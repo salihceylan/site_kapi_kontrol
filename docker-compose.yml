@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: site_kapi_kontrol_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: site_kapi_kontrol
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./server/migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  pg_data:
