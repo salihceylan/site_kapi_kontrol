@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 class HomePage extends StatelessWidget {
@@ -24,31 +26,67 @@ class HomePage extends StatelessWidget {
     final session = authService.session!;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Site Kapi Kontrol'),
-      ),
+      appBar: AppBar(title: const Text('Site Kapi Kontrol')),
       drawer: YanMenu(
         fullName: session.fullName,
         userEmail: session.email,
         roleLabel: session.role.label,
         onLogout: () => authService.logout(),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Hos geldiniz, ${session.fullName}',
-              style: Theme.of(context).textTheme.titleLarge,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(22),
+              decoration: AppDecorations.glassCard,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Hos Geldiniz',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    session.fullName,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontSize: 28,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Rol: ${session.role.label}'),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text('E-posta: ${session.email}'),
-            const SizedBox(height: 4),
-            Text('Rol: ${session.role.label}'),
-            const SizedBox(height: 20),
-            Text(_roleDescription(session.role)),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: AppDecorations.infoCard,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Profil Bilgisi',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text('E-posta: ${session.email}'),
+                  const SizedBox(height: 8),
+                  Text(_roleDescription(session.role)),
+                ],
+              ),
+            ),
           ],
         ),
       ),

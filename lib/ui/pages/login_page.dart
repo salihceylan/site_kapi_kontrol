@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.authService});
@@ -69,105 +71,121 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(_isLoginMode ? 'Uyelik Girisi' : 'Yeni Uyelik'),
-      ),
+      appBar: AppBar(title: Text(_isLoginMode ? 'Uyelik Girisi' : 'Yeni Uyelik')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _isLoginMode ? 'Rol secip giris yapin' : 'Hesap olusturun',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              decoration: AppDecorations.glassCard,
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      _isLoginMode ? 'Rol secip giris yapin' : 'Hesap olusturun',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Mavi temali guvenli giris paneli',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 20),
+                    if (!_isLoginMode) ...[
+                      TextFormField(
+                        controller: _fullNameController,
+                        decoration: const InputDecoration(labelText: 'Ad Soyad'),
+                        validator: (value) {
+                          if (!_isLoginMode && (value ?? '').trim().length < 3) {
+                            return 'Ad Soyad en az 3 karakter olmali.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    DropdownButtonFormField<UserRole>(
+                      initialValue: _selectedRole,
+                      decoration: const InputDecoration(labelText: 'Rol'),
+                      items: UserRole.values
+                          .map(
+                            (role) => DropdownMenuItem<UserRole>(
+                              value: role,
+                              child: Text(role.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (role) {
+                        if (role != null) {
+                          setState(() => _selectedRole = role);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'E-posta'),
+                      validator: (value) {
+                        final text = (value ?? '').trim();
+                        if (text.isEmpty || !text.contains('@')) {
+                          return 'Gecerli bir e-posta girin.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Sifre'),
+                      validator: (value) {
+                        if ((value ?? '').trim().length < 6) {
+                          return 'Sifre en az 6 karakter olmali.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _submit,
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(_isLoginMode ? 'Giris Yap' : 'Kayit Ol'),
+                    ),
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => setState(() => _isLoginMode = !_isLoginMode),
+                      child: Text(
+                        _isLoginMode
+                            ? 'Hesabin yok mu? Kayit ol.'
+                            : 'Hesabin var mi? Giris yap.',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'API: --dart-define=API_BASE_URL=http://localhost:8080',
+                      style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                if (!_isLoginMode) ...[
-                  TextFormField(
-                    controller: _fullNameController,
-                    decoration: const InputDecoration(labelText: 'Ad Soyad'),
-                    validator: (value) {
-                      if (!_isLoginMode && (value ?? '').trim().length < 3) {
-                        return 'Ad Soyad en az 3 karakter olmali.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                DropdownButtonFormField<UserRole>(
-                  value: _selectedRole,
-                  decoration: const InputDecoration(labelText: 'Rol'),
-                  items: UserRole.values
-                      .map(
-                        (role) => DropdownMenuItem<UserRole>(
-                          value: role,
-                          child: Text(role.label),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (role) {
-                    if (role != null) {
-                      setState(() => _selectedRole = role);
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'E-posta'),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty || !text.contains('@')) {
-                      return 'Gecerli bir e-posta girin.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Sifre'),
-                  validator: (value) {
-                    if ((value ?? '').trim().length < 6) {
-                      return 'Sifre en az 6 karakter olmali.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(_isLoginMode ? 'Giris Yap' : 'Kayit Ol'),
-                ),
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => setState(() => _isLoginMode = !_isLoginMode),
-                  child: Text(
-                    _isLoginMode
-                        ? 'Hesabin yok mu? Kayit ol.'
-                        : 'Hesabin var mi? Giris yap.',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'API: --dart-define=API_BASE_URL=http://localhost:8080',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
+              ),
             ),
           ),
         ),

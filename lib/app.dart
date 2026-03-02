@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 
@@ -30,11 +32,19 @@ class _MyAppState extends State<MyApp> {
         return MaterialApp(
           title: 'Site Kapi Kontrol',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          ),
+          theme: AppTheme.light(),
+          builder: (context, child) {
+            return Container(
+              decoration: AppDecorations.pageBackground,
+              child: child,
+            );
+          },
           home: !_authService.isReady
-              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+              ? const Scaffold(
+                  body: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               : _authService.isLoggedIn
               ? HomePage(authService: _authService)
               : LoginPage(authService: _authService),
