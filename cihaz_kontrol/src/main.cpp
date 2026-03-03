@@ -1,4 +1,4 @@
-#include <Arduino.h>
+﻿#include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 
@@ -10,18 +10,14 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 void setup() {
-
   Serial.begin(115200);
 
-  wifiBaglan();     // WiFi
-  roleSetup();      // Röle donanım
-  mqttSetup();      // MQTT ayar
-
+  wifiBaglan();
+  roleSetup();
+  mqttSetup();
 }
 
 void loop() {
-
-  mqttLoopHandler(); // MQTT haberleşme
-  roleLoop();        // Röle zaman kontrol
-
+  mqttLoopHandler();
+  roleLoop();
 }
