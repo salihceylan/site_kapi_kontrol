@@ -16,6 +16,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -26,6 +27,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _fullNameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -51,6 +53,7 @@ class _LoginPageState extends State<LoginPage> {
     } else {
       error = await widget.authService.register(
         fullName: _fullNameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
         email: email,
         password: password,
         role: _selectedRole,
@@ -106,6 +109,22 @@ class _LoginPageState extends State<LoginPage> {
                         validator: (value) {
                           if (!_isLoginMode && (value ?? '').trim().length < 3) {
                             return 'Ad Soyad en az 3 karakter olmali.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(labelText: 'Telefon Numarasi'),
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (text.isEmpty) {
+                            return 'Telefon numarasi zorunlu.';
+                          }
+                          if (!RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)) {
+                            return 'Gecerli bir telefon numarasi girin.';
                           }
                           return null;
                         },

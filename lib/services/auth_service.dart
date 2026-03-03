@@ -59,6 +59,7 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
     required UserRole role,
+    String? phoneNumber,
   }) async {
     try {
       _session = await api.register(
@@ -66,6 +67,7 @@ class AuthService extends ChangeNotifier {
         email: email,
         password: password,
         role: role,
+        phoneNumber: phoneNumber,
       );
       await _persist();
       notifyListeners();

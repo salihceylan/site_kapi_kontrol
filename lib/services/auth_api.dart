@@ -31,6 +31,7 @@ class AuthApi {
     required String email,
     required String password,
     required UserRole role,
+    String? phoneNumber,
   }) async {
     return _authRequest(
       path: '/auth/register',
@@ -39,6 +40,7 @@ class AuthApi {
         'email': email,
         'password': password,
         'role': role.apiValue,
+        'phone_number': phoneNumber,
       },
       expectedCode: 201,
     );
@@ -72,6 +74,10 @@ class AuthApi {
       email: user['email'] as String,
       role: UserRole.fromApi(user['role'] as String),
       token: payload['token'] as String,
+      phoneNumber: user['phone_number'] as String?,
+      createdAt: user['created_at'] == null
+          ? null
+          : DateTime.tryParse(user['created_at'] as String),
     );
   }
 }

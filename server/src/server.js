@@ -29,6 +29,7 @@ app.post('/auth/register', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '').trim();
   const role = String(req.body.role || '').trim();
+  const phoneNumber = String(req.body.phone_number || '').trim();
 
   if (fullName.length < 3) {
     return res.status(400).json({ error: 'full_name en az 3 karakter olmali.' });
@@ -42,24 +43,30 @@ app.post('/auth/register', async (req, res) => {
   if (!validRoles.has(role)) {
     return res.status(400).json({ error: 'Gecersiz rol.' });
   }
+  if (phoneNumber && !/^\+?[0-9()\-\s]{10,20}$/.test(phoneNumber)) {
+    return res.status(400).json({ error: 'Gecerli bir telefon numarasi girin.' });
+  }
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await pool.query(
       `
-      INSERT INTO users (full_name, email, role, password_hash)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, full_name, email, role
+      INSERT INTO users (full_name, email, role, phone_number, password_hash)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING user_code AS id, full_name, email, role, phone_number, created_at
       `,
-      [fullName, email, role, passwordHash],
+      [fullName, email, role, phoneNumber || null, passwordHash],
     );
 
     const user = result.rows[0];
     const token = signAccessToken(user);
     return res.status(201).json({ token, user });
   } catch (error) {
-    if (error?.code === '23505') {
+    if (error?.code === '23505' && error?.constraint === 'users_email_key') {
       return res.status(409).json({ error: 'Bu e-posta zaten kayitli.' });
+    }
+    if (error?.code === '23505') {
+      return res.status(409).json({ error: 'Kullanici kodu olusturulurken cakisma oldu, tekrar deneyin.' });
     }
     return res.status(500).json({ error: 'Kayit islemi basarisiz.' });
   }
@@ -80,7 +87,7 @@ app.post('/auth/login', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, full_name, email, role, password_hash
+      SELECT user_code, full_name, email, role, phone_number, created_at, password_hash
       FROM users
       WHERE email = $1
       LIMIT 1
@@ -102,10 +109,12 @@ app.post('/auth/login', async (req, res) => {
     }
 
     const user = {
-      id: row.id,
+      id: row.user_code,
       full_name: row.full_name,
       email: row.email,
       role: row.role,
+      phone_number: row.phone_number,
+      created_at: row.created_at,
     };
     const token = signAccessToken(user);
 

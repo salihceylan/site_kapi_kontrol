@@ -82,6 +82,14 @@ class HomePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text('E-posta: ${session.email}'),
+                  if (session.phoneNumber != null && session.phoneNumber!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('Telefon: ${session.phoneNumber}'),
+                  ],
+                  if (session.createdAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text('Kayit Tarihi: ${session.createdAt!.toLocal()}'),
+                  ],
                   const SizedBox(height: 8),
                   Text(_roleDescription(session.role)),
                 ],

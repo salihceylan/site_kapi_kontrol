@@ -1,0 +1,118 @@
+﻿SUNUCU KURULUM NOTLARI (site_kapi_kontrol)
+Tarih: 2026-03-02
+
+PROJENIN AMACI
+- Site/apartman yonetimi icin rol bazli (super_user, site_manager, apartment_owner) bir uyelik ve giris altyapisi sunmak.
+- API'yi guvenli sekilde VPS uzerinde (Node.js + PostgreSQL + Nginx + SSL) canliya almak.
+- Flutter istemcinin bu API uzerinden kayit, giris ve oturum yonetimi yapabilmesini saglamak.
+
+
+Bu dokuman, projeyi sifirdan VPS uzerinde calisir hale getirmek icin basariyla uygulanan adimlari icerir.
+
+1) VPS VE SSH HAZIRLIGI
+- VPS'e baglanildi: ssh salihceylan@178.210.161.55 -p 22667
+- SSH portu 22667 olarak kullanildi.
+- SSH erisimi dogrulandi ve aktif dinleme kontrol edildi:
+  sudo ss -ltnp | grep 22667
+
+2) FIREWALL (UFW)
+- Gerekli portlar acildi:
+  sudo ufw allow 22667/tcp
+  sudo ufw allow 80/tcp
+  sudo ufw allow 443/tcp
+- Durum kontrol edildi:
+  sudo ufw status
+
+3) DNS
+- Subdomain dogru IP'ye yonlendirildi:
+  api.gudeteknoloji.com.tr -> 178.210.161.55
+- Dogrulama:
+  dig +short api.gudeteknoloji.com.tr
+
+4) PROJEYI SUNUCUYA ALMA
+- Proje klasoru hazirlandi:
+  sudo mkdir -p /var/www/site_kapi_kontrol
+  sudo chown -R salihceylan:salihceylan /var/www/site_kapi_kontrol
+- Repo klonlandi:
+  cd /var/www/site_kapi_kontrol
+  git clone https://github.com/salihceylan/site_kapi_kontrol .
+
+5) NODE.JS VE PM2
+- Node.js/NPM kuruldu.
+- PM2 global kuruldu ve backend PM2 ile baslatildi:
+  cd /var/www/site_kapi_kontrol/server
+  npm install
+  pm2 start npm --name kapi-api -- run start
+  pm2 save
+- PM2 surec kontrolu:
+  pm2 list
+
+6) POSTGRESQL (DOCKER)
+- Docker + docker-compose kuruldu.
+- PostgreSQL service ayağa kaldirildi:
+  cd /var/www/site_kapi_kontrol
+  docker-compose up -d postgres
+  docker-compose ps
+- Migration otomatik calisti, users tablosu olustu.
+- Tablo kontrolu:
+  docker exec -it site_kapi_kontrol_postgres psql -U postgres -d site_kapi_kontrol -c "\\dt"
+
+7) BACKEND ENV AYARLARI
+- server/.env olusturuldu ve duzenlendi:
+  cd /var/www/site_kapi_kontrol/server
+  cp .env.example .env
+- .env icine en az su alanlar tanimlandi:
+  PORT=8080
+  JWT_SECRET=<guclu_bir_secret>
+  JWT_EXPIRES_IN=12h
+  DB_HOST=127.0.0.1
+  DB_PORT=5432
+  DB_NAME=site_kapi_kontrol
+  DB_USER=<db_user>
+  DB_PASSWORD=<db_password>
+- PM2 env guncelleyerek restart:
+  pm2 restart kapi-api --update-env
+
+8) HEALTH CHECK (LOKAL)
+- API + DB baglantisi dogrulandi:
+  curl http://127.0.0.1:8080/health
+- Basarili sonuc:
+  {"ok":true,"database":"connected"}
+
+9) NGINX REVERSE PROXY
+- Nginx kuruldu.
+- site config dosyasi olusturuldu:
+  /etc/nginx/sites-available/api.gudeteknoloji.com.tr
+- proxy hedefi:
+  http://127.0.0.1:8080
+- config test + reload:
+  sudo nginx -t
+  sudo systemctl reload nginx
+- HTTP test:
+  curl -I http://api.gudeteknoloji.com.tr/health
+  Sonuc: 200 OK
+
+10) SSL (LET'S ENCRYPT)
+- Certbot + nginx eklentisi kuruldu.
+- Sertifika alindi ve https yonlendirmesi aktif edildi:
+  sudo certbot --nginx -d api.gudeteknoloji.com.tr --redirect -m <mail> --agree-tos -n
+- HTTPS test:
+  curl -I https://api.gudeteknoloji.com.tr/health
+  Sonuc: 200 OK
+
+11) FLUTTER TARAFI
+- Uygulama API URL ile calistirildi:
+  flutter run --dart-define=API_BASE_URL=https://api.gudeteknoloji.com.tr
+- Cihaz secim ekrani geldi ve uygulama acildi.
+
+12) FINAL DOGRULAMA (YAPILACAK SON ADIM)
+- Uygulama icinden kayit ve giris testini tamamla.
+- Kayit/giris endpointlerinin canli calistigini teyit et:
+  POST /auth/register
+  POST /auth/login
+
+Notlar:
+- PM2 process adi: kapi-api
+- API health endpoint: /health
+- Uretimde DB portunu disariya acik birakmamak gerekir.
+- SSH ayar degisikliklerinde oturum kapanmadan ikinci terminalden baglanti testi yapilmalidir.
