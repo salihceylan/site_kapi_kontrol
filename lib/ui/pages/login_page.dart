@@ -197,11 +197,6 @@ class _LoginPageState extends State<LoginPage> {
                             : 'Hesabin var mi? Giris yap.',
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'API: --dart-define=API_BASE_URL=http://localhost:8080',
-                      style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                    ),
                   ],
                 ),
               ),
