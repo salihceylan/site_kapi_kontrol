@@ -6,7 +6,7 @@ void main() {
   testWidgets('Login page renders', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(networkCheckEnabled: false));
     await tester.pumpAndSettle();
 
     expect(find.text('Uyelik Girisi'), findsOneWidget);

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/network_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
+import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.networkCheckEnabled = true});
+
+  final bool networkCheckEnabled;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -16,18 +20,28 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final AuthService _authService;
+  late final NetworkService _networkService;
 
   @override
   void initState() {
     super.initState();
     _authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));
+    _networkService = NetworkService(enabled: widget.networkCheckEnabled);
     _authService.initialize();
+    _networkService.initialize();
+  }
+
+  @override
+  void dispose() {
+    _authService.dispose();
+    _networkService.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _authService,
+      animation: Listenable.merge([_authService, _networkService]),
       builder: (context, _) {
         return MaterialApp(
           title: 'Site Kapi Kontrol',
@@ -39,11 +53,12 @@ class _MyAppState extends State<MyApp> {
               child: child,
             );
           },
-          home: !_authService.isReady
-              ? const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(),
-                  ),
+          home: (!_authService.isReady || !_networkService.isReady)
+              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+              : !_networkService.hasInternet
+              ? NoInternetPage(
+                  isChecking: _networkService.isChecking,
+                  onRetry: _networkService.refresh,
                 )
               : _authService.isLoggedIn
               ? HomePage(authService: _authService)
