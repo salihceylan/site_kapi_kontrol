@@ -1,0 +1,152 @@
+﻿MQTT KURULUM REHBERI (mqtt.gudeteknoloji.com.tr)
+
+Amaç
+- Flutter uygulamasi ve ESP32 cihazlarin TLS uzerinden ayni MQTT broker'a guvenli sekilde baglanmasi.
+- Uygulama komut gonderecek (door cmd), ESP32 durum/event yayinlayacak.
+
+Mimari
+- Broker: Mosquitto (VPS)
+- Domain: mqtt.gudeteknoloji.com.tr
+- Port: 8883 (TLS)
+- Auth: username/password
+- Yetki: ACL (kullanici bazli topic izinleri)
+
+Topic yapisi (ornek)
+- Komut: site/1/door/1/cmd
+- Durum: site/1/door/1/state
+- Olay: site/1/door/1/event
+- Erisilebilirlik: site/1/door/1/availability
+
+1) DNS hazirligi
+- DNS panelinde asagidaki A kaydi olmalidir:
+  mqtt.gudeteknoloji.com.tr -> 178.210.161.55
+- Dogrulama:
+  dig +short mqtt.gudeteknoloji.com.tr @8.8.8.8
+  dig +short mqtt.gudeteknoloji.com.tr @1.1.1.1
+
+2) Paket kurulumlari (VPS)
+sudo apt update
+sudo apt install -y mosquitto mosquitto-clients certbot python3-certbot-nginx
+
+3) TLS sertifikasi (Let's Encrypt)
+sudo certbot certonly --nginx -d mqtt.gudeteknoloji.com.tr -m MAIL_ADRESIN --agree-tos -n
+
+4) Sertifika dosyalarini Mosquitto yoluna bagla
+sudo mkdir -p /etc/mosquitto/certs
+sudo ln -sf /etc/letsencrypt/live/mqtt.gudeteknoloji.com.tr/fullchain.pem /etc/mosquitto/certs/fullchain.pem
+sudo ln -sf /etc/letsencrypt/live/mqtt.gudeteknoloji.com.tr/privkey.pem /etc/mosquitto/certs/privkey.pem
+
+sudo chown -R mosquitto:mosquitto /etc/mosquitto/certs
+sudo chmod 755 /etc/mosquitto /etc/mosquitto/certs
+sudo chmod 644 /etc/mosquitto/certs/fullchain.pem
+sudo chmod 640 /etc/mosquitto/certs/privkey.pem
+
+5) MQTT kullanicilarini olustur
+sudo mosquitto_passwd -c /etc/mosquitto/passwd app_client
+sudo mosquitto_passwd /etc/mosquitto/passwd esp32_door_01
+
+6) ACL dosyasini olustur
+sudo tee /etc/mosquitto/acl > /dev/null <<'EOF'
+user app_client
+topic read site/+/door/+/state
+topic read site/+/door/+/event
+topic read site/+/door/+/availability
+topic write site/+/door/+/cmd
+
+user esp32_door_01
+topic read site/1/door/1/cmd
+topic write site/1/door/1/state
+topic write site/1/door/1/event
+topic write site/1/door/1/availability
+EOF
+
+7) Mosquitto secure config (tek dosya tavsiyesi)
+- Eski conf dosyalarini yedekle:
+  sudo mkdir -p /etc/mosquitto/conf.d.bak
+  sudo mv /etc/mosquitto/conf.d/*.conf /etc/mosquitto/conf.d.bak/ 2>/dev/null || true
+
+- Yeni dosya:
+sudo tee /etc/mosquitto/conf.d/10-secure.conf > /dev/null <<'EOF'
+per_listener_settings true
+
+listener 8883
+protocol mqtt
+
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+acl_file /etc/mosquitto/acl
+
+certfile /etc/mosquitto/certs/fullchain.pem
+keyfile /etc/mosquitto/certs/privkey.pem
+tls_version tlsv1.2
+EOF
+
+8) Ana config include kontrolu
+- /etc/mosquitto/mosquitto.conf icinde su satir olmali:
+  include_dir /etc/mosquitto/conf.d
+
+9) Izinler ve servis
+sudo chown mosquitto:mosquitto /etc/mosquitto/passwd /etc/mosquitto/acl
+sudo chmod 640 /etc/mosquitto/passwd /etc/mosquitto/acl
+
+sudo systemctl stop mosquitto
+sudo pkill -9 mosquitto
+sudo systemctl reset-failed mosquitto
+sudo systemctl start mosquitto
+sudo systemctl status mosquitto --no-pager
+sudo ss -ltnp | grep 8883
+
+10) Firewall
+sudo ufw allow 8883/tcp
+sudo ufw status
+
+11) Test komutlari
+- Subscriber (App rolu, state okuma):
+mosquitto_sub -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u app_client -P 'SIFRE' \
+-t 'site/1/door/1/state' -d
+
+- Publisher (ESP32 rolu, state yazma):
+mosquitto_pub -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u esp32_door_01 -P 'SIFRE' \
+-t 'site/1/door/1/state' -m '{"locked":false}' -q 1 -d
+
+12) ACL dogrulama (MQTT v5 ile net sonuc)
+- app_client state'e yazmaya calisinca engellenmeli:
+mosquitto_pub -V mqttv5 -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u app_client -P 'SIFRE' \
+-t 'site/1/door/1/state' -m 'x' -q 1 -d
+
+Beklenen: PUBACK RC:135 (Not authorized)
+
+- app_client cmd'ye yazabilmeli:
+mosquitto_pub -V mqttv5 -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u app_client -P 'SIFRE' \
+-t 'site/1/door/1/cmd' -m '{"action":"pulse"}' -q 1 -d
+
+Not: RC:16 gorulurse "No matching subscribers" demektir; yetki hatasi degildir.
+
+13) Siklikla gorulen hatalar
+- "Address already in use": Elle "mosquitto -c ... -v" calistirilmis ve port dolu.
+  Cozum:
+  sudo systemctl stop mosquitto
+  sudo pkill -9 mosquitto
+  sudo systemctl start mosquitto
+
+- "Unable to open acl_file": acl dosyasi yok/izin hatali.
+  Cozum:
+  sudo chown mosquitto:mosquitto /etc/mosquitto/acl
+  sudo chmod 640 /etc/mosquitto/acl
+
+- Servis surekli fail:
+  sudo journalctl -xeu mosquitto.service --no-pager | tail -n 80
+
+14) Operasyon notu
+- Servis ayakta oldugunda "sudo mosquitto -c /etc/mosquitto/mosquitto.conf -v" komutunu calistirma.
+- Yonetim icin systemd kullan:
+  sudo systemctl restart mosquitto
+  sudo systemctl status mosquitto --no-pager
