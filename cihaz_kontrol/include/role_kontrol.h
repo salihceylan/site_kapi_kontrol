@@ -21,12 +21,15 @@ inline void roleTetikle() {
   Serial.println("Role tetiklendi");
 }
 
-inline void roleLoop() {
+inline bool roleLoop() {
   if (roleAktif && millis() - roleBaslangic >= ROLE_SURE_MS) {
     digitalWrite(ROLE_PIN, HIGH);
     roleAktif = false;
     Serial.println("Role birakildi");
+    return true;
   }
+
+  return false;
 }
 
 #endif

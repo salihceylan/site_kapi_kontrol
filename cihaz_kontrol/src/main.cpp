@@ -1,13 +1,14 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 
-#include "wifi_baglanti.h"
 #include "mqtt_baglanti.h"
 #include "role_kontrol.h"
+#include "wifi_baglanti.h"
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+WiFiClientSecure espClientSecure;
+PubSubClient client(espClientSecure);
 
 void setup() {
   Serial.begin(115200);
@@ -19,5 +20,7 @@ void setup() {
 
 void loop() {
   mqttLoopHandler();
-  roleLoop();
+  if (roleLoop()) {
+    mqttNotifyPulseCompleted();
+  }
 }
