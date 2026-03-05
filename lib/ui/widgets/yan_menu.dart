@@ -49,7 +49,7 @@ class YanMenu extends StatelessWidget {
                   child: const CircleAvatar(
                     radius: 26,
                     backgroundColor: Colors.white,
-                    child: Icon(Icons.person, size: 30, color: AppColors.primary),
+                    backgroundImage: AssetImage('assets/images/app_logo.png'),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -82,7 +82,10 @@ class YanMenu extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  leading: const Icon(Icons.home_outlined, color: AppColors.primary),
+                  leading: const Icon(
+                    Icons.home_outlined,
+                    color: AppColors.primary,
+                  ),
                   title: const Text('Ana Sayfa'),
                   onTap: () => Navigator.pop(context),
                 ),

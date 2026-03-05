@@ -67,14 +67,18 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isLoginMode ? 'Uyelik Girisi' : 'Yeni Uyelik')),
+      appBar: AppBar(
+        title: Text(_isLoginMode ? 'Uyelik Girisi' : 'Yeni Uyelik'),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -88,8 +92,22 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: Image.asset(
+                          'assets/images/app_logo.png',
+                          width: 88,
+                          height: 88,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Text(
-                      _isLoginMode ? 'Rol secip giris yapin' : 'Hesap olusturun',
+                      _isLoginMode
+                          ? 'Rol secip giris yapin'
+                          : 'Hesap olusturun',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -105,9 +123,12 @@ class _LoginPageState extends State<LoginPage> {
                     if (!_isLoginMode) ...[
                       TextFormField(
                         controller: _fullNameController,
-                        decoration: const InputDecoration(labelText: 'Ad Soyad'),
+                        decoration: const InputDecoration(
+                          labelText: 'Ad Soyad',
+                        ),
                         validator: (value) {
-                          if (!_isLoginMode && (value ?? '').trim().length < 3) {
+                          if (!_isLoginMode &&
+                              (value ?? '').trim().length < 3) {
                             return 'Ad Soyad en az 3 karakter olmali.';
                           }
                           return null;
@@ -117,13 +138,17 @@ class _LoginPageState extends State<LoginPage> {
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'Telefon Numarasi'),
+                        decoration: const InputDecoration(
+                          labelText: 'Telefon Numarasi',
+                        ),
                         validator: (value) {
                           final text = (value ?? '').trim();
                           if (text.isEmpty) {
                             return 'Telefon numarasi zorunlu.';
                           }
-                          if (!RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)) {
+                          if (!RegExp(
+                            r'^\+?[0-9()\-\s]{10,20}$',
+                          ).hasMatch(text)) {
                             return 'Gecerli bir telefon numarasi girin.';
                           }
                           return null;
