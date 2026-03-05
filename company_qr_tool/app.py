@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -37,17 +37,19 @@ PROG_RE = re.compile(r"\((\d{1,3})\s*%\)")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 PREVIEW_SIZE = 180
 
-CLR_APP_BG = "#EFF9F3"
+CLR_APP_BG = "#F2F6F4"
 CLR_CARD_BG = "#FFFFFF"
-CLR_ACCENT = "#14A44D"
-CLR_ACCENT_DARK = "#0D7F3B"
-CLR_ACCENT_SOFT = "#E9F8EF"
-CLR_BORDER = "#D2E8DB"
-CLR_TEXT_MAIN = "#0C2318"
-CLR_TEXT_SUB = "#4D6A5A"
-CLR_STATUS = "#117C48"
-CLR_ROW_SEL_BG = "#CEF3DD"
-CLR_ROW_SEL_TEXT = "#0B2E1D"
+CLR_ACCENT = "#16A34A"
+CLR_ACCENT_DARK = "#0F7A37"
+CLR_ACCENT_SOFT = "#EAF7EF"
+CLR_BORDER = "#D9E6DE"
+CLR_TEXT_MAIN = "#13281D"
+CLR_TEXT_SUB = "#5D7467"
+CLR_STATUS = "#127741"
+CLR_ROW_SEL_BG = "#DDF3E5"
+CLR_ROW_SEL_TEXT = "#103423"
+CLR_HEADER_BG = "#0F3A29"
+CLR_HEADER_TEXT = "#F5FFF8"
 
 
 @dataclass
@@ -175,6 +177,24 @@ def suggest_version(releases: list[dict]) -> str:
     return f"{a}.{b}.{c + 1}"
 
 
+def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
+    c = chip.lower()
+    preferred: list[str]
+    if "esp32-c3" in c or " c3" in c:
+        preferred = ["lolin_c3_mini", "esp32-c3-devkitm-1"]
+    elif "esp32-s3" in c or " s3" in c:
+        preferred = ["esp32-s3-devkitc-1"]
+    elif "esp32-s2" in c or " s2" in c:
+        preferred = ["esp32-s2-saola-1"]
+    else:
+        preferred = ["esp32dev", "esp32doit-devkit-v1", "esp32-s3-devkitc-1"]
+
+    for env in preferred:
+        if env in envs:
+            return env
+    return envs[0] if envs else None
+
+
 class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
@@ -222,10 +242,12 @@ class App:
             s.theme_use(s.theme_names()[0])
 
         s.configure("App.TFrame", background=CLR_APP_BG)
-        s.configure("Card.TFrame", background=CLR_CARD_BG, borderwidth=1, relief="solid")
+        s.configure("Header.TFrame", background=CLR_HEADER_BG)
+        s.configure("Card.TFrame", background=CLR_CARD_BG, borderwidth=0, relief="flat")
         s.configure("Card.TLabel", background=CLR_CARD_BG)
-        s.configure("Title.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 17, "bold"))
-        s.configure("Sub.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
+        s.configure("Header.TLabel", background=CLR_HEADER_BG)
+        s.configure("Title.TLabel", background=CLR_HEADER_BG, foreground=CLR_HEADER_TEXT, font=("Segoe UI", 18, "bold"))
+        s.configure("Sub.TLabel", background=CLR_HEADER_BG, foreground="#D2EDE0", font=("Segoe UI", 10))
         s.configure("Head.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 11, "bold"))
         s.configure("Text.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
         s.configure("Status.TLabel", background=CLR_CARD_BG, foreground=CLR_STATUS, font=("Segoe UI", 10, "bold"))
@@ -237,7 +259,7 @@ class App:
             borderwidth=0,
             focusthickness=0,
             focuscolor=CLR_ACCENT,
-            padding=(12, 7),
+            padding=(14, 8),
             font=("Segoe UI", 10, "bold"),
         )
         s.map(
@@ -250,10 +272,10 @@ class App:
             "Soft.TButton",
             background=CLR_ACCENT_SOFT,
             foreground=CLR_TEXT_MAIN,
-            borderwidth=1,
+            borderwidth=0,
             focusthickness=0,
             focuscolor=CLR_ACCENT_SOFT,
-            padding=(12, 7),
+            padding=(14, 8),
             font=("Segoe UI", 10),
         )
         s.map(
@@ -287,7 +309,7 @@ class App:
         s.configure(
             "Treeview.Heading",
             font=("Segoe UI", 10, "bold"),
-            background="#F2FAF5",
+            background="#EDF5F0",
             foreground=CLR_TEXT_MAIN,
             relief="flat",
         )
@@ -319,22 +341,22 @@ class App:
         return ImageTk.PhotoImage(badge)
 
     def _ui(self) -> None:
-        main = ttk.Frame(self.root, style="App.TFrame", padding=14)
+        main = ttk.Frame(self.root, style="App.TFrame", padding=16)
         main.pack(fill=tk.BOTH, expand=True)
         main.columnconfigure(0, weight=3)
         main.columnconfigure(1, weight=2)
         main.rowconfigure(1, weight=1)
 
-        header = ttk.Frame(main, style="Card.TFrame", padding=(12, 10))
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 14))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
         header.columnconfigure(1, weight=1)
-        hlogo = ttk.Label(header, image=self.brand_photo, style="Card.TLabel")
+        hlogo = ttk.Label(header, image=self.brand_photo, style="Header.TLabel")
         hlogo.grid(row=0, column=0, rowspan=2, sticky="w")
         hlogo.image = self.brand_photo
         ttk.Label(header, text="AHBU Cihaz Etiketleyici", style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
         ttk.Label(header, text="ID oku, QR uret, firmware surumle ve cihaza yukle.", style="Sub.TLabel").grid(row=1, column=1, sticky="w", padx=(10, 0))
 
-        left = ttk.Frame(main, style="Card.TFrame", padding=12)
+        left = ttk.Frame(main, style="Card.TFrame", padding=14)
         left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         left.rowconfigure(2, weight=1)
         left.columnconfigure(0, weight=1)
@@ -352,7 +374,7 @@ class App:
 
         ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 6))
         cols = ("port", "chip", "unique_id", "description")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=18)
+        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=17)
         self.tree.heading("port", text="Port")
         self.tree.heading("chip", text="Chip")
         self.tree.heading("unique_id", text="Unique ID")
@@ -368,7 +390,7 @@ class App:
         sc.grid(row=2, column=1, sticky="ns")
         ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=3, column=0, sticky="w", pady=(8, 0))
 
-        right = ttk.Frame(main, style="Card.TFrame", padding=12)
+        right = ttk.Frame(main, style="Card.TFrame", padding=14)
         right.grid(row=1, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
         ttk.Label(right, text="QR Onizleme", style="Head.TLabel").grid(row=0, column=0, sticky="w")
@@ -382,7 +404,7 @@ class App:
         form.grid(row=5, column=0, sticky="ew", pady=(8, 6))
         form.columnconfigure(1, weight=1)
         ttk.Label(form, text="Env:", style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.env_combo = ttk.Combobox(form, state="readonly", values=self.envs, textvariable=self.env_var)
+        self.env_combo = ttk.Combobox(form, state="readonly", values=self.envs, textvariable=self.env_var, width=30)
         self.env_combo.grid(row=0, column=1, sticky="ew")
         self.env_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh_latest_release())
         ttk.Label(form, text="Surum:", style="Text.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
@@ -395,7 +417,7 @@ class App:
         self.build_btn.pack(side=tk.LEFT)
         self.release_btn = ttk.Button(fw, text="Surum olustur", command=self.start_release, style="Soft.TButton")
         self.release_btn.pack(side=tk.LEFT, padx=8)
-        self.upload_btn = ttk.Button(fw, text="Sürümü Yükle", command=self.start_upload, style="Accent.TButton")
+        self.upload_btn = ttk.Button(fw, text="Surumu Yukle", command=self.start_upload, style="Accent.TButton")
         self.upload_btn.pack(side=tk.LEFT)
 
         ttk.Label(right, textvariable=self.latest_release_var, style="Text.TLabel").grid(row=7, column=0, sticky="w", pady=(2, 6))
@@ -432,6 +454,11 @@ class App:
         d = self.selected_device()
         if d:
             self.uid_var.set(f"Unique ID: {d.unique_id}")
+            suggested = suggest_env_for_chip(d.chip, self.envs)
+            if suggested and suggested != self.env_var.get():
+                self.env_var.set(suggested)
+                self.refresh_latest_release()
+                self.set_status(f"Cihaza gore env secildi: {suggested}")
 
     def scan_devices(self) -> None:
         if self.scanning:
@@ -734,3 +761,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
