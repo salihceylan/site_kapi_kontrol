@@ -37,6 +37,18 @@ PROG_RE = re.compile(r"\((\d{1,3})\s*%\)")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 PREVIEW_SIZE = 180
 
+CLR_APP_BG = "#EFF9F3"
+CLR_CARD_BG = "#FFFFFF"
+CLR_ACCENT = "#14A44D"
+CLR_ACCENT_DARK = "#0D7F3B"
+CLR_ACCENT_SOFT = "#E9F8EF"
+CLR_BORDER = "#D2E8DB"
+CLR_TEXT_MAIN = "#0C2318"
+CLR_TEXT_SUB = "#4D6A5A"
+CLR_STATUS = "#117C48"
+CLR_ROW_SEL_BG = "#CEF3DD"
+CLR_ROW_SEL_TEXT = "#0B2E1D"
+
 
 @dataclass
 class EspDevice:
@@ -169,7 +181,7 @@ class App:
         self.root.title("AHBU Cihaz Etiketleyici")
         self.root.geometry("1100x760")
         self.root.resizable(False, False)
-        self.root.configure(bg="#EEF2F8")
+        self.root.configure(bg=CLR_APP_BG)
 
         self.logo_path = ensure_logo()
         self.devices: list[EspDevice] = []
@@ -204,20 +216,95 @@ class App:
 
     def _style(self) -> None:
         s = ttk.Style(self.root)
-        for name in ("vista", "xpnative", "clam"):
-            if name in s.theme_names():
-                s.theme_use(name)
-                break
-        s.configure("App.TFrame", background="#EEF2F8")
-        s.configure("Card.TFrame", background="#FFFFFF")
-        s.configure("Card.TLabel", background="#FFFFFF")
-        s.configure("Title.TLabel", background="#FFFFFF", foreground="#0F172A", font=("Segoe UI", 17, "bold"))
-        s.configure("Sub.TLabel", background="#FFFFFF", foreground="#475569", font=("Segoe UI", 10))
-        s.configure("Head.TLabel", background="#FFFFFF", foreground="#0F172A", font=("Segoe UI", 11, "bold"))
-        s.configure("Text.TLabel", background="#FFFFFF", foreground="#334155", font=("Segoe UI", 10))
-        s.configure("Status.TLabel", background="#FFFFFF", foreground="#1D4ED8", font=("Segoe UI", 10, "bold"))
-        s.configure("Treeview", rowheight=28, font=("Segoe UI", 10))
-        s.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        if "clam" in s.theme_names():
+            s.theme_use("clam")
+        elif s.theme_names():
+            s.theme_use(s.theme_names()[0])
+
+        s.configure("App.TFrame", background=CLR_APP_BG)
+        s.configure("Card.TFrame", background=CLR_CARD_BG, borderwidth=1, relief="solid")
+        s.configure("Card.TLabel", background=CLR_CARD_BG)
+        s.configure("Title.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 17, "bold"))
+        s.configure("Sub.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
+        s.configure("Head.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 11, "bold"))
+        s.configure("Text.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
+        s.configure("Status.TLabel", background=CLR_CARD_BG, foreground=CLR_STATUS, font=("Segoe UI", 10, "bold"))
+
+        s.configure(
+            "Accent.TButton",
+            background=CLR_ACCENT,
+            foreground="#FFFFFF",
+            borderwidth=0,
+            focusthickness=0,
+            focuscolor=CLR_ACCENT,
+            padding=(12, 7),
+            font=("Segoe UI", 10, "bold"),
+        )
+        s.map(
+            "Accent.TButton",
+            background=[("active", CLR_ACCENT_DARK), ("disabled", "#9BC8AC")],
+            foreground=[("disabled", "#EEF5F0")],
+        )
+
+        s.configure(
+            "Soft.TButton",
+            background=CLR_ACCENT_SOFT,
+            foreground=CLR_TEXT_MAIN,
+            borderwidth=1,
+            focusthickness=0,
+            focuscolor=CLR_ACCENT_SOFT,
+            padding=(12, 7),
+            font=("Segoe UI", 10),
+        )
+        s.map(
+            "Soft.TButton",
+            background=[("active", "#DDF3E8"), ("disabled", "#F2F7F4")],
+            foreground=[("disabled", "#8DA394")],
+        )
+
+        s.configure(
+            "TCombobox",
+            fieldbackground=CLR_CARD_BG,
+            background=CLR_CARD_BG,
+            foreground=CLR_TEXT_MAIN,
+            bordercolor=CLR_BORDER,
+            arrowsize=14,
+            padding=4,
+        )
+        s.map("TCombobox", fieldbackground=[("readonly", CLR_CARD_BG)], selectbackground=[("readonly", CLR_CARD_BG)])
+
+        s.configure(
+            "Treeview",
+            rowheight=29,
+            font=("Segoe UI", 10),
+            background=CLR_CARD_BG,
+            fieldbackground=CLR_CARD_BG,
+            foreground=CLR_TEXT_MAIN,
+            bordercolor=CLR_BORDER,
+            lightcolor=CLR_BORDER,
+            darkcolor=CLR_BORDER,
+        )
+        s.configure(
+            "Treeview.Heading",
+            font=("Segoe UI", 10, "bold"),
+            background="#F2FAF5",
+            foreground=CLR_TEXT_MAIN,
+            relief="flat",
+        )
+        s.map(
+            "Treeview",
+            background=[("selected", CLR_ROW_SEL_BG)],
+            foreground=[("selected", CLR_ROW_SEL_TEXT)],
+        )
+
+        s.configure(
+            "Accent.Horizontal.TProgressbar",
+            troughcolor="#E6F3EC",
+            background=CLR_ACCENT,
+            bordercolor="#E6F3EC",
+            lightcolor=CLR_ACCENT,
+            darkcolor=CLR_ACCENT,
+        )
 
     def _load_brand(self, size: int) -> ImageTk.PhotoImage | None:
         try:
@@ -254,13 +341,13 @@ class App:
 
         row = ttk.Frame(left, style="Card.TFrame")
         row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        self.scan_btn = ttk.Button(row, text="Bagli cihazlari tara", command=self.scan_devices)
+        self.scan_btn = ttk.Button(row, text="Bagli cihazlari tara", command=self.scan_devices, style="Accent.TButton")
         self.scan_btn.pack(side=tk.LEFT)
-        self.qr_btn = ttk.Button(row, text="Secili cihaz icin QR olustur", command=self.make_qr)
+        self.qr_btn = ttk.Button(row, text="Secili cihaz icin QR olustur", command=self.make_qr, style="Accent.TButton")
         self.qr_btn.pack(side=tk.LEFT, padx=8)
-        self.save_btn = ttk.Button(row, text="QR kaydet", command=self.save_qr)
+        self.save_btn = ttk.Button(row, text="QR kaydet", command=self.save_qr, style="Soft.TButton")
         self.save_btn.pack(side=tk.LEFT)
-        self.print_btn = ttk.Button(row, text="QR yazdir", command=self.print_qr)
+        self.print_btn = ttk.Button(row, text="QR yazdir", command=self.print_qr, style="Soft.TButton")
         self.print_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 6))
@@ -304,18 +391,25 @@ class App:
 
         fw = ttk.Frame(right, style="Card.TFrame")
         fw.grid(row=6, column=0, sticky="ew", pady=(8, 6))
-        self.build_btn = ttk.Button(fw, text="Firmware derle", command=self.start_build)
+        self.build_btn = ttk.Button(fw, text="Firmware derle", command=self.start_build, style="Soft.TButton")
         self.build_btn.pack(side=tk.LEFT)
-        self.release_btn = ttk.Button(fw, text="Surum olustur", command=self.start_release)
+        self.release_btn = ttk.Button(fw, text="Surum olustur", command=self.start_release, style="Soft.TButton")
         self.release_btn.pack(side=tk.LEFT, padx=8)
-        self.upload_btn = ttk.Button(fw, text="Son surumu yukle", command=self.start_upload)
+        self.upload_btn = ttk.Button(fw, text="Sürümü Yükle", command=self.start_upload, style="Accent.TButton")
         self.upload_btn.pack(side=tk.LEFT)
 
         ttk.Label(right, textvariable=self.latest_release_var, style="Text.TLabel").grid(row=7, column=0, sticky="w", pady=(2, 6))
         p = ttk.Frame(right, style="Card.TFrame")
         p.grid(row=8, column=0, sticky="ew")
         p.columnconfigure(0, weight=1)
-        self.pbar = ttk.Progressbar(p, orient="horizontal", mode="determinate", maximum=100, variable=self.progress_var)
+        self.pbar = ttk.Progressbar(
+            p,
+            orient="horizontal",
+            mode="determinate",
+            maximum=100,
+            variable=self.progress_var,
+            style="Accent.Horizontal.TProgressbar",
+        )
         self.pbar.grid(row=0, column=0, sticky="ew")
         ttk.Label(p, textvariable=self.progress_text_var, style="Text.TLabel").grid(row=0, column=1, sticky="e", padx=(8, 0))
         ttk.Label(right, text="Yukleme sirasinda yuzde gorunur, bitince TMM mesaji gelir.", style="Text.TLabel", wraplength=360).grid(row=9, column=0, sticky="w", pady=(8, 0))
@@ -640,4 +734,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
