@@ -1,0 +1,37 @@
+{
+  "releases": [
+    {
+      "id": "20260305_152942_v1_0_0",
+      "version": "1.0.0",
+      "env": "esp32-s3-devkitc-1",
+      "created_at": "2026-03-05T12:29:42.559452+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260305_152942_v1_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260305_152942_v1_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260305_152942_v1_0_0\\partitions.bin"
+      }
+    },
+    {
+      "id": "20260305_153132_v1_0_1",
+      "version": "1.0.1",
+      "env": "esp32-s3-devkitc-1",
+      "created_at": "2026-03-05T12:31:32.540157+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260305_153132_v1_0_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260305_153132_v1_0_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260305_153132_v1_0_1\\partitions.bin"
+      }
+    },
+    {
+      "id": "20260305_153304_v1_0_2",
+      "version": "1.0.2",
+      "env": "esp32-s3-devkitc-1",
+      "created_at": "2026-03-05T12:33:04.595587+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260305_153304_v1_0_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260305_153304_v1_0_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260305_153304_v1_0_2\\partitions.bin"
+      }
+    }
+  ]
+}
