@@ -48,6 +48,26 @@ function normalizeOptionalBool(raw) {
   return null;
 }
 
+function normalizeOptionalInteger(raw) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (raw === null) {
+    return null;
+  }
+
+  const text = String(raw).trim();
+  if (!text) {
+    return null;
+  }
+
+  const value = Number(text);
+  if (!Number.isInteger(value) || value <= 0) {
+    return Number.NaN;
+  }
+  return value;
+}
+
 function mapUserRow(row) {
   return {
     id: row.id,
@@ -56,6 +76,30 @@ function mapUserRow(row) {
     role: row.role,
     is_active: row.is_active,
     phone_number: row.phone_number,
+    created_at: row.created_at,
+  };
+}
+
+function mapSiteRow(row) {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    address: row.address,
+    city: row.city,
+    district: row.district,
+    created_at: row.created_at,
+  };
+}
+
+function mapDeviceRow(row) {
+  return {
+    id: Number(row.id),
+    device_uid: row.device_uid,
+    assigned_user_code: row.assigned_user_code,
+    site_code:
+      row.site_code === null || row.site_code === undefined
+        ? null
+        : Number(row.site_code),
     created_at: row.created_at,
   };
 }
@@ -114,6 +158,30 @@ function validateUpdateInput({
   }
   if (isActive === null) {
     return 'is_active alani true/false olmali.';
+  }
+  return null;
+}
+
+function validateSiteInput({ name }) {
+  if (name !== undefined && name !== null && name.length < 2) {
+    return 'Site adi en az 2 karakter olmali.';
+  }
+  return null;
+}
+
+function validateDeviceInput({
+  deviceUid,
+  assignedUserCode,
+  siteCode,
+}) {
+  if (deviceUid.length < 6) {
+    return 'Cihaz unique id en az 6 karakter olmali.';
+  }
+  if (Number.isNaN(assignedUserCode)) {
+    return 'Kullanici ID sayisal olmali.';
+  }
+  if (Number.isNaN(siteCode)) {
+    return 'Site ID sayisal olmali.';
   }
   return null;
 }
@@ -187,6 +255,107 @@ async function updateUserByCode({
   return result.rows[0] || null;
 }
 
+async function createSite({
+  name,
+  address,
+  city,
+  district,
+}) {
+  const result = await pool.query(
+    `
+      INSERT INTO sites (name, address, city, district)
+      VALUES ($1, $2, $3, $4)
+      RETURNING site_code AS id, name, address, city, district, created_at
+    `,
+    [name, address, city, district],
+  );
+  return result.rows[0];
+}
+
+async function updateSiteByCode({
+  siteCode,
+  name,
+  address,
+  city,
+  district,
+}) {
+  const sets = [];
+  const values = [];
+
+  if (name !== undefined) {
+    values.push(name);
+    sets.push(`name = $${values.length}`);
+  }
+  if (address !== undefined) {
+    values.push(address);
+    sets.push(`address = $${values.length}`);
+  }
+  if (city !== undefined) {
+    values.push(city);
+    sets.push(`city = $${values.length}`);
+  }
+  if (district !== undefined) {
+    values.push(district);
+    sets.push(`district = $${values.length}`);
+  }
+
+  if (sets.length === 0) {
+    return null;
+  }
+
+  values.push(siteCode);
+  const result = await pool.query(
+    `
+      UPDATE sites
+      SET ${sets.join(', ')}
+      WHERE site_code = $${values.length}
+      RETURNING site_code AS id, name, address, city, district, created_at
+    `,
+    values,
+  );
+  return result.rows[0] || null;
+}
+
+async function createDevice({
+  deviceUid,
+  assignedUserCode,
+  siteCode,
+}) {
+  const result = await pool.query(
+    `
+      INSERT INTO devices (device_uid, assigned_user_code, site_code)
+      VALUES ($1, $2, $3)
+      RETURNING id, device_uid, assigned_user_code, site_code, created_at
+    `,
+    [deviceUid, assignedUserCode, siteCode],
+  );
+  return result.rows[0];
+}
+
+async function userExists(userCode) {
+  if (userCode == null) {
+    return true;
+  }
+
+  const result = await pool.query(
+    `SELECT 1 FROM users WHERE user_code = $1 LIMIT 1`,
+    [userCode],
+  );
+  return result.rowCount > 0;
+}
+
+async function siteExists(siteCode) {
+  if (siteCode == null) {
+    return true;
+  }
+
+  const result = await pool.query(
+    `SELECT 1 FROM sites WHERE site_code = $1 LIMIT 1`,
+    [siteCode],
+  );
+  return result.rowCount > 0;
+}
+
 function handleUserMutationError(error, res, genericErrorMessage) {
   if (error?.code === '23505' && error?.constraint === 'users_email_key') {
     return res.status(409).json({ error: 'Bu e-posta zaten kayitli.' });
@@ -195,6 +364,20 @@ function handleUserMutationError(error, res, genericErrorMessage) {
     return res
       .status(409)
       .json({ error: 'Kullanici kodu olusturulurken cakisma oldu, tekrar deneyin.' });
+  }
+  return res.status(500).json({ error: genericErrorMessage });
+}
+
+function handleSiteMutationError(error, res, genericErrorMessage) {
+  if (error?.code === '23505') {
+    return res.status(409).json({ error: 'Site kodu olusturulurken cakisma oldu.' });
+  }
+  return res.status(500).json({ error: genericErrorMessage });
+}
+
+function handleDeviceMutationError(error, res, genericErrorMessage) {
+  if (error?.code === '23505' && error?.constraint === 'devices_device_uid_key') {
+    return res.status(409).json({ error: 'Bu cihazin unique id kayitli.' });
   }
   return res.status(500).json({ error: genericErrorMessage });
 }
@@ -617,6 +800,162 @@ app.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) 
     return res.status(204).send();
   } catch (_error) {
     return res.status(500).json({ error: 'Kullanici silinemedi.' });
+  }
+});
+
+app.get('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
+
+  try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::INTEGER AS total FROM sites`,
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+    const offset = (page - 1) * pageSize;
+    const sitesResult = await pool.query(
+      `
+      SELECT
+        site_code AS id,
+        name,
+        address,
+        city,
+        district,
+        created_at
+      FROM sites
+      ORDER BY created_at DESC
+      LIMIT $1 OFFSET $2
+      `,
+      [pageSize, offset],
+    );
+
+    return res.status(200).json({
+      sites: sitesResult.rows.map((row) => mapSiteRow(row)),
+      total,
+      page,
+      page_size: pageSize,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Site listesi alinamadi.' });
+  }
+});
+
+app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const address = normalizeOptionalText(req.body.address);
+  const city = normalizeOptionalText(req.body.city);
+  const district = normalizeOptionalText(req.body.district);
+
+  const validationError = validateSiteInput({ name });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const site = await createSite({
+      name,
+      address,
+      city,
+      district,
+    });
+    return res.status(201).json({ site: mapSiteRow(site) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site olusturulamadi.');
+  }
+});
+
+app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  const name = normalizeOptionalText(req.body.name);
+  const address = normalizeOptionalText(req.body.address);
+  const city = normalizeOptionalText(req.body.city);
+  const district = normalizeOptionalText(req.body.district);
+
+  const validationError = validateSiteInput({ name });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  if (
+    name === undefined &&
+    address === undefined &&
+    city === undefined &&
+    district === undefined
+  ) {
+    return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
+  }
+
+  try {
+    const site = await updateSiteByCode({
+      siteCode,
+      name,
+      address,
+      city,
+      district,
+    });
+    if (!site) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    return res.status(200).json({ site: mapSiteRow(site) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+  }
+});
+
+app.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM sites WHERE site_code = $1`,
+      [siteCode],
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    return res.status(204).send();
+  } catch (_error) {
+    return res.status(500).json({ error: 'Site silinemedi.' });
+  }
+});
+
+app.post('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
+  const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
+  const assignedUserCode = normalizeOptionalInteger(req.body.assigned_user_code);
+  const siteCode = normalizeOptionalInteger(req.body.site_code);
+
+  const validationError = validateDeviceInput({
+    deviceUid,
+    assignedUserCode,
+    siteCode,
+  });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    if (!(await userExists(assignedUserCode ?? null))) {
+      return res.status(404).json({ error: 'Kullanici ID bulunamadi.' });
+    }
+    if (!(await siteExists(siteCode ?? null))) {
+      return res.status(404).json({ error: 'Site ID bulunamadi.' });
+    }
+
+    const device = await createDevice({
+      deviceUid,
+      assignedUserCode: assignedUserCode ?? null,
+      siteCode: siteCode ?? null,
+    });
+    return res.status(201).json({ device: mapDeviceRow(device) });
+  } catch (error) {
+    return handleDeviceMutationError(error, res, 'Cihaz kaydedilemedi.');
   }
 });
 

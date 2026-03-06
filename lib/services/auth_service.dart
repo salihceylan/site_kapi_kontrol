@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -97,6 +99,18 @@ class AuthService extends ChangeNotifier {
     return api.listManagedUsers(
       token: active.token,
       role: role,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  Future<SitePage> listSites({
+    required int page,
+    int pageSize = 10,
+  }) async {
+    final active = _requireSuperUserSession();
+    return api.listSites(
+      token: active.token,
       page: page,
       pageSize: pageSize,
     );
@@ -202,6 +216,105 @@ class AuthService extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> createSite({
+    required String name,
+    String? address,
+    String? city,
+    String? district,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.createSite(
+        token: active.token,
+        name: name,
+        address: address,
+        city: city,
+        district: district,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> updateSite({
+    required int siteCode,
+    String? name,
+    String? address,
+    String? city,
+    String? district,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.updateSite(
+        token: active.token,
+        siteCode: siteCode,
+        name: name,
+        address: address,
+        city: city,
+        district: district,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> deleteSite({
+    required int siteCode,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.deleteSite(token: active.token, siteCode: siteCode);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<(DeviceRecord?, String?)> createDevice({
+    required String deviceUid,
+    int? assignedUserCode,
+    int? siteCode,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final device = await api.createDevice(
+        token: active.token,
+        deviceUid: deviceUid,
+        assignedUserCode: assignedUserCode,
+        siteCode: siteCode,
+      );
+      return (device, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
     }
   }
 

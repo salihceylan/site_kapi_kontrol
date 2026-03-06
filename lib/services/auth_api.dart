@@ -1,8 +1,11 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/site_page.dart';
+import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -160,6 +163,126 @@ class AuthApi {
     );
 
     _ensureStatus(response, 204, allowEmptyBody: true);
+  }
+
+  Future<SitePage> listSites({
+    required String token,
+    required int page,
+    required int pageSize,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/sites').replace(
+      queryParameters: {
+        'page': '$page',
+        'page_size': '$pageSize',
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    final sites = (payload['sites'] as List<dynamic>? ?? <dynamic>[])
+        .map((item) => SiteRecord.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    return SitePage(
+      sites: sites,
+      total: payload['total'] as int? ?? 0,
+      page: payload['page'] as int? ?? page,
+      pageSize: payload['page_size'] as int? ?? pageSize,
+    );
+  }
+
+  Future<SiteRecord> createSite({
+    required String token,
+    required String name,
+    String? address,
+    String? city,
+    String? district,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/sites',
+      token: token,
+      body: {
+        'name': name,
+        'address': address,
+        'city': city,
+        'district': district,
+      },
+    );
+
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return SiteRecord.fromJson(payload['site'] as Map<String, dynamic>);
+  }
+
+  Future<SiteRecord> updateSite({
+    required String token,
+    required int siteCode,
+    String? name,
+    String? address,
+    String? city,
+    String? district,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'address': address,
+      'city': city,
+      'district': district,
+    }..removeWhere((_, value) => value == null);
+
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/sites/$siteCode',
+      token: token,
+      body: body,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return SiteRecord.fromJson(payload['site'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteSite({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/admin/sites/$siteCode',
+      token: token,
+    );
+
+    _ensureStatus(response, 204, allowEmptyBody: true);
+  }
+
+  Future<DeviceRecord> createDevice({
+    required String token,
+    required String deviceUid,
+    int? assignedUserCode,
+    int? siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/devices',
+      token: token,
+      body: {
+        'device_uid': deviceUid,
+        'assigned_user_code': assignedUserCode,
+        'site_code': siteCode,
+      },
+    );
+
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>);
   }
 
   Future<UserSession> updateMyProfile({

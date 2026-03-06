@@ -7,6 +7,8 @@ enum SirketMenuItem {
   superUserYonetimi,
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
+  siteler,
+  cihazEkle,
 }
 
 class YanMenu extends StatelessWidget {
@@ -116,6 +118,20 @@ class YanMenu extends StatelessWidget {
                   title: 'Daire Kullanicilari Yonetimi',
                   selected: selectedItem == SirketMenuItem.daireKullanicilariYonetimi,
                   onTap: () => onSelect(SirketMenuItem.daireKullanicilariYonetimi),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.location_city_outlined,
+                  title: 'Site Yonetimi',
+                  selected: selectedItem == SirketMenuItem.siteler,
+                  onTap: () => onSelect(SirketMenuItem.siteler),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.qr_code_scanner_outlined,
+                  title: 'Cihaz Ekle',
+                  selected: selectedItem == SirketMenuItem.cihazEkle,
+                  onTap: () => onSelect(SirketMenuItem.cihazEkle),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(
