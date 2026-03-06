@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(const MyApp(networkCheckEnabled: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Uyelik Girisi'), findsOneWidget);
+    expect(find.text('Sirket Girisi'), findsOneWidget);
     expect(find.text('Giris Yap'), findsOneWidget);
   });
 }

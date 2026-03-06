@@ -19,6 +19,26 @@ class UserSession {
   final String? phoneNumber;
   final DateTime? createdAt;
 
+  UserSession copyWith({
+    int? id,
+    String? fullName,
+    String? email,
+    UserRole? role,
+    String? token,
+    String? phoneNumber,
+    DateTime? createdAt,
+  }) {
+    return UserSession(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      token: token ?? this.token,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

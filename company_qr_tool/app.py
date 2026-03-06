@@ -199,9 +199,17 @@ class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("AHBU Cihaz Etiketleyici")
-        self.root.geometry("1100x760")
-        self.root.resizable(False, False)
         self.root.configure(bg=CLR_APP_BG)
+        self.root.minsize(1100, 760)
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            try:
+                self.root.attributes("-zoomed", True)
+            except tk.TclError:
+                self.root.geometry(
+                    f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
+                )
 
         self.logo_path = ensure_logo()
         self.devices: list[EspDevice] = []
@@ -293,7 +301,18 @@ class App:
             arrowsize=14,
             padding=4,
         )
-        s.map("TCombobox", fieldbackground=[("readonly", CLR_CARD_BG)], selectbackground=[("readonly", CLR_CARD_BG)])
+        s.map(
+            "TCombobox",
+            fieldbackground=[("readonly", CLR_CARD_BG)],
+            background=[("readonly", CLR_CARD_BG)],
+            foreground=[("readonly", CLR_TEXT_MAIN)],
+            selectbackground=[("readonly", CLR_CARD_BG)],
+            selectforeground=[("readonly", CLR_TEXT_MAIN)],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", CLR_CARD_BG)
+        self.root.option_add("*TCombobox*Listbox.foreground", CLR_TEXT_MAIN)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", CLR_ROW_SEL_BG)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", CLR_ROW_SEL_TEXT)
 
         s.configure(
             "Treeview",

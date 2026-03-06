@@ -15,19 +15,12 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  UserRole _selectedRole = UserRole.superUser;
-  bool _isLoginMode = true;
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _fullNameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -39,33 +32,17 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     setState(() => _isLoading = true);
-
-    final email = _emailController.text.trim().toLowerCase();
-    final password = _passwordController.text.trim();
-    String? error;
-
-    if (_isLoginMode) {
-      error = await widget.authService.login(
-        email: email,
-        password: password,
-        role: _selectedRole,
-      );
-    } else {
-      error = await widget.authService.register(
-        fullName: _fullNameController.text.trim(),
-        phoneNumber: _phoneController.text.trim(),
-        email: email,
-        password: password,
-        role: _selectedRole,
-      );
-    }
+    final error = await widget.authService.login(
+      email: _emailController.text.trim().toLowerCase(),
+      password: _passwordController.text.trim(),
+      role: UserRole.superUser,
+    );
 
     if (!mounted) {
       return;
     }
 
     setState(() => _isLoading = false);
-
     if (error != null) {
       ScaffoldMessenger.of(
         context,
@@ -76,9 +53,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isLoginMode ? 'Uyelik Girisi' : 'Yeni Uyelik'),
-      ),
+      appBar: AppBar(title: const Text('Sirket Girisi')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -104,11 +79,9 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    Text(
-                      _isLoginMode
-                          ? 'Rol secip giris yapin'
-                          : 'Hesap olusturun',
-                      style: const TextStyle(
+                    const Text(
+                      'Sirket paneline giris yapin',
+                      style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textDark,
@@ -116,64 +89,10 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Mavi temali guvenli giris paneli',
+                      'Bu uygulama sadece sirket super user hesabiyla kullanilir.',
                       style: TextStyle(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 20),
-                    if (!_isLoginMode) ...[
-                      TextFormField(
-                        controller: _fullNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Ad Soyad',
-                        ),
-                        validator: (value) {
-                          if (!_isLoginMode &&
-                              (value ?? '').trim().length < 3) {
-                            return 'Ad Soyad en az 3 karakter olmali.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Telefon Numarasi',
-                        ),
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) {
-                            return 'Telefon numarasi zorunlu.';
-                          }
-                          if (!RegExp(
-                            r'^\+?[0-9()\-\s]{10,20}$',
-                          ).hasMatch(text)) {
-                            return 'Gecerli bir telefon numarasi girin.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    DropdownButtonFormField<UserRole>(
-                      initialValue: _selectedRole,
-                      decoration: const InputDecoration(labelText: 'Rol'),
-                      items: UserRole.values
-                          .map(
-                            (role) => DropdownMenuItem<UserRole>(
-                              value: role,
-                              child: Text(role.label),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (role) {
-                        if (role != null) {
-                          setState(() => _selectedRole = role);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -210,17 +129,7 @@ class _LoginPageState extends State<LoginPage> {
                                 color: Colors.white,
                               ),
                             )
-                          : Text(_isLoginMode ? 'Giris Yap' : 'Kayit Ol'),
-                    ),
-                    TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => setState(() => _isLoginMode = !_isLoginMode),
-                      child: Text(
-                        _isLoginMode
-                            ? 'Hesabin yok mu? Kayit ol.'
-                            : 'Hesabin var mi? Giris yap.',
-                      ),
+                          : const Text('Giris Yap'),
                     ),
                   ],
                 ),

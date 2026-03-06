@@ -1,5 +1,12 @@
 import jwt from 'jsonwebtoken';
 
+function getJwtSecret() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET tanimli degil.');
+  }
+  return process.env.JWT_SECRET;
+}
+
 export function signAccessToken(user) {
   return jwt.sign(
     {
@@ -7,7 +14,11 @@ export function signAccessToken(user) {
       email: user.email,
       role: user.role,
     },
-    process.env.JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || '12h' },
   );
+}
+
+export function verifyAccessToken(token) {
+  return jwt.verify(token, getJwtSecret());
 }

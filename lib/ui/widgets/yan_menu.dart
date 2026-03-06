@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 
+enum SirketMenuItem {
+  dashboard,
+  profilim,
+  superUserYonetimi,
+}
+
 class YanMenu extends StatelessWidget {
   const YanMenu({
     super.key,
     required this.fullName,
     required this.userEmail,
-    required this.roleLabel,
+    required this.selectedItem,
+    required this.onSelect,
     required this.onLogout,
   });
 
   final String fullName;
   final String userEmail;
-  final String roleLabel;
+  final SirketMenuItem selectedItem;
+  final ValueChanged<SirketMenuItem> onSelect;
   final VoidCallback onLogout;
 
   @override
@@ -66,11 +74,6 @@ class YanMenu extends StatelessWidget {
                   userEmail,
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  roleLabel,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
               ],
             ),
           ),
@@ -78,35 +81,70 @@ class YanMenu extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
               children: [
-                ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  leading: const Icon(
-                    Icons.home_outlined,
-                    color: AppColors.primary,
-                  ),
-                  title: const Text('Ana Sayfa'),
-                  onTap: () => Navigator.pop(context),
+                _MenuTile(
+                  icon: Icons.home_outlined,
+                  title: 'Panel',
+                  selected: selectedItem == SirketMenuItem.dashboard,
+                  onTap: () => onSelect(SirketMenuItem.dashboard),
                 ),
                 const SizedBox(height: 4),
-                ListTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  tileColor: AppColors.primary.withValues(alpha: 0.08),
-                  leading: const Icon(Icons.logout, color: AppColors.primary),
-                  title: const Text('Cikis Yap'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onLogout();
-                  },
+                _MenuTile(
+                  icon: Icons.person_outline,
+                  title: 'Profilim',
+                  selected: selectedItem == SirketMenuItem.profilim,
+                  onTap: () => onSelect(SirketMenuItem.profilim),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.manage_accounts_outlined,
+                  title: 'Super User Yonetimi',
+                  selected: selectedItem == SirketMenuItem.superUserYonetimi,
+                  onTap: () => onSelect(SirketMenuItem.superUserYonetimi),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.logout,
+                  title: 'Cikis Yap',
+                  selected: false,
+                  onTap: onLogout,
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      tileColor: selected ? AppColors.primary.withValues(alpha: 0.1) : null,
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 }
