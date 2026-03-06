@@ -10,6 +10,7 @@ class NetworkService extends ChangeNotifier {
   bool _isReady = false;
   bool _isChecking = false;
   bool _hasInternet = true;
+  bool _isDisposed = false;
 
   bool get isReady => _isReady;
   bool get isChecking => _isChecking;
@@ -19,7 +20,7 @@ class NetworkService extends ChangeNotifier {
     if (!enabled) {
       _isReady = true;
       _hasInternet = true;
-      notifyListeners();
+      _notifySafely();
       return;
     }
     await refresh();
@@ -31,13 +32,13 @@ class NetworkService extends ChangeNotifier {
     }
 
     _isChecking = true;
-    notifyListeners();
+    _notifySafely();
 
     final hasInternet = await _probeInternet();
     _hasInternet = hasInternet;
     _isChecking = false;
     _isReady = true;
-    notifyListeners();
+    _notifySafely();
   }
 
   Future<bool> _probeInternet() async {
@@ -60,5 +61,18 @@ class NetworkService extends ChangeNotifier {
     }
 
     return false;
+  }
+
+  void _notifySafely() {
+    if (_isDisposed) {
+      return;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 }

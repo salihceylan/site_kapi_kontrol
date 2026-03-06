@@ -28,6 +28,7 @@ class MqttDoorService extends ChangeNotifier {
   bool _connecting = false;
   bool _connected = false;
   bool _sending = false;
+  bool _isDisposed = false;
   bool? _doorLocked;
   String? _lastEvent;
   DateTime? _lastUpdatedAt;
@@ -47,13 +48,13 @@ class MqttDoorService extends ChangeNotifier {
   String get eventTopic => 'site/$siteId/door/$doorId/event';
 
   Future<void> connect() async {
-    if (_connected || _connecting) {
+    if (_isDisposed || _connected || _connecting) {
       return;
     }
 
     _connecting = true;
     _lastError = null;
-    notifyListeners();
+    _notifySafely();
 
     try {
       final client = MqttServerClient.withPort(
@@ -83,6 +84,11 @@ class MqttDoorService extends ChangeNotifier {
       _client = client;
       await client.connect();
 
+      if (_isDisposed) {
+        _safeDisconnect();
+        return;
+      }
+
       if (client.connectionStatus?.state != MqttConnectionState.connected) {
         throw Exception(
           'MQTT baglanti hatasi: ${client.connectionStatus?.state}',
@@ -103,7 +109,7 @@ class MqttDoorService extends ChangeNotifier {
       _safeDisconnect();
     } finally {
       _connecting = false;
-      notifyListeners();
+      _notifySafely();
     }
   }
 
@@ -118,7 +124,7 @@ class MqttDoorService extends ChangeNotifier {
 
     _sending = true;
     _lastError = null;
-    notifyListeners();
+    _notifySafely();
 
     try {
       final payload = jsonEncode({
@@ -140,7 +146,7 @@ class MqttDoorService extends ChangeNotifier {
       return _lastError;
     } finally {
       _sending = false;
-      notifyListeners();
+      _notifySafely();
     }
   }
 
@@ -164,7 +170,7 @@ class MqttDoorService extends ChangeNotifier {
       }
     }
 
-    notifyListeners();
+    _notifySafely();
   }
 
   void _applyStatePayload(String payload) {
@@ -185,17 +191,17 @@ class MqttDoorService extends ChangeNotifier {
   void _onConnected() {
     _connected = true;
     _lastError = null;
-    notifyListeners();
+    _notifySafely();
   }
 
   void _onDisconnected() {
     _connected = false;
-    notifyListeners();
+    _notifySafely();
   }
 
   void _onAutoReconnect() {
     _connecting = true;
-    notifyListeners();
+    _notifySafely();
   }
 
   void _onAutoReconnected() {
@@ -203,7 +209,7 @@ class MqttDoorService extends ChangeNotifier {
     _connected = true;
     _client?.subscribe(stateTopic, MqttQos.atLeastOnce);
     _client?.subscribe(eventTopic, MqttQos.atLeastOnce);
-    notifyListeners();
+    _notifySafely();
   }
 
   void _safeDisconnect() {
@@ -217,8 +223,16 @@ class MqttDoorService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _messageSub?.cancel();
     _safeDisconnect();
     super.dispose();
+  }
+
+  void _notifySafely() {
+    if (_isDisposed) {
+      return;
+    }
+    notifyListeners();
   }
 }

@@ -16,6 +16,7 @@ class AuthService extends ChangeNotifier {
   final AuthApi api;
   UserSession? _session;
   bool _isReady = false;
+  bool _isDisposed = false;
 
   UserSession? get session => _session;
   bool get isLoggedIn => _session != null;
@@ -35,7 +36,7 @@ class AuthService extends ChangeNotifier {
     }
 
     _isReady = true;
-    notifyListeners();
+    _notifySafely();
   }
 
   Future<String?> login({
@@ -46,7 +47,7 @@ class AuthService extends ChangeNotifier {
     try {
       _session = await api.login(email: email, password: password, role: role);
       await _persist();
-      notifyListeners();
+      _notifySafely();
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -71,7 +72,7 @@ class AuthService extends ChangeNotifier {
         phoneNumber: phoneNumber,
       );
       await _persist();
-      notifyListeners();
+      _notifySafely();
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -84,7 +85,7 @@ class AuthService extends ChangeNotifier {
     _session = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey);
-    notifyListeners();
+    _notifySafely();
   }
 
   Future<ManagedUserPage> listManagedUsers({
@@ -228,7 +229,7 @@ class AuthService extends ChangeNotifier {
       );
       _session = updated;
       await _persist();
-      notifyListeners();
+      _notifySafely();
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -259,5 +260,18 @@ class AuthService extends ChangeNotifier {
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(_session!.toJson()));
+  }
+
+  void _notifySafely() {
+    if (_isDisposed) {
+      return;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 }

@@ -70,7 +70,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      if (messenger == null) {
+        return;
+      }
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    });
   }
 
   UserRole? _roleForMenu(SirketMenuItem item) {
@@ -247,205 +256,64 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final formKey = GlobalKey<FormState>();
-    final fullNameController = TextEditingController(text: user?.fullName ?? '');
-    final emailController = TextEditingController(text: user?.email ?? '');
-    final phoneController = TextEditingController(text: user?.phoneNumber ?? '');
-    final passwordController = TextEditingController();
-    final isEditing = user != null;
-    final isSelf = user?.id == session.id;
-    var isActive = user?.isActive ?? (role == UserRole.superUser);
-    var isSaving = false;
-
-    await showDialog<void>(
+    final result = await showDialog<_ManagedUserFormResult>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> submit() async {
-              if (!(formKey.currentState?.validate() ?? false)) {
-                return;
-              }
-
-              setDialogState(() => isSaving = true);
-              final error = isEditing
-                  ? await widget.authService.updateManagedUser(
-                      userCode: user.id,
-                      fullName: fullNameController.text.trim(),
-                      email: emailController.text.trim().toLowerCase(),
-                      password: passwordController.text.trim().isEmpty
-                          ? null
-                          : passwordController.text.trim(),
-                      phoneNumber: phoneController.text.trim(),
-                      isActive: isActive,
-                    )
-                  : await widget.authService.createManagedUser(
-                      fullName: fullNameController.text.trim(),
-                      email: emailController.text.trim().toLowerCase(),
-                      password: passwordController.text.trim(),
-                      role: role,
-                      isActive: isActive,
-                      phoneNumber: phoneController.text.trim(),
-                    );
-
-              if (!mounted) {
-                return;
-              }
-
-              setDialogState(() => isSaving = false);
-              if (error != null) {
-                _showMessage(error);
-                return;
-              }
-
-              if (dialogContext.mounted) {
-                Navigator.of(dialogContext).pop();
-              }
-
-              final targetPage = isEditing ? _managedPages[role]?.page ?? 1 : 1;
-              await _loadManagedUsers(role, force: true, page: targetPage);
-              if (!mounted) {
-                return;
-              }
-
-              _showMessage(
-                isEditing
-                    ? '${_roleTitle(role)} bilgisi guncellendi.'
-                    : '${_roleTitle(role)} hesabi olusturuldu.',
-              );
-            }
-
-            return AlertDialog(
-              title: Text(
-                isEditing
-                    ? '${_roleTitle(role)} Duzenle'
-                    : 'Yeni ${_roleTitle(role)} Ekle',
-              ),
-              content: SizedBox(
-                width: 420,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: fullNameController,
-                          decoration: const InputDecoration(labelText: 'Ad Soyad'),
-                          validator: (value) => (value ?? '').trim().length < 3
-                              ? 'Ad Soyad en az 3 karakter olmali.'
-                              : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'E-posta'),
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            return text.isEmpty || !text.contains('@')
-                                ? 'Gecerli bir e-posta girin.'
-                                : null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: phoneController,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Telefon (opsiyonel)',
-                          ),
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            if (text.isEmpty) {
-                              return null;
-                            }
-                            return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
-                                ? null
-                                : 'Gecerli bir telefon numarasi girin.';
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: isEditing
-                                ? 'Yeni Sifre (opsiyonel)'
-                                : 'Sifre',
-                          ),
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            if (!isEditing && text.length < 6) {
-                              return 'Sifre en az 6 karakter olmali.';
-                            }
-                            if (isEditing && text.isNotEmpty && text.length < 6) {
-                              return 'Sifre en az 6 karakter olmali.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        SwitchListTile.adaptive(
-                          value: isActive,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Aktif'),
-                          subtitle: Text(
-                            isActive
-                                ? 'Kullanici giris yapabilir.'
-                                : 'Kullanici giris yapamaz.',
-                          ),
-                          onChanged: isSelf
-                              ? null
-                              : (value) => setDialogState(() => isActive = value),
-                        ),
-                        if (isSelf)
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Kendi super user hesabinizi burada pasif yapamazsiniz.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSaving
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Iptal'),
-                ),
-                ElevatedButton(
-                  onPressed: isSaving ? null : submit,
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Kaydet'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (dialogContext) => _ManagedUserDialog(
+        role: role,
+        roleTitle: _roleTitle(role),
+        user: user,
+        isSelf: user?.id == session.id,
+      ),
     );
 
-    fullNameController.dispose();
-    emailController.dispose();
-    phoneController.dispose();
-    passwordController.dispose();
+    if (result == null) {
+      return;
+    }
+
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) {
+      return;
+    }
+
+    final isEditing = user != null;
+    final error = isEditing
+        ? await widget.authService.updateManagedUser(
+            userCode: user.id,
+            fullName: result.fullName,
+            email: result.email,
+            password: result.password.isEmpty ? null : result.password,
+            phoneNumber: result.phoneNumber,
+            isActive: result.isActive,
+          )
+        : await widget.authService.createManagedUser(
+            fullName: result.fullName,
+            email: result.email,
+            password: result.password,
+            role: role,
+            isActive: result.isActive,
+            phoneNumber: result.phoneNumber,
+          );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    final targetPage = isEditing ? _managedPages[role]?.page ?? 1 : 1;
+    await _loadManagedUsers(role, force: true, page: targetPage);
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      isEditing
+          ? '${_roleTitle(role)} bilgisi guncellendi.'
+          : '${_roleTitle(role)} hesabi olusturuldu.',
+    );
   }
 
   Future<void> _toggleUserActivation({
@@ -1015,4 +883,197 @@ class _ManagedUserCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ManagedUserDialog extends StatefulWidget {
+  const _ManagedUserDialog({
+    required this.role,
+    required this.roleTitle,
+    required this.user,
+    required this.isSelf,
+  });
+
+  final UserRole role;
+  final String roleTitle;
+  final ManagedUserAccount? user;
+  final bool isSelf;
+
+  @override
+  State<_ManagedUserDialog> createState() => _ManagedUserDialogState();
+}
+
+class _ManagedUserDialogState extends State<_ManagedUserDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _fullNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _passwordController;
+  late bool _isActive;
+
+  bool get _isEditing => widget.user != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController = TextEditingController(text: widget.user?.fullName ?? '');
+    _emailController = TextEditingController(text: widget.user?.email ?? '');
+    _phoneController = TextEditingController(text: widget.user?.phoneNumber ?? '');
+    _passwordController = TextEditingController();
+    _isActive = widget.user?.isActive ?? (widget.role == UserRole.superUser);
+  }
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+    Navigator.of(context).pop(
+      _ManagedUserFormResult(
+        fullName: _fullNameController.text.trim(),
+        email: _emailController.text.trim().toLowerCase(),
+        phoneNumber: _phoneController.text.trim(),
+        password: _passwordController.text.trim(),
+        isActive: _isActive,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        _isEditing
+            ? '${widget.roleTitle} Duzenle'
+            : 'Yeni ${widget.roleTitle} Ekle',
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _fullNameController,
+                  decoration: const InputDecoration(labelText: 'Ad Soyad'),
+                  validator: (value) => (value ?? '').trim().length < 3
+                      ? 'Ad Soyad en az 3 karakter olmali.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'E-posta'),
+                  validator: (value) {
+                    final text = (value ?? '').trim();
+                    return text.isEmpty || !text.contains('@')
+                        ? 'Gecerli bir e-posta girin.'
+                        : null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefon (opsiyonel)',
+                  ),
+                  validator: (value) {
+                    final text = (value ?? '').trim();
+                    if (text.isEmpty) {
+                      return null;
+                    }
+                    return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
+                        ? null
+                        : 'Gecerli bir telefon numarasi girin.';
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: _isEditing
+                        ? 'Yeni Sifre (opsiyonel)'
+                        : 'Sifre',
+                  ),
+                  validator: (value) {
+                    final text = (value ?? '').trim();
+                    if (!_isEditing && text.length < 6) {
+                      return 'Sifre en az 6 karakter olmali.';
+                    }
+                    if (_isEditing && text.isNotEmpty && text.length < 6) {
+                      return 'Sifre en az 6 karakter olmali.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile.adaptive(
+                  value: _isActive,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Aktif'),
+                  subtitle: Text(
+                    _isActive
+                        ? 'Kullanici giris yapabilir.'
+                        : 'Kullanici giris yapamaz.',
+                  ),
+                  onChanged: widget.isSelf
+                      ? null
+                      : (value) => setState(() => _isActive = value),
+                ),
+                if (widget.isSelf)
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Kendi super user hesabinizi burada pasif yapamazsiniz.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Iptal'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          child: const Text('Kaydet'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ManagedUserFormResult {
+  const _ManagedUserFormResult({
+    required this.fullName,
+    required this.email,
+    required this.phoneNumber,
+    required this.password,
+    required this.isActive,
+  });
+
+  final String fullName;
+  final String email;
+  final String phoneNumber;
+  final String password;
+  final bool isActive;
 }
