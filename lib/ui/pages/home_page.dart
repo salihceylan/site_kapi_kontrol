@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
-import 'package:site_kapi_kontrol/models/super_user_account.dart';
+import 'package:site_kapi_kontrol/models/managed_user_account.dart';
+import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -19,8 +21,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late final MqttDoorService _doorService;
+  static const int _pageSize = 10;
 
+  late final MqttDoorService _doorService;
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
 
   final _profileFormKey = GlobalKey<FormState>();
@@ -30,21 +33,14 @@ class _HomePageState extends State<HomePage> {
   final _profilePasswordController = TextEditingController();
   bool _isSavingProfile = false;
 
-  final _superUserFormKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isCreatingSuperUser = false;
-
-  bool _loadingSuperUsers = false;
-  bool _superUsersLoaded = false;
-  List<SuperUserAccount> _superUsers = const [];
+  final Map<UserRole, ManagedUserPage> _managedPages = {};
+  final Set<UserRole> _loadingRoles = <UserRole>{};
+  final Set<int> _busyActivationUsers = <int>{};
+  final Set<int> _busyDeleteUsers = <int>{};
 
   @override
   void initState() {
     super.initState();
-
     final session = widget.authService.session;
     if (session != null) {
       _profileFullNameController.text = session.fullName;
@@ -69,28 +65,29 @@ class _HomePageState extends State<HomePage> {
     _profileEmailController.dispose();
     _profilePhoneController.dispose();
     _profilePasswordController.dispose();
-
-    _fullNameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _passwordController.dispose();
-
     _doorService.dispose();
     super.dispose();
   }
 
-  void _selectMenu(SirketMenuItem item) {
-    Navigator.pop(context);
-    if (_selectedMenu == item) {
-      return;
-    }
-    setState(() => _selectedMenu = item);
-    if (item == SirketMenuItem.superUserYonetimi) {
-      _loadSuperUsers(force: !_superUsersLoaded);
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  UserRole? _roleForMenu(SirketMenuItem item) {
+    switch (item) {
+      case SirketMenuItem.superUserYonetimi:
+        return UserRole.superUser;
+      case SirketMenuItem.siteYoneticileriYonetimi:
+        return UserRole.siteManager;
+      case SirketMenuItem.daireKullanicilariYonetimi:
+        return UserRole.apartmentOwner;
+      case SirketMenuItem.dashboard:
+      case SirketMenuItem.profilim:
+        return null;
     }
   }
 
-  String _titleByMenu(SirketMenuItem item) {
+  String _titleForMenu(SirketMenuItem item) {
     switch (item) {
       case SirketMenuItem.dashboard:
         return 'Sirket Paneli';
@@ -98,70 +95,96 @@ class _HomePageState extends State<HomePage> {
         return 'Profilim';
       case SirketMenuItem.superUserYonetimi:
         return 'Super User Yonetimi';
+      case SirketMenuItem.siteYoneticileriYonetimi:
+        return 'Site Yoneticileri Yonetimi';
+      case SirketMenuItem.daireKullanicilariYonetimi:
+        return 'Daire Kullanicilari Yonetimi';
     }
   }
 
-  Future<void> _loadSuperUsers({bool force = false}) async {
-    if (_loadingSuperUsers) {
-      return;
+  String _roleTitle(UserRole role) {
+    switch (role) {
+      case UserRole.superUser:
+        return 'Super User';
+      case UserRole.siteManager:
+        return 'Site Yoneticisi';
+      case UserRole.apartmentOwner:
+        return 'Daire Kullanici';
     }
-    if (!force && _superUsersLoaded) {
+  }
+
+  String _rolePlural(UserRole role) {
+    switch (role) {
+      case UserRole.superUser:
+        return 'Super User Hesaplari';
+      case UserRole.siteManager:
+        return 'Site Yoneticileri';
+      case UserRole.apartmentOwner:
+        return 'Daire Kullanicilari';
+    }
+  }
+
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final year = local.year.toString();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day.$month.$year $hour:$minute';
+  }
+
+  void _selectMenu(SirketMenuItem item) {
+    Navigator.pop(context);
+    setState(() => _selectedMenu = item);
+    final role = _roleForMenu(item);
+    if (role != null) {
+      _loadManagedUsers(role);
+    }
+  }
+
+  Future<void> _loadManagedUsers(
+    UserRole role, {
+    bool force = false,
+    int? page,
+  }) async {
+    if (_loadingRoles.contains(role)) {
       return;
     }
 
-    setState(() => _loadingSuperUsers = true);
+    final existing = _managedPages[role];
+    final targetPage = page ?? existing?.page ?? 1;
+    if (!force && existing != null && page == null) {
+      return;
+    }
+
+    setState(() => _loadingRoles.add(role));
     try {
-      final users = await widget.authService.listSuperUsers();
+      final result = await widget.authService.listManagedUsers(
+        role: role,
+        page: targetPage,
+        pageSize: _pageSize,
+      );
       if (!mounted) {
         return;
       }
-      setState(() {
-        _superUsers = users;
-        _superUsersLoaded = true;
-      });
+      setState(() => _managedPages[role] = result);
     } on ApiException catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showMessage(e.message);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
     } catch (_) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showMessage('${_rolePlural(role)} alinamadi.');
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Super user listesi alinamadi.')),
-      );
     } finally {
       if (mounted) {
-        setState(() => _loadingSuperUsers = false);
+        setState(() => _loadingRoles.remove(role));
       }
     }
-  }
-
-  Future<void> _openDoor() async {
-    final session = widget.authService.session;
-    if (session == null) {
-      return;
-    }
-
-    final error = await _doorService.sendPulseCommand(
-      requestedBy: session.email,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kapi acma komutu gonderildi.')),
-    );
   }
 
   Future<void> _saveProfile() async {
@@ -184,9 +207,8 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() => _isSavingProfile = false);
-
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      _showMessage(error);
       return;
     }
 
@@ -195,171 +217,214 @@ class _HomePageState extends State<HomePage> {
     _profileEmailController.text = session.email;
     _profilePhoneController.text = session.phoneNumber ?? '';
     _profilePasswordController.clear();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profil bilgileri guncellendi.')),
-    );
+    setState(() {});
+    _showMessage('Profil bilgileri guncellendi.');
   }
 
-  Future<void> _createSuperUser() async {
-    if (!(_superUserFormKey.currentState?.validate() ?? false)) {
+  Future<void> _openDoor() async {
+    final session = widget.authService.session;
+    if (session == null) {
       return;
     }
 
-    setState(() => _isCreatingSuperUser = true);
-
-    final error = await widget.authService.createSuperUser(
-      fullName: _fullNameController.text.trim(),
-      email: _emailController.text.trim().toLowerCase(),
-      password: _passwordController.text.trim(),
-      phoneNumber: _phoneController.text.trim(),
-    );
-
+    final error = await _doorService.sendPulseCommand(requestedBy: session.email);
     if (!mounted) {
       return;
     }
-
-    setState(() => _isCreatingSuperUser = false);
-
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      _showMessage(error);
+      return;
+    }
+    _showMessage('Kapi acma komutu gonderildi.');
+  }
+
+  Future<void> _openManagedUserDialog({
+    required UserRole role,
+    ManagedUserAccount? user,
+  }) async {
+    final session = widget.authService.session;
+    if (session == null) {
       return;
     }
 
-    _fullNameController.clear();
-    _emailController.clear();
-    _phoneController.clear();
-    _passwordController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Yeni super user basariyla olusturuldu.')),
-    );
-    await _loadSuperUsers(force: true);
-  }
-
-  Future<void> _editSuperUser(SuperUserAccount user) async {
     final formKey = GlobalKey<FormState>();
-    final fullNameController = TextEditingController(text: user.fullName);
-    final emailController = TextEditingController(text: user.email);
-    final phoneController = TextEditingController(text: user.phoneNumber ?? '');
+    final fullNameController = TextEditingController(text: user?.fullName ?? '');
+    final emailController = TextEditingController(text: user?.email ?? '');
+    final phoneController = TextEditingController(text: user?.phoneNumber ?? '');
     final passwordController = TextEditingController();
-    bool saving = false;
+    final isEditing = user != null;
+    final isSelf = user?.id == session.id;
+    var isActive = user?.isActive ?? (role == UserRole.superUser);
+    var isSaving = false;
 
     await showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            Future<void> save() async {
+            Future<void> submit() async {
               if (!(formKey.currentState?.validate() ?? false)) {
                 return;
               }
-              setDialogState(() => saving = true);
-              final error = await widget.authService.updateSuperUser(
-                userCode: user.id,
-                fullName: fullNameController.text.trim(),
-                email: emailController.text.trim().toLowerCase(),
-                phoneNumber: phoneController.text.trim(),
-                password: passwordController.text.trim().isEmpty
-                    ? null
-                    : passwordController.text.trim(),
-              );
+
+              setDialogState(() => isSaving = true);
+              final error = isEditing
+                  ? await widget.authService.updateManagedUser(
+                      userCode: user.id,
+                      fullName: fullNameController.text.trim(),
+                      email: emailController.text.trim().toLowerCase(),
+                      password: passwordController.text.trim().isEmpty
+                          ? null
+                          : passwordController.text.trim(),
+                      phoneNumber: phoneController.text.trim(),
+                      isActive: isActive,
+                    )
+                  : await widget.authService.createManagedUser(
+                      fullName: fullNameController.text.trim(),
+                      email: emailController.text.trim().toLowerCase(),
+                      password: passwordController.text.trim(),
+                      role: role,
+                      isActive: isActive,
+                      phoneNumber: phoneController.text.trim(),
+                    );
+
               if (!mounted) {
                 return;
               }
-              setDialogState(() => saving = false);
+
+              setDialogState(() => isSaving = false);
               if (error != null) {
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text(error)),
-                );
+                _showMessage(error);
                 return;
               }
-              if (!context.mounted) {
-                return;
+
+              if (dialogContext.mounted) {
+                Navigator.of(dialogContext).pop();
               }
-              Navigator.of(context).pop();
-              await _loadSuperUsers(force: true);
+
+              final targetPage = isEditing ? _managedPages[role]?.page ?? 1 : 1;
+              await _loadManagedUsers(role, force: true, page: targetPage);
               if (!mounted) {
                 return;
               }
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(content: Text('Super user bilgisi guncellendi.')),
+
+              _showMessage(
+                isEditing
+                    ? '${_roleTitle(role)} bilgisi guncellendi.'
+                    : '${_roleTitle(role)} hesabi olusturuldu.',
               );
             }
 
             return AlertDialog(
-              title: const Text('Super User Duzenle'),
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: fullNameController,
-                        decoration: const InputDecoration(labelText: 'Ad Soyad'),
-                        validator: (value) {
-                          if ((value ?? '').trim().length < 3) {
-                            return 'Ad Soyad en az 3 karakter olmali.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: emailController,
-                        decoration: const InputDecoration(labelText: 'E-posta'),
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty || !text.contains('@')) {
-                            return 'Gecerli bir e-posta girin.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: phoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Telefon (opsiyonel)',
+              title: Text(
+                isEditing
+                    ? '${_roleTitle(role)} Duzenle'
+                    : 'Yeni ${_roleTitle(role)} Ekle',
+              ),
+              content: SizedBox(
+                width: 420,
+                child: Form(
+                  key: formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: fullNameController,
+                          decoration: const InputDecoration(labelText: 'Ad Soyad'),
+                          validator: (value) => (value ?? '').trim().length < 3
+                              ? 'Ad Soyad en az 3 karakter olmali.'
+                              : null,
                         ),
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isEmpty) {
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(labelText: 'E-posta'),
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            return text.isEmpty || !text.contains('@')
+                                ? 'Gecerli bir e-posta girin.'
+                                : null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Telefon (opsiyonel)',
+                          ),
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isEmpty) {
+                              return null;
+                            }
+                            return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
+                                ? null
+                                : 'Gecerli bir telefon numarasi girin.';
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: passwordController,
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            labelText: isEditing
+                                ? 'Yeni Sifre (opsiyonel)'
+                                : 'Sifre',
+                          ),
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (!isEditing && text.length < 6) {
+                              return 'Sifre en az 6 karakter olmali.';
+                            }
+                            if (isEditing && text.isNotEmpty && text.length < 6) {
+                              return 'Sifre en az 6 karakter olmali.';
+                            }
                             return null;
-                          }
-                          if (!RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)) {
-                            return 'Gecerli bir telefon numarasi girin.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Yeni Sifre (opsiyonel)',
+                          },
                         ),
-                        validator: (value) {
-                          final text = (value ?? '').trim();
-                          if (text.isNotEmpty && text.length < 6) {
-                            return 'Sifre en az 6 karakter olmali.';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        SwitchListTile.adaptive(
+                          value: isActive,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Aktif'),
+                          subtitle: Text(
+                            isActive
+                                ? 'Kullanici giris yapabilir.'
+                                : 'Kullanici giris yapamaz.',
+                          ),
+                          onChanged: isSelf
+                              ? null
+                              : (value) => setDialogState(() => isActive = value),
+                        ),
+                        if (isSelf)
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Kendi super user hesabinizi burada pasif yapamazsiniz.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed: saving ? null : () => Navigator.of(context).pop(),
+                  onPressed: isSaving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Iptal'),
                 ),
                 ElevatedButton(
-                  onPressed: saving ? null : save,
-                  child: saving
+                  onPressed: isSaving ? null : submit,
+                  child: isSaving
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -383,22 +448,70 @@ class _HomePageState extends State<HomePage> {
     passwordController.dispose();
   }
 
-  Future<void> _deleteSuperUser(SuperUserAccount user) async {
+  Future<void> _toggleUserActivation({
+    required UserRole role,
+    required ManagedUserAccount user,
+    required bool value,
+  }) async {
     final session = widget.authService.session;
     if (session == null) {
       return;
     }
     if (session.id == user.id) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kendi hesabinizi silemezsiniz.')),
-      );
+      _showMessage('Kendi super user hesabinizi pasif yapamazsiniz.');
+      return;
+    }
+
+    setState(() => _busyActivationUsers.add(user.id));
+    final error = await widget.authService.setManagedUserActivation(
+      userCode: user.id,
+      isActive: value,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _busyActivationUsers.remove(user.id));
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    final pageData = _managedPages[role];
+    if (pageData != null) {
+      final updatedUsers = pageData.users
+          .map((item) => item.id == user.id ? item.copyWith(isActive: value) : item)
+          .toList();
+      setState(() {
+        _managedPages[role] = pageData.copyWith(users: updatedUsers);
+      });
+    }
+
+    _showMessage(
+      value
+          ? '${_roleTitle(role)} hesabi aktif edildi.'
+          : '${_roleTitle(role)} hesabi pasif edildi.',
+    );
+  }
+
+  Future<void> _deleteManagedUser({
+    required UserRole role,
+    required ManagedUserAccount user,
+  }) async {
+    final session = widget.authService.session;
+    if (session == null) {
+      return;
+    }
+    if (session.id == user.id) {
+      _showMessage('Kendi hesabinizi silemezsiniz.');
       return;
     }
 
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Super User Sil'),
+            title: Text('${_roleTitle(role)} Sil'),
             content: Text(
               '${user.fullName} hesabini silmek istediginize emin misiniz?',
             ),
@@ -420,25 +533,30 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final error = await widget.authService.deleteSuperUser(userCode: user.id);
+    setState(() => _busyDeleteUsers.add(user.id));
+    final error = await widget.authService.deleteManagedUser(userCode: user.id);
+
     if (!mounted) {
       return;
     }
+
+    setState(() => _busyDeleteUsers.remove(user.id));
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      _showMessage(error);
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Super user silindi.')),
-    );
-    await _loadSuperUsers(force: true);
-  }
 
-  String _doorStateText(bool? locked) {
-    if (locked == null) {
-      return 'Bilinmiyor';
+    final currentPage = _managedPages[role];
+    final targetPage =
+        currentPage != null && currentPage.users.length == 1 && currentPage.page > 1
+            ? currentPage.page - 1
+            : currentPage?.page ?? 1;
+
+    await _loadManagedUsers(role, force: true, page: targetPage);
+    if (!mounted) {
+      return;
     }
-    return locked ? 'Kilitli' : 'Acik/Tetiklenmis';
+    _showMessage('${_roleTitle(role)} hesabi silindi.');
   }
 
   Widget _buildDashboard(UserSession session) {
@@ -467,8 +585,10 @@ class _HomePageState extends State<HomePage> {
                       fontSize: 28,
                     ),
               ),
-              const SizedBox(height: 6),
-              const Text('Super user yonetim paneli'),
+              const SizedBox(height: 8),
+              const Text(
+                'Sandwich menuden super user, site yoneticisi ve daire kullanicisi hesaplarini yonetebilirsiniz.',
+              ),
             ],
           ),
         ),
@@ -481,7 +601,9 @@ class _HomePageState extends State<HomePage> {
                 : _doorService.connecting
                     ? 'Baglaniyor'
                     : 'Bagli degil';
-            final stateText = _doorStateText(_doorService.doorLocked);
+            final stateText = _doorService.doorLocked == null
+                ? 'Bilinmiyor'
+                : (_doorService.doorLocked! ? 'Kilitli' : 'Acik/Tetiklenmis');
 
             return Container(
               width: double.infinity,
@@ -503,24 +625,14 @@ class _HomePageState extends State<HomePage> {
                   Text('Kapi Durumu: $stateText'),
                   if (_doorService.lastUpdatedAt != null) ...[
                     const SizedBox(height: 6),
-                    Text(
-                      'Son Guncelleme: ${_doorService.lastUpdatedAt!.toLocal()}',
-                    ),
+                    Text('Son Guncelleme: ${_formatDate(_doorService.lastUpdatedAt)}'),
                   ],
                   if (_doorService.lastError != null) ...[
                     const SizedBox(height: 8),
                     Text(
                       _doorService.lastError!,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.red),
                     ),
-                  ],
-                  if (_doorService.lastEvent != null &&
-                      _doorService.lastEvent!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text('Son Event: ${_doorService.lastEvent}'),
                   ],
                   const SizedBox(height: 14),
                   SizedBox(
@@ -561,12 +673,9 @@ class _HomePageState extends State<HomePage> {
             TextFormField(
               controller: _profileFullNameController,
               decoration: const InputDecoration(labelText: 'Ad Soyad'),
-              validator: (value) {
-                if ((value ?? '').trim().length < 3) {
-                  return 'Ad Soyad en az 3 karakter olmali.';
-                }
-                return null;
-              },
+              validator: (value) => (value ?? '').trim().length < 3
+                  ? 'Ad Soyad en az 3 karakter olmali.'
+                  : null,
             ),
             const SizedBox(height: 10),
             TextFormField(
@@ -574,42 +683,26 @@ class _HomePageState extends State<HomePage> {
               decoration: const InputDecoration(labelText: 'E-posta'),
               validator: (value) {
                 final text = (value ?? '').trim();
-                if (text.isEmpty || !text.contains('@')) {
-                  return 'Gecerli bir e-posta girin.';
-                }
-                return null;
+                return text.isEmpty || !text.contains('@')
+                    ? 'Gecerli bir e-posta girin.'
+                    : null;
               },
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _profilePhoneController,
-              decoration: const InputDecoration(
-                labelText: 'Telefon (opsiyonel)',
-              ),
-              validator: (value) {
-                final text = (value ?? '').trim();
-                if (text.isEmpty) {
-                  return null;
-                }
-                if (!RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)) {
-                  return 'Gecerli bir telefon numarasi girin.';
-                }
-                return null;
-              },
+              decoration: const InputDecoration(labelText: 'Telefon (opsiyonel)'),
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _profilePasswordController,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Yeni Sifre (opsiyonel)',
-              ),
+              decoration: const InputDecoration(labelText: 'Yeni Sifre (opsiyonel)'),
               validator: (value) {
                 final text = (value ?? '').trim();
-                if (text.isNotEmpty && text.length < 6) {
-                  return 'Sifre en az 6 karakter olmali.';
-                }
-                return null;
+                return text.isNotEmpty && text.length < 6
+                    ? 'Sifre en az 6 karakter olmali.'
+                    : null;
               },
             ),
             const SizedBox(height: 14),
@@ -636,7 +729,7 @@ class _HomePageState extends State<HomePage> {
             Text('Kullanici Kodu: ${session.id}'),
             if (session.createdAt != null) ...[
               const SizedBox(height: 4),
-              Text('Kayit Tarihi: ${session.createdAt!.toLocal()}'),
+              Text('Kayit Tarihi: ${_formatDate(session.createdAt)}'),
             ],
           ],
         ),
@@ -644,7 +737,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSuperUserYonetimi(UserSession session) {
+  Widget _buildManagedRoleScreen(UserRole role, UserSession session) {
+    final pageData = _managedPages[role];
+    final users = pageData?.users ?? const <ManagedUserAccount>[];
+    final loading = _loadingRoles.contains(role);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -652,96 +749,33 @@ class _HomePageState extends State<HomePage> {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: AppDecorations.glassCard,
-          child: Form(
-            key: _superUserFormKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Yeni Super User Ekle',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _fullNameController,
-                  decoration: const InputDecoration(labelText: 'Ad Soyad'),
-                  validator: (value) {
-                    if ((value ?? '').trim().length < 3) {
-                      return 'Ad Soyad en az 3 karakter olmali.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'E-posta'),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty || !text.contains('@')) {
-                      return 'Gecerli bir e-posta girin.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(
-                    labelText: 'Telefon (opsiyonel)',
-                  ),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty) {
-                      return null;
-                    }
-                    if (!RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)) {
-                      return 'Gecerli bir telefon numarasi girin.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Sifre'),
-                  validator: (value) {
-                    if ((value ?? '').trim().length < 6) {
-                      return 'Sifre en az 6 karakter olmali.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isCreatingSuperUser ? null : _createSuperUser,
-                    icon: _isCreatingSuperUser
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.person_add_alt_1),
-                    label: Text(
-                      _isCreatingSuperUser
-                          ? 'Olusturuluyor...'
-                          : 'Super User Ekle',
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _rolePlural(role),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ekle, duzenle, sil ve aktivasyon ac/kapat islemleri bu ekrandan yapilir.',
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(
+                onPressed: () => _openManagedUserDialog(role: role),
+                icon: const Icon(Icons.person_add_alt_1),
+                label: Text('Yeni ${_roleTitle(role)}'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -754,71 +788,83 @@ class _HomePageState extends State<HomePage> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Tum Super User Hesaplari',
-                      style: TextStyle(
+                      pageData == null
+                          ? _rolePlural(role)
+                          : '${_rolePlural(role)} (${pageData.total})',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textDark,
                       ),
                     ),
                   ),
                   IconButton(
-                    onPressed: _loadingSuperUsers
+                    onPressed: loading
                         ? null
-                        : () => _loadSuperUsers(force: true),
+                        : () => _loadManagedUsers(role, force: true),
                     icon: const Icon(Icons.refresh),
-                    tooltip: 'Yenile',
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              if (_loadingSuperUsers)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
+              const SizedBox(height: 10),
+              if (loading && pageData == null)
+                const Center(child: CircularProgressIndicator())
+              else if (users.isEmpty)
+                Text('Kayitli ${_rolePlural(role).toLowerCase()} bulunamadi.')
+              else ...[
+                for (final user in users)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ManagedUserCard(
+                      user: user,
+                      isSelf: user.id == session.id,
+                      activationBusy: _busyActivationUsers.contains(user.id),
+                      deleteBusy: _busyDeleteUsers.contains(user.id),
+                      formattedCreatedAt: _formatDate(user.createdAt),
+                      onActivationChanged: (value) => _toggleUserActivation(
+                        role: role,
+                        user: user,
+                        value: value,
+                      ),
+                      onEdit: () => _openManagedUserDialog(role: role, user: user),
+                      onDelete: () => _deleteManagedUser(role: role, user: user),
+                    ),
                   ),
-                )
-              else if (_superUsers.isEmpty)
-                const Text('Kayitli super user bulunamadi.')
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _superUsers.length,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 14),
-                  itemBuilder: (context, index) {
-                    final user = _superUsers[index];
-                    final isSelf = user.id == session.id;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(user.fullName),
-                      subtitle: Text(
-                        '${user.email}\nKod: ${user.id}${user.phoneNumber == null || user.phoneNumber!.isEmpty ? '' : '\nTel: ${user.phoneNumber}'}',
+                if (pageData != null)
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Sayfa ${pageData.page} / ${pageData.totalPages} | Toplam ${pageData.total}',
                       ),
-                      isThreeLine: true,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () => _editSuperUser(user),
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: 'Duzenle',
-                          ),
-                          IconButton(
-                            onPressed: isSelf ? null : () => _deleteSuperUser(user),
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: isSelf
-                                ? 'Kendi hesabinizi silemezsiniz'
-                                : 'Sil',
-                          ),
-                        ],
+                      OutlinedButton.icon(
+                        onPressed: pageData.page > 1
+                            ? () => _loadManagedUsers(
+                                  role,
+                                  force: true,
+                                  page: pageData.page - 1,
+                                )
+                            : null,
+                        icon: const Icon(Icons.chevron_left),
+                        label: const Text('Onceki'),
                       ),
-                    );
-                  },
-                ),
+                      OutlinedButton.icon(
+                        onPressed: pageData.page < pageData.totalPages
+                            ? () => _loadManagedUsers(
+                                  role,
+                                  force: true,
+                                  page: pageData.page + 1,
+                                )
+                            : null,
+                        icon: const Icon(Icons.chevron_right),
+                        label: const Text('Sonraki'),
+                      ),
+                    ],
+                  ),
+              ],
             ],
           ),
         ),
@@ -833,18 +879,19 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.profilim:
         return _buildProfile(session);
       case SirketMenuItem.superUserYonetimi:
-        return _buildSuperUserYonetimi(session);
+        return _buildManagedRoleScreen(UserRole.superUser, session);
+      case SirketMenuItem.siteYoneticileriYonetimi:
+        return _buildManagedRoleScreen(UserRole.siteManager, session);
+      case SirketMenuItem.daireKullanicilariYonetimi:
+        return _buildManagedRoleScreen(UserRole.apartmentOwner, session);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_titleByMenu(_selectedMenu)),
-      ),
+      appBar: AppBar(title: Text(_titleForMenu(_selectedMenu))),
       drawer: YanMenu(
         fullName: session.fullName,
         userEmail: session.email,
@@ -858,6 +905,113 @@ class _HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: _buildContent(session),
+      ),
+    );
+  }
+}
+
+class _ManagedUserCard extends StatelessWidget {
+  const _ManagedUserCard({
+    required this.user,
+    required this.isSelf,
+    required this.activationBusy,
+    required this.deleteBusy,
+    required this.formattedCreatedAt,
+    required this.onActivationChanged,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ManagedUserAccount user;
+  final bool isSelf;
+  final bool activationBusy;
+  final bool deleteBusy;
+  final String formattedCreatedAt;
+  final ValueChanged<bool> onActivationChanged;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.infoCard,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  user.fullName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              Text(user.isActive ? 'Aktif' : 'Pasif'),
+              const SizedBox(width: 8),
+              activationBusy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Switch.adaptive(
+                      value: user.isActive,
+                      onChanged: isSelf ? null : onActivationChanged,
+                    ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(user.email),
+          const SizedBox(height: 4),
+          Text('Kod: ${user.id}'),
+          if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Telefon: ${user.phoneNumber}'),
+          ],
+          const SizedBox(height: 4),
+          Text('Kayit Tarihi: $formattedCreatedAt'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Duzenle'),
+              ),
+              ElevatedButton.icon(
+                onPressed: isSelf || deleteBusy ? null : onDelete,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                icon: deleteBusy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Sil'),
+              ),
+            ],
+          ),
+          if (isSelf) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Kendi super user hesabiniza silme ve pasif etme kilidi uygulanir.',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+          ],
+        ],
       ),
     );
   }

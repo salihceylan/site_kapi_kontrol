@@ -1,15 +1,14 @@
 import 'package:site_kapi_kontrol/models/user_role.dart';
 
-class UserSession {
-  const UserSession({
+class ManagedUserAccount {
+  const ManagedUserAccount({
     required this.id,
     required this.fullName,
     required this.email,
     required this.role,
     required this.isActive,
-    required this.token,
-    this.phoneNumber,
-    this.createdAt,
+    required this.phoneNumber,
+    required this.createdAt,
   });
 
   final int id;
@@ -17,58 +16,40 @@ class UserSession {
   final String email;
   final UserRole role;
   final bool isActive;
-  final String token;
   final String? phoneNumber;
   final DateTime? createdAt;
 
-  UserSession copyWith({
+  ManagedUserAccount copyWith({
     int? id,
     String? fullName,
     String? email,
     UserRole? role,
     bool? isActive,
-    String? token,
     String? phoneNumber,
     DateTime? createdAt,
   }) {
-    return UserSession(
+    return ManagedUserAccount(
       id: id ?? this.id,
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
-      token: token ?? this.token,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'full_name': fullName,
-      'email': email,
-      'role': role.apiValue,
-      'is_active': isActive,
-      'token': token,
-      'phone_number': phoneNumber,
-      'created_at': createdAt?.toIso8601String(),
-    };
-  }
-
-  factory UserSession.fromJson(Map<String, dynamic> json) {
-    final createdAtRaw = json['created_at'] as String?;
-    return UserSession(
+  factory ManagedUserAccount.fromJson(Map<String, dynamic> json) {
+    return ManagedUserAccount(
       id: json['id'] as int,
       fullName: json['full_name'] as String,
       email: json['email'] as String,
       role: UserRole.fromApi(json['role'] as String),
       isActive: json['is_active'] as bool? ?? true,
-      token: json['token'] as String,
       phoneNumber: json['phone_number'] as String?,
-      createdAt: createdAtRaw == null || createdAtRaw.isEmpty
+      createdAt: json['created_at'] == null
           ? null
-          : DateTime.tryParse(createdAtRaw),
+          : DateTime.tryParse(json['created_at'] as String),
     );
   }
 }

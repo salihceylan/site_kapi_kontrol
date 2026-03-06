@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:site_kapi_kontrol/models/super_user_account.dart';
+import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -87,26 +87,41 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> createSuperUser({
+  Future<ManagedUserPage> listManagedUsers({
+    required UserRole role,
+    required int page,
+    int pageSize = 10,
+  }) async {
+    final active = _requireSuperUserSession();
+    return api.listManagedUsers(
+      token: active.token,
+      role: role,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  Future<String?> createManagedUser({
     required String fullName,
     required String email,
     required String password,
+    required UserRole role,
+    required bool isActive,
     String? phoneNumber,
   }) async {
-    final active = _session;
+    final active = _safeRequireSuperUserSession();
     if (active == null) {
-      return 'Oturum bulunamadi.';
-    }
-    if (active.role != UserRole.superUser) {
       return 'Bu islem icin super user yetkisi gerekir.';
     }
 
     try {
-      await api.createSuperUser(
+      await api.createManagedUser(
         token: active.token,
         fullName: fullName,
         email: email,
         password: password,
+        role: role,
+        isActive: isActive,
         phoneNumber: phoneNumber,
       );
       return null;
@@ -117,41 +132,28 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<List<SuperUserAccount>> listSuperUsers() async {
-    final active = _session;
-    if (active == null) {
-      throw ApiException('Oturum bulunamadi.');
-    }
-    if (active.role != UserRole.superUser) {
-      throw ApiException('Bu islem icin super user yetkisi gerekir.');
-    }
-
-    return api.listSuperUsers(token: active.token);
-  }
-
-  Future<String?> updateSuperUser({
+  Future<String?> updateManagedUser({
     required int userCode,
     String? fullName,
     String? email,
     String? password,
     String? phoneNumber,
+    bool? isActive,
   }) async {
-    final active = _session;
+    final active = _safeRequireSuperUserSession();
     if (active == null) {
-      return 'Oturum bulunamadi.';
-    }
-    if (active.role != UserRole.superUser) {
       return 'Bu islem icin super user yetkisi gerekir.';
     }
 
     try {
-      await api.updateSuperUser(
+      await api.updateManagedUser(
         token: active.token,
         userCode: userCode,
         fullName: fullName,
         email: email,
         password: password,
         phoneNumber: phoneNumber,
+        isActive: isActive,
       );
       return null;
     } on ApiException catch (e) {
@@ -161,19 +163,39 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> deleteSuperUser({
+  Future<String?> setManagedUserActivation({
     required int userCode,
+    required bool isActive,
   }) async {
-    final active = _session;
+    final active = _safeRequireSuperUserSession();
     if (active == null) {
-      return 'Oturum bulunamadi.';
-    }
-    if (active.role != UserRole.superUser) {
       return 'Bu islem icin super user yetkisi gerekir.';
     }
 
     try {
-      await api.deleteSuperUser(token: active.token, userCode: userCode);
+      await api.setManagedUserActivation(
+        token: active.token,
+        userCode: userCode,
+        isActive: isActive,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> deleteManagedUser({
+    required int userCode,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.deleteManagedUser(token: active.token, userCode: userCode);
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -198,6 +220,7 @@ class AuthService extends ChangeNotifier {
         token: active.token,
         id: active.id,
         role: active.role,
+        isActive: active.isActive,
         fullName: fullName,
         email: email,
         phoneNumber: phoneNumber,
@@ -212,6 +235,25 @@ class AuthService extends ChangeNotifier {
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
     }
+  }
+
+  UserSession _requireSuperUserSession() {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      throw ApiException('Bu islem icin super user yetkisi gerekir.');
+    }
+    return active;
+  }
+
+  UserSession? _safeRequireSuperUserSession() {
+    final active = _session;
+    if (active == null) {
+      return null;
+    }
+    if (active.role != UserRole.superUser) {
+      return null;
+    }
+    return active;
   }
 
   Future<void> _persist() async {

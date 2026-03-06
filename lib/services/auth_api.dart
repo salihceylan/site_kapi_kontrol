@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:site_kapi_kontrol/models/super_user_account.dart';
+import 'package:site_kapi_kontrol/models/managed_user_account.dart';
+import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -43,75 +44,121 @@ class AuthApi {
     );
   }
 
-  Future<void> createSuperUser({
+  Future<ManagedUserPage> listManagedUsers({
+    required String token,
+    required UserRole role,
+    required int page,
+    required int pageSize,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/users').replace(
+      queryParameters: {
+        'role': role.apiValue,
+        'page': '$page',
+        'page_size': '$pageSize',
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+
+    final payload = _decodePayload(response);
+    final users = (payload['users'] as List<dynamic>? ?? <dynamic>[])
+        .map((item) => ManagedUserAccount.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    return ManagedUserPage(
+      users: users,
+      total: payload['total'] as int? ?? 0,
+      page: payload['page'] as int? ?? page,
+      pageSize: payload['page_size'] as int? ?? pageSize,
+    );
+  }
+
+  Future<void> createManagedUser({
     required String token,
     required String fullName,
     required String email,
     required String password,
+    required UserRole role,
+    required bool isActive,
     String? phoneNumber,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
-      path: '/admin/super-users',
+      path: '/admin/users',
       token: token,
       body: {
         'full_name': fullName,
         'email': email,
         'password': password,
+        'role': role.apiValue,
+        'is_active': isActive,
         'phone_number': phoneNumber,
       },
     );
+
     _ensureStatus(response, 201);
   }
 
-  Future<List<SuperUserAccount>> listSuperUsers({
-    required String token,
-  }) async {
-    final response = await _authorizedRequest(
-      method: 'GET',
-      path: '/admin/super-users',
-      token: token,
-    );
-    _ensureStatus(response, 200);
-    final payload = _decodePayload(response);
-    final users = (payload['users'] as List<dynamic>? ?? <dynamic>[])
-        .cast<Map<String, dynamic>>();
-    return users.map(SuperUserAccount.fromJson).toList();
-  }
-
-  Future<void> updateSuperUser({
+  Future<void> updateManagedUser({
     required String token,
     required int userCode,
     String? fullName,
     String? email,
     String? password,
     String? phoneNumber,
+    bool? isActive,
   }) async {
     final body = <String, dynamic>{
       'full_name': fullName,
       'email': email,
       'password': password,
       'phone_number': phoneNumber,
+      'is_active': isActive,
     }..removeWhere((_, value) => value == null);
 
     final response = await _authorizedRequest(
       method: 'PATCH',
-      path: '/admin/super-users/$userCode',
+      path: '/admin/users/$userCode',
       token: token,
       body: body,
     );
+
     _ensureStatus(response, 200);
   }
 
-  Future<void> deleteSuperUser({
+  Future<void> setManagedUserActivation({
+    required String token,
+    required int userCode,
+    required bool isActive,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/users/$userCode/activation',
+      token: token,
+      body: {'is_active': isActive},
+    );
+
+    _ensureStatus(response, 200);
+  }
+
+  Future<void> deleteManagedUser({
     required String token,
     required int userCode,
   }) async {
     final response = await _authorizedRequest(
       method: 'DELETE',
-      path: '/admin/super-users/$userCode',
+      path: '/admin/users/$userCode',
       token: token,
     );
+
     _ensureStatus(response, 204, allowEmptyBody: true);
   }
 
@@ -119,6 +166,7 @@ class AuthApi {
     required String token,
     required int id,
     required UserRole role,
+    required bool isActive,
     String? fullName,
     String? email,
     String? password,
@@ -137,6 +185,7 @@ class AuthApi {
       token: token,
       body: body,
     );
+
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     final user = payload['user'] as Map<String, dynamic>;
@@ -145,6 +194,7 @@ class AuthApi {
       token: token,
       fallbackId: id,
       fallbackRole: role,
+      fallbackIsActive: isActive,
     );
   }
 
@@ -159,6 +209,7 @@ class AuthApi {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(body),
     );
+
     _ensureStatus(response, expectedCode);
     final payload = _decodePayload(response);
     final user = payload['user'] as Map<String, dynamic>;
@@ -167,6 +218,7 @@ class AuthApi {
       token: payload['token'] as String,
       fallbackId: user['id'] as int,
       fallbackRole: UserRole.fromApi(user['role'] as String),
+      fallbackIsActive: user['is_active'] as bool? ?? true,
     );
   }
 
@@ -220,6 +272,7 @@ class AuthApi {
     if (response.body.trim().isEmpty) {
       return <String, dynamic>{};
     }
+
     final raw = jsonDecode(response.body);
     return raw is Map<String, dynamic> ? raw : <String, dynamic>{};
   }
@@ -229,6 +282,7 @@ class AuthApi {
     required String token,
     required int fallbackId,
     required UserRole fallbackRole,
+    required bool fallbackIsActive,
   }) {
     return UserSession(
       id: user['id'] as int? ?? fallbackId,
@@ -237,6 +291,7 @@ class AuthApi {
       role: user['role'] == null
           ? fallbackRole
           : UserRole.fromApi(user['role'] as String),
+      isActive: user['is_active'] as bool? ?? fallbackIsActive,
       token: token,
       phoneNumber: user['phone_number'] as String?,
       createdAt: user['created_at'] == null

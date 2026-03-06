@@ -3,7 +3,7 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 
-import { pool, checkDbConnection } from './db.js';
+import { pool, checkDbConnection, ensureDbSchema } from './db.js';
 import { signAccessToken, verifyAccessToken } from './jwt.js';
 
 dotenv.config();
@@ -20,24 +20,53 @@ function normalizePhone(raw) {
   return text || null;
 }
 
+function normalizeEmail(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+
+function normalizeOptionalText(raw) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const text = String(raw || '').trim();
+  return text || null;
+}
+
+function normalizeOptionalBool(raw) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (typeof raw === 'boolean') {
+    return raw;
+  }
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  return null;
+}
+
 function mapUserRow(row) {
   return {
     id: row.id,
     full_name: row.full_name,
     email: row.email,
     role: row.role,
+    is_active: row.is_active,
     phone_number: row.phone_number,
     created_at: row.created_at,
   };
 }
 
-function validateUserInput({
+function validateCreateInput({
   fullName,
   email,
   password,
   role,
   phoneNumber,
-  checkRole = true,
+  isActive,
 }) {
   if (fullName.length < 3) {
     return 'full_name en az 3 karakter olmali.';
@@ -48,11 +77,14 @@ function validateUserInput({
   if (password.length < 6) {
     return 'Sifre en az 6 karakter olmali.';
   }
-  if (checkRole && !validRoles.has(role)) {
+  if (!validRoles.has(role)) {
     return 'Gecersiz rol.';
   }
   if (phoneNumber && !/^\+?[0-9()\-\s]{10,20}$/.test(phoneNumber)) {
     return 'Gecerli bir telefon numarasi girin.';
+  }
+  if (isActive === null) {
+    return 'is_active alani true/false olmali.';
   }
   return null;
 }
@@ -62,14 +94,15 @@ function validateUpdateInput({
   email,
   password,
   phoneNumber,
+  isActive,
 }) {
-  if (fullName !== undefined && fullName.length < 3) {
+  if (fullName !== undefined && fullName !== null && fullName.length < 3) {
     return 'full_name en az 3 karakter olmali.';
   }
-  if (email !== undefined && !email.includes('@')) {
+  if (email !== undefined && email !== null && !email.includes('@')) {
     return 'Gecerli email girin.';
   }
-  if (password !== undefined && password.length < 6) {
+  if (password !== undefined && password !== null && password.length < 6) {
     return 'Sifre en az 6 karakter olmali.';
   }
   if (
@@ -79,29 +112,39 @@ function validateUpdateInput({
   ) {
     return 'Gecerli bir telefon numarasi girin.';
   }
+  if (isActive === null) {
+    return 'is_active alani true/false olmali.';
+  }
   return null;
 }
 
-async function createUser({ fullName, email, role, phoneNumber, password }) {
+async function createUser({
+  fullName,
+  email,
+  role,
+  isActive,
+  phoneNumber,
+  password,
+}) {
   const passwordHash = await bcrypt.hash(password, 12);
   const result = await pool.query(
     `
-      INSERT INTO users (full_name, email, role, phone_number, password_hash)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING user_code AS id, full_name, email, role, phone_number, created_at
+      INSERT INTO users (full_name, email, role, is_active, phone_number, password_hash)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING user_code AS id, full_name, email, role, is_active, phone_number, created_at
       `,
-    [fullName, email, role, phoneNumber, passwordHash],
+    [fullName, email, role, isActive, phoneNumber, passwordHash],
   );
   return result.rows[0];
 }
 
 async function updateUserByCode({
   userCode,
-  role,
   fullName,
   email,
   phoneNumber,
   password,
+  isActive,
 }) {
   const sets = [];
   const values = [];
@@ -122,28 +165,25 @@ async function updateUserByCode({
     values.push(await bcrypt.hash(password, 12));
     sets.push(`password_hash = $${values.length}`);
   }
+  if (isActive !== undefined) {
+    values.push(isActive);
+    sets.push(`is_active = $${values.length}`);
+  }
 
   if (sets.length === 0) {
     return null;
   }
 
   values.push(userCode);
-  let whereSql = `user_code = $${values.length}`;
-  if (role) {
-    values.push(role);
-    whereSql += ` AND role = $${values.length}`;
-  }
-
   const result = await pool.query(
     `
       UPDATE users
       SET ${sets.join(', ')}
-      WHERE ${whereSql}
-      RETURNING user_code AS id, full_name, email, role, phone_number, created_at
+      WHERE user_code = $${values.length}
+      RETURNING user_code AS id, full_name, email, role, is_active, phone_number, created_at
       `,
     values,
   );
-
   return result.rows[0] || null;
 }
 
@@ -159,7 +199,7 @@ function handleUserMutationError(error, res, genericErrorMessage) {
   return res.status(500).json({ error: genericErrorMessage });
 }
 
-function authRequired(req, res, next) {
+async function authRequired(req, res, next) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Yetkisiz erisim.' });
@@ -168,6 +208,38 @@ function authRequired(req, res, next) {
   try {
     const token = header.slice('Bearer '.length).trim();
     req.auth = verifyAccessToken(token);
+    const userCode = Number(req.auth?.sub);
+    if (!Number.isInteger(userCode)) {
+      return res.status(401).json({ error: 'Gecersiz token.' });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        user_code AS id,
+        full_name,
+        email,
+        role,
+        is_active,
+        phone_number,
+        created_at
+      FROM users
+      WHERE user_code = $1
+      LIMIT 1
+      `,
+      [userCode],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(401).json({ error: 'Kullanici bulunamadi.' });
+    }
+
+    const authUser = result.rows[0];
+    if (!authUser.is_active) {
+      return res.status(403).json({ error: 'Hesap aktif degil.' });
+    }
+
+    req.authUser = authUser;
     return next();
   } catch (_e) {
     return res.status(401).json({ error: 'Gecersiz veya suresi dolmus token.' });
@@ -175,7 +247,7 @@ function authRequired(req, res, next) {
 }
 
 function requireSuperUser(req, res, next) {
-  if (req.auth?.role !== 'super_user') {
+  if (req.authUser?.role !== 'super_user') {
     return res
       .status(403)
       .json({ error: 'Bu islem icin super user yetkisi gerekir.' });
@@ -184,8 +256,12 @@ function requireSuperUser(req, res, next) {
 }
 
 function getAuthUserCode(req) {
-  const userCode = Number(req.auth?.sub);
+  const userCode = Number(req.authUser?.id);
   return Number.isInteger(userCode) ? userCode : null;
+}
+
+function parseRole(value) {
+  return validRoles.has(value) ? value : null;
 }
 
 app.get('/health', async (_req, res) => {
@@ -199,18 +275,19 @@ app.get('/health', async (_req, res) => {
 
 app.post('/auth/register', async (req, res) => {
   const fullName = String(req.body.full_name || '').trim();
-  const email = String(req.body.email || '').trim().toLowerCase();
+  const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '').trim();
   const role = String(req.body.role || '').trim();
   const phoneNumber = normalizePhone(req.body.phone_number);
+  const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
 
-  const validationError = validateUserInput({
+  const validationError = validateCreateInput({
     fullName,
     email,
     password,
     role,
     phoneNumber,
-    checkRole: true,
+    isActive,
   });
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -221,18 +298,19 @@ app.post('/auth/register', async (req, res) => {
       fullName,
       email,
       role,
+      isActive,
       phoneNumber,
       password,
     });
     const token = signAccessToken(user);
-    return res.status(201).json({ token, user });
+    return res.status(201).json({ token, user: mapUserRow(user) });
   } catch (error) {
     return handleUserMutationError(error, res, 'Kayit islemi basarisiz.');
   }
 });
 
 app.post('/auth/login', async (req, res) => {
-  const email = String(req.body.email || '').trim().toLowerCase();
+  const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '').trim();
   const role = String(req.body.role || '').trim();
 
@@ -246,7 +324,15 @@ app.post('/auth/login', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT user_code AS id, full_name, email, role, phone_number, created_at, password_hash
+      SELECT
+        user_code AS id,
+        full_name,
+        email,
+        role,
+        is_active,
+        phone_number,
+        created_at,
+        password_hash
       FROM users
       WHERE email = $1
       LIMIT 1
@@ -268,6 +354,9 @@ app.post('/auth/login', async (req, res) => {
         .status(403)
         .json({ error: 'Kullanici rolu ile secilen rol uyusmuyor.' });
     }
+    if (!row.is_active) {
+      return res.status(403).json({ error: 'Hesap aktif degil.' });
+    }
 
     const user = mapUserRow(row);
     const token = signAccessToken(user);
@@ -278,30 +367,7 @@ app.post('/auth/login', async (req, res) => {
 });
 
 app.get('/me', authRequired, async (req, res) => {
-  const userCode = getAuthUserCode(req);
-  if (userCode == null) {
-    return res.status(401).json({ error: 'Yetkisiz erisim.' });
-  }
-
-  try {
-    const result = await pool.query(
-      `
-      SELECT user_code AS id, full_name, email, role, phone_number, created_at
-      FROM users
-      WHERE user_code = $1
-      LIMIT 1
-      `,
-      [userCode],
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Kullanici bulunamadi.' });
-    }
-
-    return res.status(200).json({ user: mapUserRow(result.rows[0]) });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Profil bilgileri alinamadi.' });
-  }
+  return res.status(200).json({ user: mapUserRow(req.authUser) });
 });
 
 app.patch('/me', authRequired, async (req, res) => {
@@ -310,19 +376,14 @@ app.patch('/me', authRequired, async (req, res) => {
     return res.status(401).json({ error: 'Yetkisiz erisim.' });
   }
 
-  const fullNameRaw = req.body.full_name;
-  const emailRaw = req.body.email;
-  const passwordRaw = req.body.password;
-  const phoneRaw = req.body.phone_number;
-
-  const fullName =
-    fullNameRaw === undefined ? undefined : String(fullNameRaw).trim();
+  const fullName = normalizeOptionalText(req.body.full_name);
   const email =
-    emailRaw === undefined ? undefined : String(emailRaw).trim().toLowerCase();
-  const password =
-    passwordRaw === undefined ? undefined : String(passwordRaw).trim();
+    req.body.email === undefined ? undefined : normalizeEmail(req.body.email);
+  const password = normalizeOptionalText(req.body.password);
   const phoneNumber =
-    phoneRaw === undefined ? undefined : normalizePhone(phoneRaw);
+    req.body.phone_number === undefined
+      ? undefined
+      : normalizePhone(req.body.phone_number);
 
   const validationError = validateUpdateInput({
     fullName,
@@ -360,20 +421,68 @@ app.patch('/me', authRequired, async (req, res) => {
   }
 });
 
-app.post('/admin/super-users', authRequired, requireSuperUser, async (req, res) => {
-  const fullName = String(req.body.full_name || '').trim();
-  const email = String(req.body.email || '').trim().toLowerCase();
-  const password = String(req.body.password || '').trim();
-  const phoneNumber = normalizePhone(req.body.phone_number);
-  const role = 'super_user';
+app.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
+  const role = parseRole(String(req.query.role || '').trim());
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
 
-  const validationError = validateUserInput({
+  if (!role) {
+    return res.status(400).json({ error: 'Gecersiz rol.' });
+  }
+
+  try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::INTEGER AS total FROM users WHERE role = $1`,
+      [role],
+    );
+    const total = countResult.rows[0]?.total ?? 0;
+    const offset = (page - 1) * pageSize;
+    const usersResult = await pool.query(
+      `
+      SELECT
+        user_code AS id,
+        full_name,
+        email,
+        role,
+        is_active,
+        phone_number,
+        created_at
+      FROM users
+      WHERE role = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+      `,
+      [role, pageSize, offset],
+    );
+
+    return res.status(200).json({
+      users: usersResult.rows.map((row) => mapUserRow(row)),
+      total,
+      page,
+      page_size: pageSize,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Kullanici listesi alinamadi.' });
+  }
+});
+
+app.post('/admin/users', authRequired, requireSuperUser, async (req, res) => {
+  const fullName = String(req.body.full_name || '').trim();
+  const email = normalizeEmail(req.body.email);
+  const password = String(req.body.password || '').trim();
+  const role = String(req.body.role || '').trim();
+  const phoneNumber = normalizePhone(req.body.phone_number);
+  const rawIsActive = normalizeOptionalBool(req.body.is_active);
+  const isActive =
+    rawIsActive ?? (role === 'super_user' ? true : false);
+
+  const validationError = validateCreateInput({
     fullName,
     email,
     password,
     role,
     phoneNumber,
-    checkRole: false,
+    isActive: rawIsActive === null ? null : isActive,
   });
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -384,62 +493,38 @@ app.post('/admin/super-users', authRequired, requireSuperUser, async (req, res) 
       fullName,
       email,
       role,
+      isActive,
       phoneNumber,
       password,
     });
     return res.status(201).json({ user: mapUserRow(user) });
   } catch (error) {
-    return handleUserMutationError(
-      error,
-      res,
-      'Super user olusturma islemi basarisiz.',
-    );
+    return handleUserMutationError(error, res, 'Kullanici olusturma basarisiz.');
   }
 });
 
-app.get('/admin/super-users', authRequired, requireSuperUser, async (_req, res) => {
-  try {
-    const result = await pool.query(
-      `
-      SELECT user_code AS id, full_name, email, role, phone_number, created_at
-      FROM users
-      WHERE role = 'super_user'
-      ORDER BY created_at DESC
-      `,
-    );
-    return res
-      .status(200)
-      .json({ users: result.rows.map((row) => mapUserRow(row)) });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Super user listesi alinamadi.' });
-  }
-});
-
-app.patch('/admin/super-users/:id', authRequired, requireSuperUser, async (req, res) => {
+app.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) => {
   const userCode = Number(req.params.id);
   if (!Number.isInteger(userCode)) {
     return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
   }
 
-  const fullNameRaw = req.body.full_name;
-  const emailRaw = req.body.email;
-  const passwordRaw = req.body.password;
-  const phoneRaw = req.body.phone_number;
-
-  const fullName =
-    fullNameRaw === undefined ? undefined : String(fullNameRaw).trim();
+  const fullName = normalizeOptionalText(req.body.full_name);
   const email =
-    emailRaw === undefined ? undefined : String(emailRaw).trim().toLowerCase();
-  const password =
-    passwordRaw === undefined ? undefined : String(passwordRaw).trim();
+    req.body.email === undefined ? undefined : normalizeEmail(req.body.email);
+  const password = normalizeOptionalText(req.body.password);
   const phoneNumber =
-    phoneRaw === undefined ? undefined : normalizePhone(phoneRaw);
+    req.body.phone_number === undefined
+      ? undefined
+      : normalizePhone(req.body.phone_number);
+  const isActive = normalizeOptionalBool(req.body.is_active);
 
   const validationError = validateUpdateInput({
     fullName,
     email,
     password,
     phoneNumber,
+    isActive,
   });
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -449,30 +534,65 @@ app.patch('/admin/super-users/:id', authRequired, requireSuperUser, async (req, 
     fullName === undefined &&
     email === undefined &&
     password === undefined &&
-    phoneNumber === undefined
+    phoneNumber === undefined &&
+    isActive === undefined
   ) {
     return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
+  }
+
+  if (isActive === false && userCode === getAuthUserCode(req)) {
+    return res.status(400).json({ error: 'Kendi hesabinizi pasif yapamazsiniz.' });
   }
 
   try {
     const updated = await updateUserByCode({
       userCode,
-      role: 'super_user',
       fullName,
       email,
       phoneNumber,
       password,
+      isActive,
     });
     if (!updated) {
-      return res.status(404).json({ error: 'Super user bulunamadi.' });
+      return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
     return res.status(200).json({ user: mapUserRow(updated) });
   } catch (error) {
-    return handleUserMutationError(error, res, 'Super user guncellenemedi.');
+    return handleUserMutationError(error, res, 'Kullanici guncellenemedi.');
   }
 });
 
-app.delete('/admin/super-users/:id', authRequired, requireSuperUser, async (req, res) => {
+app.patch(
+  '/admin/users/:id/activation',
+  authRequired,
+  requireSuperUser,
+  async (req, res) => {
+    const userCode = Number(req.params.id);
+    if (!Number.isInteger(userCode)) {
+      return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
+    }
+
+    const isActive = normalizeOptionalBool(req.body.is_active);
+    if (isActive === null || isActive === undefined) {
+      return res.status(400).json({ error: 'is_active alani true/false olmali.' });
+    }
+    if (isActive === false && userCode === getAuthUserCode(req)) {
+      return res.status(400).json({ error: 'Kendi hesabinizi pasif yapamazsiniz.' });
+    }
+
+    try {
+      const updated = await updateUserByCode({ userCode, isActive });
+      if (!updated) {
+        return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+      }
+      return res.status(200).json({ user: mapUserRow(updated) });
+    } catch (error) {
+      return handleUserMutationError(error, res, 'Aktivasyon guncellenemedi.');
+    }
+  },
+);
+
+app.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) => {
   const targetCode = Number(req.params.id);
   if (!Number.isInteger(targetCode)) {
     return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
@@ -488,18 +608,15 @@ app.delete('/admin/super-users/:id', authRequired, requireSuperUser, async (req,
 
   try {
     const result = await pool.query(
-      `
-      DELETE FROM users
-      WHERE user_code = $1 AND role = 'super_user'
-      `,
+      `DELETE FROM users WHERE user_code = $1`,
       [targetCode],
     );
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Super user bulunamadi.' });
+      return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
     return res.status(204).send();
   } catch (_error) {
-    return res.status(500).json({ error: 'Super user silinemedi.' });
+    return res.status(500).json({ error: 'Kullanici silinemedi.' });
   }
 });
 
@@ -507,7 +624,18 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Route bulunamadi.' });
 });
 
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`API started on http://localhost:${port}`);
-});
+async function startServer() {
+  try {
+    await ensureDbSchema();
+    app.listen(port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`API started on http://localhost:${port}`);
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Server startup failed:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

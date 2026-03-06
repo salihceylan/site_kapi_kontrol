@@ -21,3 +21,19 @@ export async function checkDbConnection() {
     client.release();
   }
 }
+
+export async function ensureDbSchema() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_role_active
+      ON users(role, is_active)
+    `);
+  } finally {
+    client.release();
+  }
+}

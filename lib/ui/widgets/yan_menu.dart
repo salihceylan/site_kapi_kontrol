@@ -5,6 +5,8 @@ enum SirketMenuItem {
   dashboard,
   profilim,
   superUserYonetimi,
+  siteYoneticileriYonetimi,
+  daireKullanicilariYonetimi,
 }
 
 class YanMenu extends StatelessWidget {
@@ -100,6 +102,20 @@ class YanMenu extends StatelessWidget {
                   title: 'Super User Yonetimi',
                   selected: selectedItem == SirketMenuItem.superUserYonetimi,
                   onTap: () => onSelect(SirketMenuItem.superUserYonetimi),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.apartment_outlined,
+                  title: 'Site Yoneticileri Yonetimi',
+                  selected: selectedItem == SirketMenuItem.siteYoneticileriYonetimi,
+                  onTap: () => onSelect(SirketMenuItem.siteYoneticileriYonetimi),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.groups_2_outlined,
+                  title: 'Daire Kullanicilari Yonetimi',
+                  selected: selectedItem == SirketMenuItem.daireKullanicilariYonetimi,
+                  onTap: () => onSelect(SirketMenuItem.daireKullanicilariYonetimi),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(
