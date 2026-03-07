@@ -6,6 +6,8 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/subscription_request.dart';
+import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -49,6 +51,9 @@ class _HomePageState extends State<HomePage> {
   SitePage? _sitesPage;
   bool _isLoadingSites = false;
   final Set<int> _busyDeleteSites = <int>{};
+  SubscriptionRequestPage? _subscriptionRequestsPage;
+  bool _isLoadingSubscriptionRequests = false;
+  final Set<int> _busySubscriptionRequests = <int>{};
 
   @override
   void initState() {
@@ -102,6 +107,7 @@ class _HomePageState extends State<HomePage> {
         return UserRole.siteManager;
       case SirketMenuItem.daireKullanicilariYonetimi:
         return UserRole.apartmentOwner;
+      case SirketMenuItem.abonelikTalepleri:
       case SirketMenuItem.siteler:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.dashboard:
@@ -116,6 +122,8 @@ class _HomePageState extends State<HomePage> {
         return 'Sirket Paneli';
       case SirketMenuItem.profilim:
         return 'Profilim';
+      case SirketMenuItem.abonelikTalepleri:
+        return 'Yeni Abonelik Talepleri';
       case SirketMenuItem.superUserYonetimi:
         return 'Super User Yonetimi';
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -184,6 +192,10 @@ class _HomePageState extends State<HomePage> {
     final role = _roleForMenu(item);
     if (role != null) {
       _loadManagedUsers(role);
+      return;
+    }
+    if (item == SirketMenuItem.abonelikTalepleri) {
+      _loadSubscriptionRequests();
       return;
     }
     if (item == SirketMenuItem.siteler) {
@@ -268,6 +280,83 @@ class _HomePageState extends State<HomePage> {
         setState(() => _isLoadingSites = false);
       }
     }
+  }
+
+  Future<void> _loadSubscriptionRequests({
+    bool force = false,
+    int? page,
+  }) async {
+    if (_isLoadingSubscriptionRequests) {
+      return;
+    }
+
+    final targetPage = page ?? _subscriptionRequestsPage?.page ?? 1;
+    if (!force && _subscriptionRequestsPage != null && page == null) {
+      return;
+    }
+
+    setState(() => _isLoadingSubscriptionRequests = true);
+    try {
+      final result = await widget.authService.listSubscriptionRequests(
+        page: targetPage,
+        pageSize: _pageSize,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _subscriptionRequestsPage = result);
+    } on ApiException catch (e) {
+      if (mounted) {
+        _showMessage(e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Abonelik talepleri alinamadi.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingSubscriptionRequests = false);
+      }
+    }
+  }
+
+  Future<void> _resolveSubscriptionRequest({
+    required int userCode,
+    required String action,
+  }) async {
+    setState(() => _busySubscriptionRequests.add(userCode));
+    final error = await widget.authService.resolveSubscriptionRequest(
+      userCode: userCode,
+      action: action,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _busySubscriptionRequests.remove(userCode));
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    final currentPage = _subscriptionRequestsPage;
+    final targetPage =
+        currentPage != null &&
+                currentPage.requests.length == 1 &&
+                currentPage.page > 1
+            ? currentPage.page - 1
+            : currentPage?.page ?? 1;
+    await _loadSubscriptionRequests(force: true, page: targetPage);
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      action == 'approve'
+          ? 'Abonelik talebi onaylandi.'
+          : 'Abonelik talebi reddedildi.',
+    );
   }
 
   Future<void> _openSiteDialog({
@@ -1028,6 +1117,123 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildSubscriptionRequestsScreen() {
+    final pageData = _subscriptionRequestsPage;
+    final requests = pageData?.requests ?? const <SubscriptionRequest>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: AppDecorations.glassCard,
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Yeni Abonelik Talepleri',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Mail dogrulamasini tamamlayan site yoneticileri burada onay bekler.',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: AppDecorations.glassCard,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      pageData == null
+                          ? 'Bekleyen Talepler'
+                          : 'Bekleyen Talepler (${pageData.total})',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _isLoadingSubscriptionRequests
+                        ? null
+                        : () => _loadSubscriptionRequests(force: true),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_isLoadingSubscriptionRequests && pageData == null)
+                const Center(child: CircularProgressIndicator())
+              else if (requests.isEmpty)
+                const Text('Dogrulanmis yeni abonelik talebi yok.')
+              else ...[
+                for (final request in requests)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _SubscriptionRequestCard(
+                      request: request,
+                      busy: _busySubscriptionRequests.contains(request.id),
+                      formattedCreatedAt: _formatDate(request.createdAt),
+                      onApprove: () => _resolveSubscriptionRequest(
+                        userCode: request.id,
+                        action: 'approve',
+                      ),
+                      onReject: () => _resolveSubscriptionRequest(
+                        userCode: request.id,
+                        action: 'reject',
+                      ),
+                    ),
+                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Sayfa ${pageData?.page ?? 1} / ${pageData?.totalPages ?? 1} | Toplam ${pageData?.total ?? 0}',
+                    ),
+                    OutlinedButton(
+                      onPressed: (pageData?.page ?? 1) > 1
+                          ? () => _loadSubscriptionRequests(
+                                force: true,
+                                page: (pageData?.page ?? 1) - 1,
+                              )
+                          : null,
+                      child: const Icon(Icons.chevron_left),
+                    ),
+                    OutlinedButton(
+                      onPressed:
+                          (pageData?.page ?? 1) < (pageData?.totalPages ?? 1)
+                          ? () => _loadSubscriptionRequests(
+                                force: true,
+                                page: (pageData?.page ?? 1) + 1,
+                              )
+                          : null,
+                      child: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildManagedRoleScreen(UserRole role, UserSession session) {
     final pageData = _managedPages[role];
     final users = pageData?.users ?? const <ManagedUserAccount>[];
@@ -1195,6 +1401,8 @@ class _HomePageState extends State<HomePage> {
         return _buildDashboard(session);
       case SirketMenuItem.profilim:
         return _buildProfile(session);
+      case SirketMenuItem.abonelikTalepleri:
+        return _buildSubscriptionRequestsScreen();
       case SirketMenuItem.superUserYonetimi:
         return _buildManagedRoleScreen(UserRole.superUser, session);
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -1444,6 +1652,78 @@ class _SiteCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _SubscriptionRequestCard extends StatelessWidget {
+  const _SubscriptionRequestCard({
+    required this.request,
+    required this.busy,
+    required this.formattedCreatedAt,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final SubscriptionRequest request;
+  final bool busy;
+  final String formattedCreatedAt;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: AppDecorations.infoCard,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            request.fullName,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(request.email),
+          const SizedBox(height: 4),
+          Text('Kod: ${request.id}'),
+          if (request.phoneNumber != null && request.phoneNumber!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Telefon: ${request.phoneNumber}'),
+          ],
+          const SizedBox(height: 4),
+          Text('Talep Tarihi: $formattedCreatedAt'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: busy ? null : onReject,
+                icon: const Icon(Icons.close_rounded, size: 18),
+                label: const Text('Reddet'),
+              ),
+              ElevatedButton.icon(
+                onPressed: busy ? null : onApprove,
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: const Text('Onayla'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -30,8 +30,46 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
     `);
     await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'
+    `);
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS email_verification_code_hash TEXT
+    `);
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'users_approval_status_check'
+        ) THEN
+          ALTER TABLE users
+          ADD CONSTRAINT users_approval_status_check
+          CHECK (approval_status IN ('pending', 'approved', 'rejected'));
+        END IF;
+      END $$;
+    `);
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_users_role_active
       ON users(role, is_active)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_role_approval_status
+      ON users(role, approval_status)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_role_email_verified
+      ON users(role, email_verified)
     `);
     await client.query(`
       CREATE OR REPLACE FUNCTION generate_unique_site_code()
@@ -75,8 +113,13 @@ export async function ensureDbSchema() {
         device_uid TEXT NOT NULL UNIQUE,
         assigned_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
         site_code BIGINT REFERENCES sites(site_code) ON DELETE SET NULL,
+        gate_name TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS gate_name TEXT
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_devices_assigned_user_code

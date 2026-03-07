@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
+import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -110,6 +111,18 @@ class AuthService extends ChangeNotifier {
   }) async {
     final active = _requireSuperUserSession();
     return api.listSites(
+      token: active.token,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
+
+  Future<SubscriptionRequestPage> listSubscriptionRequests({
+    required int page,
+    int pageSize = 10,
+  }) async {
+    final active = _requireSuperUserSession();
+    return api.listSubscriptionRequests(
       token: active.token,
       page: page,
       pageSize: pageSize,
@@ -315,6 +328,29 @@ class AuthService extends ChangeNotifier {
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<String?> resolveSubscriptionRequest({
+    required int userCode,
+    required String action,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.resolveSubscriptionRequest(
+        token: active.token,
+        userCode: userCode,
+        action: action,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/styles/app_colors.dart';
 enum SirketMenuItem {
   dashboard,
   profilim,
+  abonelikTalepleri,
   superUserYonetimi,
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
@@ -97,6 +98,13 @@ class YanMenu extends StatelessWidget {
                   title: 'Profilim',
                   selected: selectedItem == SirketMenuItem.profilim,
                   onTap: () => onSelect(SirketMenuItem.profilim),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.mark_email_unread_outlined,
+                  title: 'Yeni Abonelik Talepleri',
+                  selected: selectedItem == SirketMenuItem.abonelikTalepleri,
+                  onTap: () => onSelect(SirketMenuItem.abonelikTalepleri),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(

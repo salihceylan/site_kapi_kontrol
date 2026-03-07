@@ -6,6 +6,8 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/subscription_request.dart';
+import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -283,6 +285,55 @@ class AuthApi {
     _ensureStatus(response, 201);
     final payload = _decodePayload(response);
     return DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>);
+  }
+
+  Future<SubscriptionRequestPage> listSubscriptionRequests({
+    required String token,
+    required int page,
+    required int pageSize,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/subscription-requests').replace(
+      queryParameters: {
+        'page': '$page',
+        'page_size': '$pageSize',
+      },
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    final requests = (payload['requests'] as List<dynamic>? ?? <dynamic>[])
+        .map((item) => SubscriptionRequest.fromJson(item as Map<String, dynamic>))
+        .toList();
+
+    return SubscriptionRequestPage(
+      requests: requests,
+      total: payload['total'] as int? ?? 0,
+      page: payload['page'] as int? ?? page,
+      pageSize: payload['page_size'] as int? ?? pageSize,
+    );
+  }
+
+  Future<void> resolveSubscriptionRequest({
+    required String token,
+    required int userCode,
+    required String action,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/subscription-requests/$userCode',
+      token: token,
+      body: {'action': action},
+    );
+
+    _ensureStatus(response, 200);
   }
 
   Future<UserSession> updateMyProfile({
