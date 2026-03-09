@@ -12,13 +12,15 @@ PubSubClient client(espClientSecure);
 
 void setup() {
   Serial.begin(115200);
+  delay(300);
 
-  wifiBaglan();
   roleSetup();
+  wifiBaglan();
   mqttSetup();
 }
 
 void loop() {
+  wifiLoop();
   mqttLoopHandler();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();

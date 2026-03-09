@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/services/mqtt_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
+import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 double _dialogWidthForScreen(BuildContext context) {
@@ -252,10 +253,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _loadSites({
-    bool force = false,
-    int? page,
-  }) async {
+  Future<void> _loadSites({bool force = false, int? page}) async {
     if (_isLoadingSites) {
       return;
     }
@@ -274,7 +272,8 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) {
         return;
       }
-      final nextSelectedSite = result.sites.where((site) => site.id == _selectedSite?.id).isNotEmpty
+      final nextSelectedSite =
+          result.sites.where((site) => site.id == _selectedSite?.id).isNotEmpty
           ? result.sites.where((site) => site.id == _selectedSite?.id).first
           : (result.sites.isNotEmpty ? result.sites.first : null);
       setState(() {
@@ -301,10 +300,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _loadSiteStructure(
-    int siteCode, {
-    bool force = false,
-  }) async {
+  Future<void> _loadSiteStructure(int siteCode, {bool force = false}) async {
     if (_isLoadingSiteStructure) {
       return;
     }
@@ -405,10 +401,10 @@ class _HomePageState extends State<HomePage> {
     final currentPage = _subscriptionRequestsPage;
     final targetPage =
         currentPage != null &&
-                currentPage.requests.length == 1 &&
-                currentPage.page > 1
-            ? currentPage.page - 1
-            : currentPage?.page ?? 1;
+            currentPage.requests.length == 1 &&
+            currentPage.page > 1
+        ? currentPage.page - 1
+        : currentPage?.page ?? 1;
     await _loadSubscriptionRequests(force: true, page: targetPage);
     if (!mounted) {
       return;
@@ -421,9 +417,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _openSiteDialog({
-    SiteRecord? site,
-  }) async {
+  Future<void> _openSiteDialog({SiteRecord? site}) async {
     final result = await showDialog<_SiteFormResult>(
       context: context,
       builder: (dialogContext) => _SiteDialog(site: site),
@@ -485,7 +479,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _deleteSite(SiteRecord site) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Site Sil'),
@@ -524,9 +519,11 @@ class _HomePageState extends State<HomePage> {
 
     final currentPage = _sitesPage;
     final targetPage =
-        currentPage != null && currentPage.sites.length == 1 && currentPage.page > 1
-            ? currentPage.page - 1
-            : currentPage?.page ?? 1;
+        currentPage != null &&
+            currentPage.sites.length == 1 &&
+            currentPage.page > 1
+        ? currentPage.page - 1
+        : currentPage?.page ?? 1;
     await _loadSites(force: true, page: targetPage);
     if (!mounted) {
       return;
@@ -543,7 +540,8 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openApartmentResidentDialog(ApartmentRecord apartment) async {
     final result = await showDialog<_ApartmentResidentFormResult>(
       context: context,
-      builder: (dialogContext) => _ApartmentResidentDialog(apartment: apartment),
+      builder: (dialogContext) =>
+          _ApartmentResidentDialog(apartment: apartment),
     );
 
     if (result == null) {
@@ -551,15 +549,16 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() => _busyApartments.add(apartment.id));
-    final (updatedApartment, error) = await widget.authService.upsertApartmentResident(
-      apartmentId: apartment.id,
-      fullName: result.fullName,
-      loginName: result.loginName,
-      password: result.password,
-      email: result.email,
-      phoneNumber: result.phoneNumber,
-      isActive: result.isActive,
-    );
+    final (updatedApartment, error) = await widget.authService
+        .upsertApartmentResident(
+          apartmentId: apartment.id,
+          fullName: result.fullName,
+          loginName: result.loginName,
+          password: result.password,
+          email: result.email,
+          phoneNumber: result.phoneNumber,
+          isActive: result.isActive,
+        );
 
     if (!mounted) {
       return;
@@ -597,9 +596,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _assignDoorDevice(DoorRecord door) async {
-    final scannedUid = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScanPage()),
-    );
+    final scannedUid = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
 
     if (!mounted || scannedUid == null || scannedUid.trim().isEmpty) {
       return;
@@ -607,10 +606,8 @@ class _HomePageState extends State<HomePage> {
 
     final result = await showDialog<_DoorDeviceAssignResult>(
       context: context,
-      builder: (dialogContext) => _DoorDeviceDialog(
-        door: door,
-        initialDeviceUid: scannedUid,
-      ),
+      builder: (dialogContext) =>
+          _DoorDeviceDialog(door: door, initialDeviceUid: scannedUid),
     );
 
     if (result == null) {
@@ -642,10 +639,10 @@ class _HomePageState extends State<HomePage> {
     _showMessage('Kapi cihazi guncellendi.');
   }
 
-  Future<void> _openDeviceAddFlow() async {
-    final scannedUid = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScanPage()),
-    );
+  Future<void> _openDeviceRegistrationFlow() async {
+    final scannedUid = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
 
     if (!mounted || scannedUid == null || scannedUid.trim().isEmpty) {
       return;
@@ -681,6 +678,53 @@ class _HomePageState extends State<HomePage> {
     }
 
     _showMessage('Cihaz ${device?.deviceUid ?? result.deviceUid} kaydedildi.');
+  }
+
+  Future<void> _openDeviceAddFlow() async {
+    final _DeviceToolAction?
+    action = await showModalBottomSheet<_DeviceToolAction>(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.qr_code_scanner_outlined),
+                title: const Text('QR ile Cihaz Kaydet'),
+                subtitle: const Text(
+                  'Cihaz unique id okuyup sisteme kaydeder.',
+                ),
+                onTap: () =>
+                    Navigator.of(context).pop(_DeviceToolAction.registerDevice),
+              ),
+              ListTile(
+                leading: const Icon(Icons.bluetooth_searching_outlined),
+                title: const Text('Bluetooth ile Wi-Fi Kur'),
+                subtitle: const Text(
+                  'Kurulmamıs cihaza yakin Wi-Fi bilgisini gonderir.',
+                ),
+                onTap: () =>
+                    Navigator.of(context).pop(_DeviceToolAction.provisionWifi),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) {
+      return;
+    }
+
+    if (action == _DeviceToolAction.registerDevice) {
+      await _openDeviceRegistrationFlow();
+      return;
+    }
+
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const WifiProvisionPage()));
   }
 
   Future<void> _saveProfile() async {
@@ -723,7 +767,9 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final error = await _doorService.sendPulseCommand(requestedBy: session.email);
+    final error = await _doorService.sendPulseCommand(
+      requestedBy: session.email,
+    );
     if (!mounted) {
       return;
     }
@@ -836,7 +882,10 @@ class _HomePageState extends State<HomePage> {
     final pageData = _managedPages[role];
     if (pageData != null) {
       final updatedUsers = pageData.users
-          .map((item) => item.id == user.id ? item.copyWith(isActive: value) : item)
+          .map(
+            (item) =>
+                item.id == user.id ? item.copyWith(isActive: value) : item,
+          )
           .toList();
       setState(() {
         _managedPages[role] = pageData.copyWith(users: updatedUsers);
@@ -863,7 +912,8 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: Text('${_roleTitle(role)} Sil'),
@@ -901,9 +951,11 @@ class _HomePageState extends State<HomePage> {
 
     final currentPage = _managedPages[role];
     final targetPage =
-        currentPage != null && currentPage.users.length == 1 && currentPage.page > 1
-            ? currentPage.page - 1
-            : currentPage?.page ?? 1;
+        currentPage != null &&
+            currentPage.users.length == 1 &&
+            currentPage.page > 1
+        ? currentPage.page - 1
+        : currentPage?.page ?? 1;
 
     await _loadManagedUsers(role, force: true, page: targetPage);
     if (!mounted) {
@@ -1003,9 +1055,9 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 6),
               Text(
                 session.fullName,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontSize: 28,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontSize: 28),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -1021,8 +1073,8 @@ class _HomePageState extends State<HomePage> {
             final connectionText = _doorService.connected
                 ? 'Bagli'
                 : _doorService.connecting
-                    ? 'Baglaniyor'
-                    : 'Bagli degil';
+                ? 'Baglaniyor'
+                : 'Bagli degil';
             final stateText = _doorService.doorLocked == null
                 ? 'Bilinmiyor'
                 : (_doorService.doorLocked! ? 'Kilitli' : 'Acik/Tetiklenmis');
@@ -1047,7 +1099,9 @@ class _HomePageState extends State<HomePage> {
                   Text('Kapi Durumu: $stateText'),
                   if (_doorService.lastUpdatedAt != null) ...[
                     const SizedBox(height: 6),
-                    Text('Son Guncelleme: ${_formatDate(_doorService.lastUpdatedAt)}'),
+                    Text(
+                      'Son Guncelleme: ${_formatDate(_doorService.lastUpdatedAt)}',
+                    ),
                   ],
                   if (_doorService.lastError != null) ...[
                     const SizedBox(height: 8),
@@ -1113,13 +1167,17 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 10),
             TextFormField(
               controller: _profilePhoneController,
-              decoration: const InputDecoration(labelText: 'Telefon (opsiyonel)'),
+              decoration: const InputDecoration(
+                labelText: 'Telefon (opsiyonel)',
+              ),
             ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _profilePasswordController,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Yeni Sifre (opsiyonel)'),
+              decoration: const InputDecoration(
+                labelText: 'Yeni Sifre (opsiyonel)',
+              ),
               validator: (value) {
                 final text = (value ?? '').trim();
                 return text.isNotEmpty && text.length < 6
@@ -1239,7 +1297,9 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Expanded(
                     child: Text(
-                      pageData == null ? 'Site Listesi' : 'Site Listesi (${pageData.total})',
+                      pageData == null
+                          ? 'Site Listesi'
+                          : 'Site Listesi (${pageData.total})',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textDark,
@@ -1247,7 +1307,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   IconButton(
-                    onPressed: _isLoadingSites ? null : () => _loadSites(force: true),
+                    onPressed: _isLoadingSites
+                        ? null
+                        : () => _loadSites(force: true),
                     icon: const Icon(Icons.refresh),
                   ),
                 ],
@@ -1282,13 +1344,19 @@ class _HomePageState extends State<HomePage> {
                       ),
                       OutlinedButton(
                         onPressed: pageData.page > 1
-                            ? () => _loadSites(force: true, page: pageData.page - 1)
+                            ? () => _loadSites(
+                                force: true,
+                                page: pageData.page - 1,
+                              )
                             : null,
                         child: const Icon(Icons.chevron_left),
                       ),
                       OutlinedButton(
                         onPressed: pageData.page < pageData.totalPages
-                            ? () => _loadSites(force: true, page: pageData.page + 1)
+                            ? () => _loadSites(
+                                force: true,
+                                page: pageData.page + 1,
+                              )
                             : null,
                         child: const Icon(Icons.chevron_right),
                       ),
@@ -1334,7 +1402,8 @@ class _HomePageState extends State<HomePage> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: () => _openSiteDialog(site: structure.site),
+                          onPressed: () =>
+                              _openSiteDialog(site: structure.site),
                           icon: const Icon(Icons.edit_outlined),
                           label: const Text('Siteyi Duzenle'),
                         ),
@@ -1362,7 +1431,9 @@ class _HomePageState extends State<HomePage> {
                               runSpacing: 8,
                               children: [
                                 Text('Site Kodu: ${structure.site.id}'),
-                                Text('MQTT Site ID: ${structure.site.mqttSiteId}'),
+                                Text(
+                                  'MQTT Site ID: ${structure.site.mqttSiteId}',
+                                ),
                                 Text('Blok: ${structure.site.blockCount}'),
                                 Text('Daire: ${structure.site.apartmentCount}'),
                                 Text('Kapi: ${structure.site.doorCount}'),
@@ -1551,9 +1622,9 @@ class _HomePageState extends State<HomePage> {
                     OutlinedButton(
                       onPressed: (pageData?.page ?? 1) > 1
                           ? () => _loadSubscriptionRequests(
-                                force: true,
-                                page: (pageData?.page ?? 1) - 1,
-                              )
+                              force: true,
+                              page: (pageData?.page ?? 1) - 1,
+                            )
                           : null,
                       child: const Icon(Icons.chevron_left),
                     ),
@@ -1561,9 +1632,9 @@ class _HomePageState extends State<HomePage> {
                       onPressed:
                           (pageData?.page ?? 1) < (pageData?.totalPages ?? 1)
                           ? () => _loadSubscriptionRequests(
-                                force: true,
-                                page: (pageData?.page ?? 1) + 1,
-                              )
+                              force: true,
+                              page: (pageData?.page ?? 1) + 1,
+                            )
                           : null,
                       child: const Icon(Icons.chevron_right),
                     ),
@@ -1711,20 +1782,20 @@ class _HomePageState extends State<HomePage> {
                       OutlinedButton(
                         onPressed: pageData.page > 1
                             ? () => _loadManagedUsers(
-                                  role,
-                                  force: true,
-                                  page: pageData.page - 1,
-                                )
+                                role,
+                                force: true,
+                                page: pageData.page - 1,
+                              )
                             : null,
                         child: const Icon(Icons.chevron_left),
                       ),
                       OutlinedButton(
                         onPressed: pageData.page < pageData.totalPages
                             ? () => _loadManagedUsers(
-                                  role,
-                                  force: true,
-                                  page: pageData.page + 1,
-                                )
+                                role,
+                                force: true,
+                                page: pageData.page + 1,
+                              )
                             : null,
                         child: const Icon(Icons.chevron_right),
                       ),
@@ -1885,7 +1956,8 @@ class _ManagedUserCard extends StatelessWidget {
                           ),
                         )
                       : Switch.adaptive(
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           value: user.isActive,
                           onChanged: isSelf ? null : onActivationChanged,
                         ),
@@ -1992,13 +2064,16 @@ class _SiteCard extends StatelessWidget {
                   ),
                   if ((site.managerName ?? '').isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text('Yonetici: ${site.managerName} (${site.managerUserCode ?? '-'})'),
+                    Text(
+                      'Yonetici: ${site.managerName} (${site.managerUserCode ?? '-'})',
+                    ),
                   ],
                   if (site.address != null && site.address!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(site.address!),
                   ],
-                  if ((site.city ?? '').isNotEmpty || (site.district ?? '').isNotEmpty) ...[
+                  if ((site.city ?? '').isNotEmpty ||
+                      (site.district ?? '').isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('${site.city ?? '-'} / ${site.district ?? '-'}'),
                   ],
@@ -2114,7 +2189,9 @@ class _ApartmentCard extends StatelessWidget {
                             Text(
                               active ? 'Aktif' : 'Pasif',
                               style: TextStyle(
-                                color: active ? Colors.green.shade700 : Colors.red.shade700,
+                                color: active
+                                    ? Colors.green.shade700
+                                    : Colors.red.shade700,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -2218,7 +2295,8 @@ class _SubscriptionRequestCard extends StatelessWidget {
           Text(request.email),
           const SizedBox(height: 4),
           Text('Kod: ${request.id}'),
-          if (request.phoneNumber != null && request.phoneNumber!.isNotEmpty) ...[
+          if (request.phoneNumber != null &&
+              request.phoneNumber!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text('Telefon: ${request.phoneNumber}'),
           ],
@@ -2282,9 +2360,13 @@ class _SiteDialogState extends State<_SiteDialog> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.site?.name ?? '');
-    _addressController = TextEditingController(text: widget.site?.address ?? '');
+    _addressController = TextEditingController(
+      text: widget.site?.address ?? '',
+    );
     _cityController = TextEditingController(text: widget.site?.city ?? '');
-    _districtController = TextEditingController(text: widget.site?.district ?? '');
+    _districtController = TextEditingController(
+      text: widget.site?.district ?? '',
+    );
     _blockCountController = TextEditingController(
       text: '${widget.site?.blockCount ?? 1}',
     );
@@ -2407,7 +2489,9 @@ class _SiteDialogState extends State<_SiteDialog> {
                 TextFormField(
                   controller: _doorCountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Otomatik Kapi Sayisi'),
+                  decoration: const InputDecoration(
+                    labelText: 'Otomatik Kapi Sayisi',
+                  ),
                   validator: (value) {
                     final parsed = int.tryParse((value ?? '').trim());
                     return parsed == null || parsed <= 0
@@ -2442,10 +2526,7 @@ class _SiteDialogState extends State<_SiteDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Iptal'),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Kaydet'),
-        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
       ],
     );
   }
@@ -2516,7 +2597,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
               children: [
                 TextFormField(
                   controller: _deviceUidController,
-                  decoration: const InputDecoration(labelText: 'Cihaz Unique ID'),
+                  decoration: const InputDecoration(
+                    labelText: 'Cihaz Unique ID',
+                  ),
                   validator: (value) => (value ?? '').trim().length < 6
                       ? 'Cihaz unique id en az 6 karakter olmali.'
                       : null,
@@ -2550,7 +2633,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
                     if (text.isEmpty) {
                       return null;
                     }
-                    return int.tryParse(text) == null ? 'Site ID sayisal olmali.' : null;
+                    return int.tryParse(text) == null
+                        ? 'Site ID sayisal olmali.'
+                        : null;
                   },
                 ),
                 const SizedBox(height: 12),
@@ -2571,10 +2656,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Iptal'),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Cihazi Kaydet'),
-        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Cihazi Kaydet')),
       ],
     );
   }
@@ -2586,7 +2668,8 @@ class _ApartmentResidentDialog extends StatefulWidget {
   final ApartmentRecord apartment;
 
   @override
-  State<_ApartmentResidentDialog> createState() => _ApartmentResidentDialogState();
+  State<_ApartmentResidentDialog> createState() =>
+      _ApartmentResidentDialogState();
 }
 
 class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
@@ -2703,16 +2786,16 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
                   keyboardType: TextInputType.number,
                   validator: (value) =>
                       RegExp(r'^\d{4}$').hasMatch((value ?? '').trim())
-                          ? null
-                          : 'PIN 4 haneli sayisal olmali.',
+                      ? null
+                      : 'PIN 4 haneli sayisal olmali.',
                 ),
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
                     onPressed: () {
-                      final randomPin =
-                          (1000 + (math.Random().nextInt(9000))).toString();
+                      final randomPin = (1000 + (math.Random().nextInt(9000)))
+                          .toString();
                       _passwordController.text = randomPin;
                     },
                     icon: const Icon(Icons.password_outlined),
@@ -2758,20 +2841,14 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Iptal'),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Kaydet'),
-        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
       ],
     );
   }
 }
 
 class _DoorDeviceDialog extends StatefulWidget {
-  const _DoorDeviceDialog({
-    required this.door,
-    required this.initialDeviceUid,
-  });
+  const _DoorDeviceDialog({required this.door, required this.initialDeviceUid});
 
   final DoorRecord door;
   final String initialDeviceUid;
@@ -2831,7 +2908,10 @@ class _DoorDeviceDialogState extends State<_DoorDeviceDialog> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Mevcut cihaz: ${widget.door.assignedDeviceUid ?? 'Atanmadi'}',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
             ],
@@ -2843,10 +2923,7 @@ class _DoorDeviceDialogState extends State<_DoorDeviceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Iptal'),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Ata'),
-        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Ata')),
       ],
     );
   }
@@ -2882,9 +2959,13 @@ class _ManagedUserDialogState extends State<_ManagedUserDialog> {
   @override
   void initState() {
     super.initState();
-    _fullNameController = TextEditingController(text: widget.user?.fullName ?? '');
+    _fullNameController = TextEditingController(
+      text: widget.user?.fullName ?? '',
+    );
     _emailController = TextEditingController(text: widget.user?.email ?? '');
-    _phoneController = TextEditingController(text: widget.user?.phoneNumber ?? '');
+    _phoneController = TextEditingController(
+      text: widget.user?.phoneNumber ?? '',
+    );
     _passwordController = TextEditingController();
     _isActive = widget.user?.isActive ?? (widget.role == UserRole.superUser);
   }
@@ -2971,9 +3052,7 @@ class _ManagedUserDialogState extends State<_ManagedUserDialog> {
                   controller: _passwordController,
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: _isEditing
-                        ? 'Yeni Sifre (opsiyonel)'
-                        : 'Sifre',
+                    labelText: _isEditing ? 'Yeni Sifre (opsiyonel)' : 'Sifre',
                   ),
                   validator: (value) {
                     final text = (value ?? '').trim();
@@ -3021,10 +3100,7 @@ class _ManagedUserDialogState extends State<_ManagedUserDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Iptal'),
         ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: const Text('Kaydet'),
-        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
       ],
     );
   }
@@ -3079,6 +3155,8 @@ class _DeviceFormResult {
   final int? assignedUserCode;
   final int? siteCode;
 }
+
+enum _DeviceToolAction { registerDevice, provisionWifi }
 
 class _ApartmentResidentFormResult {
   const _ApartmentResidentFormResult({

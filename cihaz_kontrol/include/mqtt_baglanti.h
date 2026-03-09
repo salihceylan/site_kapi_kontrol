@@ -7,6 +7,7 @@
 #include <WiFiClientSecure.h>
 
 #include "role_kontrol.h"
+#include "wifi_baglanti.h"
 
 extern PubSubClient client;
 extern WiFiClientSecure espClientSecure;
@@ -22,13 +23,14 @@ inline const char* TOPIC_EVENT = "site/1/door/1/event";
 inline const char* TOPIC_AVAILABILITY = "site/1/door/1/availability";
 
 inline bool gDoorLocked = true;
+inline unsigned long gLastMqttReconnectAt = 0;
 
 inline void mqttPublishAvailability(const char* value) {
   client.publish(TOPIC_AVAILABILITY, value, true);
 }
 
 inline void mqttPublishState(bool locked) {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["locked"] = locked;
 
   String payload;
@@ -37,7 +39,7 @@ inline void mqttPublishState(bool locked) {
 }
 
 inline void mqttPublishEvent(const char* eventName) {
-  StaticJsonDocument<160> doc;
+  JsonDocument doc;
   doc["event"] = eventName;
   doc["ms"] = millis();
 
@@ -51,7 +53,7 @@ inline bool shouldTriggerPulse(const String& message) {
     return true;
   }
 
-  StaticJsonDocument<192> json;
+  JsonDocument json;
   const auto err = deserializeJson(json, message);
   if (err) {
     return false;
@@ -88,11 +90,15 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 inline bool mqttReconnect() {
+  if (!wifiHazirMi()) {
+    return false;
+  }
+
   if (client.connected()) {
     return true;
   }
 
-  const String clientId = "ESP32S3-" + String(static_cast<uint32_t>(ESP.getEfuseMac()), HEX);
+  const String clientId = "AHBU-" + cihazUniqueId();
   Serial.print("MQTT baglaniyor...");
 
   if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, TOPIC_AVAILABILITY, 1, true, "offline")) {
@@ -119,10 +125,20 @@ inline void mqttSetup() {
 }
 
 inline void mqttLoopHandler() {
+  if (!wifiHazirMi()) {
+    if (client.connected()) {
+      client.disconnect();
+    }
+    return;
+  }
+
   if (!client.connected()) {
+    if (millis() - gLastMqttReconnectAt < 2000) {
+      return;
+    }
+    gLastMqttReconnectAt = millis();
     const bool connected = mqttReconnect();
     if (!connected) {
-      delay(2000);
       return;
     }
   }
