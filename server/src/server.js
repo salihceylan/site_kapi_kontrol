@@ -75,6 +75,7 @@ function mapUserRow(row) {
     id: row.id,
     full_name: row.full_name,
     email: row.email,
+    login_name: row.login_name,
     role: row.role,
     is_active: row.is_active,
     email_verified: row.email_verified,
@@ -91,6 +92,15 @@ function mapSiteRow(row) {
     address: row.address,
     city: row.city,
     district: row.district,
+    block_count: Number(row.block_count ?? 1),
+    apartment_count: Number(row.apartment_count ?? 0),
+    door_count: Number(row.door_count ?? 1),
+    mqtt_site_id: Number(row.mqtt_site_id ?? 0),
+    manager_user_code:
+      row.manager_user_code === null || row.manager_user_code === undefined
+        ? null
+        : Number(row.manager_user_code),
+    manager_name: row.manager_name ?? null,
     created_at: row.created_at,
   };
 }
@@ -101,10 +111,69 @@ function mapDeviceRow(row) {
     device_uid: row.device_uid,
     assigned_user_code: row.assigned_user_code,
     gate_name: row.gate_name,
+    assigned_door_id:
+      row.assigned_door_id === null || row.assigned_door_id === undefined
+        ? null
+        : Number(row.assigned_door_id),
     site_code:
       row.site_code === null || row.site_code === undefined
         ? null
         : Number(row.site_code),
+    created_at: row.created_at,
+  };
+}
+
+function mapBlockRow(row) {
+  return {
+    id: Number(row.id),
+    site_code: Number(row.site_code),
+    block_name: row.block_name,
+    sort_order: Number(row.sort_order),
+    created_at: row.created_at,
+  };
+}
+
+function mapApartmentRow(row) {
+  return {
+    id: Number(row.id),
+    site_code: Number(row.site_code),
+    block_id: Number(row.block_id),
+    block_name: row.block_name,
+    unit_label: row.unit_label,
+    sort_order: Number(row.sort_order),
+    is_active: row.is_active,
+    resident_user_code:
+      row.resident_user_code === null || row.resident_user_code === undefined
+        ? null
+        : Number(row.resident_user_code),
+    resident_full_name: row.resident_full_name ?? null,
+    resident_login_name: row.resident_login_name ?? null,
+    resident_phone_number: row.resident_phone_number ?? null,
+    resident_is_active:
+      row.resident_is_active === null || row.resident_is_active === undefined
+        ? null
+        : Boolean(row.resident_is_active),
+    created_at: row.created_at,
+  };
+}
+
+function mapDoorRow(row) {
+  return {
+    id: Number(row.id),
+    site_code: Number(row.site_code),
+    site_name: row.site_name ?? null,
+    door_name: row.door_name,
+    door_index: Number(row.door_index),
+    is_active: row.is_active,
+    assigned_device_id:
+      row.assigned_device_id === null || row.assigned_device_id === undefined
+        ? null
+        : Number(row.assigned_device_id),
+    assigned_device_uid: row.assigned_device_uid ?? null,
+    mqtt_site_id:
+      row.mqtt_site_id === null || row.mqtt_site_id === undefined
+        ? null
+        : Number(row.mqtt_site_id),
     created_at: row.created_at,
   };
 }
@@ -134,6 +203,16 @@ function validateCreateInput({
   }
   if (isActive === null) {
     return 'is_active alani true/false olmali.';
+  }
+  return null;
+}
+
+function validateLoginName(loginName) {
+  if (!loginName || loginName.length < 3) {
+    return 'Kullanici adi en az 3 karakter olmali.';
+  }
+  if (!/^[a-z0-9._-]+$/i.test(loginName)) {
+    return 'Kullanici adi yalnizca harf, rakam, nokta, alt tire ve tire icerebilir.';
   }
   return null;
 }
@@ -170,6 +249,69 @@ function validateUpdateInput({
 function validateSiteInput({ name }) {
   if (name !== undefined && name !== null && name.length < 2) {
     return 'Site adi en az 2 karakter olmali.';
+  }
+  return null;
+}
+
+function validateStructuredSiteInput({
+  name,
+  blockCount,
+  apartmentCount,
+  doorCount,
+}) {
+  if (!name || name.length < 2) {
+    return 'Site adi en az 2 karakter olmali.';
+  }
+  if (!Number.isInteger(blockCount) || blockCount <= 0) {
+    return 'Blok sayisi pozitif tamsayi olmali.';
+  }
+  if (!Number.isInteger(apartmentCount) || apartmentCount < 0) {
+    return 'Daire sayisi sifir veya pozitif tamsayi olmali.';
+  }
+  if (!Number.isInteger(doorCount) || doorCount <= 0) {
+    return 'Otomatik kapi sayisi pozitif tamsayi olmali.';
+  }
+  if (apartmentCount > 5000) {
+    return 'Bu islem icin daire sayisi fazla buyuk.';
+  }
+  if (blockCount > 100) {
+    return 'Bu islem icin blok sayisi fazla buyuk.';
+  }
+  if (doorCount > 100) {
+    return 'Bu islem icin kapi sayisi fazla buyuk.';
+  }
+  return null;
+}
+
+function validateApartmentResidentInput({
+  fullName,
+  loginName,
+  password,
+  phoneNumber,
+  isActive,
+}) {
+  if (!fullName || fullName.length < 3) {
+    return 'Ad Soyad en az 3 karakter olmali.';
+  }
+  const loginError = validateLoginName(loginName);
+  if (loginError) {
+    return loginError;
+  }
+  if (!password || password.length < 6) {
+    return 'Sifre en az 6 karakter olmali.';
+  }
+  if (phoneNumber && !/^\+?[0-9()\-\s]{10,20}$/.test(phoneNumber)) {
+    return 'Gecerli bir telefon numarasi girin.';
+  }
+  if (isActive === null) {
+    return 'is_active alani true/false olmali.';
+  }
+  return null;
+}
+
+function validateDoorAssignmentInput({ deviceUid }) {
+  if (!deviceUid || deviceUid.length < 6) {
+    return 'Cihaz unique id en az 6 karakter olmali.';
   }
   return null;
 }
@@ -239,6 +381,7 @@ function parseApprovalStatus(value) {
 async function createUser({
   fullName,
   email,
+  loginName = null,
   role,
   isActive,
   phoneNumber,
@@ -247,13 +390,15 @@ async function createUser({
   approvalStatus = 'approved',
   verificationCodeHash = null,
   verificationCodeExpiresAt = null,
+  db = pool,
 }) {
   const passwordHash = await bcrypt.hash(password, 12);
-  const result = await pool.query(
+  const result = await db.query(
     `
       INSERT INTO users (
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -263,11 +408,12 @@ async function createUser({
         email_verification_code_hash,
         email_verification_expires_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING
         user_code AS id,
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -278,6 +424,7 @@ async function createUser({
     [
       fullName,
       email,
+      loginName,
       role,
       isActive,
       emailVerified,
@@ -295,9 +442,11 @@ async function updateUserByCode({
   userCode,
   fullName,
   email,
+  loginName,
   phoneNumber,
   password,
   isActive,
+  db = pool,
 }) {
   const sets = [];
   const values = [];
@@ -309,6 +458,10 @@ async function updateUserByCode({
   if (email !== undefined) {
     values.push(email);
     sets.push(`email = $${values.length}`);
+  }
+  if (loginName !== undefined) {
+    values.push(loginName);
+    sets.push(`login_name = $${values.length}`);
   }
   if (phoneNumber !== undefined) {
     values.push(phoneNumber);
@@ -328,7 +481,7 @@ async function updateUserByCode({
   }
 
   values.push(userCode);
-  const result = await pool.query(
+  const result = await db.query(
     `
       UPDATE users
       SET ${sets.join(', ')}
@@ -337,6 +490,7 @@ async function updateUserByCode({
         user_code AS id,
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -373,14 +527,27 @@ async function createSite({
   address,
   city,
   district,
+  blockCount = 1,
+  apartmentCount = 0,
+  doorCount = 1,
 }) {
   const result = await pool.query(
     `
-      INSERT INTO sites (name, address, city, district)
-      VALUES ($1, $2, $3, $4)
-      RETURNING site_code AS id, name, address, city, district, created_at
+      INSERT INTO sites (name, address, city, district, block_count, apartment_count, door_count)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING
+        site_code AS id,
+        name,
+        address,
+        city,
+        district,
+        block_count,
+        apartment_count,
+        door_count,
+        mqtt_site_id,
+        created_at
     `,
-    [name, address, city, district],
+    [name, address, city, district, blockCount, apartmentCount, doorCount],
   );
   return result.rows[0];
 }
@@ -391,6 +558,9 @@ async function updateSiteByCode({
   address,
   city,
   district,
+  blockCount,
+  apartmentCount,
+  doorCount,
 }) {
   const sets = [];
   const values = [];
@@ -411,6 +581,18 @@ async function updateSiteByCode({
     values.push(district);
     sets.push(`district = $${values.length}`);
   }
+  if (blockCount !== undefined) {
+    values.push(blockCount);
+    sets.push(`block_count = $${values.length}`);
+  }
+  if (apartmentCount !== undefined) {
+    values.push(apartmentCount);
+    sets.push(`apartment_count = $${values.length}`);
+  }
+  if (doorCount !== undefined) {
+    values.push(doorCount);
+    sets.push(`door_count = $${values.length}`);
+  }
 
   if (sets.length === 0) {
     return null;
@@ -422,7 +604,17 @@ async function updateSiteByCode({
       UPDATE sites
       SET ${sets.join(', ')}
       WHERE site_code = $${values.length}
-      RETURNING site_code AS id, name, address, city, district, created_at
+      RETURNING
+        site_code AS id,
+        name,
+        address,
+        city,
+        district,
+        block_count,
+        apartment_count,
+        door_count,
+        mqtt_site_id,
+        created_at
     `,
     values,
   );
@@ -438,7 +630,7 @@ async function createDevice({
     `
       INSERT INTO devices (device_uid, assigned_user_code, site_code)
       VALUES ($1, $2, $3)
-      RETURNING id, device_uid, assigned_user_code, site_code, created_at
+      RETURNING id, device_uid, assigned_user_code, site_code, gate_name, created_at
     `,
     [deviceUid, assignedUserCode, siteCode],
   );
@@ -448,14 +640,793 @@ async function createDevice({
 async function findDeviceByUid(deviceUid) {
   const result = await pool.query(
     `
-      SELECT id, device_uid, assigned_user_code, site_code, gate_name, created_at
+      SELECT
+        devices.id,
+        devices.device_uid,
+        devices.assigned_user_code,
+        devices.site_code,
+        devices.gate_name,
+        door.id AS assigned_door_id,
+        devices.created_at
       FROM devices
-      WHERE device_uid = $1
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      WHERE devices.device_uid = $1
       LIMIT 1
     `,
     [deviceUid],
   );
   return result.rows[0] || null;
+}
+
+function blockLabelFromIndex(index) {
+  let current = index + 1;
+  let label = '';
+  while (current > 0) {
+    current -= 1;
+    label = String.fromCharCode(65 + (current % 26)) + label;
+    current = Math.floor(current / 26);
+  }
+  return label;
+}
+
+function generateInternalApartmentEmail({ loginName, apartmentId, siteCode }) {
+  return `${loginName}.${apartmentId}.${siteCode}@ahbu.local`;
+}
+
+async function siteManagerExists(userCode) {
+  if (userCode == null) {
+    return false;
+  }
+  const result = await pool.query(
+    `SELECT 1 FROM users WHERE user_code = $1 AND role = 'site_manager' LIMIT 1`,
+    [userCode],
+  );
+  return result.rowCount > 0;
+}
+
+async function hasSiteManagementAccess(authUser, siteCode) {
+  if (authUser?.role === 'super_user') {
+    return true;
+  }
+  if (authUser?.role !== 'site_manager') {
+    return false;
+  }
+  const result = await pool.query(
+    `
+      SELECT 1
+      FROM site_manager_sites
+      WHERE site_code = $1 AND manager_user_code = $2
+      LIMIT 1
+    `,
+    [siteCode, Number(authUser.id)],
+  );
+  return result.rowCount > 0;
+}
+
+async function getSiteByCode(siteCode) {
+  const result = await pool.query(
+    `
+      SELECT
+        s.site_code AS id,
+        s.name,
+        s.address,
+        s.city,
+        s.district,
+        s.block_count,
+        s.apartment_count,
+        s.door_count,
+        s.mqtt_site_id,
+        sm.manager_user_code,
+        manager.full_name AS manager_name,
+        s.created_at
+      FROM sites s
+      LEFT JOIN LATERAL (
+        SELECT manager_user_code
+        FROM site_manager_sites
+        WHERE site_code = s.site_code
+        ORDER BY created_at ASC
+        LIMIT 1
+      ) sm ON TRUE
+      LEFT JOIN users manager ON manager.user_code = sm.manager_user_code
+      WHERE s.site_code = $1
+      LIMIT 1
+    `,
+    [siteCode],
+  );
+  return result.rows[0] || null;
+}
+
+async function listSitesForAuthUser({ authUser, page, pageSize }) {
+  const offset = (page - 1) * pageSize;
+  if (authUser?.role === 'super_user') {
+    const countResult = await pool.query(`SELECT COUNT(*)::INTEGER AS total FROM sites`);
+    const rows = await pool.query(
+      `
+        SELECT
+          s.site_code AS id,
+          s.name,
+          s.address,
+          s.city,
+          s.district,
+          s.block_count,
+          s.apartment_count,
+          s.door_count,
+          s.mqtt_site_id,
+          sm.manager_user_code,
+          manager.full_name AS manager_name,
+          s.created_at
+        FROM sites s
+        LEFT JOIN LATERAL (
+          SELECT manager_user_code
+          FROM site_manager_sites
+          WHERE site_code = s.site_code
+          ORDER BY created_at ASC
+          LIMIT 1
+        ) sm ON TRUE
+        LEFT JOIN users manager ON manager.user_code = sm.manager_user_code
+        ORDER BY s.created_at DESC
+        LIMIT $1 OFFSET $2
+      `,
+      [pageSize, offset],
+    );
+    return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
+  }
+
+  const countResult = await pool.query(
+    `
+      SELECT COUNT(*)::INTEGER AS total
+      FROM sites s
+      INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
+      WHERE sms.manager_user_code = $1
+    `,
+    [Number(authUser.id)],
+  );
+  const rows = await pool.query(
+    `
+      SELECT
+        s.site_code AS id,
+        s.name,
+        s.address,
+        s.city,
+        s.district,
+        s.block_count,
+        s.apartment_count,
+        s.door_count,
+        s.mqtt_site_id,
+        sms.manager_user_code,
+        manager.full_name AS manager_name,
+        s.created_at
+      FROM sites s
+      INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
+      INNER JOIN users manager ON manager.user_code = sms.manager_user_code
+      WHERE sms.manager_user_code = $1
+      ORDER BY s.created_at DESC
+      LIMIT $2 OFFSET $3
+    `,
+    [Number(authUser.id), pageSize, offset],
+  );
+  return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
+}
+
+async function listSiteBlocks(siteCode, db = pool) {
+  const result = await db.query(
+    `
+      SELECT id, site_code, block_name, sort_order, created_at
+      FROM site_blocks
+      WHERE site_code = $1
+      ORDER BY sort_order ASC
+    `,
+    [siteCode],
+  );
+  return result.rows;
+}
+
+async function listSiteApartments(siteCode, db = pool) {
+  const result = await db.query(
+    `
+      SELECT
+        a.id,
+        a.site_code,
+        a.block_id,
+        b.block_name,
+        a.unit_label,
+        a.sort_order,
+        a.is_active,
+        a.resident_user_code,
+        u.full_name AS resident_full_name,
+        u.login_name AS resident_login_name,
+        u.phone_number AS resident_phone_number,
+        u.is_active AS resident_is_active,
+        a.created_at
+      FROM apartments a
+      INNER JOIN site_blocks b ON b.id = a.block_id
+      LEFT JOIN users u ON u.user_code = a.resident_user_code
+      WHERE a.site_code = $1
+      ORDER BY b.sort_order ASC, a.sort_order ASC
+    `,
+    [siteCode],
+  );
+  return result.rows;
+}
+
+async function listSiteDoors(siteCode, db = pool) {
+  const result = await db.query(
+    `
+      SELECT
+        d.id,
+        d.site_code,
+        sites.name AS site_name,
+        d.door_name,
+        d.door_index,
+        d.is_active,
+        d.assigned_device_id,
+        devices.device_uid AS assigned_device_uid,
+        sites.mqtt_site_id,
+        d.created_at
+      FROM site_doors d
+      INNER JOIN sites ON sites.site_code = d.site_code
+      LEFT JOIN devices ON devices.id = d.assigned_device_id
+      WHERE d.site_code = $1
+      ORDER BY d.door_index ASC
+    `,
+    [siteCode],
+  );
+  return result.rows;
+}
+
+async function getSiteStructure(siteCode) {
+  const site = await getSiteByCode(siteCode);
+  if (!site) {
+    return null;
+  }
+  const [blocks, apartments, doors] = await Promise.all([
+    listSiteBlocks(siteCode),
+    listSiteApartments(siteCode),
+    listSiteDoors(siteCode),
+  ]);
+  return {
+    site,
+    blocks: blocks.map(mapBlockRow),
+    apartments: apartments.map(mapApartmentRow),
+    doors: doors.map(mapDoorRow),
+  };
+}
+
+async function createSiteWithStructure({
+  name,
+  address,
+  city,
+  district,
+  blockCount,
+  apartmentCount,
+  doorCount,
+  managerUserCode,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const siteResult = await client.query(
+      `
+        INSERT INTO sites (
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING
+          site_code AS id,
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count,
+          mqtt_site_id,
+          created_at
+      `,
+      [name, address, city, district, blockCount, apartmentCount, doorCount],
+    );
+    const site = siteResult.rows[0];
+    const siteCode = Number(site.id);
+
+    if (managerUserCode != null) {
+      await client.query(
+        `
+          INSERT INTO site_manager_sites (site_code, manager_user_code)
+          VALUES ($1, $2)
+          ON CONFLICT (site_code, manager_user_code) DO NOTHING
+        `,
+        [siteCode, managerUserCode],
+      );
+    }
+
+    const blockIds = [];
+    for (let index = 0; index < blockCount; index += 1) {
+      const blockResult = await client.query(
+        `
+          INSERT INTO site_blocks (site_code, block_name, sort_order)
+          VALUES ($1, $2, $3)
+          RETURNING id
+        `,
+        [siteCode, blockLabelFromIndex(index), index + 1],
+      );
+      blockIds.push(Number(blockResult.rows[0].id));
+    }
+
+    let remainingApartments = apartmentCount;
+    for (let index = 0; index < blockIds.length; index += 1) {
+      const blockId = blockIds[index];
+      const blocksLeft = blockIds.length - index;
+      const targetForBlock = blocksLeft <= 0 ? 0 : Math.ceil(remainingApartments / blocksLeft);
+      for (let unitIndex = 0; unitIndex < targetForBlock; unitIndex += 1) {
+        await client.query(
+          `
+            INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
+            VALUES ($1, $2, $3, $4)
+          `,
+          [siteCode, blockId, String(unitIndex + 1).padLeft(2, '0'), unitIndex + 1],
+        );
+      }
+      remainingApartments -= targetForBlock;
+    }
+
+    for (let doorIndex = 1; doorIndex <= doorCount; doorIndex += 1) {
+      await client.query(
+        `
+          INSERT INTO site_doors (site_code, door_name, door_index)
+          VALUES ($1, $2, $3)
+        `,
+        [siteCode, `Kapi ${doorIndex}`, doorIndex],
+      );
+    }
+
+    await client.query('COMMIT');
+    return getSiteByCode(siteCode);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function syncSiteStructureCounts({
+  siteCode,
+  blockCount,
+  apartmentCount,
+  doorCount,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const blocks = await listSiteBlocks(siteCode, client);
+    const apartments = await listSiteApartments(siteCode, client);
+    const doors = await listSiteDoors(siteCode, client);
+
+    if (blockCount > blocks.length) {
+      for (let index = blocks.length; index < blockCount; index += 1) {
+        await client.query(
+          `
+            INSERT INTO site_blocks (site_code, block_name, sort_order)
+            VALUES ($1, $2, $3)
+          `,
+          [siteCode, blockLabelFromIndex(index), index + 1],
+        );
+      }
+    }
+
+    const refreshedBlocks = await listSiteBlocks(siteCode, client);
+
+    if (apartmentCount > apartments.length) {
+      let nextApartmentNumber = apartments.length;
+      while (nextApartmentNumber < apartmentCount) {
+        const targetBlock = refreshedBlocks[nextApartmentNumber % refreshedBlocks.length];
+        const blockApartments = apartments.filter((item) => Number(item.block_id) === Number(targetBlock.id));
+        const sortOrder = blockApartments.length + 1;
+        await client.query(
+          `
+            INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
+            VALUES ($1, $2, $3, $4)
+          `,
+          [siteCode, Number(targetBlock.id), String(sortOrder).padLeft(2, '0'), sortOrder],
+        );
+        apartments.push({
+          block_id: Number(targetBlock.id),
+          sort_order: sortOrder,
+          resident_user_code: null,
+        });
+        nextApartmentNumber += 1;
+      }
+    } else if (apartmentCount < apartments.length) {
+      const removable = apartments
+          .filter((item) => item.resident_user_code == null)
+          .sort((a, b) => Number(b.id) - Number(a.id));
+      const removeCount = apartments.length - apartmentCount;
+      if (removable.length < removeCount) {
+        throw new Error('Dolu daireler varken daire sayisi azaltilamaz.');
+      }
+      for (const apartment of removable.slice(0, removeCount)) {
+        await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
+      }
+    }
+
+    const refreshedDoors = await listSiteDoors(siteCode, client);
+    if (doorCount > refreshedDoors.length) {
+      for (let index = refreshedDoors.length + 1; index <= doorCount; index += 1) {
+        await client.query(
+          `
+            INSERT INTO site_doors (site_code, door_name, door_index)
+            VALUES ($1, $2, $3)
+          `,
+          [siteCode, `Kapi ${index}`, index],
+        );
+      }
+    } else if (doorCount < refreshedDoors.length) {
+      const removableDoors = refreshedDoors
+          .filter((item) => item.assigned_device_id == null)
+          .sort((a, b) => Number(b.door_index) - Number(a.door_index));
+      const removeCount = refreshedDoors.length - doorCount;
+      if (removableDoors.length < removeCount) {
+        throw new Error('Cihaz atamasi olan kapilar varken kapi sayisi azaltilamaz.');
+      }
+      for (const door of removableDoors.slice(0, removeCount)) {
+        await client.query(`DELETE FROM site_doors WHERE id = $1`, [Number(door.id)]);
+      }
+    }
+
+    const latestBlocks = await listSiteBlocks(siteCode, client);
+    if (blockCount < latestBlocks.length) {
+      const removableBlocks = latestBlocks
+          .sort((a, b) => Number(b.sort_order) - Number(a.sort_order));
+      const removeCount = latestBlocks.length - blockCount;
+      for (const block of removableBlocks.slice(0, removeCount)) {
+        const apartmentCheck = await client.query(
+          `SELECT COUNT(*)::INTEGER AS total FROM apartments WHERE block_id = $1`,
+          [Number(block.id)],
+        );
+        if ((apartmentCheck.rows[0]?.total ?? 0) > 0) {
+          throw new Error('Bos olmayan bloklar varken blok sayisi azaltilamaz.');
+        }
+        await client.query(`DELETE FROM site_blocks WHERE id = $1`, [Number(block.id)]);
+      }
+    }
+
+    await client.query(
+      `
+        UPDATE sites
+        SET block_count = $1, apartment_count = $2, door_count = $3
+        WHERE site_code = $4
+      `,
+      [blockCount, apartmentCount, doorCount, siteCode],
+    );
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function upsertSiteManagerLink({ siteCode, managerUserCode }) {
+  await pool.query(`DELETE FROM site_manager_sites WHERE site_code = $1`, [siteCode]);
+  if (managerUserCode != null) {
+    await pool.query(
+      `
+        INSERT INTO site_manager_sites (site_code, manager_user_code)
+        VALUES ($1, $2)
+      `,
+      [siteCode, managerUserCode],
+    );
+  }
+}
+
+async function provisionApartmentResident({
+  apartmentId,
+  fullName,
+  loginName,
+  password,
+  phoneNumber,
+  isActive,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const apartmentResult = await client.query(
+      `
+        SELECT
+          a.id,
+          a.site_code,
+          a.resident_user_code
+        FROM apartments a
+        WHERE a.id = $1
+        LIMIT 1
+      `,
+      [apartmentId],
+    );
+    if (apartmentResult.rowCount === 0) {
+      throw new Error('APARTMENT_NOT_FOUND');
+    }
+
+    const apartment = apartmentResult.rows[0];
+    const internalEmail = generateInternalApartmentEmail({
+      loginName,
+      apartmentId: Number(apartment.id),
+      siteCode: Number(apartment.site_code),
+    });
+
+    let userCode = apartment.resident_user_code == null
+      ? null
+      : Number(apartment.resident_user_code);
+
+    if (userCode == null) {
+      const createdUser = await createUser({
+        fullName,
+        email: internalEmail,
+        loginName,
+        role: 'apartment_owner',
+        isActive,
+        phoneNumber,
+        password,
+        db: client,
+      });
+      userCode = Number(createdUser.id);
+      await client.query(
+        `
+          UPDATE apartments
+          SET resident_user_code = $1, is_active = $2
+          WHERE id = $3
+        `,
+        [userCode, isActive, apartmentId],
+      );
+    } else {
+      const passwordHash = await bcrypt.hash(password, 12);
+      await client.query(
+        `
+          UPDATE users
+          SET
+            full_name = $1,
+            email = $2,
+            login_name = $3,
+            phone_number = $4,
+            password_hash = $5,
+            is_active = $6
+          WHERE user_code = $7
+        `,
+        [fullName, internalEmail, loginName, phoneNumber, passwordHash, isActive, userCode],
+      );
+      await client.query(
+        `
+          UPDATE apartments
+          SET is_active = $1
+          WHERE id = $2
+        `,
+        [isActive, apartmentId],
+      );
+    }
+
+    const finalResult = await client.query(
+      `
+        SELECT
+          a.id,
+          a.site_code,
+          a.block_id,
+          b.block_name,
+          a.unit_label,
+          a.sort_order,
+          a.is_active,
+          a.resident_user_code,
+          u.full_name AS resident_full_name,
+          u.login_name AS resident_login_name,
+          u.phone_number AS resident_phone_number,
+          u.is_active AS resident_is_active,
+          a.created_at
+        FROM apartments a
+        INNER JOIN site_blocks b ON b.id = a.block_id
+        LEFT JOIN users u ON u.user_code = a.resident_user_code
+        WHERE a.id = $1
+      `,
+      [apartmentId],
+    );
+
+    await client.query('COMMIT');
+    return finalResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function updateDoorDeviceAssignment({
+  doorId,
+  deviceUid,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const doorResult = await client.query(
+      `
+        SELECT id, site_code, door_name, assigned_device_id
+        FROM site_doors
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [doorId],
+    );
+    if (doorResult.rowCount === 0) {
+      throw new Error('DOOR_NOT_FOUND');
+    }
+    const door = doorResult.rows[0];
+
+    const deviceResult = await client.query(
+      `
+        SELECT id, device_uid
+        FROM devices
+        WHERE device_uid = $1
+        LIMIT 1
+      `,
+      [deviceUid],
+    );
+    if (deviceResult.rowCount === 0) {
+      throw new Error('DEVICE_NOT_FOUND');
+    }
+    const device = deviceResult.rows[0];
+
+    await client.query(
+      `
+        UPDATE site_doors
+        SET assigned_device_id = NULL
+        WHERE assigned_device_id = $1
+      `,
+      [Number(device.id)],
+    );
+
+    if (door.assigned_device_id != null && Number(door.assigned_device_id) !== Number(device.id)) {
+      await client.query(
+        `
+          UPDATE devices
+          SET site_code = NULL, gate_name = NULL
+          WHERE id = $1
+        `,
+        [Number(door.assigned_device_id)],
+      );
+    }
+
+    await client.query(
+      `
+        UPDATE site_doors
+        SET assigned_device_id = $1
+        WHERE id = $2
+      `,
+      [Number(device.id), doorId],
+    );
+
+    await client.query(
+      `
+        UPDATE devices
+        SET site_code = $1, gate_name = $2
+        WHERE id = $3
+      `,
+      [Number(door.site_code), door.door_name, Number(device.id)],
+    );
+
+    const finalResult = await client.query(
+      `
+        SELECT
+          d.id,
+          d.site_code,
+          sites.name AS site_name,
+          d.door_name,
+          d.door_index,
+          d.is_active,
+          d.assigned_device_id,
+          devices.device_uid AS assigned_device_uid,
+          sites.mqtt_site_id,
+          d.created_at
+        FROM site_doors d
+        INNER JOIN sites ON sites.site_code = d.site_code
+        LEFT JOIN devices ON devices.id = d.assigned_device_id
+        WHERE d.id = $1
+      `,
+      [doorId],
+    );
+
+    await client.query('COMMIT');
+    return finalResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function listAccessibleDoorsForUser(authUser) {
+  if (authUser?.role === 'super_user') {
+    const result = await pool.query(
+      `
+        SELECT
+          d.id,
+          d.site_code,
+          s.name AS site_name,
+          d.door_name,
+          d.door_index,
+          d.is_active,
+          d.assigned_device_id,
+          devices.device_uid AS assigned_device_uid,
+          s.mqtt_site_id,
+          d.created_at
+        FROM site_doors d
+        INNER JOIN sites s ON s.site_code = d.site_code
+        LEFT JOIN devices ON devices.id = d.assigned_device_id
+        WHERE d.is_active = TRUE
+        ORDER BY s.name ASC, d.door_index ASC
+      `,
+    );
+    return result.rows;
+  }
+
+  if (authUser?.role === 'site_manager') {
+    const result = await pool.query(
+      `
+        SELECT
+          d.id,
+          d.site_code,
+          s.name AS site_name,
+          d.door_name,
+          d.door_index,
+          d.is_active,
+          d.assigned_device_id,
+          devices.device_uid AS assigned_device_uid,
+          s.mqtt_site_id,
+          d.created_at
+        FROM site_doors d
+        INNER JOIN sites s ON s.site_code = d.site_code
+        INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
+        LEFT JOIN devices ON devices.id = d.assigned_device_id
+        WHERE sms.manager_user_code = $1
+          AND d.is_active = TRUE
+        ORDER BY s.name ASC, d.door_index ASC
+      `,
+      [Number(authUser.id)],
+    );
+    return result.rows;
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        d.id,
+        d.site_code,
+        s.name AS site_name,
+        d.door_name,
+        d.door_index,
+        d.is_active,
+        d.assigned_device_id,
+        devices.device_uid AS assigned_device_uid,
+        s.mqtt_site_id,
+        d.created_at
+      FROM apartments a
+      INNER JOIN sites s ON s.site_code = a.site_code
+      INNER JOIN site_doors d ON d.site_code = a.site_code
+      LEFT JOIN devices ON devices.id = d.assigned_device_id
+      WHERE a.resident_user_code = $1
+        AND a.is_active = TRUE
+        AND d.is_active = TRUE
+      ORDER BY d.door_index ASC
+    `,
+    [Number(authUser.id)],
+  );
+  return result.rows;
 }
 
 async function updateDeviceAssignment({
@@ -505,6 +1476,9 @@ function handleUserMutationError(error, res, genericErrorMessage) {
   if (error?.code === '23505' && error?.constraint === 'users_email_key') {
     return res.status(409).json({ error: 'Bu e-posta zaten kayitli.' });
   }
+  if (error?.code === '23505' && error?.constraint === 'idx_users_login_name_unique') {
+    return res.status(409).json({ error: 'Bu kullanici adi zaten kayitli.' });
+  }
   if (error?.code === '23505') {
     return res
       .status(409)
@@ -547,6 +1521,7 @@ async function authRequired(req, res, next) {
         user_code AS id,
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -870,11 +1845,13 @@ app.post('/auth/site-manager/resend-code', async (req, res) => {
 });
 
 app.post('/auth/login', async (req, res) => {
-  const email = normalizeEmail(req.body.email);
+  const identifier = normalizeEmail(
+    req.body.email ?? req.body.login ?? req.body.identifier,
+  );
   const password = String(req.body.password || '').trim();
   const role = String(req.body.role || '').trim();
 
-  if (!email || !password || !role) {
+  if (!identifier || !password || !role) {
     return res.status(400).json({ error: 'email, password, role zorunlu.' });
   }
   if (!validRoles.has(role)) {
@@ -888,6 +1865,7 @@ app.post('/auth/login', async (req, res) => {
         user_code AS id,
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -896,10 +1874,10 @@ app.post('/auth/login', async (req, res) => {
         created_at,
         password_hash
       FROM users
-      WHERE email = $1
+      WHERE email = $1 OR login_name = $1
       LIMIT 1
       `,
-      [email],
+      [identifier],
     );
 
     if (result.rowCount === 0) {
@@ -1015,6 +1993,7 @@ app.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
         user_code AS id,
         full_name,
         email,
+        login_name,
         role,
         is_active,
         email_verified,
@@ -1220,6 +2199,7 @@ app.get(
           user_code AS id,
           full_name,
           email,
+          login_name,
           role,
           is_active,
           email_verified,
@@ -1281,6 +2261,7 @@ app.patch(
           user_code AS id,
           full_name,
           email,
+          login_name,
           role,
           is_active,
           email_verified,
@@ -1307,30 +2288,15 @@ app.get('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
 
   try {
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::INTEGER AS total FROM sites`,
-    );
-    const total = countResult.rows[0]?.total ?? 0;
-    const offset = (page - 1) * pageSize;
-    const sitesResult = await pool.query(
-      `
-      SELECT
-        site_code AS id,
-        name,
-        address,
-        city,
-        district,
-        created_at
-      FROM sites
-      ORDER BY created_at DESC
-      LIMIT $1 OFFSET $2
-      `,
-      [pageSize, offset],
-    );
+    const result = await listSitesForAuthUser({
+      authUser: req.authUser,
+      page,
+      pageSize,
+    });
 
     return res.status(200).json({
-      sites: sitesResult.rows.map((row) => mapSiteRow(row)),
-      total,
+      sites: result.rows.map((row) => mapSiteRow(row)),
+      total: result.total,
       page,
       page_size: pageSize,
     });
@@ -1341,21 +2307,47 @@ app.get('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
 
 app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   const name = String(req.body.name || '').trim();
-  const address = normalizeOptionalText(req.body.address);
-  const city = normalizeOptionalText(req.body.city);
-  const district = normalizeOptionalText(req.body.district);
+  const address = normalizeOptionalText(req.body.address) ?? null;
+  const city = normalizeOptionalText(req.body.city) ?? null;
+  const district = normalizeOptionalText(req.body.district) ?? null;
+  const blockCount = normalizeOptionalInteger(req.body.block_count);
+  const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const doorCount = normalizeOptionalInteger(req.body.door_count);
+  const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
 
-  const validationError = validateSiteInput({ name });
+  if (
+    Number.isNaN(blockCount) ||
+    Number.isNaN(apartmentCount) ||
+    Number.isNaN(doorCount) ||
+    Number.isNaN(managerUserCode)
+  ) {
+    return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
+  }
+
+  const validationError = validateStructuredSiteInput({
+    name,
+    blockCount: blockCount ?? 1,
+    apartmentCount: apartmentCount ?? 0,
+    doorCount: doorCount ?? 1,
+  });
   if (validationError) {
     return res.status(400).json({ error: validationError });
   }
 
   try {
-    const site = await createSite({
+    if (managerUserCode != null && !(await siteManagerExists(managerUserCode))) {
+      return res.status(404).json({ error: 'Site yoneticisi bulunamadi.' });
+    }
+
+    const site = await createSiteWithStructure({
       name,
       address,
       city,
       district,
+      blockCount: blockCount ?? 1,
+      apartmentCount: apartmentCount ?? 0,
+      doorCount: doorCount ?? 1,
+      managerUserCode: managerUserCode ?? null,
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
@@ -1373,35 +2365,109 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
   const address = normalizeOptionalText(req.body.address);
   const city = normalizeOptionalText(req.body.city);
   const district = normalizeOptionalText(req.body.district);
+  const blockCount = normalizeOptionalInteger(req.body.block_count);
+  const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const doorCount = normalizeOptionalInteger(req.body.door_count);
+  const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
 
-  const validationError = validateSiteInput({ name });
-  if (validationError) {
-    return res.status(400).json({ error: validationError });
+  if (
+    Number.isNaN(blockCount) ||
+    Number.isNaN(apartmentCount) ||
+    Number.isNaN(doorCount) ||
+    Number.isNaN(managerUserCode)
+  ) {
+    return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
   }
 
   if (
     name === undefined &&
     address === undefined &&
     city === undefined &&
-    district === undefined
+    district === undefined &&
+    blockCount === undefined &&
+    apartmentCount === undefined &&
+    doorCount === undefined &&
+    managerUserCode === undefined
   ) {
     return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
   }
 
   try {
-    const site = await updateSiteByCode({
-      siteCode,
-      name,
-      address,
-      city,
-      district,
-    });
-    if (!site) {
+    const existing = await getSiteByCode(siteCode);
+    if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
-    return res.status(200).json({ site: mapSiteRow(site) });
+
+    const validationError = validateStructuredSiteInput({
+      name: name ?? existing.name,
+      blockCount: blockCount ?? Number(existing.block_count ?? 1),
+      apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+      doorCount: doorCount ?? Number(existing.door_count ?? 1),
+    });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    if (managerUserCode != null && !(await siteManagerExists(managerUserCode))) {
+      return res.status(404).json({ error: 'Site yoneticisi bulunamadi.' });
+    }
+
+    if (
+      name !== undefined ||
+      address !== undefined ||
+      city !== undefined ||
+      district !== undefined
+    ) {
+      await updateSiteByCode({
+        siteCode,
+        name,
+        address,
+        city,
+        district,
+      });
+    }
+
+    if (
+      blockCount !== undefined ||
+      apartmentCount !== undefined ||
+      doorCount !== undefined
+    ) {
+      await syncSiteStructureCounts({
+        siteCode,
+        blockCount: blockCount ?? Number(existing.block_count ?? 1),
+        apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+        doorCount: doorCount ?? Number(existing.door_count ?? 1),
+      });
+    }
+
+    if (managerUserCode !== undefined) {
+      await upsertSiteManagerLink({
+        siteCode,
+        managerUserCode: managerUserCode ?? null,
+      });
+    }
+
+    const updated = await getSiteByCode(siteCode);
+    return res.status(200).json({ site: mapSiteRow(updated) });
   } catch (error) {
     return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+  }
+});
+
+app.get('/admin/sites/:id/structure', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  try {
+    const structure = await getSiteStructure(siteCode);
+    if (!structure) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    return res.status(200).json(structure);
+  } catch (_error) {
+    return res.status(500).json({ error: 'Site yapisi alinamadi.' });
   }
 });
 
@@ -1422,6 +2488,73 @@ app.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) 
     return res.status(204).send();
   } catch (_error) {
     return res.status(500).json({ error: 'Site silinemedi.' });
+  }
+});
+
+app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+
+  const fullName = String(req.body.full_name || '').trim();
+  const loginName = String(req.body.login_name || '').trim().toLowerCase();
+  const password = String(req.body.password || '').trim();
+  const phoneNumber = normalizePhone(req.body.phone_number);
+  const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
+
+  const validationError = validateApartmentResidentInput({
+    fullName,
+    loginName,
+    password,
+    phoneNumber,
+    isActive,
+  });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const apartment = await provisionApartmentResident({
+      apartmentId,
+      fullName,
+      loginName,
+      password,
+      phoneNumber,
+      isActive,
+    });
+    return res.status(200).json({ apartment: mapApartmentRow(apartment) });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+  }
+});
+
+app.patch('/admin/doors/:id/device', authRequired, requireSuperUser, async (req, res) => {
+  const doorId = Number(req.params.id);
+  if (!Number.isInteger(doorId)) {
+    return res.status(400).json({ error: 'Gecersiz kapi ID.' });
+  }
+
+  const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
+  const validationError = validateDoorAssignmentInput({ deviceUid });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const door = await updateDoorDeviceAssignment({ doorId, deviceUid });
+    return res.status(200).json({ door: mapDoorRow(door) });
+  } catch (error) {
+    if (error?.message === 'DOOR_NOT_FOUND') {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (error?.message === 'DEVICE_NOT_FOUND') {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+    return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
   }
 });
 
@@ -1458,26 +2591,183 @@ app.post('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
   }
 });
 
-app.get('/manager/sites', authRequired, requireSiteManager, async (_req, res) => {
+app.get('/manager/sites', authRequired, requireSiteManager, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 100)));
+
   try {
-    const result = await pool.query(
-      `
-        SELECT
-          site_code AS id,
-          name,
-          address,
-          city,
-          district,
-          created_at
-        FROM sites
-        ORDER BY name ASC, created_at DESC
-      `,
-    );
+    const result = await listSitesForAuthUser({
+      authUser: req.authUser,
+      page,
+      pageSize,
+    });
     return res.status(200).json({
-      sites: result.rows.map(mapSiteRow),
+      sites: result.rows.map((row) => mapSiteRow(row)),
+      total: result.total,
+      page,
+      page_size: pageSize,
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Siteler yuklenemedi.' });
+  }
+});
+
+app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) => {
+  const managerUserCode = getAuthUserCode(req);
+  if (managerUserCode == null) {
+    return res.status(401).json({ error: 'Yetkisiz erisim.' });
+  }
+
+  const name = String(req.body.name || '').trim();
+  const address = normalizeOptionalText(req.body.address) ?? null;
+  const city = normalizeOptionalText(req.body.city) ?? null;
+  const district = normalizeOptionalText(req.body.district) ?? null;
+  const blockCount = normalizeOptionalInteger(req.body.block_count);
+  const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const doorCount = normalizeOptionalInteger(req.body.door_count);
+
+  if (
+    Number.isNaN(blockCount) ||
+    Number.isNaN(apartmentCount) ||
+    Number.isNaN(doorCount)
+  ) {
+    return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
+  }
+
+  const validationError = validateStructuredSiteInput({
+    name,
+    blockCount: blockCount ?? 1,
+    apartmentCount: apartmentCount ?? 0,
+    doorCount: doorCount ?? 1,
+  });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const site = await createSiteWithStructure({
+      name,
+      address,
+      city,
+      district,
+      blockCount: blockCount ?? 1,
+      apartmentCount: apartmentCount ?? 0,
+      doorCount: doorCount ?? 1,
+      managerUserCode,
+    });
+    return res.status(201).json({ site: mapSiteRow(site) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site olusturulamadi.');
+  }
+});
+
+app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+  }
+
+  const name = normalizeOptionalText(req.body.name);
+  const address = normalizeOptionalText(req.body.address);
+  const city = normalizeOptionalText(req.body.city);
+  const district = normalizeOptionalText(req.body.district);
+  const blockCount = normalizeOptionalInteger(req.body.block_count);
+  const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const doorCount = normalizeOptionalInteger(req.body.door_count);
+
+  if (
+    Number.isNaN(blockCount) ||
+    Number.isNaN(apartmentCount) ||
+    Number.isNaN(doorCount)
+  ) {
+    return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
+  }
+
+  if (
+    name === undefined &&
+    address === undefined &&
+    city === undefined &&
+    district === undefined &&
+    blockCount === undefined &&
+    apartmentCount === undefined &&
+    doorCount === undefined
+  ) {
+    return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
+  }
+
+  try {
+    const existing = await getSiteByCode(siteCode);
+    if (!existing) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+
+    const validationError = validateStructuredSiteInput({
+      name: name ?? existing.name,
+      blockCount: blockCount ?? Number(existing.block_count ?? 1),
+      apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+      doorCount: doorCount ?? Number(existing.door_count ?? 1),
+    });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    if (
+      name !== undefined ||
+      address !== undefined ||
+      city !== undefined ||
+      district !== undefined
+    ) {
+      await updateSiteByCode({
+        siteCode,
+        name,
+        address,
+        city,
+        district,
+      });
+    }
+
+    if (
+      blockCount !== undefined ||
+      apartmentCount !== undefined ||
+      doorCount !== undefined
+    ) {
+      await syncSiteStructureCounts({
+        siteCode,
+        blockCount: blockCount ?? Number(existing.block_count ?? 1),
+        apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+        doorCount: doorCount ?? Number(existing.door_count ?? 1),
+      });
+    }
+
+    const updated = await getSiteByCode(siteCode);
+    return res.status(200).json({ site: mapSiteRow(updated) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+  }
+});
+
+app.get('/manager/sites/:id/structure', authRequired, requireSiteManager, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+  }
+
+  try {
+    const structure = await getSiteStructure(siteCode);
+    if (!structure) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    return res.status(200).json(structure);
+  } catch (_error) {
+    return res.status(500).json({ error: 'Site yapisi alinamadi.' });
   }
 });
 
@@ -1495,6 +2785,99 @@ app.get('/manager/devices/lookup', authRequired, requireSiteManager, async (req,
     return res.status(200).json({ device: mapDeviceRow(device) });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihaz bilgisi okunamadi.' });
+  }
+});
+
+app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+
+  const apartmentSiteResult = await pool.query(
+    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
+    [apartmentId],
+  );
+  if (apartmentSiteResult.rowCount === 0) {
+    return res.status(404).json({ error: 'Daire bulunamadi.' });
+  }
+
+  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+  }
+
+  const fullName = String(req.body.full_name || '').trim();
+  const loginName = String(req.body.login_name || '').trim().toLowerCase();
+  const password = String(req.body.password || '').trim();
+  const phoneNumber = normalizePhone(req.body.phone_number);
+  const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
+
+  const validationError = validateApartmentResidentInput({
+    fullName,
+    loginName,
+    password,
+    phoneNumber,
+    isActive,
+  });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const apartment = await provisionApartmentResident({
+      apartmentId,
+      fullName,
+      loginName,
+      password,
+      phoneNumber,
+      isActive,
+    });
+    return res.status(200).json({ apartment: mapApartmentRow(apartment) });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+  }
+});
+
+app.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async (req, res) => {
+  const doorId = Number(req.params.id);
+  if (!Number.isInteger(doorId)) {
+    return res.status(400).json({ error: 'Gecersiz kapi ID.' });
+  }
+
+  const doorResult = await pool.query(
+    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
+    [doorId],
+  );
+  if (doorResult.rowCount === 0) {
+    return res.status(404).json({ error: 'Kapi bulunamadi.' });
+  }
+
+  const siteCode = Number(doorResult.rows[0].site_code);
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+  }
+
+  const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
+  const validationError = validateDoorAssignmentInput({ deviceUid });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const door = await updateDoorDeviceAssignment({ doorId, deviceUid });
+    return res.status(200).json({ door: mapDoorRow(door) });
+  } catch (error) {
+    if (error?.message === 'DOOR_NOT_FOUND') {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (error?.message === 'DEVICE_NOT_FOUND') {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+    return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
   }
 });
 
@@ -1524,6 +2907,10 @@ app.patch(
         return res.status(404).json({ error: 'Site ID bulunamadi.' });
       }
 
+      if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+        return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+      }
+
       const device = await updateDeviceAssignment({
         deviceId,
         siteCode,
@@ -1540,6 +2927,17 @@ app.patch(
     }
   },
 );
+
+app.get('/app/my-doors', authRequired, async (req, res) => {
+  try {
+    const doors = await listAccessibleDoorsForUser(req.authUser);
+    return res.status(200).json({
+      doors: doors.map((row) => mapDoorRow(row)),
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Kapilar yuklenemedi.' });
+  }
+});
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route bulunamadi.' });

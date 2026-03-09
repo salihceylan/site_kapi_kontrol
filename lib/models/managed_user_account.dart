@@ -5,6 +5,7 @@ class ManagedUserAccount {
     required this.id,
     required this.fullName,
     required this.email,
+    required this.loginName,
     required this.role,
     required this.isActive,
     required this.phoneNumber,
@@ -14,6 +15,7 @@ class ManagedUserAccount {
   final int id;
   final String fullName;
   final String email;
+  final String? loginName;
   final UserRole role;
   final bool isActive;
   final String? phoneNumber;
@@ -23,6 +25,7 @@ class ManagedUserAccount {
     int? id,
     String? fullName,
     String? email,
+    String? loginName,
     UserRole? role,
     bool? isActive,
     String? phoneNumber,
@@ -32,6 +35,7 @@ class ManagedUserAccount {
       id: id ?? this.id,
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
+      loginName: loginName ?? this.loginName,
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       phoneNumber: phoneNumber ?? this.phoneNumber,
@@ -44,6 +48,7 @@ class ManagedUserAccount {
       id: json['id'] as int,
       fullName: json['full_name'] as String,
       email: json['email'] as String,
+      loginName: json['login_name'] as String?,
       role: UserRole.fromApi(json['role'] as String),
       isActive: json['is_active'] as bool? ?? true,
       phoneNumber: json['phone_number'] as String?,

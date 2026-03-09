@@ -2,6 +2,13 @@
 
 Flutter + PostgreSQL tabanli rol bazli uyelik sistemi.
 
+## Dokumanlar
+
+- Genel teknik ozet: `PROJE_TEKNIK_NOTLAR.md`
+- Sunucu kurulum notlari: `sunucu_kurulum.txt`
+- MQTT kurulum notlari: `MQTT_kurulum.txt`
+- QR / firmware araci: `company_qr_tool/README.md`
+
 ## Roller
 
 - Super User (`super_user`)

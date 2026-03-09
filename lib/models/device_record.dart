@@ -4,6 +4,7 @@ class DeviceRecord {
     required this.deviceUid,
     required this.assignedUserCode,
     required this.gateName,
+    required this.assignedDoorId,
     required this.siteCode,
     required this.createdAt,
   });
@@ -12,6 +13,7 @@ class DeviceRecord {
   final String deviceUid;
   final int? assignedUserCode;
   final String? gateName;
+  final int? assignedDoorId;
   final int? siteCode;
   final DateTime? createdAt;
 
@@ -21,6 +23,7 @@ class DeviceRecord {
       deviceUid: json['device_uid'] as String? ?? '',
       assignedUserCode: json['assigned_user_code'] as int?,
       gateName: json['gate_name'] as String?,
+      assignedDoorId: json['assigned_door_id'] as int?,
       siteCode: json['site_code'] as int?,
       createdAt: json['created_at'] == null
           ? null

@@ -1,10 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
+import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -237,6 +240,10 @@ class AuthService extends ChangeNotifier {
     String? address,
     String? city,
     String? district,
+    required int blockCount,
+    required int apartmentCount,
+    required int doorCount,
+    int? managerUserCode,
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
@@ -250,6 +257,10 @@ class AuthService extends ChangeNotifier {
         address: address,
         city: city,
         district: district,
+        blockCount: blockCount,
+        apartmentCount: apartmentCount,
+        doorCount: doorCount,
+        managerUserCode: managerUserCode,
       );
       return null;
     } on ApiException catch (e) {
@@ -265,6 +276,10 @@ class AuthService extends ChangeNotifier {
     String? address,
     String? city,
     String? district,
+    int? blockCount,
+    int? apartmentCount,
+    int? doorCount,
+    int? managerUserCode,
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
@@ -279,6 +294,10 @@ class AuthService extends ChangeNotifier {
         address: address,
         city: city,
         district: district,
+        blockCount: blockCount,
+        apartmentCount: apartmentCount,
+        doorCount: doorCount,
+        managerUserCode: managerUserCode,
       );
       return null;
     } on ApiException catch (e) {
@@ -303,6 +322,81 @@ class AuthService extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<(SiteStructureRecord?, String?)> getSiteStructure({
+    required int siteCode,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final structure = await api.getSiteStructure(
+        token: active.token,
+        siteCode: siteCode,
+      );
+      return (structure, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(ApartmentRecord?, String?)> upsertApartmentResident({
+    required int apartmentId,
+    required String fullName,
+    required String loginName,
+    required String password,
+    String? phoneNumber,
+    required bool isActive,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final apartment = await api.upsertApartmentResident(
+        token: active.token,
+        apartmentId: apartmentId,
+        fullName: fullName,
+        loginName: loginName,
+        password: password,
+        phoneNumber: phoneNumber,
+        isActive: isActive,
+      );
+      return (apartment, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DoorRecord?, String?)> assignDoorDevice({
+    required int doorId,
+    required String deviceUid,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final door = await api.assignDoorDevice(
+        token: active.token,
+        doorId: doorId,
+        deviceUid: deviceUid,
+      );
+      return (door, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
     }
   }
 

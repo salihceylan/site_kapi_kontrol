@@ -1,11 +1,14 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -207,6 +210,10 @@ class AuthApi {
     String? address,
     String? city,
     String? district,
+    required int blockCount,
+    required int apartmentCount,
+    required int doorCount,
+    int? managerUserCode,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -217,6 +224,10 @@ class AuthApi {
         'address': address,
         'city': city,
         'district': district,
+        'block_count': blockCount,
+        'apartment_count': apartmentCount,
+        'door_count': doorCount,
+        'manager_user_code': managerUserCode,
       },
     );
 
@@ -232,12 +243,20 @@ class AuthApi {
     String? address,
     String? city,
     String? district,
+    int? blockCount,
+    int? apartmentCount,
+    int? doorCount,
+    int? managerUserCode,
   }) async {
     final body = <String, dynamic>{
       'name': name,
       'address': address,
       'city': city,
       'district': district,
+      'block_count': blockCount,
+      'apartment_count': apartmentCount,
+      'door_count': doorCount,
+      'manager_user_code': managerUserCode,
     }..removeWhere((_, value) => value == null);
 
     final response = await _authorizedRequest(
@@ -250,6 +269,67 @@ class AuthApi {
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return SiteRecord.fromJson(payload['site'] as Map<String, dynamic>);
+  }
+
+  Future<SiteStructureRecord> getSiteStructure({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/admin/sites/$siteCode/structure',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return SiteStructureRecord.fromJson(payload);
+  }
+
+  Future<ApartmentRecord> upsertApartmentResident({
+    required String token,
+    required int apartmentId,
+    required String fullName,
+    required String loginName,
+    required String password,
+    String? phoneNumber,
+    required bool isActive,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/apartments/$apartmentId/resident',
+      token: token,
+      body: {
+        'full_name': fullName,
+        'login_name': loginName,
+        'password': password,
+        'phone_number': phoneNumber,
+        'is_active': isActive,
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return ApartmentRecord.fromJson(payload['apartment'] as Map<String, dynamic>);
+  }
+
+  Future<DoorRecord> assignDoorDevice({
+    required String token,
+    required int doorId,
+    required String deviceUid,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/doors/$doorId/device',
+      token: token,
+      body: {
+        'device_uid': deviceUid,
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return DoorRecord.fromJson(payload['door'] as Map<String, dynamic>);
   }
 
   Future<void> deleteSite({
@@ -462,6 +542,7 @@ class AuthApi {
       id: user['id'] as int? ?? fallbackId,
       fullName: user['full_name'] as String,
       email: user['email'] as String,
+      loginName: user['login_name'] as String?,
       role: user['role'] == null
           ? fallbackRole
           : UserRole.fromApi(user['role'] as String),
