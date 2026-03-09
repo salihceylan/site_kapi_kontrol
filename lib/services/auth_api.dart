@@ -292,6 +292,7 @@ class AuthApi {
     required String fullName,
     required String loginName,
     required String password,
+    String? email,
     String? phoneNumber,
     required bool isActive,
   }) async {
@@ -303,6 +304,7 @@ class AuthApi {
         'full_name': fullName,
         'login_name': loginName,
         'password': password,
+        'email': email,
         'phone_number': phoneNumber,
         'is_active': isActive,
       },
@@ -311,6 +313,19 @@ class AuthApi {
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return ApartmentRecord.fromJson(payload['apartment'] as Map<String, dynamic>);
+  }
+
+  Future<void> sendApartmentCredentials({
+    required String token,
+    required int apartmentId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/apartments/$apartmentId/send-credentials',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
   }
 
   Future<DoorRecord> assignDoorDevice({

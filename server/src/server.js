@@ -5,7 +5,10 @@ import dotenv from 'dotenv';
 
 import { pool, checkDbConnection, ensureDbSchema } from './db.js';
 import { signAccessToken, verifyAccessToken } from './jwt.js';
-import { sendSiteManagerVerificationEmail } from './mailer.js';
+import {
+  sendApartmentCredentialsEmail,
+  sendSiteManagerVerificationEmail,
+} from './mailer.js';
 
 dotenv.config();
 
@@ -24,6 +27,14 @@ function normalizePhone(raw) {
 
 function normalizeEmail(raw) {
   return String(raw || '').trim().toLowerCase();
+}
+
+function normalizeOptionalEmail(raw) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const text = String(raw || '').trim().toLowerCase();
+  return text || null;
 }
 
 function normalizeOptionalText(raw) {
@@ -148,6 +159,8 @@ function mapApartmentRow(row) {
         : Number(row.resident_user_code),
     resident_full_name: row.resident_full_name ?? null,
     resident_login_name: row.resident_login_name ?? null,
+    resident_email: row.resident_email ?? null,
+    resident_pin_code: row.resident_pin_code ?? null,
     resident_phone_number: row.resident_phone_number ?? null,
     resident_is_active:
       row.resident_is_active === null || row.resident_is_active === undefined
@@ -287,6 +300,7 @@ function validateApartmentResidentInput({
   fullName,
   loginName,
   password,
+  email,
   phoneNumber,
   isActive,
 }) {
@@ -297,8 +311,11 @@ function validateApartmentResidentInput({
   if (loginError) {
     return loginError;
   }
-  if (!password || password.length < 6) {
-    return 'Sifre en az 6 karakter olmali.';
+  if (!password || !/^\d{4}$/.test(password)) {
+    return 'Sifre 4 haneli sayisal olmali.';
+  }
+  if (email && !email.includes('@')) {
+    return 'Gecerli e-posta girin.';
   }
   if (phoneNumber && !/^\+?[0-9()\-\s]{10,20}$/.test(phoneNumber)) {
     return 'Gecerli bir telefon numarasi girin.';
@@ -669,8 +686,172 @@ function blockLabelFromIndex(index) {
   return label;
 }
 
+function blockNameFromIndex(index) {
+  return `${blockLabelFromIndex(index)} Blok`;
+}
+
+function normalizeLoginSegment(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replaceAll('ç', 'c')
+    .replaceAll('ğ', 'g')
+    .replaceAll('ı', 'i')
+    .replaceAll('ö', 'o')
+    .replaceAll('ş', 's')
+    .replaceAll('ü', 'u')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function apartmentResidentFullName({ blockName, unitLabel }) {
+  return `${blockName} ${unitLabel}`.trim();
+}
+
+function apartmentBaseLoginName({ blockName, sortOrder }) {
+  let blockSegment = normalizeLoginSegment(blockName);
+  if (!blockSegment.endsWith('blok')) {
+    blockSegment = `${blockSegment}blok`;
+  }
+  return `${blockSegment}daire${sortOrder}`;
+}
+
+function generateApartmentPin() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+async function generateUniqueApartmentLoginName({
+  db,
+  blockName,
+  sortOrder,
+  siteCode,
+  excludeUserCode = null,
+}) {
+  const baseLoginName = apartmentBaseLoginName({ blockName, sortOrder });
+  return ensureUniqueLoginName({
+    db,
+    desiredLoginName: baseLoginName,
+    siteCode,
+    excludeUserCode,
+  });
+}
+
+async function ensureUniqueLoginName({
+  db,
+  desiredLoginName,
+  siteCode,
+  excludeUserCode = null,
+}) {
+  const baseLoginName = normalizeLoginSegment(desiredLoginName);
+  const siteSuffix = String(siteCode).slice(-4);
+  let attempt = 0;
+
+  while (attempt < 100) {
+    const candidate = attempt === 0
+      ? baseLoginName
+      : `${baseLoginName}_${siteSuffix}${attempt === 1 ? '' : attempt}`;
+    const existing = await db.query(
+      `
+        SELECT user_code
+        FROM users
+        WHERE login_name = $1
+        LIMIT 1
+      `,
+      [candidate],
+    );
+    if (
+      existing.rowCount === 0 ||
+      (
+        excludeUserCode != null &&
+        Number(existing.rows[0]?.user_code ?? 0) === Number(excludeUserCode)
+      )
+    ) {
+      return candidate;
+    }
+    attempt += 1;
+  }
+
+  throw new Error('APARTMENT_LOGIN_GENERATION_FAILED');
+}
+
 function generateInternalApartmentEmail({ loginName, apartmentId, siteCode }) {
   return `${loginName}.${apartmentId}.${siteCode}@ahbu.local`;
+}
+
+async function createApartmentResidentAccount({
+  apartmentId,
+  siteCode,
+  blockName,
+  unitLabel,
+  sortOrder,
+  db,
+}) {
+  const loginName = await generateUniqueApartmentLoginName({
+    db,
+    blockName,
+    sortOrder,
+    siteCode,
+  });
+  const pinCode = generateApartmentPin();
+  const internalEmail = generateInternalApartmentEmail({
+    loginName,
+    apartmentId,
+    siteCode,
+  });
+  const createdUser = await createUser({
+    fullName: apartmentResidentFullName({ blockName, unitLabel }),
+    email: internalEmail,
+    loginName,
+    role: 'apartment_owner',
+    isActive: true,
+    phoneNumber: null,
+    password: pinCode,
+    db,
+  });
+
+  await db.query(
+    `
+      UPDATE apartments
+      SET
+        resident_user_code = $1,
+        resident_pin_code = $2,
+        is_active = TRUE
+      WHERE id = $3
+    `,
+    [Number(createdUser.id), pinCode, apartmentId],
+  );
+}
+
+async function ensureSiteApartmentResidents(siteCode, db = pool) {
+  const apartmentsResult = await db.query(
+    `
+      SELECT
+        a.id,
+        a.site_code,
+        a.unit_label,
+        a.sort_order,
+        a.resident_user_code,
+        b.block_name
+      FROM apartments a
+      INNER JOIN site_blocks b ON b.id = a.block_id
+      WHERE a.site_code = $1
+      ORDER BY b.sort_order ASC, a.sort_order ASC
+    `,
+    [siteCode],
+  );
+
+  for (const apartment of apartmentsResult.rows) {
+    if (apartment.resident_user_code != null) {
+      continue;
+    }
+    await createApartmentResidentAccount({
+      apartmentId: Number(apartment.id),
+      siteCode: Number(apartment.site_code),
+      blockName: apartment.block_name,
+      unitLabel: apartment.unit_label,
+      sortOrder: Number(apartment.sort_order),
+      db,
+    });
+  }
 }
 
 async function siteManagerExists(userCode) {
@@ -835,6 +1016,8 @@ async function listSiteApartments(siteCode, db = pool) {
         a.resident_user_code,
         u.full_name AS resident_full_name,
         u.login_name AS resident_login_name,
+        a.resident_email,
+        a.resident_pin_code,
         u.phone_number AS resident_phone_number,
         u.is_active AS resident_is_active,
         a.created_at
@@ -875,6 +1058,7 @@ async function listSiteDoors(siteCode, db = pool) {
 }
 
 async function getSiteStructure(siteCode) {
+  await ensureSiteApartmentResidents(siteCode);
   const site = await getSiteByCode(siteCode);
   if (!site) {
     return null;
@@ -953,7 +1137,7 @@ async function createSiteWithStructure({
           VALUES ($1, $2, $3)
           RETURNING id
         `,
-        [siteCode, blockLabelFromIndex(index), index + 1],
+        [siteCode, blockNameFromIndex(index), index + 1],
       );
       blockIds.push(Number(blockResult.rows[0].id));
     }
@@ -969,7 +1153,7 @@ async function createSiteWithStructure({
             INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
             VALUES ($1, $2, $3, $4)
           `,
-          [siteCode, blockId, String(unitIndex + 1).padLeft(2, '0'), unitIndex + 1],
+          [siteCode, blockId, `Daire ${unitIndex + 1}`, unitIndex + 1],
         );
       }
       remainingApartments -= targetForBlock;
@@ -984,6 +1168,8 @@ async function createSiteWithStructure({
         [siteCode, `Kapi ${doorIndex}`, doorIndex],
       );
     }
+
+    await ensureSiteApartmentResidents(siteCode, client);
 
     await client.query('COMMIT');
     return getSiteByCode(siteCode);
@@ -1011,11 +1197,11 @@ async function syncSiteStructureCounts({
     if (blockCount > blocks.length) {
       for (let index = blocks.length; index < blockCount; index += 1) {
         await client.query(
-          `
-            INSERT INTO site_blocks (site_code, block_name, sort_order)
-            VALUES ($1, $2, $3)
-          `,
-          [siteCode, blockLabelFromIndex(index), index + 1],
+        `
+          INSERT INTO site_blocks (site_code, block_name, sort_order)
+          VALUES ($1, $2, $3)
+        `,
+          [siteCode, blockNameFromIndex(index), index + 1],
         );
       }
     }
@@ -1033,9 +1219,10 @@ async function syncSiteStructureCounts({
             INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
             VALUES ($1, $2, $3, $4)
           `,
-          [siteCode, Number(targetBlock.id), String(sortOrder).padLeft(2, '0'), sortOrder],
+          [siteCode, Number(targetBlock.id), `Daire ${sortOrder}`, sortOrder],
         );
         apartments.push({
+          id: null,
           block_id: Number(targetBlock.id),
           sort_order: sortOrder,
           resident_user_code: null,
@@ -1044,13 +1231,19 @@ async function syncSiteStructureCounts({
       }
     } else if (apartmentCount < apartments.length) {
       const removable = apartments
-          .filter((item) => item.resident_user_code == null)
+          .slice()
           .sort((a, b) => Number(b.id) - Number(a.id));
       const removeCount = apartments.length - apartmentCount;
-      if (removable.length < removeCount) {
-        throw new Error('Dolu daireler varken daire sayisi azaltilamaz.');
-      }
       for (const apartment of removable.slice(0, removeCount)) {
+        if (apartment.resident_user_code != null) {
+          await client.query(
+            `
+              DELETE FROM users
+              WHERE user_code = $1 AND role = 'apartment_owner'
+            `,
+            [Number(apartment.resident_user_code)],
+          );
+        }
         await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
       }
     }
@@ -1105,6 +1298,8 @@ async function syncSiteStructureCounts({
       [blockCount, apartmentCount, doorCount, siteCode],
     );
 
+    await ensureSiteApartmentResidents(siteCode, client);
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1132,6 +1327,7 @@ async function provisionApartmentResident({
   fullName,
   loginName,
   password,
+  email,
   phoneNumber,
   isActive,
 }) {
@@ -1143,8 +1339,13 @@ async function provisionApartmentResident({
         SELECT
           a.id,
           a.site_code,
-          a.resident_user_code
+          a.resident_user_code,
+          a.resident_email,
+          b.block_name,
+          a.unit_label,
+          a.sort_order
         FROM apartments a
+        INNER JOIN site_blocks b ON b.id = a.block_id
         WHERE a.id = $1
         LIMIT 1
       `,
@@ -1155,21 +1356,41 @@ async function provisionApartmentResident({
     }
 
     const apartment = apartmentResult.rows[0];
-    const internalEmail = generateInternalApartmentEmail({
-      loginName,
-      apartmentId: Number(apartment.id),
-      siteCode: Number(apartment.site_code),
-    });
 
     let userCode = apartment.resident_user_code == null
       ? null
       : Number(apartment.resident_user_code);
+    const finalLoginName = loginName
+      ? await ensureUniqueLoginName({
+          db: client,
+          desiredLoginName: loginName,
+          siteCode: Number(apartment.site_code),
+          excludeUserCode: userCode,
+        })
+      : await generateUniqueApartmentLoginName({
+          db: client,
+          blockName: apartment.block_name,
+          sortOrder: Number(apartment.sort_order),
+          siteCode: Number(apartment.site_code),
+          excludeUserCode: userCode,
+        });
+    const internalEmail = generateInternalApartmentEmail({
+      loginName: finalLoginName,
+      apartmentId: Number(apartment.id),
+      siteCode: Number(apartment.site_code),
+    });
+    const residentEmail = email === undefined
+      ? apartment.resident_email
+      : email;
 
     if (userCode == null) {
       const createdUser = await createUser({
-        fullName,
+        fullName: fullName || apartmentResidentFullName({
+          blockName: apartment.block_name,
+          unitLabel: apartment.unit_label,
+        }),
         email: internalEmail,
-        loginName,
+        loginName: finalLoginName,
         role: 'apartment_owner',
         isActive,
         phoneNumber,
@@ -1180,10 +1401,14 @@ async function provisionApartmentResident({
       await client.query(
         `
           UPDATE apartments
-          SET resident_user_code = $1, is_active = $2
-          WHERE id = $3
+          SET
+            resident_user_code = $1,
+            resident_email = $2,
+            resident_pin_code = $3,
+            is_active = $4
+          WHERE id = $5
         `,
-        [userCode, isActive, apartmentId],
+        [userCode, residentEmail, password, isActive, apartmentId],
       );
     } else {
       const passwordHash = await bcrypt.hash(password, 12);
@@ -1199,15 +1424,18 @@ async function provisionApartmentResident({
             is_active = $6
           WHERE user_code = $7
         `,
-        [fullName, internalEmail, loginName, phoneNumber, passwordHash, isActive, userCode],
+        [fullName, internalEmail, finalLoginName, phoneNumber, passwordHash, isActive, userCode],
       );
       await client.query(
         `
           UPDATE apartments
-          SET is_active = $1
-          WHERE id = $2
+          SET
+            resident_email = $1,
+            resident_pin_code = $2,
+            is_active = $3
+          WHERE id = $4
         `,
-        [isActive, apartmentId],
+        [residentEmail, password, isActive, apartmentId],
       );
     }
 
@@ -1224,6 +1452,8 @@ async function provisionApartmentResident({
           a.resident_user_code,
           u.full_name AS resident_full_name,
           u.login_name AS resident_login_name,
+          a.resident_email,
+          a.resident_pin_code,
           u.phone_number AS resident_phone_number,
           u.is_active AS resident_is_active,
           a.created_at
@@ -1243,6 +1473,53 @@ async function provisionApartmentResident({
   } finally {
     client.release();
   }
+}
+
+async function getApartmentCredentialSnapshot(apartmentId) {
+  const result = await pool.query(
+    `
+      SELECT
+        a.id,
+        a.site_code,
+        a.unit_label,
+        a.resident_email,
+        a.resident_pin_code,
+        b.block_name,
+        s.name AS site_name,
+        u.full_name AS resident_full_name,
+        u.login_name AS resident_login_name
+      FROM apartments a
+      INNER JOIN site_blocks b ON b.id = a.block_id
+      INNER JOIN sites s ON s.site_code = a.site_code
+      LEFT JOIN users u ON u.user_code = a.resident_user_code
+      WHERE a.id = $1
+      LIMIT 1
+    `,
+    [apartmentId],
+  );
+  return result.rows[0] || null;
+}
+
+async function sendApartmentCredentials(apartmentId) {
+  const snapshot = await getApartmentCredentialSnapshot(apartmentId);
+  if (!snapshot) {
+    throw new Error('APARTMENT_NOT_FOUND');
+  }
+  if (!snapshot.resident_email) {
+    throw new Error('APARTMENT_EMAIL_REQUIRED');
+  }
+  if (!snapshot.resident_login_name || !snapshot.resident_pin_code) {
+    throw new Error('APARTMENT_CREDENTIALS_NOT_READY');
+  }
+
+  await sendApartmentCredentialsEmail({
+    to: snapshot.resident_email,
+    residentName: snapshot.resident_full_name || `${snapshot.block_name} ${snapshot.unit_label}`,
+    apartmentLabel: `${snapshot.block_name} / ${snapshot.unit_label}`,
+    siteName: snapshot.site_name,
+    loginName: snapshot.resident_login_name,
+    pinCode: snapshot.resident_pin_code,
+  });
 }
 
 async function updateDoorDeviceAssignment({
@@ -2500,6 +2777,7 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
   const fullName = String(req.body.full_name || '').trim();
   const loginName = String(req.body.login_name || '').trim().toLowerCase();
   const password = String(req.body.password || '').trim();
+  const email = normalizeOptionalEmail(req.body.email);
   const phoneNumber = normalizePhone(req.body.phone_number);
   const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
 
@@ -2507,6 +2785,7 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
     fullName,
     loginName,
     password,
+    email,
     phoneNumber,
     isActive,
   });
@@ -2520,6 +2799,7 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
       fullName,
       loginName,
       password,
+      email,
       phoneNumber,
       isActive,
     });
@@ -2529,6 +2809,29 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
       return res.status(404).json({ error: 'Daire bulunamadi.' });
     }
     return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+  }
+});
+
+app.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+
+  try {
+    await sendApartmentCredentials(apartmentId);
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    if (error?.message === 'APARTMENT_EMAIL_REQUIRED') {
+      return res.status(400).json({ error: 'Mail gonderimi icin daire sakini e-postasi gerekli.' });
+    }
+    if (error?.message === 'APARTMENT_CREDENTIALS_NOT_READY') {
+      return res.status(400).json({ error: 'Kullanici adi veya PIN hazir degil.' });
+    }
+    return res.status(500).json({ error: 'Daire bilgileri e-posta ile gonderilemedi.' });
   }
 });
 
@@ -2810,6 +3113,7 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
   const fullName = String(req.body.full_name || '').trim();
   const loginName = String(req.body.login_name || '').trim().toLowerCase();
   const password = String(req.body.password || '').trim();
+  const email = normalizeOptionalEmail(req.body.email);
   const phoneNumber = normalizePhone(req.body.phone_number);
   const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
 
@@ -2817,6 +3121,7 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
     fullName,
     loginName,
     password,
+    email,
     phoneNumber,
     isActive,
   });
@@ -2830,6 +3135,7 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
       fullName,
       loginName,
       password,
+      email,
       phoneNumber,
       isActive,
     });
@@ -2839,6 +3145,39 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
       return res.status(404).json({ error: 'Daire bulunamadi.' });
     }
     return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+  }
+});
+
+app.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteManager, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+
+  const apartmentSiteResult = await pool.query(
+    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
+    [apartmentId],
+  );
+  if (apartmentSiteResult.rowCount === 0) {
+    return res.status(404).json({ error: 'Daire bulunamadi.' });
+  }
+
+  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+  }
+
+  try {
+    await sendApartmentCredentials(apartmentId);
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_EMAIL_REQUIRED') {
+      return res.status(400).json({ error: 'Mail gonderimi icin daire sakini e-postasi gerekli.' });
+    }
+    if (error?.message === 'APARTMENT_CREDENTIALS_NOT_READY') {
+      return res.status(400).json({ error: 'Kullanici adi veya PIN hazir degil.' });
+    }
+    return res.status(500).json({ error: 'Daire bilgileri e-posta ile gonderilemedi.' });
   }
 });
 

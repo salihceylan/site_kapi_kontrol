@@ -556,6 +556,7 @@ class _HomePageState extends State<HomePage> {
       fullName: result.fullName,
       loginName: result.loginName,
       password: result.password,
+      email: result.email,
       phoneNumber: result.phoneNumber,
       isActive: result.isActive,
     );
@@ -577,6 +578,22 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     _showMessage('Daire kullanicisi kaydedildi.');
+  }
+
+  Future<void> _sendApartmentCredentials(ApartmentRecord apartment) async {
+    setState(() => _busyApartments.add(apartment.id));
+    final error = await widget.authService.sendApartmentCredentials(
+      apartmentId: apartment.id,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _busyApartments.remove(apartment.id));
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    _showMessage('Daire giris bilgileri e-posta ile gonderildi.');
   }
 
   Future<void> _assignDoorDevice(DoorRecord door) async {
@@ -1399,6 +1416,9 @@ class _HomePageState extends State<HomePage> {
                         apartment: apartment,
                         busy: _busyApartments.contains(apartment.id),
                         onTap: () => _openApartmentResidentDialog(apartment),
+                        onSendCredentials: apartment.residentEmail == null
+                            ? null
+                            : () => _sendApartmentCredentials(apartment),
                       ),
                     ),
               ],
@@ -2027,16 +2047,19 @@ class _ApartmentCard extends StatelessWidget {
     required this.apartment,
     required this.busy,
     required this.onTap,
+    required this.onSendCredentials,
   });
 
   final ApartmentRecord apartment;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback? onSendCredentials;
 
   @override
   Widget build(BuildContext context) {
     final residentName = apartment.residentFullName ?? 'Atanmadi';
     final loginName = apartment.residentLoginName ?? '-';
+    final pinCode = apartment.residentPinCode ?? '-';
     final active = apartment.residentIsActive ?? apartment.isActive;
 
     return Material(
@@ -2062,7 +2085,7 @@ class _ApartmentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$residentName | Kullanici adi: $loginName',
+                      '$residentName | Kullanici: $loginName | PIN: $pinCode',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2076,18 +2099,29 @@ class _ApartmentCard extends StatelessWidget {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          active ? 'Aktif' : 'Pasif',
-                          style: TextStyle(
-                            color: active ? Colors.green.shade700 : Colors.red.shade700,
-                            fontWeight: FontWeight.w700,
+                        if (onSendCredentials != null)
+                          IconButton(
+                            tooltip: 'Giris bilgilerini mail gonder',
+                            onPressed: onSendCredentials,
+                            icon: const Icon(Icons.mail_outline),
                           ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              active ? 'Aktif' : 'Pasif',
+                              style: TextStyle(
+                                color: active ? Colors.green.shade700 : Colors.red.shade700,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Icon(Icons.chevron_right),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.chevron_right),
                       ],
                     ),
             ],
@@ -2559,6 +2593,7 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _fullNameController;
   late final TextEditingController _loginNameController;
+  late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
   late final TextEditingController _phoneController;
   late bool _isActive;
@@ -2572,7 +2607,12 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
     _loginNameController = TextEditingController(
       text: widget.apartment.residentLoginName ?? '',
     );
-    _passwordController = TextEditingController();
+    _emailController = TextEditingController(
+      text: widget.apartment.residentEmail ?? '',
+    );
+    _passwordController = TextEditingController(
+      text: widget.apartment.residentPinCode ?? '',
+    );
     _phoneController = TextEditingController(
       text: widget.apartment.residentPhoneNumber ?? '',
     );
@@ -2583,6 +2623,7 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
   void dispose() {
     _fullNameController.dispose();
     _loginNameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -2597,6 +2638,7 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
       _ApartmentResidentFormResult(
         fullName: _fullNameController.text.trim(),
         loginName: _loginNameController.text.trim().toLowerCase(),
+        email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         isActive: _isActive,
@@ -2640,12 +2682,42 @@ class _ApartmentResidentDialogState extends State<_ApartmentResidentDialog> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Daire Sakini E-postasi',
+                    helperText: 'Mail gonderimi icin opsiyonel.',
+                  ),
+                  validator: (value) {
+                    final text = (value ?? '').trim();
+                    if (text.isEmpty) {
+                      return null;
+                    }
+                    return text.contains('@') ? null : 'Gecerli e-posta girin.';
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
                   controller: _passwordController,
-                  obscureText: true,
                   decoration: const InputDecoration(labelText: 'Sifre'),
-                  validator: (value) => (value ?? '').trim().length < 6
-                      ? 'Sifre en az 6 karakter olmali.'
-                      : null,
+                  keyboardType: TextInputType.number,
+                  validator: (value) =>
+                      RegExp(r'^\d{4}$').hasMatch((value ?? '').trim())
+                          ? null
+                          : 'PIN 4 haneli sayisal olmali.',
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      final randomPin =
+                          (1000 + (math.Random().nextInt(9000))).toString();
+                      _passwordController.text = randomPin;
+                    },
+                    icon: const Icon(Icons.password_outlined),
+                    label: const Text('Rastgele PIN'),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -3012,6 +3084,7 @@ class _ApartmentResidentFormResult {
   const _ApartmentResidentFormResult({
     required this.fullName,
     required this.loginName,
+    required this.email,
     required this.password,
     required this.phoneNumber,
     required this.isActive,
@@ -3019,6 +3092,7 @@ class _ApartmentResidentFormResult {
 
   final String fullName;
   final String loginName;
+  final String email;
   final String password;
   final String phoneNumber;
   final bool isActive;

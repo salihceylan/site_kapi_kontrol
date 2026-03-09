@@ -52,3 +52,34 @@ export async function sendSiteManagerVerificationEmail({
     `,
   });
 }
+
+export async function sendApartmentCredentialsEmail({
+  to,
+  residentName,
+  apartmentLabel,
+  siteName,
+  loginName,
+  pinCode,
+}) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from,
+    to,
+    subject: 'AHBU daire giris bilgileriniz',
+    text: `Merhaba ${residentName}, ${siteName} icindeki ${apartmentLabel} icin giris bilgileriniz: kullanici adi ${loginName}, PIN ${pinCode}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
+        <p>Merhaba <strong>${residentName}</strong>,</p>
+        <p><strong>${siteName}</strong> icindeki <strong>${apartmentLabel}</strong> icin AHBU giris bilgileriniz asagidadir:</p>
+        <p><strong>Kullanici adi:</strong> ${loginName}</p>
+        <p><strong>PIN:</strong> ${pinCode}</p>
+        <p>Giris yaptiktan sonra gerekirse site yoneticinizden yeni sifre talep edebilirsiniz.</p>
+      </div>
+    `,
+  });
+}

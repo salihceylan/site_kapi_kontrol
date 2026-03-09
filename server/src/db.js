@@ -219,11 +219,21 @@ export async function ensureDbSchema() {
         unit_label TEXT NOT NULL,
         sort_order INTEGER NOT NULL,
         resident_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        resident_email TEXT,
+        resident_pin_code TEXT,
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (site_code, block_id, unit_label),
         UNIQUE (site_code, block_id, sort_order)
       )
+    `);
+    await client.query(`
+      ALTER TABLE apartments
+      ADD COLUMN IF NOT EXISTS resident_email TEXT
+    `);
+    await client.query(`
+      ALTER TABLE apartments
+      ADD COLUMN IF NOT EXISTS resident_pin_code TEXT
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_apartments_site_code

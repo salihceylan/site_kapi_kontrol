@@ -351,6 +351,7 @@ class AuthService extends ChangeNotifier {
     required String fullName,
     required String loginName,
     required String password,
+    String? email,
     String? phoneNumber,
     required bool isActive,
   }) async {
@@ -366,6 +367,7 @@ class AuthService extends ChangeNotifier {
         fullName: fullName,
         loginName: loginName,
         password: password,
+        email: email,
         phoneNumber: phoneNumber,
         isActive: isActive,
       );
@@ -374,6 +376,27 @@ class AuthService extends ChangeNotifier {
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<String?> sendApartmentCredentials({
+    required int apartmentId,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.sendApartmentCredentials(
+        token: active.token,
+        apartmentId: apartmentId,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
     }
   }
 
