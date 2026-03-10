@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -17,6 +18,9 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 
 class AuthApi {
   AuthApi({required this.baseUrl});
+
+  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _retryDelay = Duration(milliseconds: 350);
 
   final String baseUrl;
 
@@ -66,8 +70,9 @@ class AuthApi {
       },
     );
 
-    final response = await http.get(
-      uri,
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -77,11 +82,14 @@ class AuthApi {
     _ensureStatus(response, 200);
 
     final payload = _decodePayload(response);
-    final users = (payload['users'] as List<dynamic>? ?? <dynamic>[])
-        .map(
-          (item) => ManagedUserAccount.fromJson(item as Map<String, dynamic>),
-        )
-        .toList();
+    final users = _parsePayload(
+      'Kullanici listesi',
+      () => (payload['users'] as List<dynamic>? ?? <dynamic>[])
+          .map(
+            (item) => ManagedUserAccount.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+    );
 
     return ManagedUserPage(
       users: users,
@@ -187,8 +195,9 @@ class AuthApi {
       },
     );
 
-    final response = await http.get(
-      uri,
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -197,9 +206,12 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    final sites = (payload['sites'] as List<dynamic>? ?? <dynamic>[])
-        .map((item) => SiteRecord.fromJson(item as Map<String, dynamic>))
-        .toList();
+    final sites = _parsePayload(
+      'Site listesi',
+      () => (payload['sites'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => SiteRecord.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
 
     return SitePage(
       sites: sites,
@@ -257,7 +269,10 @@ class AuthApi {
 
     _ensureStatus(response, 201);
     final payload = _decodePayload(response);
-    return SiteRecord.fromJson(payload['site'] as Map<String, dynamic>);
+    return _parsePayload(
+      'Site kaydi',
+      () => SiteRecord.fromJson(payload['site'] as Map<String, dynamic>),
+    );
   }
 
   Future<SiteRecord> updateSite({
@@ -296,7 +311,10 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return SiteRecord.fromJson(payload['site'] as Map<String, dynamic>);
+    return _parsePayload(
+      'Site kaydi',
+      () => SiteRecord.fromJson(payload['site'] as Map<String, dynamic>),
+    );
   }
 
   Future<SiteStructureRecord> getSiteStructure({
@@ -311,7 +329,10 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return SiteStructureRecord.fromJson(payload);
+    return _parsePayload(
+      'Site yapisi',
+      () => SiteStructureRecord.fromJson(payload),
+    );
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -340,8 +361,11 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return ApartmentRecord.fromJson(
-      payload['apartment'] as Map<String, dynamic>,
+    return _parsePayload(
+      'Daire kullanicisi',
+      () => ApartmentRecord.fromJson(
+        payload['apartment'] as Map<String, dynamic>,
+      ),
     );
   }
 
@@ -372,7 +396,10 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return DoorRecord.fromJson(payload['door'] as Map<String, dynamic>);
+    return _parsePayload(
+      'Kapi kaydi',
+      () => DoorRecord.fromJson(payload['door'] as Map<String, dynamic>),
+    );
   }
 
   Future<void> deleteSite({
@@ -407,7 +434,10 @@ class AuthApi {
 
     _ensureStatus(response, 201);
     final payload = _decodePayload(response);
-    return DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>);
+    return _parsePayload(
+      'Cihaz kaydi',
+      () => DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>),
+    );
   }
 
   Future<SubscriptionRequestPage> listSubscriptionRequests({
@@ -419,8 +449,9 @@ class AuthApi {
       '$baseUrl/admin/subscription-requests',
     ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
 
-    final response = await http.get(
-      uri,
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -429,11 +460,14 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    final requests = (payload['requests'] as List<dynamic>? ?? <dynamic>[])
-        .map(
-          (item) => SubscriptionRequest.fromJson(item as Map<String, dynamic>),
-        )
-        .toList();
+    final requests = _parsePayload(
+      'Abonelik talepleri',
+      () => (payload['requests'] as List<dynamic>? ?? <dynamic>[])
+          .map(
+            (item) => SubscriptionRequest.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+    );
 
     return SubscriptionRequestPage(
       requests: requests,
@@ -484,14 +518,16 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    final user = payload['user'] as Map<String, dynamic>;
-    return _toUserSession(
-      user: user,
-      token: token,
-      fallbackId: id,
-      fallbackRole: role,
-      fallbackIsActive: isActive,
-    );
+    return _parsePayload('Profil bilgisi', () {
+      final user = payload['user'] as Map<String, dynamic>;
+      return _toUserSession(
+        user: user,
+        token: token,
+        fallbackId: id,
+        fallbackRole: role,
+        fallbackIsActive: isActive,
+      );
+    });
   }
 
   Future<UserSession> _authRequest({
@@ -500,22 +536,25 @@ class AuthApi {
     required int expectedCode,
   }) async {
     final uri = Uri.parse('$baseUrl$path');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: body,
     );
 
     _ensureStatus(response, expectedCode);
     final payload = _decodePayload(response);
-    final user = payload['user'] as Map<String, dynamic>;
-    return _toUserSession(
-      user: user,
-      token: payload['token'] as String,
-      fallbackId: user['id'] as int,
-      fallbackRole: UserRole.fromApi(user['role'] as String),
-      fallbackIsActive: user['is_active'] as bool? ?? true,
-    );
+    return _parsePayload('Oturum bilgisi', () {
+      final user = payload['user'] as Map<String, dynamic>;
+      return _toUserSession(
+        user: user,
+        token: payload['token'] as String,
+        fallbackId: user['id'] as int,
+        fallbackRole: UserRole.fromApi(user['role'] as String),
+        fallbackIsActive: user['is_active'] as bool? ?? true,
+      );
+    });
   }
 
   Future<http.Response> _authorizedRequest({
@@ -532,15 +571,84 @@ class AuthApi {
 
     switch (method) {
       case 'GET':
-        return http.get(uri, headers: headers);
+        return _sendRequest(method: 'GET', uri: uri, headers: headers);
       case 'DELETE':
-        return http.delete(uri, headers: headers);
+        return _sendRequest(method: 'DELETE', uri: uri, headers: headers);
       case 'PATCH':
-        return http.patch(uri, headers: headers, body: jsonEncode(body ?? {}));
+        return _sendRequest(
+          method: 'PATCH',
+          uri: uri,
+          headers: headers,
+          body: body,
+        );
       case 'POST':
-        return http.post(uri, headers: headers, body: jsonEncode(body ?? {}));
+        return _sendRequest(
+          method: 'POST',
+          uri: uri,
+          headers: headers,
+          body: body,
+        );
       default:
         throw ArgumentError('Desteklenmeyen method: $method');
+    }
+  }
+
+  Future<http.Response> _sendRequest({
+    required String method,
+    required Uri uri,
+    required Map<String, String> headers,
+    Map<String, dynamic>? body,
+    bool retryOnTransportError = true,
+  }) async {
+    Future<http.Response> execute() {
+      switch (method) {
+        case 'GET':
+          return http.get(uri, headers: headers);
+        case 'DELETE':
+          return http.delete(uri, headers: headers);
+        case 'PATCH':
+          return http.patch(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? <String, dynamic>{}),
+          );
+        case 'POST':
+          return http.post(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? <String, dynamic>{}),
+          );
+        default:
+          throw ArgumentError('Desteklenmeyen method: $method');
+      }
+    }
+
+    try {
+      return await execute().timeout(_requestTimeout);
+    } on TimeoutException {
+      if (retryOnTransportError) {
+        await Future<void>.delayed(_retryDelay);
+        return _sendRequest(
+          method: method,
+          uri: uri,
+          headers: headers,
+          body: body,
+          retryOnTransportError: false,
+        );
+      }
+      throw ApiException('Sunucu zaman asimina ugradi. Tekrar deneyin.');
+    } on http.ClientException catch (error) {
+      if (retryOnTransportError) {
+        await Future<void>.delayed(_retryDelay);
+        return _sendRequest(
+          method: method,
+          uri: uri,
+          headers: headers,
+          body: body,
+          retryOnTransportError: false,
+        );
+      }
+      throw ApiException(_mapClientError(error));
     }
   }
 
@@ -569,8 +677,38 @@ class AuthApi {
       return <String, dynamic>{};
     }
 
-    final raw = jsonDecode(response.body);
-    return raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+    try {
+      final raw = jsonDecode(response.body);
+      return raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+    } on FormatException {
+      throw ApiException('Sunucudan gecersiz yanit alindi.');
+    }
+  }
+
+  String _mapClientError(http.ClientException error) {
+    final message = error.message.toLowerCase();
+    if (message.contains('certificate') ||
+        message.contains('handshake') ||
+        message.contains('tls')) {
+      return 'SSL baglantisi kurulurken hata olustu.';
+    }
+    if (message.contains('connection closed') ||
+        message.contains('connection reset') ||
+        message.contains('failed host lookup') ||
+        message.contains('socket')) {
+      return 'Sunucuya ulasilamadi. Internet veya DNS baglantisini kontrol edin.';
+    }
+    return 'Sunucu baglantisinda istemci hatasi olustu.';
+  }
+
+  T _parsePayload<T>(String label, T Function() parser) {
+    try {
+      return parser();
+    } on FormatException {
+      throw ApiException('$label verisi islenemedi.');
+    } on TypeError {
+      throw ApiException('$label verisi beklenen formatta degil.');
+    }
   }
 
   UserSession _toUserSession({

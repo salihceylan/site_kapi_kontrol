@@ -125,11 +125,16 @@ export async function ensureDbSchema() {
         block_count INTEGER NOT NULL DEFAULT 1 CHECK (block_count > 0),
         apartment_count INTEGER NOT NULL DEFAULT 0 CHECK (apartment_count >= 0),
         door_count INTEGER NOT NULL DEFAULT 1 CHECK (door_count > 0),
+        block_apartment_counts INTEGER[] NOT NULL DEFAULT ARRAY[0]::INTEGER[],
         approval_status TEXT NOT NULL DEFAULT 'approved',
         approved_at TIMESTAMPTZ,
         mqtt_site_id INTEGER NOT NULL UNIQUE DEFAULT generate_unique_mqtt_site_id(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS block_apartment_counts INTEGER[] NOT NULL DEFAULT ARRAY[0]::INTEGER[]
     `);
     await client.query(`
       ALTER TABLE sites
@@ -168,6 +173,14 @@ export async function ensureDbSchema() {
           CHECK (approval_status IN ('pending', 'approved', 'rejected'));
         END IF;
       END $$;
+    `);
+    await client.query(`
+      UPDATE sites
+      SET block_apartment_counts = CASE
+        WHEN block_apartment_counts IS NULL OR array_length(block_apartment_counts, 1) IS NULL
+          THEN ARRAY[apartment_count]::INTEGER[]
+        ELSE block_apartment_counts
+      END
     `);
     await client.query(`
       UPDATE sites

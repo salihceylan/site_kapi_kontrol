@@ -597,9 +597,15 @@ async function createSite({
   district,
   blockCount = 1,
   apartmentCount = 0,
+  blockApartmentCounts,
   doorCount = 1,
   approvalStatus = 'approved',
 }) {
+  const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
+    blockCount,
+    apartmentCount,
+    blockApartmentCounts,
+  });
   const result = await pool.query(
     `
       INSERT INTO sites (
@@ -610,11 +616,12 @@ async function createSite({
         block_count,
         apartment_count,
         door_count,
+        block_apartment_counts,
         mqtt_site_id,
         approval_status,
         approved_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, generate_unique_mqtt_site_id(), $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10)
       RETURNING
         site_code AS id,
         name,
@@ -637,6 +644,7 @@ async function createSite({
       blockCount,
       apartmentCount,
       doorCount,
+      resolvedBlockApartmentCounts,
       approvalStatus,
       approvalStatus === 'approved' ? new Date() : null,
     ],
@@ -653,6 +661,7 @@ async function updateSiteByCode({
   blockCount,
   apartmentCount,
   doorCount,
+  blockApartmentCounts,
   approvalStatus,
 }) {
   const sets = [];
@@ -685,6 +694,10 @@ async function updateSiteByCode({
   if (doorCount !== undefined) {
     values.push(doorCount);
     sets.push(`door_count = $${values.length}`);
+  }
+  if (blockApartmentCounts !== undefined) {
+    values.push(blockApartmentCounts);
+    sets.push(`block_apartment_counts = $${values.length}`);
   }
   if (approvalStatus !== undefined) {
     values.push(approvalStatus);
@@ -872,6 +885,15 @@ function buildBlockApartmentCounts({
   }
 
   return counts;
+}
+
+function resolveStoredBlockApartmentCounts(siteRow) {
+  const normalized = normalizeBlockApartmentCounts(siteRow?.block_apartment_counts);
+  return buildBlockApartmentCounts({
+    blockCount: Number(siteRow?.block_count ?? 1),
+    apartmentCount: Number(siteRow?.apartment_count ?? 0),
+    blockApartmentCounts: normalized,
+  });
 }
 
 function normalizeLoginSegment(raw) {
@@ -1096,6 +1118,7 @@ async function getSiteByCode(siteCode) {
         s.block_count,
         s.apartment_count,
         s.door_count,
+        s.block_apartment_counts,
         s.approval_status,
         s.approved_at,
         s.mqtt_site_id,
@@ -1316,7 +1339,7 @@ async function getSiteStructure(siteCode) {
     listSiteDoors(siteCode),
   ]);
   return {
-    site,
+    site: mapSiteRow(site),
     blocks: blocks.map(mapBlockRow),
     apartments: apartments.map(mapApartmentRow),
     doors: doors.map(mapDoorRow),
@@ -1358,11 +1381,12 @@ async function createSiteWithStructure({
           block_count,
           apartment_count,
           door_count,
+          block_apartment_counts,
           mqtt_site_id,
           approval_status,
           approved_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, generate_unique_mqtt_site_id(), $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10)
         RETURNING
           site_code AS id,
           name,
@@ -1385,6 +1409,7 @@ async function createSiteWithStructure({
         resolvedBlockCount,
         resolvedApartmentCount,
         doorCount,
+        resolvedBlockApartmentCounts,
         approvalStatus,
         approvalStatus === 'approved' ? new Date() : null,
       ],
@@ -1401,6 +1426,11 @@ async function createSiteWithStructure({
         `,
         [siteCode, managerUserCode],
       );
+    }
+
+    if (approvalStatus !== 'approved') {
+      await client.query('COMMIT');
+      return getSiteByCode(siteCode);
     }
 
     const blockIds = [];
@@ -1579,10 +1609,20 @@ async function syncSiteStructureCounts({
     await client.query(
       `
         UPDATE sites
-        SET block_count = $1, apartment_count = $2, door_count = $3
-        WHERE site_code = $4
+        SET
+          block_count = $1,
+          apartment_count = $2,
+          door_count = $3,
+          block_apartment_counts = $4
+        WHERE site_code = $5
       `,
-      [resolvedBlockCount, resolvedApartmentCount, doorCount, siteCode],
+      [
+        resolvedBlockCount,
+        resolvedApartmentCount,
+        doorCount,
+        resolvedBlockApartmentCounts,
+        siteCode,
+      ],
     );
 
     await ensureSiteApartmentResidents(siteCode, client);
@@ -2985,6 +3025,21 @@ app.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, async (re
   }
 
   try {
+    const existing = await getSiteByCode(siteCode);
+    if (!existing || existing.approval_status !== 'pending') {
+      return res.status(404).json({ error: 'Bekleyen site talebi bulunamadi.' });
+    }
+
+    if (action === 'approve') {
+      await syncSiteStructureCounts({
+        siteCode,
+        blockCount: Number(existing.block_count ?? 1),
+        apartmentCount: Number(existing.apartment_count ?? 0),
+        blockApartmentCounts: resolveStoredBlockApartmentCounts(existing),
+        doorCount: Number(existing.door_count ?? 1),
+      });
+    }
+
     const result = await pool.query(
       `
         UPDATE sites
@@ -3014,10 +3069,6 @@ app.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, async (re
         siteCode,
       ],
     );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Bekleyen site talebi bulunamadi.' });
-    }
 
     return res.status(200).json({ site: mapSiteRow(result.rows[0]) });
   } catch (error) {
@@ -3092,22 +3143,44 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
       name !== undefined ||
       address !== undefined ||
       city !== undefined ||
-      district !== undefined
+      district !== undefined ||
+      existing.approval_status !== 'approved'
     ) {
+      const resolvedBlockApartmentCounts = blockApartmentCounts === undefined
+        ? resolveStoredBlockApartmentCounts(existing)
+        : blockApartmentCounts;
       await updateSiteByCode({
         siteCode,
         name,
         address,
         city,
         district,
+        blockCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : blockCount ?? Number(existing.block_count ?? 1),
+        apartmentCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : apartmentCount ?? Number(existing.apartment_count ?? 0),
+        doorCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : doorCount ?? Number(existing.door_count ?? 1),
+        blockApartmentCounts:
+          existing.approval_status === 'approved'
+            ? undefined
+            : resolvedBlockApartmentCounts,
       });
     }
 
     if (
+      existing.approval_status === 'approved' && (
       blockCount !== undefined ||
       apartmentCount !== undefined ||
       blockApartmentCounts !== undefined ||
       doorCount !== undefined
+      )
     ) {
       await syncSiteStructureCounts({
         siteCode,
@@ -3436,22 +3509,44 @@ app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, re
       name !== undefined ||
       address !== undefined ||
       city !== undefined ||
-      district !== undefined
+      district !== undefined ||
+      existing.approval_status !== 'approved'
     ) {
+      const resolvedBlockApartmentCounts = blockApartmentCounts === undefined
+        ? resolveStoredBlockApartmentCounts(existing)
+        : blockApartmentCounts;
       await updateSiteByCode({
         siteCode,
         name,
         address,
         city,
         district,
+        blockCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : blockCount ?? Number(existing.block_count ?? 1),
+        apartmentCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : apartmentCount ?? Number(existing.apartment_count ?? 0),
+        doorCount:
+          existing.approval_status === 'approved'
+            ? undefined
+            : doorCount ?? Number(existing.door_count ?? 1),
+        blockApartmentCounts:
+          existing.approval_status === 'approved'
+            ? undefined
+            : resolvedBlockApartmentCounts,
       });
     }
 
     if (
+      existing.approval_status === 'approved' && (
       blockCount !== undefined ||
       apartmentCount !== undefined ||
       blockApartmentCounts !== undefined ||
       doorCount !== undefined
+      )
     ) {
       await syncSiteStructureCounts({
         siteCode,
