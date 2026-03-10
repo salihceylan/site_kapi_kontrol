@@ -125,6 +125,8 @@ export async function ensureDbSchema() {
         block_count INTEGER NOT NULL DEFAULT 1 CHECK (block_count > 0),
         apartment_count INTEGER NOT NULL DEFAULT 0 CHECK (apartment_count >= 0),
         door_count INTEGER NOT NULL DEFAULT 1 CHECK (door_count > 0),
+        approval_status TEXT NOT NULL DEFAULT 'approved',
+        approved_at TIMESTAMPTZ,
         mqtt_site_id INTEGER NOT NULL UNIQUE DEFAULT generate_unique_mqtt_site_id(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
@@ -143,12 +145,39 @@ export async function ensureDbSchema() {
     `);
     await client.query(`
       ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE sites
       ADD COLUMN IF NOT EXISTS mqtt_site_id INTEGER
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'sites_approval_status_check'
+        ) THEN
+          ALTER TABLE sites
+          ADD CONSTRAINT sites_approval_status_check
+          CHECK (approval_status IN ('pending', 'approved', 'rejected'));
+        END IF;
+      END $$;
     `);
     await client.query(`
       UPDATE sites
       SET mqtt_site_id = generate_unique_mqtt_site_id()
       WHERE mqtt_site_id IS NULL
+    `);
+    await client.query(`
+      UPDATE sites
+      SET approved_at = COALESCE(approved_at, created_at)
+      WHERE approval_status = 'approved' AND approved_at IS NULL
     `);
     await client.query(`
       ALTER TABLE sites
@@ -165,6 +194,10 @@ export async function ensureDbSchema() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_sites_city_district
       ON sites(city, district)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_sites_approval_status
+      ON sites(approval_status)
     `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS devices (

@@ -27,6 +27,58 @@ double _dialogWidthForScreen(BuildContext context) {
   return math.min(420, math.max(280, screenWidth - 48));
 }
 
+String _blockLabelFromIndex(int index) {
+  var current = index + 1;
+  var label = '';
+  while (current > 0) {
+    current -= 1;
+    label = '${String.fromCharCode(65 + (current % 26))}$label';
+    current = current ~/ 26;
+  }
+  return '$label Blok';
+}
+
+List<int> _distributeApartmentCounts({
+  required int blockCount,
+  required int apartmentCount,
+}) {
+  final totalBlocks = blockCount > 0 ? blockCount : 1;
+  var remainingApartments = apartmentCount < 0 ? 0 : apartmentCount;
+  final counts = <int>[];
+
+  for (var index = 0; index < totalBlocks; index += 1) {
+    final blocksLeft = totalBlocks - index;
+    final targetForBlock = blocksLeft <= 0
+        ? 0
+        : (remainingApartments / blocksLeft).ceil();
+    counts.add(targetForBlock);
+    remainingApartments -= targetForBlock;
+  }
+
+  return counts;
+}
+
+List<int> _siteBlockApartmentCounts({
+  SiteRecord? site,
+  SiteStructureRecord? structure,
+}) {
+  if (site == null && structure == null) {
+    return const <int>[1];
+  }
+  if (structure != null && structure.blocks.isNotEmpty) {
+    return structure.blocks.map((block) {
+      return structure.apartments
+          .where((apartment) => apartment.blockId == block.id)
+          .length;
+    }).toList();
+  }
+
+  return _distributeApartmentCounts(
+    blockCount: site?.blockCount ?? 1,
+    apartmentCount: site?.apartmentCount ?? 0,
+  );
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.authService});
 
@@ -63,6 +115,9 @@ class _HomePageState extends State<HomePage> {
   SubscriptionRequestPage? _subscriptionRequestsPage;
   bool _isLoadingSubscriptionRequests = false;
   final Set<int> _busySubscriptionRequests = <int>{};
+  SitePage? _pendingSiteApprovalsPage;
+  bool _isLoadingPendingSiteApprovals = false;
+  final Set<int> _busySiteApprovals = <int>{};
 
   @override
   void initState() {
@@ -117,6 +172,7 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.daireKullanicilariYonetimi:
         return UserRole.apartmentOwner;
       case SirketMenuItem.abonelikTalepleri:
+      case SirketMenuItem.siteOnayTalepleri:
       case SirketMenuItem.siteler:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.dashboard:
@@ -133,6 +189,8 @@ class _HomePageState extends State<HomePage> {
         return 'Profilim';
       case SirketMenuItem.abonelikTalepleri:
         return 'Yeni Abonelik Talepleri';
+      case SirketMenuItem.siteOnayTalepleri:
+        return 'Site Onay Talepleri';
       case SirketMenuItem.superUserYonetimi:
         return 'Super User Yonetimi';
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -205,6 +263,10 @@ class _HomePageState extends State<HomePage> {
     }
     if (item == SirketMenuItem.abonelikTalepleri) {
       _loadSubscriptionRequests();
+      return;
+    }
+    if (item == SirketMenuItem.siteOnayTalepleri) {
+      _loadPendingSiteApprovals();
       return;
     }
     if (item == SirketMenuItem.siteler) {
@@ -417,10 +479,94 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _loadPendingSiteApprovals({
+    bool force = false,
+    int? page,
+  }) async {
+    if (_isLoadingPendingSiteApprovals) {
+      return;
+    }
+
+    final targetPage = page ?? _pendingSiteApprovalsPage?.page ?? 1;
+    if (!force && _pendingSiteApprovalsPage != null && page == null) {
+      return;
+    }
+
+    setState(() => _isLoadingPendingSiteApprovals = true);
+    try {
+      final result = await widget.authService.listSites(
+        page: targetPage,
+        pageSize: _pageSize,
+        approvalStatus: 'pending',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _pendingSiteApprovalsPage = result);
+    } on ApiException catch (e) {
+      if (mounted) {
+        _showMessage(e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Site onay talepleri alinamadi.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPendingSiteApprovals = false);
+      }
+    }
+  }
+
+  Future<void> _resolveSiteApproval({
+    required int siteCode,
+    required String action,
+  }) async {
+    setState(() => _busySiteApprovals.add(siteCode));
+    final error = await widget.authService.resolveSiteApproval(
+      siteCode: siteCode,
+      action: action,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _busySiteApprovals.remove(siteCode));
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    final currentPage = _pendingSiteApprovalsPage;
+    final targetPage =
+        currentPage != null &&
+            currentPage.sites.length == 1 &&
+            currentPage.page > 1
+        ? currentPage.page - 1
+        : currentPage?.page ?? 1;
+    await _loadPendingSiteApprovals(force: true, page: targetPage);
+    await _loadSites(force: true, page: _sitesPage?.page ?? 1);
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      action == 'approve'
+          ? 'Site talebi onaylandi.'
+          : 'Site talebi reddedildi.',
+    );
+  }
+
   Future<void> _openSiteDialog({SiteRecord? site}) async {
     final result = await showDialog<_SiteFormResult>(
       context: context,
-      builder: (dialogContext) => _SiteDialog(site: site),
+      builder: (dialogContext) => _SiteDialog(
+        site: site,
+        structure: site != null && _selectedSiteStructure?.site.id == site.id
+            ? _selectedSiteStructure
+            : null,
+      ),
     );
 
     if (result == null) {
@@ -440,8 +586,7 @@ class _HomePageState extends State<HomePage> {
             address: result.address,
             city: result.city,
             district: result.district,
-            blockCount: result.blockCount,
-            apartmentCount: result.apartmentCount,
+            blockApartmentCounts: result.blockApartmentCounts,
             doorCount: result.doorCount,
             managerUserCode: result.managerUserCode,
           )
@@ -450,8 +595,7 @@ class _HomePageState extends State<HomePage> {
             address: result.address,
             city: result.city,
             district: result.district,
-            blockCount: result.blockCount,
-            apartmentCount: result.apartmentCount,
+            blockApartmentCounts: result.blockApartmentCounts,
             doorCount: result.doorCount,
             managerUserCode: result.managerUserCode,
           );
@@ -1648,6 +1792,123 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildPendingSiteApprovalsScreen() {
+    final pageData = _pendingSiteApprovalsPage;
+    final sites = pageData?.sites ?? const <SiteRecord>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: AppDecorations.glassCard,
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Site Onay Talepleri',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Site yoneticilerinin olusturdugu siteler burada sirket onayi bekler.',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: AppDecorations.glassCard,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      pageData == null
+                          ? 'Bekleyen Siteler'
+                          : 'Bekleyen Siteler (${pageData.total})',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _isLoadingPendingSiteApprovals
+                        ? null
+                        : () => _loadPendingSiteApprovals(force: true),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_isLoadingPendingSiteApprovals && pageData == null)
+                const Center(child: CircularProgressIndicator())
+              else if (sites.isEmpty)
+                const Text('Bekleyen site onay talebi yok.')
+              else ...[
+                for (final site in sites)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _SiteApprovalRequestCard(
+                      site: site,
+                      busy: _busySiteApprovals.contains(site.id),
+                      formattedCreatedAt: _formatDate(site.createdAt),
+                      onApprove: () => _resolveSiteApproval(
+                        siteCode: site.id,
+                        action: 'approve',
+                      ),
+                      onReject: () => _resolveSiteApproval(
+                        siteCode: site.id,
+                        action: 'reject',
+                      ),
+                    ),
+                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Sayfa ${pageData?.page ?? 1} / ${pageData?.totalPages ?? 1} | Toplam ${pageData?.total ?? 0}',
+                    ),
+                    OutlinedButton(
+                      onPressed: (pageData?.page ?? 1) > 1
+                          ? () => _loadPendingSiteApprovals(
+                              force: true,
+                              page: (pageData?.page ?? 1) - 1,
+                            )
+                          : null,
+                      child: const Icon(Icons.chevron_left),
+                    ),
+                    OutlinedButton(
+                      onPressed:
+                          (pageData?.page ?? 1) < (pageData?.totalPages ?? 1)
+                          ? () => _loadPendingSiteApprovals(
+                              force: true,
+                              page: (pageData?.page ?? 1) + 1,
+                            )
+                          : null,
+                      child: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildManagedRoleScreen(UserRole role, UserSession session) {
     final pageData = _managedPages[role];
     final users = pageData?.users ?? const <ManagedUserAccount>[];
@@ -1817,6 +2078,8 @@ class _HomePageState extends State<HomePage> {
         return _buildProfile(session);
       case SirketMenuItem.abonelikTalepleri:
         return _buildSubscriptionRequestsScreen();
+      case SirketMenuItem.siteOnayTalepleri:
+        return _buildPendingSiteApprovalsScreen();
       case SirketMenuItem.superUserYonetimi:
         return _buildManagedRoleScreen(UserRole.superUser, session);
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -1992,6 +2255,11 @@ class _SiteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final approvalColor = switch (site.approvalStatus) {
+      'pending' => Colors.orange.shade700,
+      'rejected' => Colors.red.shade700,
+      _ => Colors.green.shade700,
+    };
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2034,7 +2302,34 @@ class _SiteCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text('ID: ${site.id}'),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('ID: ${site.id}'),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: approvalColor.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    site.approvalLabel,
+                                    style: TextStyle(
+                                      color: approvalColor,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         )
                       : Row(
@@ -2048,7 +2343,27 @@ class _SiteCard extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 12),
                             Text('ID: ${site.id}'),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: approvalColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                site.approvalLabel,
+                                style: TextStyle(
+                                  color: approvalColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                   const SizedBox(height: 6),
@@ -2261,6 +2576,90 @@ class _DoorCard extends StatelessWidget {
   }
 }
 
+class _SiteApprovalRequestCard extends StatelessWidget {
+  const _SiteApprovalRequestCard({
+    required this.site,
+    required this.busy,
+    required this.formattedCreatedAt,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final SiteRecord site;
+  final bool busy;
+  final String formattedCreatedAt;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: AppDecorations.infoCard,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  site.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              Text('ID: ${site.id}'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${site.blockCount} blok, ${site.apartmentCount} daire, ${site.doorCount} kapi',
+          ),
+          if ((site.managerName ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Yonetici: ${site.managerName} (${site.managerUserCode ?? '-'})',
+            ),
+          ],
+          if ((site.address ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(site.address!),
+          ],
+          if ((site.city ?? '').isNotEmpty || (site.district ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('${site.city ?? '-'} / ${site.district ?? '-'}'),
+            ),
+          const SizedBox(height: 6),
+          Text('Olusturma Tarihi: $formattedCreatedAt'),
+          const SizedBox(height: 12),
+          busy
+              ? const Center(child: CircularProgressIndicator())
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: onApprove,
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Onayla'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onReject,
+                      icon: const Icon(Icons.block_outlined, size: 18),
+                      label: const Text('Reddet'),
+                    ),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SubscriptionRequestCard extends StatelessWidget {
   const _SubscriptionRequestCard({
     required this.request,
@@ -2335,9 +2734,10 @@ class _SubscriptionRequestCard extends StatelessWidget {
 }
 
 class _SiteDialog extends StatefulWidget {
-  const _SiteDialog({required this.site});
+  const _SiteDialog({required this.site, this.structure});
 
   final SiteRecord? site;
+  final SiteStructureRecord? structure;
 
   @override
   State<_SiteDialog> createState() => _SiteDialogState();
@@ -2350,15 +2750,20 @@ class _SiteDialogState extends State<_SiteDialog> {
   late final TextEditingController _cityController;
   late final TextEditingController _districtController;
   late final TextEditingController _blockCountController;
-  late final TextEditingController _apartmentCountController;
   late final TextEditingController _doorCountController;
   late final TextEditingController _managerUserCodeController;
+  final List<TextEditingController> _blockApartmentControllers =
+      <TextEditingController>[];
 
   bool get _isEditing => widget.site != null;
 
   @override
   void initState() {
     super.initState();
+    final initialBlockApartmentCounts = _siteBlockApartmentCounts(
+      site: widget.site,
+      structure: widget.structure,
+    );
     _nameController = TextEditingController(text: widget.site?.name ?? '');
     _addressController = TextEditingController(
       text: widget.site?.address ?? '',
@@ -2368,10 +2773,7 @@ class _SiteDialogState extends State<_SiteDialog> {
       text: widget.site?.district ?? '',
     );
     _blockCountController = TextEditingController(
-      text: '${widget.site?.blockCount ?? 1}',
-    );
-    _apartmentCountController = TextEditingController(
-      text: '${widget.site?.apartmentCount ?? 0}',
+      text: '${initialBlockApartmentCounts.length}',
     );
     _doorCountController = TextEditingController(
       text: '${widget.site?.doorCount ?? 1}',
@@ -2379,6 +2781,11 @@ class _SiteDialogState extends State<_SiteDialog> {
     _managerUserCodeController = TextEditingController(
       text: widget.site?.managerUserCode?.toString() ?? '',
     );
+    _syncBlockApartmentControllers(
+      initialBlockApartmentCounts.length,
+      seedCounts: initialBlockApartmentCounts,
+    );
+    _blockCountController.addListener(_handleBlockCountChanged);
   }
 
   @override
@@ -2387,10 +2794,13 @@ class _SiteDialogState extends State<_SiteDialog> {
     _addressController.dispose();
     _cityController.dispose();
     _districtController.dispose();
+    _blockCountController.removeListener(_handleBlockCountChanged);
     _blockCountController.dispose();
-    _apartmentCountController.dispose();
     _doorCountController.dispose();
     _managerUserCodeController.dispose();
+    for (final controller in _blockApartmentControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -2402,6 +2812,45 @@ class _SiteDialogState extends State<_SiteDialog> {
     return int.tryParse(text);
   }
 
+  void _handleBlockCountChanged() {
+    final blockCount = int.tryParse(_blockCountController.text.trim());
+    if (blockCount == null ||
+        blockCount <= 0 ||
+        blockCount == _blockApartmentControllers.length) {
+      return;
+    }
+    setState(() {
+      _syncBlockApartmentControllers(blockCount);
+    });
+  }
+
+  void _syncBlockApartmentControllers(
+    int targetCount, {
+    List<int>? seedCounts,
+  }) {
+    final counts =
+        seedCounts ??
+        _blockApartmentControllers
+            .map((controller) => int.tryParse(controller.text.trim()) ?? 1)
+            .toList();
+
+    while (_blockApartmentControllers.length < targetCount) {
+      _blockApartmentControllers.add(TextEditingController());
+    }
+    while (_blockApartmentControllers.length > targetCount) {
+      _blockApartmentControllers.removeLast().dispose();
+    }
+
+    for (var index = 0; index < _blockApartmentControllers.length; index += 1) {
+      final value = index < counts.length ? counts[index] : 1;
+      _blockApartmentControllers[index].text = '$value';
+    }
+  }
+
+  List<int> get _blockApartmentCounts => _blockApartmentControllers
+      .map((controller) => int.tryParse(controller.text.trim()) ?? 0)
+      .toList();
+
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -2412,8 +2861,7 @@ class _SiteDialogState extends State<_SiteDialog> {
         address: _addressController.text.trim(),
         city: _cityController.text.trim(),
         district: _districtController.text.trim(),
-        blockCount: int.parse(_blockCountController.text.trim()),
-        apartmentCount: int.parse(_apartmentCountController.text.trim()),
+        blockApartmentCounts: _blockApartmentCounts,
         doorCount: int.parse(_doorCountController.text.trim()),
         managerUserCode: _parseOptionalInt(_managerUserCodeController.text),
       ),
@@ -2422,6 +2870,10 @@ class _SiteDialogState extends State<_SiteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final totalApartments = _blockApartmentCounts.fold<int>(
+      0,
+      (sum, count) => sum + count,
+    );
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: Text(_isEditing ? 'Site Duzenle' : 'Yeni Site Ekle'),
@@ -2474,16 +2926,58 @@ class _SiteDialogState extends State<_SiteDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _apartmentCountController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Daire Sayisi'),
-                  validator: (value) {
-                    final parsed = int.tryParse((value ?? '').trim());
-                    return parsed == null || parsed < 0
-                        ? 'Daire sayisi sifir veya pozitif tamsayi olmali.'
-                        : null;
-                  },
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFB8D7F7)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Blok Daire Dagilimi',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      for (
+                        var index = 0;
+                        index < _blockApartmentControllers.length;
+                        index += 1
+                      ) ...[
+                        Text(
+                          _blockLabelFromIndex(index),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _blockApartmentControllers[index],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Daire Sayisi',
+                          ),
+                          validator: (value) {
+                            final parsed = int.tryParse((value ?? '').trim());
+                            return parsed == null || parsed <= 0
+                                ? 'Her blokta en az 1 daire olmali.'
+                                : null;
+                          },
+                        ),
+                        if (index != _blockApartmentControllers.length - 1)
+                          const SizedBox(height: 12),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Toplam Daire: $totalApartments',
+                        style: const TextStyle(color: AppColors.textMuted),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -3128,8 +3622,7 @@ class _SiteFormResult {
     required this.address,
     required this.city,
     required this.district,
-    required this.blockCount,
-    required this.apartmentCount,
+    required this.blockApartmentCounts,
     required this.doorCount,
     required this.managerUserCode,
   });
@@ -3138,8 +3631,7 @@ class _SiteFormResult {
   final String address;
   final String city;
   final String district;
-  final int blockCount;
-  final int apartmentCount;
+  final List<int> blockApartmentCounts;
   final int doorCount;
   final int? managerUserCode;
 }

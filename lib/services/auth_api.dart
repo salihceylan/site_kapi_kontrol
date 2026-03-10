@@ -78,7 +78,9 @@ class AuthApi {
 
     final payload = _decodePayload(response);
     final users = (payload['users'] as List<dynamic>? ?? <dynamic>[])
-        .map((item) => ManagedUserAccount.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) => ManagedUserAccount.fromJson(item as Map<String, dynamic>),
+        )
         .toList();
 
     return ManagedUserPage(
@@ -174,11 +176,14 @@ class AuthApi {
     required String token,
     required int page,
     required int pageSize,
+    String? approvalStatus,
   }) async {
     final uri = Uri.parse('$baseUrl/admin/sites').replace(
       queryParameters: {
         'page': '$page',
         'page_size': '$pageSize',
+        // ignore: use_null_aware_elements
+        if (approvalStatus != null) 'approval_status': approvalStatus,
       },
     );
 
@@ -204,17 +209,35 @@ class AuthApi {
     );
   }
 
+  Future<void> resolveSiteApproval({
+    required String token,
+    required int siteCode,
+    required String action,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/sites/$siteCode/approval',
+      token: token,
+      body: {'action': action},
+    );
+
+    _ensureStatus(response, 200);
+  }
+
   Future<SiteRecord> createSite({
     required String token,
     required String name,
     String? address,
     String? city,
     String? district,
-    required int blockCount,
-    required int apartmentCount,
+    required List<int> blockApartmentCounts,
     required int doorCount,
     int? managerUserCode,
   }) async {
+    final totalApartments = blockApartmentCounts.fold<int>(
+      0,
+      (sum, count) => sum + count,
+    );
     final response = await _authorizedRequest(
       method: 'POST',
       path: '/admin/sites',
@@ -224,8 +247,9 @@ class AuthApi {
         'address': address,
         'city': city,
         'district': district,
-        'block_count': blockCount,
-        'apartment_count': apartmentCount,
+        'block_count': blockApartmentCounts.length,
+        'apartment_count': totalApartments,
+        'block_apartment_counts': blockApartmentCounts,
         'door_count': doorCount,
         'manager_user_code': managerUserCode,
       },
@@ -243,18 +267,22 @@ class AuthApi {
     String? address,
     String? city,
     String? district,
-    int? blockCount,
-    int? apartmentCount,
+    List<int>? blockApartmentCounts,
     int? doorCount,
     int? managerUserCode,
   }) async {
+    final totalApartments = blockApartmentCounts?.fold<int>(
+      0,
+      (sum, count) => sum + count,
+    );
     final body = <String, dynamic>{
       'name': name,
       'address': address,
       'city': city,
       'district': district,
-      'block_count': blockCount,
-      'apartment_count': apartmentCount,
+      'block_count': blockApartmentCounts?.length,
+      'apartment_count': totalApartments,
+      'block_apartment_counts': blockApartmentCounts,
       'door_count': doorCount,
       'manager_user_code': managerUserCode,
     }..removeWhere((_, value) => value == null);
@@ -312,7 +340,9 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return ApartmentRecord.fromJson(payload['apartment'] as Map<String, dynamic>);
+    return ApartmentRecord.fromJson(
+      payload['apartment'] as Map<String, dynamic>,
+    );
   }
 
   Future<void> sendApartmentCredentials({
@@ -337,9 +367,7 @@ class AuthApi {
       method: 'PATCH',
       path: '/admin/doors/$doorId/device',
       token: token,
-      body: {
-        'device_uid': deviceUid,
-      },
+      body: {'device_uid': deviceUid},
     );
 
     _ensureStatus(response, 200);
@@ -387,12 +415,9 @@ class AuthApi {
     required int page,
     required int pageSize,
   }) async {
-    final uri = Uri.parse('$baseUrl/admin/subscription-requests').replace(
-      queryParameters: {
-        'page': '$page',
-        'page_size': '$pageSize',
-      },
-    );
+    final uri = Uri.parse(
+      '$baseUrl/admin/subscription-requests',
+    ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
 
     final response = await http.get(
       uri,
@@ -405,7 +430,9 @@ class AuthApi {
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     final requests = (payload['requests'] as List<dynamic>? ?? <dynamic>[])
-        .map((item) => SubscriptionRequest.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) => SubscriptionRequest.fromJson(item as Map<String, dynamic>),
+        )
         .toList();
 
     return SubscriptionRequestPage(

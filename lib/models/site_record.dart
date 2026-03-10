@@ -8,6 +8,8 @@ class SiteRecord {
     required this.blockCount,
     required this.apartmentCount,
     required this.doorCount,
+    required this.approvalStatus,
+    required this.approvedAt,
     required this.mqttSiteId,
     required this.managerUserCode,
     required this.managerName,
@@ -22,10 +24,25 @@ class SiteRecord {
   final int blockCount;
   final int apartmentCount;
   final int doorCount;
+  final String approvalStatus;
+  final DateTime? approvedAt;
   final int mqttSiteId;
   final int? managerUserCode;
   final String? managerName;
   final DateTime? createdAt;
+
+  bool get isApproved => approvalStatus == 'approved';
+
+  String get approvalLabel {
+    switch (approvalStatus) {
+      case 'pending':
+        return 'Onay Bekliyor';
+      case 'rejected':
+        return 'Reddedildi';
+      default:
+        return 'Onaylandi';
+    }
+  }
 
   SiteRecord copyWith({
     int? id,
@@ -36,6 +53,8 @@ class SiteRecord {
     int? blockCount,
     int? apartmentCount,
     int? doorCount,
+    String? approvalStatus,
+    DateTime? approvedAt,
     int? mqttSiteId,
     int? managerUserCode,
     String? managerName,
@@ -50,6 +69,8 @@ class SiteRecord {
       blockCount: blockCount ?? this.blockCount,
       apartmentCount: apartmentCount ?? this.apartmentCount,
       doorCount: doorCount ?? this.doorCount,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
+      approvedAt: approvedAt ?? this.approvedAt,
       mqttSiteId: mqttSiteId ?? this.mqttSiteId,
       managerUserCode: managerUserCode ?? this.managerUserCode,
       managerName: managerName ?? this.managerName,
@@ -67,6 +88,10 @@ class SiteRecord {
       blockCount: json['block_count'] as int? ?? 1,
       apartmentCount: json['apartment_count'] as int? ?? 0,
       doorCount: json['door_count'] as int? ?? 1,
+      approvalStatus: json['approval_status'] as String? ?? 'approved',
+      approvedAt: json['approved_at'] == null
+          ? null
+          : DateTime.tryParse(json['approved_at'] as String),
       mqttSiteId: json['mqtt_site_id'] as int? ?? 0,
       managerUserCode: json['manager_user_code'] as int?,
       managerName: json['manager_name'] as String?,

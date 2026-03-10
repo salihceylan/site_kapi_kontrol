@@ -81,6 +81,29 @@ function normalizeOptionalInteger(raw) {
   return value;
 }
 
+function normalizeBlockApartmentCounts(raw) {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+
+  const counts = [];
+  for (const item of raw) {
+    const value = normalizeOptionalInteger(item);
+    if (value === undefined || value === null || Number.isNaN(value)) {
+      if (Number(item) === 0 || String(item).trim() === '0') {
+        counts.push(0);
+        continue;
+      }
+      return null;
+    }
+    counts.push(value);
+  }
+  return counts;
+}
+
 function mapUserRow(row) {
   return {
     id: row.id,
@@ -106,6 +129,10 @@ function mapSiteRow(row) {
     block_count: Number(row.block_count ?? 1),
     apartment_count: Number(row.apartment_count ?? 0),
     door_count: Number(row.door_count ?? 1),
+    approval_status: validApprovalStatuses.has(row.approval_status)
+      ? row.approval_status
+      : 'approved',
+    approved_at: row.approved_at ?? null,
     mqtt_site_id: Number(row.mqtt_site_id ?? 0),
     manager_user_code:
       row.manager_user_code === null || row.manager_user_code === undefined
@@ -130,6 +157,11 @@ function mapDeviceRow(row) {
       row.site_code === null || row.site_code === undefined
         ? null
         : Number(row.site_code),
+    site_name: row.site_name ?? null,
+    assigned_door_name: row.assigned_door_name ?? null,
+    site_approval_status: validApprovalStatuses.has(row.site_approval_status)
+      ? row.site_approval_status
+      : 'approved',
     created_at: row.created_at,
   };
 }
@@ -271,27 +303,46 @@ function validateStructuredSiteInput({
   blockCount,
   apartmentCount,
   doorCount,
+  blockApartmentCounts,
 }) {
   if (!name || name.length < 2) {
     return 'Site adi en az 2 karakter olmali.';
   }
+  if (!Number.isInteger(doorCount) || doorCount <= 0) {
+    return 'Otomatik kapi sayisi pozitif tamsayi olmali.';
+  }
+  if (doorCount > 100) {
+    return 'Bu islem icin kapi sayisi fazla buyuk.';
+  }
+
+  if (blockApartmentCounts !== undefined) {
+    if (!Array.isArray(blockApartmentCounts) || blockApartmentCounts.length === 0) {
+      return 'En az bir blok tanimlanmali.';
+    }
+    if (blockApartmentCounts.length > 100) {
+      return 'Bu islem icin blok sayisi fazla buyuk.';
+    }
+    const totalApartments = blockApartmentCounts.reduce((sum, count) => sum + count, 0);
+    if (totalApartments > 5000) {
+      return 'Bu islem icin daire sayisi fazla buyuk.';
+    }
+    if (blockApartmentCounts.some((count) => !Number.isInteger(count) || count < 0)) {
+      return 'Her blok icin daire sayisi sifir veya pozitif tamsayi olmali.';
+    }
+    return null;
+  }
+
   if (!Number.isInteger(blockCount) || blockCount <= 0) {
     return 'Blok sayisi pozitif tamsayi olmali.';
   }
   if (!Number.isInteger(apartmentCount) || apartmentCount < 0) {
     return 'Daire sayisi sifir veya pozitif tamsayi olmali.';
   }
-  if (!Number.isInteger(doorCount) || doorCount <= 0) {
-    return 'Otomatik kapi sayisi pozitif tamsayi olmali.';
-  }
   if (apartmentCount > 5000) {
     return 'Bu islem icin daire sayisi fazla buyuk.';
   }
   if (blockCount > 100) {
     return 'Bu islem icin blok sayisi fazla buyuk.';
-  }
-  if (doorCount > 100) {
-    return 'Bu islem icin kapi sayisi fazla buyuk.';
   }
   return null;
 }
@@ -547,11 +598,22 @@ async function createSite({
   blockCount = 1,
   apartmentCount = 0,
   doorCount = 1,
+  approvalStatus = 'approved',
 }) {
   const result = await pool.query(
     `
-      INSERT INTO sites (name, address, city, district, block_count, apartment_count, door_count)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO sites (
+        name,
+        address,
+        city,
+        district,
+        block_count,
+        apartment_count,
+        door_count,
+        approval_status,
+        approved_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING
         site_code AS id,
         name,
@@ -561,10 +623,22 @@ async function createSite({
         block_count,
         apartment_count,
         door_count,
+        approval_status,
+        approved_at,
         mqtt_site_id,
         created_at
     `,
-    [name, address, city, district, blockCount, apartmentCount, doorCount],
+    [
+      name,
+      address,
+      city,
+      district,
+      blockCount,
+      apartmentCount,
+      doorCount,
+      approvalStatus,
+      approvalStatus === 'approved' ? new Date() : null,
+    ],
   );
   return result.rows[0];
 }
@@ -578,6 +652,7 @@ async function updateSiteByCode({
   blockCount,
   apartmentCount,
   doorCount,
+  approvalStatus,
 }) {
   const sets = [];
   const values = [];
@@ -610,6 +685,12 @@ async function updateSiteByCode({
     values.push(doorCount);
     sets.push(`door_count = $${values.length}`);
   }
+  if (approvalStatus !== undefined) {
+    values.push(approvalStatus);
+    sets.push(`approval_status = $${values.length}`);
+    values.push(approvalStatus === 'approved' ? new Date() : null);
+    sets.push(`approved_at = $${values.length}`);
+  }
 
   if (sets.length === 0) {
     return null;
@@ -630,6 +711,8 @@ async function updateSiteByCode({
         block_count,
         apartment_count,
         door_count,
+        approval_status,
+        approved_at,
         mqtt_site_id,
         created_at
     `,
@@ -662,15 +745,90 @@ async function findDeviceByUid(deviceUid) {
         devices.device_uid,
         devices.assigned_user_code,
         devices.site_code,
+        sites.name AS site_name,
+        sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.door_name AS assigned_door_name,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
       WHERE devices.device_uid = $1
       LIMIT 1
     `,
     [deviceUid],
+  );
+  return result.rows[0] || null;
+}
+
+async function listManagedDevicesForUser(authUser) {
+  const userCode = getAuthUserCode({ authUser });
+  if (userCode == null) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        devices.id,
+        devices.device_uid,
+        devices.assigned_user_code,
+        devices.site_code,
+        sites.name AS site_name,
+        sites.approval_status AS site_approval_status,
+        devices.gate_name,
+        door.id AS assigned_door_id,
+        door.door_name AS assigned_door_name,
+        devices.created_at
+      FROM devices
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      WHERE EXISTS (
+        SELECT 1
+        FROM site_manager_sites sms
+        WHERE sms.manager_user_code = $1
+          AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+      )
+      ORDER BY sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
+    `,
+    [userCode],
+  );
+  return result.rows;
+}
+
+async function findManagedDeviceById({ authUser, deviceId }) {
+  const userCode = getAuthUserCode({ authUser });
+  if (userCode == null) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        devices.id,
+        devices.device_uid,
+        devices.assigned_user_code,
+        devices.site_code,
+        sites.name AS site_name,
+        sites.approval_status AS site_approval_status,
+        devices.gate_name,
+        door.id AS assigned_door_id,
+        door.door_name AS assigned_door_name,
+        devices.created_at
+      FROM devices
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      WHERE devices.id = $1
+        AND EXISTS (
+          SELECT 1
+          FROM site_manager_sites sms
+          WHERE sms.manager_user_code = $2
+            AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+        )
+      LIMIT 1
+    `,
+    [deviceId, userCode],
   );
   return result.rows[0] || null;
 }
@@ -688,6 +846,31 @@ function blockLabelFromIndex(index) {
 
 function blockNameFromIndex(index) {
   return `${blockLabelFromIndex(index)} Blok`;
+}
+
+function buildBlockApartmentCounts({
+  blockCount,
+  apartmentCount,
+  blockApartmentCounts,
+}) {
+  if (Array.isArray(blockApartmentCounts) && blockApartmentCounts.length > 0) {
+    return blockApartmentCounts;
+  }
+
+  const totalBlocks = Number.isInteger(blockCount) && blockCount > 0 ? blockCount : 1;
+  let remainingApartments = Number.isInteger(apartmentCount) && apartmentCount >= 0
+    ? apartmentCount
+    : 0;
+  const counts = [];
+
+  for (let index = 0; index < totalBlocks; index += 1) {
+    const blocksLeft = totalBlocks - index;
+    const targetForBlock = blocksLeft <= 0 ? 0 : Math.ceil(remainingApartments / blocksLeft);
+    counts.push(targetForBlock);
+    remainingApartments -= targetForBlock;
+  }
+
+  return counts;
 }
 
 function normalizeLoginSegment(raw) {
@@ -884,6 +1067,22 @@ async function hasSiteManagementAccess(authUser, siteCode) {
   return result.rowCount > 0;
 }
 
+async function siteHasApprovedStatus(siteCode, db = pool) {
+  const result = await db.query(
+    `
+      SELECT approval_status
+      FROM sites
+      WHERE site_code = $1
+      LIMIT 1
+    `,
+    [siteCode],
+  );
+  if (result.rowCount === 0) {
+    return false;
+  }
+  return result.rows[0]?.approval_status === 'approved';
+}
+
 async function getSiteByCode(siteCode) {
   const result = await pool.query(
     `
@@ -896,6 +1095,8 @@ async function getSiteByCode(siteCode) {
         s.block_count,
         s.apartment_count,
         s.door_count,
+        s.approval_status,
+        s.approved_at,
         s.mqtt_site_id,
         sm.manager_user_code,
         manager.full_name AS manager_name,
@@ -917,10 +1118,23 @@ async function getSiteByCode(siteCode) {
   return result.rows[0] || null;
 }
 
-async function listSitesForAuthUser({ authUser, page, pageSize }) {
+async function listSitesForAuthUser({
+  authUser,
+  page,
+  pageSize,
+  approvalStatus,
+}) {
   const offset = (page - 1) * pageSize;
+  const parsedApprovalStatus = approvalStatus && validApprovalStatuses.has(approvalStatus)
+    ? approvalStatus
+    : null;
   if (authUser?.role === 'super_user') {
-    const countResult = await pool.query(`SELECT COUNT(*)::INTEGER AS total FROM sites`);
+    const countResult = await pool.query(
+      parsedApprovalStatus == null
+        ? `SELECT COUNT(*)::INTEGER AS total FROM sites`
+        : `SELECT COUNT(*)::INTEGER AS total FROM sites WHERE approval_status = $1`,
+      parsedApprovalStatus == null ? [] : [parsedApprovalStatus],
+    );
     const rows = await pool.query(
       `
         SELECT
@@ -932,6 +1146,8 @@ async function listSitesForAuthUser({ authUser, page, pageSize }) {
           s.block_count,
           s.apartment_count,
           s.door_count,
+          s.approval_status,
+          s.approved_at,
           s.mqtt_site_id,
           sm.manager_user_code,
           manager.full_name AS manager_name,
@@ -945,10 +1161,13 @@ async function listSitesForAuthUser({ authUser, page, pageSize }) {
           LIMIT 1
         ) sm ON TRUE
         LEFT JOIN users manager ON manager.user_code = sm.manager_user_code
+        ${parsedApprovalStatus == null ? '' : 'WHERE s.approval_status = $3'}
         ORDER BY s.created_at DESC
         LIMIT $1 OFFSET $2
       `,
-      [pageSize, offset],
+      parsedApprovalStatus == null
+        ? [pageSize, offset]
+        : [pageSize, offset, parsedApprovalStatus],
     );
     return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
   }
@@ -959,8 +1178,11 @@ async function listSitesForAuthUser({ authUser, page, pageSize }) {
       FROM sites s
       INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
       WHERE sms.manager_user_code = $1
+        ${parsedApprovalStatus == null ? '' : 'AND s.approval_status = $2'}
     `,
-    [Number(authUser.id)],
+    parsedApprovalStatus == null
+      ? [Number(authUser.id)]
+      : [Number(authUser.id), parsedApprovalStatus],
   );
   const rows = await pool.query(
     `
@@ -973,6 +1195,8 @@ async function listSitesForAuthUser({ authUser, page, pageSize }) {
         s.block_count,
         s.apartment_count,
         s.door_count,
+        s.approval_status,
+        s.approved_at,
         s.mqtt_site_id,
         sms.manager_user_code,
         manager.full_name AS manager_name,
@@ -981,10 +1205,13 @@ async function listSitesForAuthUser({ authUser, page, pageSize }) {
       INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
       INNER JOIN users manager ON manager.user_code = sms.manager_user_code
       WHERE sms.manager_user_code = $1
+        ${parsedApprovalStatus == null ? '' : 'AND s.approval_status = $4'}
       ORDER BY s.created_at DESC
       LIMIT $2 OFFSET $3
     `,
-    [Number(authUser.id), pageSize, offset],
+    parsedApprovalStatus == null
+      ? [Number(authUser.id), pageSize, offset]
+      : [Number(authUser.id), pageSize, offset, parsedApprovalStatus],
   );
   return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
 }
@@ -1028,6 +1255,25 @@ async function listSiteApartments(siteCode, db = pool) {
       ORDER BY b.sort_order ASC, a.sort_order ASC
     `,
     [siteCode],
+  );
+  return result.rows;
+}
+
+async function listBlockApartments(blockId, db = pool) {
+  const result = await db.query(
+    `
+      SELECT
+        a.id,
+        a.site_code,
+        a.block_id,
+        a.unit_label,
+        a.sort_order,
+        a.resident_user_code
+      FROM apartments a
+      WHERE a.block_id = $1
+      ORDER BY a.sort_order ASC, a.id ASC
+    `,
+    [blockId],
   );
   return result.rows;
 }
@@ -1083,9 +1329,21 @@ async function createSiteWithStructure({
   district,
   blockCount,
   apartmentCount,
+  blockApartmentCounts,
   doorCount,
   managerUserCode,
+  approvalStatus = 'approved',
 }) {
+  const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
+    blockCount,
+    apartmentCount,
+    blockApartmentCounts,
+  });
+  const resolvedBlockCount = resolvedBlockApartmentCounts.length;
+  const resolvedApartmentCount = resolvedBlockApartmentCounts.reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1098,9 +1356,11 @@ async function createSiteWithStructure({
           district,
           block_count,
           apartment_count,
-          door_count
+          door_count,
+          approval_status,
+          approved_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING
           site_code AS id,
           name,
@@ -1110,10 +1370,22 @@ async function createSiteWithStructure({
           block_count,
           apartment_count,
           door_count,
+          approval_status,
+          approved_at,
           mqtt_site_id,
           created_at
       `,
-      [name, address, city, district, blockCount, apartmentCount, doorCount],
+      [
+        name,
+        address,
+        city,
+        district,
+        resolvedBlockCount,
+        resolvedApartmentCount,
+        doorCount,
+        approvalStatus,
+        approvalStatus === 'approved' ? new Date() : null,
+      ],
     );
     const site = siteResult.rows[0];
     const siteCode = Number(site.id);
@@ -1130,7 +1402,7 @@ async function createSiteWithStructure({
     }
 
     const blockIds = [];
-    for (let index = 0; index < blockCount; index += 1) {
+    for (let index = 0; index < resolvedBlockCount; index += 1) {
       const blockResult = await client.query(
         `
           INSERT INTO site_blocks (site_code, block_name, sort_order)
@@ -1142,11 +1414,9 @@ async function createSiteWithStructure({
       blockIds.push(Number(blockResult.rows[0].id));
     }
 
-    let remainingApartments = apartmentCount;
     for (let index = 0; index < blockIds.length; index += 1) {
       const blockId = blockIds[index];
-      const blocksLeft = blockIds.length - index;
-      const targetForBlock = blocksLeft <= 0 ? 0 : Math.ceil(remainingApartments / blocksLeft);
+      const targetForBlock = resolvedBlockApartmentCounts[index] ?? 0;
       for (let unitIndex = 0; unitIndex < targetForBlock; unitIndex += 1) {
         await client.query(
           `
@@ -1156,7 +1426,6 @@ async function createSiteWithStructure({
           [siteCode, blockId, `Daire ${unitIndex + 1}`, unitIndex + 1],
         );
       }
-      remainingApartments -= targetForBlock;
     }
 
     for (let doorIndex = 1; doorIndex <= doorCount; doorIndex += 1) {
@@ -1185,17 +1454,27 @@ async function syncSiteStructureCounts({
   siteCode,
   blockCount,
   apartmentCount,
+  blockApartmentCounts,
   doorCount,
 }) {
+  const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
+    blockCount,
+    apartmentCount,
+    blockApartmentCounts,
+  });
+  const resolvedBlockCount = resolvedBlockApartmentCounts.length;
+  const resolvedApartmentCount = resolvedBlockApartmentCounts.reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const blocks = await listSiteBlocks(siteCode, client);
-    const apartments = await listSiteApartments(siteCode, client);
     const doors = await listSiteDoors(siteCode, client);
 
-    if (blockCount > blocks.length) {
-      for (let index = blocks.length; index < blockCount; index += 1) {
+    if (resolvedBlockCount > blocks.length) {
+      for (let index = blocks.length; index < resolvedBlockCount; index += 1) {
         await client.query(
         `
           INSERT INTO site_blocks (site_code, block_name, sort_order)
@@ -1207,44 +1486,50 @@ async function syncSiteStructureCounts({
     }
 
     const refreshedBlocks = await listSiteBlocks(siteCode, client);
+    for (let index = 0; index < refreshedBlocks.length; index += 1) {
+      const block = refreshedBlocks[index];
+      await client.query(
+        `
+          UPDATE site_blocks
+          SET block_name = $1, sort_order = $2
+          WHERE id = $3
+        `,
+        [blockNameFromIndex(index), index + 1, Number(block.id)],
+      );
+    }
 
-    if (apartmentCount > apartments.length) {
-      let nextApartmentNumber = apartments.length;
-      while (nextApartmentNumber < apartmentCount) {
-        const targetBlock = refreshedBlocks[nextApartmentNumber % refreshedBlocks.length];
-        const blockApartments = apartments.filter((item) => Number(item.block_id) === Number(targetBlock.id));
-        const sortOrder = blockApartments.length + 1;
-        await client.query(
-          `
-            INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
-            VALUES ($1, $2, $3, $4)
-          `,
-          [siteCode, Number(targetBlock.id), `Daire ${sortOrder}`, sortOrder],
-        );
-        apartments.push({
-          id: null,
-          block_id: Number(targetBlock.id),
-          sort_order: sortOrder,
-          resident_user_code: null,
-        });
-        nextApartmentNumber += 1;
-      }
-    } else if (apartmentCount < apartments.length) {
-      const removable = apartments
-          .slice()
-          .sort((a, b) => Number(b.id) - Number(a.id));
-      const removeCount = apartments.length - apartmentCount;
-      for (const apartment of removable.slice(0, removeCount)) {
-        if (apartment.resident_user_code != null) {
+    for (let index = 0; index < refreshedBlocks.length; index += 1) {
+      const block = refreshedBlocks[index];
+      const targetApartmentCount = resolvedBlockApartmentCounts[index] ?? 0;
+      const currentApartments = await listBlockApartments(Number(block.id), client);
+
+      if (targetApartmentCount > currentApartments.length) {
+        for (let unitIndex = currentApartments.length; unitIndex < targetApartmentCount; unitIndex += 1) {
           await client.query(
             `
-              DELETE FROM users
-              WHERE user_code = $1 AND role = 'apartment_owner'
+              INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
+              VALUES ($1, $2, $3, $4)
             `,
-            [Number(apartment.resident_user_code)],
+            [siteCode, Number(block.id), `Daire ${unitIndex + 1}`, unitIndex + 1],
           );
         }
-        await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
+      } else if (targetApartmentCount < currentApartments.length) {
+        const removableApartments = currentApartments
+          .slice()
+          .sort((a, b) => Number(b.sort_order) - Number(a.sort_order));
+        const removeCount = currentApartments.length - targetApartmentCount;
+        for (const apartment of removableApartments.slice(0, removeCount)) {
+          if (apartment.resident_user_code != null) {
+            await client.query(
+              `
+                DELETE FROM users
+                WHERE user_code = $1 AND role = 'apartment_owner'
+              `,
+              [Number(apartment.resident_user_code)],
+            );
+          }
+          await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
+        }
       }
     }
 
@@ -1273,10 +1558,10 @@ async function syncSiteStructureCounts({
     }
 
     const latestBlocks = await listSiteBlocks(siteCode, client);
-    if (blockCount < latestBlocks.length) {
+    if (resolvedBlockCount < latestBlocks.length) {
       const removableBlocks = latestBlocks
           .sort((a, b) => Number(b.sort_order) - Number(a.sort_order));
-      const removeCount = latestBlocks.length - blockCount;
+      const removeCount = latestBlocks.length - resolvedBlockCount;
       for (const block of removableBlocks.slice(0, removeCount)) {
         const apartmentCheck = await client.query(
           `SELECT COUNT(*)::INTEGER AS total FROM apartments WHERE block_id = $1`,
@@ -1295,7 +1580,7 @@ async function syncSiteStructureCounts({
         SET block_count = $1, apartment_count = $2, door_count = $3
         WHERE site_code = $4
       `,
-      [blockCount, apartmentCount, doorCount, siteCode],
+      [resolvedBlockCount, resolvedApartmentCount, doorCount, siteCode],
     );
 
     await ensureSiteApartmentResidents(siteCode, client);
@@ -1671,6 +1956,7 @@ async function listAccessibleDoorsForUser(authUser) {
         INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
         LEFT JOIN devices ON devices.id = d.assigned_device_id
         WHERE sms.manager_user_code = $1
+          AND s.approval_status = 'approved'
           AND d.is_active = TRUE
         ORDER BY s.name ASC, d.door_index ASC
       `,
@@ -1697,6 +1983,7 @@ async function listAccessibleDoorsForUser(authUser) {
       INNER JOIN site_doors d ON d.site_code = a.site_code
       LEFT JOIN devices ON devices.id = d.assigned_device_id
       WHERE a.resident_user_code = $1
+        AND s.approval_status = 'approved'
         AND a.is_active = TRUE
         AND d.is_active = TRUE
       ORDER BY d.door_index ASC
@@ -1723,6 +2010,32 @@ async function updateDeviceAssignment({
     [siteCode, gateName, deviceId],
   );
   return result.rows[0] || null;
+}
+
+async function deleteDeviceById(deviceId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `
+        UPDATE site_doors
+        SET assigned_device_id = NULL
+        WHERE assigned_device_id = $1
+      `,
+      [deviceId],
+    );
+    const result = await client.query(
+      `DELETE FROM devices WHERE id = $1`,
+      [deviceId],
+    );
+    await client.query('COMMIT');
+    return result.rowCount > 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function userExists(userCode) {
@@ -1765,8 +2078,20 @@ function handleUserMutationError(error, res, genericErrorMessage) {
 }
 
 function handleSiteMutationError(error, res, genericErrorMessage) {
+  if (error?.code === '23505' && error?.constraint === 'users_email_key') {
+    return res.status(409).json({ error: 'Daire kullanicisi e-postasi uretilirken cakisma oldu.' });
+  }
+  if (error?.code === '23505' && error?.constraint === 'idx_users_login_name_unique') {
+    return res.status(409).json({ error: 'Daire kullanicisi hesabi uretilirken kullanici adi cakismasi oldu.' });
+  }
   if (error?.code === '23505') {
     return res.status(409).json({ error: 'Site kodu olusturulurken cakisma oldu.' });
+  }
+  if (error?.message === 'APARTMENT_LOGIN_GENERATION_FAILED') {
+    return res.status(500).json({ error: 'Daire kullanicisi hesabi uretilemedi.' });
+  }
+  if (typeof error?.message === 'string' && error.message.trim().isNotEmpty()) {
+    return res.status(400).json({ error: error.message });
   }
   return res.status(500).json({ error: genericErrorMessage });
 }
@@ -2563,12 +2888,20 @@ app.patch(
 app.get('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
+  const approvalStatus = req.query.approval_status == null
+    ? undefined
+    : parseApprovalStatus(String(req.query.approval_status).trim().toLowerCase());
+
+  if (req.query.approval_status != null && approvalStatus == null) {
+    return res.status(400).json({ error: 'Gecersiz approval_status degeri.' });
+  }
 
   try {
     const result = await listSitesForAuthUser({
       authUser: req.authUser,
       page,
       pageSize,
+      approvalStatus,
     });
 
     return res.status(200).json({
@@ -2589,6 +2922,9 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   const district = normalizeOptionalText(req.body.district) ?? null;
   const blockCount = normalizeOptionalInteger(req.body.block_count);
   const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const blockApartmentCounts = normalizeBlockApartmentCounts(
+    req.body.block_apartment_counts,
+  );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
 
@@ -2596,6 +2932,7 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
     Number.isNaN(blockCount) ||
     Number.isNaN(apartmentCount) ||
     Number.isNaN(doorCount) ||
+    blockApartmentCounts === null ||
     Number.isNaN(managerUserCode)
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
@@ -2606,6 +2943,7 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
     blockCount: blockCount ?? 1,
     apartmentCount: apartmentCount ?? 0,
     doorCount: doorCount ?? 1,
+    blockApartmentCounts,
   });
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -2623,12 +2961,65 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
       district,
       blockCount: blockCount ?? 1,
       apartmentCount: apartmentCount ?? 0,
+      blockApartmentCounts,
       doorCount: doorCount ?? 1,
       managerUserCode: managerUserCode ?? null,
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
     return handleSiteMutationError(error, res, 'Site olusturulamadi.');
+  }
+});
+
+app.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  const action = String(req.body.action || '').trim().toLowerCase();
+
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+  if (action !== 'approve' && action !== 'reject') {
+    return res.status(400).json({ error: 'action approve veya reject olmali.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        UPDATE sites
+        SET
+          approval_status = $1,
+          approved_at = $2
+        WHERE
+          site_code = $3
+          AND approval_status = 'pending'
+        RETURNING
+          site_code AS id,
+          name,
+          address,
+          city,
+          district,
+          block_count,
+          apartment_count,
+          door_count,
+          approval_status,
+          approved_at,
+          mqtt_site_id,
+          created_at
+      `,
+      [
+        action === 'approve' ? 'approved' : 'rejected',
+        action === 'approve' ? new Date() : null,
+        siteCode,
+      ],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Bekleyen site talebi bulunamadi.' });
+    }
+
+    return res.status(200).json({ site: mapSiteRow(result.rows[0]) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site onayi guncellenemedi.');
   }
 });
 
@@ -2644,6 +3035,9 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
   const district = normalizeOptionalText(req.body.district);
   const blockCount = normalizeOptionalInteger(req.body.block_count);
   const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const blockApartmentCounts = normalizeBlockApartmentCounts(
+    req.body.block_apartment_counts,
+  );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
 
@@ -2651,6 +3045,7 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
     Number.isNaN(blockCount) ||
     Number.isNaN(apartmentCount) ||
     Number.isNaN(doorCount) ||
+    blockApartmentCounts === null ||
     Number.isNaN(managerUserCode)
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
@@ -2663,6 +3058,7 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
     district === undefined &&
     blockCount === undefined &&
     apartmentCount === undefined &&
+    blockApartmentCounts === undefined &&
     doorCount === undefined &&
     managerUserCode === undefined
   ) {
@@ -2680,6 +3076,7 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
       blockCount: blockCount ?? Number(existing.block_count ?? 1),
       apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
       doorCount: doorCount ?? Number(existing.door_count ?? 1),
+      blockApartmentCounts,
     });
     if (validationError) {
       return res.status(400).json({ error: validationError });
@@ -2707,12 +3104,14 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
     if (
       blockCount !== undefined ||
       apartmentCount !== undefined ||
+      blockApartmentCounts !== undefined ||
       doorCount !== undefined
     ) {
       await syncSiteStructureCounts({
         siteCode,
         blockCount: blockCount ?? Number(existing.block_count ?? 1),
         apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+        blockApartmentCounts,
         doorCount: doorCount ?? Number(existing.door_count ?? 1),
       });
     }
@@ -2927,12 +3326,16 @@ app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) =>
   const district = normalizeOptionalText(req.body.district) ?? null;
   const blockCount = normalizeOptionalInteger(req.body.block_count);
   const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const blockApartmentCounts = normalizeBlockApartmentCounts(
+    req.body.block_apartment_counts,
+  );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
 
   if (
     Number.isNaN(blockCount) ||
     Number.isNaN(apartmentCount) ||
-    Number.isNaN(doorCount)
+    Number.isNaN(doorCount) ||
+    blockApartmentCounts === null
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
   }
@@ -2942,6 +3345,7 @@ app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) =>
     blockCount: blockCount ?? 1,
     apartmentCount: apartmentCount ?? 0,
     doorCount: doorCount ?? 1,
+    blockApartmentCounts,
   });
   if (validationError) {
     return res.status(400).json({ error: validationError });
@@ -2955,8 +3359,10 @@ app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) =>
       district,
       blockCount: blockCount ?? 1,
       apartmentCount: apartmentCount ?? 0,
+      blockApartmentCounts,
       doorCount: doorCount ?? 1,
       managerUserCode,
+      approvalStatus: 'pending',
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
@@ -2980,12 +3386,16 @@ app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, re
   const district = normalizeOptionalText(req.body.district);
   const blockCount = normalizeOptionalInteger(req.body.block_count);
   const apartmentCount = normalizeOptionalInteger(req.body.apartment_count);
+  const blockApartmentCounts = normalizeBlockApartmentCounts(
+    req.body.block_apartment_counts,
+  );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
 
   if (
     Number.isNaN(blockCount) ||
     Number.isNaN(apartmentCount) ||
-    Number.isNaN(doorCount)
+    Number.isNaN(doorCount) ||
+    blockApartmentCounts === null
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
   }
@@ -2997,6 +3407,7 @@ app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, re
     district === undefined &&
     blockCount === undefined &&
     apartmentCount === undefined &&
+    blockApartmentCounts === undefined &&
     doorCount === undefined
   ) {
     return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
@@ -3013,6 +3424,7 @@ app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, re
       blockCount: blockCount ?? Number(existing.block_count ?? 1),
       apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
       doorCount: doorCount ?? Number(existing.door_count ?? 1),
+      blockApartmentCounts,
     });
     if (validationError) {
       return res.status(400).json({ error: validationError });
@@ -3036,12 +3448,14 @@ app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, re
     if (
       blockCount !== undefined ||
       apartmentCount !== undefined ||
+      blockApartmentCounts !== undefined ||
       doorCount !== undefined
     ) {
       await syncSiteStructureCounts({
         siteCode,
         blockCount: blockCount ?? Number(existing.block_count ?? 1),
         apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
+        blockApartmentCounts,
         doorCount: doorCount ?? Number(existing.door_count ?? 1),
       });
     }
@@ -3088,6 +3502,17 @@ app.get('/manager/devices/lookup', authRequired, requireSiteManager, async (req,
     return res.status(200).json({ device: mapDeviceRow(device) });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihaz bilgisi okunamadi.' });
+  }
+});
+
+app.get('/manager/devices', authRequired, requireSiteManager, async (req, res) => {
+  try {
+    const devices = await listManagedDevicesForUser(req.authUser);
+    return res.status(200).json({
+      devices: devices.map((row) => mapDeviceRow(row)),
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
   }
 });
 
@@ -3199,6 +3624,9 @@ app.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async (
   if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
     return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
   }
+  if (!(await siteHasApprovedStatus(siteCode))) {
+    return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz.' });
+  }
 
   const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
   const validationError = validateDoorAssignmentInput({ deviceUid });
@@ -3249,6 +3677,9 @@ app.patch(
       if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
         return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
       }
+      if (!(await siteHasApprovedStatus(siteCode))) {
+        return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz.' });
+      }
 
       const device = await updateDeviceAssignment({
         deviceId,
@@ -3266,6 +3697,25 @@ app.patch(
     }
   },
 );
+
+app.delete('/manager/devices/:id', authRequired, requireSiteManager, async (req, res) => {
+  const deviceId = Number(req.params.id);
+  if (!Number.isInteger(deviceId)) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
+  }
+
+  try {
+    const device = await findManagedDeviceById({ authUser: req.authUser, deviceId });
+    if (!device) {
+      return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+    }
+
+    await deleteDeviceById(deviceId);
+    return res.status(204).send();
+  } catch (error) {
+    return handleDeviceMutationError(error, res, 'Cihaz silinemedi.');
+  }
+});
 
 app.get('/app/my-doors', authRequired, async (req, res) => {
   try {

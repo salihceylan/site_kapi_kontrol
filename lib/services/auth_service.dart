@@ -111,12 +111,14 @@ class AuthService extends ChangeNotifier {
   Future<SitePage> listSites({
     required int page,
     int pageSize = 10,
+    String? approvalStatus,
   }) async {
     final active = _requireSuperUserSession();
     return api.listSites(
       token: active.token,
       page: page,
       pageSize: pageSize,
+      approvalStatus: approvalStatus,
     );
   }
 
@@ -217,9 +219,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> deleteManagedUser({
-    required int userCode,
-  }) async {
+  Future<String?> deleteManagedUser({required int userCode}) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
       return 'Bu islem icin super user yetkisi gerekir.';
@@ -240,8 +240,7 @@ class AuthService extends ChangeNotifier {
     String? address,
     String? city,
     String? district,
-    required int blockCount,
-    required int apartmentCount,
+    required List<int> blockApartmentCounts,
     required int doorCount,
     int? managerUserCode,
   }) async {
@@ -257,8 +256,7 @@ class AuthService extends ChangeNotifier {
         address: address,
         city: city,
         district: district,
-        blockCount: blockCount,
-        apartmentCount: apartmentCount,
+        blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
         managerUserCode: managerUserCode,
       );
@@ -276,8 +274,7 @@ class AuthService extends ChangeNotifier {
     String? address,
     String? city,
     String? district,
-    int? blockCount,
-    int? apartmentCount,
+    List<int>? blockApartmentCounts,
     int? doorCount,
     int? managerUserCode,
   }) async {
@@ -294,8 +291,7 @@ class AuthService extends ChangeNotifier {
         address: address,
         city: city,
         district: district,
-        blockCount: blockCount,
-        apartmentCount: apartmentCount,
+        blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
         managerUserCode: managerUserCode,
       );
@@ -307,9 +303,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> deleteSite({
-    required int siteCode,
-  }) async {
+  Future<String?> deleteSite({required int siteCode}) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
       return 'Bu islem icin super user yetkisi gerekir.';
@@ -379,9 +373,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> sendApartmentCredentials({
-    required int apartmentId,
-  }) async {
+  Future<String?> sendApartmentCredentials({required int apartmentId}) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
       return 'Bu islem icin super user yetkisi gerekir.';
@@ -461,6 +453,29 @@ class AuthService extends ChangeNotifier {
       await api.resolveSubscriptionRequest(
         token: active.token,
         userCode: userCode,
+        action: action,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> resolveSiteApproval({
+    required int siteCode,
+    required String action,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.resolveSiteApproval(
+        token: active.token,
+        siteCode: siteCode,
         action: action,
       );
       return null;

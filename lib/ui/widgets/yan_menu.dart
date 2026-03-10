@@ -5,6 +5,7 @@ enum SirketMenuItem {
   dashboard,
   profilim,
   abonelikTalepleri,
+  siteOnayTalepleri,
   superUserYonetimi,
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
@@ -108,6 +109,13 @@ class YanMenu extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(
+                  icon: Icons.approval_outlined,
+                  title: 'Site Onay Talepleri',
+                  selected: selectedItem == SirketMenuItem.siteOnayTalepleri,
+                  onTap: () => onSelect(SirketMenuItem.siteOnayTalepleri),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
                   icon: Icons.manage_accounts_outlined,
                   title: 'Super User Yonetimi',
                   selected: selectedItem == SirketMenuItem.superUserYonetimi,
@@ -117,15 +125,19 @@ class YanMenu extends StatelessWidget {
                 _MenuTile(
                   icon: Icons.apartment_outlined,
                   title: 'Site Yoneticileri Yonetimi',
-                  selected: selectedItem == SirketMenuItem.siteYoneticileriYonetimi,
-                  onTap: () => onSelect(SirketMenuItem.siteYoneticileriYonetimi),
+                  selected:
+                      selectedItem == SirketMenuItem.siteYoneticileriYonetimi,
+                  onTap: () =>
+                      onSelect(SirketMenuItem.siteYoneticileriYonetimi),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(
                   icon: Icons.groups_2_outlined,
                   title: 'Daire Kullanicilari Yonetimi',
-                  selected: selectedItem == SirketMenuItem.daireKullanicilariYonetimi,
-                  onTap: () => onSelect(SirketMenuItem.daireKullanicilariYonetimi),
+                  selected:
+                      selectedItem == SirketMenuItem.daireKullanicilariYonetimi,
+                  onTap: () =>
+                      onSelect(SirketMenuItem.daireKullanicilariYonetimi),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(
@@ -173,9 +185,7 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       tileColor: selected ? AppColors.primary.withValues(alpha: 0.1) : null,
       leading: Icon(icon, color: AppColors.primary),
       title: Text(
