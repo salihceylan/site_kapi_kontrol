@@ -170,7 +170,7 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.siteYoneticileriYonetimi:
         return UserRole.siteManager;
       case SirketMenuItem.daireKullanicilariYonetimi:
-        return UserRole.apartmentOwner;
+        return null;
       case SirketMenuItem.abonelikTalepleri:
       case SirketMenuItem.siteOnayTalepleri:
       case SirketMenuItem.siteler:
@@ -269,7 +269,10 @@ class _HomePageState extends State<HomePage> {
       _loadPendingSiteApprovals();
       return;
     }
-    if (item == SirketMenuItem.siteler) {
+    if (
+      item == SirketMenuItem.siteler ||
+      item == SirketMenuItem.daireKullanicilariYonetimi
+    ) {
       _loadSites();
     }
   }
@@ -1366,6 +1369,8 @@ class _HomePageState extends State<HomePage> {
     final sites = pageData?.sites ?? const <SiteRecord>[];
     final compact = _useCompactSectionLayout(context);
     final structure = _selectedSiteStructure;
+    final apartmentMode =
+        _selectedMenu == SirketMenuItem.daireKullanicilariYonetimi;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1378,16 +1383,18 @@ class _HomePageState extends State<HomePage> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Siteler',
+                    Text(
+                      apartmentMode ? 'Site Daireleri' : 'Siteler',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textDark,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
+                    Text(
+                      apartmentMode
+                          ? 'Bir site secin. Daire kullanicilari yalnizca secili site altinda listelenir.'
+                          : 'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
                     ),
                     const SizedBox(height: 12),
                     SizedBox(
@@ -1402,12 +1409,12 @@ class _HomePageState extends State<HomePage> {
                 )
               : Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Siteler',
+                            apartmentMode ? 'Site Daireleri' : 'Siteler',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               color: AppColors.textDark,
@@ -1415,7 +1422,9 @@ class _HomePageState extends State<HomePage> {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
+                            apartmentMode
+                                ? 'Bir site secin. Daire kullanicilari yalnizca secili site altinda listelenir.'
+                                : 'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
                           ),
                         ],
                       ),
@@ -1472,9 +1481,22 @@ class _HomePageState extends State<HomePage> {
                       selected: _selectedSite?.id == site.id,
                       formattedCreatedAt: _formatDate(site.createdAt),
                       deleteBusy: _busyDeleteSites.contains(site.id),
+                      approvalBusy: _busySiteApprovals.contains(site.id),
                       onTap: () => _selectSite(site),
                       onEdit: () => _openSiteDialog(site: site),
                       onDelete: () => _deleteSite(site),
+                      onApprove: site.approvalStatus == 'pending'
+                          ? () => _resolveSiteApproval(
+                              siteCode: site.id,
+                              action: 'approve',
+                            )
+                          : null,
+                      onReject: site.approvalStatus == 'pending'
+                          ? () => _resolveSiteApproval(
+                              siteCode: site.id,
+                              action: 'reject',
+                            )
+                          : null,
                     ),
                   ),
                 if (pageData != null)
@@ -2085,7 +2107,7 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.siteYoneticileriYonetimi:
         return _buildManagedRoleScreen(UserRole.siteManager, session);
       case SirketMenuItem.daireKullanicilariYonetimi:
-        return _buildManagedRoleScreen(UserRole.apartmentOwner, session);
+        return _buildSitesScreen();
       case SirketMenuItem.siteler:
         return _buildSitesScreen();
       case SirketMenuItem.cihazEkle:
@@ -2240,18 +2262,24 @@ class _SiteCard extends StatelessWidget {
     required this.selected,
     required this.formattedCreatedAt,
     required this.deleteBusy,
+    required this.approvalBusy,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    this.onApprove,
+    this.onReject,
   });
 
   final SiteRecord site;
   final bool selected;
   final String formattedCreatedAt;
   final bool deleteBusy;
+  final bool approvalBusy;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
 
   @override
   Widget build(BuildContext context) {
@@ -2395,6 +2423,38 @@ class _SiteCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text('Kayit Tarihi: $formattedCreatedAt'),
                   const SizedBox(height: 10),
+                  if (site.approvalStatus == 'pending' &&
+                      (onApprove != null || onReject != null)) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: approvalBusy ? null : onApprove,
+                          icon: approvalBusy
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 18,
+                                ),
+                          label: const Text('Onayla'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: approvalBusy ? null : onReject,
+                          icon: const Icon(Icons.block_outlined, size: 18),
+                          label: const Text('Reddet'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,

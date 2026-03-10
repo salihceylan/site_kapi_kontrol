@@ -1328,10 +1328,12 @@ async function listSiteDoors(siteCode, db = pool) {
 }
 
 async function getSiteStructure(siteCode) {
-  await ensureSiteApartmentResidents(siteCode);
   const site = await getSiteByCode(siteCode);
   if (!site) {
     return null;
+  }
+  if (site.approval_status === 'approved') {
+    await ensureSiteApartmentResidents(siteCode);
   }
   const [blocks, apartments, doors] = await Promise.all([
     listSiteBlocks(siteCode),

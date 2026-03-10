@@ -26,6 +26,12 @@ export async function ensureDbSchema() {
   const client = await pool.connect();
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS app_maintenance_runs (
+        maintenance_key TEXT PRIMARY KEY,
+        executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS login_name TEXT
     `);
@@ -314,6 +320,40 @@ export async function ensureDbSchema() {
       ON site_doors(assigned_device_id)
       WHERE assigned_device_id IS NOT NULL
     `);
+
+    const apartmentResetMaintenanceKey =
+      'reset_apartment_residents_after_site_approval_flow_v1';
+    const maintenanceCheck = await client.query(
+      `
+        SELECT 1
+        FROM app_maintenance_runs
+        WHERE maintenance_key = $1
+        LIMIT 1
+      `,
+      [apartmentResetMaintenanceKey],
+    );
+
+    if (maintenanceCheck.rowCount === 0) {
+      await client.query(`
+        UPDATE apartments
+        SET
+          resident_user_code = NULL,
+          resident_pin_code = NULL
+        WHERE resident_user_code IS NOT NULL
+           OR resident_pin_code IS NOT NULL
+      `);
+      await client.query(`
+        DELETE FROM users
+        WHERE role = 'apartment_owner'
+      `);
+      await client.query(
+        `
+          INSERT INTO app_maintenance_runs (maintenance_key)
+          VALUES ($1)
+        `,
+        [apartmentResetMaintenanceKey],
+      );
+    }
   } finally {
     client.release();
   }
