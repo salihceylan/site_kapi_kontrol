@@ -610,10 +610,11 @@ async function createSite({
         block_count,
         apartment_count,
         door_count,
+        mqtt_site_id,
         approval_status,
         approved_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, generate_unique_mqtt_site_id(), $8, $9)
       RETURNING
         site_code AS id,
         name,
@@ -1357,10 +1358,11 @@ async function createSiteWithStructure({
           block_count,
           apartment_count,
           door_count,
+          mqtt_site_id,
           approval_status,
           approved_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, generate_unique_mqtt_site_id(), $8, $9)
         RETURNING
           site_code AS id,
           name,

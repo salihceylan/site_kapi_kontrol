@@ -175,6 +175,10 @@ export async function ensureDbSchema() {
       WHERE mqtt_site_id IS NULL
     `);
     await client.query(`
+      ALTER TABLE sites
+      ALTER COLUMN mqtt_site_id SET DEFAULT generate_unique_mqtt_site_id()
+    `);
+    await client.query(`
       UPDATE sites
       SET approved_at = COALESCE(approved_at, created_at)
       WHERE approval_status = 'approved' AND approved_at IS NULL
