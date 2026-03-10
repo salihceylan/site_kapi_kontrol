@@ -2090,7 +2090,7 @@ function handleSiteMutationError(error, res, genericErrorMessage) {
   if (error?.message === 'APARTMENT_LOGIN_GENERATION_FAILED') {
     return res.status(500).json({ error: 'Daire kullanicisi hesabi uretilemedi.' });
   }
-  if (typeof error?.message === 'string' && error.message.trim().isNotEmpty()) {
+  if (typeof error?.message === 'string' && error.message.trim().length > 0) {
     return res.status(400).json({ error: error.message });
   }
   return res.status(500).json({ error: genericErrorMessage });
