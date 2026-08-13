@@ -2115,11 +2115,24 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _logout() async {
+    await widget.authService.logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
     return Scaffold(
-      appBar: AppBar(title: Text(_titleForMenu(_selectedMenu))),
+      appBar: AppBar(
+        title: Text(_titleForMenu(_selectedMenu)),
+        actions: [
+          IconButton(
+            tooltip: 'Cikis yap',
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+          ),
+        ],
+      ),
       drawer: YanMenu(
         fullName: session.fullName,
         userEmail: session.email,
@@ -2127,7 +2140,7 @@ class _HomePageState extends State<HomePage> {
         onSelect: _selectMenu,
         onLogout: () {
           Navigator.pop(context);
-          widget.authService.logout();
+          _logout();
         },
       ),
       body: SafeArea(
