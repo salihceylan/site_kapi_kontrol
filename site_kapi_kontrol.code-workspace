@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "name": "site_kapi_kontrol",
+      "path": "."
+    },
+    {
+      "name": "cihaz_kontrol",
+      "path": "cihaz_kontrol"
+    }
+  ],
+  "settings": {
+    "C_Cpp.default.configurationProvider": "platformio.platformio-ide",
+    "platformio-ide.autoRebuildAutocompleteIndex": true
+  }
+}

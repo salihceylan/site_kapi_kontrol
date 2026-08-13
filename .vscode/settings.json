@@ -1,5 +1,4 @@
 {
     "C_Cpp.default.configurationProvider":  "platformio.platformio-ide",
-    "platformio-ide.autoRebuildAutocompleteIndex":  true,
-    "C_Cpp.default.compileCommands":  "${workspaceFolder}/cihaz_kontrol/compile_commands.json"
+    "platformio-ide.autoRebuildAutocompleteIndex":  true
 }

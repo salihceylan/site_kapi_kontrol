@@ -1,0 +1,398 @@
+
+=== DIRECTORY TREE (max depth 3, source files only) ===
+.claude
+.claude\CLAUDE.md
+.dart_tool
+.dart_tool\dartpad
+.dart_tool\dartpad\web_plugin_registrant.dart
+.dart_tool\extension_discovery
+.dart_tool\extension_discovery\vs_code.json
+.dart_tool\package_config.json
+.dart_tool\package_graph.json
+.dart_tool\version
+.flutter-plugins-dependencies
+.github
+.github\modernize
+.github\modernize\java-upgrade
+.github\modernize\java-upgrade\.gitignore
+.github\modernize\java-upgrade\hooks
+.gitignore
+.metadata
+.vscode
+.vscode\settings.json
+analysis_options.yaml
+android
+android\.gitignore
+android\app
+android\app\build.gradle.kts
+android\app\src
+android\app\src\debug
+android\app\src\main
+android\app\src\profile
+android\build.gradle.kts
+android\gradle
+android\gradle\wrapper
+android\gradle\wrapper\gradle-wrapper.properties
+android\gradle.properties
+android\local.properties
+android\settings.gradle.kts
+assets
+assets\images
+assets\images\app_logo.png
+cihaz_kontrol
+cihaz_kontrol\.gitignore
+cihaz_kontrol\.vscode
+cihaz_kontrol\.vscode\extensions.json
+cihaz_kontrol\.vscode\settings.json
+cihaz_kontrol\firmware_releases
+cihaz_kontrol\firmware_releases\20260305_152942_v1_0_0
+cihaz_kontrol\firmware_releases\20260305_152942_v1_0_0\bootloader.bin
+cihaz_kontrol\firmware_releases\20260305_152942_v1_0_0\firmware.bin
+cihaz_kontrol\firmware_releases\20260305_152942_v1_0_0\partitions.bin
+cihaz_kontrol\firmware_releases\20260305_153132_v1_0_1
+cihaz_kontrol\firmware_releases\20260305_153132_v1_0_1\bootloader.bin
+cihaz_kontrol\firmware_releases\20260305_153132_v1_0_1\firmware.bin
+cihaz_kontrol\firmware_releases\20260305_153132_v1_0_1\partitions.bin
+cihaz_kontrol\firmware_releases\20260305_153304_v1_0_2
+cihaz_kontrol\firmware_releases\20260305_153304_v1_0_2\bootloader.bin
+cihaz_kontrol\firmware_releases\20260305_153304_v1_0_2\firmware.bin
+cihaz_kontrol\firmware_releases\20260305_153304_v1_0_2\partitions.bin
+cihaz_kontrol\firmware_releases\index.json
+cihaz_kontrol\include
+cihaz_kontrol\include\device_konfig.h
+cihaz_kontrol\include\mqtt_baglanti.h
+cihaz_kontrol\include\README
+cihaz_kontrol\include\role_kontrol.h
+cihaz_kontrol\include\wifi_baglanti.h
+cihaz_kontrol\lib
+cihaz_kontrol\lib\README
+cihaz_kontrol\platformio.ini
+cihaz_kontrol\src
+cihaz_kontrol\src\main.cpp
+cihaz_kontrol\test
+cihaz_kontrol\test\README
+company_qr_tool
+company_qr_tool\.gitignore
+company_qr_tool\app.py
+company_qr_tool\assets
+company_qr_tool\assets\ahbu_logo.png
+company_qr_tool\launch_company_qr_tool.bat
+company_qr_tool\README.md
+company_qr_tool\requirements.txt
+devtools_options.yaml
+docker-compose.yml
+docs
+docs\codebase
+docs\codebase\.codebase-scan.txt
+ios
+ios\.gitignore
+ios\Flutter
+ios\Flutter\AppFrameworkInfo.plist
+ios\Flutter\Debug.xcconfig
+ios\Flutter\ephemeral
+ios\Flutter\ephemeral\flutter_lldb_helper.py
+ios\Flutter\ephemeral\flutter_lldbinit
+ios\Flutter\flutter_export_environment.sh
+ios\Flutter\Generated.xcconfig
+ios\Flutter\Release.xcconfig
+ios\Runner
+ios\Runner\AppDelegate.swift
+ios\Runner\Assets.xcassets
+ios\Runner\Assets.xcassets\AppIcon.appiconset
+ios\Runner\Assets.xcassets\LaunchImage.imageset
+ios\Runner\Base.lproj
+ios\Runner\Base.lproj\LaunchScreen.storyboard
+ios\Runner\Base.lproj\Main.storyboard
+ios\Runner\GeneratedPluginRegistrant.h
+ios\Runner\GeneratedPluginRegistrant.m
+ios\Runner\Info.plist
+ios\Runner\Runner-Bridging-Header.h
+ios\Runner\SceneDelegate.swift
+ios\Runner.xcodeproj
+ios\Runner.xcodeproj\project.pbxproj
+ios\Runner.xcodeproj\project.xcworkspace
+ios\Runner.xcodeproj\project.xcworkspace\contents.xcworkspacedata
+ios\Runner.xcodeproj\project.xcworkspace\xcshareddata
+ios\Runner.xcodeproj\xcshareddata
+ios\Runner.xcodeproj\xcshareddata\xcschemes
+ios\Runner.xcworkspace
+ios\Runner.xcworkspace\contents.xcworkspacedata
+ios\Runner.xcworkspace\xcshareddata
+ios\Runner.xcworkspace\xcshareddata\IDEWorkspaceChecks.plist
+ios\Runner.xcworkspace\xcshareddata\WorkspaceSettings.xcsettings
+ios\RunnerTests
+ios\RunnerTests\RunnerTests.swift
+lib
+lib\app.dart
+lib\config
+lib\config\app_config.dart
+lib\main.dart
+lib\menu.dart
+lib\models
+lib\models\apartment_record.dart
+lib\models\device_record.dart
+lib\models\door_record.dart
+lib\models\managed_user_account.dart
+lib\models\managed_user_page.dart
+lib\models\site_block_record.dart
+lib\models\site_page.dart
+lib\models\site_record.dart
+lib\models\site_structure_record.dart
+lib\models\subscription_request.dart
+lib\models\subscription_request_page.dart
+lib\models\super_user_account.dart
+lib\models\user_role.dart
+lib\models\user_session.dart
+lib\services
+lib\services\api_exception.dart
+lib\services\auth_api.dart
+lib\services\auth_service.dart
+lib\services\ble_wifi_provision_service.dart
+lib\services\mqtt_door_service.dart
+lib\services\mqtt_door_service_io.dart
+lib\services\mqtt_door_service_stub.dart
+lib\services\network_service.dart
+lib\styles
+lib\styles\app_colors.dart
+lib\styles\app_decorations.dart
+lib\styles\app_theme.dart
+lib\ui
+lib\ui\pages
+lib\ui\pages\home_page.dart
+lib\ui\pages\login_page.dart
+lib\ui\pages\no_internet_page.dart
+lib\ui\pages\qr_scan_page.dart
+lib\ui\pages\wifi_provision_page.dart
+lib\ui\widgets
+lib\ui\widgets\yan_menu.dart
+linux
+linux\.gitignore
+linux\CMakeLists.txt
+linux\flutter
+linux\flutter\CMakeLists.txt
+linux\flutter\ephemeral
+linux\flutter\ephemeral\.plugin_symlinks
+linux\flutter\generated_plugin_registrant.cc
+linux\flutter\generated_plugin_registrant.h
+linux\flutter\generated_plugins.cmake
+linux\runner
+linux\runner\CMakeLists.txt
+linux\runner\main.cc
+linux\runner\my_application.cc
+linux\runner\my_application.h
+macos
+macos\.gitignore
+macos\Flutter
+macos\Flutter\ephemeral
+macos\Flutter\ephemeral\Flutter-Generated.xcconfig
+macos\Flutter\ephemeral\flutter_export_environment.sh
+macos\Flutter\Flutter-Debug.xcconfig
+macos\Flutter\Flutter-Release.xcconfig
+macos\Flutter\GeneratedPluginRegistrant.swift
+macos\Runner
+macos\Runner\AppDelegate.swift
+macos\Runner\Assets.xcassets
+macos\Runner\Assets.xcassets\AppIcon.appiconset
+macos\Runner\Base.lproj
+macos\Runner\Base.lproj\MainMenu.xib
+macos\Runner\Configs
+macos\Runner\Configs\AppInfo.xcconfig
+macos\Runner\Configs\Debug.xcconfig
+macos\Runner\Configs\Release.xcconfig
+macos\Runner\Configs\Warnings.xcconfig
+
+=== STACK DETECTION (manifest files) ===
+
+--- pubspec.lock ---
+# Generated by pub
+# See https://dart.dev/tools/pub/glossary#lockfile
+packages:
+  async:
+    dependency: transitive
+    description:
+      name: async
+      sha256: "758e6d74e971c3e5aceb4110bfd6698efc7f501675bcfe0c775459a8140750eb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.13.0"
+  boolean_selector:
+    dependency: transitive
+    description:
+      name: boolean_selector
+      sha256: "8aab1771e1243a5063b8b0ff68042d67334e3feab9e95b9490f9a6ebf73b42ea"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.2"
+  characters:
+    dependency: transitive
+    description:
+      name: characters
+      sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.1"
+  clock:
+    dependency: transitive
+    description:
+      name: clock
+      sha256: fddb70d9b5277016c77a80201021d40a2247104d9f4aa7bab7157b7e3f05b84b
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.2"
+  collection:
+    dependency: transitive
+    description:
+      name: collection
+      sha256: "2f5709ae4d3d59dd8f7cd309b4e023046b57d8a6c82130785d2b0e5868084e76"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.19.1"
+  crypto:
+    dependency: transitive
+    description:
+      name: crypto
+      sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.7"
+  cupertino_icons:
+    dependency: "direct main"
+    description:
+      name: cupertino_icons
+      sha256: ba631d1c7f7bef6b729a622b7b752645a2d076dba9976925b8f25725a30e1ee6
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.8"
+  event_bus:
+    dependency: transitive
+    description:
+      name: event_bus
+      sha256: "1a55e97923769c286d295240048fc180e7b0768902c3c2e869fe059aafa15304"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
+  fake_async:
+    dependency: transitive
+    description:
+      name: fake_async
+      sha256: "5368f224a74523e8d2e7399ea1638b37aecfca824a3cc4dfdf77bf1fa905ac44"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.3"
+  ffi:
+    dependency: transitive
+    description:
+      name: ffi
+      sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
+
+[TRUNCATED] Showing first 80 of 498 lines.
+--- pubspec.yaml ---
+name: site_kapi_kontrol
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  mobile_scanner: ^7.2.0
+  mqtt_client: ^10.7.0
+  shared_preferences: ^2.5.3
+  permission_handler: ^12.0.1
+  flutter_reactive_ble: ^5.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/app_logo.png
+
+
+=== ENTRY POINTS ===
+No common entry points found. Check 'main' or 'scripts.start' in manifest files above.
+
+=== LINTING AND FORMATTING CONFIG ===
+No linting or formatting config files found in project root.
+
+=== ENVIRONMENT VARIABLE TEMPLATES ===
+No .env.example or .env.template found. Identify required environment variables by searching the code and config for environment variable reads.
+
+=== TODO / FIXME / HACK (production code only, test dirs excluded) ===
+None found.
+
+=== GIT RECENT COMMITS (last 20) ===
+6a5f622 chore: update tooling and server dependencies
+cf66e8c Delay apartment users until site approval
+15f9959 Harden API handling and defer site structure until approval
+893e7ea Fix mqtt site id generation for new sites
+05c92ed Fix site creation error response handling
+48f6bce Add site approval flow and manager device APIs
+7b67f0c Add BLE Wi-Fi provisioning flow for ESP32 devices
+1ba8b12 Automate apartment credentials and resident email delivery
+20847f6 Add multi-site structure and company management flow
+e707bcc Add site manager verification flow and device assignment APIs
+c0c5255 Add device onboarding flow and responsive admin lists
+89773dc Fix company app dialog lifecycle and release network permissions
+b7ac8cc Add company app role management and activation controls
+e3cd885 Add company super user management panel
+c7886f8 Improve QR tool UI and add multi-board ESP32 env support
+c1e2dd2 Update QR tool upload button label to Turkish
+2b0993f Add company QR tool with firmware versioning and ESP32 upload
+2634c0e Add app logo assets and launcher icons for company app
+34a6297 Remove ahbu project from monorepo (moved to separate repo)
+5d3469d Add ahbu user app project to main repository
+
+=== HIGH-CHURN FILES (last 90 days, top 20) ===
+None found.
+
+=== MONOREPO SIGNALS ===
+No monorepo signals detected.
+
+=== CODE METRICS ===
+Total files scanned: 240
+Total lines of code: 9121
+
+Files by language:
+  Other: 207
+  C Header: 13
+  Swift: 7
+  C++: 5
+  JavaScript: 4
+  Python: 2
+  Java: 1
+  Kotlin: 1
+
+Top 10 largest files:
+cihaz_kontrol\firmware_releases\20260305_152942_v1_0_0\firmware.bin: 832.9KB
+cihaz_kontrol\firmware_releases\20260305_153132_v1_0_1\firmware.bin: 832.9KB
+cihaz_kontrol\firmware_releases\20260305_153304_v1_0_2\firmware.bin: 832.9KB
+ios\Runner\Assets.xcassets\AppIcon.appiconset\1024.png: 521.1KB
+assets\images\app_logo.png: 395.1KB
+company_qr_tool\assets\ahbu_logo.png: 304.0KB
+ios\Runner\Assets.xcassets\AppIcon.appiconset\512.png: 192.3KB
+lib\ui\pages\home_page.dart: 126.0KB
+server\src\server.js: 109.5KB
+macos\Runner\Assets.xcassets\AppIcon.appiconset\app_icon_1024.png: 100.6KB
+
+=== CI/CD PIPELINES ===
+No CI/CD pipelines detected.
+
+=== CONTAINERS & ORCHESTRATION ===
+Orchestration: Docker Compose found
+
+=== SECURITY & COMPLIANCE ===
+No security configs detected.
+
+=== PERFORMANCE & TESTING ===
+No performance testing configs detected.
+
+=== SCAN COMPLETE ===
