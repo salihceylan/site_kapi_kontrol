@@ -227,9 +227,7 @@ inline void wifiPerformScan() {
 }
 
 inline String wifiBleDeviceName() {
-  const String uid = cihazUniqueId();
-  const int start = uid.length() > 6 ? uid.length() - 6 : 0;
-  return "AHBU-" + uid.substring(start);
+  return "GUDE" + cihazUniqueId();
 }
 
 inline void wifiStopProvisioningMode();
@@ -255,7 +253,8 @@ inline void wifiApplyProvisioningRequest() {
   wifiPersistCredentials(ssid, password);
   wifiNotifyBleResult("connected", "WiFi ayari kaydedildi.");
   wifiNotifyBleState();
-  wifiStopProvisioningMode();
+  delay(1000);
+  ESP.restart();
 }
 
 class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
@@ -394,11 +393,6 @@ inline void wifiBaglan() {
   pinMode(WIFI_RESET_BUTTON_PIN, WIFI_RESET_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT);
   wifiSetStatusLed(false);
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
-  WiFi.persistent(false);
-
   gWifiPrefs.begin(WIFI_PREFS_NAMESPACE, false);
   wifiLoadStoredCredentials();
   gWifiConnected = false;
@@ -406,9 +400,16 @@ inline void wifiBaglan() {
 
   if (!gWifiConfigured) {
     Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");
+    WiFi.mode(WIFI_OFF);
+    delay(150);
     wifiStartProvisioningMode();
     return;
   }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
 
   Serial.printf("Kayitli WiFi bulundu: %s\n", gSavedWifiSsid.c_str());
   if (wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 20000)) {

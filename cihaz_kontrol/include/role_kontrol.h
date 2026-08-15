@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-constexpr uint8_t ROLE_PIN = 5;
+constexpr uint8_t ROLE_PIN = 21;
 constexpr unsigned long ROLE_SURE_MS = 1500;
 
 inline unsigned long roleBaslangic = 0;

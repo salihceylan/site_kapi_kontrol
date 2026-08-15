@@ -10,6 +10,36 @@
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
 
+constexpr unsigned long STATUS_PRINT_INTERVAL_MS = 5000;
+unsigned long sonDurumYazdirmaMs = 0;
+
+void seriDurumYazdir() {
+  Serial.println("----- CIHAZ DURUMU -----");
+  Serial.print("Cihaz UID: ");
+  Serial.println(cihazUniqueId());
+  Serial.print("WiFi kayitli: ");
+  Serial.println(wifiAktifSsid().isEmpty() ? "hayir" : "evet");
+  Serial.print("WiFi SSID: ");
+  Serial.println(wifiAktifSsid().isEmpty() ? "-" : wifiAktifSsid());
+  Serial.print("WiFi bagli: ");
+  Serial.println(wifiHazirMi() ? "evet" : "hayir");
+  Serial.print("WiFi IP: ");
+  Serial.println(wifiIpAdresi().isEmpty() ? "-" : wifiIpAdresi());
+  Serial.print("Bluetooth provisioning: ");
+  Serial.println(wifiProvisioningAktifMi() ? "acik" : "kapali");
+  Serial.print("Bluetooth adi: ");
+  Serial.println(wifiProvisioningAktifMi() ? wifiBleDeviceName() : "-");
+  Serial.print("MQTT: ");
+  Serial.println(client.connected() ? "bagli" : "bagli degil");
+  Serial.print("MQTT sunucu: ");
+  Serial.print(MQTT_SERVER);
+  Serial.print(":");
+  Serial.println(MQTT_PORT);
+  Serial.print("Role GPIO: ");
+  Serial.println(ROLE_PIN);
+  Serial.println("------------------------");
+}
+
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -24,5 +54,10 @@ void loop() {
   mqttLoopHandler();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
+  }
+
+  if (millis() - sonDurumYazdirmaMs >= STATUS_PRINT_INTERVAL_MS) {
+    sonDurumYazdirmaMs = millis();
+    seriDurumYazdir();
   }
 }
