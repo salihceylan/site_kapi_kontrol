@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/device_page.dart';
+import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -91,7 +93,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const int _pageSize = 10;
 
-  late final MqttDoorService _doorService;
+  MqttDoorService? _doorService;
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
 
   final _profileFormKey = GlobalKey<FormState>();
@@ -118,6 +120,14 @@ class _HomePageState extends State<HomePage> {
   SitePage? _pendingSiteApprovalsPage;
   bool _isLoadingPendingSiteApprovals = false;
   final Set<int> _busySiteApprovals = <int>{};
+  SitePage? _doorControlSitesPage;
+  SiteRecord? _doorControlSite;
+  SiteStructureRecord? _doorControlStructure;
+  DoorRecord? _doorControlDoor;
+  bool _isLoadingDoorControlSites = false;
+  bool _isLoadingDoorControlStructure = false;
+  DevicePage? _companyDevicesPage;
+  bool _isLoadingCompanyDevices = false;
 
   @override
   void initState() {
@@ -129,15 +139,7 @@ class _HomePageState extends State<HomePage> {
       _profilePhoneController.text = session.phoneNumber ?? '';
     }
 
-    _doorService = MqttDoorService(
-      host: mqttHost,
-      port: mqttPort,
-      username: mqttAppUser,
-      password: mqttAppPassword,
-      siteId: mqttSiteId,
-      doorId: mqttDoorId,
-    );
-    _doorService.connect();
+    _loadDoorControlSites();
   }
 
   @override
@@ -146,7 +148,7 @@ class _HomePageState extends State<HomePage> {
     _profileEmailController.dispose();
     _profilePhoneController.dispose();
     _profilePasswordController.dispose();
-    _doorService.dispose();
+    _doorService?.dispose();
     super.dispose();
   }
 
@@ -175,6 +177,8 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.siteOnayTalepleri:
       case SirketMenuItem.siteler:
       case SirketMenuItem.cihazEkle:
+      case SirketMenuItem.kayitliCihazlar:
+      case SirketMenuItem.bluetoothWifiKur:
       case SirketMenuItem.dashboard:
       case SirketMenuItem.profilim:
         return null;
@@ -200,7 +204,11 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.siteler:
         return 'Site Yonetimi';
       case SirketMenuItem.cihazEkle:
-        return 'Cihaz Ekle';
+        return 'Sirket Veritabanina Cihaz Kaydet';
+      case SirketMenuItem.kayitliCihazlar:
+        return 'Sirket Hesabina Kayitli Cihazlar';
+      case SirketMenuItem.bluetoothWifiKur:
+        return 'Bluetooth ile Wi-Fi Kur';
     }
   }
 
@@ -245,17 +253,10 @@ class _HomePageState extends State<HomePage> {
 
   void _selectMenu(SirketMenuItem item) {
     Navigator.pop(context);
-    if (item == SirketMenuItem.cihazEkle) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        _openDeviceAddFlow();
-      });
-      return;
-    }
-
     setState(() => _selectedMenu = item);
+    if (item == SirketMenuItem.kayitliCihazlar) {
+      _loadCompanyDevices(force: true);
+    }
     final role = _roleForMenu(item);
     if (role != null) {
       _loadManagedUsers(role);
@@ -396,6 +397,332 @@ class _HomePageState extends State<HomePage> {
       _selectedSite = structure.site;
       _selectedSiteStructure = structure;
     });
+  }
+
+  Future<void> _loadDoorControlSites({bool force = false}) async {
+    if (_isLoadingDoorControlSites) {
+      return;
+    }
+    if (!force && _doorControlSitesPage != null) {
+      return;
+    }
+
+    setState(() => _isLoadingDoorControlSites = true);
+    try {
+      final sites = <SiteRecord>[];
+      var page = 1;
+      var total = 0;
+      var pageSize = 50;
+
+      while (true) {
+        final result = await widget.authService.listSites(
+          page: page,
+          pageSize: pageSize,
+        );
+        sites.addAll(result.sites);
+        total = result.total;
+        pageSize = result.pageSize;
+        if (page >= result.totalPages) {
+          break;
+        }
+        page += 1;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      SiteRecord? selected = sites.isNotEmpty ? sites.first : null;
+      if (_doorControlSite != null) {
+        selected = null;
+        for (final site in sites) {
+          if (site.id == _doorControlSite!.id) {
+            selected = site;
+            break;
+          }
+        }
+      }
+
+      setState(() {
+        _doorControlSitesPage = SitePage(
+          sites: sites,
+          total: total,
+          page: 1,
+          pageSize: pageSize,
+        );
+        _doorControlSite = selected;
+      });
+
+      if (selected != null) {
+        await _loadDoorControlStructure(selected.id, force: true);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        _showMessage(e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Kapi kontrol site listesi alinamadi.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingDoorControlSites = false);
+      }
+    }
+  }
+
+  Future<void> _loadCompanyDevices({int page = 1, bool force = false}) async {
+    if (_isLoadingCompanyDevices) {
+      return;
+    }
+    if (!force && _companyDevicesPage != null && _companyDevicesPage!.page == page) {
+      return;
+    }
+
+    setState(() => _isLoadingCompanyDevices = true);
+    final (devices, error) = await widget.authService.listCompanyDevices(
+      page: page,
+      pageSize: _pageSize,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingCompanyDevices = false;
+      if (error == null) {
+        _companyDevicesPage = devices;
+      }
+    });
+
+    if (error != null) {
+      _showMessage(error);
+    }
+  }
+
+  Future<List<SiteRecord>> _loadAllSitesForPicker() async {
+    final sites = <SiteRecord>[];
+    var page = 1;
+    while (true) {
+      final result = await widget.authService.listSites(
+        page: page,
+        pageSize: 100,
+      );
+      sites.addAll(result.sites);
+      if (page >= result.totalPages) {
+        break;
+      }
+      page += 1;
+    }
+    return sites;
+  }
+
+  Future<void> _editCompanyDevice(DeviceRecord device) async {
+    final result = await showDialog<_DeviceEditResult>(
+      context: context,
+      builder: (dialogContext) => _DeviceEditDialog(device: device),
+    );
+    if (result == null) {
+      return;
+    }
+
+    final updateResult = await widget.authService.updateDevice(
+      deviceId: device.id,
+      assignedUserCode: result.assignedUserCode,
+      siteCode: result.siteCode,
+      gateName: result.gateName,
+    );
+    final error = updateResult.$2;
+    if (!mounted) {
+      return;
+    }
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    _showMessage('Cihaz guncellendi.');
+    await _loadCompanyDevices(page: _companyDevicesPage?.page ?? 1, force: true);
+  }
+
+  Future<void> _deleteCompanyDevice(DeviceRecord device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cihazi Sil'),
+        content: Text(
+          '${device.deviceUid} cihazini silmek istiyor musunuz? Varsa kapi atamasi da kaldirilir.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Iptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    final error = await widget.authService.deleteDevice(deviceId: device.id);
+    if (!mounted) {
+      return;
+    }
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    _showMessage('Cihaz silindi.');
+    await _loadCompanyDevices(page: _companyDevicesPage?.page ?? 1, force: true);
+  }
+
+  Future<void> _assignCompanyDeviceToDoor(DeviceRecord device) async {
+    List<SiteRecord> sites;
+    try {
+      sites = await _loadAllSitesForPicker();
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Site listesi alinamadi.');
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final door = await showDialog<DoorRecord>(
+      context: context,
+      builder: (dialogContext) => _DeviceDoorAssignDialog(
+        authService: widget.authService,
+        sites: sites,
+        device: device,
+      ),
+    );
+    if (door == null) {
+      return;
+    }
+
+    final assignResult = await widget.authService.assignDoorDevice(
+      doorId: door.id,
+      deviceUid: device.deviceUid,
+    );
+    final error = assignResult.$2;
+    if (!mounted) {
+      return;
+    }
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    _showMessage('${device.deviceUid} cihazi ${door.doorName} kapisina atandi.');
+    await _loadCompanyDevices(page: _companyDevicesPage?.page ?? 1, force: true);
+  }
+
+  Future<void> _loadDoorControlStructure(
+    int siteCode, {
+    bool force = false,
+  }) async {
+    if (_isLoadingDoorControlStructure) {
+      return;
+    }
+    if (!force && _doorControlStructure?.site.id == siteCode) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingDoorControlStructure = true;
+      _doorControlDoor = null;
+      _disposeDoorControlService();
+    });
+
+    final (structure, error) = await widget.authService.getSiteStructure(
+      siteCode: siteCode,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isLoadingDoorControlStructure = false);
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    if (structure == null) {
+      _showMessage('Kapi kontrol site yapisi alinamadi.');
+      return;
+    }
+
+    setState(() {
+      _doorControlSite = structure.site;
+      _doorControlStructure = structure;
+    });
+  }
+
+  Future<void> _selectDoorControlSite(int siteCode) async {
+    SiteRecord? site;
+    for (final item in _doorControlSitesPage?.sites ?? const <SiteRecord>[]) {
+      if (item.id == siteCode) {
+        site = item;
+        break;
+      }
+    }
+    if (site == null) {
+      return;
+    }
+
+    setState(() {
+      _doorControlSite = site;
+      _doorControlStructure = null;
+      _doorControlDoor = null;
+      _disposeDoorControlService();
+    });
+    await _loadDoorControlStructure(site.id, force: true);
+  }
+
+  void _selectDoorControlDoor(int doorId) {
+    DoorRecord? door;
+    for (final item in _doorControlStructure?.doors ?? const <DoorRecord>[]) {
+      if (item.id == doorId) {
+        door = item;
+        break;
+      }
+    }
+    if (door == null) {
+      return;
+    }
+    final selectedDoor = door;
+
+    setState(() {
+      _doorControlDoor = selectedDoor;
+      _disposeDoorControlService();
+      if (selectedDoor.assignedDeviceUid != null &&
+          selectedDoor.assignedDeviceUid!.trim().isNotEmpty) {
+        final siteId =
+            (selectedDoor.mqttSiteId ?? _doorControlSite?.mqttSiteId ?? 0)
+                .toString();
+        _doorService = MqttDoorService(
+          host: mqttHost,
+          port: mqttPort,
+          username: mqttAppUser,
+          password: mqttAppPassword,
+          siteId: siteId,
+          doorId: selectedDoor.doorIndex.toString(),
+          topicPrefix: 'device/${selectedDoor.assignedDeviceUid}',
+        );
+        _doorService!.connect();
+      }
+    });
+  }
+
+  void _disposeDoorControlService() {
+    _doorService?.dispose();
+    _doorService = null;
   }
 
   Future<void> _selectSite(SiteRecord site) async {
@@ -773,7 +1100,13 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _busyDoors.remove(door.id));
     if (error != null) {
-      _showMessage(error);
+      if (error.contains('sirket hesabinda kayitli degil')) {
+        _showMessage(
+          'Cihaz once Sirket Veritabanina Cihaz Kaydet menusunden kaydedilmeli.',
+        );
+      } else {
+        _showMessage(error);
+      }
       return;
     }
 
@@ -827,7 +1160,46 @@ class _HomePageState extends State<HomePage> {
     _showMessage('Cihaz ${device?.deviceUid ?? result.deviceUid} kaydedildi.');
   }
 
-  Future<void> _openDeviceAddFlow() async {
+  Future<void> _openManualDeviceRegistrationFlow() async {
+    final result = await showDialog<_DeviceFormResult>(
+      context: context,
+      builder: (dialogContext) => const _DeviceDialog(initialDeviceUid: ''),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) {
+      return;
+    }
+
+    final (device, error) = await widget.authService.createDevice(
+      deviceUid: result.deviceUid,
+      assignedUserCode: result.assignedUserCode,
+      siteCode: result.siteCode,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    _showMessage('Cihaz ${device?.deviceUid ?? result.deviceUid} kaydedildi.');
+  }
+
+  Future<void> _openWifiProvisionFlow() async {
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const WifiProvisionPage()));
+  }
+
+  Future<void> openDeviceAddFlow() async {
     final _DeviceToolAction?
     action = await showModalBottomSheet<_DeviceToolAction>(
       context: context,
@@ -838,9 +1210,9 @@ class _HomePageState extends State<HomePage> {
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.qr_code_scanner_outlined),
-                title: const Text('QR ile Cihaz Kaydet'),
+                title: const Text('QR ile Sirket Veritabanina Kaydet'),
                 subtitle: const Text(
-                  'Cihaz unique id okuyup sisteme kaydeder.',
+                  'Cihaz Unique ID bilgisini okuyup sirket hesabina kaydeder.',
                 ),
                 onTap: () =>
                     Navigator.of(context).pop(_DeviceToolAction.registerDevice),
@@ -910,11 +1282,12 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openDoor() async {
     final session = widget.authService.session;
-    if (session == null) {
+    final doorService = _doorService;
+    if (session == null || doorService == null) {
       return;
     }
 
-    final error = await _doorService.sendPulseCommand(
+    final error = await doorService.sendPulseCommand(
       requestedBy: session.email,
     );
     if (!mounted) {
@@ -1214,62 +1587,434 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(height: 16),
-        AnimatedBuilder(
-          animation: _doorService,
-          builder: (context, _) {
-            final connectionText = _doorService.connected
-                ? 'Bagli'
-                : _doorService.connecting
-                ? 'Baglaniyor'
-                : 'Bagli degil';
-            final stateText = _doorService.doorLocked == null
-                ? 'Bilinmiyor'
-                : (_doorService.doorLocked! ? 'Kilitli' : 'Acik/Tetiklenmis');
+        _buildDoorControlPanel(),
+      ],
+    );
+  }
 
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: AppDecorations.glassCard,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Kapi Kontrol',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text('MQTT: $connectionText'),
-                  const SizedBox(height: 6),
-                  Text('Kapi Durumu: $stateText'),
-                  if (_doorService.lastUpdatedAt != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Son Guncelleme: ${_formatDate(_doorService.lastUpdatedAt)}',
-                    ),
-                  ],
-                  if (_doorService.lastError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _doorService.lastError!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _doorService.commandEnabled ? _openDoor : null,
-                      icon: const Icon(Icons.lock_open),
-                      label: const Text('Kapi Ac'),
-                    ),
-                  ),
-                ],
+  Widget _buildDoorControlPanel() {
+    final sites = _doorControlSitesPage?.sites ?? const <SiteRecord>[];
+    final doors = _doorControlStructure?.doors ?? const <DoorRecord>[];
+    final selectedDoor = _doorControlDoor;
+    final doorService = _doorService;
+
+    Widget buildStatus() {
+      if (selectedDoor == null) {
+        return const Text(
+          'Kontrol etmek icin once siteyi, sonra o siteye ait kapiyi secin.',
+          style: TextStyle(color: AppColors.textMuted),
+        );
+      }
+
+      if (selectedDoor.assignedDeviceUid == null ||
+          selectedDoor.assignedDeviceUid!.trim().isEmpty) {
+        return const Text(
+          'Bu kapiya henuz cihaz atanmamis. Kapi acma komutu aktif olmaz.',
+          style: TextStyle(color: Colors.red),
+        );
+      }
+
+      if (doorService == null) {
+        return const Text(
+          'MQTT kontrol servisi hazirlanamadi.',
+          style: TextStyle(color: Colors.red),
+        );
+      }
+
+      return AnimatedBuilder(
+        animation: doorService,
+        builder: (context, _) {
+          final connectionText = doorService.connected
+              ? 'Bagli'
+              : doorService.connecting
+              ? 'Baglaniyor'
+              : 'Bagli degil';
+          final deviceOnlineText = doorService.deviceOnline == null
+              ? 'Bilinmiyor'
+              : doorService.deviceOnline!
+              ? 'Online'
+              : 'Offline';
+          final stateText = doorService.doorLocked == null
+              ? 'Bilinmiyor'
+              : (doorService.doorLocked! ? 'Kapali/Kilitli' : 'Acik');
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Cihaz: ${selectedDoor.assignedDeviceUid}'),
+              const SizedBox(height: 6),
+              Text('MQTT Topic: ${doorService.cmdTopic}'),
+              const SizedBox(height: 6),
+              Text('MQTT: $connectionText'),
+              const SizedBox(height: 6),
+              Text('Cihaz Baglantisi: $deviceOnlineText'),
+              const SizedBox(height: 6),
+              Text('Kapi Durumu: $stateText'),
+              if (doorService.lastUpdatedAt != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Son Guncelleme: ${_formatDate(doorService.lastUpdatedAt)}',
+                ),
+              ],
+              if (doorService.lastError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  doorService.lastError!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: doorService.commandEnabled ? _openDoor : null,
+                  icon: const Icon(Icons.lock_open),
+                  label: const Text('Kapi Ac'),
+                ),
               ),
+            ],
+          );
+        },
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: AppDecorations.glassCard,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Kapi Ac / Kapat',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Once siteyi secin, sonra o siteye ait kapiyi secin. Kapiya cihaz atanmis ve MQTT baglantisi saglikliysa kapi acma komutu aktif olur.',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<int>(
+            initialValue: _doorControlSite?.id,
+            decoration: const InputDecoration(labelText: 'Site sec'),
+            items: [
+              for (final site in sites)
+                DropdownMenuItem<int>(
+                  value: site.id,
+                  child: Text('${site.name} (${site.id})'),
+                ),
+            ],
+            onChanged: _isLoadingDoorControlSites
+                ? null
+                : (value) {
+                    if (value != null) {
+                      _selectDoorControlSite(value);
+                    }
+                  },
+          ),
+          if (_isLoadingDoorControlSites) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: selectedDoor?.id,
+            decoration: const InputDecoration(labelText: 'Kapi sec'),
+            items: [
+              for (final door in doors)
+                DropdownMenuItem<int>(
+                  value: door.id,
+                  child: Text(
+                    '${door.doorName} - ${door.assignedDeviceUid ?? 'Cihaz yok'}',
+                  ),
+                ),
+            ],
+            onChanged: _isLoadingDoorControlStructure || doors.isEmpty
+                ? null
+                : (value) {
+                    if (value != null) {
+                      _selectDoorControlDoor(value);
+                    }
+                  },
+          ),
+          if (_isLoadingDoorControlStructure) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 14),
+          buildStatus(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceAddScreen() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(22),
+          decoration: AppDecorations.glassCard,
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sirket Veritabanina Cihaz Kaydet',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Cihazin Unique ID bilgisini QR koddan okuyarak veya masaustu kullanimda elle yazarak sirket veritabanina kaydedebilirsiniz.',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 680;
+            final children = [
+              _DeviceActionTile(
+                icon: Icons.qr_code_scanner_outlined,
+                title: 'QR ile Sirket Veritabanina Kaydet',
+                description:
+                    'Cihaz uzerindeki QR kodu okutur, Unique ID alanini otomatik doldurur ve sirket kayit formunu acar.',
+                buttonLabel: 'QR Oku',
+                onPressed: _openDeviceRegistrationFlow,
+              ),
+              _DeviceActionTile(
+                icon: Icons.edit_note_outlined,
+                title: 'Unique ID ile Sirket Veritabanina Kaydet',
+                description:
+                    'QR okunamiyorsa veya masaustu surumde calisiyorsaniz cihaz Unique ID bilgisini elle girerek sirket hesabina kayit yapar.',
+                buttonLabel: 'Unique ID Gir',
+                onPressed: _openManualDeviceRegistrationFlow,
+              ),
+            ];
+
+            if (isCompact) {
+              return Column(
+                children: [
+                  children[0],
+                  const SizedBox(height: 12),
+                  children[1],
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: children[0]),
+                const SizedBox(width: 12),
+                Expanded(child: children[1]),
+              ],
             );
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompanyDevicesScreen() {
+    final pageData = _companyDevicesPage;
+    final devices = pageData?.devices ?? const <DeviceRecord>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(22),
+          decoration: AppDecorations.glassCard,
+          child: Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sirket Hesabina Kayitli Cihazlar',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Sirket veritabanina kaydedilmis cihazlari, atandiklari site ve kapi bilgileriyle birlikte gorebilirsiniz.',
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Yenile',
+                onPressed: _isLoadingCompanyDevices
+                    ? null
+                    : () => _loadCompanyDevices(
+                        page: pageData?.page ?? 1,
+                        force: true,
+                      ),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_isLoadingCompanyDevices)
+          const LinearProgressIndicator()
+        else if (devices.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: AppDecorations.glassCard,
+            child: const Text('Sirket hesabina kayitli cihaz bulunamadi.'),
+          )
+        else
+          ...devices.map(_buildCompanyDeviceCard),
+        if (pageData != null && pageData.totalPages > 1) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Sayfa ${pageData.page} / ${pageData.totalPages} | Toplam ${pageData.total}',
+                ),
+              ),
+              TextButton(
+                onPressed: pageData.page > 1 && !_isLoadingCompanyDevices
+                    ? () => _loadCompanyDevices(page: pageData.page - 1)
+                    : null,
+                child: const Text('Onceki'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed:
+                    pageData.page < pageData.totalPages &&
+                        !_isLoadingCompanyDevices
+                    ? () => _loadCompanyDevices(page: pageData.page + 1)
+                    : null,
+                child: const Text('Sonraki'),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCompanyDeviceCard(DeviceRecord device) {
+    final siteText = device.siteName == null
+        ? (device.siteCode == null ? '-' : 'Site ID: ${device.siteCode}')
+        : '${device.siteName} (${device.siteCode ?? '-'})';
+    final doorText = device.assignedDoorName ?? 'Kapi atanmamis';
+    final userText = device.assignedUserCode?.toString() ?? '-';
+    final dateText = device.createdAt == null
+        ? '-'
+        : _formatDate(device.createdAt);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: AppDecorations.glassCard,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              device.deviceUid,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text('Site: $siteText'),
+            const SizedBox(height: 6),
+            Text('Kapi: $doorText'),
+            const SizedBox(height: 6),
+            Text('Kullanici ID: $userText'),
+            const SizedBox(height: 6),
+            Text('Kayit Tarihi: $dateText'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _editCompanyDevice(device),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Duzenle'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _assignCompanyDeviceToDoor(device),
+                  icon: const Icon(Icons.meeting_room_outlined),
+                  label: const Text('Kapiya Ata'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _deleteCompanyDevice(device),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Sil'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBluetoothWifiScreen() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(22),
+          decoration: AppDecorations.glassCard,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Bluetooth ile Wi-Fi Kur',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Kayitli Wi-Fi bilgisi olmayan cihazlar Bluetooth uzerinden bulunabilir olur. Bu ekrandan cihaza baglanip kullanacagi Wi-Fi adini ve sifresini gonderebilirsiniz.',
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _openWifiProvisionFlow,
+                  icon: const Icon(Icons.bluetooth_searching_outlined),
+                  label: const Text('Bluetooth ile Wi-Fi Kurulumunu Ac'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Wi-Fi bilgisi dogruysa cihaz bilgileri kaydeder, yeniden baslar ve internete baglandiktan sonra Bluetooth kapanir. Wi-Fi degisecekse cihazdaki reset dugmesine 3 saniye basin; bilgiler silinir ve Bluetooth tekrar bulunabilir olur.',
+          style: TextStyle(color: AppColors.textMuted),
         ),
       ],
     );
@@ -2111,7 +2856,11 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.siteler:
         return _buildSitesScreen();
       case SirketMenuItem.cihazEkle:
-        return _buildDashboard(session);
+        return _buildDeviceAddScreen();
+      case SirketMenuItem.kayitliCihazlar:
+        return _buildCompanyDevicesScreen();
+      case SirketMenuItem.bluetoothWifiKur:
+        return _buildBluetoothWifiScreen();
     }
   }
 
@@ -2159,6 +2908,57 @@ class _HomePageState extends State<HomePage> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _DeviceActionTile extends StatelessWidget {
+  const _DeviceActionTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.buttonLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String buttonLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: AppDecorations.glassCard,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary, size: 30),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(description),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon),
+              label: Text(buttonLabel),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3153,7 +3953,7 @@ class _DeviceDialogState extends State<_DeviceDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: const Text('Cihaz Kaydi'),
+      title: const Text('Sirket Veritabani Cihaz Kaydi'),
       content: SizedBox(
         width: _dialogWidthForScreen(context),
         child: Form(
@@ -3166,6 +3966,9 @@ class _DeviceDialogState extends State<_DeviceDialog> {
                   controller: _deviceUidController,
                   decoration: const InputDecoration(
                     labelText: 'Cihaz Unique ID',
+                    hintText: 'Ornek: 1CDA72A172E0',
+                    helperText:
+                        'Bu Unique ID sirket veritabanina kaydedilecek.',
                   ),
                   validator: (value) => (value ?? '').trim().length < 6
                       ? 'Cihaz unique id en az 6 karakter olmali.'
@@ -3496,6 +4299,264 @@ class _DoorDeviceDialogState extends State<_DoorDeviceDialog> {
   }
 }
 
+class _DeviceEditDialog extends StatefulWidget {
+  const _DeviceEditDialog({required this.device});
+
+  final DeviceRecord device;
+
+  @override
+  State<_DeviceEditDialog> createState() => _DeviceEditDialogState();
+}
+
+class _DeviceEditDialogState extends State<_DeviceEditDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _assignedUserCodeController;
+  late final TextEditingController _siteCodeController;
+  late final TextEditingController _gateNameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _assignedUserCodeController = TextEditingController(
+      text: widget.device.assignedUserCode?.toString() ?? '',
+    );
+    _siteCodeController = TextEditingController(
+      text: widget.device.siteCode?.toString() ?? '',
+    );
+    _gateNameController = TextEditingController(
+      text: widget.device.gateName ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _assignedUserCodeController.dispose();
+    _siteCodeController.dispose();
+    _gateNameController.dispose();
+    super.dispose();
+  }
+
+  int? _parseOptionalInt(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    return int.tryParse(text);
+  }
+
+  String? _validateOptionalInt(String? value, String label) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    return int.tryParse(text) == null ? '$label sayisal olmali.' : null;
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+    Navigator.of(context).pop(
+      _DeviceEditResult(
+        assignedUserCode: _parseOptionalInt(_assignedUserCodeController.text),
+        siteCode: _parseOptionalInt(_siteCodeController.text),
+        gateName: _gateNameController.text.trim().isEmpty
+            ? null
+            : _gateNameController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: Text('${widget.device.deviceUid} - Duzenle'),
+      content: SizedBox(
+        width: _dialogWidthForScreen(context),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _assignedUserCodeController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Kullanici ID (opsiyonel)',
+                  ),
+                  validator: (value) =>
+                      _validateOptionalInt(value, 'Kullanici ID'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _siteCodeController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Site ID (opsiyonel)',
+                  ),
+                  validator: (value) => _validateOptionalInt(value, 'Site ID'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _gateNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Kapi Etiketi (opsiyonel)',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Iptal'),
+        ),
+        ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
+      ],
+    );
+  }
+}
+
+class _DeviceDoorAssignDialog extends StatefulWidget {
+  const _DeviceDoorAssignDialog({
+    required this.authService,
+    required this.sites,
+    required this.device,
+  });
+
+  final AuthService authService;
+  final List<SiteRecord> sites;
+  final DeviceRecord device;
+
+  @override
+  State<_DeviceDoorAssignDialog> createState() =>
+      _DeviceDoorAssignDialogState();
+}
+
+class _DeviceDoorAssignDialogState extends State<_DeviceDoorAssignDialog> {
+  SiteRecord? _selectedSite;
+  SiteStructureRecord? _structure;
+  DoorRecord? _selectedDoor;
+  bool _loadingDoors = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSite = widget.sites.isEmpty ? null : widget.sites.first;
+    if (_selectedSite != null) {
+      _loadDoors(_selectedSite!.id);
+    }
+  }
+
+  Future<void> _loadDoors(int siteCode) async {
+    setState(() {
+      _loadingDoors = true;
+      _structure = null;
+      _selectedDoor = null;
+      _error = null;
+    });
+    final (structure, error) = await widget.authService.getSiteStructure(
+      siteCode: siteCode,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _loadingDoors = false;
+      _structure = structure;
+      _selectedDoor = structure?.doors.isEmpty ?? true
+          ? null
+          : structure!.doors.first;
+      _error = error;
+    });
+  }
+
+  void _submit() {
+    final door = _selectedDoor;
+    if (door == null) {
+      return;
+    }
+    Navigator.of(context).pop(door);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final doors = _structure?.doors ?? const <DoorRecord>[];
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: Text('${widget.device.deviceUid} - Kapiya Ata'),
+      content: SizedBox(
+        width: _dialogWidthForScreen(context),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<int>(
+              initialValue: _selectedSite?.id,
+              decoration: const InputDecoration(labelText: 'Site'),
+              items: [
+                for (final site in widget.sites)
+                  DropdownMenuItem<int>(
+                    value: site.id,
+                    child: Text('${site.name} (${site.id})'),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                final site = widget.sites.firstWhere((item) => item.id == value);
+                setState(() => _selectedSite = site);
+                _loadDoors(site.id);
+              },
+            ),
+            const SizedBox(height: 12),
+            if (_loadingDoors)
+              const LinearProgressIndicator()
+            else if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red))
+            else
+              DropdownButtonFormField<int>(
+                initialValue: _selectedDoor?.id,
+                decoration: const InputDecoration(labelText: 'Kapi'),
+                items: [
+                  for (final door in doors)
+                    DropdownMenuItem<int>(
+                      value: door.id,
+                      child: Text(
+                        '${door.doorName} - ${door.assignedDeviceUid ?? 'Bos'}',
+                      ),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  final door = doors.firstWhere((item) => item.id == value);
+                  setState(() => _selectedDoor = door);
+                },
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Iptal'),
+        ),
+        ElevatedButton(
+          onPressed: _selectedDoor == null || _loadingDoors ? null : _submit,
+          child: const Text('Ata'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ManagedUserDialog extends StatefulWidget {
   const _ManagedUserDialog({
     required this.role,
@@ -3719,6 +4780,18 @@ class _DeviceFormResult {
   final String deviceUid;
   final int? assignedUserCode;
   final int? siteCode;
+}
+
+class _DeviceEditResult {
+  const _DeviceEditResult({
+    required this.assignedUserCode,
+    required this.siteCode,
+    required this.gateName,
+  });
+
+  final int? assignedUserCode;
+  final int? siteCode;
+  final String? gateName;
 }
 
 enum _DeviceToolAction { registerDevice, provisionWifi }

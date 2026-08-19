@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import qrcode
-from PIL import Image, ImageDraw, ImageOps, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
 from serial.tools import list_ports
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -36,6 +36,8 @@ UPL_RE = re.compile(r"^\s*upload_speed\s*=\s*(\d+)")
 PROG_RE = re.compile(r"\((\d{1,3})\s*%\)")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 PREVIEW_SIZE = 180
+QR_SIZE = 1200
+QR_LABEL_HEIGHT = 150
 
 CLR_APP_BG = "#F2F6F4"
 CLR_CARD_BG = "#FFFFFF"
@@ -57,7 +59,7 @@ class EspDevice:
     port: str
     description: str
     chip: str
-    unique_id: str
+    unique_id: str = ""
 
 
 def ensure_logo() -> Path:
@@ -81,17 +83,31 @@ def trim_image(image: Image.Image) -> Image.Image:
     return rgba if bbox is None else rgba.crop(bbox)
 
 
+def load_label_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = [
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
+        Path("C:/Windows/Fonts/segoeuib.ttf"),
+        Path("C:/Windows/Fonts/segoeui.ttf"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return ImageFont.truetype(str(path), size)
+    return ImageFont.load_default()
+
+
 def generate_qr(unique_id: str, logo_path: Path) -> Image.Image:
+    normalized_uid = unique_id.strip().upper()
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=20,
         border=2,
     )
-    qr.add_data(unique_id.strip().upper())
+    qr.add_data(normalized_uid)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
-    qr_img = qr_img.resize((1200, 1200), Image.Resampling.LANCZOS)
+    qr_img = qr_img.resize((QR_SIZE, QR_SIZE), Image.Resampling.LANCZOS)
 
     logo = trim_image(Image.open(logo_path))
     logo = ImageOps.contain(logo, (264, 264), Image.Resampling.LANCZOS)
@@ -100,8 +116,18 @@ def generate_qr(unique_id: str, logo_path: Path) -> Image.Image:
     draw = ImageDraw.Draw(badge)
     draw.ellipse((0, 0, 321, 321), fill=(255, 255, 255, 245))
     badge.alpha_composite(logo, ((322 - logo.width) // 2, (322 - logo.height) // 2))
-    qr_img.alpha_composite(badge, ((1200 - 322) // 2, (1200 - 322) // 2))
-    return qr_img
+    qr_img.alpha_composite(badge, ((QR_SIZE - 322) // 2, (QR_SIZE - 322) // 2))
+
+    output = Image.new("RGBA", (QR_SIZE, QR_SIZE + QR_LABEL_HEIGHT), "white")
+    output.alpha_composite(qr_img, (0, 0))
+    draw = ImageDraw.Draw(output)
+    font = load_label_font(48)
+    label = f"Unique ID: {normalized_uid}"
+    bbox = draw.textbbox((0, 0), label, font=font)
+    x = (QR_SIZE - (bbox[2] - bbox[0])) // 2
+    y = QR_SIZE + (QR_LABEL_HEIGHT - (bbox[3] - bbox[1])) // 2 - 6
+    draw.text((x, y), label, fill=(19, 40, 29, 255), font=font)
+    return output
 
 
 def find_platformio() -> str:
@@ -231,6 +257,7 @@ class App:
         self.progress_text_var = tk.StringVar(value="%0")
 
         self.scanning = False
+        self.uid_reading = False
         self.fw_busy = False
 
         self._style()
@@ -384,6 +411,8 @@ class App:
         row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.scan_btn = ttk.Button(row, text="Bagli cihazlari tara", command=self.scan_devices, style="Accent.TButton")
         self.scan_btn.pack(side=tk.LEFT)
+        self.read_uid_btn = ttk.Button(row, text="Secili cihaz UID oku", command=self.read_selected_uid, style="Soft.TButton")
+        self.read_uid_btn.pack(side=tk.LEFT, padx=(8, 0))
         self.qr_btn = ttk.Button(row, text="Secili cihaz icin QR olustur", command=self.make_qr, style="Accent.TButton")
         self.qr_btn.pack(side=tk.LEFT, padx=8)
         self.save_btn = ttk.Button(row, text="QR kaydet", command=self.save_qr, style="Soft.TButton")
@@ -472,7 +501,7 @@ class App:
     def on_select(self, _event: object) -> None:
         d = self.selected_device()
         if d:
-            self.uid_var.set(f"Unique ID: {d.unique_id}")
+            self.uid_var.set(f"Unique ID: {d.unique_id or 'Okunmadi'}")
             suggested = suggest_env_for_chip(d.chip, self.envs)
             if suggested and suggested != self.env_var.get():
                 self.env_var.set(suggested)
@@ -484,27 +513,31 @@ class App:
             return
         self.scanning = True
         self.scan_btn.configure(state=tk.DISABLED)
+        self.read_uid_btn.configure(state=tk.DISABLED)
         self.qr_btn.configure(state=tk.DISABLED)
         self.save_btn.configure(state=tk.DISABLED)
         self.print_btn.configure(state=tk.DISABLED)
-        self.set_status("Tarama baslatildi...")
+        self.set_status("Portlar listeleniyor...")
         threading.Thread(target=self._scan_worker, daemon=True).start()
 
     def _scan_worker(self) -> None:
         ports = list(list_ports.comports())
         found: list[EspDevice] = []
-        for i, p in enumerate(ports, start=1):
-            self.root.after(0, lambda msg=f"Taraniyor {i}/{len(ports)}: {p.device}": self.set_status(msg))
-            try:
-                chip, uid = read_mac(p.device)
-                found.append(EspDevice(port=p.device, description=p.description or "", chip=chip, unique_id=uid))
-            except Exception:
-                continue
+        for p in ports:
+            found.append(
+                EspDevice(
+                    port=p.device,
+                    description=p.description or "",
+                    chip="Okunmadi",
+                    unique_id="",
+                )
+            )
         self.root.after(0, lambda: self._finish_scan(found))
 
     def _finish_scan(self, found: list[EspDevice]) -> None:
         self.scanning = False
         self.scan_btn.configure(state=tk.NORMAL)
+        self.read_uid_btn.configure(state=tk.NORMAL)
         self.qr_btn.configure(state=tk.NORMAL)
         self.save_btn.configure(state=tk.NORMAL)
         self.print_btn.configure(state=tk.NORMAL)
@@ -512,17 +545,71 @@ class App:
         for x in self.tree.get_children():
             self.tree.delete(x)
         for i, d in enumerate(found):
-            self.tree.insert("", tk.END, iid=str(i), values=(d.port, d.chip, d.unique_id, d.description))
+            self.tree.insert("", tk.END, iid=str(i), values=(d.port, d.chip, d.unique_id or "Okunmadi", d.description))
         if found:
-            self.set_status(f"{len(found)} cihaz bulundu.")
+            self.set_status(f"{len(found)} port listelendi. UID okuma ayri islemdir ve cihazi resetleyebilir.")
         else:
-            self.set_status("ESP32 bulunamadi.")
-            messagebox.showwarning("Cihaz bulunamadi", "USB/driver/COM baglantisini kontrol edin.")
+            self.set_status("Bagli seri port bulunamadi.")
+            messagebox.showwarning("Port bulunamadi", "USB/driver/COM baglantisini kontrol edin.")
+
+    def read_selected_uid(self) -> None:
+        if self.uid_reading:
+            return
+        d = self.selected_device()
+        if d is None:
+            messagebox.showinfo("Secim gerekli", "Lutfen listeden bir port secin.")
+            return
+        self.uid_reading = True
+        self.scan_btn.configure(state=tk.DISABLED)
+        self.read_uid_btn.configure(state=tk.DISABLED)
+        self.qr_btn.configure(state=tk.DISABLED)
+        self.set_status(f"UID okunuyor: {d.port}. Bu islem cihazi resetleyebilir.")
+        idx = self.devices.index(d)
+        threading.Thread(target=self._read_uid_worker, args=(idx, d), daemon=True).start()
+
+    def _read_uid_worker(self, idx: int, dev: EspDevice) -> None:
+        try:
+            chip, uid = read_mac(dev.port)
+            updated = EspDevice(
+                port=dev.port,
+                description=dev.description,
+                chip=chip,
+                unique_id=uid,
+            )
+            self.root.after(0, lambda: self._finish_uid_read(idx, updated, None))
+        except Exception as exc:
+            self.root.after(0, lambda: self._finish_uid_read(idx, dev, str(exc)))
+
+    def _finish_uid_read(self, idx: int, dev: EspDevice, error: str | None) -> None:
+        self.uid_reading = False
+        self.scan_btn.configure(state=tk.NORMAL)
+        self.read_uid_btn.configure(state=tk.NORMAL)
+        self.qr_btn.configure(state=tk.NORMAL)
+        if error is not None:
+            self.set_status("UID okunamadi.")
+            messagebox.showerror("UID okunamadi", error)
+            return
+        if 0 <= idx < len(self.devices):
+            self.devices[idx] = dev
+            self.tree.item(str(idx), values=(dev.port, dev.chip, dev.unique_id, dev.description))
+            self.tree.selection_set(str(idx))
+        self.uid_var.set(f"Unique ID: {dev.unique_id}")
+        suggested = suggest_env_for_chip(dev.chip, self.envs)
+        if suggested:
+            self.env_var.set(suggested)
+            self.refresh_latest_release()
+        self.set_status(f"UID okundu: {dev.unique_id}")
 
     def make_qr(self) -> None:
         d = self.selected_device()
         if d is None:
             messagebox.showinfo("Secim gerekli", "Lutfen listeden bir cihaz secin.")
+            return
+        if not d.unique_id:
+            messagebox.showinfo(
+                "UID gerekli",
+                "Once secili cihaz icin UID oku komutunu calistirin. Bu komut cihazi resetleyebilir.",
+            )
             return
         img = generate_qr(d.unique_id, self.logo_path)
         self.latest_qr = img

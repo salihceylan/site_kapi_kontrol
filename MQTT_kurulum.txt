@@ -52,12 +52,20 @@ topic read site/+/door/+/state
 topic read site/+/door/+/event
 topic read site/+/door/+/availability
 topic write site/+/door/+/cmd
+topic read device/+/state
+topic read device/+/event
+topic read device/+/availability
+topic write device/+/cmd
 
 user esp32_door_01
 topic read site/1/door/1/cmd
 topic write site/1/door/1/state
 topic write site/1/door/1/event
 topic write site/1/door/1/availability
+topic read device/+/cmd
+topic write device/+/state
+topic write device/+/event
+topic write device/+/availability
 EOF
 
 7) Mosquitto secure config (tek dosya tavsiyesi)

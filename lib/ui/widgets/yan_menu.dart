@@ -11,6 +11,8 @@ enum SirketMenuItem {
   daireKullanicilariYonetimi,
   siteler,
   cihazEkle,
+  kayitliCihazlar,
+  bluetoothWifiKur,
 }
 
 class YanMenu extends StatelessWidget {
@@ -149,9 +151,23 @@ class YanMenu extends StatelessWidget {
                 const SizedBox(height: 4),
                 _MenuTile(
                   icon: Icons.qr_code_scanner_outlined,
-                  title: 'Cihaz Ekle',
+                  title: 'Sirket Veritabanina Cihaz Kaydet',
                   selected: selectedItem == SirketMenuItem.cihazEkle,
                   onTap: () => onSelect(SirketMenuItem.cihazEkle),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.devices_other_outlined,
+                  title: 'Sirket Hesabina Kayitli Cihazlar',
+                  selected: selectedItem == SirketMenuItem.kayitliCihazlar,
+                  onTap: () => onSelect(SirketMenuItem.kayitliCihazlar),
+                ),
+                const SizedBox(height: 4),
+                _MenuTile(
+                  icon: Icons.bluetooth_searching_outlined,
+                  title: 'Bluetooth ile Wi-Fi Kur',
+                  selected: selectedItem == SirketMenuItem.bluetoothWifiKur,
+                  onTap: () => onSelect(SirketMenuItem.bluetoothWifiKur),
                 ),
                 const SizedBox(height: 4),
                 _MenuTile(

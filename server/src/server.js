@@ -776,6 +776,59 @@ async function findDeviceByUid(deviceUid) {
   return result.rows[0] || null;
 }
 
+async function findDeviceById(deviceId) {
+  const result = await pool.query(
+    `
+      SELECT
+        devices.id,
+        devices.device_uid,
+        devices.assigned_user_code,
+        devices.site_code,
+        sites.name AS site_name,
+        sites.approval_status AS site_approval_status,
+        devices.gate_name,
+        door.id AS assigned_door_id,
+        door.door_name AS assigned_door_name,
+        devices.created_at
+      FROM devices
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      WHERE devices.id = $1
+      LIMIT 1
+    `,
+    [deviceId],
+  );
+  return result.rows[0] || null;
+}
+
+async function listCompanyDevices({ page, pageSize }) {
+  const offset = (page - 1) * pageSize;
+  const result = await pool.query(
+    `
+      SELECT
+        devices.id,
+        devices.device_uid,
+        devices.assigned_user_code,
+        devices.site_code,
+        sites.name AS site_name,
+        sites.approval_status AS site_approval_status,
+        devices.gate_name,
+        door.id AS assigned_door_id,
+        door.door_name AS assigned_door_name,
+        devices.created_at,
+        COUNT(*) OVER() AS total_count
+      FROM devices
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      ORDER BY sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
+      LIMIT $1 OFFSET $2
+    `,
+    [pageSize, offset],
+  );
+  const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
+  return { rows: result.rows, total };
+}
+
 async function listManagedDevicesForUser(authUser) {
   const userCode = getAuthUserCode({ authUser });
   if (userCode == null) {
@@ -2056,6 +2109,30 @@ async function updateDeviceAssignment({
   return result.rows[0] || null;
 }
 
+async function updateDeviceDetails({
+  deviceId,
+  assignedUserCode,
+  siteCode,
+  gateName,
+}) {
+  const result = await pool.query(
+    `
+      UPDATE devices
+      SET
+        assigned_user_code = $1,
+        site_code = $2,
+        gate_name = $3
+      WHERE id = $4
+      RETURNING id
+    `,
+    [assignedUserCode, siteCode, gateName, deviceId],
+  );
+  if (result.rowCount === 0) {
+    return null;
+  }
+  return findDeviceById(deviceId);
+}
+
 async function deleteDeviceById(deviceId) {
   const client = await pool.connect();
   try {
@@ -3334,6 +3411,73 @@ app.patch('/admin/doors/:id/device', authRequired, requireSuperUser, async (req,
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
     return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
+  }
+});
+
+app.get('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 50)));
+
+  try {
+    const { rows, total } = await listCompanyDevices({ page, pageSize });
+    return res.status(200).json({
+      devices: rows.map((row) => mapDeviceRow(row)),
+      total,
+      page,
+      page_size: pageSize,
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  }
+});
+
+app.patch('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) => {
+  const deviceId = Number(req.params.id);
+  if (!Number.isInteger(deviceId)) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
+  }
+
+  const assignedUserCode = normalizeOptionalInteger(req.body.assigned_user_code);
+  const siteCode = normalizeOptionalInteger(req.body.site_code);
+  const gateName = String(req.body.gate_name || '').trim() || null;
+
+  try {
+    if (!(await userExists(assignedUserCode ?? null))) {
+      return res.status(404).json({ error: 'Kullanici ID bulunamadi.' });
+    }
+    if (!(await siteExists(siteCode ?? null))) {
+      return res.status(404).json({ error: 'Site ID bulunamadi.' });
+    }
+
+    const device = await updateDeviceDetails({
+      deviceId,
+      assignedUserCode: assignedUserCode ?? null,
+      siteCode: siteCode ?? null,
+      gateName,
+    });
+    if (!device) {
+      return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+    }
+    return res.status(200).json({ device: mapDeviceRow(device) });
+  } catch (error) {
+    return handleDeviceMutationError(error, res, 'Cihaz guncellenemedi.');
+  }
+});
+
+app.delete('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) => {
+  const deviceId = Number(req.params.id);
+  if (!Number.isInteger(deviceId)) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
+  }
+
+  try {
+    const deleted = await deleteDeviceById(deviceId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+    }
+    return res.status(204).send();
+  } catch (_error) {
+    return res.status(500).json({ error: 'Cihaz silinemedi.' });
   }
 });
 

@@ -13,6 +13,7 @@ class MqttDoorService extends ChangeNotifier {
     required this.password,
     required this.siteId,
     required this.doorId,
+    this.topicPrefix,
   });
 
   final String host;
@@ -21,6 +22,7 @@ class MqttDoorService extends ChangeNotifier {
   final String password;
   final String siteId;
   final String doorId;
+  final String? topicPrefix;
 
   MqttServerClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _messageSub;
@@ -29,6 +31,7 @@ class MqttDoorService extends ChangeNotifier {
   bool _connected = false;
   bool _sending = false;
   bool _isDisposed = false;
+  bool? _deviceOnline;
   bool? _doorLocked;
   String? _lastEvent;
   DateTime? _lastUpdatedAt;
@@ -37,15 +40,18 @@ class MqttDoorService extends ChangeNotifier {
   bool get connecting => _connecting;
   bool get connected => _connected;
   bool get sending => _sending;
-  bool get commandEnabled => _connected && !_sending;
+  bool get commandEnabled => _connected && _deviceOnline == true && !_sending;
+  bool? get deviceOnline => _deviceOnline;
   bool? get doorLocked => _doorLocked;
   String? get lastEvent => _lastEvent;
   DateTime? get lastUpdatedAt => _lastUpdatedAt;
   String? get lastError => _lastError;
 
-  String get cmdTopic => 'site/$siteId/door/$doorId/cmd';
-  String get stateTopic => 'site/$siteId/door/$doorId/state';
-  String get eventTopic => 'site/$siteId/door/$doorId/event';
+  String get _topicPrefix => topicPrefix ?? 'site/$siteId/door/$doorId';
+  String get cmdTopic => '$_topicPrefix/cmd';
+  String get stateTopic => '$_topicPrefix/state';
+  String get eventTopic => '$_topicPrefix/event';
+  String get availabilityTopic => '$_topicPrefix/availability';
 
   Future<void> connect() async {
     if (_isDisposed || _connected || _connecting) {
@@ -98,6 +104,7 @@ class MqttDoorService extends ChangeNotifier {
       _messageSub?.cancel();
       _messageSub = client.updates?.listen(_onMessage);
 
+      client.subscribe(availabilityTopic, MqttQos.atLeastOnce);
       client.subscribe(stateTopic, MqttQos.atLeastOnce);
       client.subscribe(eventTopic, MqttQos.atLeastOnce);
 
@@ -167,6 +174,8 @@ class MqttDoorService extends ChangeNotifier {
         _applyStatePayload(payload);
       } else if (topic == eventTopic) {
         _lastEvent = payload;
+      } else if (topic == availabilityTopic) {
+        _deviceOnline = payload.trim().toLowerCase() == 'online';
       }
     }
 
@@ -196,6 +205,7 @@ class MqttDoorService extends ChangeNotifier {
 
   void _onDisconnected() {
     _connected = false;
+    _deviceOnline = false;
     _notifySafely();
   }
 
@@ -207,6 +217,7 @@ class MqttDoorService extends ChangeNotifier {
   void _onAutoReconnected() {
     _connecting = false;
     _connected = true;
+    _client?.subscribe(availabilityTopic, MqttQos.atLeastOnce);
     _client?.subscribe(stateTopic, MqttQos.atLeastOnce);
     _client?.subscribe(eventTopic, MqttQos.atLeastOnce);
     _notifySafely();

@@ -25,8 +25,14 @@ inline const char* TOPIC_AVAILABILITY = "site/1/door/1/availability";
 inline bool gDoorLocked = true;
 inline unsigned long gLastMqttReconnectAt = 0;
 
+inline String mqttDeviceTopic(const char* suffix) {
+  return "device/" + cihazUniqueId() + "/" + suffix;
+}
+
 inline void mqttPublishAvailability(const char* value) {
   client.publish(TOPIC_AVAILABILITY, value, true);
+  const String deviceAvailabilityTopic = mqttDeviceTopic("availability");
+  client.publish(deviceAvailabilityTopic.c_str(), value, true);
 }
 
 inline void mqttPublishState(bool locked) {
@@ -36,6 +42,8 @@ inline void mqttPublishState(bool locked) {
   String payload;
   serializeJson(doc, payload);
   client.publish(TOPIC_STATE, payload.c_str(), true);
+  const String deviceStateTopic = mqttDeviceTopic("state");
+  client.publish(deviceStateTopic.c_str(), payload.c_str(), true);
 }
 
 inline void mqttPublishEvent(const char* eventName) {
@@ -46,6 +54,8 @@ inline void mqttPublishEvent(const char* eventName) {
   String payload;
   serializeJson(doc, payload);
   client.publish(TOPIC_EVENT, payload.c_str(), false);
+  const String deviceEventTopic = mqttDeviceTopic("event");
+  client.publish(deviceEventTopic.c_str(), payload.c_str(), false);
 }
 
 inline bool shouldTriggerPulse(const String& message) {
@@ -75,7 +85,8 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("MQTT Mesaj: ");
   Serial.println(message);
 
-  if (String(topic) != TOPIC_CMD) {
+  const String deviceCmdTopic = mqttDeviceTopic("cmd");
+  if (String(topic) != TOPIC_CMD && String(topic) != deviceCmdTopic) {
     return;
   }
 
@@ -100,10 +111,13 @@ inline bool mqttReconnect() {
 
   const String clientId = "AHBU-" + cihazUniqueId();
   Serial.print("MQTT baglaniyor...");
+  const String deviceAvailabilityTopic = mqttDeviceTopic("availability");
 
-  if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, TOPIC_AVAILABILITY, 1, true, "offline")) {
+  if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, deviceAvailabilityTopic.c_str(), 1, true, "offline")) {
     Serial.println("baglandi");
     client.subscribe(TOPIC_CMD, 1);
+    const String deviceCmdTopic = mqttDeviceTopic("cmd");
+    client.subscribe(deviceCmdTopic.c_str(), 1);
     mqttPublishAvailability("online");
     mqttPublishState(gDoorLocked);
     mqttPublishEvent("device_connected");

@@ -212,7 +212,7 @@ class BleWifiProvisionService {
         .listen(
           (DiscoveredDevice device) {
             final String name = device.name.trim();
-            if (!name.toUpperCase().startsWith('AHBU-')) {
+            if (!name.toUpperCase().startsWith('AHBU')) {
               return;
             }
             devices[device.id] = BleProvisionDevice(

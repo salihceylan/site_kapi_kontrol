@@ -25,10 +25,24 @@ void seriDurumYazdir() {
   Serial.println(wifiHazirMi() ? "evet" : "hayir");
   Serial.print("WiFi IP: ");
   Serial.println(wifiIpAdresi().isEmpty() ? "-" : wifiIpAdresi());
+  Serial.print("WiFi gucu: ");
+  if (wifiHazirMi()) {
+    Serial.print("%");
+    Serial.print(wifiSinyalYuzde());
+    Serial.print(" (");
+    Serial.print(wifiSinyalDbm());
+    Serial.println(" dBm)");
+  } else {
+    Serial.println("-");
+  }
   Serial.print("Bluetooth provisioning: ");
   Serial.println(wifiProvisioningAktifMi() ? "acik" : "kapali");
   Serial.print("Bluetooth adi: ");
   Serial.println(wifiProvisioningAktifMi() ? wifiBleDeviceName() : "-");
+  Serial.print("WiFi LED GPIO: ");
+  Serial.println(WIFI_STATUS_LED_PIN);
+  Serial.print("Bluetooth LED GPIO: ");
+  Serial.println(BLE_STATUS_LED_PIN);
   Serial.print("MQTT: ");
   Serial.println(client.connected() ? "bagli" : "bagli degil");
   Serial.print("MQTT sunucu: ");

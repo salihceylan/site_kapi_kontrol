@@ -52,8 +52,15 @@ inline BLECharacteristic* gBleResultCharacteristic = nullptr;
 inline bool gBleStarted = false;
 
 inline void wifiSetStatusLed(bool on) {
+  pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
   const uint8_t level = WIFI_STATUS_LED_ACTIVE_HIGH ? (on ? HIGH : LOW) : (on ? LOW : HIGH);
   digitalWrite(WIFI_STATUS_LED_PIN, level);
+}
+
+inline void wifiSetBleStatusLed(bool on) {
+  pinMode(BLE_STATUS_LED_PIN, OUTPUT);
+  const uint8_t level = BLE_STATUS_LED_ACTIVE_HIGH ? (on ? HIGH : LOW) : (on ? LOW : HIGH);
+  digitalWrite(BLE_STATUS_LED_PIN, level);
 }
 
 inline bool wifiResetButtonPressed() {
@@ -104,7 +111,6 @@ inline void wifiNotifyBleState() {
 
   const String payload = wifiBuildStatePayload();
   gBleStateCharacteristic->setValue(payload.c_str());
-  gBleStateCharacteristic->notify();
 }
 
 inline void wifiNotifyBleResult(const String& status, const String& message = "") {
@@ -118,10 +124,11 @@ inline void wifiNotifyBleResult(const String& status, const String& message = ""
   }
 
   gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
-  gBleResultCharacteristic->notify();
 }
 
 inline void wifiUpdateLed() {
+  wifiSetBleStatusLed(gProvisioningMode);
+
   if (gWifiConnected) {
     wifiSetStatusLed(true);
     return;
@@ -139,9 +146,10 @@ inline void wifiUpdateLed() {
 inline bool wifiTryConnect(const String& ssid, const String& password, unsigned long timeoutMs = 15000) {
   Serial.printf("WiFi baglantisi deneniyor: %s\n", ssid.c_str());
   gLastWifiAttemptAt = millis();
-  WiFi.disconnect(true, true);
-  delay(150);
   WiFi.mode(WIFI_STA);
+  delay(150);
+  WiFi.disconnect(false, false);
+  delay(150);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   const unsigned long startedAt = millis();
@@ -221,13 +229,12 @@ inline void wifiPerformScan() {
   serializeJson(doc, gBleNetworksPayload);
   if (gBleNetworksCharacteristic != nullptr) {
     gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
-    gBleNetworksCharacteristic->notify();
   }
   wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
 }
 
 inline String wifiBleDeviceName() {
-  return "GUDE" + cihazUniqueId();
+  return "AHBU" + cihazUniqueId();
 }
 
 inline void wifiStopProvisioningMode();
@@ -298,6 +305,7 @@ class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
 
 inline void wifiStartProvisioningMode() {
   gProvisioningMode = true;
+  wifiSetBleStatusLed(true);
   if (gBleStarted) {
     wifiNotifyBleState();
     return;
@@ -345,6 +353,7 @@ inline void wifiStartProvisioningMode() {
 inline void wifiStopProvisioningMode() {
   if (!gBleStarted) {
     gProvisioningMode = false;
+    wifiSetBleStatusLed(false);
     return;
   }
 
@@ -360,6 +369,7 @@ inline void wifiStopProvisioningMode() {
   gBleResultCharacteristic = nullptr;
   gBleStarted = false;
   gProvisioningMode = false;
+  wifiSetBleStatusLed(false);
   Serial.println("BLE WiFi provisioning kapatildi.");
 }
 
@@ -390,8 +400,10 @@ inline void wifiHandleResetButton() {
 
 inline void wifiBaglan() {
   pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
+  pinMode(BLE_STATUS_LED_PIN, OUTPUT);
   pinMode(WIFI_RESET_BUTTON_PIN, WIFI_RESET_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT);
   wifiSetStatusLed(false);
+  wifiSetBleStatusLed(false);
 
   gWifiPrefs.begin(WIFI_PREFS_NAMESPACE, false);
   wifiLoadStoredCredentials();
@@ -458,6 +470,25 @@ inline String wifiAktifSsid() {
 
 inline String wifiIpAdresi() {
   return gWifiConnected ? WiFi.localIP().toString() : "";
+}
+
+inline int wifiSinyalDbm() {
+  return gWifiConnected ? WiFi.RSSI() : 0;
+}
+
+inline int wifiSinyalYuzde() {
+  if (!gWifiConnected) {
+    return 0;
+  }
+
+  const int rssi = WiFi.RSSI();
+  if (rssi <= -100) {
+    return 0;
+  }
+  if (rssi >= -50) {
+    return 100;
+  }
+  return 2 * (rssi + 100);
 }
 
 #endif

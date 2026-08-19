@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
@@ -438,6 +439,79 @@ class AuthApi {
       'Cihaz kaydi',
       () => DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>),
     );
+  }
+
+  Future<DevicePage> listCompanyDevices({
+    required String token,
+    required int page,
+    required int pageSize,
+  }) async {
+    final uri = Uri.parse('$baseUrl/admin/devices').replace(
+      queryParameters: {'page': '$page', 'page_size': '$pageSize'},
+    );
+
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    final devices = _parsePayload(
+      'Cihazlar',
+      () => (payload['devices'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => DeviceRecord.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+    return DevicePage(
+      devices: devices,
+      total: payload['total'] as int? ?? 0,
+      page: payload['page'] as int? ?? page,
+      pageSize: payload['page_size'] as int? ?? pageSize,
+    );
+  }
+
+  Future<DeviceRecord> updateDevice({
+    required String token,
+    required int deviceId,
+    int? assignedUserCode,
+    int? siteCode,
+    String? gateName,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/devices/$deviceId',
+      token: token,
+      body: {
+        'assigned_user_code': assignedUserCode,
+        'site_code': siteCode,
+        'gate_name': gateName,
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Cihaz kaydi',
+      () => DeviceRecord.fromJson(payload['device'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> deleteDevice({
+    required String token,
+    required int deviceId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/admin/devices/$deviceId',
+      token: token,
+    );
+
+    _ensureStatus(response, 204, allowEmptyBody: true);
   }
 
   Future<SubscriptionRequestPage> listSubscriptionRequests({

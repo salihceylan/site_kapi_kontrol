@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -437,6 +438,72 @@ class AuthService extends ChangeNotifier {
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DevicePage?, String?)> listCompanyDevices({
+    required int page,
+    required int pageSize,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final devices = await api.listCompanyDevices(
+        token: active.token,
+        page: page,
+        pageSize: pageSize,
+      );
+      return (devices, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DeviceRecord?, String?)> updateDevice({
+    required int deviceId,
+    int? assignedUserCode,
+    int? siteCode,
+    String? gateName,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final device = await api.updateDevice(
+        token: active.token,
+        deviceId: deviceId,
+        assignedUserCode: assignedUserCode,
+        siteCode: siteCode,
+        gateName: gateName,
+      );
+      return (device, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<String?> deleteDevice({required int deviceId}) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.deleteDevice(token: active.token, deviceId: deviceId);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
     }
   }
 

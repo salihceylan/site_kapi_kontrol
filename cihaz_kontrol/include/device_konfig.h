@@ -3,13 +3,10 @@
 
 #include <Arduino.h>
 
-#ifdef LED_BUILTIN
-constexpr uint8_t WIFI_STATUS_LED_PIN = LED_BUILTIN;
-#else
-constexpr uint8_t WIFI_STATUS_LED_PIN = 2;
-#endif
-
+constexpr uint8_t WIFI_STATUS_LED_PIN = 1;
 constexpr bool WIFI_STATUS_LED_ACTIVE_HIGH = true;
+constexpr uint8_t BLE_STATUS_LED_PIN = 2;
+constexpr bool BLE_STATUS_LED_ACTIVE_HIGH = true;
 constexpr uint8_t WIFI_RESET_BUTTON_PIN = 0;
 constexpr bool WIFI_RESET_BUTTON_ACTIVE_LOW = true;
 constexpr unsigned long WIFI_RESET_HOLD_MS = 3000;
