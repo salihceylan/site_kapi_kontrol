@@ -77,6 +77,13 @@ def sanitize_filename(text: str) -> str:
     return value[:80] or "device"
 
 
+def mac_to_firmware_uid(mac: str) -> str:
+    parts = [part.strip().upper() for part in mac.split(":")]
+    if len(parts) != 6 or any(not re.fullmatch(r"[0-9A-F]{2}", part) for part in parts):
+        return mac.strip().upper()
+    return "".join(reversed(parts))
+
+
 def trim_image(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
     bbox = rgba.getbbox()
@@ -148,7 +155,7 @@ def read_mac(port: str) -> tuple[str, str]:
     cm = CHIP_RE.search(text)
     if mm:
         chip = cm.group(1).strip() if cm else "ESP32"
-        return chip, mm.group(1).upper()
+        return chip, mac_to_firmware_uid(mm.group(1))
     lines = [x.strip() for x in text.splitlines() if x.strip()]
     raise RuntimeError(lines[-1] if lines else "Cihaz kimligi okunamadi.")
 

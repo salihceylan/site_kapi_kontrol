@@ -40,6 +40,15 @@ String _blockLabelFromIndex(int index) {
   return '$label Blok';
 }
 
+String _mqttDeviceUidFromStoredUid(String uid) {
+  final text = uid.trim().toUpperCase();
+  final macPattern = RegExp(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$');
+  if (!macPattern.hasMatch(text)) {
+    return text;
+  }
+  return text.split(':').reversed.join();
+}
+
 List<int> _distributeApartmentCounts({
   required int blockCount,
   required int apartmentCount,
@@ -703,6 +712,9 @@ class _HomePageState extends State<HomePage> {
       _disposeDoorControlService();
       if (selectedDoor.assignedDeviceUid != null &&
           selectedDoor.assignedDeviceUid!.trim().isNotEmpty) {
+        final deviceTopicUid = _mqttDeviceUidFromStoredUid(
+          selectedDoor.assignedDeviceUid!,
+        );
         final siteId =
             (selectedDoor.mqttSiteId ?? _doorControlSite?.mqttSiteId ?? 0)
                 .toString();
@@ -713,7 +725,7 @@ class _HomePageState extends State<HomePage> {
           password: mqttAppPassword,
           siteId: siteId,
           doorId: selectedDoor.doorIndex.toString(),
-          topicPrefix: 'device/${selectedDoor.assignedDeviceUid}',
+          topicPrefix: 'device/$deviceTopicUid',
         );
         _doorService!.connect();
       }

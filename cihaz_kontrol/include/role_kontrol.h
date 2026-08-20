@@ -10,23 +10,50 @@ constexpr bool ROLE_ACTIVE_LOW = true;
 inline unsigned long roleBaslangic = 0;
 inline bool roleAktif = false;
 
+inline void rolePinDurumuYazdir(const char* baslik) {
+  Serial.print(baslik);
+  Serial.print(" GPIO ");
+  Serial.print(ROLE_PIN);
+  Serial.print(" = ");
+  Serial.println(digitalRead(ROLE_PIN) == HIGH ? "HIGH" : "LOW");
+}
+
 inline void roleSetup() {
   digitalWrite(ROLE_PIN, ROLE_ACTIVE_LOW ? HIGH : LOW);
   pinMode(ROLE_PIN, OUTPUT);
+  Serial.print("Role bos durum GPIO ");
+  Serial.print(ROLE_PIN);
+  Serial.print(" -> ");
+  Serial.println(ROLE_ACTIVE_LOW ? "HIGH" : "LOW");
+  rolePinDurumuYazdir("Role setup okuma");
+}
+
+inline void roleManuelSeviye(uint8_t level) {
+  roleAktif = false;
+  digitalWrite(ROLE_PIN, level);
+  rolePinDurumuYazdir("Role manuel");
 }
 
 inline void roleTetikle() {
   digitalWrite(ROLE_PIN, ROLE_ACTIVE_LOW ? LOW : HIGH);
   roleBaslangic = millis();
   roleAktif = true;
-  Serial.println("Role tetiklendi");
+  Serial.print("Role tetiklendi GPIO ");
+  Serial.print(ROLE_PIN);
+  Serial.print(" -> ");
+  Serial.println(ROLE_ACTIVE_LOW ? "LOW" : "HIGH");
+  rolePinDurumuYazdir("Role tetik okuma");
 }
 
 inline bool roleLoop() {
   if (roleAktif && millis() - roleBaslangic >= ROLE_SURE_MS) {
     digitalWrite(ROLE_PIN, ROLE_ACTIVE_LOW ? HIGH : LOW);
     roleAktif = false;
-    Serial.println("Role birakildi");
+    Serial.print("Role birakildi GPIO ");
+    Serial.print(ROLE_PIN);
+    Serial.print(" -> ");
+    Serial.println(ROLE_ACTIVE_LOW ? "HIGH" : "LOW");
+    rolePinDurumuYazdir("Role birak okuma");
     return true;
   }
 

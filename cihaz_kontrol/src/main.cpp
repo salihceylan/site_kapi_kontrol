@@ -13,6 +13,47 @@ PubSubClient client(espClientSecure);
 constexpr unsigned long STATUS_PRINT_INTERVAL_MS = 5000;
 unsigned long sonDurumYazdirmaMs = 0;
 
+void pinBulmaTesti() {
+  const uint8_t testPins[] = {3, 4, 5, 6, 7, 8, 9, 10, 20, 21};
+  Serial.println("Pin bulma testi basladi. LED + ucunu yazilan GPIO pinine, - ucunu GND'ye baglayin.");
+  for (uint8_t i = 0; i < sizeof(testPins); i++) {
+    const uint8_t pin = testPins[i];
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
+    Serial.print("TEST GPIO ");
+    Serial.print(pin);
+    Serial.println(" -> HIGH");
+    delay(1200);
+    digitalWrite(pin, LOW);
+    Serial.print("TEST GPIO ");
+    Serial.print(pin);
+    Serial.println(" -> LOW");
+    delay(300);
+  }
+  pinMode(ROLE_PIN, OUTPUT);
+  digitalWrite(ROLE_PIN, ROLE_ACTIVE_LOW ? HIGH : LOW);
+  Serial.println("Pin bulma testi bitti.");
+}
+
+void seriKomutKontrol() {
+  while (Serial.available() > 0) {
+    const char komut = static_cast<char>(Serial.read());
+    if (komut == 'r' || komut == 'R') {
+      Serial.println("Seri komut: role pulse");
+      roleTetikle();
+    } else if (komut == 'h' || komut == 'H') {
+      Serial.println("Seri komut: role pini HIGH");
+      roleManuelSeviye(HIGH);
+    } else if (komut == 'l' || komut == 'L') {
+      Serial.println("Seri komut: role pini LOW");
+      roleManuelSeviye(LOW);
+    } else if (komut == 'p' || komut == 'P') {
+      Serial.println("Seri komut: pin bulma testi");
+      pinBulmaTesti();
+    }
+  }
+}
+
 void seriDurumYazdir() {
   Serial.println("----- CIHAZ DURUMU -----");
   Serial.print("Cihaz UID: ");
@@ -51,6 +92,8 @@ void seriDurumYazdir() {
   Serial.println(MQTT_PORT);
   Serial.print("Role GPIO: ");
   Serial.println(ROLE_PIN);
+  rolePinDurumuYazdir("Role pin okuma");
+  Serial.println("Seri role test: h=HIGH, l=LOW, r=pulse, p=pin bulma");
   Serial.println("------------------------");
 }
 
@@ -64,6 +107,7 @@ void setup() {
 }
 
 void loop() {
+  seriKomutKontrol();
   wifiLoop();
   mqttLoopHandler();
   if (roleLoop()) {
