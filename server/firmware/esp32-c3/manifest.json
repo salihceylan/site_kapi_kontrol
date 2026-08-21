@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "version": "1.1.0",
+  "filename": "firmware.bin",
+  "force": false,
+  "interval_hours": 24,
+  "allowed_uids": [],
+  "notes": "OTA yayini kapali. firmware.bin hazir oldugunda enabled true yapilir."
+}

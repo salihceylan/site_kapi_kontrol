@@ -195,3 +195,52 @@ export async function publishDoorPulse({
     });
   });
 }
+
+export async function publishOtaCheckToDevices({
+  deviceUids,
+  requestedBy,
+}) {
+  if (!client || !client.connected) {
+    const error = new Error(lastBridgeError || 'MQTT_BRIDGE_NOT_CONNECTED');
+    error.code = 'MQTT_BRIDGE_NOT_CONNECTED';
+    throw error;
+  }
+
+  const uniqueUids = [
+    ...new Set(
+      deviceUids
+        .map((uid) => normalizeDeviceTopicUid(uid))
+        .filter(Boolean),
+    ),
+  ];
+  const payload = JSON.stringify({
+    action: 'ota_check',
+    requested_by: requestedBy,
+    requested_at: new Date().toISOString(),
+  });
+  let sent = 0;
+  const failed = [];
+
+  for (const uid of uniqueUids) {
+    try {
+      await new Promise((resolve, reject) => {
+        client.publish(`device/${uid}/cmd`, payload, { qos: 1, retain: false }, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+      sent += 1;
+    } catch (error) {
+      failed.push({ device_uid: uid, error: error.message });
+    }
+  }
+
+  return {
+    requested: uniqueUids.length,
+    sent,
+    failed,
+  };
+}

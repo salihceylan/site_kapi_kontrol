@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 import { pool, checkDbConnection, ensureDbSchema } from './db.js';
 import { signAccessToken, verifyAccessToken } from './jwt.js';
@@ -12,6 +14,7 @@ import {
 import {
   getDeviceRuntimeStatus,
   mqttBridgeHealth,
+  publishOtaCheckToDevices,
   publishDoorPulse,
   startMqttBridge,
 } from './mqtt_bridge.js';
@@ -19,6 +22,7 @@ import {
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 const port = Number(process.env.PORT || 8080);
 const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner']);
 const validApprovalStatuses = new Set(['pending', 'approved', 'rejected']);
@@ -37,6 +41,7 @@ const allowedCorsOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const firmwareRoot = path.resolve(process.env.FIRMWARE_DIR || path.join(process.cwd(), 'firmware'));
 
 app.disable('x-powered-by');
 app.use((_req, res, next) => {
@@ -89,6 +94,45 @@ function auditLog(eventName, details) {
     event: eventName,
     ...details,
   }));
+}
+
+function publicBaseUrl(req) {
+  const configured = String(process.env.PUBLIC_BASE_URL || '').trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function safeFirmwareTarget(value) {
+  const target = String(value || '').trim().toLowerCase();
+  return /^[a-z0-9_-]{2,64}$/.test(target) ? target : null;
+}
+
+function safeFirmwareFile(value) {
+  const fileName = String(value || '').trim();
+  return /^[a-zA-Z0-9_.-]+\.bin$/.test(fileName) ? fileName : null;
+}
+
+function compareVersionParts(left, right) {
+  const leftParts = String(left || '')
+    .split(/[.-]/)
+    .map((item) => Number.parseInt(item, 10));
+  const rightParts = String(right || '')
+    .split(/[.-]/)
+    .map((item) => Number.parseInt(item, 10));
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftValue = Number.isFinite(leftParts[index]) ? leftParts[index] : 0;
+    const rightValue = Number.isFinite(rightParts[index]) ? rightParts[index] : 0;
+    if (leftValue > rightValue) {
+      return 1;
+    }
+    if (leftValue < rightValue) {
+      return -1;
+    }
+  }
+  return 0;
 }
 
 function normalizePhone(raw) {
@@ -901,6 +945,17 @@ async function listCompanyDevices({ page, pageSize }) {
   );
   const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
   return { rows: result.rows, total };
+}
+
+async function listAllDeviceUids() {
+  const result = await pool.query(
+    `
+      SELECT device_uid
+      FROM devices
+      ORDER BY device_uid ASC
+    `,
+  );
+  return result.rows.map((row) => row.device_uid);
 }
 
 async function listManagedDevicesForUser(authUser) {
@@ -2480,6 +2535,82 @@ app.get('/health', async (_req, res) => {
   }
 });
 
+app.get('/firmware/:target/manifest.json', (req, res) => {
+  const target = safeFirmwareTarget(req.params.target);
+  if (!target) {
+    return res.status(400).json({ error: 'Gecersiz firmware hedefi.' });
+  }
+
+  const currentVersion = String(req.query.current_version || '').trim();
+  const uid = String(req.query.uid || '').trim().toUpperCase();
+  const manifestPath = path.join(firmwareRoot, target, 'manifest.json');
+
+  try {
+    if (!fs.existsSync(manifestPath)) {
+      return res.status(200).json({
+        enabled: false,
+        update_available: false,
+        message: 'Bu hedef icin OTA yayini yok.',
+      });
+    }
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const enabled = manifest.enabled === true;
+    const version = String(manifest.version || '').trim();
+    const fileName = safeFirmwareFile(manifest.filename || 'firmware.bin');
+    const allowedUids = Array.isArray(manifest.allowed_uids)
+      ? manifest.allowed_uids.map((item) => String(item).trim().toUpperCase()).filter(Boolean)
+      : [];
+    const blockedByUid = allowedUids.length > 0 && !allowedUids.includes(uid);
+    const updateAvailable =
+      enabled &&
+      !blockedByUid &&
+      version &&
+      fileName &&
+      (!currentVersion || compareVersionParts(version, currentVersion) > 0);
+
+    return res.status(200).json({
+      enabled,
+      update_available: Boolean(updateAvailable),
+      version,
+      force: manifest.force === true,
+      url: updateAvailable
+        ? `${publicBaseUrl(req)}/firmware/${target}/${fileName}`
+        : null,
+      notes: String(manifest.notes || ''),
+      interval_hours: Number(manifest.interval_hours || 24),
+      message: blockedByUid ? 'Cihaz bu yayin grubunda degil.' : '',
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Firmware manifest okunamadi.' });
+  }
+});
+
+app.get('/firmware/:target/:file', (req, res) => {
+  const target = safeFirmwareTarget(req.params.target);
+  const fileName = safeFirmwareFile(req.params.file);
+  if (!target || !fileName) {
+    return res.status(400).json({ error: 'Gecersiz firmware dosyasi.' });
+  }
+
+  const filePath = path.join(firmwareRoot, target, fileName);
+  const resolved = path.resolve(filePath);
+  const targetRoot = path.resolve(firmwareRoot, target);
+  if (!resolved.startsWith(targetRoot + path.sep)) {
+    return res.status(400).json({ error: 'Gecersiz firmware yolu.' });
+  }
+  if (!fs.existsSync(resolved)) {
+    return res.status(404).json({ error: 'Firmware dosyasi bulunamadi.' });
+  }
+
+  return res.sendFile(resolved, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
 app.post('/auth/register', async (req, res) => {
   const fullName = String(req.body.full_name || '').trim();
   const email = normalizeEmail(req.body.email);
@@ -3596,6 +3727,39 @@ app.get('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  }
+});
+
+app.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, res) => {
+  try {
+    const deviceUids = await listAllDeviceUids();
+    if (deviceUids.length === 0) {
+      return res.status(202).json({
+        requested: 0,
+        sent: 0,
+        failed: [],
+      });
+    }
+
+    const result = await publishOtaCheckToDevices({
+      deviceUids,
+      requestedBy: req.authUser.email,
+    });
+
+    auditLog('ota_check_broadcast', {
+      user_code: Number(req.authUser.id),
+      role: req.authUser.role,
+      requested: result.requested,
+      sent: result.sent,
+      failed_count: result.failed.length,
+    });
+
+    return res.status(202).json(result);
+  } catch (error) {
+    if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {
+      return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });
+    }
+    return res.status(500).json({ error: 'OTA komutu gonderilemedi.' });
   }
 });
 
