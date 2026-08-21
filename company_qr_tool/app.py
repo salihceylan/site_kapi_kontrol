@@ -2,19 +2,23 @@
 
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
 import threading
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 import qrcode
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
+import serial
 from serial.tools import list_ports
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -60,6 +64,78 @@ class EspDevice:
     description: str
     chip: str
     unique_id: str = ""
+
+
+@dataclass
+class DeviceStatus:
+    values: dict[str, str] = field(default_factory=dict)
+
+    def get(self, key: str) -> str:
+        value = self.values.get(key, "-").strip()
+        return value if value else "-"
+
+
+class SerialWorker:
+    def __init__(
+        self,
+        port: str,
+        on_line: Callable[[str], None],
+        on_error: Callable[[str], None],
+        baud_rate: int = 115200,
+    ) -> None:
+        self.port = port
+        self.baud_rate = baud_rate
+        self.on_line = on_line
+        self.on_error = on_error
+        self._serial: serial.Serial | None = None
+        self._stop = threading.Event()
+        self._write_queue: queue.Queue[str] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self.write("\n")
+        try:
+            if self._serial is not None:
+                self._serial.close()
+        except Exception:
+            pass
+
+    def write(self, text: str) -> None:
+        self._write_queue.put(text)
+
+    def _run(self) -> None:
+        try:
+            self._serial = serial.Serial(self.port, self.baud_rate, timeout=0.2)
+            time.sleep(0.2)
+            self.on_line(f"[baglandi] {self.port} @ {self.baud_rate}")
+            while not self._stop.is_set():
+                self._flush_writes()
+                raw = self._serial.readline()
+                if not raw:
+                    continue
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                if line:
+                    self.on_line(line)
+        except Exception as exc:
+            self.on_error(str(exc))
+        finally:
+            try:
+                if self._serial is not None:
+                    self._serial.close()
+            except Exception:
+                pass
+
+    def _flush_writes(self) -> None:
+        if self._serial is None:
+            return
+        while not self._write_queue.empty():
+            text = self._write_queue.get_nowait()
+            self._serial.write(text.encode("utf-8"))
+            self._serial.flush()
 
 
 def ensure_logo() -> Path:
@@ -292,6 +368,7 @@ class App:
         s.configure("Sub.TLabel", background=CLR_HEADER_BG, foreground="#D2EDE0", font=("Segoe UI", 10))
         s.configure("Head.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 11, "bold"))
         s.configure("Text.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
+        s.configure("Value.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 10, "bold"))
         s.configure("Status.TLabel", background=CLR_CARD_BG, foreground=CLR_STATUS, font=("Segoe UI", 10, "bold"))
 
         s.configure(
@@ -426,6 +503,8 @@ class App:
         self.save_btn.pack(side=tk.LEFT)
         self.print_btn = ttk.Button(row, text="QR yazdir", command=self.print_qr, style="Soft.TButton")
         self.print_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.test_btn = ttk.Button(row, text="Cihaz dene", command=self.open_device_tester, style="Soft.TButton")
+        self.test_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 6))
         cols = ("port", "chip", "unique_id", "description")
@@ -493,6 +572,9 @@ class App:
 
     def run(self) -> None:
         self.root.mainloop()
+
+    def open_device_tester(self) -> None:
+        DeviceTesterWindow(self.root)
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
@@ -865,6 +947,218 @@ class App:
         finally:
             self.fw_busy = False
             self.root.after(0, lambda: self._set_fw_state(True))
+
+
+class DeviceTesterWindow:
+    STATUS_START = "----- CIHAZ DURUMU -----"
+    STATUS_END = "------------------------"
+
+    def __init__(self, parent: tk.Tk) -> None:
+        self.window = tk.Toplevel(parent)
+        self.window.title("AHBU Cihaz Deneme")
+        self.window.configure(bg=CLR_APP_BG)
+        self.window.minsize(1040, 700)
+
+        self.worker: SerialWorker | None = None
+        self.line_queue: queue.Queue[str] = queue.Queue()
+        self.status = DeviceStatus()
+        self._collecting_status = False
+        self._status_lines: list[str] = []
+
+        self.port_var = tk.StringVar()
+        self.connection_var = tk.StringVar(value="Bagli degil")
+        self.last_command_var = tk.StringVar(value="-")
+        self.status_vars: dict[str, tk.StringVar] = {}
+
+        self._ui()
+        self.refresh_ports()
+        self.window.after(100, self._drain_lines)
+        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _ui(self) -> None:
+        main = ttk.Frame(self.window, style="App.TFrame", padding=16)
+        main.pack(fill=tk.BOTH, expand=True)
+        main.columnconfigure(0, weight=3)
+        main.columnconfigure(1, weight=2)
+        main.rowconfigure(2, weight=1)
+
+        ttk.Label(main, text="AHBU Cihaz Deneme", style="Head.TLabel").grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+        )
+
+        conn = ttk.Frame(main, style="Card.TFrame", padding=14)
+        conn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 12))
+        conn.columnconfigure(1, weight=1)
+        ttk.Label(conn, text="Seri Port", style="Head.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.port_combo = ttk.Combobox(conn, textvariable=self.port_var, state="readonly", width=42)
+        self.port_combo.grid(row=0, column=1, sticky="ew")
+        ttk.Button(conn, text="Yenile", command=self.refresh_ports, style="Soft.TButton").grid(row=0, column=2, padx=(8, 0))
+        self.connect_btn = ttk.Button(conn, text="Baglan", command=self.toggle_connection, style="Accent.TButton")
+        self.connect_btn.grid(row=0, column=3, padx=(8, 0))
+        ttk.Label(conn, textvariable=self.connection_var, style="Text.TLabel").grid(row=1, column=1, sticky="w", pady=(8, 0))
+
+        status_card = ttk.Frame(main, style="Card.TFrame", padding=14)
+        status_card.grid(row=2, column=0, sticky="nsew", padx=(0, 10))
+        status_card.columnconfigure(1, weight=1)
+        ttk.Label(status_card, text="Cihaz Bilgileri", style="Head.TLabel").grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(0, 10),
+        )
+
+        fields = [
+            "Cihaz UID",
+            "Firmware surumu",
+            "OTA durum",
+            "WiFi kayitli",
+            "WiFi SSID",
+            "WiFi bagli",
+            "WiFi IP",
+            "WiFi gucu",
+            "Bluetooth provisioning",
+            "Bluetooth adi",
+            "WiFi LED GPIO",
+            "Bluetooth LED GPIO",
+            "MQTT",
+            "MQTT kimligi",
+            "MQTT sunucu",
+            "Role GPIO",
+            "Role pin okuma",
+        ]
+        for row, field_name in enumerate(fields, start=1):
+            ttk.Label(status_card, text=f"{field_name}:", style="Text.TLabel").grid(row=row, column=0, sticky="w", pady=3)
+            var = tk.StringVar(value="-")
+            self.status_vars[field_name] = var
+            ttk.Label(status_card, textvariable=var, style="Value.TLabel").grid(row=row, column=1, sticky="w", pady=3)
+
+        tools = ttk.Frame(main, style="Card.TFrame", padding=14)
+        tools.grid(row=2, column=1, sticky="nsew")
+        tools.columnconfigure(0, weight=1)
+        ttk.Label(tools, text="Temel Testler", style="Head.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ttk.Button(tools, text="Role Pin HIGH", command=lambda: self.send_command("h"), style="Accent.TButton").grid(row=1, column=0, sticky="ew", pady=4)
+        ttk.Button(tools, text="Role Pin LOW", command=lambda: self.send_command("l"), style="Accent.TButton").grid(row=2, column=0, sticky="ew", pady=4)
+        ttk.Button(tools, text="Role Pulse", command=lambda: self.send_command("r"), style="Accent.TButton").grid(row=3, column=0, sticky="ew", pady=4)
+        ttk.Button(tools, text="Pin Bulma Testi", command=lambda: self.send_command("p"), style="Soft.TButton").grid(row=4, column=0, sticky="ew", pady=4)
+        ttk.Separator(tools).grid(row=5, column=0, sticky="ew", pady=12)
+        ttk.Label(tools, text="Son Komut", style="Head.TLabel").grid(row=6, column=0, sticky="w")
+        ttk.Label(tools, textvariable=self.last_command_var, style="Value.TLabel").grid(row=7, column=0, sticky="w", pady=(4, 12))
+        ttk.Label(
+            tools,
+            text="Cihaz seri porttan durum bloğu yazdığında bilgiler otomatik güncellenir. Role test komutlari: h=HIGH, l=LOW, r=pulse, p=pin bulma.",
+            style="Text.TLabel",
+            wraplength=330,
+        ).grid(row=8, column=0, sticky="ew")
+
+        log_card = ttk.Frame(main, style="Card.TFrame", padding=14)
+        log_card.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
+        log_card.columnconfigure(0, weight=1)
+        log_card.rowconfigure(1, weight=1)
+        ttk.Label(log_card, text="Seri Log", style="Head.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        self.log_text = tk.Text(log_card, height=12, bg="#07111F", fg="#D6E8FF", insertbackground="#D6E8FF", relief=tk.FLAT)
+        self.log_text.grid(row=1, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(log_card, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.grid(row=1, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=scrollbar.set)
+
+    def refresh_ports(self) -> None:
+        ports = list(list_ports.comports())
+        values = [f"{p.device} - {p.description}" for p in ports]
+        self.port_combo.configure(values=values)
+        if values and not self.port_var.get():
+            self.port_var.set(values[0])
+
+    def toggle_connection(self) -> None:
+        if self.worker is not None:
+            self.worker.stop()
+            self.worker = None
+            self.connect_btn.configure(text="Baglan")
+            self.connection_var.set("Bagli degil")
+            return
+
+        port_text = self.port_var.get().strip()
+        if not port_text:
+            messagebox.showinfo("Port gerekli", "Lutfen bir seri port secin.")
+            return
+        port = port_text.split(" - ", 1)[0].strip()
+        self.worker = SerialWorker(
+            port=port,
+            on_line=self.line_queue.put,
+            on_error=lambda text: self.line_queue.put(f"[hata] {text}"),
+        )
+        self.worker.start()
+        self.connect_btn.configure(text="Kes")
+        self.connection_var.set(f"Baglaniyor: {port}")
+
+    def send_command(self, command: str) -> None:
+        if self.worker is None:
+            messagebox.showinfo("Baglanti yok", "Once cihaza seri porttan baglanin.")
+            return
+        self.worker.write(command)
+        self.last_command_var.set(command)
+        self._append_log(f">>> {command}")
+
+    def _drain_lines(self) -> None:
+        while not self.line_queue.empty():
+            line = self.line_queue.get_nowait()
+            self._handle_line(line)
+        self.window.after(100, self._drain_lines)
+
+    def _handle_line(self, line: str) -> None:
+        self._append_log(line)
+        if line.startswith("[baglandi]"):
+            self.connection_var.set(line.replace("[baglandi] ", "Bagli: "))
+        if line.startswith("[hata]"):
+            self.connection_var.set("Hata")
+
+        if line == self.STATUS_START:
+            self._collecting_status = True
+            self._status_lines = []
+            return
+        if line == self.STATUS_END and self._collecting_status:
+            self._collecting_status = False
+            self._apply_status_block(self._status_lines)
+            return
+        if self._collecting_status:
+            self._status_lines.append(line)
+            return
+
+        if line.startswith("Role pin okuma GPIO"):
+            self.status_vars["Role pin okuma"].set(line.replace("Role pin okuma ", ""))
+        elif line.startswith("Role manuel GPIO"):
+            self.status_vars["Role pin okuma"].set(line.replace("Role manuel ", ""))
+        elif line.startswith("Role tetik okuma GPIO"):
+            self.status_vars["Role pin okuma"].set(line.replace("Role tetik okuma ", ""))
+        elif line.startswith("Role birak okuma GPIO"):
+            self.status_vars["Role pin okuma"].set(line.replace("Role birak okuma ", ""))
+
+    def _apply_status_block(self, lines: list[str]) -> None:
+        values: dict[str, str] = {}
+        for line in lines:
+            if ": " not in line:
+                continue
+            key, value = line.split(": ", 1)
+            values[key.strip()] = value.strip()
+        self.status.values = values
+        for key, var in self.status_vars.items():
+            if key in values:
+                var.set(values[key])
+        role_line = next((line for line in lines if line.startswith("Role pin okuma GPIO")), None)
+        if role_line:
+            self.status_vars["Role pin okuma"].set(role_line.replace("Role pin okuma ", ""))
+
+    def _append_log(self, line: str) -> None:
+        self.log_text.insert(tk.END, f"{line}\n")
+        self.log_text.see(tk.END)
+
+    def _on_close(self) -> None:
+        if self.worker is not None:
+            self.worker.stop()
+        self.window.destroy()
 
 
 def main() -> None:

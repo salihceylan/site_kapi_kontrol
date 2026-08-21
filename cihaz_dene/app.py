@@ -160,6 +160,8 @@ class App:
 
         fields = [
             "Cihaz UID",
+            "Firmware surumu",
+            "OTA durum",
             "WiFi kayitli",
             "WiFi SSID",
             "WiFi bagli",
@@ -170,6 +172,7 @@ class App:
             "WiFi LED GPIO",
             "Bluetooth LED GPIO",
             "MQTT",
+            "MQTT kimligi",
             "MQTT sunucu",
             "Role GPIO",
             "Role pin okuma",

@@ -10,6 +10,8 @@ Amac:
 - `cihaz_kontrol` kodundan firmware surumu olusturur.
 - Son surumu secili ESP32 cihaza yukler.
 - Yukleme sirasinda yuzde ilerleme gosterir, bitince `TMM` mesaji verir.
+- `Cihaz dene` penceresiyle seri porttan cihaz durumunu, firmware surumunu,
+  OTA durumunu, MQTT kimligini ve role testlerini ayni uygulamada gosterir.
 
 MQTT gerekmez.
 
@@ -30,8 +32,19 @@ PowerShell `ExecutionPolicy` hatasina takilmaz, cunku `.bat` kullanir.
 2. `launch_company_qr_tool.bat` dosyasina cift tiklayin.
 3. Uygulamada `Bagli cihazlari tara` butonuna basin.
 4. Listeden cihazi secin.
-5. `Secili cihaz icin QR olustur` butonuna basin.
-6. `QR kaydet` ile PNG ciktiyi alin veya `QR yazdir` ile direkt yazdirin.
+5. `Secili cihaz UID oku` butonuna basin.
+6. `Secili cihaz icin QR olustur` butonuna basin.
+7. `QR kaydet` ile PNG ciktiyi alin veya `QR yazdir` ile direkt yazdirin.
+
+## Cihaz Deneme
+
+Ana ekrandaki `Cihaz dene` butonu seri port test penceresini acar.
+
+Bu pencerede:
+- Cihaz UID, firmware surumu, OTA durumu, Wi-Fi, Bluetooth, MQTT ve role bilgileri
+  canli durum bloklarindan okunur.
+- `h`, `l`, `r`, `p` seri komutlari butonlarla gonderilir.
+- Role pininin HIGH/LOW/pulse davranisi seri logdan takip edilir.
 
 ## Firmware Surumleme ve Yukleme
 
