@@ -362,6 +362,10 @@ class App:
         self.scanning = False
         self.uid_reading = False
         self.fw_busy = False
+        self.fw_build_ready = False
+        self.fw_release_ready = False
+        self.fw_build_key: tuple[str, str] | None = None
+        self.fw_release_key: tuple[str, str] | None = None
 
         self._style()
         self.brand_photo = self._load_brand(64)
@@ -370,7 +374,9 @@ class App:
             self.root.iconphoto(True, self.icon_photo)
 
         self._ui()
+        self.version_var.trace_add("write", lambda *_args: self._on_fw_input_changed())
         self.refresh_latest_release()
+        self._apply_fw_button_state()
 
     def _style(self) -> None:
         s = ttk.Style(self.root)
@@ -560,7 +566,7 @@ class App:
         ttk.Label(form, text="Env:", style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
         self.env_combo = ttk.Combobox(form, state="readonly", values=self.envs, textvariable=self.env_var, width=30)
         self.env_combo.grid(row=0, column=1, sticky="ew")
-        self.env_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh_latest_release())
+        self.env_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_env_changed())
         ttk.Label(form, text="Surum:", style="Text.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
         self.version_entry = ttk.Entry(form, textvariable=self.version_var)
         self.version_entry.grid(row=1, column=1, sticky="ew", pady=(8, 0))
@@ -571,7 +577,7 @@ class App:
         self.build_btn.pack(side=tk.LEFT)
         self.release_btn = ttk.Button(fw, text="Surum olustur", command=self.start_release, style="Soft.TButton")
         self.release_btn.pack(side=tk.LEFT, padx=8)
-        self.upload_btn = ttk.Button(fw, text="Surumu Yukle", command=self.start_upload, style="Accent.TButton")
+        self.upload_btn = ttk.Button(fw, text="Surumu USB ile cihaza yukle", command=self.start_upload, style="Accent.TButton")
         self.upload_btn.pack(side=tk.LEFT)
 
         ttk.Label(right, textvariable=self.latest_release_var, style="Text.TLabel").grid(row=7, column=0, sticky="w", pady=(2, 6))
@@ -765,13 +771,41 @@ class App:
         last = items[0]
         self.latest_release_var.set(f"Son surum ({env}): v{last['version']} [{last['created_at']}]")
 
+    def _fw_current_key(self) -> tuple[str, str]:
+        return (self.env_var.get().strip(), self.version_var.get().strip())
+
+    def _on_env_changed(self) -> None:
+        self.refresh_latest_release()
+        self._on_fw_input_changed()
+
+    def _on_fw_input_changed(self) -> None:
+        key = self._fw_current_key()
+        if self.fw_build_key != key:
+            self.fw_build_ready = False
+        if self.fw_release_key != key:
+            self.fw_release_ready = False
+        self._apply_fw_button_state()
+
+    def _apply_fw_button_state(self) -> None:
+        if not hasattr(self, "build_btn"):
+            return
+        if self.fw_busy:
+            self.build_btn.configure(state=tk.DISABLED)
+            self.release_btn.configure(state=tk.DISABLED)
+            self.upload_btn.configure(state=tk.DISABLED)
+            self.env_combo.configure(state="disabled")
+            self.version_entry.configure(state=tk.DISABLED)
+            return
+
+        self.build_btn.configure(state=tk.NORMAL)
+        self.release_btn.configure(state=tk.NORMAL if self.fw_build_ready else tk.DISABLED)
+        self.upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+        self.env_combo.configure(state="readonly")
+        self.version_entry.configure(state=tk.NORMAL)
+
     def _set_fw_state(self, enabled: bool) -> None:
-        state = tk.NORMAL if enabled else tk.DISABLED
-        self.build_btn.configure(state=state)
-        self.release_btn.configure(state=state)
-        self.upload_btn.configure(state=state)
-        self.env_combo.configure(state="readonly" if enabled else "disabled")
-        self.version_entry.configure(state=state)
+        self.fw_busy = not enabled
+        self._apply_fw_button_state()
 
     def _run_stream(self, cmd: list[str], cwd: Path, on_line=None) -> tuple[int, list[str]]:
         p = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -793,13 +827,17 @@ class App:
         if not env:
             messagebox.showerror("Env", "Env secin.")
             return
+        self.fw_build_ready = False
+        self.fw_release_ready = False
+        self.fw_build_key = None
+        self.fw_release_key = None
         self.fw_busy = True
-        self._set_fw_state(False)
+        self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
-        threading.Thread(target=self._build_worker, args=(env,), daemon=True).start()
+        threading.Thread(target=self._build_worker, args=(env, self.version_var.get().strip()), daemon=True).start()
 
-    def _build_worker(self, env: str) -> None:
+    def _build_worker(self, env: str, version: str) -> None:
         try:
             pio = find_platformio()
             self.root.after(0, lambda: self.set_status(f"Derleme basladi: {env}"))
@@ -810,20 +848,31 @@ class App:
             )
             if rc != 0:
                 raise RuntimeError("\n".join(tail[-8:]) if tail else "Derleme hatasi.")
+            self.fw_build_key = (env, version)
+            self.fw_build_ready = True
+            self.fw_release_ready = False
+            self.fw_release_key = None
             self.root.after(0, lambda: self.set_status("Derleme tamamlandi."))
             self.root.after(0, lambda: messagebox.showinfo("Basarili", "Firmware derleme tamamlandi."))
         except Exception as exc:
+            self.fw_build_ready = False
+            self.fw_release_ready = False
+            self.fw_build_key = None
+            self.fw_release_key = None
             self.root.after(0, lambda: messagebox.showerror("Derleme hatasi", str(exc)))
             self.root.after(0, lambda: self.set_status("Derleme basarisiz."))
         finally:
             self.fw_busy = False
-            self.root.after(0, lambda: self._set_fw_state(True))
+            self.root.after(0, self._apply_fw_button_state)
 
     def start_release(self) -> None:
         if self.fw_busy:
             return
         env = self.env_var.get().strip()
         version = self.version_var.get().strip()
+        if not self.fw_build_ready or self.fw_build_key != (env, version):
+            messagebox.showwarning("Derleme gerekli", "Once bu env ve surum icin firmware derleyin.")
+            return
         if not env:
             messagebox.showerror("Env", "Env secin.")
             return
@@ -845,7 +894,9 @@ class App:
             )
             return
         self.fw_busy = True
-        self._set_fw_state(False)
+        self.fw_release_ready = False
+        self.fw_release_key = None
+        self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
         threading.Thread(target=self._release_worker, args=(env, version), daemon=True).start()
@@ -911,20 +962,27 @@ class App:
             }
             self.releases.append(entry)
             save_releases(self.releases)
+            self.fw_release_key = (env, version)
+            self.fw_release_ready = True
 
             self.root.after(0, self.refresh_latest_release)
             self.root.after(0, lambda: self.version_var.set(read_firmware_source_version() or suggest_version(self.releases)))
             self.root.after(0, lambda: self.set_status(f"Surum olusturuldu: v{version}"))
             self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Surum olusturuldu: v{version}\n{folder}"))
         except Exception as exc:
+            self.fw_release_ready = False
+            self.fw_release_key = None
             self.root.after(0, lambda: messagebox.showerror("Surum hatasi", str(exc)))
             self.root.after(0, lambda: self.set_status("Surum olusturma basarisiz."))
         finally:
             self.fw_busy = False
-            self.root.after(0, lambda: self._set_fw_state(True))
+            self.root.after(0, self._apply_fw_button_state)
 
     def start_upload(self) -> None:
         if self.fw_busy:
+            return
+        if not self.fw_release_ready or self.fw_release_key != self._fw_current_key():
+            messagebox.showwarning("Surum gerekli", "Once derleme ve surum olusturma adimlarini basariyla tamamlayin.")
             return
         dev = self.selected_device()
         if dev is None:
@@ -938,7 +996,7 @@ class App:
         items.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
         rel = items[0]
         self.fw_busy = True
-        self._set_fw_state(False)
+        self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
         threading.Thread(target=self._upload_worker, args=(dev, rel), daemon=True).start()
@@ -1001,7 +1059,7 @@ class App:
             self.root.after(0, lambda: self.set_status("Yukleme basarisiz."))
         finally:
             self.fw_busy = False
-            self.root.after(0, lambda: self._set_fw_state(True))
+            self.root.after(0, self._apply_fw_button_state)
 
 
 class DeviceTesterWindow:
