@@ -9,6 +9,12 @@ import {
   sendApartmentCredentialsEmail,
   sendSiteManagerVerificationEmail,
 } from './mailer.js';
+import {
+  getDeviceRuntimeStatus,
+  mqttBridgeHealth,
+  publishDoorPulse,
+  startMqttBridge,
+} from './mqtt_bridge.js';
 
 dotenv.config();
 
@@ -16,12 +22,29 @@ const app = express();
 const port = Number(process.env.PORT || 8080);
 const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner']);
 const validApprovalStatuses = new Set(['pending', 'approved', 'rejected']);
+const loginRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 20,
+  message: 'Cok fazla giris denemesi. Biraz sonra tekrar deneyin.',
+});
+const doorCommandRateLimiter = createRateLimiter({
+  windowMs: 10 * 1000,
+  maxRequests: 4,
+  message: 'Kapi komutu cok sik gonderildi. Biraz sonra tekrar deneyin.',
+});
 
 const allowedCorsOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  next();
+});
 app.use(
   cors({
     origin(origin, callback) {
@@ -35,7 +58,38 @@ app.use(
     },
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: '64kb' }));
+
+function createRateLimiter({ windowMs, maxRequests, message }) {
+  const buckets = new Map();
+
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${req.ip}:${req.path}`;
+    const existing = buckets.get(key);
+    if (!existing || existing.resetAt <= now) {
+      buckets.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    existing.count += 1;
+    if (existing.count > maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({ error: message });
+    }
+    return next();
+  };
+}
+
+function auditLog(eventName, details) {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({
+    at: new Date().toISOString(),
+    event: eventName,
+    ...details,
+  }));
+}
 
 function normalizePhone(raw) {
   const text = String(raw || '').trim();
@@ -2192,6 +2246,11 @@ async function listAccessibleDoorsForUser(authUser) {
   return result.rows;
 }
 
+async function getAccessibleDoorForUser({ authUser, doorId }) {
+  const doors = await listAccessibleDoorsForUser(authUser);
+  return doors.find((door) => Number(door.id) === Number(doorId)) || null;
+}
+
 async function updateDeviceAssignment({
   deviceId,
   siteCode,
@@ -2415,9 +2474,9 @@ function parseRole(value) {
 app.get('/health', async (_req, res) => {
   try {
     await checkDbConnection();
-    res.json({ ok: true, database: 'connected' });
+    res.json({ ok: true, database: 'connected', mqtt: mqttBridgeHealth() });
   } catch (_e) {
-    res.status(500).json({ ok: false, database: 'disconnected' });
+    res.status(500).json({ ok: false, database: 'disconnected', mqtt: mqttBridgeHealth() });
   }
 });
 
@@ -2669,7 +2728,7 @@ app.post('/auth/site-manager/resend-code', async (req, res) => {
   }
 });
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', loginRateLimiter, async (req, res) => {
   const identifier = normalizeEmail(
     req.body.email ?? req.body.login ?? req.body.identifier,
   );
@@ -4091,6 +4150,82 @@ app.get('/app/my-doors', authRequired, async (req, res) => {
   }
 });
 
+app.get('/app/doors/:id/status', authRequired, async (req, res) => {
+  const doorId = Number(req.params.id);
+  if (!Number.isInteger(doorId)) {
+    return res.status(400).json({ error: 'Gecersiz kapi id.' });
+  }
+
+  try {
+    const door = await getAccessibleDoorForUser({
+      authUser: req.authUser,
+      doorId,
+    });
+    if (!door) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!door.assigned_device_uid) {
+      return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });
+    }
+
+    return res.status(200).json({
+      door: mapDoorRow(door),
+      device_status: getDeviceRuntimeStatus(door.assigned_device_uid),
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Kapi durumu alinamadi.' });
+  }
+});
+
+app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req, res) => {
+  const doorId = Number(req.params.id);
+  if (!Number.isInteger(doorId)) {
+    return res.status(400).json({ error: 'Gecersiz kapi id.' });
+  }
+
+  try {
+    const door = await getAccessibleDoorForUser({
+      authUser: req.authUser,
+      doorId,
+    });
+    if (!door) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!door.assigned_device_uid) {
+      return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });
+    }
+
+    await publishDoorPulse({
+      deviceUid: door.assigned_device_uid,
+      requestedBy: req.authUser.email,
+      doorId: Number(door.id),
+      siteCode: Number(door.site_code),
+    });
+
+    auditLog('door_open_command', {
+      user_code: Number(req.authUser.id),
+      role: req.authUser.role,
+      door_id: Number(door.id),
+      site_code: Number(door.site_code),
+      device_uid: door.assigned_device_uid,
+    });
+
+    return res.status(202).json({
+      ok: true,
+      door: mapDoorRow(door),
+      device_status: getDeviceRuntimeStatus(door.assigned_device_uid),
+    });
+  } catch (error) {
+    if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {
+      return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });
+    }
+    if (error?.code === 'DEVICE_OFFLINE') {
+      return res.status(409).json({ error: 'Cihaz online gorunmuyor.' });
+    }
+    return res.status(500).json({ error: 'Kapi acma komutu gonderilemedi.' });
+  }
+});
+
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route bulunamadi.' });
 });
@@ -4098,6 +4233,7 @@ app.use((_req, res) => {
 async function startServer() {
   try {
     await ensureDbSchema();
+    startMqttBridge();
     app.listen(port, () => {
       // eslint-disable-next-line no-console
       console.log(`API started on http://localhost:${port}`);
