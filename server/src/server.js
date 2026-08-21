@@ -17,7 +17,24 @@ const port = Number(process.env.PORT || 8080);
 const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner']);
 const validApprovalStatuses = new Set(['pending', 'approved', 'rejected']);
 
-app.use(cors());
+const allowedCorsOrigins = String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedCorsOrigins.length === 0) {
+        return callback(null, true);
+      }
+      if (allowedCorsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS origin not allowed.'));
+    },
+  }),
+);
 app.use(express.json());
 
 function normalizePhone(raw) {
@@ -763,6 +780,7 @@ async function findDeviceByUid(deviceUid) {
         sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
         devices.created_at
       FROM devices
@@ -788,6 +806,7 @@ async function findDeviceById(deviceId) {
         sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
         devices.created_at
       FROM devices
@@ -814,6 +833,7 @@ async function listCompanyDevices({ page, pageSize }) {
         sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
         devices.created_at,
         COUNT(*) OVER() AS total_count
@@ -846,6 +866,7 @@ async function listManagedDevicesForUser(authUser) {
         sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
         devices.created_at
       FROM devices
@@ -881,6 +902,7 @@ async function findManagedDeviceById({ authUser, deviceId }) {
         sites.approval_status AS site_approval_status,
         devices.gate_name,
         door.id AS assigned_door_id,
+        door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
         devices.created_at
       FROM devices
@@ -1141,6 +1163,76 @@ async function hasSiteManagementAccess(authUser, siteCode) {
     [siteCode, Number(authUser.id)],
   );
   return result.rowCount > 0;
+}
+
+async function getManagedSiteCodes(authUser) {
+  if (authUser?.role === 'super_user') {
+    return null;
+  }
+  if (authUser?.role !== 'site_manager') {
+    return new Set();
+  }
+
+  const result = await pool.query(
+    `
+      SELECT site_code
+      FROM site_manager_sites
+      WHERE manager_user_code = $1
+    `,
+    [Number(authUser.id)],
+  );
+  return new Set(result.rows.map((row) => Number(row.site_code)));
+}
+
+function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode) {
+  if (managedSiteCodes === null) {
+    return true;
+  }
+  if (!managedSiteCodes.has(Number(targetSiteCode))) {
+    return false;
+  }
+
+  const deviceSiteCode =
+    device.site_code === null || device.site_code === undefined
+      ? null
+      : Number(device.site_code);
+  const assignedDoorSiteCode =
+    device.assigned_door_site_code === null ||
+    device.assigned_door_site_code === undefined
+      ? null
+      : Number(device.assigned_door_site_code);
+
+  if (assignedDoorSiteCode !== null) {
+    return managedSiteCodes.has(assignedDoorSiteCode);
+  }
+  if (deviceSiteCode !== null) {
+    return managedSiteCodes.has(deviceSiteCode);
+  }
+  return true;
+}
+
+function isDeviceVisibleToManagedSites(device, managedSiteCodes) {
+  if (managedSiteCodes === null) {
+    return true;
+  }
+
+  const deviceSiteCode =
+    device.site_code === null || device.site_code === undefined
+      ? null
+      : Number(device.site_code);
+  const assignedDoorSiteCode =
+    device.assigned_door_site_code === null ||
+    device.assigned_door_site_code === undefined
+      ? null
+      : Number(device.assigned_door_site_code);
+
+  if (assignedDoorSiteCode !== null) {
+    return managedSiteCodes.has(assignedDoorSiteCode);
+  }
+  if (deviceSiteCode !== null) {
+    return managedSiteCodes.has(deviceSiteCode);
+  }
+  return true;
 }
 
 async function siteHasApprovedStatus(siteCode, db = pool) {
@@ -1907,6 +1999,7 @@ async function sendApartmentCredentials(apartmentId) {
 async function updateDoorDeviceAssignment({
   doorId,
   deviceUid,
+  authUser = null,
 }) {
   const client = await pool.connect();
   try {
@@ -1928,8 +2021,13 @@ async function updateDoorDeviceAssignment({
 
     const deviceResult = await client.query(
       `
-        SELECT id, device_uid
+        SELECT
+          devices.id,
+          devices.device_uid,
+          devices.site_code,
+          door.site_code AS assigned_door_site_code
         FROM devices
+        LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
         WHERE device_uid = $1
         LIMIT 1
       `,
@@ -1939,6 +2037,10 @@ async function updateDoorDeviceAssignment({
       throw new Error('DEVICE_NOT_FOUND');
     }
     const device = deviceResult.rows[0];
+    const managedSiteCodes = await getManagedSiteCodes(authUser);
+    if (!isDeviceAssignableToManagedSite(device, managedSiteCodes, Number(door.site_code))) {
+      throw new Error('DEVICE_NOT_ASSIGNABLE');
+    }
 
     await client.query(
       `
@@ -3401,7 +3503,11 @@ app.patch('/admin/doors/:id/device', authRequired, requireSuperUser, async (req,
   }
 
   try {
-    const door = await updateDoorDeviceAssignment({ doorId, deviceUid });
+    const door = await updateDoorDeviceAssignment({
+      doorId,
+      deviceUid,
+      authUser: req.authUser,
+    });
     return res.status(200).json({ door: mapDoorRow(door) });
   } catch (error) {
     if (error?.message === 'DOOR_NOT_FOUND') {
@@ -3409,6 +3515,9 @@ app.patch('/admin/doors/:id/device', authRequired, requireSuperUser, async (req,
     }
     if (error?.message === 'DEVICE_NOT_FOUND') {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+    if (error?.message === 'DEVICE_NOT_ASSIGNABLE') {
+      return res.status(403).json({ error: 'Bu cihaz yonettiginiz siteye atanamaz.' });
     }
     return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
   }
@@ -3742,6 +3851,10 @@ app.get('/manager/devices/lookup', authRequired, requireSiteManager, async (req,
     if (!device) {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
+    const managedSiteCodes = await getManagedSiteCodes(req.authUser);
+    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes)) {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
     return res.status(200).json({ device: mapDeviceRow(device) });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihaz bilgisi okunamadi.' });
@@ -3878,7 +3991,11 @@ app.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async (
   }
 
   try {
-    const door = await updateDoorDeviceAssignment({ doorId, deviceUid });
+    const door = await updateDoorDeviceAssignment({
+      doorId,
+      deviceUid,
+      authUser: req.authUser,
+    });
     return res.status(200).json({ door: mapDoorRow(door) });
   } catch (error) {
     if (error?.message === 'DOOR_NOT_FOUND') {
@@ -3886,6 +4003,9 @@ app.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async (
     }
     if (error?.message === 'DEVICE_NOT_FOUND') {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+    if (error?.message === 'DEVICE_NOT_ASSIGNABLE') {
+      return res.status(403).json({ error: 'Bu cihaz yonettiginiz siteye atanamaz.' });
     }
     return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
   }

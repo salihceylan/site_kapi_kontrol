@@ -16,6 +16,7 @@ inline const char* MQTT_SERVER = "mqtt.gudeteknoloji.com.tr";
 constexpr uint16_t MQTT_PORT = 8883;
 inline const char* MQTT_USER = "esp32_door_01";
 inline const char* MQTT_PASS = "Fingon08.";
+constexpr bool MQTT_ALLOW_INSECURE_TLS = true;
 
 inline const char* TOPIC_CMD = "site/1/door/1/cmd";
 inline const char* TOPIC_STATE = "site/1/door/1/state";
@@ -131,9 +132,11 @@ inline bool mqttReconnect() {
 }
 
 inline void mqttSetup() {
-  // TLS var, sertifika dogrulamasini cihaz tarafinda sade kurulum icin kapatildi.
-  // Uretimde setCACert ile CA dogrulamasi onerilir.
-  espClientSecure.setInsecure();
+  // Uretimde MQTT_ALLOW_INSECURE_TLS false yapilip setCACert ile CA dogrulamasi
+  // kullanilmalidir. Mevcut saha kurulumlari bozulmasin diye gecici fallback acik.
+  if (MQTT_ALLOW_INSECURE_TLS) {
+    espClientSecure.setInsecure();
+  }
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(mqttCallback);
 }

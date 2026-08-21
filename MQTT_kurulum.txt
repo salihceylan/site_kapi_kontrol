@@ -48,25 +48,24 @@ sudo mosquitto_passwd /etc/mosquitto/passwd esp32_door_01
 6) ACL dosyasini olustur
 sudo tee /etc/mosquitto/acl > /dev/null <<'EOF'
 user app_client
-topic read site/+/door/+/state
-topic read site/+/door/+/event
-topic read site/+/door/+/availability
-topic write site/+/door/+/cmd
 topic read device/+/state
 topic read device/+/event
 topic read device/+/availability
 topic write device/+/cmd
 
 user esp32_door_01
-topic read site/1/door/1/cmd
-topic write site/1/door/1/state
-topic write site/1/door/1/event
-topic write site/1/door/1/availability
-topic read device/+/cmd
-topic write device/+/state
-topic write device/+/event
-topic write device/+/availability
+topic read device/D4C771A172E0/cmd
+topic write device/D4C771A172E0/state
+topic write device/D4C771A172E0/event
+topic write device/D4C771A172E0/availability
 EOF
+
+Not:
+- D4C771A172E0 ornek cihaz Unique ID'sidir; her cihaz icin kendi UID'siyle
+  ayri kullanici ve ayri ACL satirlari olusturun.
+- app_client halen kapilari acabilmek icin device/+/cmd yazma yetkisine sahiptir.
+  Uretimde ideal model, komutlari API uzerinden broker'a tasimak veya app
+  kullanicilarini site/cihaz bazli ayri ACL'lere bolmektir.
 
 7) Mosquitto secure config (tek dosya tavsiyesi)
 - Eski conf dosyalarini yedekle:

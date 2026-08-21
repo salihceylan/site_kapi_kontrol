@@ -172,14 +172,13 @@ class BleWifiProvisionService {
       final Map<Permission, PermissionStatus> statuses = await <Permission>[
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
-        Permission.locationWhenInUse,
       ].request();
       final bool denied = statuses.values.any(
         (PermissionStatus status) => !status.isGranted,
       );
       if (denied) {
         throw const BleProvisionException(
-          'Bluetooth tarama ve konum izinleri zorunludur.',
+          'Bluetooth tarama ve baglanti izinleri zorunludur.',
         );
       }
       return;

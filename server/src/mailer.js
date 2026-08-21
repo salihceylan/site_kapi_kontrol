@@ -26,6 +26,15 @@ function createTransporter() {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 export async function sendSiteManagerVerificationEmail({
   to,
   fullName,
@@ -37,6 +46,8 @@ export async function sendSiteManagerVerificationEmail({
   }
 
   const transporter = createTransporter();
+  const safeFullName = escapeHtml(fullName);
+  const safeCode = escapeHtml(code);
   await transporter.sendMail({
     from,
     to,
@@ -44,9 +55,9 @@ export async function sendSiteManagerVerificationEmail({
     text: `Merhaba ${fullName}, AHBU dogrulama kodunuz: ${code}`,
     html: `
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
-        <p>Merhaba <strong>${fullName}</strong>,</p>
+        <p>Merhaba <strong>${safeFullName}</strong>,</p>
         <p>AHBU kaydinizi tamamlamak icin 4 haneli dogrulama kodunuz:</p>
-        <p style="font-size:28px;font-weight:700;letter-spacing:8px">${code}</p>
+        <p style="font-size:28px;font-weight:700;letter-spacing:8px">${safeCode}</p>
         <p>Bu kod 10 dakika boyunca gecerlidir.</p>
       </div>
     `,
@@ -67,6 +78,11 @@ export async function sendApartmentCredentialsEmail({
   }
 
   const transporter = createTransporter();
+  const safeResidentName = escapeHtml(residentName);
+  const safeApartmentLabel = escapeHtml(apartmentLabel);
+  const safeSiteName = escapeHtml(siteName);
+  const safeLoginName = escapeHtml(loginName);
+  const safePinCode = escapeHtml(pinCode);
   await transporter.sendMail({
     from,
     to,
@@ -74,10 +90,10 @@ export async function sendApartmentCredentialsEmail({
     text: `Merhaba ${residentName}, ${siteName} icindeki ${apartmentLabel} icin giris bilgileriniz: kullanici adi ${loginName}, PIN ${pinCode}`,
     html: `
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
-        <p>Merhaba <strong>${residentName}</strong>,</p>
-        <p><strong>${siteName}</strong> icindeki <strong>${apartmentLabel}</strong> icin AHBU giris bilgileriniz asagidadir:</p>
-        <p><strong>Kullanici adi:</strong> ${loginName}</p>
-        <p><strong>PIN:</strong> ${pinCode}</p>
+        <p>Merhaba <strong>${safeResidentName}</strong>,</p>
+        <p><strong>${safeSiteName}</strong> icindeki <strong>${safeApartmentLabel}</strong> icin AHBU giris bilgileriniz asagidadir:</p>
+        <p><strong>Kullanici adi:</strong> ${safeLoginName}</p>
+        <p><strong>PIN:</strong> ${safePinCode}</p>
         <p>Giris yaptiktan sonra gerekirse site yoneticinizden yeni sifre talep edebilirsiniz.</p>
       </div>
     `,
