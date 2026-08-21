@@ -293,6 +293,22 @@ function mapDeviceRow(row) {
       : 'approved',
     mqtt_username: row.mqtt_username ?? null,
     mqtt_configured: Boolean(row.mqtt_username && row.mqtt_password),
+    mqtt_connected: row.mqtt_connected === null || row.mqtt_connected === undefined
+      ? null
+      : Boolean(row.mqtt_connected),
+    firmware_version: row.firmware_version ?? null,
+    ota_status: row.ota_status ?? null,
+    ota_last_version: row.ota_last_version ?? null,
+    wifi_rssi:
+      row.wifi_rssi === null || row.wifi_rssi === undefined
+        ? null
+        : Number(row.wifi_rssi),
+    wifi_signal_percent:
+      row.wifi_signal_percent === null || row.wifi_signal_percent === undefined
+        ? null
+        : Number(row.wifi_signal_percent),
+    last_seen_at: row.last_seen_at ?? null,
+    last_event: row.last_event ?? null,
     created_at: row.created_at,
   };
 }
@@ -921,10 +937,19 @@ async function findDeviceByUid(deviceUid) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        runtime.mqtt_connected,
+        runtime.firmware_version,
+        runtime.ota_status,
+        runtime.ota_last_version,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.last_seen_at,
+        runtime.last_event,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.device_uid = $1
       LIMIT 1
     `,
@@ -949,10 +974,19 @@ async function findDeviceById(deviceId) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        runtime.mqtt_connected,
+        runtime.firmware_version,
+        runtime.ota_status,
+        runtime.ota_last_version,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.last_seen_at,
+        runtime.last_event,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.id = $1
       LIMIT 1
     `,
@@ -1014,11 +1048,20 @@ async function listCompanyDevices({ page, pageSize }) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        runtime.mqtt_connected,
+        runtime.firmware_version,
+        runtime.ota_status,
+        runtime.ota_last_version,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.last_seen_at,
+        runtime.last_event,
         devices.created_at,
         COUNT(*) OVER() AS total_count
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       ORDER BY sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
       LIMIT $1 OFFSET $2
     `,
@@ -1037,6 +1080,100 @@ async function listAllDeviceUids() {
     `,
   );
   return result.rows.map((row) => row.device_uid);
+}
+
+async function createOtaUpdateJob({ authUser, deviceUids }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const jobResult = await client.query(
+      `
+        INSERT INTO ota_update_jobs (
+          requested_by_user_code,
+          requested_by_email,
+          requested_count,
+          status
+        )
+        VALUES ($1, $2, $3, 'publishing')
+        RETURNING id
+      `,
+      [Number(authUser.id), authUser.email, deviceUids.length],
+    );
+    const jobId = Number(jobResult.rows[0].id);
+    for (const deviceUid of deviceUids) {
+      await client.query(
+        `
+          INSERT INTO ota_update_job_devices (job_id, device_uid)
+          VALUES ($1, $2)
+          ON CONFLICT (job_id, device_uid) DO NOTHING
+        `,
+        [jobId, deviceUid],
+      );
+    }
+    await client.query('COMMIT');
+    return jobId;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function finishOtaUpdateJob({ jobId, result }) {
+  const failedByUid = new Map(
+    result.failed.map((item) => [String(item.device_uid).toUpperCase(), item.error]),
+  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const devices = await client.query(
+      `
+        SELECT device_uid
+        FROM ota_update_job_devices
+        WHERE job_id = $1
+      `,
+      [jobId],
+    );
+    for (const row of devices.rows) {
+      const uid = String(row.device_uid).toUpperCase();
+      const error = failedByUid.get(uid) || null;
+      await client.query(
+        `
+          UPDATE ota_update_job_devices
+          SET
+            publish_status = $3,
+            error_message = $4,
+            updated_at = NOW()
+          WHERE job_id = $1 AND device_uid = $2
+        `,
+        [jobId, uid, error ? 'failed' : 'sent', error],
+      );
+    }
+    await client.query(
+      `
+        UPDATE ota_update_jobs
+        SET
+          sent_count = $2,
+          failed_count = $3,
+          status = $4,
+          completed_at = NOW()
+        WHERE id = $1
+      `,
+      [
+        jobId,
+        result.sent,
+        result.failed.length,
+        result.failed.length > 0 ? 'completed_with_errors' : 'completed',
+      ],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function listManagedDevicesForUser(authUser) {
@@ -1060,10 +1197,19 @@ async function listManagedDevicesForUser(authUser) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        runtime.mqtt_connected,
+        runtime.firmware_version,
+        runtime.ota_status,
+        runtime.ota_last_version,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.last_seen_at,
+        runtime.last_event,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE EXISTS (
         SELECT 1
         FROM site_manager_sites sms
@@ -1098,10 +1244,19 @@ async function findManagedDeviceById({ authUser, deviceId }) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        runtime.mqtt_connected,
+        runtime.firmware_version,
+        runtime.ota_status,
+        runtime.ota_last_version,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.last_seen_at,
+        runtime.last_event,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.id = $1
         AND EXISTS (
           SELECT 1
@@ -2666,6 +2821,8 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
       url: updateAvailable
         ? `${publicBaseUrl(req)}/firmware/${target}/${fileName}`
         : null,
+      sha256: manifest.sha256 ? String(manifest.sha256) : null,
+      md5: manifest.md5 ? String(manifest.md5) : null,
       notes: String(manifest.notes || ''),
       interval_hours: Number(manifest.interval_hours || 24),
       message: blockedByUid ? 'Cihaz bu yayin grubunda degil.' : '',
@@ -3852,18 +4009,25 @@ app.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req,
     const deviceUids = await listAllDeviceUids();
     if (deviceUids.length === 0) {
       return res.status(202).json({
+        job_id: null,
         requested: 0,
         sent: 0,
         failed: [],
       });
     }
 
+    const jobId = await createOtaUpdateJob({
+      authUser: req.authUser,
+      deviceUids,
+    });
     const result = await publishOtaCheckToDevices({
       deviceUids,
       requestedBy: req.authUser.email,
     });
+    await finishOtaUpdateJob({ jobId, result });
 
     auditLog('ota_check_broadcast', {
+      job_id: jobId,
       user_code: Number(req.authUser.id),
       role: req.authUser.role,
       requested: result.requested,
@@ -3871,7 +4035,7 @@ app.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req,
       failed_count: result.failed.length,
     });
 
-    return res.status(202).json(result);
+    return res.status(202).json({ job_id: jobId, ...result });
   } catch (error) {
     if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {
       return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });

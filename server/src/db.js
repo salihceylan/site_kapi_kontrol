@@ -258,6 +258,54 @@ export async function ensureDbSchema() {
       ON devices(site_code)
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS device_runtime_status (
+        device_uid TEXT PRIMARY KEY REFERENCES devices(device_uid) ON DELETE CASCADE,
+        mqtt_connected BOOLEAN NOT NULL DEFAULT FALSE,
+        door_locked BOOLEAN,
+        firmware_version TEXT,
+        ota_status TEXT,
+        ota_last_version TEXT,
+        wifi_rssi INTEGER,
+        wifi_signal_percent INTEGER,
+        last_event TEXT,
+        last_event_detail TEXT,
+        last_payload_at TIMESTAMPTZ,
+        last_seen_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_device_runtime_status_last_seen
+      ON device_runtime_status(last_seen_at DESC)
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ota_update_jobs (
+        id BIGSERIAL PRIMARY KEY,
+        requested_by_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        requested_by_email TEXT,
+        requested_count INTEGER NOT NULL DEFAULT 0,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'created',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ota_update_job_devices (
+        job_id BIGINT NOT NULL REFERENCES ota_update_jobs(id) ON DELETE CASCADE,
+        device_uid TEXT NOT NULL REFERENCES devices(device_uid) ON DELETE CASCADE,
+        publish_status TEXT NOT NULL DEFAULT 'pending',
+        error_message TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (job_id, device_uid)
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ota_update_jobs_created_at
+      ON ota_update_jobs(created_at DESC)
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS site_manager_sites (
         site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
         manager_user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,

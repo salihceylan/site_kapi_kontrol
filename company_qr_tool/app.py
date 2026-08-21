@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import hashlib
 import os
 import queue
 import re
@@ -39,6 +40,7 @@ ENV_RE = re.compile(r"^\s*\[env:([^\]]+)\]")
 UPL_RE = re.compile(r"^\s*upload_speed\s*=\s*(\d+)")
 PROG_RE = re.compile(r"\((\d{1,3})\s*%\)")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+OTA_VERSION_RE = re.compile(r'OTA_CURRENT_VERSION\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
 PREVIEW_SIZE = 180
 QR_SIZE = 1200
 QR_LABEL_HEIGHT = 150
@@ -273,6 +275,24 @@ def save_releases(releases: list[dict]) -> None:
     RELEASE_INDEX.write_text(json.dumps({"releases": releases}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def read_firmware_source_version() -> str | None:
+    header = DEVICE_PROJECT_DIR / "include" / "ota_guncelleme.h"
+    try:
+        text = header.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    match = OTA_VERSION_RE.search(text)
+    return match.group(1) if match else None
+
+
+def file_hash(path: Path, algorithm: str) -> str:
+    digest = hashlib.new(algorithm)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def suggest_version(releases: list[dict]) -> str:
     versions: list[tuple[int, int, int]] = []
     for r in releases:
@@ -334,7 +354,7 @@ class App:
         self.status_var = tk.StringVar(value="Hazir.")
         self.uid_var = tk.StringVar(value="Unique ID: -")
         self.env_var = tk.StringVar(value=self.envs[0] if self.envs else "esp32-s3-devkitc-1")
-        self.version_var = tk.StringVar(value=suggest_version(self.releases))
+        self.version_var = tk.StringVar(value=read_firmware_source_version() or suggest_version(self.releases))
         self.latest_release_var = tk.StringVar(value="Son surum: -")
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_text_var = tk.StringVar(value="%0")
@@ -810,6 +830,20 @@ class App:
         if not SEMVER_RE.match(version):
             messagebox.showerror("Surum", "Surum formati 1.2.3 olmali.")
             return
+        source_version = read_firmware_source_version()
+        if source_version is None:
+            messagebox.showerror("Surum", "Firmware kaynak surumu okunamadi.")
+            return
+        if source_version != version:
+            messagebox.showerror(
+                "Surum uyusmuyor",
+                (
+                    f"Firmware kaynak surumu v{source_version}, "
+                    f"girilen surum v{version}.\n"
+                    "Once ota_guncelleme.h icindeki OTA_CURRENT_VERSION degerini guncelleyin."
+                ),
+            )
+            return
         self.fw_busy = True
         self._set_fw_state(False)
         self.progress_var.set(0)
@@ -842,10 +876,29 @@ class App:
             folder = RELEASES_DIR / f"{rid}_v{version.replace('.', '_')}"
             folder.mkdir(parents=True, exist_ok=True)
             out_files: dict[str, str] = {}
+            hashes: dict[str, dict[str, str]] = {}
             for k, src in files.items():
                 dst = folder / src.name
                 shutil.copy2(src, dst)
                 out_files[k] = str(dst.relative_to(DEVICE_PROJECT_DIR))
+                hashes[k] = {
+                    "sha256": file_hash(dst, "sha256"),
+                    "md5": file_hash(dst, "md5"),
+                }
+
+            ota_manifest = {
+                "enabled": True,
+                "version": version,
+                "filename": "firmware.bin",
+                "force": False,
+                "interval_hours": 24,
+                "allowed_uids": [],
+                "sha256": hashes["firmware_bin"]["sha256"],
+                "md5": hashes["firmware_bin"]["md5"],
+                "notes": f"AHBU firmware v{version}.",
+            }
+            manifest_path = folder / "manifest.json"
+            manifest_path.write_text(json.dumps(ota_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
             entry = {
                 "id": folder.name,
@@ -853,12 +906,14 @@ class App:
                 "env": env,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "files": out_files,
+                "hashes": hashes,
+                "manifest": str(manifest_path.relative_to(DEVICE_PROJECT_DIR)),
             }
             self.releases.append(entry)
             save_releases(self.releases)
 
             self.root.after(0, self.refresh_latest_release)
-            self.root.after(0, lambda: self.version_var.set(suggest_version(self.releases)))
+            self.root.after(0, lambda: self.version_var.set(read_firmware_source_version() or suggest_version(self.releases)))
             self.root.after(0, lambda: self.set_status(f"Surum olusturuldu: v{version}"))
             self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Surum olusturuldu: v{version}\n{folder}"))
         except Exception as exc:

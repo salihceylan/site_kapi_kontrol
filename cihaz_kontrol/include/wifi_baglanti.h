@@ -311,18 +311,11 @@ inline void wifiApplyProvisioningRequest() {
     return;
   }
 
-  wifiNotifyBleResult("connecting", "Secilen aga baglaniliyor.");
-  if (!wifiTryConnect(ssid, password, 20000)) {
-    gProvisioningMode = true;
-    wifiNotifyBleResult("failed", "WiFi baglantisi kurulamadi.");
-    return;
-  }
-
   wifiPersistCredentials(ssid, password);
   wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword);
-  wifiNotifyBleResult("connected", "WiFi ayari kaydedildi.");
+  wifiNotifyBleResult("restarting", "WiFi ve MQTT bilgileri kaydedildi. Cihaz temiz baglanti icin yeniden baslatiliyor.");
   wifiNotifyBleState();
-  delay(1000);
+  delay(1500);
   ESP.restart();
 }
 
@@ -497,6 +490,15 @@ inline void wifiBaglan() {
     return;
   }
 
+  if (!wifiHasMqttCredentials()) {
+    Serial.println("Kayitli WiFi var ama MQTT kimligi yok, BLE provisioning baslatiliyor.");
+    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    delay(150);
+    wifiStartProvisioningMode();
+    return;
+  }
+
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
@@ -504,16 +506,15 @@ inline void wifiBaglan() {
 
   Serial.printf("Kayitli WiFi bulundu: %s\n", gSavedWifiSsid.c_str());
   if (wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 20000)) {
-    if (wifiHasMqttCredentials()) {
-      wifiStopProvisioningMode();
-    } else {
-      Serial.println("WiFi bagli ama MQTT kimligi eksik, BLE provisioning acik tutuluyor.");
-      wifiStartProvisioningMode();
-    }
+    wifiStopProvisioningMode();
     return;
   }
 
-  Serial.println("Kayitli WiFi'ye baglanamadi, cihaz yeniden deneyecek.");
+  Serial.println("Kayitli WiFi'ye baglanamadi, BLE provisioning baslatiliyor.");
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  delay(150);
+  wifiStartProvisioningMode();
 }
 
 inline void wifiLoop() {
@@ -531,9 +532,14 @@ inline void wifiLoop() {
 
   if (gWifiConnected && wifiHasMqttCredentials()) {
     wifiStopProvisioningMode();
-  } else if (gWifiConnected) {
-    wifiStartProvisioningMode();
   } else if (!gWifiConfigured) {
+    wifiStartProvisioningMode();
+  } else if (!wifiHasMqttCredentials()) {
+    if (WiFi.getMode() != WIFI_OFF) {
+      WiFi.disconnect(true, false);
+      WiFi.mode(WIFI_OFF);
+      delay(50);
+    }
     wifiStartProvisioningMode();
   } else if (millis() - gLastWifiAttemptAt >= WIFI_RETRY_INTERVAL_MS) {
     wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 8000);

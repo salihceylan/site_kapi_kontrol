@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
@@ -20,6 +21,7 @@ class AuthService extends ChangeNotifier {
   AuthService({required this.api});
 
   static const String _storageKey = 'auth_session';
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   final AuthApi api;
   UserSession? _session;
@@ -32,13 +34,20 @@ class AuthService extends ChangeNotifier {
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    String? raw = await _secureStorage.read(key: _storageKey);
+    final legacyRaw = prefs.getString(_storageKey);
+    if ((raw == null || raw.isEmpty) && legacyRaw != null && legacyRaw.isNotEmpty) {
+      raw = legacyRaw;
+      await _secureStorage.write(key: _storageKey, value: legacyRaw);
+      await prefs.remove(_storageKey);
+    }
 
     if (raw != null && raw.isNotEmpty) {
       try {
         final data = jsonDecode(raw) as Map<String, dynamic>;
         _session = UserSession.fromJson(data);
       } catch (_) {
+        await _secureStorage.delete(key: _storageKey);
         await prefs.remove(_storageKey);
       }
     }
@@ -92,6 +101,7 @@ class AuthService extends ChangeNotifier {
   Future<void> logout() async {
     _session = null;
     final prefs = await SharedPreferences.getInstance();
+    await _secureStorage.delete(key: _storageKey);
     await prefs.remove(_storageKey);
     _notifySafely();
   }
@@ -681,8 +691,10 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(_session!.toJson()));
+    await _secureStorage.write(
+      key: _storageKey,
+      value: jsonEncode(_session!.toJson()),
+    );
   }
 
   void _notifySafely() {

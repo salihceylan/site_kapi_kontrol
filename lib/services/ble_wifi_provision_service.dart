@@ -85,6 +85,8 @@ class BleWifiResult {
 
   bool get isFailure => status == 'error' || status == 'failed';
   bool get isScanComplete => status == 'scan_complete';
+  bool get isProvisionAccepted =>
+      status == 'connected' || status == 'restarting' || status == 'saved';
 
   factory BleWifiResult.fromPayload(String payload) {
     final Map<String, dynamic> json = _decodeJsonMap(payload);
@@ -403,7 +405,22 @@ class BleWifiProvisionService {
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
     for (int index = 0; index < 28; index += 1) {
       await Future<void>.delayed(const Duration(seconds: 1));
-      result = await readResult();
+      try {
+        result = await readResult();
+      } catch (_) {
+        return const BleWifiResult(
+          status: 'restarting',
+          message: 'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',
+        );
+      }
+      if (result.isProvisionAccepted) {
+        return BleWifiResult(
+          status: result.status,
+          message: result.message.isEmpty
+              ? 'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.'
+              : result.message,
+        );
+      }
       final BleWifiState state = await readState();
       if (state.wifiConnected) {
         return BleWifiResult(

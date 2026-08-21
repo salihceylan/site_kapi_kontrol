@@ -1,9 +1,11 @@
 {
-  "enabled": false,
-  "version": "1.1.0",
+  "enabled": true,
+  "version": "1.2.0",
   "filename": "firmware.bin",
   "force": false,
   "interval_hours": 24,
   "allowed_uids": [],
-  "notes": "OTA yayini kapali. firmware.bin hazir oldugunda enabled true yapilir."
+  "sha256": "c8f8cb4ab7f4bd09d921bdebb4175f9ac7126e4e8b8a7e294bdeeadd5f0cb906",
+  "md5": "fa256bb1dc27e1a7962c4a9c253ef75b",
+  "notes": "OTA telemetri, kalici durum ve guvenli yayin iyilestirmeleri."
 }

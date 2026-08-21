@@ -99,6 +99,8 @@ void seriDurumYazdir() {
   Serial.println(OTA_CURRENT_VERSION);
   Serial.print("OTA durum: ");
   Serial.println(otaLastStatus());
+  Serial.print("OTA son hedef surum: ");
+  Serial.println(otaLastVersion().isEmpty() ? "-" : otaLastVersion());
   rolePinDurumuYazdir("Role pin okuma");
   Serial.println("Seri role test: h=HIGH, l=LOW, r=pulse, p=pin bulma");
   Serial.println("------------------------");

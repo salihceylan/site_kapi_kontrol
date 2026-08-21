@@ -7,6 +7,10 @@ class DoorRuntimeStatus {
     required this.mqttBridgeConnected,
     required this.mqttConnected,
     required this.doorLocked,
+    required this.firmwareVersion,
+    required this.otaStatus,
+    required this.wifiRssi,
+    required this.wifiSignalPercent,
     required this.lastEvent,
     required this.lastSeenAt,
   });
@@ -16,6 +20,10 @@ class DoorRuntimeStatus {
   final bool mqttBridgeConnected;
   final bool mqttConnected;
   final bool? doorLocked;
+  final String? firmwareVersion;
+  final String? otaStatus;
+  final int? wifiRssi;
+  final int? wifiSignalPercent;
   final String? lastEvent;
   final DateTime? lastSeenAt;
 
@@ -29,6 +37,10 @@ class DoorRuntimeStatus {
       mqttBridgeConnected: status['mqtt_bridge_connected'] as bool? ?? false,
       mqttConnected: status['mqtt_connected'] as bool? ?? false,
       doorLocked: status['door_locked'] as bool?,
+      firmwareVersion: status['firmware_version'] as String?,
+      otaStatus: status['ota_status'] as String?,
+      wifiRssi: status['wifi_rssi'] as int?,
+      wifiSignalPercent: status['wifi_signal_percent'] as int?,
       lastEvent: status['last_event'] as String?,
       lastSeenAt: status['last_seen_at'] == null
           ? null

@@ -36,6 +36,11 @@ inline void mqttPublishAvailability(const char* value) {
 inline void mqttPublishState(bool locked) {
   JsonDocument doc;
   doc["locked"] = locked;
+  doc["firmware_version"] = OTA_CURRENT_VERSION;
+  doc["ota_status"] = otaLastStatus();
+  doc["ota_last_version"] = otaLastVersion();
+  doc["wifi_rssi"] = wifiSinyalDbm();
+  doc["wifi_signal_percent"] = wifiSinyalYuzde();
 
   String payload;
   serializeJson(doc, payload);
@@ -43,15 +48,28 @@ inline void mqttPublishState(bool locked) {
   client.publish(deviceStateTopic.c_str(), payload.c_str(), true);
 }
 
-inline void mqttPublishEvent(const char* eventName) {
+inline void mqttPublishEvent(const char* eventName, const char* detail = "") {
   JsonDocument doc;
   doc["event"] = eventName;
+  if (detail != nullptr && detail[0] != '\0') {
+    doc["detail"] = detail;
+  }
   doc["ms"] = millis();
+  doc["firmware_version"] = OTA_CURRENT_VERSION;
+  doc["ota_status"] = otaLastStatus();
 
   String payload;
   serializeJson(doc, payload);
   const String deviceEventTopic = mqttDeviceTopic("event");
   client.publish(deviceEventTopic.c_str(), payload.c_str(), false);
+}
+
+inline void mqttPublishOtaEvent(const char* eventName, const char* detail) {
+  if (!client.connected()) {
+    return;
+  }
+  mqttPublishEvent(eventName, detail);
+  mqttPublishState(gDoorLocked);
 }
 
 inline bool shouldTriggerPulse(const String& message) {
@@ -158,6 +176,7 @@ inline void mqttSetup() {
   gMqttConfiguredPort = wifiMqttPort(MQTT_DEFAULT_PORT);
   client.setServer(gMqttConfiguredHost.c_str(), gMqttConfiguredPort);
   client.setCallback(mqttCallback);
+  otaSetEventPublisher(mqttPublishOtaEvent);
 }
 
 inline String mqttAktifSunucu() {

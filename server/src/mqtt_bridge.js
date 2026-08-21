@@ -1,5 +1,7 @@
 import mqtt from 'mqtt';
 
+import { pool } from './db.js';
+
 const statusByDeviceUid = new Map();
 let client = null;
 let connectStarted = false;
@@ -45,12 +47,80 @@ function ensureStatus(deviceUid) {
     device_uid: normalizedUid,
     mqtt_connected: false,
     door_locked: null,
+    firmware_version: null,
+    ota_status: null,
+    ota_last_version: null,
+    wifi_rssi: null,
+    wifi_signal_percent: null,
     last_event: null,
+    last_event_detail: null,
     last_seen_at: null,
     last_payload_at: null,
   };
   statusByDeviceUid.set(normalizedUid, created);
   return created;
+}
+
+function optionalInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+async function persistRuntimeStatus(status) {
+  try {
+    await pool.query(
+      `
+        INSERT INTO device_runtime_status (
+          device_uid,
+          mqtt_connected,
+          door_locked,
+          firmware_version,
+          ota_status,
+          ota_last_version,
+          wifi_rssi,
+          wifi_signal_percent,
+          last_event,
+          last_event_detail,
+          last_payload_at,
+          last_seen_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        ON CONFLICT (device_uid) DO UPDATE SET
+          mqtt_connected = EXCLUDED.mqtt_connected,
+          door_locked = EXCLUDED.door_locked,
+          firmware_version = COALESCE(EXCLUDED.firmware_version, device_runtime_status.firmware_version),
+          ota_status = COALESCE(EXCLUDED.ota_status, device_runtime_status.ota_status),
+          ota_last_version = COALESCE(EXCLUDED.ota_last_version, device_runtime_status.ota_last_version),
+          wifi_rssi = COALESCE(EXCLUDED.wifi_rssi, device_runtime_status.wifi_rssi),
+          wifi_signal_percent = COALESCE(EXCLUDED.wifi_signal_percent, device_runtime_status.wifi_signal_percent),
+          last_event = COALESCE(EXCLUDED.last_event, device_runtime_status.last_event),
+          last_event_detail = COALESCE(EXCLUDED.last_event_detail, device_runtime_status.last_event_detail),
+          last_payload_at = COALESCE(EXCLUDED.last_payload_at, device_runtime_status.last_payload_at),
+          last_seen_at = COALESCE(EXCLUDED.last_seen_at, device_runtime_status.last_seen_at),
+          updated_at = NOW()
+      `,
+      [
+        status.device_uid,
+        status.mqtt_connected,
+        status.door_locked,
+        status.firmware_version,
+        status.ota_status,
+        status.ota_last_version,
+        status.wifi_rssi,
+        status.wifi_signal_percent,
+        status.last_event,
+        status.last_event_detail,
+        status.last_payload_at,
+        status.last_seen_at,
+      ],
+    );
+  } catch (error) {
+    lastBridgeError = `Device status DB yazilamadi: ${error.message}`;
+  }
 }
 
 function applyStatusMessage(topic, payload) {
@@ -69,12 +139,25 @@ function applyStatusMessage(topic, payload) {
     status.last_seen_at = status.mqtt_connected
       ? status.last_payload_at
       : status.last_seen_at;
+    void persistRuntimeStatus(status);
     return;
   }
 
   if (kind === 'event') {
-    status.last_event = text || null;
+    try {
+      const decoded = JSON.parse(text);
+      status.last_event = decoded.event ? String(decoded.event) : text || null;
+      status.last_event_detail = decoded.detail ? String(decoded.detail) : null;
+      status.firmware_version = decoded.firmware_version
+        ? String(decoded.firmware_version)
+        : status.firmware_version;
+      status.ota_status = decoded.ota_status ? String(decoded.ota_status) : status.ota_status;
+    } catch (_error) {
+      status.last_event = text || null;
+      status.last_event_detail = null;
+    }
     status.last_seen_at = status.last_payload_at;
+    void persistRuntimeStatus(status);
     return;
   }
 
@@ -86,10 +169,20 @@ function applyStatusMessage(topic, payload) {
       } else if (decoded.locked != null) {
         status.door_locked = String(decoded.locked).toLowerCase() === 'true';
       }
+      status.firmware_version = decoded.firmware_version
+        ? String(decoded.firmware_version)
+        : status.firmware_version;
+      status.ota_status = decoded.ota_status ? String(decoded.ota_status) : status.ota_status;
+      status.ota_last_version = decoded.ota_last_version
+        ? String(decoded.ota_last_version)
+        : status.ota_last_version;
+      status.wifi_rssi = optionalInteger(decoded.wifi_rssi);
+      status.wifi_signal_percent = optionalInteger(decoded.wifi_signal_percent);
     } catch (_error) {
       status.door_locked = null;
     }
     status.last_seen_at = status.last_payload_at;
+    void persistRuntimeStatus(status);
   }
 }
 

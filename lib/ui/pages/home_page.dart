@@ -625,9 +625,10 @@ class _HomePageState extends State<HomePage> {
 
     final requested = result?['requested'] as int? ?? 0;
     final sent = result?['sent'] as int? ?? 0;
+    final jobId = result?['job_id'];
     final failed = result?['failed'] as List<dynamic>? ?? const <dynamic>[];
     _showMessage(
-      'OTA kontrol komutu gonderildi. Hedef: $requested, basarili: $sent, hata: ${failed.length}.',
+      'OTA kontrol komutu gonderildi. Is No: ${jobId ?? '-'}, hedef: $requested, basarili: $sent, hata: ${failed.length}.',
     );
   }
 
@@ -1734,6 +1735,10 @@ class _HomePageState extends State<HomePage> {
       final stateText = runtimeStatus?.doorLocked == null
           ? 'Bilinmiyor'
           : (runtimeStatus!.doorLocked! ? 'Kapali/Kilitli' : 'Acik');
+      final signalText = runtimeStatus?.wifiSignalPercent == null
+          ? '-'
+          : '%${runtimeStatus!.wifiSignalPercent}'
+                '${runtimeStatus.wifiRssi == null ? '' : ' (${runtimeStatus.wifiRssi} dBm)'}';
       final commandEnabled =
           runtimeStatus?.commandEnabled == true && !_isOpeningDoor;
 
@@ -1747,6 +1752,12 @@ class _HomePageState extends State<HomePage> {
           Text('Cihaz Baglantisi: $deviceOnlineText'),
           const SizedBox(height: 6),
           Text('Kapi Durumu: $stateText'),
+          const SizedBox(height: 6),
+          Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
+          const SizedBox(height: 6),
+          Text('OTA Durumu: ${runtimeStatus?.otaStatus ?? '-'}'),
+          const SizedBox(height: 6),
+          Text('Wi-Fi Gucu: $signalText'),
           if (runtimeStatus?.lastSeenAt != null) ...[
             const SizedBox(height: 6),
             Text('Son Guncelleme: ${_formatDate(runtimeStatus!.lastSeenAt)}'),
@@ -2034,6 +2045,16 @@ class _HomePageState extends State<HomePage> {
     final dateText = device.createdAt == null
         ? '-'
         : _formatDate(device.createdAt);
+    final onlineText = device.mqttConnected == null
+        ? 'Bilinmiyor'
+        : (device.mqttConnected! ? 'Online' : 'Offline');
+    final signalText = device.wifiSignalPercent == null
+        ? '-'
+        : '%${device.wifiSignalPercent}'
+              '${device.wifiRssi == null ? '' : ' (${device.wifiRssi} dBm)'}';
+    final lastSeenText = device.lastSeenAt == null
+        ? '-'
+        : _formatDate(device.lastSeenAt);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -2062,6 +2083,16 @@ class _HomePageState extends State<HomePage> {
             Text(
               'MQTT Kimligi: ${device.mqttConfigured ? 'Hazir' : 'Eksik'}',
             ),
+            const SizedBox(height: 6),
+            Text('Cihaz Baglantisi: $onlineText'),
+            const SizedBox(height: 6),
+            Text('Firmware: ${device.firmwareVersion ?? '-'}'),
+            const SizedBox(height: 6),
+            Text('OTA Durumu: ${device.otaStatus ?? '-'}'),
+            const SizedBox(height: 6),
+            Text('Wi-Fi Gucu: $signalText'),
+            const SizedBox(height: 6),
+            Text('Son Gorulme: $lastSeenText'),
             if ((device.mqttUsername ?? '').isNotEmpty) ...[
               const SizedBox(height: 6),
               Text('MQTT Kullanici: ${device.mqttUsername}'),

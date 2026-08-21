@@ -11,6 +11,14 @@ class DeviceRecord {
     required this.siteApprovalStatus,
     required this.mqttUsername,
     required this.mqttConfigured,
+    required this.mqttConnected,
+    required this.firmwareVersion,
+    required this.otaStatus,
+    required this.otaLastVersion,
+    required this.wifiRssi,
+    required this.wifiSignalPercent,
+    required this.lastSeenAt,
+    required this.lastEvent,
     required this.createdAt,
   });
 
@@ -25,6 +33,14 @@ class DeviceRecord {
   final String siteApprovalStatus;
   final String? mqttUsername;
   final bool mqttConfigured;
+  final bool? mqttConnected;
+  final String? firmwareVersion;
+  final String? otaStatus;
+  final String? otaLastVersion;
+  final int? wifiRssi;
+  final int? wifiSignalPercent;
+  final DateTime? lastSeenAt;
+  final String? lastEvent;
   final DateTime? createdAt;
 
   factory DeviceRecord.fromJson(Map<String, dynamic> json) {
@@ -40,6 +56,16 @@ class DeviceRecord {
       siteApprovalStatus: json['site_approval_status'] as String? ?? 'approved',
       mqttUsername: json['mqtt_username'] as String?,
       mqttConfigured: json['mqtt_configured'] as bool? ?? false,
+      mqttConnected: json['mqtt_connected'] as bool?,
+      firmwareVersion: json['firmware_version'] as String?,
+      otaStatus: json['ota_status'] as String?,
+      otaLastVersion: json['ota_last_version'] as String?,
+      wifiRssi: json['wifi_rssi'] as int?,
+      wifiSignalPercent: json['wifi_signal_percent'] as int?,
+      lastSeenAt: json['last_seen_at'] == null
+          ? null
+          : DateTime.tryParse(json['last_seen_at'] as String),
+      lastEvent: json['last_event'] as String?,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'] as String),
