@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 import { pool, checkDbConnection, ensureDbSchema } from './db.js';
 import { signAccessToken, verifyAccessToken } from './jwt.js';
@@ -133,6 +134,18 @@ function compareVersionParts(left, right) {
     }
   }
   return 0;
+}
+
+function normalizeDeviceUid(raw) {
+  return String(raw || '').trim().toUpperCase().replace(/[^0-9A-F]/g, '');
+}
+
+function mqttUsernameForDevice(deviceUid) {
+  return `device_${normalizeDeviceUid(deviceUid)}`;
+}
+
+function generateMqttPassword() {
+  return crypto.randomBytes(24).toString('base64url');
 }
 
 function normalizePhone(raw) {
@@ -277,7 +290,19 @@ function mapDeviceRow(row) {
     site_approval_status: validApprovalStatuses.has(row.site_approval_status)
       ? row.site_approval_status
       : 'approved',
+    mqtt_username: row.mqtt_username ?? null,
+    mqtt_configured: Boolean(row.mqtt_username && row.mqtt_password),
     created_at: row.created_at,
+  };
+}
+
+function mapDeviceMqttCredentialsRow(row) {
+  return {
+    device_uid: row.device_uid,
+    mqtt_host: String(process.env.MQTT_HOST || 'mqtt.gudeteknoloji.com.tr'),
+    mqtt_port: Number(process.env.MQTT_PORT || 8883),
+    mqtt_username: row.mqtt_username,
+    mqtt_password: row.mqtt_password,
   };
 }
 
@@ -855,13 +880,26 @@ async function createDevice({
   assignedUserCode,
   siteCode,
 }) {
+  const normalizedUid = normalizeDeviceUid(deviceUid);
   const result = await pool.query(
     `
-      INSERT INTO devices (device_uid, assigned_user_code, site_code)
-      VALUES ($1, $2, $3)
-      RETURNING id, device_uid, assigned_user_code, site_code, gate_name, created_at
+      INSERT INTO devices (
+        device_uid,
+        assigned_user_code,
+        site_code,
+        mqtt_username,
+        mqtt_password
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, device_uid, assigned_user_code, site_code, gate_name, mqtt_username, mqtt_password, created_at
     `,
-    [deviceUid, assignedUserCode, siteCode],
+    [
+      normalizedUid,
+      assignedUserCode,
+      siteCode,
+      mqttUsernameForDevice(normalizedUid),
+      generateMqttPassword(),
+    ],
   );
   return result.rows[0];
 }
@@ -880,6 +918,8 @@ async function findDeviceByUid(deviceUid) {
         door.id AS assigned_door_id,
         door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
+        devices.mqtt_username,
+        devices.mqtt_password,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
@@ -906,6 +946,8 @@ async function findDeviceById(deviceId) {
         door.id AS assigned_door_id,
         door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
+        devices.mqtt_username,
+        devices.mqtt_password,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
@@ -914,6 +956,42 @@ async function findDeviceById(deviceId) {
       LIMIT 1
     `,
     [deviceId],
+  );
+  return result.rows[0] || null;
+}
+
+async function ensureDeviceMqttCredentialsByUid(deviceUid) {
+  const normalizedUid = normalizeDeviceUid(deviceUid);
+  if (normalizedUid.length < 6) {
+    return null;
+  }
+
+  const existing = await pool.query(
+    `
+      SELECT device_uid, mqtt_username, mqtt_password
+      FROM devices
+      WHERE device_uid = $1
+      LIMIT 1
+    `,
+    [normalizedUid],
+  );
+  if (existing.rowCount === 0) {
+    return null;
+  }
+
+  const row = existing.rows[0];
+  if (row.mqtt_username && row.mqtt_password) {
+    return row;
+  }
+
+  const result = await pool.query(
+    `
+      UPDATE devices
+      SET mqtt_username = $1, mqtt_password = $2
+      WHERE device_uid = $3
+      RETURNING device_uid, mqtt_username, mqtt_password
+    `,
+    [mqttUsernameForDevice(normalizedUid), generateMqttPassword(), normalizedUid],
   );
   return result.rows[0] || null;
 }
@@ -933,6 +1011,8 @@ async function listCompanyDevices({ page, pageSize }) {
         door.id AS assigned_door_id,
         door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
+        devices.mqtt_username,
+        devices.mqtt_password,
         devices.created_at,
         COUNT(*) OVER() AS total_count
       FROM devices
@@ -977,6 +1057,8 @@ async function listManagedDevicesForUser(authUser) {
         door.id AS assigned_door_id,
         door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
+        devices.mqtt_username,
+        devices.mqtt_password,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
@@ -1013,6 +1095,8 @@ async function findManagedDeviceById({ authUser, deviceId }) {
         door.id AS assigned_door_id,
         door.site_code AS assigned_door_site_code,
         door.door_name AS assigned_door_name,
+        devices.mqtt_username,
+        devices.mqtt_password,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
@@ -3727,6 +3811,26 @@ app.get('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  }
+});
+
+app.post('/admin/devices/mqtt-credentials', authRequired, requireSuperUser, async (req, res) => {
+  const deviceUid = normalizeDeviceUid(req.body.device_uid);
+  if (deviceUid.length < 6) {
+    return res.status(400).json({ error: 'Cihaz unique id en az 6 karakter olmali.' });
+  }
+
+  try {
+    const credentials = await ensureDeviceMqttCredentialsByUid(deviceUid);
+    if (!credentials) {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+
+    return res.status(200).json({
+      mqtt: mapDeviceMqttCredentialsRow(credentials),
+    });
+  } catch (_error) {
+    return res.status(500).json({ error: 'MQTT cihaz kimligi uretilemedi.' });
   }
 });
 

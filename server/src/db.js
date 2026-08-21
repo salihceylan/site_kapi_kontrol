@@ -237,6 +237,19 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS gate_name TEXT
     `);
     await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS mqtt_username TEXT
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS mqtt_password TEXT
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique
+      ON devices(mqtt_username)
+      WHERE mqtt_username IS NOT NULL
+    `);
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_devices_assigned_user_code
       ON devices(assigned_user_code)
     `);
