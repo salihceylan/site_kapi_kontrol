@@ -63,8 +63,8 @@ node --check src/server.js
 ### 5) Environment and Config
 
 - Config sources: `lib/config/app_config.dart`, `server/.env.example`, `docker-compose.yml`, `cihaz_kontrol/include/mqtt_baglanti.h`.
-- Required backend env vars: `PORT`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
-- Flutter compile-time config: `API_BASE_URL`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_APP_USER`, `MQTT_APP_PASSWORD`, `MQTT_SITE_ID`, `MQTT_DOOR_ID`.
+- Required backend env vars: `PORT`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER`, `MQTT_PASSWORD`.
+- Flutter compile-time config: `API_BASE_URL`.
 - Deployment/runtime constraints: PostgreSQL is provided through Docker Compose locally; production notes document Nginx, PM2, SSL, and VPS deployment.
 
 ### 6) Evidence

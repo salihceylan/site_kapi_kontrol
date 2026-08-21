@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { pool } from '../src/db.js';
@@ -8,6 +8,10 @@ const dryRun = process.argv.includes('--dry-run');
 const passwdFile = process.env.MQTT_PASSWD_FILE || '/etc/mosquitto/passwd';
 const aclFile = process.env.MQTT_ACL_FILE || '/etc/mosquitto/acl';
 const mosquittoPasswd = process.env.MOSQUITTO_PASSWD_BIN || 'mosquitto_passwd';
+const legacyUsers = String(process.env.MQTT_LEGACY_USERS || 'app_client,esp32_door_01')
+  .split(',')
+  .map((user) => user.trim())
+  .filter(Boolean);
 
 function buildAcl(devices) {
   const lines = [
@@ -44,6 +48,30 @@ function runMosquittoPasswd(username, password) {
   }
 }
 
+function listPasswordUsers() {
+  try {
+    return readFileSync(passwdFile, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.split(':')[0]?.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function deleteMosquittoUser(username) {
+  const result = spawnSync(
+    mosquittoPasswd,
+    ['-D', passwdFile, username],
+    { encoding: 'utf8' },
+  );
+
+  if (result.status !== 0) {
+    const detail = result.stderr || result.stdout || 'bilinmeyen hata';
+    throw new Error(`mosquitto_passwd ${username} silme basarisiz: ${detail}`);
+  }
+}
+
 async function main() {
   const result = await pool.query(`
     SELECT device_uid, mqtt_username, mqtt_password
@@ -68,6 +96,16 @@ async function main() {
 
   for (const device of devices) {
     runMosquittoPasswd(device.mqtt_username, device.mqtt_password);
+  }
+
+  const wantedUsers = new Set(devices.map((device) => device.mqtt_username));
+  for (const username of listPasswordUsers()) {
+    if (username.startsWith('device_') && !wantedUsers.has(username)) {
+      deleteMosquittoUser(username);
+    }
+    if (legacyUsers.includes(username)) {
+      deleteMosquittoUser(username);
+    }
   }
 
   console.log(`${devices.length} cihaz MQTT ACL/passwd senkronu tamamlandi.`);

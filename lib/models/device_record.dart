@@ -9,6 +9,8 @@ class DeviceRecord {
     required this.siteName,
     required this.assignedDoorName,
     required this.siteApprovalStatus,
+    required this.mqttUsername,
+    required this.mqttConfigured,
     required this.createdAt,
   });
 
@@ -21,6 +23,8 @@ class DeviceRecord {
   final String? siteName;
   final String? assignedDoorName;
   final String siteApprovalStatus;
+  final String? mqttUsername;
+  final bool mqttConfigured;
   final DateTime? createdAt;
 
   factory DeviceRecord.fromJson(Map<String, dynamic> json) {
@@ -34,6 +38,8 @@ class DeviceRecord {
       siteName: json['site_name'] as String?,
       assignedDoorName: json['assigned_door_name'] as String?,
       siteApprovalStatus: json['site_approval_status'] as String? ?? 'approved',
+      mqttUsername: json['mqtt_username'] as String?,
+      mqttConfigured: json['mqtt_configured'] as bool? ?? false,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'] as String),

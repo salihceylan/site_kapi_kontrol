@@ -334,21 +334,21 @@ TLS port:
 
 Kullanim mantigi:
 
-- Flutter uygulamalari MQTT ile kapi durumunu gorur
-- komutlar belirli topic yapisi uzerinden gonderilir
-- ESP32 bu topicleri dinler
+- Mobil uygulama kapi komutunu API'ye gonderir
+- API `api_bridge` MQTT kullanicisi ile cihaz komut topic'ine yazar
+- ESP32 kendi cihaz kullanicisi ile sadece kendi topic'lerini dinler/yazar
 
 Temel topic deseni:
 
-- state: `site/1/door/1/state`
-- command: `site/1/door/1/cmd`
-- event: `site/1/door/1/event`
-- availability: `site/1/door/1/availability`
+- state: `device/<UID>/state`
+- command: `device/<UID>/cmd`
+- event: `device/<UID>/event`
+- availability: `device/<UID>/availability`
 
 Ornek roller:
 
-- `app_client`
-- `esp32_door_01`
+- `api_bridge`
+- `device_<UID>`
 
 Kurulum ve ACL notlari ayrintili olarak:
 

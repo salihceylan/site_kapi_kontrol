@@ -38,6 +38,7 @@ class BleWifiState {
     required this.wifiConnected,
     required this.provisioning,
     required this.hasCredentials,
+    required this.mqttConfigured,
     required this.ssid,
     required this.ip,
   });
@@ -46,6 +47,7 @@ class BleWifiState {
   final bool wifiConnected;
   final bool provisioning;
   final bool hasCredentials;
+  final bool mqttConfigured;
   final String ssid;
   final String ip;
 
@@ -56,6 +58,7 @@ class BleWifiState {
       wifiConnected: json['wifi_connected'] == true,
       provisioning: json['provisioning'] == true,
       hasCredentials: json['has_credentials'] == true,
+      mqttConfigured: json['mqtt_configured'] == true,
       ssid: (json['ssid'] ?? '').toString(),
       ip: (json['ip'] ?? '').toString(),
     );
@@ -364,14 +367,33 @@ class BleWifiProvisionService {
   Future<BleWifiResult> provisionWifi({
     required String ssid,
     required String password,
+    required Map<String, dynamic> mqttCredentials,
   }) async {
     if (ssid.trim().isEmpty) {
       throw const BleProvisionException('SSID secimi zorunludur.');
     }
 
-    final String payload = jsonEncode(<String, String>{
+    final String mqttHost = (mqttCredentials['mqtt_host'] ?? '').toString();
+    final int mqttPort =
+        (mqttCredentials['mqtt_port'] as num?)?.toInt() ?? 8883;
+    final String mqttUsername = (mqttCredentials['mqtt_username'] ?? '')
+        .toString();
+    final String mqttPassword = (mqttCredentials['mqtt_password'] ?? '')
+        .toString();
+
+    if (mqttHost.isEmpty || mqttUsername.isEmpty || mqttPassword.isEmpty) {
+      throw const BleProvisionException(
+        'MQTT cihaz kimligi hazir degil. Once cihazi sirket hesabina kaydedin.',
+      );
+    }
+
+    final String payload = jsonEncode(<String, Object>{
       'ssid': ssid.trim(),
       'password': password,
+      'mqtt_host': mqttHost,
+      'mqtt_port': mqttPort,
+      'mqtt_username': mqttUsername,
+      'mqtt_password': mqttPassword,
     });
     await _ble.writeCharacteristicWithResponse(
       _qualifiedCharacteristic(_commandUuid),

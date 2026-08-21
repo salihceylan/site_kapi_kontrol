@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/ble_wifi_provision_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
@@ -6,9 +7,11 @@ import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 class WifiProvisionPage extends StatefulWidget {
   const WifiProvisionPage({
     super.key,
+    this.authService,
     this.title = 'Bluetooth ile Wi-Fi Kurulumu',
   });
 
+  final AuthService? authService;
   final String title;
 
   @override
@@ -155,9 +158,32 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
 
     setState(() => _savingWifi = true);
     try {
+      final String deviceUid = (_deviceState?.deviceUid ?? '').trim();
+      if (deviceUid.isEmpty) {
+        throw const BleProvisionException(
+          'Cihaz unique id okunamadi. Once Bluetooth cihazina baglanin.',
+        );
+      }
+
+      final AuthService? authService = widget.authService;
+      if (authService == null) {
+        throw const BleProvisionException(
+          'MQTT kimligi alinacak oturum bulunamadi.',
+        );
+      }
+
+      final (Map<String, dynamic>? mqttCredentials, String? mqttError) =
+          await authService.getDeviceMqttCredentials(deviceUid: deviceUid);
+      if (mqttError != null || mqttCredentials == null) {
+        throw BleProvisionException(
+          mqttError ?? 'MQTT cihaz kimligi alinamadi.',
+        );
+      }
+
       final BleWifiResult result = await _service.provisionWifi(
         ssid: ssid,
         password: _passwordController.text.trim(),
+        mqttCredentials: mqttCredentials,
       );
       final BleWifiState state = await _service.readState();
       if (!mounted) return;
@@ -213,15 +239,19 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           ),
           SizedBox(height: 4),
           Text(
-            '2. Cihaza baglanin, yakindaki SSID listesini alin ve dogru agi secin.',
+            '2. Cihaz once sirket veritabanina kayitli olmalidir; unique id ile MQTT kimligi hazirlanir.',
           ),
           SizedBox(height: 4),
           Text(
-            '3. Yalnizca Wi-Fi sifresini girin. Cihaz baglanirsa LED sabit yanar.',
+            '3. Cihaza baglanin, yakindaki SSID listesini alin ve dogru agi secin.',
           ),
           SizedBox(height: 4),
           Text(
-            '4. Ag degisirse cihazdaki butona 3 saniye basili tutarak ayari sifirlayin.',
+            '4. Wi-Fi sifresini girin. Uygulama, kayitli cihazin MQTT kimligini guvenli sekilde cihaza yazar.',
+          ),
+          SizedBox(height: 4),
+          Text(
+            '5. Ag degisirse cihazdaki butona 3 saniye basili tutarak Wi-Fi ayarini sifirlayin.',
           ),
         ],
       ),
@@ -320,6 +350,9 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
               'Wi-Fi Durumu: ${state.wifiConnected ? 'Bagli' : 'Bagli degil'}',
             ),
             Text('IP: ${state.ip.isEmpty ? '-' : state.ip}'),
+            Text(
+              'MQTT Kimligi: ${state.mqttConfigured ? 'Hazir' : 'Eksik veya henuz yazilmadi'}',
+            ),
           ],
           if ((_lastResult?.message ?? '').isNotEmpty) ...<Widget>[
             const SizedBox(height: 8),

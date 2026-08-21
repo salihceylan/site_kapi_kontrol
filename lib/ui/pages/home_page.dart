@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -17,7 +18,6 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/services/mqtt_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
@@ -38,15 +38,6 @@ String _blockLabelFromIndex(int index) {
     current = current ~/ 26;
   }
   return '$label Blok';
-}
-
-String _mqttDeviceUidFromStoredUid(String uid) {
-  final text = uid.trim().toUpperCase();
-  final macPattern = RegExp(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$');
-  if (!macPattern.hasMatch(text)) {
-    return text;
-  }
-  return text.split(':').reversed.join();
 }
 
 List<int> _distributeApartmentCounts({
@@ -102,7 +93,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const int _pageSize = 10;
 
-  MqttDoorService? _doorService;
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
 
   final _profileFormKey = GlobalKey<FormState>();
@@ -133,10 +123,16 @@ class _HomePageState extends State<HomePage> {
   SiteRecord? _doorControlSite;
   SiteStructureRecord? _doorControlStructure;
   DoorRecord? _doorControlDoor;
+  DoorRuntimeStatus? _doorRuntimeStatus;
+  Timer? _doorStatusTimer;
+  bool _isLoadingDoorStatus = false;
+  bool _isOpeningDoor = false;
+  String? _doorStatusError;
   bool _isLoadingDoorControlSites = false;
   bool _isLoadingDoorControlStructure = false;
   DevicePage? _companyDevicesPage;
   bool _isLoadingCompanyDevices = false;
+  bool _isBroadcastingOtaCheck = false;
 
   @override
   void initState() {
@@ -157,7 +153,7 @@ class _HomePageState extends State<HomePage> {
     _profileEmailController.dispose();
     _profilePhoneController.dispose();
     _profilePasswordController.dispose();
-    _doorService?.dispose();
+    _stopDoorStatusTimer();
     super.dispose();
   }
 
@@ -590,6 +586,51 @@ class _HomePageState extends State<HomePage> {
     await _loadCompanyDevices(page: _companyDevicesPage?.page ?? 1, force: true);
   }
 
+  Future<void> _broadcastOtaCheckToAllDevices() async {
+    final total = _companyDevicesPage?.total ?? 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tum Cihazlara OTA Kontrolu'),
+        content: Text(
+          'Kayitli $total cihaza kendinizi guncelleyin kontrol komutu gonderilecek. '
+          'Manifest kapaliysa cihazlar guncelleme indirmez. Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Vazgec'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Gonder'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _isBroadcastingOtaCheck = true);
+    final (result, error) = await widget.authService.broadcastOtaCheck();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isBroadcastingOtaCheck = false);
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+
+    final requested = result?['requested'] as int? ?? 0;
+    final sent = result?['sent'] as int? ?? 0;
+    final failed = result?['failed'] as List<dynamic>? ?? const <dynamic>[];
+    _showMessage(
+      'OTA kontrol komutu gonderildi. Hedef: $requested, basarili: $sent, hata: ${failed.length}.',
+    );
+  }
+
   Future<void> _assignCompanyDeviceToDoor(DeviceRecord device) async {
     List<SiteRecord> sites;
     try {
@@ -646,7 +687,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isLoadingDoorControlStructure = true;
       _doorControlDoor = null;
-      _disposeDoorControlService();
+      _clearDoorRuntimeStatus();
     });
 
     final (structure, error) = await widget.authService.getSiteStructure(
@@ -689,7 +730,7 @@ class _HomePageState extends State<HomePage> {
       _doorControlSite = site;
       _doorControlStructure = null;
       _doorControlDoor = null;
-      _disposeDoorControlService();
+      _clearDoorRuntimeStatus();
     });
     await _loadDoorControlStructure(site.id, force: true);
   }
@@ -709,32 +750,73 @@ class _HomePageState extends State<HomePage> {
 
     setState(() {
       _doorControlDoor = selectedDoor;
-      _disposeDoorControlService();
-      if (selectedDoor.assignedDeviceUid != null &&
-          selectedDoor.assignedDeviceUid!.trim().isNotEmpty) {
-        final deviceTopicUid = _mqttDeviceUidFromStoredUid(
-          selectedDoor.assignedDeviceUid!,
-        );
-        final siteId =
-            (selectedDoor.mqttSiteId ?? _doorControlSite?.mqttSiteId ?? 0)
-                .toString();
-        _doorService = MqttDoorService(
-          host: mqttHost,
-          port: mqttPort,
-          username: mqttAppUser,
-          password: mqttAppPassword,
-          siteId: siteId,
-          doorId: selectedDoor.doorIndex.toString(),
-          topicPrefix: 'device/$deviceTopicUid',
-        );
-        _doorService!.connect();
-      }
+      _doorRuntimeStatus = null;
+      _doorStatusError = null;
+    });
+    _startDoorStatusPolling(selectedDoor);
+  }
+
+  void _clearDoorRuntimeStatus() {
+    _stopDoorStatusTimer();
+    _doorRuntimeStatus = null;
+    _doorStatusError = null;
+    _isLoadingDoorStatus = false;
+    _isOpeningDoor = false;
+  }
+
+  void _stopDoorStatusTimer() {
+    _doorStatusTimer?.cancel();
+    _doorStatusTimer = null;
+  }
+
+  void _startDoorStatusPolling(DoorRecord door) {
+    _stopDoorStatusTimer();
+    if (door.assignedDeviceUid == null || door.assignedDeviceUid!.trim().isEmpty) {
+      return;
+    }
+    _refreshDoorRuntimeStatus(showLoading: true);
+    _doorStatusTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _refreshDoorRuntimeStatus();
     });
   }
 
-  void _disposeDoorControlService() {
-    _doorService?.dispose();
-    _doorService = null;
+  Future<void> _refreshDoorRuntimeStatus({bool showLoading = false}) async {
+    final door = _doorControlDoor;
+    if (door == null ||
+        door.assignedDeviceUid == null ||
+        door.assignedDeviceUid!.trim().isEmpty) {
+      return;
+    }
+    if (_isLoadingDoorStatus) {
+      return;
+    }
+
+    if (showLoading && mounted) {
+      setState(() => _isLoadingDoorStatus = true);
+    } else {
+      _isLoadingDoorStatus = true;
+    }
+
+    final (status, error) = await widget.authService.getDoorRuntimeStatus(
+      doorId: door.id,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (_doorControlDoor?.id != door.id) {
+      setState(() => _isLoadingDoorStatus = false);
+      return;
+    }
+
+    setState(() {
+      _isLoadingDoorStatus = false;
+      if (status != null) {
+        _doorRuntimeStatus = status;
+        _doorStatusError = null;
+      } else {
+        _doorStatusError = error;
+      }
+    });
   }
 
   Future<void> _selectSite(SiteRecord site) async {
@@ -1208,7 +1290,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openWifiProvisionFlow() async {
     await Navigator.of(
       context,
-    ).push<void>(MaterialPageRoute(builder: (_) => const WifiProvisionPage()));
+    ).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WifiProvisionPage(authService: widget.authService),
+      ),
+    );
   }
 
   Future<void> openDeviceAddFlow() async {
@@ -1255,7 +1341,11 @@ class _HomePageState extends State<HomePage> {
 
     await Navigator.of(
       context,
-    ).push<void>(MaterialPageRoute(builder: (_) => const WifiProvisionPage()));
+    ).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WifiProvisionPage(authService: widget.authService),
+      ),
+    );
   }
 
   Future<void> _saveProfile() async {
@@ -1293,18 +1383,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openDoor() async {
-    final session = widget.authService.session;
-    final doorService = _doorService;
-    if (session == null || doorService == null) {
+    final door = _doorControlDoor;
+    if (door == null || _isOpeningDoor) {
       return;
     }
 
-    final error = await doorService.sendPulseCommand(
-      requestedBy: session.email,
-    );
+    setState(() => _isOpeningDoor = true);
+    final (status, error) = await widget.authService.openDoor(doorId: door.id);
     if (!mounted) {
       return;
     }
+    setState(() {
+      _isOpeningDoor = false;
+      if (status != null) {
+        _doorRuntimeStatus = status;
+        _doorStatusError = null;
+      }
+    });
     if (error != null) {
       _showMessage(error);
       return;
@@ -1608,7 +1703,7 @@ class _HomePageState extends State<HomePage> {
     final sites = _doorControlSitesPage?.sites ?? const <SiteRecord>[];
     final doors = _doorControlStructure?.doors ?? const <DoorRecord>[];
     final selectedDoor = _doorControlDoor;
-    final doorService = _doorService;
+    final runtimeStatus = _doorRuntimeStatus;
 
     Widget buildStatus() {
       if (selectedDoor == null) {
@@ -1626,67 +1721,57 @@ class _HomePageState extends State<HomePage> {
         );
       }
 
-      if (doorService == null) {
-        return const Text(
-          'MQTT kontrol servisi hazirlanamadi.',
-          style: TextStyle(color: Colors.red),
-        );
-      }
+      final connectionText = runtimeStatus == null
+          ? 'Bilinmiyor'
+          : runtimeStatus.mqttBridgeConnected
+          ? 'Hazir'
+          : 'Hazir degil';
+      final deviceOnlineText = runtimeStatus == null
+          ? 'Bilinmiyor'
+          : runtimeStatus.mqttConnected
+          ? 'Online'
+          : 'Offline';
+      final stateText = runtimeStatus?.doorLocked == null
+          ? 'Bilinmiyor'
+          : (runtimeStatus!.doorLocked! ? 'Kapali/Kilitli' : 'Acik');
+      final commandEnabled =
+          runtimeStatus?.commandEnabled == true && !_isOpeningDoor;
 
-      return AnimatedBuilder(
-        animation: doorService,
-        builder: (context, _) {
-          final connectionText = doorService.connected
-              ? 'Bagli'
-              : doorService.connecting
-              ? 'Baglaniyor'
-              : 'Bagli degil';
-          final deviceOnlineText = doorService.deviceOnline == null
-              ? 'Bilinmiyor'
-              : doorService.deviceOnline!
-              ? 'Online'
-              : 'Offline';
-          final stateText = doorService.doorLocked == null
-              ? 'Bilinmiyor'
-              : (doorService.doorLocked! ? 'Kapali/Kilitli' : 'Acik');
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Cihaz: ${selectedDoor.assignedDeviceUid}'),
-              const SizedBox(height: 6),
-              Text('MQTT Topic: ${doorService.cmdTopic}'),
-              const SizedBox(height: 6),
-              Text('MQTT: $connectionText'),
-              const SizedBox(height: 6),
-              Text('Cihaz Baglantisi: $deviceOnlineText'),
-              const SizedBox(height: 6),
-              Text('Kapi Durumu: $stateText'),
-              if (doorService.lastUpdatedAt != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Son Guncelleme: ${_formatDate(doorService.lastUpdatedAt)}',
-                ),
-              ],
-              if (doorService.lastError != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  doorService.lastError!,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ],
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: doorService.commandEnabled ? _openDoor : null,
-                  icon: const Icon(Icons.lock_open),
-                  label: const Text('Kapi Ac'),
-                ),
-              ),
-            ],
-          );
-        },
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Cihaz: ${selectedDoor.assignedDeviceUid}'),
+          const SizedBox(height: 6),
+          Text('Sunucu MQTT: $connectionText'),
+          const SizedBox(height: 6),
+          Text('Cihaz Baglantisi: $deviceOnlineText'),
+          const SizedBox(height: 6),
+          Text('Kapi Durumu: $stateText'),
+          if (runtimeStatus?.lastSeenAt != null) ...[
+            const SizedBox(height: 6),
+            Text('Son Guncelleme: ${_formatDate(runtimeStatus!.lastSeenAt)}'),
+          ],
+          if (_isLoadingDoorStatus) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          if (_doorStatusError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _doorStatusError!,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: commandEnabled ? _openDoor : null,
+              icon: const Icon(Icons.lock_open),
+              label: Text(_isOpeningDoor ? 'Gonderiliyor' : 'Kapi Ac'),
+            ),
+          ),
+        ],
       );
     }
 
@@ -1848,36 +1933,51 @@ class _HomePageState extends State<HomePage> {
           width: double.infinity,
           padding: const EdgeInsets.all(22),
           decoration: AppDecorations.glassCard,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Sirket Hesabina Kayitli Cihazlar',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Sirket veritabanina kaydedilmis cihazlari, atandiklari site ve kapi bilgileriyle birlikte gorebilirsiniz.',
-                    ),
-                  ],
+              const Text(
+                'Sirket Hesabina Kayitli Cihazlar',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
                 ),
               ),
-              IconButton(
-                tooltip: 'Yenile',
-                onPressed: _isLoadingCompanyDevices
-                    ? null
-                    : () => _loadCompanyDevices(
-                        page: pageData?.page ?? 1,
-                        force: true,
-                      ),
-                icon: const Icon(Icons.refresh),
+              const SizedBox(height: 8),
+              const Text(
+                'Sirket veritabanina kaydedilmis cihazlari, atandiklari site ve kapi bilgileriyle birlikte gorebilirsiniz.',
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed:
+                        _isBroadcastingOtaCheck ||
+                            _isLoadingCompanyDevices ||
+                            (pageData?.total ?? 0) == 0
+                        ? null
+                        : _broadcastOtaCheckToAllDevices,
+                    icon: const Icon(Icons.system_update_alt),
+                    label: Text(
+                      _isBroadcastingOtaCheck
+                          ? 'Gonderiliyor'
+                          : 'Tumune OTA Kontrolu',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Yenile',
+                    onPressed: _isLoadingCompanyDevices
+                        ? null
+                        : () => _loadCompanyDevices(
+                            page: pageData?.page ?? 1,
+                            force: true,
+                          ),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1958,6 +2058,14 @@ class _HomePageState extends State<HomePage> {
             Text('Kapi: $doorText'),
             const SizedBox(height: 6),
             Text('Kullanici ID: $userText'),
+            const SizedBox(height: 6),
+            Text(
+              'MQTT Kimligi: ${device.mqttConfigured ? 'Hazir' : 'Eksik'}',
+            ),
+            if ((device.mqttUsername ?? '').isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('MQTT Kullanici: ${device.mqttUsername}'),
+            ],
             const SizedBox(height: 6),
             Text('Kayit Tarihi: $dateText'),
             const SizedBox(height: 12),

@@ -37,6 +37,12 @@ migrate_working_dir/
 /build/
 /coverage/
 /server/node_modules/
+.env
+.env.*
+!/server/.env.example
+/server/.env
+/server/package-lock.json.server-backup
+/server/firmware/**/*.bin
 
 # Symbolication related
 app.*.symbols

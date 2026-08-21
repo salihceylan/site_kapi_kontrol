@@ -1,8 +1,9 @@
 ﻿MQTT KURULUM REHBERI (mqtt.gudeteknoloji.com.tr)
 
-Amaç
-- Flutter uygulamasi ve ESP32 cihazlarin TLS uzerinden ayni MQTT broker'a guvenli sekilde baglanmasi.
-- Uygulama komut gonderecek (door cmd), ESP32 durum/event yayinlayacak.
+Amac
+- API ve ESP32 cihazlarin TLS uzerinden ayni MQTT broker'a guvenli sekilde baglanmasi.
+- Mobil uygulama MQTT'ye dogrudan baglanmaz; kapi komutu API'ye gider.
+- Her ESP32 cihaz kendi MQTT kullanici/sifresiyle yalnizca kendi topic'lerine erisir.
 
 Mimari
 - Broker: Mosquitto (VPS)
@@ -11,11 +12,11 @@ Mimari
 - Auth: username/password
 - Yetki: ACL (kullanici bazli topic izinleri)
 
-Topic yapisi (ornek)
-- Komut: site/1/door/1/cmd
-- Durum: site/1/door/1/state
-- Olay: site/1/door/1/event
-- Erisilebilirlik: site/1/door/1/availability
+Topic yapisi
+- Komut: device/<UID>/cmd
+- Durum: device/<UID>/state
+- Olay: device/<UID>/event
+- Erisilebilirlik: device/<UID>/availability
 
 1) DNS hazirligi
 - DNS panelinde asagidaki A kaydi olmalidir:
@@ -42,18 +43,22 @@ sudo chmod 644 /etc/mosquitto/certs/fullchain.pem
 sudo chmod 640 /etc/mosquitto/certs/privkey.pem
 
 5) MQTT kullanicilarini olustur
-sudo mosquitto_passwd -c /etc/mosquitto/passwd app_client
-sudo mosquitto_passwd /etc/mosquitto/passwd esp32_door_01
+sudo mosquitto_passwd -c /etc/mosquitto/passwd api_bridge
+
+# Her cihaz icin:
+# UID ornek: D4C771A172E0
+# Kullanici ornek: device_D4C771A172E0
+sudo mosquitto_passwd /etc/mosquitto/passwd device_D4C771A172E0
 
 6) ACL dosyasini olustur
 sudo tee /etc/mosquitto/acl > /dev/null <<'EOF'
-user app_client
+user api_bridge
 topic read device/+/state
 topic read device/+/event
 topic read device/+/availability
 topic write device/+/cmd
 
-user esp32_door_01
+user device_D4C771A172E0
 topic read device/D4C771A172E0/cmd
 topic write device/D4C771A172E0/state
 topic write device/D4C771A172E0/event
@@ -61,11 +66,48 @@ topic write device/D4C771A172E0/availability
 EOF
 
 Not:
-- D4C771A172E0 ornek cihaz Unique ID'sidir; her cihaz icin kendi UID'siyle
-  ayri kullanici ve ayri ACL satirlari olusturun.
-- app_client halen kapilari acabilmek icin device/+/cmd yazma yetkisine sahiptir.
-  Uretimde ideal model, komutlari API uzerinden broker'a tasimak veya app
-  kullanicilarini site/cihaz bazli ayri ACL'lere bolmektir.
+- D4C771A172E0 ornek cihaz Unique ID'sidir.
+- Sunucu cihaz kaydinda mqtt_username/mqtt_password olusturur. Broker tarafinda
+  ayni kullanici/sifre mosquitto_passwd ve ACL dosyasina eklenmelidir.
+- Ticari urun modunda cihaz kaydi sonrasi bu islem API tarafindan otomatik
+  tetiklenir. Bunun icin 6.1 adimindaki sinirli sudo komutu kurulmalidir.
+- Mobil uygulamaya MQTT kullanici/sifresi verilmez. Kapi acma komutu API'ye
+  gider; API, api_bridge kullanicisi ile broker'a yazar.
+
+6.1) Otomatik broker senkronu (ticari urun modu)
+- API'ye sinirsiz sudo verilmez. Sadece asagidaki tek komutu sifresiz
+  calistirma yetkisi verilir.
+
+sudo install -o root -g root -m 0755 \
+  /var/www/site_kapi_kontrol/server/scripts/kapi-mqtt-sync.sh \
+  /usr/local/bin/kapi-mqtt-sync
+
+sudo tee /etc/sudoers.d/kapi-mqtt-sync > /dev/null <<'EOF'
+salihceylan ALL=(root) NOPASSWD: /usr/local/bin/kapi-mqtt-sync
+EOF
+
+sudo chmod 440 /etc/sudoers.d/kapi-mqtt-sync
+sudo visudo -cf /etc/sudoers.d/kapi-mqtt-sync
+
+- server/.env icinde otomatik senkron icin:
+  MQTT_SYNC_COMMAND=sudo
+  MQTT_SYNC_ARGS=-n /usr/local/bin/kapi-mqtt-sync
+  MQTT_SYNC_TIMEOUT_MS=30000
+  MQTT_SYNC_REQUIRED=true
+
+- Elle test:
+  cd /var/www/site_kapi_kontrol/server
+  sudo -n /usr/local/bin/kapi-mqtt-sync
+
+- Bu kurulumdan sonra yeni cihaz kaydedildiginde backend DB'de cihaz MQTT
+  kimligini uretir, Mosquitto ACL/passwd dosyalarini senkronlar ve Mosquitto'yu
+  reload/restart eder.
+- server/.env icinde su degerler tanimli olmali:
+  MQTT_HOST=mqtt.gudeteknoloji.com.tr
+  MQTT_PORT=8883
+  MQTT_USER=api_bridge
+  MQTT_PASSWORD=<api_bridge_sifresi>
+  MQTT_ALLOW_INSECURE_TLS=false
 
 7) Mosquitto secure config (tek dosya tavsiyesi)
 - Eski conf dosyalarini yedekle:
@@ -108,32 +150,38 @@ sudo ufw allow 8883/tcp
 sudo ufw status
 
 11) Test komutlari
-- Subscriber (App rolu, state okuma):
+- Subscriber (API bridge rolu, state okuma):
 mosquitto_sub -h mqtt.gudeteknoloji.com.tr -p 8883 \
 --cafile /etc/ssl/certs/ca-certificates.crt \
--u app_client -P 'SIFRE' \
--t 'site/1/door/1/state' -d
+-u api_bridge -P 'SIFRE' \
+-t 'device/D4C771A172E0/state' -d
 
-- Publisher (ESP32 rolu, state yazma):
+- Publisher (ESP32 cihaz rolu, state yazma):
 mosquitto_pub -h mqtt.gudeteknoloji.com.tr -p 8883 \
 --cafile /etc/ssl/certs/ca-certificates.crt \
--u esp32_door_01 -P 'SIFRE' \
--t 'site/1/door/1/state' -m '{"locked":false}' -q 1 -d
+-u device_D4C771A172E0 -P 'SIFRE' \
+-t 'device/D4C771A172E0/state' -m '{"locked":false}' -q 1 -d
+
+- ESP32 cihaz kendi cmd topic'i disinda baska cihazin komutunu okuyamamali:
+mosquitto_sub -V mqttv5 -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u device_D4C771A172E0 -P 'SIFRE' \
+-t 'device/BASKAUID/cmd' -d
 
 12) ACL dogrulama (MQTT v5 ile net sonuc)
-- app_client state'e yazmaya calisinca engellenmeli:
+- api_bridge state'e yazmaya calisinca engellenmeli:
 mosquitto_pub -V mqttv5 -h mqtt.gudeteknoloji.com.tr -p 8883 \
 --cafile /etc/ssl/certs/ca-certificates.crt \
--u app_client -P 'SIFRE' \
--t 'site/1/door/1/state' -m 'x' -q 1 -d
+-u api_bridge -P 'SIFRE' \
+-t 'device/D4C771A172E0/state' -m 'x' -q 1 -d
 
 Beklenen: PUBACK RC:135 (Not authorized)
 
-- app_client cmd'ye yazabilmeli:
+- api_bridge cmd'ye yazabilmeli:
 mosquitto_pub -V mqttv5 -h mqtt.gudeteknoloji.com.tr -p 8883 \
 --cafile /etc/ssl/certs/ca-certificates.crt \
--u app_client -P 'SIFRE' \
--t 'site/1/door/1/cmd' -m '{"action":"pulse"}' -q 1 -d
+-u api_bridge -P 'SIFRE' \
+-t 'device/D4C771A172E0/cmd' -m '{"action":"pulse"}' -q 1 -d
 
 Not: RC:16 gorulurse "No matching subscribers" demektir; yetki hatasi degildir.
 

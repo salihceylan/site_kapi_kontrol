@@ -12,12 +12,12 @@ const int mqttPort = int.fromEnvironment('MQTT_PORT', defaultValue: 8883);
 
 const String mqttAppUser = String.fromEnvironment(
   'MQTT_APP_USER',
-  defaultValue: 'app_client',
+  defaultValue: '',
 );
 
 const String mqttAppPassword = String.fromEnvironment(
   'MQTT_APP_PASSWORD',
-  defaultValue: 'Fingon08.',
+  defaultValue: '',
 );
 
 const String mqttSiteId = String.fromEnvironment(

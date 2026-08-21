@@ -1,0 +1,55 @@
+ESP32 OTA GUNCELLEME AKISI
+==========================
+
+Karar verilen model:
+- Cihaz acilista WiFi oturduktan sonra yaklasik 90 saniye + cihaz bazli rastgele
+  gecikme ile bir kez guncelleme kontrol eder.
+- Normal calismada 24 saatte bir kontrol eder. Her cihaz kendi UID'sinden
+  uretilen rastgele gecikmeyle kontrol ettigi icin binlerce cihaz ayni anda
+  sunucuya yuklenmez.
+- Acil durumda MQTT komutu ile hemen kontrol ettirilebilir:
+  {"action":"ota_check"}
+- Sirket panelinde "Sirket Hesabina Kayitli Cihazlar" ekranindan
+  "Tumune OTA Kontrolu" butonu ile kayitli tum cihazlara tek tusla ayni
+  ota_check komutu gonderilebilir.
+
+Sunucu dosya yapisi:
+- Manifest:
+  server/firmware/esp32-c3/manifest.json
+- Firmware:
+  server/firmware/esp32-c3/firmware.bin
+
+Manifest ornegi:
+{
+  "enabled": true,
+  "version": "1.1.1",
+  "filename": "firmware.bin",
+  "force": false,
+  "interval_hours": 24,
+  "allowed_uids": [],
+  "notes": "Röle ve WiFi iyilestirmeleri"
+}
+
+Notlar:
+- enabled false ise cihazlar guncelleme indirmez.
+- allowed_uids bos ise tum ESP32-C3 cihazlari bu yayini gorebilir.
+- allowed_uids dolu ise sadece listedeki UID'ler guncelleme alir. Bu, once
+  1-2 test cihazina yayin yapmak icin kullanilir.
+- Cihaz firmware'ine OTA ozelligi bir kez USB ile yuklenmelidir. Sonraki
+  firmware.bin yayinlari uzaktan alinabilir.
+
+Sunucuda hizli kontrol:
+curl "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=1.1.0&uid=D4C771A172E0"
+
+MQTT ile acil OTA kontrol komutu:
+mosquitto_pub -h mqtt.gudeteknoloji.com.tr -p 8883 \
+--cafile /etc/ssl/certs/ca-certificates.crt \
+-u api_bridge -P 'SIFRE' \
+-t 'device/D4C771A172E0/cmd' \
+-m '{"action":"ota_check"}' -q 1
+
+Panelden toplu komut:
+- Sirket Paneli > Sirket Hesabina Kayitli Cihazlar
+- Tumune OTA Kontrolu
+- Onay verildiginde API veritabanindaki tum cihaz UID'lerine ayri ayri
+  device/<UID>/cmd topic'i uzerinden ota_check yayinlar.

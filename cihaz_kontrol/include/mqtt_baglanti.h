@@ -7,31 +7,28 @@
 #include <WiFiClientSecure.h>
 
 #include "role_kontrol.h"
+#include "ota_guncelleme.h"
+#include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
 extern PubSubClient client;
 extern WiFiClientSecure espClientSecure;
 
-inline const char* MQTT_SERVER = "mqtt.gudeteknoloji.com.tr";
-constexpr uint16_t MQTT_PORT = 8883;
-inline const char* MQTT_USER = "esp32_door_01";
-inline const char* MQTT_PASS = "Fingon08.";
-constexpr bool MQTT_ALLOW_INSECURE_TLS = true;
-
-inline const char* TOPIC_CMD = "site/1/door/1/cmd";
-inline const char* TOPIC_STATE = "site/1/door/1/state";
-inline const char* TOPIC_EVENT = "site/1/door/1/event";
-inline const char* TOPIC_AVAILABILITY = "site/1/door/1/availability";
+inline const char* MQTT_DEFAULT_SERVER = "mqtt.gudeteknoloji.com.tr";
+constexpr uint16_t MQTT_DEFAULT_PORT = 8883;
+inline const char* MQTT_DEFAULT_USER = "";
+inline const char* MQTT_DEFAULT_PASS = "";
 
 inline bool gDoorLocked = true;
 inline unsigned long gLastMqttReconnectAt = 0;
+inline String gMqttConfiguredHost = MQTT_DEFAULT_SERVER;
+inline uint16_t gMqttConfiguredPort = MQTT_DEFAULT_PORT;
 
 inline String mqttDeviceTopic(const char* suffix) {
   return "device/" + cihazUniqueId() + "/" + suffix;
 }
 
 inline void mqttPublishAvailability(const char* value) {
-  client.publish(TOPIC_AVAILABILITY, value, true);
   const String deviceAvailabilityTopic = mqttDeviceTopic("availability");
   client.publish(deviceAvailabilityTopic.c_str(), value, true);
 }
@@ -42,7 +39,6 @@ inline void mqttPublishState(bool locked) {
 
   String payload;
   serializeJson(doc, payload);
-  client.publish(TOPIC_STATE, payload.c_str(), true);
   const String deviceStateTopic = mqttDeviceTopic("state");
   client.publish(deviceStateTopic.c_str(), payload.c_str(), true);
 }
@@ -54,7 +50,6 @@ inline void mqttPublishEvent(const char* eventName) {
 
   String payload;
   serializeJson(doc, payload);
-  client.publish(TOPIC_EVENT, payload.c_str(), false);
   const String deviceEventTopic = mqttDeviceTopic("event");
   client.publish(deviceEventTopic.c_str(), payload.c_str(), false);
 }
@@ -74,6 +69,21 @@ inline bool shouldTriggerPulse(const String& message) {
   return String(action) == "pulse";
 }
 
+inline bool shouldTriggerOtaCheck(const String& message) {
+  if (message == "ota" || message == "ota_check") {
+    return true;
+  }
+
+  JsonDocument json;
+  const auto err = deserializeJson(json, message);
+  if (err) {
+    return false;
+  }
+
+  const char* action = json["action"] | "";
+  return String(action) == "ota_check";
+}
+
 inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message;
   message.reserve(length);
@@ -87,7 +97,13 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.println(message);
 
   const String deviceCmdTopic = mqttDeviceTopic("cmd");
-  if (String(topic) != TOPIC_CMD && String(topic) != deviceCmdTopic) {
+  if (String(topic) != deviceCmdTopic) {
+    return;
+  }
+
+  if (shouldTriggerOtaCheck(message)) {
+    otaTalepEt("mqtt");
+    mqttPublishEvent("ota_check_requested");
     return;
   }
 
@@ -109,14 +125,19 @@ inline bool mqttReconnect() {
   if (client.connected()) {
     return true;
   }
+  if (!wifiHasMqttCredentials()) {
+    Serial.println("MQTT kimligi yok; BLE provisioning ile cihaz kimligi yazilmali.");
+    return false;
+  }
 
   const String clientId = "AHBU-" + cihazUniqueId();
   Serial.print("MQTT baglaniyor...");
   const String deviceAvailabilityTopic = mqttDeviceTopic("availability");
+  const String mqttUser = wifiMqttUser(MQTT_DEFAULT_USER);
+  const String mqttPass = wifiMqttPassword(MQTT_DEFAULT_PASS);
 
-  if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, deviceAvailabilityTopic.c_str(), 1, true, "offline")) {
+  if (client.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str(), deviceAvailabilityTopic.c_str(), 1, true, "offline")) {
     Serial.println("baglandi");
-    client.subscribe(TOPIC_CMD, 1);
     const String deviceCmdTopic = mqttDeviceTopic("cmd");
     client.subscribe(deviceCmdTopic.c_str(), 1);
     mqttPublishAvailability("online");
@@ -132,13 +153,19 @@ inline bool mqttReconnect() {
 }
 
 inline void mqttSetup() {
-  // Uretimde MQTT_ALLOW_INSECURE_TLS false yapilip setCACert ile CA dogrulamasi
-  // kullanilmalidir. Mevcut saha kurulumlari bozulmasin diye gecici fallback acik.
-  if (MQTT_ALLOW_INSECURE_TLS) {
-    espClientSecure.setInsecure();
-  }
-  client.setServer(MQTT_SERVER, MQTT_PORT);
+  espClientSecure.setCACert(TLS_ROOT_CA);
+  gMqttConfiguredHost = wifiMqttHost(MQTT_DEFAULT_SERVER);
+  gMqttConfiguredPort = wifiMqttPort(MQTT_DEFAULT_PORT);
+  client.setServer(gMqttConfiguredHost.c_str(), gMqttConfiguredPort);
   client.setCallback(mqttCallback);
+}
+
+inline String mqttAktifSunucu() {
+  return gMqttConfiguredHost;
+}
+
+inline uint16_t mqttAktifPort() {
+  return gMqttConfiguredPort;
 }
 
 inline void mqttLoopHandler() {

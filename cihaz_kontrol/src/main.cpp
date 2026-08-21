@@ -4,6 +4,7 @@
 #include <PubSubClient.h>
 
 #include "mqtt_baglanti.h"
+#include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
 
@@ -86,12 +87,18 @@ void seriDurumYazdir() {
   Serial.println(BLE_STATUS_LED_PIN);
   Serial.print("MQTT: ");
   Serial.println(client.connected() ? "bagli" : "bagli degil");
+  Serial.print("MQTT kimligi: ");
+  Serial.println(wifiHasMqttCredentials() ? "cihaz ozel kimlikli" : "eksik");
   Serial.print("MQTT sunucu: ");
-  Serial.print(MQTT_SERVER);
+  Serial.print(mqttAktifSunucu());
   Serial.print(":");
-  Serial.println(MQTT_PORT);
+  Serial.println(mqttAktifPort());
   Serial.print("Role GPIO: ");
   Serial.println(ROLE_PIN);
+  Serial.print("Firmware surumu: ");
+  Serial.println(OTA_CURRENT_VERSION);
+  Serial.print("OTA durum: ");
+  Serial.println(otaLastStatus());
   rolePinDurumuYazdir("Role pin okuma");
   Serial.println("Seri role test: h=HIGH, l=LOW, r=pulse, p=pin bulma");
   Serial.println("------------------------");
@@ -103,6 +110,7 @@ void setup() {
 
   roleSetup();
   wifiBaglan();
+  otaSetup();
   mqttSetup();
 }
 
@@ -110,6 +118,7 @@ void loop() {
   seriKomutKontrol();
   wifiLoop();
   mqttLoopHandler();
+  otaCheckAndUpdate();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
   }

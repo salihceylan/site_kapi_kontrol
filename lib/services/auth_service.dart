@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
-import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -504,6 +505,80 @@ class AuthService extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<(Map<String, dynamic>?, String?)> broadcastOtaCheck() async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final result = await api.broadcastOtaCheck(token: active.token);
+      return (result, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(Map<String, dynamic>?, String?)> getDeviceMqttCredentials({
+    required String deviceUid,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
+    }
+
+    try {
+      final result = await api.getDeviceMqttCredentials(
+        token: active.token,
+        deviceUid: deviceUid,
+      );
+      return (result, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DoorRuntimeStatus?, String?)> getDoorRuntimeStatus({
+    required int doorId,
+  }) async {
+    final active = session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadi.');
+    }
+
+    try {
+      final status = await api.getDoorRuntimeStatus(
+        token: active.token,
+        doorId: doorId,
+      );
+      return (status, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DoorRuntimeStatus?, String?)> openDoor({required int doorId}) async {
+    final active = session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadi.');
+    }
+
+    try {
+      final status = await api.openDoor(token: active.token, doorId: doorId);
+      return (status, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
     }
   }
 

@@ -15,6 +15,10 @@
 inline constexpr char WIFI_PREFS_NAMESPACE[] = "wifi_cfg";
 inline constexpr char WIFI_PREF_SSID[] = "ssid";
 inline constexpr char WIFI_PREF_PASSWORD[] = "password";
+inline constexpr char WIFI_PREF_MQTT_HOST[] = "mqtt_host";
+inline constexpr char WIFI_PREF_MQTT_PORT[] = "mqtt_port";
+inline constexpr char WIFI_PREF_MQTT_USER[] = "mqtt_user";
+inline constexpr char WIFI_PREF_MQTT_PASSWORD[] = "mqtt_pass";
 
 inline constexpr char BLE_WIFI_SERVICE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f001";
 inline constexpr char BLE_WIFI_STATE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f002";
@@ -29,6 +33,10 @@ inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 8;
 inline Preferences gWifiPrefs;
 inline String gSavedWifiSsid;
 inline String gSavedWifiPassword;
+inline String gSavedMqttHost;
+inline uint16_t gSavedMqttPort = 0;
+inline String gSavedMqttUser;
+inline String gSavedMqttPassword;
 inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
@@ -36,6 +44,10 @@ inline bool gPendingWifiScan = false;
 inline bool gPendingWifiProvision = false;
 inline String gPendingProvisionSsid;
 inline String gPendingProvisionPassword;
+inline String gPendingMqttHost;
+inline uint16_t gPendingMqttPort = 0;
+inline String gPendingMqttUser;
+inline String gPendingMqttPassword;
 inline String gBleNetworksPayload = R"({"networks":[]})";
 inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
@@ -71,6 +83,10 @@ inline bool wifiResetButtonPressed() {
 inline void wifiLoadStoredCredentials() {
   gSavedWifiSsid = gWifiPrefs.getString(WIFI_PREF_SSID, "");
   gSavedWifiPassword = gWifiPrefs.getString(WIFI_PREF_PASSWORD, "");
+  gSavedMqttHost = gWifiPrefs.getString(WIFI_PREF_MQTT_HOST, "");
+  gSavedMqttPort = static_cast<uint16_t>(gWifiPrefs.getUInt(WIFI_PREF_MQTT_PORT, 0));
+  gSavedMqttUser = gWifiPrefs.getString(WIFI_PREF_MQTT_USER, "");
+  gSavedMqttPassword = gWifiPrefs.getString(WIFI_PREF_MQTT_PASSWORD, "");
   gWifiConfigured = !gSavedWifiSsid.isEmpty();
 }
 
@@ -82,6 +98,26 @@ inline void wifiPersistCredentials(const String& ssid, const String& password) {
   gWifiConfigured = !gSavedWifiSsid.isEmpty();
 }
 
+inline void wifiPersistMqttCredentials(
+  const String& host,
+  uint16_t port,
+  const String& username,
+  const String& password
+) {
+  if (host.isEmpty() || port == 0 || username.isEmpty() || password.isEmpty()) {
+    return;
+  }
+
+  gWifiPrefs.putString(WIFI_PREF_MQTT_HOST, host);
+  gWifiPrefs.putUInt(WIFI_PREF_MQTT_PORT, port);
+  gWifiPrefs.putString(WIFI_PREF_MQTT_USER, username);
+  gWifiPrefs.putString(WIFI_PREF_MQTT_PASSWORD, password);
+  gSavedMqttHost = host;
+  gSavedMqttPort = port;
+  gSavedMqttUser = username;
+  gSavedMqttPassword = password;
+}
+
 inline void wifiForgetCredentials() {
   gWifiPrefs.remove(WIFI_PREF_SSID);
   gWifiPrefs.remove(WIFI_PREF_PASSWORD);
@@ -90,12 +126,33 @@ inline void wifiForgetCredentials() {
   gWifiConfigured = false;
 }
 
+inline bool wifiHasMqttCredentials() {
+  return !gSavedMqttUser.isEmpty() && !gSavedMqttPassword.isEmpty();
+}
+
+inline String wifiMqttHost(const char* fallback) {
+  return gSavedMqttHost.isEmpty() ? String(fallback) : gSavedMqttHost;
+}
+
+inline uint16_t wifiMqttPort(uint16_t fallback) {
+  return gSavedMqttPort == 0 ? fallback : gSavedMqttPort;
+}
+
+inline String wifiMqttUser(const char* fallback) {
+  return gSavedMqttUser.isEmpty() ? String(fallback) : gSavedMqttUser;
+}
+
+inline String wifiMqttPassword(const char* fallback) {
+  return gSavedMqttPassword.isEmpty() ? String(fallback) : gSavedMqttPassword;
+}
+
 inline String wifiBuildStatePayload() {
   JsonDocument doc;
   doc["device_uid"] = cihazUniqueId();
   doc["wifi_connected"] = gWifiConnected;
   doc["provisioning"] = gProvisioningMode;
   doc["has_credentials"] = gWifiConfigured;
+  doc["mqtt_configured"] = wifiHasMqttCredentials();
   doc["ssid"] = gWifiConnected ? WiFi.SSID() : gSavedWifiSsid;
   doc["ip"] = gWifiConnected ? WiFi.localIP().toString() : "";
 
@@ -244,6 +301,10 @@ inline void wifiApplyProvisioningRequest() {
   gPendingWifiProvision = false;
   const String ssid = gPendingProvisionSsid;
   const String password = gPendingProvisionPassword;
+  const String mqttHost = gPendingMqttHost;
+  const uint16_t mqttPort = gPendingMqttPort;
+  const String mqttUser = gPendingMqttUser;
+  const String mqttPassword = gPendingMqttPassword;
 
   if (ssid.isEmpty()) {
     wifiNotifyBleResult("error", "SSID zorunlu.");
@@ -258,6 +319,7 @@ inline void wifiApplyProvisioningRequest() {
   }
 
   wifiPersistCredentials(ssid, password);
+  wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword);
   wifiNotifyBleResult("connected", "WiFi ayari kaydedildi.");
   wifiNotifyBleState();
   delay(1000);
@@ -292,13 +354,30 @@ class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
 
     const String ssid = String(doc["ssid"] | "");
     const String password = String(doc["password"] | "");
+    const String mqttHost = String(doc["mqtt_host"] | "");
+    const uint16_t mqttPort = static_cast<uint16_t>(doc["mqtt_port"] | 0);
+    const String mqttUser = String(doc["mqtt_username"] | "");
+    const String mqttPassword = String(doc["mqtt_password"] | "");
     if (ssid.isEmpty()) {
       wifiNotifyBleResult("error", "SSID bilgisi eksik.");
+      return;
+    }
+    if (
+      mqttHost.isEmpty() ||
+      mqttPort == 0 ||
+      mqttUser.isEmpty() ||
+      mqttPassword.isEmpty()
+    ) {
+      wifiNotifyBleResult("error", "MQTT cihaz kimligi eksik. Once cihazi sirket hesabina kaydedin.");
       return;
     }
 
     gPendingProvisionSsid = ssid;
     gPendingProvisionPassword = password;
+    gPendingMqttHost = mqttHost;
+    gPendingMqttPort = mqttPort;
+    gPendingMqttUser = mqttUser;
+    gPendingMqttPassword = mqttPassword;
     gPendingWifiProvision = true;
   }
 };
@@ -425,7 +504,12 @@ inline void wifiBaglan() {
 
   Serial.printf("Kayitli WiFi bulundu: %s\n", gSavedWifiSsid.c_str());
   if (wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 20000)) {
-    wifiStopProvisioningMode();
+    if (wifiHasMqttCredentials()) {
+      wifiStopProvisioningMode();
+    } else {
+      Serial.println("WiFi bagli ama MQTT kimligi eksik, BLE provisioning acik tutuluyor.");
+      wifiStartProvisioningMode();
+    }
     return;
   }
 
@@ -445,8 +529,10 @@ inline void wifiLoop() {
     wifiApplyProvisioningRequest();
   }
 
-  if (gWifiConnected) {
+  if (gWifiConnected && wifiHasMqttCredentials()) {
     wifiStopProvisioningMode();
+  } else if (gWifiConnected) {
+    wifiStartProvisioningMode();
   } else if (!gWifiConfigured) {
     wifiStartProvisioningMode();
   } else if (millis() - gLastWifiAttemptAt >= WIFI_RETRY_INTERVAL_MS) {

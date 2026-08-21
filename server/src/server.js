@@ -19,6 +19,7 @@ import {
   publishDoorPulse,
   startMqttBridge,
 } from './mqtt_bridge.js';
+import { mqttAclSyncConfigured, syncMqttAclOrThrow } from './mqtt_acl_sync.js';
 
 dotenv.config();
 
@@ -2611,11 +2612,15 @@ function parseRole(value) {
 }
 
 app.get('/health', async (_req, res) => {
+  const mqtt = {
+    ...mqttBridgeHealth(),
+    acl_sync_configured: mqttAclSyncConfigured(),
+  };
   try {
     await checkDbConnection();
-    res.json({ ok: true, database: 'connected', mqtt: mqttBridgeHealth() });
+    res.json({ ok: true, database: 'connected', mqtt });
   } catch (_e) {
-    res.status(500).json({ ok: false, database: 'disconnected', mqtt: mqttBridgeHealth() });
+    res.status(500).json({ ok: false, database: 'disconnected', mqtt });
   }
 });
 
@@ -3825,11 +3830,19 @@ app.post('/admin/devices/mqtt-credentials', authRequired, requireSuperUser, asyn
     if (!credentials) {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
+    const mqttSync = await syncMqttAclOrThrow({ reason: 'device_mqtt_credentials' });
 
     return res.status(200).json({
       mqtt: mapDeviceMqttCredentialsRow(credentials),
+      mqtt_sync: mqttSync,
     });
-  } catch (_error) {
+  } catch (error) {
+    if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      return res.status(503).json({
+        error: 'MQTT broker senkronu basarisiz.',
+        mqtt_sync: error.syncResult,
+      });
+    }
     return res.status(500).json({ error: 'MQTT cihaz kimligi uretilemedi.' });
   }
 });
@@ -3911,8 +3924,15 @@ app.delete('/admin/devices/:id', authRequired, requireSuperUser, async (req, res
     if (!deleted) {
       return res.status(404).json({ error: 'Cihaz bulunamadi.' });
     }
+    await syncMqttAclOrThrow({ reason: 'device_deleted' });
     return res.status(204).send();
-  } catch (_error) {
+  } catch (error) {
+    if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      return res.status(503).json({
+        error: 'Cihaz silindi ama MQTT broker senkronu basarisiz.',
+        mqtt_sync: error.syncResult,
+      });
+    }
     return res.status(500).json({ error: 'Cihaz silinemedi.' });
   }
 });
@@ -3944,8 +3964,18 @@ app.post('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
       assignedUserCode: assignedUserCode ?? null,
       siteCode: siteCode ?? null,
     });
-    return res.status(201).json({ device: mapDeviceRow(device) });
+    const mqttSync = await syncMqttAclOrThrow({ reason: 'device_created' });
+    return res.status(201).json({
+      device: mapDeviceRow(device),
+      mqtt_sync: mqttSync,
+    });
   } catch (error) {
+    if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      return res.status(503).json({
+        error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',
+        mqtt_sync: error.syncResult,
+      });
+    }
     return handleDeviceMutationError(error, res, 'Cihaz kaydedilemedi.');
   }
 });

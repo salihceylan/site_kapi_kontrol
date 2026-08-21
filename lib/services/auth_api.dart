@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -512,6 +513,74 @@ class AuthApi {
     );
 
     _ensureStatus(response, 204, allowEmptyBody: true);
+  }
+
+  Future<Map<String, dynamic>> broadcastOtaCheck({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/devices/ota-check',
+      token: token,
+    );
+
+    _ensureStatus(response, 202);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> getDeviceMqttCredentials({
+    required String token,
+    required String deviceUid,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/devices/mqtt-credentials',
+      token: token,
+      body: {'device_uid': deviceUid},
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'MQTT cihaz kimligi',
+      () => payload['mqtt'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<DoorRuntimeStatus> getDoorRuntimeStatus({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/doors/$doorId/status',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Kapi durumu',
+      () => DoorRuntimeStatus.fromJson(payload),
+    );
+  }
+
+  Future<DoorRuntimeStatus> openDoor({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/doors/$doorId/open',
+      token: token,
+    );
+
+    _ensureStatus(response, 202);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Kapi komutu',
+      () => DoorRuntimeStatus.fromJson(payload),
+    );
   }
 
   Future<SubscriptionRequestPage> listSubscriptionRequests({
