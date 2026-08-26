@@ -10,12 +10,13 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 import qrcode
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
@@ -33,6 +34,16 @@ PLATFORMIO_INI_PATH = DEVICE_PROJECT_DIR / "platformio.ini"
 BUILD_DIR = DEVICE_PROJECT_DIR / ".pio" / "build"
 RELEASES_DIR = DEVICE_PROJECT_DIR / "firmware_releases"
 RELEASE_INDEX = RELEASES_DIR / "index.json"
+LOCAL_SERVER_FIRMWARE_DIR = (BASE_DIR / ".." / "server" / "firmware" / "esp32-c3").resolve()
+VPS_HOST = "178.210.161.55"
+VPS_PORT = "22667"
+VPS_USER = "salihceylan"
+VPS_FIRMWARE_DIR = "/var/www/site_kapi_kontrol/server/firmware/esp32-c3"
+PUBLIC_FIRMWARE_MANIFEST_URL = "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json"
+PLATFORMIO_HOME = Path.home() / ".platformio"
+BUNDLED_PYTHON_DIR = PLATFORMIO_HOME / "python3"
+BUNDLED_ESPTOOL_DIR = PLATFORMIO_HOME / "packages" / "tool-esptoolpy"
+BUNDLED_SITE_PACKAGES_DIR = PLATFORMIO_HOME / "penv" / "Lib" / "site-packages"
 
 MAC_RE = re.compile(r"MAC:\s*([0-9A-Fa-f:]{17})")
 CHIP_RE = re.compile(r"Chip is\s+([^\r\n]+)")
@@ -293,6 +304,20 @@ def file_hash(path: Path, algorithm: str) -> str:
     return digest.hexdigest()
 
 
+def zip_directory(zf: zipfile.ZipFile, source: Path, arc_root: str) -> None:
+    ignored_dirs = {".git", "__pycache__", ".pytest_cache"}
+    ignored_suffixes = {".pyc", ".pyo"}
+    for item in source.rglob("*"):
+        if any(part in ignored_dirs for part in item.parts):
+            continue
+        if item.is_dir():
+            continue
+        if item.suffix.lower() in ignored_suffixes:
+            continue
+        arc_name = Path(arc_root) / item.relative_to(source)
+        zf.write(item, arc_name.as_posix())
+
+
 def suggest_version(releases: list[dict]) -> str:
     versions: list[tuple[int, int, int]] = []
     for r in releases:
@@ -307,20 +332,8 @@ def suggest_version(releases: list[dict]) -> str:
 
 
 def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
-    c = chip.lower()
-    preferred: list[str]
-    if "esp32-c3" in c or " c3" in c:
-        preferred = ["lolin_c3_mini", "esp32-c3-devkitm-1"]
-    elif "esp32-s3" in c or " s3" in c:
-        preferred = ["esp32-s3-devkitc-1"]
-    elif "esp32-s2" in c or " s2" in c:
-        preferred = ["esp32-s2-saola-1"]
-    else:
-        preferred = ["esp32dev", "esp32doit-devkit-v1", "esp32-s3-devkitc-1"]
-
-    for env in preferred:
-        if env in envs:
-            return env
+    if "lolin_c3_mini" in envs:
+        return "lolin_c3_mini"
     return envs[0] if envs else None
 
 
@@ -353,7 +366,7 @@ class App:
 
         self.status_var = tk.StringVar(value="Hazir.")
         self.uid_var = tk.StringVar(value="Unique ID: -")
-        self.env_var = tk.StringVar(value=self.envs[0] if self.envs else "esp32-s3-devkitc-1")
+        self.env_var = tk.StringVar(value=self.envs[0] if self.envs else "lolin_c3_mini")
         self.version_var = tk.StringVar(value=read_firmware_source_version() or suggest_version(self.releases))
         self.latest_release_var = tk.StringVar(value="Son surum: -")
         self.progress_var = tk.DoubleVar(value=0)
@@ -579,6 +592,20 @@ class App:
         self.release_btn.pack(side=tk.LEFT, padx=8)
         self.upload_btn = ttk.Button(fw, text="Surumu USB ile cihaza yukle", command=self.start_upload, style="Accent.TButton")
         self.upload_btn.pack(side=tk.LEFT)
+        self.server_upload_btn = ttk.Button(
+            fw,
+            text="Guncelleme Dosyasini Sunucuya gonder",
+            command=self.start_server_upload,
+            style="Accent.TButton",
+        )
+        self.server_upload_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.coworker_zip_btn = ttk.Button(
+            fw,
+            text="Calisma arkadasina guncelleme ZIP'i olustur",
+            command=self.start_coworker_zip,
+            style="Soft.TButton",
+        )
+        self.coworker_zip_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         ttk.Label(right, textvariable=self.latest_release_var, style="Text.TLabel").grid(row=7, column=0, sticky="w", pady=(2, 6))
         p = ttk.Frame(right, style="Card.TFrame")
@@ -793,6 +820,8 @@ class App:
             self.build_btn.configure(state=tk.DISABLED)
             self.release_btn.configure(state=tk.DISABLED)
             self.upload_btn.configure(state=tk.DISABLED)
+            self.server_upload_btn.configure(state=tk.DISABLED)
+            self.coworker_zip_btn.configure(state=tk.DISABLED)
             self.env_combo.configure(state="disabled")
             self.version_entry.configure(state=tk.DISABLED)
             return
@@ -800,6 +829,8 @@ class App:
         self.build_btn.configure(state=tk.NORMAL)
         self.release_btn.configure(state=tk.NORMAL if self.fw_build_ready else tk.DISABLED)
         self.upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+        self.server_upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+        self.coworker_zip_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
         self.env_combo.configure(state="readonly")
         self.version_entry.configure(state=tk.NORMAL)
 
@@ -819,6 +850,26 @@ class App:
                     on_line(s)
         rc = p.wait()
         return rc, lines[-30:]
+
+    def _latest_release_for_current_key(self) -> dict | None:
+        env, version = self._fw_current_key()
+        items = [
+            r
+            for r in self.releases
+            if r.get("env") == env and str(r.get("version", "")).strip() == version
+        ]
+        if not items:
+            return None
+        items.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+        return items[0]
+
+    def _release_file_paths(self, rel: dict) -> tuple[Path, Path, Path, Path]:
+        files = rel["files"]
+        boot = (DEVICE_PROJECT_DIR / files["bootloader_bin"]).resolve()
+        part = (DEVICE_PROJECT_DIR / files["partitions_bin"]).resolve()
+        firm = (DEVICE_PROJECT_DIR / files["firmware_bin"]).resolve()
+        manifest = (DEVICE_PROJECT_DIR / rel.get("manifest", "")).resolve()
+        return boot, part, firm, manifest
 
     def start_build(self) -> None:
         if self.fw_busy:
@@ -989,12 +1040,10 @@ class App:
             messagebox.showinfo("Secim gerekli", "Lutfen cihaz secin.")
             return
         env = self.env_var.get().strip()
-        items = [r for r in self.releases if r.get("env") == env]
-        if not items:
+        rel = self._latest_release_for_current_key()
+        if rel is None:
             messagebox.showwarning("Surum yok", "Bu env icin surum yok. Once surum olusturun.")
             return
-        items.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
-        rel = items[0]
         self.fw_busy = True
         self._apply_fw_button_state()
         self.progress_var.set(0)
@@ -1004,10 +1053,7 @@ class App:
     def _upload_worker(self, dev: EspDevice, rel: dict) -> None:
         try:
             speed = int(self.upload_speeds.get(rel["env"], 921600))
-            f = rel["files"]
-            boot = (DEVICE_PROJECT_DIR / f["bootloader_bin"]).resolve()
-            part = (DEVICE_PROJECT_DIR / f["partitions_bin"]).resolve()
-            firm = (DEVICE_PROJECT_DIR / f["firmware_bin"]).resolve()
+            boot, part, firm, _manifest = self._release_file_paths(rel)
             for p in (boot, part, firm):
                 if not p.exists():
                     raise FileNotFoundError(f"Firmware dosyasi yok: {p}")
@@ -1057,6 +1103,237 @@ class App:
         except Exception as exc:
             self.root.after(0, lambda: messagebox.showerror("Yukleme hatasi", str(exc)))
             self.root.after(0, lambda: self.set_status("Yukleme basarisiz."))
+        finally:
+            self.fw_busy = False
+            self.root.after(0, self._apply_fw_button_state)
+
+    def start_server_upload(self) -> None:
+        if self.fw_busy:
+            return
+        if not self.fw_release_ready or self.fw_release_key != self._fw_current_key():
+            messagebox.showwarning("Surum gerekli", "Once derleme ve surum olusturma adimlarini basariyla tamamlayin.")
+            return
+        rel = self._latest_release_for_current_key()
+        if rel is None:
+            messagebox.showwarning("Surum yok", "Sunucuya gonderilecek surum bulunamadi.")
+            return
+        self.fw_busy = True
+        self._apply_fw_button_state()
+        self.progress_var.set(0)
+        self.progress_text_var.set("%0")
+        threading.Thread(target=self._server_upload_worker, args=(rel,), daemon=True).start()
+
+    def _server_upload_worker(self, rel: dict) -> None:
+        try:
+            _boot, _part, firm, manifest = self._release_file_paths(rel)
+            if not firm.exists():
+                raise FileNotFoundError(f"Firmware dosyasi yok: {firm}")
+            if not manifest.exists():
+                raise FileNotFoundError(f"Manifest dosyasi yok: {manifest}")
+
+            LOCAL_SERVER_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
+            local_firm = LOCAL_SERVER_FIRMWARE_DIR / "firmware.bin"
+            local_manifest = LOCAL_SERVER_FIRMWARE_DIR / "manifest.json"
+            shutil.copy2(firm, local_firm)
+            shutil.copy2(manifest, local_manifest)
+
+            ssh_target = f"{VPS_USER}@{VPS_HOST}"
+            ssh_options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=12"]
+            scp_base = ["scp", *ssh_options, "-P", VPS_PORT]
+            ssh_base = ["ssh", *ssh_options, "-p", VPS_PORT, ssh_target]
+
+            steps: list[tuple[str, list[str]]] = [
+                ("Firmware VPS /tmp klasorune gonderiliyor", [*scp_base, str(local_firm), f"{ssh_target}:/tmp/firmware.bin"]),
+                ("Manifest VPS /tmp klasorune gonderiliyor", [*scp_base, str(local_manifest), f"{ssh_target}:/tmp/manifest.json"]),
+                (
+                    "VPS firmware klasoru guncelleniyor",
+                    [
+                        *ssh_base,
+                        (
+                            f"mkdir -p {VPS_FIRMWARE_DIR} && "
+                            f"mv /tmp/firmware.bin {VPS_FIRMWARE_DIR}/firmware.bin && "
+                            f"mv /tmp/manifest.json {VPS_FIRMWARE_DIR}/manifest.json"
+                        ),
+                    ],
+                ),
+                (
+                    "Public manifest dogrulaniyor",
+                    [
+                        *ssh_base,
+                        f"curl -sS --max-time 8 '{PUBLIC_FIRMWARE_MANIFEST_URL}?current_version=0.0.0'",
+                    ],
+                ),
+            ]
+
+            total = len(steps)
+            for index, (label, cmd) in enumerate(steps, start=1):
+                self.root.after(0, lambda t=label: self.set_status(t))
+                rc, tail = self._run_stream(
+                    cmd,
+                    BASE_DIR,
+                    on_line=lambda ln: self.root.after(0, lambda t=ln: self.set_status(f"Sunucu: {t[:90]}")),
+                )
+                if rc != 0:
+                    detail = "\n".join(tail[-8:]) if tail else "Komut basarisiz."
+                    raise RuntimeError(f"{label}\n{detail}")
+                pct = int(index * 100 / total)
+                self.root.after(0, lambda v=pct: self.progress_var.set(v))
+                self.root.after(0, lambda v=pct: self.progress_text_var.set(f"%{v}"))
+
+            self.root.after(0, lambda: self.set_status("TMM: Guncelleme dosyasi sunucuya gonderildi."))
+            self.root.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "TMM",
+                    f"Guncelleme dosyasi sunucuya gonderildi.\nSurum: v{rel['version']}\nSunucu: {VPS_HOST}",
+                ),
+            )
+        except Exception as exc:
+            self.root.after(0, lambda: messagebox.showerror("Sunucu yukleme hatasi", str(exc)))
+            self.root.after(0, lambda: self.set_status("Sunucuya gonderme basarisiz."))
+        finally:
+            self.fw_busy = False
+            self.root.after(0, self._apply_fw_button_state)
+
+    def start_coworker_zip(self) -> None:
+        if self.fw_busy:
+            return
+        if not self.fw_release_ready or self.fw_release_key != self._fw_current_key():
+            messagebox.showwarning("Surum gerekli", "Once derleme ve surum olusturma adimlarini basariyla tamamlayin.")
+            return
+        rel = self._latest_release_for_current_key()
+        if rel is None:
+            messagebox.showwarning("Surum yok", "ZIP yapilacak surum bulunamadi.")
+            return
+        env = str(rel.get("env", "env")).replace(" ", "_")
+        version = str(rel.get("version", "0.0.0")).replace(".", "_")
+        target = filedialog.asksaveasfilename(
+            title="Guncelleme ZIP dosyasini kaydet",
+            defaultextension=".zip",
+            initialfile=f"AHBU_guncelleme_{env}_v{version}.zip",
+            filetypes=[("ZIP dosyasi", "*.zip"), ("Tum dosyalar", "*.*")],
+        )
+        if not target:
+            return
+        self.fw_busy = True
+        self._apply_fw_button_state()
+        self.progress_var.set(0)
+        self.progress_text_var.set("%0")
+        threading.Thread(target=self._coworker_zip_worker, args=(rel, Path(target)), daemon=True).start()
+
+    def _coworker_zip_worker(self, rel: dict, target: Path) -> None:
+        try:
+            boot, part, firm, manifest = self._release_file_paths(rel)
+            for p in (boot, part, firm, manifest):
+                if not p.exists():
+                    raise FileNotFoundError(f"Guncelleme dosyasi yok: {p}")
+            required_tool_dirs = [
+                BUNDLED_PYTHON_DIR,
+                BUNDLED_ESPTOOL_DIR,
+                BUNDLED_SITE_PACKAGES_DIR / "serial",
+            ]
+            for tool_dir in required_tool_dirs:
+                if not tool_dir.exists():
+                    raise FileNotFoundError(f"ZIP icin gerekli arac klasoru yok: {tool_dir}")
+
+            speed = int(self.upload_speeds.get(rel["env"], 460800))
+            version = str(rel.get("version", ""))
+            env = str(rel.get("env", ""))
+            bat = f"""@echo off
+setlocal
+cd /d "%~dp0"
+set PORT=%~1
+set PYEXE=%~dp0tools\\python3\\python.exe
+if not exist "%PYEXE%" (
+  echo Paket icindeki Python bulunamadi.
+  echo ZIP dosyasini tamamen cikardiginizdan emin olun.
+  pause
+  exit /b 1
+)
+set PYTHONPATH=%~dp0tools\\site-packages;%~dp0tools\\tool-esptoolpy;%~dp0tools\\tool-esptoolpy\\_contrib
+if "%PORT%"=="" (
+  echo ESP32 COM portu otomatik araniyor...
+  for /f "delims=" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-CimInstance Win32_SerialPort | Where-Object {{ $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty DeviceID; if(-not $p){{ $n=Get-CimInstance Win32_PnPEntity | Where-Object {{ $_.Name -match '(COM[0-9]+)' -and $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty Name; if($n -match '(COM[0-9]+)'){{ $p=$Matches[1] }} }}; if($p){{ $p.ToUpper() }}"') do set PORT=%%P
+)
+if "%PORT%"=="" (
+  echo ESP32 COM portu otomatik bulunamadi.
+  echo.
+  echo Gorunen seri portlar:
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_PnPEntity | Where-Object {{ $_.Name -match 'COM[0-9]+' }} | Select-Object -ExpandProperty Name"
+  echo.
+  echo Cihazi USB ile baglayip tekrar deneyin.
+  pause
+  exit /b 1
+)
+echo Kullanilacak port: %PORT%
+%PYEXE% -m esptool version >nul 2>&1
+if errorlevel 1 (
+  echo Paket icindeki esptool calistirilamadi.
+  echo ZIP dosyasini tamamen cikardiginizdan emin olun.
+  pause
+  exit /b 1
+)
+%PYEXE% -m esptool --chip auto --port "%PORT%" --baud {speed} --before default_reset --after hard_reset write_flash -z 0x0 firmware\\bootloader.bin 0x8000 firmware\\partitions.bin 0x10000 firmware\\firmware.bin
+if errorlevel 1 (
+  echo.
+  echo Yukleme basarisiz oldu.
+  pause
+  exit /b 1
+)
+echo.
+echo AHBU firmware yukleme tamamlandi. Surum: v{version}
+pause
+"""
+            readme = f"""AHBU cihaz USB guncelleme paketi
+
+Surum: v{version}
+PlatformIO env: {env}
+
+Kullanim:
+1. ZIP dosyasini bir klasore cikarin.
+2. ESP32 C3 cihazi USB ile bilgisayara baglayin.
+3. flash_ahbu_usb.bat dosyasina cift tiklayin.
+4. Program COM portunu otomatik bulur ve firmware yukler.
+
+Gerekli yazilim:
+- Python, pip veya esptool kurulu olmak zorunda degildir.
+- Gerekli yukleme araci bu ZIP paketinin icindedir.
+- Windows cihazi COM portu olarak gormuyorsa USB seri surucusu gerekebilir.
+
+Paket icerigi:
+- firmware/bootloader.bin
+- firmware/partitions.bin
+- firmware/firmware.bin
+- firmware/manifest.json
+- flash_ahbu_usb.bat
+- tools/python3/
+- tools/tool-esptoolpy/
+- tools/site-packages/
+"""
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            self.root.after(0, lambda: self.set_status("ZIP paketi olusturuluyor..."))
+            with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.write(boot, "firmware/bootloader.bin")
+                zf.write(part, "firmware/partitions.bin")
+                zf.write(firm, "firmware/firmware.bin")
+                zf.write(manifest, "firmware/manifest.json")
+                zf.writestr("flash_ahbu_usb.bat", bat)
+                zf.writestr("README.txt", readme)
+                zip_directory(zf, BUNDLED_PYTHON_DIR, "tools/python3")
+                zip_directory(zf, BUNDLED_ESPTOOL_DIR, "tools/tool-esptoolpy")
+                zip_directory(zf, BUNDLED_SITE_PACKAGES_DIR / "serial", "tools/site-packages/serial")
+                pyserial_info = next(BUNDLED_SITE_PACKAGES_DIR.glob("pyserial-*.dist-info"), None)
+                if pyserial_info is not None:
+                    zip_directory(zf, pyserial_info, f"tools/site-packages/{pyserial_info.name}")
+
+            self.root.after(0, lambda: self.progress_var.set(100))
+            self.root.after(0, lambda: self.progress_text_var.set("%100"))
+            self.root.after(0, lambda: self.set_status(f"ZIP hazir: {target}"))
+            self.root.after(0, lambda: messagebox.showinfo("ZIP hazir", f"Guncelleme ZIP dosyasi olusturuldu:\n{target}"))
+        except Exception as exc:
+            self.root.after(0, lambda: messagebox.showerror("ZIP hatasi", str(exc)))
+            self.root.after(0, lambda: self.set_status("ZIP olusturma basarisiz."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)

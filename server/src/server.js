@@ -504,6 +504,43 @@ function validateStructuredSiteInput({
   return null;
 }
 
+function parseSiteManagerCreationInput(raw) {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { error: 'Site yoneticisi bilgileri gecersiz.' };
+  }
+
+  const fullName = String(raw.full_name || '').trim();
+  const email = normalizeEmail(raw.email);
+  const password = String(raw.password || '').trim();
+  const phoneNumber = normalizePhone(raw.phone_number);
+  const isActive = normalizeOptionalBool(raw.is_active) ?? true;
+
+  const validationError = validateCreateInput({
+    fullName,
+    email,
+    password,
+    role: 'site_manager',
+    phoneNumber,
+    isActive,
+  });
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  return {
+    value: {
+      fullName,
+      email,
+      password,
+      phoneNumber,
+      isActive,
+    },
+  };
+}
+
 function validateApartmentResidentInput({
   fullName,
   loginName,
@@ -1460,9 +1497,13 @@ async function ensureSiteApartmentResidents(siteCode, db = pool) {
         a.unit_label,
         a.sort_order,
         a.resident_user_code,
+        u.user_code AS existing_resident_user_code,
         b.block_name
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
+      LEFT JOIN users u
+        ON u.user_code = a.resident_user_code
+       AND u.role = 'apartment_owner'
       WHERE a.site_code = $1
       ORDER BY b.sort_order ASC, a.sort_order ASC
     `,
@@ -1470,7 +1511,10 @@ async function ensureSiteApartmentResidents(siteCode, db = pool) {
   );
 
   for (const apartment of apartmentsResult.rows) {
-    if (apartment.resident_user_code != null) {
+    if (
+      apartment.resident_user_code != null &&
+      apartment.existing_resident_user_code != null
+    ) {
       continue;
     }
     await createApartmentResidentAccount({
@@ -1557,7 +1601,7 @@ function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCod
   if (deviceSiteCode !== null) {
     return managedSiteCodes.has(deviceSiteCode);
   }
-  return true;
+  return false;
 }
 
 function isDeviceVisibleToManagedSites(device, managedSiteCodes) {
@@ -1581,7 +1625,7 @@ function isDeviceVisibleToManagedSites(device, managedSiteCodes) {
   if (deviceSiteCode !== null) {
     return managedSiteCodes.has(deviceSiteCode);
   }
-  return true;
+  return false;
 }
 
 async function siteHasApprovedStatus(siteCode, db = pool) {
@@ -1852,6 +1896,7 @@ async function createSiteWithStructure({
   blockApartmentCounts,
   doorCount,
   managerUserCode,
+  managerUser,
   approvalStatus = 'approved',
 }) {
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
@@ -1912,15 +1957,29 @@ async function createSiteWithStructure({
     );
     const site = siteResult.rows[0];
     const siteCode = Number(site.id);
+    let resolvedManagerUserCode = managerUserCode;
 
-    if (managerUserCode != null) {
+    if (managerUser) {
+      const createdManager = await createUser({
+        fullName: managerUser.fullName,
+        email: managerUser.email,
+        role: 'site_manager',
+        isActive: managerUser.isActive,
+        phoneNumber: managerUser.phoneNumber,
+        password: managerUser.password,
+        db: client,
+      });
+      resolvedManagerUserCode = Number(createdManager.id);
+    }
+
+    if (resolvedManagerUserCode != null) {
       await client.query(
         `
           INSERT INTO site_manager_sites (site_code, manager_user_code)
           VALUES ($1, $2)
           ON CONFLICT (site_code, manager_user_code) DO NOTHING
         `,
-        [siteCode, managerUserCode],
+        [siteCode, resolvedManagerUserCode],
       );
     }
 
@@ -2858,6 +2917,10 @@ app.get('/firmware/:target/:file', (req, res) => {
 });
 
 app.post('/auth/register', async (req, res) => {
+  return res.status(410).json({
+    error: 'Yeni kullanici kaydi yalnizca super user tarafindan yapilir.',
+  });
+
   const fullName = String(req.body.full_name || '').trim();
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '').trim();
@@ -2894,6 +2957,10 @@ app.post('/auth/register', async (req, res) => {
 });
 
 app.post('/auth/site-manager/register', async (req, res) => {
+  return res.status(410).json({
+    error: 'Site yoneticisi kaydi yalnizca super user tarafindan yapilir.',
+  });
+
   const fullName = String(req.body.full_name || '').trim();
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || '').trim();
@@ -2985,6 +3052,10 @@ app.post('/auth/site-manager/register', async (req, res) => {
 });
 
 app.post('/auth/site-manager/verify-email', async (req, res) => {
+  return res.status(410).json({
+    error: 'Site yoneticisi onay akisi kapatildi.',
+  });
+
   const email = normalizeEmail(req.body.email);
   const code = String(req.body.code || '').trim();
 
@@ -3057,6 +3128,10 @@ app.post('/auth/site-manager/verify-email', async (req, res) => {
 });
 
 app.post('/auth/site-manager/resend-code', async (req, res) => {
+  return res.status(410).json({
+    error: 'Site yoneticisi onay akisi kapatildi.',
+  });
+
   const email = normalizeEmail(req.body.email);
   if (!email) {
     return res.status(400).json({ error: 'E-posta zorunlu.' });
@@ -3112,10 +3187,10 @@ app.post('/auth/login', loginRateLimiter, async (req, res) => {
   const password = String(req.body.password || '').trim();
   const role = String(req.body.role || '').trim();
 
-  if (!identifier || !password || !role) {
-    return res.status(400).json({ error: 'email, password, role zorunlu.' });
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'email ve password zorunlu.' });
   }
-  if (!validRoles.has(role)) {
+  if (role && !validRoles.has(role)) {
     return res.status(400).json({ error: 'Gecersiz rol.' });
   }
 
@@ -3150,7 +3225,7 @@ app.post('/auth/login', loginRateLimiter, async (req, res) => {
     if (!isPasswordMatch) {
       return res.status(401).json({ error: 'Giris bilgileri hatali.' });
     }
-    if (row.role !== role) {
+    if (role && row.role !== role) {
       return res
         .status(403)
         .json({ error: 'Kullanici rolu ile secilen rol uyusmuyor.' });
@@ -3586,6 +3661,7 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   );
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
+  const managerUserInput = parseSiteManagerCreationInput(req.body.manager_user);
 
   if (
     Number.isNaN(blockCount) ||
@@ -3595,6 +3671,14 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
     Number.isNaN(managerUserCode)
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
+  }
+  if (managerUserInput?.error) {
+    return res.status(400).json({ error: managerUserInput.error });
+  }
+  if (managerUserCode != null && managerUserInput?.value) {
+    return res.status(400).json({
+      error: 'Mevcut yonetici kodu veya yeni yonetici bilgilerinden yalnizca biri gonderilmeli.',
+    });
   }
 
   const validationError = validateStructuredSiteInput({
@@ -3623,6 +3707,7 @@ app.post('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
       blockApartmentCounts,
       doorCount: doorCount ?? 1,
       managerUserCode: managerUserCode ?? null,
+      managerUser: managerUserInput?.value ?? null,
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
@@ -4004,6 +4089,44 @@ app.post('/admin/devices/mqtt-credentials', authRequired, requireSuperUser, asyn
   }
 });
 
+app.post('/manager/devices/mqtt-credentials', authRequired, requireSiteManager, async (req, res) => {
+  const deviceUid = normalizeDeviceUid(req.body.device_uid);
+  if (deviceUid.length < 6) {
+    return res.status(400).json({ error: 'Cihaz unique id en az 6 karakter olmali.' });
+  }
+
+  try {
+    const device = await findDeviceByUid(deviceUid);
+    if (!device) {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+
+    const managedSiteCodes = await getManagedSiteCodes(req.authUser);
+    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes)) {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+
+    const credentials = await ensureDeviceMqttCredentialsByUid(deviceUid);
+    if (!credentials) {
+      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    }
+    const mqttSync = await syncMqttAclOrThrow({ reason: 'managed_device_mqtt_credentials' });
+
+    return res.status(200).json({
+      mqtt: mapDeviceMqttCredentialsRow(credentials),
+      mqtt_sync: mqttSync,
+    });
+  } catch (error) {
+    if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      return res.status(503).json({
+        error: 'MQTT broker senkronu basarisiz.',
+        mqtt_sync: error.syncResult,
+      });
+    }
+    return res.status(500).json({ error: 'MQTT cihaz kimligi uretilemedi.' });
+  }
+});
+
 app.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, res) => {
   try {
     const deviceUids = await listAllDeviceUids();
@@ -4166,6 +4289,10 @@ app.get('/manager/sites', authRequired, requireSiteManager, async (req, res) => 
 });
 
 app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) => {
+  if (req.authUser?.role !== 'super_user') {
+    return res.status(403).json({ error: 'Site kaydini yalnizca super user olusturabilir.' });
+  }
+
   const managerUserCode = getAuthUserCode(req);
   if (managerUserCode == null) {
     return res.status(401).json({ error: 'Yetkisiz erisim.' });
@@ -4222,6 +4349,10 @@ app.post('/manager/sites', authRequired, requireSiteManager, async (req, res) =>
 });
 
 app.patch('/manager/sites/:id', authRequired, requireSiteManager, async (req, res) => {
+  if (req.authUser?.role !== 'super_user') {
+    return res.status(403).json({ error: 'Site kaydini yalnizca super user guncelleyebilir.' });
+  }
+
   const siteCode = Number(req.params.id);
   if (!Number.isInteger(siteCode)) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
@@ -4394,6 +4525,8 @@ app.get('/manager/devices', authRequired, requireSiteManager, async (req, res) =
 });
 
 app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
+  return res.status(403).json({ error: 'Daire kullanicisini yalnizca super user olusturabilir veya guncelleyebilir.' });
+
   const apartmentId = Number(req.params.id);
   if (!Number.isInteger(apartmentId)) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
@@ -4451,6 +4584,8 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
 });
 
 app.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteManager, async (req, res) => {
+  return res.status(403).json({ error: 'Daire kullanici bilgilerini yalnizca super user gonderebilir.' });
+
   const apartmentId = Number(req.params.id);
   if (!Number.isInteger(apartmentId)) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
@@ -4565,6 +4700,14 @@ app.patch(
         return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz.' });
       }
 
+      const existingDevice = await findManagedDeviceById({
+        authUser: req.authUser,
+        deviceId,
+      });
+      if (!existingDevice) {
+        return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+      }
+
       const device = await updateDeviceAssignment({
         deviceId,
         siteCode,
@@ -4583,6 +4726,10 @@ app.patch(
 );
 
 app.delete('/manager/devices/:id', authRequired, requireSiteManager, async (req, res) => {
+  if (req.authUser?.role !== 'super_user') {
+    return res.status(403).json({ error: 'Cihaz silme islemini yalnizca super user yapabilir.' });
+  }
+
   const deviceId = Number(req.params.id);
   if (!Number.isInteger(deviceId)) {
     return res.status(400).json({ error: 'Gecersiz cihaz ID.' });

@@ -5,7 +5,7 @@
 
 constexpr uint8_t ROLE_PIN = 10;
 constexpr unsigned long ROLE_SURE_MS = 1500;
-constexpr bool ROLE_ACTIVE_LOW = true;
+constexpr bool ROLE_ACTIVE_LOW = false;
 
 inline unsigned long roleBaslangic = 0;
 inline bool roleAktif = false;

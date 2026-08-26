@@ -5,7 +5,7 @@
   "force": false,
   "interval_hours": 24,
   "allowed_uids": [],
-  "sha256": "bc4ea2e8eecba5e99d9f03f49634b72acb8cb0915e90c87fe19919d0aaff58f5",
-  "md5": "9006b77e6623af4b891bf5b81dcc0d9c",
+  "sha256": "3c5a8700b9c71609b4b5270a1a8cd2490e8715dbfb064942bdba1c581ee0dd2e",
+  "md5": "145401bb76b1ae0bc4dfb8ddae36f197",
   "notes": "AHBU firmware v1.2.0."
 }

@@ -84,7 +84,11 @@ void seriDurumYazdir() {
   Serial.print("WiFi LED GPIO: ");
   Serial.println(WIFI_STATUS_LED_PIN);
   Serial.print("Bluetooth LED GPIO: ");
-  Serial.println(BLE_STATUS_LED_PIN);
+  if (BLE_STATUS_LED_PIN < 0) {
+    Serial.println("-");
+  } else {
+    Serial.println(BLE_STATUS_LED_PIN);
+  }
   Serial.print("MQTT: ");
   Serial.println(client.connected() ? "bagli" : "bagli degil");
   Serial.print("MQTT kimligi: ");

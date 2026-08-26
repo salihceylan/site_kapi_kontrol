@@ -29,13 +29,21 @@ class AuthApi {
   Future<UserSession> login({
     required String email,
     required String password,
-    required UserRole role,
+    UserRole? role,
   }) async {
     return _authRequest(
       path: '/auth/login',
-      body: {'email': email, 'password': password, 'role': role.apiValue},
+      body: {
+        'email': email,
+        'password': password,
+        if (role != null) 'role': role.apiValue,
+      },
       expectedCode: 200,
     );
+  }
+
+  String _managementPrefix(UserRole role) {
+    return role == UserRole.superUser ? '/admin' : '/manager';
   }
 
   Future<UserSession> register({
@@ -184,16 +192,17 @@ class AuthApi {
 
   Future<SitePage> listSites({
     required String token,
+    required UserRole role,
     required int page,
     required int pageSize,
     String? approvalStatus,
   }) async {
-    final uri = Uri.parse('$baseUrl/admin/sites').replace(
+    final uri = Uri.parse('$baseUrl${_managementPrefix(role)}/sites').replace(
       queryParameters: {
         'page': '$page',
         'page_size': '$pageSize',
-        // ignore: use_null_aware_elements
-        if (approvalStatus != null) 'approval_status': approvalStatus,
+        if (role == UserRole.superUser && approvalStatus != null)
+          'approval_status': approvalStatus,
       },
     );
 
@@ -240,6 +249,7 @@ class AuthApi {
 
   Future<SiteRecord> createSite({
     required String token,
+    required UserRole role,
     required String name,
     String? address,
     String? city,
@@ -247,6 +257,7 @@ class AuthApi {
     required List<int> blockApartmentCounts,
     required int doorCount,
     int? managerUserCode,
+    Map<String, dynamic>? managerUser,
   }) async {
     final totalApartments = blockApartmentCounts.fold<int>(
       0,
@@ -254,7 +265,7 @@ class AuthApi {
     );
     final response = await _authorizedRequest(
       method: 'POST',
-      path: '/admin/sites',
+      path: '${_managementPrefix(role)}/sites',
       token: token,
       body: {
         'name': name,
@@ -266,6 +277,7 @@ class AuthApi {
         'block_apartment_counts': blockApartmentCounts,
         'door_count': doorCount,
         'manager_user_code': managerUserCode,
+        'manager_user': managerUser,
       },
     );
 
@@ -279,6 +291,7 @@ class AuthApi {
 
   Future<SiteRecord> updateSite({
     required String token,
+    required UserRole role,
     required int siteCode,
     String? name,
     String? address,
@@ -306,7 +319,7 @@ class AuthApi {
 
     final response = await _authorizedRequest(
       method: 'PATCH',
-      path: '/admin/sites/$siteCode',
+      path: '${_managementPrefix(role)}/sites/$siteCode',
       token: token,
       body: body,
     );
@@ -321,11 +334,12 @@ class AuthApi {
 
   Future<SiteStructureRecord> getSiteStructure({
     required String token,
+    required UserRole role,
     required int siteCode,
   }) async {
     final response = await _authorizedRequest(
       method: 'GET',
-      path: '/admin/sites/$siteCode/structure',
+      path: '${_managementPrefix(role)}/sites/$siteCode/structure',
       token: token,
     );
 
@@ -339,6 +353,7 @@ class AuthApi {
 
   Future<ApartmentRecord> upsertApartmentResident({
     required String token,
+    required UserRole role,
     required int apartmentId,
     required String fullName,
     required String loginName,
@@ -349,7 +364,7 @@ class AuthApi {
   }) async {
     final response = await _authorizedRequest(
       method: 'PATCH',
-      path: '/admin/apartments/$apartmentId/resident',
+      path: '${_managementPrefix(role)}/apartments/$apartmentId/resident',
       token: token,
       body: {
         'full_name': fullName,
@@ -373,11 +388,12 @@ class AuthApi {
 
   Future<void> sendApartmentCredentials({
     required String token,
+    required UserRole role,
     required int apartmentId,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
-      path: '/admin/apartments/$apartmentId/send-credentials',
+      path: '${_managementPrefix(role)}/apartments/$apartmentId/send-credentials',
       token: token,
     );
 
@@ -386,12 +402,13 @@ class AuthApi {
 
   Future<DoorRecord> assignDoorDevice({
     required String token,
+    required UserRole role,
     required int doorId,
     required String deviceUid,
   }) async {
     final response = await _authorizedRequest(
       method: 'PATCH',
-      path: '/admin/doors/$doorId/device',
+      path: '${_managementPrefix(role)}/doors/$doorId/device',
       token: token,
       body: {'device_uid': deviceUid},
     );
@@ -444,9 +461,32 @@ class AuthApi {
 
   Future<DevicePage> listCompanyDevices({
     required String token,
+    required UserRole role,
     required int page,
     required int pageSize,
   }) async {
+    if (role == UserRole.siteManager) {
+      final response = await _authorizedRequest(
+        method: 'GET',
+        path: '/manager/devices',
+        token: token,
+      );
+      _ensureStatus(response, 200);
+      final payload = _decodePayload(response);
+      final devices = _parsePayload(
+        'Cihazlar',
+        () => (payload['devices'] as List<dynamic>? ?? <dynamic>[])
+            .map((item) => DeviceRecord.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+      return DevicePage(
+        devices: devices,
+        total: devices.length,
+        page: 1,
+        pageSize: devices.length,
+      );
+    }
+
     final uri = Uri.parse('$baseUrl/admin/devices').replace(
       queryParameters: {'page': '$page', 'page_size': '$pageSize'},
     );
@@ -478,6 +518,7 @@ class AuthApi {
 
   Future<DeviceRecord> updateDevice({
     required String token,
+    required UserRole role,
     required int deviceId,
     int? assignedUserCode,
     int? siteCode,
@@ -485,7 +526,9 @@ class AuthApi {
   }) async {
     final response = await _authorizedRequest(
       method: 'PATCH',
-      path: '/admin/devices/$deviceId',
+      path: role == UserRole.superUser
+          ? '/admin/devices/$deviceId'
+          : '/manager/devices/$deviceId/assignment',
       token: token,
       body: {
         'assigned_user_code': assignedUserCode,
@@ -504,11 +547,14 @@ class AuthApi {
 
   Future<void> deleteDevice({
     required String token,
+    required UserRole role,
     required int deviceId,
   }) async {
     final response = await _authorizedRequest(
       method: 'DELETE',
-      path: '/admin/devices/$deviceId',
+      path: role == UserRole.superUser
+          ? '/admin/devices/$deviceId'
+          : '/manager/devices/$deviceId',
       token: token,
     );
 
@@ -530,11 +576,14 @@ class AuthApi {
 
   Future<Map<String, dynamic>> getDeviceMqttCredentials({
     required String token,
+    required UserRole role,
     required String deviceUid,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
-      path: '/admin/devices/mqtt-credentials',
+      path: role == UserRole.superUser
+          ? '/admin/devices/mqtt-credentials'
+          : '/manager/devices/mqtt-credentials',
       token: token,
       body: {'device_uid': deviceUid},
     );
@@ -580,6 +629,23 @@ class AuthApi {
     return _parsePayload(
       'Kapi komutu',
       () => DoorRuntimeStatus.fromJson(payload),
+    );
+  }
+
+  Future<List<DoorRecord>> listMyDoors({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/my-doors',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Kapilar',
+      () => (payload['doors'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => DoorRecord.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 

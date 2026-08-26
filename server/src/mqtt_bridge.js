@@ -88,7 +88,10 @@ async function persistRuntimeStatus(status) {
           last_seen_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
+        WHERE EXISTS (
+          SELECT 1 FROM devices WHERE device_uid = $1
+        )
         ON CONFLICT (device_uid) DO UPDATE SET
           mqtt_connected = EXCLUDED.mqtt_connected,
           door_locked = EXCLUDED.door_locked,

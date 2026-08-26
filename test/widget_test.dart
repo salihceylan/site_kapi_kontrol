@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(const MyApp(networkCheckEnabled: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sirket Girisi'), findsOneWidget);
+    expect(find.text('AHBU Giris'), findsOneWidget);
     expect(find.text('Giris Yap'), findsOneWidget);
   });
 }

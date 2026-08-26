@@ -27,7 +27,8 @@ inline constexpr char BLE_WIFI_NETWORKS_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08
 inline constexpr char BLE_WIFI_RESULT_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f005";
 
 inline constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
-inline constexpr unsigned long WIFI_BLINK_INTERVAL_MS = 400;
+inline constexpr unsigned long WIFI_CONFIGURED_BLINK_INTERVAL_MS = 700;
+inline constexpr unsigned long WIFI_UNCONFIGURED_BLINK_INTERVAL_MS = 150;
 inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 8;
 
 inline Preferences gWifiPrefs;
@@ -53,6 +54,7 @@ inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
 inline unsigned long gLastLedToggleAt = 0;
 inline unsigned long gResetPressedAt = 0;
+inline unsigned long gResetLastProgressAt = 0;
 inline bool gLedLogicalState = false;
 inline bool gResetHandled = false;
 inline BLEServer* gBleServer = nullptr;
@@ -64,12 +66,20 @@ inline BLECharacteristic* gBleResultCharacteristic = nullptr;
 inline bool gBleStarted = false;
 
 inline void wifiSetStatusLed(bool on) {
+  if (WIFI_STATUS_LED_PIN < 0) {
+    return;
+  }
+
   pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
   const uint8_t level = WIFI_STATUS_LED_ACTIVE_HIGH ? (on ? HIGH : LOW) : (on ? LOW : HIGH);
   digitalWrite(WIFI_STATUS_LED_PIN, level);
 }
 
 inline void wifiSetBleStatusLed(bool on) {
+  if (BLE_STATUS_LED_PIN < 0) {
+    return;
+  }
+
   pinMode(BLE_STATUS_LED_PIN, OUTPUT);
   const uint8_t level = BLE_STATUS_LED_ACTIVE_HIGH ? (on ? HIGH : LOW) : (on ? LOW : HIGH);
   digitalWrite(BLE_STATUS_LED_PIN, level);
@@ -184,14 +194,16 @@ inline void wifiNotifyBleResult(const String& status, const String& message = ""
 }
 
 inline void wifiUpdateLed() {
-  wifiSetBleStatusLed(gProvisioningMode);
-
   if (gWifiConnected) {
     wifiSetStatusLed(true);
     return;
   }
 
-  if (millis() - gLastLedToggleAt < WIFI_BLINK_INTERVAL_MS) {
+  const unsigned long blinkInterval = gWifiConfigured
+    ? WIFI_CONFIGURED_BLINK_INTERVAL_MS
+    : WIFI_UNCONFIGURED_BLINK_INTERVAL_MS;
+
+  if (millis() - gLastLedToggleAt < blinkInterval) {
     return;
   }
 
@@ -448,17 +460,34 @@ inline void wifiStopProvisioningMode() {
 inline void wifiHandleResetButton() {
   const bool pressed = wifiResetButtonPressed();
   if (!pressed) {
+    if (gResetPressedAt != 0 && !gResetHandled) {
+      Serial.println("WiFi reset butonu birakildi, sifirlama iptal.");
+    }
     gResetPressedAt = 0;
+    gResetLastProgressAt = 0;
     gResetHandled = false;
     return;
   }
 
   if (gResetPressedAt == 0) {
     gResetPressedAt = millis();
+    gResetLastProgressAt = gResetPressedAt;
+    Serial.println("WiFi reset butonu algilandi. Sifirlama icin 3 saniye basili tutun.");
     return;
   }
 
-  if (gResetHandled || millis() - gResetPressedAt < WIFI_RESET_HOLD_MS) {
+  if (gResetHandled) {
+    return;
+  }
+
+  const unsigned long heldMs = millis() - gResetPressedAt;
+  if (heldMs < WIFI_RESET_HOLD_MS) {
+    if (millis() - gResetLastProgressAt >= 1000) {
+      gResetLastProgressAt = millis();
+      Serial.print("WiFi reset basili: ");
+      Serial.print(heldMs / 1000);
+      Serial.println(" sn");
+    }
     return;
   }
 
@@ -471,8 +500,12 @@ inline void wifiHandleResetButton() {
 }
 
 inline void wifiBaglan() {
-  pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
-  pinMode(BLE_STATUS_LED_PIN, OUTPUT);
+  if (WIFI_STATUS_LED_PIN >= 0) {
+    pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
+  }
+  if (BLE_STATUS_LED_PIN >= 0) {
+    pinMode(BLE_STATUS_LED_PIN, OUTPUT);
+  }
   pinMode(WIFI_RESET_BUTTON_PIN, WIFI_RESET_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT);
   wifiSetStatusLed(false);
   wifiSetBleStatusLed(false);
@@ -532,6 +565,9 @@ inline void wifiLoop() {
 
   if (gWifiConnected && wifiHasMqttCredentials()) {
     wifiStopProvisioningMode();
+  } else if (gProvisioningMode) {
+    wifiUpdateLed();
+    return;
   } else if (!gWifiConfigured) {
     wifiStartProvisioningMode();
   } else if (!wifiHasMqttCredentials()) {

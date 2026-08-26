@@ -9,10 +9,14 @@ class WifiProvisionPage extends StatefulWidget {
     super.key,
     this.authService,
     this.title = 'Bluetooth ile Wi-Fi Kurulumu',
+    this.accentColor,
+    this.surfaceColor,
   });
 
   final AuthService? authService;
   final String title;
+  final Color? accentColor;
+  final Color? surfaceColor;
 
   @override
   State<WifiProvisionPage> createState() => _WifiProvisionPageState();
@@ -449,8 +453,13 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = widget.accentColor ?? AppColors.primary;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      backgroundColor: widget.surfaceColor,
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: accentColor,
+      ),
       body: Container(
         decoration: AppDecorations.pageBackground,
         child: SafeArea(

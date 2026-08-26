@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/styles/role_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
@@ -193,7 +194,7 @@ class _HomePageState extends State<HomePage> {
   String _titleForMenu(SirketMenuItem item) {
     switch (item) {
       case SirketMenuItem.dashboard:
-        return 'Sirket Paneli';
+        return 'AHBU Panel';
       case SirketMenuItem.profilim:
         return 'Profilim';
       case SirketMenuItem.abonelikTalepleri:
@@ -256,7 +257,106 @@ class _HomePageState extends State<HomePage> {
     return MediaQuery.sizeOf(context).width < 760;
   }
 
+  bool _canAccessMenu(SirketMenuItem item, UserRole role) {
+    switch (role) {
+      case UserRole.superUser:
+        return const {
+          SirketMenuItem.dashboard,
+          SirketMenuItem.profilim,
+          SirketMenuItem.superUserYonetimi,
+          SirketMenuItem.siteYoneticileriYonetimi,
+          SirketMenuItem.daireKullanicilariYonetimi,
+          SirketMenuItem.siteler,
+          SirketMenuItem.cihazEkle,
+          SirketMenuItem.kayitliCihazlar,
+          SirketMenuItem.bluetoothWifiKur,
+        }.contains(item);
+      case UserRole.siteManager:
+        return const {
+          SirketMenuItem.dashboard,
+          SirketMenuItem.profilim,
+          SirketMenuItem.siteler,
+          SirketMenuItem.kayitliCihazlar,
+          SirketMenuItem.bluetoothWifiKur,
+        }.contains(item);
+      case UserRole.apartmentOwner:
+        return const {
+          SirketMenuItem.dashboard,
+          SirketMenuItem.profilim,
+        }.contains(item);
+    }
+  }
+
+  ThemeData _themeForRole(BuildContext context, UserRole role) {
+    final base = Theme.of(context);
+    final accent = role.accentColor;
+    final colorScheme = base.colorScheme.copyWith(
+      primary: accent,
+      secondary: role.lightAccentColor,
+    );
+
+    return base.copyWith(
+      colorScheme: colorScheme,
+      appBarTheme: base.appBarTheme.copyWith(backgroundColor: accent),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: accent,
+          side: BorderSide(color: accent.withValues(alpha: 0.45)),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: accent,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      snackBarTheme: base.snackBarTheme.copyWith(backgroundColor: accent),
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: accent, width: 1.5),
+        ),
+      ),
+    );
+  }
+
   void _selectMenu(SirketMenuItem item) {
+    final sessionRole = widget.authService.session?.role;
+    if (sessionRole != null && !_canAccessMenu(item, sessionRole)) {
+      Navigator.pop(context);
+      _showMessage('Bu menu icin yetkiniz yok.');
+      return;
+    }
     Navigator.pop(context);
     setState(() => _selectedMenu = item);
     if (item == SirketMenuItem.kayitliCihazlar) {
@@ -414,6 +514,72 @@ class _HomePageState extends State<HomePage> {
 
     setState(() => _isLoadingDoorControlSites = true);
     try {
+      final session = widget.authService.session;
+      if (session?.role == UserRole.apartmentOwner) {
+        final (doors, error) = await widget.authService.listMyDoors();
+        if (!mounted) {
+          return;
+        }
+        if (error != null) {
+          _showMessage(error);
+          return;
+        }
+
+        final accessibleDoors = doors ?? const <DoorRecord>[];
+        final sitesById = <int, SiteRecord>{};
+        final doorsBySite = <int, List<DoorRecord>>{};
+        for (final door in accessibleDoors) {
+          sitesById.putIfAbsent(
+            door.siteCode,
+            () => SiteRecord(
+              id: door.siteCode,
+              name: door.siteName ?? 'Site ${door.siteCode}',
+              address: null,
+              city: null,
+              district: null,
+              blockCount: 0,
+              apartmentCount: 0,
+              doorCount: 0,
+              approvalStatus: 'approved',
+              approvedAt: null,
+              mqttSiteId: door.mqttSiteId ?? 0,
+              managerUserCode: null,
+              managerName: null,
+              createdAt: null,
+            ),
+          );
+          doorsBySite.putIfAbsent(door.siteCode, () => <DoorRecord>[]).add(door);
+        }
+
+        final sites = sitesById.values.toList()
+          ..sort((left, right) => left.name.compareTo(right.name));
+        final selected = sites.isNotEmpty ? sites.first : null;
+        setState(() {
+          _doorControlSitesPage = SitePage(
+            sites: sites,
+            total: sites.length,
+            page: 1,
+            pageSize: sites.length,
+          );
+          _doorControlSite = selected;
+          _doorControlStructure = selected == null
+              ? null
+              : SiteStructureRecord(
+                  site: selected,
+                  blocks: const [],
+                  apartments: const [],
+                  doors: doorsBySite[selected.id] ?? const <DoorRecord>[],
+                );
+          _doorControlDoor = _doorControlStructure?.doors.isNotEmpty == true
+              ? _doorControlStructure!.doors.first
+              : null;
+        });
+        if (_doorControlDoor != null) {
+          _startDoorStatusPolling(_doorControlDoor!);
+        }
+        return;
+      }
+
       final sites = <SiteRecord>[];
       var page = 1;
       var total = 0;
@@ -526,7 +692,10 @@ class _HomePageState extends State<HomePage> {
   Future<void> _editCompanyDevice(DeviceRecord device) async {
     final result = await showDialog<_DeviceEditResult>(
       context: context,
-      builder: (dialogContext) => _DeviceEditDialog(device: device),
+      builder: (dialogContext) => _DeviceEditDialog(
+        device: device,
+        isSuperUser: widget.authService.session?.role == UserRole.superUser,
+      ),
     );
     if (result == null) {
       return;
@@ -733,6 +902,34 @@ class _HomePageState extends State<HomePage> {
       _doorControlDoor = null;
       _clearDoorRuntimeStatus();
     });
+
+    if (widget.authService.session?.role == UserRole.apartmentOwner) {
+      final (doors, error) = await widget.authService.listMyDoors();
+      if (!mounted) {
+        return;
+      }
+      if (error != null) {
+        _showMessage(error);
+        return;
+      }
+      final siteDoors = (doors ?? const <DoorRecord>[])
+          .where((door) => door.siteCode == site!.id)
+          .toList();
+      setState(() {
+        _doorControlStructure = SiteStructureRecord(
+          site: site!,
+          blocks: const [],
+          apartments: const [],
+          doors: siteDoors,
+        );
+        _doorControlDoor = siteDoors.isNotEmpty ? siteDoors.first : null;
+      });
+      if (_doorControlDoor != null) {
+        _startDoorStatusPolling(_doorControlDoor!);
+      }
+      return;
+    }
+
     await _loadDoorControlStructure(site.id, force: true);
   }
 
@@ -1023,6 +1220,7 @@ class _HomePageState extends State<HomePage> {
             blockApartmentCounts: result.blockApartmentCounts,
             doorCount: result.doorCount,
             managerUserCode: result.managerUserCode,
+            managerUser: result.managerUser,
           );
 
     if (!mounted) {
@@ -1167,7 +1365,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _assignDoorDevice(DoorRecord door) async {
     final scannedUid = await Navigator.of(
       context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
+    ).push<String>(
+      MaterialPageRoute(
+        builder: (_) => QrScanPage(
+          accentColor: widget.authService.session?.role.accentColor,
+        ),
+      ),
+    );
 
     if (!mounted || scannedUid == null || scannedUid.trim().isEmpty) {
       return;
@@ -1217,7 +1421,13 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openDeviceRegistrationFlow() async {
     final scannedUid = await Navigator.of(
       context,
-    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
+    ).push<String>(
+      MaterialPageRoute(
+        builder: (_) => QrScanPage(
+          accentColor: widget.authService.session?.role.accentColor,
+        ),
+      ),
+    );
 
     if (!mounted || scannedUid == null || scannedUid.trim().isEmpty) {
       return;
@@ -1293,7 +1503,11 @@ class _HomePageState extends State<HomePage> {
       context,
     ).push<void>(
       MaterialPageRoute(
-        builder: (_) => WifiProvisionPage(authService: widget.authService),
+        builder: (_) => WifiProvisionPage(
+          authService: widget.authService,
+          accentColor: widget.authService.session?.role.accentColor,
+          surfaceColor: widget.authService.session?.role.surfaceColor,
+        ),
       ),
     );
   }
@@ -1344,7 +1558,11 @@ class _HomePageState extends State<HomePage> {
       context,
     ).push<void>(
       MaterialPageRoute(
-        builder: (_) => WifiProvisionPage(authService: widget.authService),
+        builder: (_) => WifiProvisionPage(
+          authService: widget.authService,
+          accentColor: widget.authService.session?.role.accentColor,
+          surfaceColor: widget.authService.session?.role.surfaceColor,
+        ),
       ),
     );
   }
@@ -1662,6 +1880,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildDashboard(UserSession session) {
+    final dashboardDescription = switch (session.role) {
+      UserRole.superUser =>
+        'Tum kullanicilari, siteleri, cihazlari ve kapi erisimlerini yonetebilirsiniz.',
+      UserRole.siteManager =>
+        'Yetkili oldugunuz siteleri, cihazlari ve kapilari yonetebilirsiniz.',
+      UserRole.apartmentOwner =>
+        'Yetkili oldugunuz kapilari gorup kapi acma komutu verebilirsiniz.',
+    };
+    final roleColor = session.role.accentColor;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1688,8 +1916,22 @@ class _HomePageState extends State<HomePage> {
                 ).textTheme.titleLarge?.copyWith(fontSize: 28),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Sandwich menuden kullanicilari, siteleri ve cihaz kayitlarini yonetebilirsiniz.',
+              Text(dashboardDescription),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  backgroundColor: roleColor.withValues(alpha: 0.12),
+                  side: BorderSide(color: roleColor.withValues(alpha: 0.35)),
+                  avatar: Icon(Icons.verified_user_outlined, color: roleColor),
+                  label: Text(
+                    session.role.label,
+                    style: TextStyle(
+                      color: roleColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -2037,6 +2279,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCompanyDeviceCard(DeviceRecord device) {
+    final isSuperUser = widget.authService.session?.role == UserRole.superUser;
     final siteText = device.siteName == null
         ? (device.siteCode == null ? '-' : 'Site ID: ${device.siteCode}')
         : '${device.siteName} (${device.siteCode ?? '-'})';
@@ -2114,11 +2357,12 @@ class _HomePageState extends State<HomePage> {
                   icon: const Icon(Icons.meeting_room_outlined),
                   label: const Text('Kapiya Ata'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => _deleteCompanyDevice(device),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Sil'),
-                ),
+                if (isSuperUser)
+                  OutlinedButton.icon(
+                    onPressed: () => _deleteCompanyDevice(device),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Sil'),
+                  ),
               ],
             ),
           ],
@@ -2261,12 +2505,24 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildSitesScreen() {
+    final session = widget.authService.session;
+    final canManageSites = session?.role == UserRole.superUser;
+    final canManageApartmentUsers = session?.role == UserRole.superUser;
+    final canAssignDoorDevices =
+        session?.role == UserRole.superUser ||
+        session?.role == UserRole.siteManager;
     final pageData = _sitesPage;
     final sites = pageData?.sites ?? const <SiteRecord>[];
     final compact = _useCompactSectionLayout(context);
     final structure = _selectedSiteStructure;
     final apartmentMode =
         _selectedMenu == SirketMenuItem.daireKullanicilariYonetimi;
+    final sitesDescription = canManageSites
+        ? 'Site, blok, daire, otomatik kapi yapisi ve site yoneticisini burada yonetirsiniz.'
+        : 'Yetkili oldugunuz siteleri, kapi cihaz atamalarini ve cihaz durumlarini burada gorursunuz.';
+    final apartmentsDescription = canManageApartmentUsers
+        ? 'Bir site secin. Daire kullanicilari yalnizca secili site altinda listelenir.'
+        : 'Yetkili oldugunuz sitelerin daire ve kapi yapisini gorursunuz.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2286,21 +2542,22 @@ class _HomePageState extends State<HomePage> {
                         color: AppColors.textDark,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      apartmentMode
-                          ? 'Bir site secin. Daire kullanicilari yalnizca secili site altinda listelenir.'
-                          : 'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
+                      const SizedBox(height: 8),
+                      Text(
+                        apartmentMode ? apartmentsDescription : sitesDescription,
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _openSiteDialog(),
-                        icon: const Icon(Icons.add_business_outlined),
-                        label: const Text('Yeni Site'),
+                    if (canManageSites) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _openSiteDialog(),
+                          icon: const Icon(Icons.add_business_outlined),
+                          label: const Text('Yeni Site'),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 )
               : Row(
@@ -2319,18 +2576,20 @@ class _HomePageState extends State<HomePage> {
                           SizedBox(height: 8),
                           Text(
                             apartmentMode
-                                ? 'Bir site secin. Daire kullanicilari yalnizca secili site altinda listelenir.'
-                                : 'Site, blok, daire ve otomatik kapi yapisini burada yonetirsiniz. Daire kullanicisi ve cihaz atamalarini secili site detayinda yapin.',
+                                ? apartmentsDescription
+                                : sitesDescription,
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () => _openSiteDialog(),
-                      icon: const Icon(Icons.add_business_outlined),
-                      label: const Text('Yeni Site'),
-                    ),
+                    if (canManageSites) ...[
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => _openSiteDialog(),
+                        icon: const Icon(Icons.add_business_outlined),
+                        label: const Text('Yeni Site'),
+                      ),
+                    ],
                   ],
                 ),
         ),
@@ -2379,15 +2638,17 @@ class _HomePageState extends State<HomePage> {
                       deleteBusy: _busyDeleteSites.contains(site.id),
                       approvalBusy: _busySiteApprovals.contains(site.id),
                       onTap: () => _selectSite(site),
-                      onEdit: () => _openSiteDialog(site: site),
-                      onDelete: () => _deleteSite(site),
-                      onApprove: site.approvalStatus == 'pending'
+                      onEdit: canManageSites
+                          ? () => _openSiteDialog(site: site)
+                          : null,
+                      onDelete: canManageSites ? () => _deleteSite(site) : null,
+                      onApprove: canManageSites && site.approvalStatus == 'pending'
                           ? () => _resolveSiteApproval(
                               siteCode: site.id,
                               action: 'approve',
                             )
                           : null,
-                      onReject: site.approvalStatus == 'pending'
+                      onReject: canManageSites && site.approvalStatus == 'pending'
                           ? () => _resolveSiteApproval(
                               siteCode: site.id,
                               action: 'reject',
@@ -2461,15 +2722,18 @@ class _HomePageState extends State<HomePage> {
                       if ((structure.site.address ?? '').isNotEmpty)
                         Text('Adres: ${structure.site.address}'),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () =>
-                              _openSiteDialog(site: structure.site),
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Siteyi Duzenle'),
+                      if (canManageSites) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                _openSiteDialog(site: structure.site),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Siteyi Duzenle'),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   )
                 : Row(
@@ -2514,12 +2778,14 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => _openSiteDialog(site: structure.site),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Siteyi Duzenle'),
-                      ),
+                      if (canManageSites) ...[
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => _openSiteDialog(site: structure.site),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Siteyi Duzenle'),
+                        ),
+                      ],
                     ],
                   ),
           ),
@@ -2548,8 +2814,11 @@ class _HomePageState extends State<HomePage> {
                       child: _ApartmentCard(
                         apartment: apartment,
                         busy: _busyApartments.contains(apartment.id),
-                        onTap: () => _openApartmentResidentDialog(apartment),
-                        onSendCredentials: apartment.residentEmail == null
+                        onTap: canManageApartmentUsers
+                            ? () => _openApartmentResidentDialog(apartment)
+                            : null,
+                        onSendCredentials:
+                            !canManageApartmentUsers || apartment.residentEmail == null
                             ? null
                             : () => _sendApartmentCredentials(apartment),
                       ),
@@ -2582,7 +2851,9 @@ class _HomePageState extends State<HomePage> {
                       child: _DoorCard(
                         door: door,
                         busy: _busyDoors.contains(door.id),
-                        onAssign: () => _assignDoorDevice(door),
+                        onAssign: canAssignDoorDevices
+                            ? () => _assignDoorDevice(door)
+                            : null,
                       ),
                     ),
               ],
@@ -2989,6 +3260,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildContent(UserSession session) {
+    if (!_canAccessMenu(_selectedMenu, session.role)) {
+      _selectedMenu = SirketMenuItem.dashboard;
+    }
+
     switch (_selectedMenu) {
       case SirketMenuItem.dashboard:
         return _buildDashboard(session);
@@ -3022,42 +3297,50 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titleForMenu(_selectedMenu)),
-        actions: [
-          IconButton(
-            tooltip: 'Cikis yap',
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
-      ),
-      drawer: YanMenu(
-        fullName: session.fullName,
-        userEmail: session.email,
-        selectedItem: _selectedMenu,
-        onSelect: _selectMenu,
-        onLogout: () {
-          Navigator.pop(context);
-          _logout();
-        },
-      ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
-            return SingleChildScrollView(
-              padding: EdgeInsets.all(horizontalPadding),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1100),
-                  child: _buildContent(session),
-                ),
-              ),
-            );
+    final roleColor = session.role.accentColor;
+    return Theme(
+      data: _themeForRole(context, session.role),
+      child: Scaffold(
+        backgroundColor: session.role.surfaceColor,
+        appBar: AppBar(
+          title: Text(_titleForMenu(_selectedMenu)),
+          backgroundColor: roleColor,
+          actions: [
+            IconButton(
+              tooltip: 'Cikis yap',
+              icon: const Icon(Icons.logout),
+              onPressed: _logout,
+            ),
+          ],
+        ),
+        drawer: YanMenu(
+          fullName: session.fullName,
+          userEmail: session.email,
+          role: session.role,
+          selectedItem: _selectedMenu,
+          onSelect: _selectMenu,
+          onLogout: () {
+            Navigator.pop(context);
+            _logout();
           },
+        ),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalPadding =
+                  constraints.maxWidth < 600 ? 16.0 : 20.0;
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(horizontalPadding),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: _buildContent(session),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -3240,8 +3523,8 @@ class _SiteCard extends StatelessWidget {
   final bool deleteBusy;
   final bool approvalBusy;
   final VoidCallback onTap;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
 
@@ -3419,33 +3702,36 @@ class _SiteCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                   ],
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton(
-                        onPressed: onEdit,
-                        child: const Icon(Icons.edit_outlined, size: 18),
-                      ),
-                      ElevatedButton(
-                        onPressed: deleteBusy ? null : onDelete,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: deleteBusy
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.delete_outline, size: 18),
-                      ),
-                    ],
-                  ),
+                  if (onEdit != null || onDelete != null)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (onEdit != null)
+                          OutlinedButton(
+                            onPressed: onEdit,
+                            child: const Icon(Icons.edit_outlined, size: 18),
+                          ),
+                        if (onDelete != null)
+                          ElevatedButton(
+                            onPressed: deleteBusy ? null : onDelete,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: deleteBusy
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.delete_outline, size: 18),
+                          ),
+                      ],
+                    ),
                 ],
               );
             },
@@ -3466,7 +3752,7 @@ class _ApartmentCard extends StatelessWidget {
 
   final ApartmentRecord apartment;
   final bool busy;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final VoidCallback? onSendCredentials;
 
   @override
@@ -3534,8 +3820,10 @@ class _ApartmentCard extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            const Icon(Icons.chevron_right),
+                            if (onTap != null) ...[
+                              const SizedBox(height: 4),
+                              const Icon(Icons.chevron_right),
+                            ],
                           ],
                         ),
                       ],
@@ -3557,7 +3845,7 @@ class _DoorCard extends StatelessWidget {
 
   final DoorRecord door;
   final bool busy;
-  final VoidCallback onAssign;
+  final VoidCallback? onAssign;
 
   @override
   Widget build(BuildContext context) {
@@ -3589,11 +3877,13 @@ class _DoorCard extends StatelessWidget {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : OutlinedButton.icon(
-                  onPressed: onAssign,
-                  icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
-                  label: const Text('Cihaz Ata'),
-                ),
+              : onAssign == null
+                  ? const SizedBox.shrink()
+                  : OutlinedButton.icon(
+                      onPressed: onAssign,
+                      icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
+                      label: const Text('Cihaz Ata'),
+                    ),
         ],
       ),
     );
@@ -3776,8 +4066,13 @@ class _SiteDialogState extends State<_SiteDialog> {
   late final TextEditingController _blockCountController;
   late final TextEditingController _doorCountController;
   late final TextEditingController _managerUserCodeController;
+  late final TextEditingController _managerFullNameController;
+  late final TextEditingController _managerEmailController;
+  late final TextEditingController _managerPhoneController;
+  late final TextEditingController _managerPasswordController;
   final List<TextEditingController> _blockApartmentControllers =
       <TextEditingController>[];
+  late bool _createNewManager;
 
   bool get _isEditing => widget.site != null;
 
@@ -3805,6 +4100,11 @@ class _SiteDialogState extends State<_SiteDialog> {
     _managerUserCodeController = TextEditingController(
       text: widget.site?.managerUserCode?.toString() ?? '',
     );
+    _managerFullNameController = TextEditingController();
+    _managerEmailController = TextEditingController();
+    _managerPhoneController = TextEditingController();
+    _managerPasswordController = TextEditingController();
+    _createNewManager = !_isEditing;
     _syncBlockApartmentControllers(
       initialBlockApartmentCounts.length,
       seedCounts: initialBlockApartmentCounts,
@@ -3822,6 +4122,10 @@ class _SiteDialogState extends State<_SiteDialog> {
     _blockCountController.dispose();
     _doorCountController.dispose();
     _managerUserCodeController.dispose();
+    _managerFullNameController.dispose();
+    _managerEmailController.dispose();
+    _managerPhoneController.dispose();
+    _managerPasswordController.dispose();
     for (final controller in _blockApartmentControllers) {
       controller.dispose();
     }
@@ -3887,7 +4191,18 @@ class _SiteDialogState extends State<_SiteDialog> {
         district: _districtController.text.trim(),
         blockApartmentCounts: _blockApartmentCounts,
         doorCount: int.parse(_doorCountController.text.trim()),
-        managerUserCode: _parseOptionalInt(_managerUserCodeController.text),
+        managerUserCode: _createNewManager
+            ? null
+            : _parseOptionalInt(_managerUserCodeController.text),
+        managerUser: _createNewManager
+            ? {
+                'full_name': _managerFullNameController.text.trim(),
+                'email': _managerEmailController.text.trim().toLowerCase(),
+                'phone_number': _managerPhoneController.text.trim(),
+                'password': _managerPasswordController.text.trim(),
+                'is_active': true,
+              }
+            : null,
       ),
     );
   }
@@ -4018,22 +4333,90 @@ class _SiteDialogState extends State<_SiteDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _managerUserCodeController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Yonetici Kullanici Kodu (opsiyonel)',
+                if (!_isEditing) ...[
+                  SwitchListTile.adaptive(
+                    value: _createNewManager,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Yeni site yoneticisi olustur'),
+                    subtitle: Text(
+                      _createNewManager
+                          ? 'Site kaydedilirken yonetici kullanicisi da acilir ve siteye baglanir.'
+                          : 'Daha once olusturulmus yoneticinin kullanici kodunu girin.',
+                    ),
+                    onChanged: (value) =>
+                        setState(() => _createNewManager = value),
                   ),
-                  validator: (value) {
-                    final text = (value ?? '').trim();
-                    if (text.isEmpty) {
-                      return null;
-                    }
-                    return int.tryParse(text) == null
-                        ? 'Yonetici kodu sayisal olmali.'
-                        : null;
-                  },
-                ),
+                  const SizedBox(height: 12),
+                ],
+                if (_createNewManager) ...[
+                  TextFormField(
+                    controller: _managerFullNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Site Yoneticisi Ad Soyad',
+                    ),
+                    validator: (value) => (value ?? '').trim().length < 3
+                        ? 'Ad Soyad en az 3 karakter olmali.'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _managerEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Site Yoneticisi E-posta',
+                    ),
+                    validator: (value) {
+                      final text = (value ?? '').trim();
+                      return text.isEmpty || !text.contains('@')
+                          ? 'Gecerli bir e-posta girin.'
+                          : null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _managerPhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Site Yoneticisi Telefon (opsiyonel)',
+                    ),
+                    validator: (value) {
+                      final text = (value ?? '').trim();
+                      if (text.isEmpty) {
+                        return null;
+                      }
+                      return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
+                          ? null
+                          : 'Gecerli bir telefon numarasi girin.';
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _managerPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Site Yoneticisi Sifre',
+                    ),
+                    validator: (value) => (value ?? '').trim().length < 6
+                        ? 'Sifre en az 6 karakter olmali.'
+                        : null,
+                  ),
+                ] else
+                  TextFormField(
+                    controller: _managerUserCodeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Yonetici Kullanici Kodu (opsiyonel)',
+                    ),
+                    validator: (value) {
+                      final text = (value ?? '').trim();
+                      if (text.isEmpty) {
+                        return null;
+                      }
+                      return int.tryParse(text) == null
+                          ? 'Yonetici kodu sayisal olmali.'
+                          : null;
+                    },
+                  ),
               ],
             ),
           ),
@@ -4451,9 +4834,13 @@ class _DoorDeviceDialogState extends State<_DoorDeviceDialog> {
 }
 
 class _DeviceEditDialog extends StatefulWidget {
-  const _DeviceEditDialog({required this.device});
+  const _DeviceEditDialog({
+    required this.device,
+    required this.isSuperUser,
+  });
 
   final DeviceRecord device;
+  final bool isSuperUser;
 
   @override
   State<_DeviceEditDialog> createState() => _DeviceEditDialogState();
@@ -4509,7 +4896,9 @@ class _DeviceEditDialogState extends State<_DeviceEditDialog> {
     }
     Navigator.of(context).pop(
       _DeviceEditResult(
-        assignedUserCode: _parseOptionalInt(_assignedUserCodeController.text),
+        assignedUserCode: widget.isSuperUser
+            ? _parseOptionalInt(_assignedUserCodeController.text)
+            : widget.device.assignedUserCode,
         siteCode: _parseOptionalInt(_siteCodeController.text),
         gateName: _gateNameController.text.trim().isEmpty
             ? null
@@ -4531,16 +4920,18 @@ class _DeviceEditDialogState extends State<_DeviceEditDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  controller: _assignedUserCodeController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Kullanici ID (opsiyonel)',
+                if (widget.isSuperUser) ...[
+                  TextFormField(
+                    controller: _assignedUserCodeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Kullanici ID (opsiyonel)',
+                    ),
+                    validator: (value) =>
+                        _validateOptionalInt(value, 'Kullanici ID'),
                   ),
-                  validator: (value) =>
-                      _validateOptionalInt(value, 'Kullanici ID'),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
                   controller: _siteCodeController,
                   keyboardType: TextInputType.number,
@@ -4910,6 +5301,7 @@ class _SiteFormResult {
     required this.blockApartmentCounts,
     required this.doorCount,
     required this.managerUserCode,
+    required this.managerUser,
   });
 
   final String name;
@@ -4919,6 +5311,7 @@ class _SiteFormResult {
   final List<int> blockApartmentCounts;
   final int doorCount;
   final int? managerUserCode;
+  final Map<String, dynamic>? managerUser;
 }
 
 class _DeviceFormResult {

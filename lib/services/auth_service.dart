@@ -59,7 +59,7 @@ class AuthService extends ChangeNotifier {
   Future<String?> login({
     required String email,
     required String password,
-    required UserRole role,
+    UserRole? role,
   }) async {
     try {
       _session = await api.login(email: email, password: password, role: role);
@@ -125,9 +125,10 @@ class AuthService extends ChangeNotifier {
     int pageSize = 10,
     String? approvalStatus,
   }) async {
-    final active = _requireSuperUserSession();
+    final active = _requireManagementSession();
     return api.listSites(
       token: active.token,
+      role: active.role,
       page: page,
       pageSize: pageSize,
       approvalStatus: approvalStatus,
@@ -255,6 +256,7 @@ class AuthService extends ChangeNotifier {
     required List<int> blockApartmentCounts,
     required int doorCount,
     int? managerUserCode,
+    Map<String, dynamic>? managerUser,
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
@@ -264,6 +266,7 @@ class AuthService extends ChangeNotifier {
     try {
       await api.createSite(
         token: active.token,
+        role: active.role,
         name: name,
         address: address,
         city: city,
@@ -271,6 +274,7 @@ class AuthService extends ChangeNotifier {
         blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
         managerUserCode: managerUserCode,
+        managerUser: managerUser,
       );
       return null;
     } on ApiException catch (e) {
@@ -298,6 +302,7 @@ class AuthService extends ChangeNotifier {
     try {
       await api.updateSite(
         token: active.token,
+        role: active.role,
         siteCode: siteCode,
         name: name,
         address: address,
@@ -334,14 +339,15 @@ class AuthService extends ChangeNotifier {
   Future<(SiteStructureRecord?, String?)> getSiteStructure({
     required int siteCode,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
       final structure = await api.getSiteStructure(
         token: active.token,
+        role: active.role,
         siteCode: siteCode,
       );
       return (structure, null);
@@ -369,6 +375,7 @@ class AuthService extends ChangeNotifier {
     try {
       final apartment = await api.upsertApartmentResident(
         token: active.token,
+        role: active.role,
         apartmentId: apartmentId,
         fullName: fullName,
         loginName: loginName,
@@ -394,6 +401,7 @@ class AuthService extends ChangeNotifier {
     try {
       await api.sendApartmentCredentials(
         token: active.token,
+        role: active.role,
         apartmentId: apartmentId,
       );
       return null;
@@ -408,14 +416,15 @@ class AuthService extends ChangeNotifier {
     required int doorId,
     required String deviceUid,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
       final door = await api.assignDoorDevice(
         token: active.token,
+        role: active.role,
         doorId: doorId,
         deviceUid: deviceUid,
       );
@@ -456,14 +465,15 @@ class AuthService extends ChangeNotifier {
     required int page,
     required int pageSize,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
       final devices = await api.listCompanyDevices(
         token: active.token,
+        role: active.role,
         page: page,
         pageSize: pageSize,
       );
@@ -481,14 +491,15 @@ class AuthService extends ChangeNotifier {
     int? siteCode,
     String? gateName,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
       final device = await api.updateDevice(
         token: active.token,
+        role: active.role,
         deviceId: deviceId,
         assignedUserCode: assignedUserCode,
         siteCode: siteCode,
@@ -509,7 +520,11 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      await api.deleteDevice(token: active.token, deviceId: deviceId);
+      await api.deleteDevice(
+        token: active.token,
+        role: active.role,
+        deviceId: deviceId,
+      );
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -537,14 +552,15 @@ class AuthService extends ChangeNotifier {
   Future<(Map<String, dynamic>?, String?)> getDeviceMqttCredentials({
     required String deviceUid,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
       final result = await api.getDeviceMqttCredentials(
         token: active.token,
+        role: active.role,
         deviceUid: deviceUid,
       );
       return (result, null);
@@ -585,6 +601,22 @@ class AuthService extends ChangeNotifier {
     try {
       final status = await api.openDoor(token: active.token, doorId: doorId);
       return (status, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(List<DoorRecord>?, String?)> listMyDoors() async {
+    final active = session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadi.');
+    }
+
+    try {
+      final doors = await api.listMyDoors(token: active.token);
+      return (doors, null);
     } on ApiException catch (e) {
       return (null, e.message);
     } catch (_) {
@@ -685,6 +717,22 @@ class AuthService extends ChangeNotifier {
       return null;
     }
     if (active.role != UserRole.superUser) {
+      return null;
+    }
+    return active;
+  }
+
+  UserSession _requireManagementSession() {
+    final active = _safeRequireManagementSession();
+    if (active == null) {
+      throw ApiException('Bu islem icin site yonetim yetkisi gerekir.');
+    }
+    return active;
+  }
+
+  UserSession? _safeRequireManagementSession() {
+    final active = _session;
+    if (active == null || active.role == UserRole.apartmentOwner) {
       return null;
     }
     return active;

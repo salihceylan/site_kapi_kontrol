@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
@@ -35,7 +34,6 @@ class _LoginPageState extends State<LoginPage> {
     final error = await widget.authService.login(
       email: _emailController.text.trim().toLowerCase(),
       password: _passwordController.text.trim(),
-      role: UserRole.superUser,
     );
 
     if (!mounted) {
@@ -53,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sirket Girisi')),
+      appBar: AppBar(title: const Text('AHBU Giris')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -80,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'Sirket paneline giris yapin',
+                      'AHBU hesabinizla giris yapin',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -89,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Bu uygulama sadece sirket super user hesabiyla kullanilir.',
+                      'Yetkili oldugunuz siteler, kapilar ve menu islemleri rolunuze gore acilir.',
                       style: TextStyle(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 20),

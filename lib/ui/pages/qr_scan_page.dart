@@ -4,7 +4,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 
 class QrScanPage extends StatefulWidget {
-  const QrScanPage({super.key});
+  const QrScanPage({super.key, this.accentColor});
+
+  final Color? accentColor;
 
   @override
   State<QrScanPage> createState() => _QrScanPageState();
@@ -63,9 +65,13 @@ class _QrScanPageState extends State<QrScanPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = widget.accentColor ?? AppColors.primaryLight;
     if (!_isSupportedPlatform) {
       return Scaffold(
-        appBar: AppBar(title: const Text('QR Kod Oku')),
+        appBar: AppBar(
+          title: const Text('QR Kod Oku'),
+          backgroundColor: accentColor,
+        ),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -79,7 +85,10 @@ class _QrScanPageState extends State<QrScanPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('QR Kod Oku')),
+      appBar: AppBar(
+        title: const Text('QR Kod Oku'),
+        backgroundColor: accentColor,
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final scanBoxSize =
@@ -114,7 +123,7 @@ class _QrScanPageState extends State<QrScanPage> {
                   width: scanBoxSize,
                   height: scanBoxSize,
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.primaryLight, width: 3),
+                    border: Border.all(color: accentColor, width: 3),
                     borderRadius: BorderRadius.circular(24),
                   ),
                 ),

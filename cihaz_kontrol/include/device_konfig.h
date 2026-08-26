@@ -3,9 +3,9 @@
 
 #include <Arduino.h>
 
-constexpr uint8_t WIFI_STATUS_LED_PIN = 1;
+constexpr int WIFI_STATUS_LED_PIN = 2;
 constexpr bool WIFI_STATUS_LED_ACTIVE_HIGH = true;
-constexpr uint8_t BLE_STATUS_LED_PIN = 2;
+constexpr int BLE_STATUS_LED_PIN = -1;
 constexpr bool BLE_STATUS_LED_ACTIVE_HIGH = true;
 constexpr uint8_t WIFI_RESET_BUTTON_PIN = 0;
 constexpr bool WIFI_RESET_BUTTON_ACTIVE_LOW = true;
