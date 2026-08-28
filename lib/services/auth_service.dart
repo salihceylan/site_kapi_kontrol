@@ -76,6 +76,7 @@ class AuthService extends ChangeNotifier {
       _notifySafely();
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -101,6 +102,7 @@ class AuthService extends ChangeNotifier {
       _notifySafely();
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -124,13 +126,18 @@ class AuthService extends ChangeNotifier {
     String? search,
   }) async {
     final active = _requireSuperUserSession();
-    return api.listManagedUsers(
-      token: active.token,
-      role: role,
-      page: page,
-      pageSize: pageSize,
-      search: search,
-    );
+    try {
+      return await api.listManagedUsers(
+        token: active.token,
+        role: role,
+        page: page,
+        pageSize: pageSize,
+        search: search,
+      );
+    } catch (e) {
+      _handleSessionError(e);
+      rethrow;
+    }
   }
 
   Future<SitePage> listSites({
@@ -139,13 +146,18 @@ class AuthService extends ChangeNotifier {
     String? approvalStatus,
   }) async {
     final active = _requireManagementSession();
-    return api.listSites(
-      token: active.token,
-      role: active.role,
-      page: page,
-      pageSize: pageSize,
-      approvalStatus: approvalStatus,
-    );
+    try {
+      return await api.listSites(
+        token: active.token,
+        role: active.role,
+        page: page,
+        pageSize: pageSize,
+        approvalStatus: approvalStatus,
+      );
+    } catch (e) {
+      _handleSessionError(e);
+      rethrow;
+    }
   }
 
   Future<SubscriptionRequestPage> listSubscriptionRequests({
@@ -153,11 +165,16 @@ class AuthService extends ChangeNotifier {
     int pageSize = 10,
   }) async {
     final active = _requireSuperUserSession();
-    return api.listSubscriptionRequests(
-      token: active.token,
-      page: page,
-      pageSize: pageSize,
-    );
+    try {
+      return await api.listSubscriptionRequests(
+        token: active.token,
+        page: page,
+        pageSize: pageSize,
+      );
+    } catch (e) {
+      _handleSessionError(e);
+      rethrow;
+    }
   }
 
   Future<String?> createManagedUser({
@@ -185,6 +202,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -216,6 +234,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -239,6 +258,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -255,6 +275,7 @@ class AuthService extends ChangeNotifier {
       await api.deleteManagedUser(token: active.token, userCode: userCode);
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -291,6 +312,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -327,6 +349,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -343,6 +366,7 @@ class AuthService extends ChangeNotifier {
       await api.deleteSite(token: active.token, siteCode: siteCode);
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -365,6 +389,7 @@ class AuthService extends ChangeNotifier {
       );
       return (structure, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -399,6 +424,7 @@ class AuthService extends ChangeNotifier {
       );
       return (apartment, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -419,6 +445,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -443,6 +470,7 @@ class AuthService extends ChangeNotifier {
       );
       return (door, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -468,6 +496,7 @@ class AuthService extends ChangeNotifier {
       );
       return (device, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -492,6 +521,7 @@ class AuthService extends ChangeNotifier {
       );
       return (devices, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -520,6 +550,7 @@ class AuthService extends ChangeNotifier {
       );
       return (device, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -540,6 +571,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -556,6 +588,7 @@ class AuthService extends ChangeNotifier {
       final result = await api.broadcastOtaCheck(token: active.token);
       return (result, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -578,6 +611,7 @@ class AuthService extends ChangeNotifier {
       );
       return (result, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -600,6 +634,7 @@ class AuthService extends ChangeNotifier {
       await _cacheLocalDoorAccess(status);
       return (status, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -669,6 +704,7 @@ class AuthService extends ChangeNotifier {
       final doors = await api.listMyDoors(token: active.token);
       return (doors, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -692,6 +728,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -715,6 +752,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -748,6 +786,7 @@ class AuthService extends ChangeNotifier {
       _notifySafely();
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -777,6 +816,7 @@ class AuthService extends ChangeNotifier {
       );
       return (pass, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -793,6 +833,7 @@ class AuthService extends ChangeNotifier {
       final passes = await api.listGuestPasses(token: active.token);
       return (passes, null);
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -809,6 +850,7 @@ class AuthService extends ChangeNotifier {
       await api.revokeGuestPass(token: active.token, passId: passId);
       return null;
     } on ApiException catch (e) {
+      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -848,6 +890,13 @@ class AuthService extends ChangeNotifier {
       return null;
     }
     return active;
+  }
+
+  void _handleSessionError(Object error) {
+    if (error is SessionExpiredException ||
+        (error is ApiException && error.isUnauthorized)) {
+      logout();
+    }
   }
 
   Future<void> _persist() async {

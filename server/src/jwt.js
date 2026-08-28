@@ -15,7 +15,7 @@ export function signAccessToken(user) {
       role: user.role,
     },
     getJwtSecret(),
-    { expiresIn: process.env.JWT_EXPIRES_IN || '12h' },
+    { expiresIn: process.env.JWT_EXPIRES_IN || '90d' },
   );
 }
 

@@ -896,9 +896,23 @@ class AuthApi {
     }
 
     final payload = _decodePayload(response);
+    final errorMsg = payload['error'] as String?;
+
+    if (response.statusCode == 401) {
+      final lower = (errorMsg ?? '').toLowerCase();
+      if (lower.contains('token') ||
+          lower.contains('yetkisiz') ||
+          lower.contains('oturum') ||
+          lower.contains('unauthorized') ||
+          lower.contains('expired')) {
+        throw SessionExpiredException('Oturum süreniz doldu. Lütfen tekrar giriş yapın.');
+      }
+      throw ApiException(errorMsg ?? 'Yetkisiz erişim (401)', statusCode: 401);
+    }
+
     throw ApiException(
-      (payload['error'] as String?) ??
-          'Islem basarisiz (${response.statusCode})',
+      errorMsg ?? 'İşlem başarısız (${response.statusCode})',
+      statusCode: response.statusCode,
     );
   }
 
