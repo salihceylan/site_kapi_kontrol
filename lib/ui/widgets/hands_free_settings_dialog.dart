@@ -189,11 +189,13 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          const Text(
-                            'Apple Siri ("Hey Siri")',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                          const Expanded(
+                            child: Text(
+                              'Apple Siri ("Hey Siri")',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
                         ],
@@ -276,11 +278,13 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          const Text(
-                            'Google Asistan & Ana Ekran Kısayolları',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                          const Expanded(
+                            child: Text(
+                              'Google Asistan & Ana Ekran Kısayolları',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
                         ],
@@ -324,11 +328,13 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          const Text(
-                            '🏷️ NFC Araç Tutacağı Etiketi',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                          const Expanded(
+                            child: Text(
+                              '🏷️ NFC Araç Tutacağı Etiketi',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
                         ],

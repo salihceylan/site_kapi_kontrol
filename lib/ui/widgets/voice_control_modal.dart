@@ -161,18 +161,22 @@ class _VoiceControlModalState extends State<VoiceControlModal>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.mic, color: color, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Sesli Kapı Kontrolü',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.mic, color: color, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sesli Kapı Kontrolü',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     tooltip: widget.voiceService.ttsEnabled
