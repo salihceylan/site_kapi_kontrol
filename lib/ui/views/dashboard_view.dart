@@ -126,12 +126,16 @@ class DashboardView extends StatelessWidget {
 
   /// SADECE Daire Sakini için Özel Tasarlanmış "Akıllı Kapı Kumandası"
   Widget _buildResidentDashboard(BuildContext context) {
-    final hasLocal = canTryLocalDoorOpen;
-    final isMqttConnected = runtimeStatus?.mqttConnected == true;
     final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
         selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
-    final commandEnabled =
-        isDeviceAssigned && (isMqttConnected || hasLocal) && !isOpeningDoor;
+    final isCloudOnline = runtimeStatus?.mqttConnected == true;
+    final isServerOffline = doorStatusError != null || runtimeStatus == null;
+    final canUseLocal = isServerOffline && canTryLocalDoorOpen;
+
+    final commandEnabled = isDeviceAssigned &&
+        (isCloudOnline || canUseLocal) &&
+        !isOpeningDoor &&
+        !isLoadingStatus;
 
     String statusText;
     Color statusColor;
@@ -141,18 +145,18 @@ class DashboardView extends StatelessWidget {
     } else if (isOpeningDoor) {
       statusText = 'Kapı açılıyor, lütfen bekleyin...';
       statusColor = const Color(0xFF93C5FD);
-    } else if (doorStatusError != null && !hasLocal) {
-      statusText = doorStatusError!;
-      statusColor = const Color(0xFFF87171);
-    } else if (isMqttConnected) {
+    } else if (isLoadingStatus) {
+      statusText = 'Cihaz durumu kontrol ediliyor...';
+      statusColor = const Color(0xFF94A3B8);
+    } else if (isCloudOnline) {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
-    } else if (hasLocal) {
+    } else if (canUseLocal) {
       statusText = '🟢 Online (Yerel Ağ / Wi-Fi) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
     } else {
-      statusText = 'Kapıyı açmak için dokunun';
-      statusColor = const Color(0xFF94A3B8);
+      statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';
+      statusColor = const Color(0xFFF87171);
     }
 
     return Column(
@@ -354,7 +358,7 @@ class DashboardView extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'KAPIYI AÇ',
+                                commandEnabled ? 'KAPIYI AÇ' : 'KAPALI',
                                 style: TextStyle(
                                   color: commandEnabled
                                       ? Colors.white
@@ -581,28 +585,34 @@ class DashboardView extends StatelessWidget {
         );
       }
 
-      final hasLocal = canTryLocalDoorOpen;
+      final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
+          selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
+      final isCloudOnline = runtimeStatus?.mqttConnected == true;
+      final isServerOffline = doorStatusError != null || runtimeStatus == null;
+      final canUseLocal = isServerOffline && canTryLocalDoorOpen;
+
       final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
-      final isMqttConnected = runtimeStatus?.mqttConnected == true;
 
       final connectionText = isMqttBridgeConnected
           ? 'Hazır (Bulut)'
-          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Hazır değil');
-      final deviceOnlineText = isMqttConnected
+          : (canUseLocal ? 'Hazır (Yerel Ağ)' : 'Hazır değil');
+      final deviceOnlineText = isCloudOnline
           ? 'Online (Bulut)'
-          : (hasLocal
+          : (canUseLocal
               ? 'Online (Yerel Ağ)'
               : (runtimeStatus == null ? 'Bilinmiyor' : 'Offline'));
       final stateText = runtimeStatus?.doorLocked != null
           ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
-          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Bilinmiyor');
+          : (canUseLocal ? 'Hazır (Yerel Ağ)' : 'Bilinmiyor');
       final signalText = runtimeStatus?.wifiSignalPercent == null
-          ? (hasLocal ? 'Yerel Ağ Bağlı' : '-')
+          ? (canUseLocal ? 'Yerel Ağ Bağlı' : '-')
           : '%${runtimeStatus!.wifiSignalPercent}'
               '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}';
-      final commandEnabled =
-          (runtimeStatus?.commandEnabled == true || canTryLocalDoorOpen) &&
-              !isOpeningDoor;
+
+      final commandEnabled = isDeviceAssigned &&
+          (isCloudOnline || canUseLocal) &&
+          !isOpeningDoor &&
+          !isLoadingStatus;
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
