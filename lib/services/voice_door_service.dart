@@ -125,7 +125,15 @@ class VoiceDoorService extends ChangeNotifier {
         onStatus: (val) {
           if (val == 'done' || val == 'notListening') {
             if (_status == VoiceStatus.listening && !_isProcessingCommand) {
-              _processCurrentRecognizedWords();
+              final words = _recognizedWords.trim();
+              _recognizedWords = '';
+              if (words.isNotEmpty) {
+                _processVoiceCommand(words, candidateDoors: _lastCandidateDoors);
+              } else {
+                _status = VoiceStatus.idle;
+                _feedbackText = '';
+                notifyListeners();
+              }
             }
           }
         },
@@ -191,14 +199,20 @@ class VoiceDoorService extends ChangeNotifier {
           pauseFor: const Duration(seconds: 3),
           partialResults: true,
           cancelOnError: false,
-          listenMode: ListenMode.confirmation,
+          listenMode: ListenMode.dictation,
         ),
         onResult: (result) {
-          _recognizedWords = result.recognizedWords;
+          final words = result.recognizedWords.trim();
+          if (words.isEmpty) return;
+
+          _recognizedWords = words;
           notifyListeners();
+
           if (result.finalResult && !_isProcessingCommand) {
+            _recognizedWords = '';
+            _speech.stop();
             _processVoiceCommand(
-              _recognizedWords,
+              words,
               candidateDoors: candidateDoors ?? _lastCandidateDoors,
             );
           }
@@ -216,20 +230,15 @@ class VoiceDoorService extends ChangeNotifier {
       await _speech.stop();
     }
     if (_status == VoiceStatus.listening && !_isProcessingCommand) {
-      _processCurrentRecognizedWords();
-    }
-  }
-
-  void _processCurrentRecognizedWords() {
-    if (_isProcessingCommand) {
-      return;
-    }
-    if (_recognizedWords.trim().isNotEmpty && _status == VoiceStatus.listening) {
-      _processVoiceCommand(_recognizedWords, candidateDoors: _lastCandidateDoors);
-    } else if (_status == VoiceStatus.listening) {
-      _status = VoiceStatus.idle;
-      _feedbackText = '';
-      notifyListeners();
+      final words = _recognizedWords.trim();
+      _recognizedWords = '';
+      if (words.isNotEmpty) {
+        _processVoiceCommand(words, candidateDoors: _lastCandidateDoors);
+      } else {
+        _status = VoiceStatus.idle;
+        _feedbackText = '';
+        notifyListeners();
+      }
     }
   }
 
@@ -237,7 +246,15 @@ class VoiceDoorService extends ChangeNotifier {
     String rawCommand, {
     List<DoorRecord>? candidateDoors,
   }) async {
-    // Çift çalıştırmayı (duplicate execution) engellemek için mutex ve debouncing
+    final command = rawCommand.trim();
+    if (command.isEmpty) {
+      return const VoiceDoorResult(
+        success: false,
+        recognizedText: '',
+        feedbackMessage: 'Ses algılanamadı.',
+      );
+    }
+
     if (_isProcessingCommand) {
       return const VoiceDoorResult(
         success: false,
@@ -248,41 +265,28 @@ class VoiceDoorService extends ChangeNotifier {
 
     final now = DateTime.now();
     if (_lastCommandProcessedAt != null &&
-        now.difference(_lastCommandProcessedAt!).inMilliseconds < 2000) {
+        now.difference(_lastCommandProcessedAt!).inSeconds < 5) {
       return const VoiceDoorResult(
         success: false,
         recognizedText: '',
-        feedbackMessage: 'Komut zaten işlendi.',
+        feedbackMessage: 'Komut yakın zamanda işlendi.',
       );
     }
 
     _isProcessingCommand = true;
     _lastCommandProcessedAt = now;
-
-    // Dinlemeyi derhal durdur
-    if (_speech.isListening) {
-      try {
-        await _speech.stop();
-      } catch (_) {}
-    }
-
-    _status = VoiceStatus.processing;
-    _feedbackText = 'Komut işleniyor: "$rawCommand"...';
-    notifyListeners();
+    _recognizedWords = '';
 
     try {
-      if (rawCommand.trim().isEmpty) {
-        const message = 'Ses algılanamadı.';
-        _status = VoiceStatus.error;
-        _feedbackText = message;
-        notifyListeners();
-        await speak(message);
-        return const VoiceDoorResult(
-          success: false,
-          recognizedText: '',
-          feedbackMessage: message,
-        );
+      if (_speech.isListening) {
+        try {
+          await _speech.stop();
+        } catch (_) {}
       }
+
+      _status = VoiceStatus.processing;
+      _feedbackText = 'Komut işleniyor: "$command"...';
+      notifyListeners();
 
       List<DoorRecord> doors =
           candidateDoors ?? _lastCandidateDoors ?? <DoorRecord>[];
@@ -302,12 +306,12 @@ class VoiceDoorService extends ChangeNotifier {
         await speak(message);
         return VoiceDoorResult(
           success: false,
-          recognizedText: rawCommand,
+          recognizedText: command,
           feedbackMessage: message,
         );
       }
 
-      final matched = matchDoorFromCommand(rawCommand, doors);
+      final matched = matchDoorFromCommand(command, doors);
       if (matched == null) {
         const message =
             'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
@@ -317,7 +321,7 @@ class VoiceDoorService extends ChangeNotifier {
         await speak(message);
         return VoiceDoorResult(
           success: false,
-          recognizedText: rawCommand,
+          recognizedText: command,
           feedbackMessage: message,
         );
       }
@@ -332,7 +336,7 @@ class VoiceDoorService extends ChangeNotifier {
         await speak(message);
         return VoiceDoorResult(
           success: false,
-          recognizedText: rawCommand,
+          recognizedText: command,
           matchedDoor: matched,
           feedbackMessage: message,
         );
@@ -354,7 +358,7 @@ class VoiceDoorService extends ChangeNotifier {
         await speak('${matched.doorName} başarıyla açıldı.');
         return VoiceDoorResult(
           success: true,
-          recognizedText: rawCommand,
+          recognizedText: command,
           matchedDoor: matched,
           feedbackMessage: '${matched.doorName} açıldı.',
         );
@@ -367,12 +371,13 @@ class VoiceDoorService extends ChangeNotifier {
         await speak(errorMsg);
         return VoiceDoorResult(
           success: false,
-          recognizedText: rawCommand,
+          recognizedText: command,
           matchedDoor: matched,
           feedbackMessage: errorMsg,
         );
       }
     } finally {
+      await Future.delayed(const Duration(seconds: 3));
       _isProcessingCommand = false;
     }
   }
