@@ -77,6 +77,8 @@ class YanMenu extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   fullName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -86,6 +88,8 @@ class YanMenu extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   userEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 8),

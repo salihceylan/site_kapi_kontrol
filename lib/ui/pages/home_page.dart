@@ -1698,33 +1698,35 @@ class _HomePageState extends State<HomePage> {
         title: const Text('🎉 Gecis Linki Hazir!'),
         content: SizedBox(
           width: _dialogWidthForScreen(context),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Kurye veya misafiriniz bu linke tiklayarak ${door.doorName} kapisini acabilir.',
-                style: const TextStyle(fontSize: 13.5),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kurye veya misafiriniz bu linke tiklayarak ${door.doorName} kapisini acabilir.',
+                  style: const TextStyle(fontSize: 13.5),
                 ),
-                child: SelectableText(
-                  pass.webUrl,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12.5,
-                    color: AppColors.primary,
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: SelectableText(
+                    pass.webUrl,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
