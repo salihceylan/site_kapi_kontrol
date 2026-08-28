@@ -36,7 +36,6 @@ import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 import 'package:site_kapi_kontrol/ui/views/sites_view.dart';
 import 'package:site_kapi_kontrol/ui/views/subscription_requests_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/hands_free_settings_dialog.dart';
-import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 class HomePage extends StatefulWidget {
@@ -886,21 +885,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _openVoiceControlModal() {
-    if (widget.voiceDoorService == null) return;
-    List<DoorRecord>? candidateDoors;
-    if (_doorControlStructure?.doors.isNotEmpty == true) {
-      candidateDoors = _doorControlStructure!.doors;
-    } else if (_selectedSiteStructure?.doors.isNotEmpty == true) {
-      candidateDoors = _selectedSiteStructure!.doors;
-    }
-    VoiceControlModal.show(
-      context,
-      voiceService: widget.voiceDoorService!,
-      candidateDoors: candidateDoors,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
@@ -948,20 +932,6 @@ class _HomePageState extends State<HomePage> {
           },
         ),
       ),
-      floatingActionButton: widget.voiceDoorService == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _openVoiceControlModal,
-              backgroundColor: roleColor,
-              icon: const Icon(Icons.mic, color: Colors.white),
-              label: const Text(
-                'Sesle Aç',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
     );
   }
 
