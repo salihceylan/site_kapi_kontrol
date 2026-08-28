@@ -2,6 +2,7 @@
 #define YEREL_KAPI_KONTROL_H
 
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 
 #include "device_konfig.h"
@@ -164,6 +165,17 @@ inline void yerelKapiKontrolBaslat() {
   gYerelKapiServer.begin();
   gYerelKapiServer.setNoDelay(true);
   gYerelKapiServerAktif = true;
+
+  String mdnsHost = "ahbu-" + cihazUniqueId();
+  mdnsHost.toLowerCase();
+  if (MDNS.begin(mdnsHost.c_str())) {
+    MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);
+    Serial.print("mDNS aktif: http://");
+    Serial.print(mdnsHost);
+    Serial.print(".local:");
+    Serial.println(YEREL_KAPI_KONTROL_PORT);
+  }
+
   Serial.print("Yerel kapi kontrol aktif: http://");
   Serial.print(wifiIpAdresi());
   Serial.print(":");
@@ -176,6 +188,7 @@ inline void yerelKapiKontrolDurdur() {
     return;
   }
 
+  MDNS.end();
   gYerelKapiServer.stop();
   gYerelKapiServerAktif = false;
   Serial.println("Yerel kapi kontrol durduruldu.");

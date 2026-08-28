@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -938,6 +939,71 @@ class AuthApi {
     } on TypeError {
       throw ApiException('$label verisi beklenen formatta degil.');
     }
+  }
+
+  Future<GuestPassRecord> createGuestPass({
+    required String token,
+    required int doorId,
+    required String title,
+    required String passType,
+    int? durationMinutes,
+    int? maxUses,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/guest-passes',
+      token: token,
+      body: {
+        'door_id': doorId,
+        'title': title,
+        'pass_type': passType,
+        'duration_minutes': durationMinutes,
+        'max_uses': maxUses,
+      },
+    );
+
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Gecis kaydi',
+      () => GuestPassRecord.fromJson(
+        payload['guest_pass'] as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  Future<List<GuestPassRecord>> listGuestPasses({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/guest-passes',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Gecisler',
+      () => (payload['passes'] as List<dynamic>? ?? <dynamic>[])
+          .map(
+            (item) => GuestPassRecord.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> revokeGuestPass({
+    required String token,
+    required int passId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/app/guest-passes/$passId',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
   }
 
   UserSession _toUserSession({

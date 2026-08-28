@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
@@ -12,6 +13,7 @@
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
 
+constexpr unsigned int WDT_TIMEOUT_SECONDS = 8;
 constexpr unsigned long STATUS_PRINT_INTERVAL_MS = 5000;
 unsigned long sonDurumYazdirmaMs = 0;
 
@@ -119,6 +121,9 @@ void setup() {
   Serial.begin(115200);
   delay(300);
 
+  esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
+  esp_task_wdt_add(NULL);
+
   roleSetup();
   wifiBaglan();
   otaSetup();
@@ -126,6 +131,7 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();
   seriKomutKontrol();
   wifiLoop();
   yerelKapiKontrolLoop();

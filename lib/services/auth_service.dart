@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
+import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -745,6 +746,67 @@ class AuthService extends ChangeNotifier {
       _session = updated;
       await _persist();
       _notifySafely();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<(GuestPassRecord?, String?)> createGuestPass({
+    required int doorId,
+    required String title,
+    required String passType,
+    int? durationMinutes,
+    int? maxUses,
+  }) async {
+    final active = _session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadi.');
+    }
+
+    try {
+      final pass = await api.createGuestPass(
+        token: active.token,
+        doorId: doorId,
+        title: title,
+        passType: passType,
+        durationMinutes: durationMinutes,
+        maxUses: maxUses,
+      );
+      return (pass, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(List<GuestPassRecord>?, String?)> listGuestPasses() async {
+    final active = _session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadi.');
+    }
+
+    try {
+      final passes = await api.listGuestPasses(token: active.token);
+      return (passes, null);
+    } on ApiException catch (e) {
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<String?> revokeGuestPass(int passId) async {
+    final active = _session;
+    if (active == null) {
+      return 'Oturum bulunamadi.';
+    }
+
+    try {
+      await api.revokeGuestPass(token: active.token, passId: passId);
       return null;
     } on ApiException catch (e) {
       return e.message;

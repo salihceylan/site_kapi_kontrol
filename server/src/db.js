@@ -428,9 +428,44 @@ export async function ensureDbSchema() {
       ON site_doors(site_code)
     `);
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_site_doors_assigned_device_unique
-      ON site_doors(assigned_device_id)
-      WHERE assigned_device_id IS NOT NULL
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS last_online_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS last_offline_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS guest_passes (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        door_id BIGINT NOT NULL REFERENCES site_doors(id) ON DELETE CASCADE,
+        created_by_user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        pass_type TEXT NOT NULL DEFAULT 'single_use',
+        expires_at TIMESTAMPTZ NOT NULL,
+        max_uses INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_guest_passes_token
+      ON guest_passes(token)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_guest_passes_user_code
+      ON guest_passes(created_by_user_code)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_guest_passes_door_id
+      ON guest_passes(door_id)
     `);
 
     const apartmentResetMaintenanceKey =

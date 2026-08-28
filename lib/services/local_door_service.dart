@@ -85,6 +85,12 @@ class LocalDoorService {
       }
     }
 
+    // Hizli mDNS cozumu: ahbu-<device_uid>.local
+    final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
+    if (await _matchesDevice(mdnsHost, access, const Duration(milliseconds: 600))) {
+      return mdnsHost;
+    }
+
     final candidates = await _candidateIps(knownIp);
     var cursor = 0;
     String? found;

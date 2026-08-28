@@ -133,6 +133,17 @@ async function persistRuntimeStatus(status) {
         status.last_seen_at,
       ],
     );
+    await pool.query(
+      `
+        UPDATE devices
+        SET
+          is_online = $2,
+          last_online_at = CASE WHEN $2 = TRUE THEN NOW() ELSE last_online_at END,
+          last_offline_at = CASE WHEN $2 = FALSE THEN NOW() ELSE last_offline_at END
+        WHERE device_uid = $1
+      `,
+      [status.device_uid, Boolean(status.mqtt_connected)],
+    );
   } catch (error) {
     lastBridgeError = `Device status DB yazilamadi: ${error.message}`;
   }
