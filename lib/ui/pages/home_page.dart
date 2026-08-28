@@ -3577,7 +3577,7 @@ class _ManagedUserCard extends StatelessWidget {
   }
 }
 
-class _SiteCard extends StatelessWidget {
+class _SiteCard extends StatefulWidget {
   const _SiteCard({
     required this.site,
     required this.selected,
@@ -3603,156 +3603,256 @@ class _SiteCard extends StatelessWidget {
   final VoidCallback? onReject;
 
   @override
+  State<_SiteCard> createState() => _SiteCardState();
+}
+
+class _SiteCardState extends State<_SiteCard> {
+  bool _expanded = false;
+
+  @override
+  void didUpdateWidget(covariant _SiteCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected && !oldWidget.selected) {
+      _expanded = true;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final site = widget.site;
     final approvalColor = switch (site.approvalStatus) {
       'pending' => Colors.orange.shade700,
       'rejected' => Colors.red.shade700,
       _ => Colors.green.shade700,
     };
+    final hasManager = (site.managerName ?? '').trim().isNotEmpty;
+    final isSelected = widget.selected;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          setState(() => _expanded = !_expanded);
+          widget.onTap();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected
+              color: isSelected
                   ? AppColors.primary
                   : AppColors.primarySoft.withValues(alpha: 0.25),
-              width: selected ? 1.6 : 1,
+              width: isSelected ? 1.6 : 1,
             ),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: AppColors.shadowDark,
-                blurRadius: 18,
-                offset: Offset(0, 8),
+                color: isSelected
+                    ? AppColors.shadowDark
+                    : Colors.black.withValues(alpha: 0.03),
+                blurRadius: isSelected ? 14 : 6,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 420;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ana Başlık Satırı (Kompakt: Sadece Site İsmi & Varsa Yönetici)
+              Row(
                 children: [
-                  compact
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              site.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text('ID: ${site.id}'),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: approvalColor.withValues(
-                                      alpha: 0.12,
-                                    ),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    site.approvalLabel,
-                                    style: TextStyle(
-                                      color: approvalColor,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                site.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text('ID: ${site.id}'),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: approvalColor.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                site.approvalLabel,
-                                style: TextStyle(
-                                  color: approvalColor,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 6,
-                    children: [
-                      Text('Blok: ${site.blockCount}'),
-                      Text('Daire: ${site.apartmentCount}'),
-                      Text('Kapi: ${site.doorCount}'),
-                      Text('MQTT Site ID: ${site.mqttSiteId}'),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.apartment_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
                   ),
-                  if ((site.managerName ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          site.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasManager
+                              ? 'Yönetici: ${site.managerName}'
+                              : 'Yönetici atanmamış',
+                          style: TextStyle(
+                            color: hasManager
+                                ? AppColors.textMuted
+                                : Colors.orange.shade800,
+                            fontSize: 12.5,
+                            fontWeight: hasManager
+                                ? FontWeight.normal
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (site.approvalStatus == 'pending')
+                    Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: approvalColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Onay Bekliyor',
+                        style: TextStyle(
+                          color: approvalColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textMuted,
+                  ),
+                ],
+              ),
+
+              // Tıklanınca Açılan Ayrıntılar
+              if (_expanded) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1),
+                ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    Text('ID: ${site.id}', style: const TextStyle(fontSize: 12.5)),
                     Text(
-                      'Yonetici: ${site.managerName} (${site.managerUserCode ?? '-'})',
+                      'MQTT Site ID: ${site.mqttSiteId}',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    Text(
+                      'Blok: ${site.blockCount}',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    Text(
+                      'Daire: ${site.apartmentCount}',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    Text(
+                      'Kapı: ${site.doorCount}',
+                      style: const TextStyle(fontSize: 12.5),
                     ),
                   ],
-                  if (site.address != null && site.address!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(site.address!),
-                  ],
-                  if ((site.city ?? '').isNotEmpty ||
-                      (site.district ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text('${site.city ?? '-'} / ${site.district ?? '-'}'),
-                  ],
+                ),
+                if (site.managerUserCode != null) ...[
                   const SizedBox(height: 4),
-                  Text('Kayit Tarihi: $formattedCreatedAt'),
-                  const SizedBox(height: 10),
-                  if (site.approvalStatus == 'pending' &&
-                      (onApprove != null || onReject != null)) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: approvalBusy ? null : onApprove,
-                          icon: approvalBusy
+                  Text(
+                    'Yönetici Kodu: ${site.managerUserCode}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+                if (site.address != null && site.address!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Adres: ${site.address}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+                if ((site.city ?? '').isNotEmpty ||
+                    (site.district ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Konum: ${site.city ?? '-'} / ${site.district ?? '-'}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  'Kayıt Tarihi: ${widget.formattedCreatedAt}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (site.approvalStatus == 'pending' &&
+                    (widget.onApprove != null || widget.onReject != null)) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: widget.approvalBusy ? null : widget.onApprove,
+                        icon: widget.approvalBusy
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_circle_outline, size: 18),
+                        label: const Text('Onayla'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: widget.approvalBusy ? null : widget.onReject,
+                        icon: const Icon(Icons.block_outlined, size: 18),
+                        label: const Text('Reddet'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (widget.onEdit != null || widget.onDelete != null)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (widget.onEdit != null)
+                        OutlinedButton.icon(
+                          onPressed: widget.onEdit,
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Düzenle'),
+                        ),
+                      if (widget.onDelete != null)
+                        ElevatedButton.icon(
+                          onPressed: widget.deleteBusy ? null : widget.onDelete,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: widget.deleteBusy
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
@@ -3761,54 +3861,13 @@ class _SiteCard extends StatelessWidget {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Icon(
-                                  Icons.check_circle_outline,
-                                  size: 18,
-                                ),
-                          label: const Text('Onayla'),
+                              : const Icon(Icons.delete_outline, size: 16),
+                          label: const Text('Sil'),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: approvalBusy ? null : onReject,
-                          icon: const Icon(Icons.block_outlined, size: 18),
-                          label: const Text('Reddet'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (onEdit != null || onDelete != null)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (onEdit != null)
-                          OutlinedButton(
-                            onPressed: onEdit,
-                            child: const Icon(Icons.edit_outlined, size: 18),
-                          ),
-                        if (onDelete != null)
-                          ElevatedButton(
-                            onPressed: deleteBusy ? null : onDelete,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade600,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: deleteBusy
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.delete_outline, size: 18),
-                          ),
-                      ],
-                    ),
-                ],
-              );
-            },
+                    ],
+                  ),
+              ],
+            ],
           ),
         ),
       ),
@@ -3910,7 +3969,7 @@ class _ApartmentCard extends StatelessWidget {
   }
 }
 
-class _DoorCard extends StatelessWidget {
+class _DoorCard extends StatefulWidget {
   const _DoorCard({
     required this.door,
     required this.busy,
@@ -3922,43 +3981,155 @@ class _DoorCard extends StatelessWidget {
   final VoidCallback? onAssign;
 
   @override
+  State<_DoorCard> createState() => _DoorCardState();
+}
+
+class _DoorCardState extends State<_DoorCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: AppDecorations.infoCard,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  door.doorName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text('Cihaz: ${door.assignedDeviceUid ?? 'Atanmadi'}'),
-              ],
+    final door = widget.door;
+    final hasDevice = door.assignedDeviceUid != null &&
+        door.assignedDeviceUid!.trim().isNotEmpty;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: hasDevice
+                  ? AppColors.primarySoft.withValues(alpha: 0.3)
+                  : Colors.orange.shade200,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          busy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : onAssign == null
-                  ? const SizedBox.shrink()
-                  : OutlinedButton.icon(
-                      onPressed: onAssign,
-                      icon: const Icon(Icons.qr_code_scanner_outlined, size: 18),
-                      label: const Text('Cihaz Ata'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.door_front_door_outlined,
+                    color: hasDevice ? AppColors.primary : Colors.orange.shade700,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      door.doorName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: AppColors.textDark,
+                      ),
                     ),
-        ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hasDevice
+                          ? Colors.green.withValues(alpha: 0.12)
+                          : Colors.orange.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      hasDevice ? 'Cihaz Atandı' : 'Cihaz Yok',
+                      style: TextStyle(
+                        color: hasDevice
+                            ? Colors.green.shade800
+                            : Colors.orange.shade800,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
+                ],
+              ),
+              if (_expanded) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cihaz UID: ${door.assignedDeviceUid ?? 'Atanmadı'}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Kapı İndeksi: ${door.doorIndex}',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (widget.busy)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else if (widget.onAssign != null)
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        onPressed: widget.onAssign,
+                        icon: const Icon(
+                          Icons.qr_code_scanner_outlined,
+                          size: 16,
+                        ),
+                        label: Text(
+                          hasDevice ? 'Cihaz Değiştir' : 'Cihaz Ata',
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
