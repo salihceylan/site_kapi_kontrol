@@ -54,8 +54,9 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
+  Timer? _statusAutoRefreshTimer;
 
   // Profil Form
   final _profileFormKey = GlobalKey<FormState>();
@@ -108,6 +109,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final session = widget.authService.session;
     _profileFullNameController = TextEditingController(
       text: session?.fullName ?? '',
@@ -121,15 +123,40 @@ class _HomePageState extends State<HomePage> {
     _profilePasswordController = TextEditingController();
 
     _loadInitialData();
+    _startStatusAutoRefreshTimer();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusAutoRefreshTimer?.cancel();
     _profileFullNameController.dispose();
     _profileEmailController.dispose();
     _profilePhoneController.dispose();
     _profilePasswordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_doorControlDoor != null) {
+        _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
+      }
+    }
+  }
+
+  void _startStatusAutoRefreshTimer() {
+    _statusAutoRefreshTimer?.cancel();
+    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (!mounted) return;
+      if (_selectedMenu == SirketMenuItem.dashboard &&
+          _doorControlDoor != null &&
+          !_isOpeningDoor &&
+          !_isLoadingDoorStatus) {
+        _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
+      }
+    });
   }
 
   void _showMessage(String message) {
@@ -402,19 +429,28 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _loadDoorRuntimeStatus(int doorId) async {
-    setState(() {
-      _isLoadingDoorStatus = true;
-      _doorStatusError = null;
-    });
+  Future<void> _loadDoorRuntimeStatus(
+    int doorId, {
+    bool isBackgroundRefresh = false,
+  }) async {
+    if (!isBackgroundRefresh) {
+      setState(() {
+        _isLoadingDoorStatus = true;
+        _doorStatusError = null;
+      });
+    }
 
     final (status, error) = await widget.authService.getDoorRuntimeStatus(
       doorId: doorId,
     );
     if (!mounted) return;
     setState(() {
-      _isLoadingDoorStatus = false;
-      _doorRuntimeStatus = status;
+      if (!isBackgroundRefresh) {
+        _isLoadingDoorStatus = false;
+      }
+      if (status != null || !isBackgroundRefresh) {
+        _doorRuntimeStatus = status;
+      }
       final canLocal = _doorControlDoor != null &&
           widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
       if (canLocal &&
@@ -424,7 +460,9 @@ class _HomePageState extends State<HomePage> {
               error.contains('baglanilamadi'))) {
         _doorStatusError = null;
       } else {
-        _doorStatusError = error;
+        if (!isBackgroundRefresh || error == null) {
+          _doorStatusError = error;
+        }
       }
     });
   }
