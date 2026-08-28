@@ -5689,28 +5689,30 @@ class _DoorDeviceDialogState extends State<_DoorDeviceDialog> {
         width: _dialogWidthForScreen(context),
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _deviceUidController,
-                decoration: const InputDecoration(labelText: 'Cihaz Unique ID'),
-                validator: (value) => (value ?? '').trim().length < 6
-                    ? 'Cihaz unique id en az 6 karakter olmali.'
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Mevcut cihaz: ${widget.door.assignedDeviceUid ?? 'Atanmadi'}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _deviceUidController,
+                  decoration: const InputDecoration(labelText: 'Cihaz Unique ID'),
+                  validator: (value) => (value ?? '').trim().length < 6
+                      ? 'Cihaz unique id en az 6 karakter olmali.'
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Mevcut cihaz: ${widget.door.assignedDeviceUid ?? 'Atanmadi'}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -5926,55 +5928,57 @@ class _DeviceDoorAssignDialogState extends State<_DeviceDoorAssignDialog> {
       title: Text('${widget.device.deviceUid} - Kapiya Ata'),
       content: SizedBox(
         width: _dialogWidthForScreen(context),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<int>(
-              initialValue: _selectedSite?.id,
-              decoration: const InputDecoration(labelText: 'Site'),
-              items: [
-                for (final site in widget.sites)
-                  DropdownMenuItem<int>(
-                    value: site.id,
-                    child: Text('${site.name} (${site.id})'),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                final site = widget.sites.firstWhere((item) => item.id == value);
-                setState(() => _selectedSite = site);
-                _loadDoors(site.id);
-              },
-            ),
-            const SizedBox(height: 12),
-            if (_loadingDoors)
-              const LinearProgressIndicator()
-            else if (_error != null)
-              Text(_error!, style: const TextStyle(color: Colors.red))
-            else
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               DropdownButtonFormField<int>(
-                initialValue: _selectedDoor?.id,
-                decoration: const InputDecoration(labelText: 'Kapi'),
+                initialValue: _selectedSite?.id,
+                decoration: const InputDecoration(labelText: 'Site'),
                 items: [
-                  for (final door in doors)
+                  for (final site in widget.sites)
                     DropdownMenuItem<int>(
-                      value: door.id,
-                      child: Text(
-                        '${door.doorName} - ${door.assignedDeviceUid ?? 'Bos'}',
-                      ),
+                      value: site.id,
+                      child: Text('${site.name} (${site.id})'),
                     ),
                 ],
                 onChanged: (value) {
                   if (value == null) {
                     return;
                   }
-                  final door = doors.firstWhere((item) => item.id == value);
-                  setState(() => _selectedDoor = door);
+                  final site = widget.sites.firstWhere((item) => item.id == value);
+                  setState(() => _selectedSite = site);
+                  _loadDoors(site.id);
                 },
               ),
-          ],
+              const SizedBox(height: 12),
+              if (_loadingDoors)
+                const LinearProgressIndicator()
+              else if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.red))
+              else
+                DropdownButtonFormField<int>(
+                  initialValue: _selectedDoor?.id,
+                  decoration: const InputDecoration(labelText: 'Kapi'),
+                  items: [
+                    for (final door in doors)
+                      DropdownMenuItem<int>(
+                        value: door.id,
+                        child: Text(
+                          '${door.doorName} - ${door.assignedDeviceUid ?? 'Bos'}',
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    final door = doors.firstWhere((item) => item.id == value);
+                    setState(() => _selectedDoor = door);
+                  },
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
