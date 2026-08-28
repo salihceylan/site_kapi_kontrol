@@ -110,12 +110,17 @@ class SerialWorker:
 
     def stop(self) -> None:
         self._stop.set()
-        self.write("\n")
         try:
             if self._serial is not None:
                 self._serial.close()
+                self._serial = None
         except Exception:
             pass
+        if self._thread.is_alive() and threading.current_thread() != self._thread:
+            try:
+                self._thread.join(timeout=0.5)
+            except Exception:
+                pass
 
     def write(self, text: str) -> None:
         self._write_queue.put(text)
@@ -627,7 +632,7 @@ class App:
         self.root.mainloop()
 
     def open_device_tester(self) -> None:
-        DeviceTesterWindow(self.root)
+        self.device_tester = DeviceTesterWindow(self.root)
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
@@ -1052,6 +1057,14 @@ class App:
 
     def _upload_worker(self, dev: EspDevice, rel: dict) -> None:
         try:
+            # Otomatik baglanti kesme: Cihaz deneme penceresi bu portu tutuyorsa kapat
+            if getattr(self, "device_tester", None) is not None:
+                try:
+                    self.device_tester.disconnect()
+                    time.sleep(0.3)
+                except Exception:
+                    pass
+
             speed = int(self.upload_speeds.get(rel["env"], 921600))
             boot, part, firm, _manifest = self._release_file_paths(rel)
             for p in (boot, part, firm):
@@ -1069,9 +1082,9 @@ class App:
                 "--baud",
                 str(speed),
                 "--before",
-                "default_reset",
+                "default-reset",
                 "--after",
-                "hard_reset",
+                "hard-reset",
                 "write_flash",
                 "-z",
                 "0x0",
@@ -1094,14 +1107,23 @@ class App:
 
             rc, tail = self._run_stream(cmd, DEVICE_PROJECT_DIR, on_line=on_line)
             if rc != 0:
-                raise RuntimeError("\n".join(tail[-8:]) if tail else "Yukleme hatasi.")
+                raw_err = "\n".join(tail[-8:]) if tail else "Yukleme hatasi."
+                if "PermissionError" in raw_err or "port is busy" in raw_err.lower() or "Erişim engellendi" in raw_err:
+                    raise RuntimeError(
+                        f"{dev.port} portu meşgul (Erişim engellendi).\n\n"
+                        "Çözüm Adımları:\n"
+                        "1. 'Cihaz Dene' penceresi açıksa 'Bağlantıyı Kes' butonuna basın.\n"
+                        "2. VS Code Seri Monitörü açıksa terminaldeki çöp kutusu simgesinden kapatın.\n"
+                        "3. Cihazı USB'den çıkarıp tekrar takın."
+                    )
+                raise RuntimeError(raw_err)
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
             self.root.after(0, lambda: self.set_status("TMM: Firmware yukleme tamamlandi."))
             self.root.after(0, lambda: messagebox.showinfo("TMM", f"Yukleme tamamlandi.\nPort: {dev.port}\nSurum: v{rel['version']}"))
         except Exception as exc:
-            self.root.after(0, lambda: messagebox.showerror("Yukleme hatasi", str(exc)))
+            self.root.after(0, lambda m=str(exc): messagebox.showerror("Yukleme hatasi", m))
             self.root.after(0, lambda: self.set_status("Yukleme basarisiz."))
         finally:
             self.fw_busy = False
@@ -1462,12 +1484,19 @@ class DeviceTesterWindow:
         if values and not self.port_var.get():
             self.port_var.set(values[0])
 
-    def toggle_connection(self) -> None:
+    def disconnect(self) -> None:
         if self.worker is not None:
             self.worker.stop()
             self.worker = None
-            self.connect_btn.configure(text="Baglan")
-            self.connection_var.set("Bagli degil")
+            try:
+                self.connect_btn.configure(text="Baglan")
+                self.connection_var.set("Bagli degil")
+            except Exception:
+                pass
+
+    def toggle_connection(self) -> None:
+        if self.worker is not None:
+            self.disconnect()
             return
 
         port_text = self.port_var.get().strip()
