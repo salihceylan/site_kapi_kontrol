@@ -52,22 +52,17 @@ class DashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dashboardDescription = switch (session.role) {
-      UserRole.superUser =>
-        'Tüm kullanıcıları, siteleri, cihazları ve kapı erişimlerini yönetebilirsiniz.',
-      UserRole.siteManager =>
-        'Yetkili olduğunuz siteleri, cihazları ve kapıları yönetebilirsiniz.',
-      UserRole.apartmentOwner =>
-        'Yetkili olduğunuz kapıları görüp kapı açma komutu verebilirsiniz.',
-    };
-    final roleColor = session.role.accentColor;
+    if (session.role == UserRole.apartmentOwner) {
+      return _buildResidentDashboard(context);
+    }
 
+    final roleColor = session.role.accentColor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(20),
           decoration: AppDecorations.glassCard,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,32 +70,31 @@ class DashboardView extends StatelessWidget {
               const Text(
                 'Hoş Geldiniz',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   color: AppColors.textMuted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 session.fullName,
                 style: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontSize: 28),
+                ).textTheme.titleLarge?.copyWith(fontSize: 24),
               ),
-              const SizedBox(height: 8),
-              Text(dashboardDescription),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Chip(
                   backgroundColor: roleColor.withValues(alpha: 0.12),
                   side: BorderSide(color: roleColor.withValues(alpha: 0.35)),
-                  avatar: Icon(Icons.verified_user_outlined, color: roleColor),
+                  avatar: Icon(Icons.verified_user_outlined, color: roleColor, size: 18),
                   label: Text(
                     session.role.label,
                     style: TextStyle(
                       color: roleColor,
                       fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
                     ),
                   ),
                 ),
@@ -108,16 +102,321 @@ class DashboardView extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        _buildSmartDoorRemoteCard(context),
         if (voiceDoorService != null) ...[
           const SizedBox(height: 16),
           _buildVoiceLiveBanner(context, roleColor),
         ],
         const SizedBox(height: 16),
-        _buildDoorControlPanel(context),
+        _buildManagerManagementSection(context),
       ],
     );
   }
 
+  /// Daire Sakini için Özel Modern & Minimalist Ekran
+  Widget _buildResidentDashboard(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildSmartDoorRemoteCard(context),
+        if (voiceDoorService != null) ...[
+          const SizedBox(height: 16),
+          _buildVoiceLiveBanner(context, session.role.accentColor),
+        ],
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              side: BorderSide(color: Colors.grey.shade300, width: 1.2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              backgroundColor: Colors.white,
+            ),
+            onPressed: onCreateGuestPass,
+            icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 20),
+            label: const Text(
+              '📦 Kurye / Misafir Geçiş Linki Oluştur',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Ortak Büyük Butonlu "Akıllı Kapı Kumandası" (Web Misafir Ekranı Temasında)
+  Widget _buildSmartDoorRemoteCard(BuildContext context) {
+    final hasLocal = canTryLocalDoorOpen;
+    final isMqttConnected = runtimeStatus?.mqttConnected == true;
+    final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
+        selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
+    final commandEnabled =
+        isDeviceAssigned && (isMqttConnected || hasLocal) && !isOpeningDoor;
+
+    String statusText;
+    Color statusColor;
+    if (!isDeviceAssigned) {
+      statusText = 'Bu kapıya henüz cihaz atanmamış.';
+      statusColor = const Color(0xFFF87171);
+    } else if (isOpeningDoor) {
+      statusText = 'Kapı açılıyor, lütfen bekleyin...';
+      statusColor = const Color(0xFF93C5FD);
+    } else if (doorStatusError != null && !hasLocal) {
+      statusText = doorStatusError!;
+      statusColor = const Color(0xFFF87171);
+    } else if (isMqttConnected) {
+      statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
+      statusColor = const Color(0xFF4ADE80);
+    } else if (hasLocal) {
+      statusText = '🟢 Online (Yerel Ağ / Wi-Fi) - Kapıyı açmak için dokunun';
+      statusColor = const Color(0xFF4ADE80);
+    } else {
+      statusText = 'Kapıyı açmak için dokunun';
+      statusColor = const Color(0xFF94A3B8);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0F172A),
+            Color(0xFF1E293B),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+        border: Border.all(color: const Color(0x28FFFFFF), width: 1.2),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // AHBU Rozeti
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0x333B82F6),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0x663B82F6)),
+            ),
+            child: const Text(
+              'AHBU AKILLI GEÇİŞ',
+              style: TextStyle(
+                color: Color(0xFF93C5FD),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Site Adı
+          Text(
+            selectedSite?.name ?? (doors.isNotEmpty ? doors.first.doorName : 'Site Kapısı'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFFF8FAFC),
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // Kapı Adı
+          Text(
+            selectedDoor != null
+                ? '🚪 ${selectedDoor!.doorName}'
+                : 'Kapı Seçilmedi',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+
+          // Birden fazla kapı varsa: Hızlı Yatay Kapı Seçici
+          if (doors.length > 1) ...[
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (final door in doors)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(door.doorName),
+                        selected: selectedDoor?.id == door.id,
+                        selectedColor: const Color(0xFF2563EB),
+                        backgroundColor: const Color(0x1FFFFFFF),
+                        labelStyle: TextStyle(
+                          color: selectedDoor?.id == door.id
+                              ? Colors.white
+                              : const Color(0xFFCBD5E1),
+                          fontWeight: selectedDoor?.id == door.id
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          fontSize: 12.5,
+                        ),
+                        side: BorderSide(
+                          color: selectedDoor?.id == door.id
+                              ? const Color(0xFF60A5FA)
+                              : const Color(0x33FFFFFF),
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            onSelectDoor(door.id);
+                          }
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // MERKEZDEKİ DEV DAİRESEL KAPI AÇ BUTONU (170x170 px)
+          GestureDetector(
+            onTap: commandEnabled ? onOpenDoor : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: commandEnabled
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFF334155), Color(0xFF1E293B)],
+                      ),
+                boxShadow: commandEnabled
+                    ? const [
+                        BoxShadow(
+                          color: Color(0x662563EB),
+                          blurRadius: 28,
+                          offset: Offset(0, 10),
+                        ),
+                        BoxShadow(
+                          color: Color(0x22FFFFFF),
+                          blurRadius: 6,
+                          offset: Offset(0, -2),
+                        ),
+                      ]
+                    : [],
+                border: Border.all(
+                  color: commandEnabled
+                      ? const Color(0x8060A5FA)
+                      : const Color(0x22FFFFFF),
+                  width: 2,
+                ),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: commandEnabled ? onOpenDoor : null,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (isOpeningDoor) ...[
+                          const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3.5,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'AÇILIYOR',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ] else ...[
+                          Icon(
+                            commandEnabled
+                                ? Icons.lock_open_rounded
+                                : Icons.lock_outline_rounded,
+                            size: 46,
+                            color: commandEnabled
+                                ? Colors.white
+                                : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'KAPIYI AÇ',
+                            style: TextStyle(
+                              color: commandEnabled
+                                  ? Colors.white
+                                  : const Color(0xFF64748B),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Durum Mesajı
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              statusText,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: statusColor,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sesli Dinleme Canlı Banner'ı
   Widget _buildVoiceLiveBanner(BuildContext context, Color roleColor) {
     final vService = voiceDoorService!;
     return AnimatedBuilder(
@@ -142,7 +441,7 @@ class DashboardView extends StatelessWidget {
             title = '🎙️ Sesli Dinleme Aktif';
             subtitle = vService.recognizedWords.isNotEmpty
                 ? '"${vService.recognizedWords}"'
-                : 'Dinleniyor... "Kapıyı aç" veya "1. kapıyı aç" diyebilirsiniz.';
+                : 'Dinleniyor... "Kapıyı aç" diyebilirsiniz.';
             break;
           case VoiceStatus.processing:
             bannerBg = const Color(0xFFE3F2FD);
@@ -188,7 +487,7 @@ class DashboardView extends StatelessWidget {
 
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: bannerBg,
             borderRadius: BorderRadius.circular(16),
@@ -204,14 +503,14 @@ class DashboardView extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
                   color: iconColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(bannerIcon, color: iconColor, size: 24),
+                child: Icon(bannerIcon, color: iconColor, size: 22),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,15 +519,15 @@ class DashboardView extends StatelessWidget {
                       title,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontSize: 14,
                         color: iconColor,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         color: AppColors.textDark,
                         fontWeight: FontWeight.w500,
                       ),
@@ -236,7 +535,7 @@ class DashboardView extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               IconButton.filledTonal(
                 onPressed: () {
                   if (isListening) {
@@ -248,6 +547,7 @@ class DashboardView extends StatelessWidget {
                 icon: Icon(
                   isListening ? Icons.stop_rounded : Icons.mic_rounded,
                   color: iconColor,
+                  size: 20,
                 ),
                 tooltip: isListening ? 'Durdur' : 'Tekrar Dinle',
               ),
@@ -258,103 +558,8 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  Widget _buildDoorControlPanel(BuildContext context) {
-    Widget buildStatus() {
-      if (selectedDoor == null) {
-        return const Text(
-          'Kontrol etmek için önce siteyi, sonra o siteye ait kapıyı seçin.',
-          style: TextStyle(color: AppColors.textMuted),
-        );
-      }
-
-      if (selectedDoor!.assignedDeviceUid == null ||
-          selectedDoor!.assignedDeviceUid!.trim().isEmpty) {
-        return const Text(
-          'Bu kapıya henüz cihaz atanmamış. Kapı açma komutu aktif olmaz.',
-          style: TextStyle(color: Colors.red),
-        );
-      }
-
-      final hasLocal = canTryLocalDoorOpen;
-      final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
-      final isMqttConnected = runtimeStatus?.mqttConnected == true;
-
-      final connectionText = isMqttBridgeConnected
-          ? 'Hazır (Bulut)'
-          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Hazır değil');
-      final deviceOnlineText = isMqttConnected
-          ? 'Online (Bulut)'
-          : (hasLocal
-              ? 'Online (Yerel Ağ)'
-              : (runtimeStatus == null ? 'Bilinmiyor' : 'Offline'));
-      final stateText = runtimeStatus?.doorLocked != null
-          ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
-          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Bilinmiyor');
-      final signalText = runtimeStatus?.wifiSignalPercent == null
-          ? (hasLocal ? 'Yerel Ağ Bağlı' : '-')
-          : '%${runtimeStatus!.wifiSignalPercent}'
-              '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}';
-      final commandEnabled =
-          (runtimeStatus?.commandEnabled == true || canTryLocalDoorOpen) &&
-              !isOpeningDoor;
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Cihaz: ${selectedDoor!.assignedDeviceUid}'),
-          const SizedBox(height: 6),
-          Text('Sunucu MQTT: $connectionText'),
-          const SizedBox(height: 6),
-          Text('Cihaz Bağlantısı: $deviceOnlineText'),
-          const SizedBox(height: 6),
-          Text('Kapı Durumu: $stateText'),
-          const SizedBox(height: 6),
-          Text(
-            'Yerel Ağ Kontrolü: ${canTryLocalDoorOpen ? 'Hazır' : 'Hazır değil'}',
-          ),
-          const SizedBox(height: 6),
-          Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
-          const SizedBox(height: 6),
-          Text('OTA Durumu: ${runtimeStatus?.otaStatus ?? '-'}'),
-          const SizedBox(height: 6),
-          Text('Wi-Fi Gücü: $signalText'),
-          if (runtimeStatus?.lastSeenAt != null) ...[
-            const SizedBox(height: 6),
-            Text('Son Güncelleme: ${formatDateTime(runtimeStatus!.lastSeenAt)}'),
-          ],
-          if (isLoadingStatus) ...[
-            const SizedBox(height: 8),
-            const LinearProgressIndicator(),
-          ],
-          if (doorStatusError != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              doorStatusError!,
-              style: const TextStyle(color: Colors.red),
-            ),
-          ],
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: commandEnabled ? onOpenDoor : null,
-              icon: const Icon(Icons.lock_open),
-              label: Text(isOpeningDoor ? 'Gönderiliyor' : 'Kapı Aç'),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onCreateGuestPass,
-              icon: const Icon(Icons.share_outlined, size: 18),
-              label: const Text('Kurye / Misafir Geçişi Oluştur'),
-            ),
-          ),
-        ],
-      );
-    }
-
+  /// Yönetici için Detaylı Cihaz/Site Seçimi ve Durum Paneli
+  Widget _buildManagerManagementSection(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -363,16 +568,17 @@ class DashboardView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Kapı Aç / Kapat',
+            'Yönetim & Kapı Detayları',
             style: TextStyle(
               fontWeight: FontWeight.w700,
+              fontSize: 16,
               color: AppColors.textDark,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           const Text(
-            'Önce siteyi seçin, sonra o siteye ait kapıyı seçin. Kapıya cihaz atanmış ve MQTT bağlantısı sağlıklıysa kapı açma komutu aktif olur.',
-            style: TextStyle(color: AppColors.textMuted),
+            'Farklı siteleri ve kapıları seçebilir, cihaz bağlantı durumlarını inceleyebilirsiniz.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
@@ -423,7 +629,28 @@ class DashboardView extends StatelessWidget {
             const LinearProgressIndicator(),
           ],
           const SizedBox(height: 14),
-          buildStatus(),
+          if (selectedDoor != null) ...[
+            Text('Cihaz: ${selectedDoor!.assignedDeviceUid ?? 'Atanmamış'}'),
+            const SizedBox(height: 4),
+            Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
+            const SizedBox(height: 4),
+            Text(
+              'Wi-Fi Sinyal: ${runtimeStatus?.wifiSignalPercent == null ? '-' : '%${runtimeStatus!.wifiSignalPercent}'}',
+            ),
+            if (runtimeStatus?.lastSeenAt != null) ...[
+              const SizedBox(height: 4),
+              Text('Son Görülme: ${formatDateTime(runtimeStatus!.lastSeenAt)}'),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onCreateGuestPass,
+                icon: const Icon(Icons.share_outlined, size: 18),
+                label: const Text('Kurye / Misafir Geçişi Oluştur'),
+              ),
+            ),
+          ],
         ],
       ),
     );
