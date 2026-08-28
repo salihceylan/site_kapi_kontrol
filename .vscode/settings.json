@@ -1,4 +1,9 @@
 {
     "C_Cpp.default.configurationProvider":  "platformio.platformio-ide",
-    "platformio-ide.autoRebuildAutocompleteIndex":  true
+    "platformio-ide.autoRebuildAutocompleteIndex":  true,
+    "python.defaultInterpreterPath": "${workspaceFolder}/company_qr_tool/.venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/company_qr_tool"
+    ],
+    "python.analysis.typeCheckingMode": "basic"
 }
