@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import hashlib
@@ -81,7 +81,7 @@ class EspDevice:
 
 @dataclass
 class DeviceStatus:
-    values: dict[str, str] = field(default_factory=dict)
+    values: dict[str, str] = field(default_factory=lambda: {})
 
     def get(self, key: str) -> str:
         value = self.values.get(key, "-").strip()
