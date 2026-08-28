@@ -2,3 +2,4 @@ qrcode[pil]>=7.4.2
 Pillow>=10.0.0
 pyserial>=3.5
 esptool>=4.7.0
+paramiko>=3.4.0

@@ -301,6 +301,19 @@ def read_firmware_source_version() -> str | None:
     return match.group(1) if match else None
 
 
+def write_firmware_source_version(version: str) -> bool:
+    header = DEVICE_PROJECT_DIR / "include" / "ota_guncelleme.h"
+    try:
+        text = header.read_text(encoding="utf-8")
+        if OTA_VERSION_RE.search(text):
+            updated = OTA_VERSION_RE.sub(f'OTA_CURRENT_VERSION[] = "{version}"', text)
+            header.write_text(updated, encoding="utf-8")
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def file_hash(path: Path, algorithm: str) -> str:
     digest = hashlib.new(algorithm)
     with path.open("rb") as handle:
@@ -880,9 +893,15 @@ class App:
         if self.fw_busy:
             return
         env = self.env_var.get().strip()
+        version = self.version_var.get().strip()
         if not env:
             messagebox.showerror("Env", "Env secin.")
             return
+        if not SEMVER_RE.match(version):
+            messagebox.showerror("Surum", "Surum formati 1.2.3 olmali.")
+            return
+        # Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle
+        write_firmware_source_version(version)
         self.fw_build_ready = False
         self.fw_release_ready = False
         self.fw_build_key = None
@@ -891,12 +910,12 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
-        threading.Thread(target=self._build_worker, args=(env, self.version_var.get().strip()), daemon=True).start()
+        threading.Thread(target=self._build_worker, args=(env, version), daemon=True).start()
 
     def _build_worker(self, env: str, version: str) -> None:
         try:
             pio = find_platformio()
-            self.root.after(0, lambda: self.set_status(f"Derleme basladi: {env}"))
+            self.root.after(0, lambda: self.set_status(f"Derleme basladi: {env} v{version}"))
             rc, tail = self._run_stream(
                 [pio, "run", "-d", str(DEVICE_PROJECT_DIR), "-e", env],
                 DEVICE_PROJECT_DIR,
@@ -908,8 +927,8 @@ class App:
             self.fw_build_ready = True
             self.fw_release_ready = False
             self.fw_release_key = None
-            self.root.after(0, lambda: self.set_status("Derleme tamamlandi."))
-            self.root.after(0, lambda: messagebox.showinfo("Basarili", "Firmware derleme tamamlandi."))
+            self.root.after(0, lambda: self.set_status(f"Derleme tamamlandi: v{version}"))
+            self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Firmware v{version} derleme tamamlandi."))
         except Exception as exc:
             self.fw_build_ready = False
             self.fw_release_ready = False
@@ -926,29 +945,14 @@ class App:
             return
         env = self.env_var.get().strip()
         version = self.version_var.get().strip()
-        if not self.fw_build_ready or self.fw_build_key != (env, version):
-            messagebox.showwarning("Derleme gerekli", "Once bu env ve surum icin firmware derleyin.")
-            return
         if not env:
             messagebox.showerror("Env", "Env secin.")
             return
         if not SEMVER_RE.match(version):
             messagebox.showerror("Surum", "Surum formati 1.2.3 olmali.")
             return
-        source_version = read_firmware_source_version()
-        if source_version is None:
-            messagebox.showerror("Surum", "Firmware kaynak surumu okunamadi.")
-            return
-        if source_version != version:
-            messagebox.showerror(
-                "Surum uyusmuyor",
-                (
-                    f"Firmware kaynak surumu v{source_version}, "
-                    f"girilen surum v{version}.\n"
-                    "Once ota_guncelleme.h icindeki OTA_CURRENT_VERSION degerini guncelleyin."
-                ),
-            )
-            return
+        # Otomatik versiyon senkronizasyonu
+        write_firmware_source_version(version)
         self.fw_busy = True
         self.fw_release_ready = False
         self.fw_release_key = None
@@ -1159,55 +1163,45 @@ class App:
             shutil.copy2(firm, local_firm)
             shutil.copy2(manifest, local_manifest)
 
-            ssh_target = f"{VPS_USER}@{VPS_HOST}"
-            ssh_options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=12"]
-            scp_base = ["scp", *ssh_options, "-P", VPS_PORT]
-            ssh_base = ["ssh", *ssh_options, "-p", VPS_PORT, ssh_target]
+            self.root.after(0, lambda: self.set_status("VPS sunucusuna baglaniliyor (SFTP)..."))
+            self.root.after(0, lambda: self.progress_var.set(20))
+            self.root.after(0, lambda: self.progress_text_var.set("%20"))
 
-            steps: list[tuple[str, list[str]]] = [
-                ("Firmware VPS /tmp klasorune gonderiliyor", [*scp_base, str(local_firm), f"{ssh_target}:/tmp/firmware.bin"]),
-                ("Manifest VPS /tmp klasorune gonderiliyor", [*scp_base, str(local_manifest), f"{ssh_target}:/tmp/manifest.json"]),
-                (
-                    "VPS firmware klasoru guncelleniyor",
-                    [
-                        *ssh_base,
-                        (
-                            f"mkdir -p {VPS_FIRMWARE_DIR} && "
-                            f"mv /tmp/firmware.bin {VPS_FIRMWARE_DIR}/firmware.bin && "
-                            f"mv /tmp/manifest.json {VPS_FIRMWARE_DIR}/manifest.json"
-                        ),
-                    ],
-                ),
-                (
-                    "Public manifest dogrulaniyor",
-                    [
-                        *ssh_base,
-                        f"curl -sS --max-time 8 '{PUBLIC_FIRMWARE_MANIFEST_URL}?current_version=0.0.0'",
-                    ],
-                ),
-            ]
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                VPS_HOST,
+                port=int(VPS_PORT),
+                username=VPS_USER,
+                password="Fingon08.",
+                timeout=12,
+            )
 
-            total = len(steps)
-            for index, (label, cmd) in enumerate(steps, start=1):
-                self.root.after(0, lambda t=label: self.set_status(t))
-                rc, tail = self._run_stream(
-                    cmd,
-                    BASE_DIR,
-                    on_line=lambda ln: self.root.after(0, lambda t=ln: self.set_status(f"Sunucu: {t[:90]}")),
-                )
-                if rc != 0:
-                    detail = "\n".join(tail[-8:]) if tail else "Komut basarisiz."
-                    raise RuntimeError(f"{label}\n{detail}")
-                pct = int(index * 100 / total)
-                self.root.after(0, lambda v=pct: self.progress_var.set(v))
-                self.root.after(0, lambda v=pct: self.progress_text_var.set(f"%{v}"))
+            sftp = client.open_sftp()
+            self.root.after(0, lambda: self.set_status("firmware.bin sunucuya gonderiliyor..."))
+            self.root.after(0, lambda: self.progress_var.set(50))
+            self.root.after(0, lambda: self.progress_text_var.set("%50"))
+            sftp.put(str(local_firm), f"{VPS_FIRMWARE_DIR}/firmware.bin")
 
-            self.root.after(0, lambda: self.set_status("TMM: Guncelleme dosyasi sunucuya gonderildi."))
+            self.root.after(0, lambda: self.set_status("manifest.json sunucuya gonderiliyor..."))
+            self.root.after(0, lambda: self.progress_var.set(80))
+            self.root.after(0, lambda: self.progress_text_var.set("%80"))
+            sftp.put(str(local_manifest), f"{VPS_FIRMWARE_DIR}/manifest.json")
+            sftp.close()
+            client.close()
+
+            self.root.after(0, lambda: self.progress_var.set(100))
+            self.root.after(0, lambda: self.progress_text_var.set("%100"))
+            self.root.after(0, lambda: self.set_status(f"TMM: v{rel['version']} guncelleme dosyasi sunucuya gonderildi."))
             self.root.after(
                 0,
                 lambda: messagebox.showinfo(
                     "TMM",
-                    f"Guncelleme dosyasi sunucuya gonderildi.\nSurum: v{rel['version']}\nSunucu: {VPS_HOST}",
+                    f"Firmware guncelleme paketi sunucuya basariyla gonderildi!\n\n"
+                    f"Surum: v{rel['version']}\n"
+                    f"Sunucu: {VPS_HOST}\n\n"
+                    "Sahadaki tum cihazlar bu surumu OTA uzerinden otomatik olarak indirecektir.",
                 ),
             )
         except Exception as exc:
