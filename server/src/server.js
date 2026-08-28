@@ -5232,7 +5232,11 @@ app.post('/app/guest-passes', authRequired, async (req, res) => {
     );
 
     const row = insertResult.rows[0];
-    const baseUrl = String(process.env.PUBLIC_APP_URL || 'https://sitekapi.gudeteknoloji.com').replace(/\/+$/, '');
+    const baseUrl = String(
+      process.env.PUBLIC_APP_URL ||
+      process.env.PUBLIC_BASE_URL ||
+      'https://api.gudeteknoloji.com.tr',
+    ).replace(/\/+$/, '');
     const webUrl = `${baseUrl}/guest/${token}`;
 
     auditLog('guest_pass_created', {
@@ -5284,7 +5288,11 @@ app.get('/app/guest-passes', authRequired, async (req, res) => {
       [Number(req.authUser.id)],
     );
 
-    const baseUrl = String(process.env.PUBLIC_APP_URL || 'https://sitekapi.gudeteknoloji.com').replace(/\/+$/, '');
+    const baseUrl = String(
+      process.env.PUBLIC_APP_URL ||
+      process.env.PUBLIC_BASE_URL ||
+      'https://api.gudeteknoloji.com.tr',
+    ).replace(/\/+$/, '');
     const passes = result.rows.map((row) => ({
       id: Number(row.id),
       title: row.title,
