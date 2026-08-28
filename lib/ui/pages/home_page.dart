@@ -25,6 +25,7 @@ import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
+import 'package:site_kapi_kontrol/ui/widgets/hands_free_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
@@ -197,6 +198,7 @@ class _HomePageState extends State<HomePage> {
       case SirketMenuItem.bluetoothWifiKur:
       case SirketMenuItem.dashboard:
       case SirketMenuItem.profilim:
+      case SirketMenuItem.ellerSerbest:
         return null;
     }
   }
@@ -225,6 +227,8 @@ class _HomePageState extends State<HomePage> {
         return 'Sirket Hesabina Kayitli Cihazlar';
       case SirketMenuItem.bluetoothWifiKur:
         return 'Bluetooth ile Wi-Fi Kur';
+      case SirketMenuItem.ellerSerbest:
+        return 'Eller Serbest & Kestirmeler';
     }
   }
 
@@ -273,6 +277,7 @@ class _HomePageState extends State<HomePage> {
         return const {
           SirketMenuItem.dashboard,
           SirketMenuItem.profilim,
+          SirketMenuItem.ellerSerbest,
           SirketMenuItem.superUserYonetimi,
           SirketMenuItem.siteYoneticileriYonetimi,
           SirketMenuItem.daireKullanicilariYonetimi,
@@ -285,6 +290,7 @@ class _HomePageState extends State<HomePage> {
         return const {
           SirketMenuItem.dashboard,
           SirketMenuItem.profilim,
+          SirketMenuItem.ellerSerbest,
           SirketMenuItem.siteler,
           SirketMenuItem.kayitliCihazlar,
           SirketMenuItem.bluetoothWifiKur,
@@ -293,6 +299,7 @@ class _HomePageState extends State<HomePage> {
         return const {
           SirketMenuItem.dashboard,
           SirketMenuItem.profilim,
+          SirketMenuItem.ellerSerbest,
         }.contains(item);
     }
   }
@@ -368,6 +375,15 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     Navigator.pop(context);
+    if (item == SirketMenuItem.ellerSerbest) {
+      if (widget.voiceDoorService != null) {
+        HandsFreeSettingsDialog.show(
+          context,
+          voiceDoorService: widget.voiceDoorService!,
+        );
+      }
+      return;
+    }
     setState(() => _selectedMenu = item);
     if (item == SirketMenuItem.kayitliCihazlar) {
       _loadCompanyDevices(force: true);
@@ -590,6 +606,13 @@ class _HomePageState extends State<HomePage> {
         if (widget.quickActionsService != null) {
           widget.quickActionsService!.updateDoorShortcuts(accessibleDoors);
         }
+        if (widget.voiceDoorService?.handsFreeAutoListen == true) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _openVoiceControlModal();
+            }
+          });
+        }
         return;
       }
 
@@ -639,6 +662,13 @@ class _HomePageState extends State<HomePage> {
 
       if (selected != null) {
         await _loadDoorControlStructure(selected.id, force: true);
+      }
+      if (widget.voiceDoorService?.handsFreeAutoListen == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _openVoiceControlModal();
+          }
+        });
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -3312,6 +3342,8 @@ class _HomePageState extends State<HomePage> {
         return _buildCompanyDevicesScreen();
       case SirketMenuItem.bluetoothWifiKur:
         return _buildBluetoothWifiScreen();
+      case SirketMenuItem.ellerSerbest:
+        return _buildDashboard(session);
     }
   }
 
@@ -3348,12 +3380,6 @@ class _HomePageState extends State<HomePage> {
           title: Text(_titleForMenu(_selectedMenu)),
           backgroundColor: roleColor,
           actions: [
-            if (widget.voiceDoorService != null)
-              IconButton(
-                tooltip: 'Sesli Kapı Aç',
-                icon: const Icon(Icons.mic_rounded),
-                onPressed: _openVoiceControlModal,
-              ),
             IconButton(
               tooltip: 'Cikis yap',
               icon: const Icon(Icons.logout),
@@ -3372,16 +3398,6 @@ class _HomePageState extends State<HomePage> {
             _logout();
           },
         ),
-        floatingActionButton: widget.voiceDoorService != null
-            ? FloatingActionButton.extended(
-                backgroundColor: roleColor,
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.mic_rounded),
-                label: const Text('Sesli Aç'),
-                tooltip: 'Sesli Kapı Açma Komutu',
-                onPressed: _openVoiceControlModal,
-              )
-            : null,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {

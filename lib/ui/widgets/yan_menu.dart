@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/styles/role_theme.dart';
 enum SirketMenuItem {
   dashboard,
   profilim,
+  ellerSerbest,
   abonelikTalepleri,
   siteOnayTalepleri,
   superUserYonetimi,
@@ -145,6 +146,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.ellerSerbest,
         SirketMenuItem.superUserYonetimi,
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
@@ -157,6 +159,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.ellerSerbest,
         SirketMenuItem.siteler,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -165,6 +168,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.ellerSerbest,
       ];
   }
 }
@@ -175,6 +179,8 @@ String _titleForItem(SirketMenuItem item) {
       return 'Panel';
     case SirketMenuItem.profilim:
       return 'Profilim';
+    case SirketMenuItem.ellerSerbest:
+      return 'Eller Serbest & Kestirmeler';
     case SirketMenuItem.abonelikTalepleri:
       return 'Yeni Abonelik Talepleri';
     case SirketMenuItem.siteOnayTalepleri:
@@ -202,6 +208,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.home_outlined;
     case SirketMenuItem.profilim:
       return Icons.person_outline;
+    case SirketMenuItem.ellerSerbest:
+      return Icons.directions_car_outlined;
     case SirketMenuItem.abonelikTalepleri:
       return Icons.mark_email_unread_outlined;
     case SirketMenuItem.siteOnayTalepleri:

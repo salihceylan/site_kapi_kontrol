@@ -5,7 +5,7 @@
   "force": false,
   "interval_hours": 24,
   "allowed_uids": [],
-  "sha256": "470e446725910b658e602cb627ecac68609fef355aaf790f3c35199385943bc1",
-  "md5": "c0281ec4ec67865840e94a19db4a6dc8",
-  "notes": "AHBU firmware v1.3.0: NimBLE optimizasyonu, 0ms yerel kapi acma ve bellek iyilestirmesi."
+  "sha256": "24617af5dd03df3ef76e0ea5e1883b396a3612735dc22b777254239fdb1aabd2",
+  "md5": "bba5b4c7f5d3f70728a264f4671a71c9",
+  "notes": "AHBU firmware v1.3.0."
 }
