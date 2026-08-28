@@ -14,13 +14,14 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -32,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
     final error = await widget.authService.login(
-      email: _emailController.text.trim().toLowerCase(),
+      email: _identifierController.text.trim().toLowerCase(),
       password: _passwordController.text.trim(),
     );
 
@@ -78,7 +79,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'AHBU hesabinizla giris yapin',
+                      'AHBU hesabınızla giriş yapın',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -87,18 +88,24 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Yetkili oldugunuz siteler, kapilar ve menu islemleri rolunuze gore acilir.',
+                      'Yetkili olduğunuz siteler, kapılar ve menü işlemleri rolünüze göre açılır.',
                       style: TextStyle(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'E-posta'),
+                      controller: _identifierController,
+                      keyboardType: TextInputType.text,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: const InputDecoration(
+                        labelText: 'E-posta veya Kullanıcı Adı',
+                        hintText: 'örn: ornek@email.com veya ablokdaire1',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
                       validator: (value) {
                         final text = (value ?? '').trim();
-                        if (text.isEmpty || !text.contains('@')) {
-                          return 'Gecerli bir e-posta girin.';
+                        if (text.isEmpty) {
+                          return 'Lütfen e-posta veya kullanıcı adınızı girin.';
                         }
                         return null;
                       },
@@ -106,28 +113,45 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Sifre'),
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Şifre',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
+                        ),
+                      ),
                       validator: (value) {
-                        if ((value ?? '').trim().length < 6) {
-                          return 'Sifre en az 6 karakter olmali.';
+                        final text = (value ?? '').trim();
+                        if (text.isEmpty) {
+                          return 'Lütfen şifrenizi girin.';
                         }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
                       child: _isLoading
                           ? const SizedBox(
-                              width: 18,
-                              height: 18,
+                              width: 20,
+                              height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Giris Yap'),
+                          : const Text('Giris Yap', style: TextStyle(fontSize: 16)),
                     ),
                   ],
                 ),

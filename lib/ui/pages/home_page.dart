@@ -317,10 +317,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _isLoadingDoorControlStructure = false;
         if (doors != null && doors.isNotEmpty) {
+          final firstSiteName = doors.first.siteName;
           _doorControlStructure = SiteStructureRecord(
             site: SiteRecord(
-              id: 0,
-              name: 'Tanımlı Kapılarım',
+              id: doors.first.siteCode,
+              name: (firstSiteName != null && firstSiteName.isNotEmpty)
+                  ? firstSiteName
+                  : 'Site Kapısı',
               address: null,
               city: null,
               district: null,
