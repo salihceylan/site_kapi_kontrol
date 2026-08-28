@@ -109,3 +109,4 @@ class CompanyDeviceCard extends StatelessWidget {
     );
   }
 }
+

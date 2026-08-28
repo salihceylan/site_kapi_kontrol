@@ -55,3 +55,4 @@ class BluetoothWifiView extends StatelessWidget {
     );
   }
 }
+

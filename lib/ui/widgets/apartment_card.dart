@@ -225,3 +225,4 @@ class _ApartmentCardState extends State<ApartmentCard> {
     );
   }
 }
+

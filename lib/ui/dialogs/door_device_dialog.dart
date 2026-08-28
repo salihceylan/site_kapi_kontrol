@@ -262,3 +262,4 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
     );
   }
 }
+

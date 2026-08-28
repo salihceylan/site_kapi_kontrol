@@ -87,3 +87,4 @@ class DeviceAddView extends StatelessWidget {
     );
   }
 }
+

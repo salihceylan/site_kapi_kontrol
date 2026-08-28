@@ -29,3 +29,4 @@ String formatDateTime(DateTime? dateTime) {
   final minute = local.minute.toString().padLeft(2, '0');
   return '$day.$month.$year $hour:$minute';
 }
+

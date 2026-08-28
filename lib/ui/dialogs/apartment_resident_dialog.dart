@@ -216,3 +216,4 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
     );
   }
 }
+

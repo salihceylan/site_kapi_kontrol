@@ -280,3 +280,4 @@ class DashboardView extends StatelessWidget {
     );
   }
 }
+

@@ -308,3 +308,4 @@ class _DeviceEditDialogState extends State<DeviceEditDialog> {
     );
   }
 }
+

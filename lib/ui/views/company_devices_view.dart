@@ -134,3 +134,4 @@ class CompanyDevicesView extends StatelessWidget {
     );
   }
 }
+
