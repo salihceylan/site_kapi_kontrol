@@ -1,9 +1,9 @@
-﻿#ifndef WIFI_BAGLANTI_H
+#ifndef WIFI_BAGLANTI_H
 #define WIFI_BAGLANTI_H
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <BLEDevice.h>
+#include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <WiFi.h>
 
@@ -60,12 +60,12 @@ inline unsigned long gResetPressedAt = 0;
 inline unsigned long gResetLastProgressAt = 0;
 inline bool gLedLogicalState = false;
 inline bool gResetHandled = false;
-inline BLEServer* gBleServer = nullptr;
-inline BLEService* gBleService = nullptr;
-inline BLEAdvertising* gBleAdvertising = nullptr;
-inline BLECharacteristic* gBleStateCharacteristic = nullptr;
-inline BLECharacteristic* gBleNetworksCharacteristic = nullptr;
-inline BLECharacteristic* gBleResultCharacteristic = nullptr;
+inline NimBLEServer* gBleServer = nullptr;
+inline NimBLEService* gBleService = nullptr;
+inline NimBLEAdvertising* gBleAdvertising = nullptr;
+inline NimBLECharacteristic* gBleStateCharacteristic = nullptr;
+inline NimBLECharacteristic* gBleNetworksCharacteristic = nullptr;
+inline NimBLECharacteristic* gBleResultCharacteristic = nullptr;
 inline bool gBleStarted = false;
 
 inline void wifiSetStatusLed(bool on) {
@@ -204,6 +204,7 @@ inline void wifiNotifyBleState() {
 
   const String payload = wifiBuildStatePayload();
   gBleStateCharacteristic->setValue(payload.c_str());
+  gBleStateCharacteristic->notify();
 }
 
 inline void wifiNotifyBleResult(const String& status, const String& message = "") {
@@ -217,6 +218,7 @@ inline void wifiNotifyBleResult(const String& status, const String& message = ""
   }
 
   gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
+  gBleResultCharacteristic->notify();
 }
 
 inline void wifiUpdateLed() {
@@ -324,6 +326,7 @@ inline void wifiPerformScan() {
   serializeJson(doc, gBleNetworksPayload);
   if (gBleNetworksCharacteristic != nullptr) {
     gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
+    gBleNetworksCharacteristic->notify();
   }
   wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
 }
@@ -358,9 +361,9 @@ inline void wifiApplyProvisioningRequest() {
   ESP.restart();
 }
 
-class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
+class WifiProvisionCommandCallbacks : public NimBLECharacteristicCallbacks {
  public:
-  void onWrite(BLECharacteristic* characteristic) override {
+  void onWrite(NimBLECharacteristic* characteristic) override {
     const std::string value = characteristic->getValue();
     if (value.empty()) {
       return;
@@ -425,32 +428,32 @@ inline void wifiStartProvisioningMode() {
   }
 
   const String bleName = wifiBleDeviceName();
-  BLEDevice::init(bleName.c_str());
-  BLEDevice::setPower(ESP_PWR_LVL_P9);
+  NimBLEDevice::init(bleName.c_str());
+  NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-  gBleServer = BLEDevice::createServer();
+  gBleServer = NimBLEDevice::createServer();
   gBleService = gBleServer->createService(BLE_WIFI_SERVICE_UUID);
 
   gBleStateCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_STATE_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
   );
   gBleNetworksCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_NETWORKS_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
   );
   gBleResultCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_RESULT_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
   );
-  BLECharacteristic* commandCharacteristic = gBleService->createCharacteristic(
+  NimBLECharacteristic* commandCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_COMMAND_UUID,
-    BLECharacteristic::PROPERTY_WRITE
+    NIMBLE_PROPERTY::WRITE
   );
   commandCharacteristic->setCallbacks(new WifiProvisionCommandCallbacks());
 
   gBleService->start();
-  gBleAdvertising = BLEDevice::getAdvertising();
+  gBleAdvertising = NimBLEDevice::getAdvertising();
   gBleAdvertising->addServiceUUID(BLE_WIFI_SERVICE_UUID);
   gBleAdvertising->setScanResponse(true);
   gBleAdvertising->start();
@@ -473,7 +476,7 @@ inline void wifiStopProvisioningMode() {
   if (gBleAdvertising != nullptr) {
     gBleAdvertising->stop();
   }
-  BLEDevice::deinit(true);
+  NimBLEDevice::deinit(true);
   gBleAdvertising = nullptr;
   gBleService = nullptr;
   gBleServer = nullptr;
