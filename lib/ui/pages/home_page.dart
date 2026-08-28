@@ -18,11 +18,14 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
+import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
+import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 double _dialogWidthForScreen(BuildContext context) {
@@ -83,9 +86,16 @@ List<int> _siteBlockApartmentCounts({
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.authService});
+  const HomePage({
+    super.key,
+    required this.authService,
+    this.voiceDoorService,
+    this.quickActionsService,
+  });
 
   final AuthService authService;
+  final VoiceDoorService? voiceDoorService;
+  final QuickActionsService? quickActionsService;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -576,6 +586,9 @@ class _HomePageState extends State<HomePage> {
         });
         if (_doorControlDoor != null) {
           _startDoorStatusPolling(_doorControlDoor!);
+        }
+        if (widget.quickActionsService != null) {
+          widget.quickActionsService!.updateDoorShortcuts(accessibleDoors);
         }
         return;
       }
@@ -3306,6 +3319,23 @@ class _HomePageState extends State<HomePage> {
     await widget.authService.logout();
   }
 
+  void _openVoiceControlModal() {
+    if (widget.voiceDoorService == null) {
+      return;
+    }
+    List<DoorRecord>? candidateDoors;
+    if (_doorControlStructure?.doors.isNotEmpty == true) {
+      candidateDoors = _doorControlStructure!.doors;
+    } else if (_selectedSiteStructure?.doors.isNotEmpty == true) {
+      candidateDoors = _selectedSiteStructure!.doors;
+    }
+    VoiceControlModal.show(
+      context,
+      voiceService: widget.voiceDoorService!,
+      candidateDoors: candidateDoors,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
@@ -3318,6 +3348,12 @@ class _HomePageState extends State<HomePage> {
           title: Text(_titleForMenu(_selectedMenu)),
           backgroundColor: roleColor,
           actions: [
+            if (widget.voiceDoorService != null)
+              IconButton(
+                tooltip: 'Sesli Kapı Aç',
+                icon: const Icon(Icons.mic_rounded),
+                onPressed: _openVoiceControlModal,
+              ),
             IconButton(
               tooltip: 'Cikis yap',
               icon: const Icon(Icons.logout),
@@ -3336,6 +3372,16 @@ class _HomePageState extends State<HomePage> {
             _logout();
           },
         ),
+        floatingActionButton: widget.voiceDoorService != null
+            ? FloatingActionButton.extended(
+                backgroundColor: roleColor,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.mic_rounded),
+                label: const Text('Sesli Aç'),
+                tooltip: 'Sesli Kapı Açma Komutu',
+                onPressed: _openVoiceControlModal,
+              )
+            : null,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {

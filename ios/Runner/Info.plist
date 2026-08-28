@@ -28,10 +28,27 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>QR kod okuyarak cihazi sisteme eklemek icin kamera kullanilir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesli komutla kapıyı açmak için mikrofon kullanılır.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Sesli komut ile kapı açmak için konuşma tanıma izni gereklidir.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.gudeteknoloji.sitekapikontrol</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sitekapi</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
