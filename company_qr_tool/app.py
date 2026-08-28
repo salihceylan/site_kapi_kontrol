@@ -14,11 +14,12 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, cast
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import qrcode
+from qrcode.constants import ERROR_CORRECT_H
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
 import serial
 from serial.tools import list_ports
@@ -201,14 +202,14 @@ def generate_qr(unique_id: str, logo_path: Path) -> Image.Image:
     normalized_uid = unique_id.strip().upper()
     qr = qrcode.QRCode(
         version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        error_correction=ERROR_CORRECT_H,
         box_size=20,
         border=2,
     )
     qr.add_data(normalized_uid)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
-    qr_img = qr_img.resize((QR_SIZE, QR_SIZE), Image.Resampling.LANCZOS)
+    pil_raw = cast(Image.Image, qr.make_image(fill_color="black", back_color="white"))
+    qr_img = pil_raw.convert("RGBA").resize((QR_SIZE, QR_SIZE), Image.Resampling.LANCZOS)
 
     logo = trim_image(Image.open(logo_path))
     logo = ImageOps.contain(logo, (264, 264), Image.Resampling.LANCZOS)
