@@ -47,12 +47,16 @@ inline String yerelJsonEscape(const String& raw) {
   return escaped;
 }
 
+void mqttPublishEvent(const char* eventName, const char* detail);
+void mqttPublishState(bool locked);
+
 inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
   const unsigned long startedAt = millis();
   String firstLine;
 
-  while (client.connected() && millis() - startedAt < 600) {
+  while (client.connected() && millis() - startedAt < 150) {
     if (!client.available()) {
+      yield();
       delay(1);
       continue;
     }
@@ -69,8 +73,9 @@ inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
   request.method = firstLine.substring(0, firstSpace);
   request.path = firstLine.substring(firstSpace + 1, secondSpace);
 
-  while (client.connected() && millis() - startedAt < 900) {
+  while (client.connected() && millis() - startedAt < 250) {
     if (!client.available()) {
+      yield();
       delay(1);
       continue;
     }
@@ -145,6 +150,8 @@ inline void yerelOpenHandler(WiFiClient& client, const YerelHttpIstek& request) 
 
   roleTetikle();
   gDoorLocked = false;
+  mqttPublishEvent("local_pulse_started", "");
+  mqttPublishState(gDoorLocked);
   yerelHttpCevap(client, 202, "Accepted", R"({"ok":true,"message":"yerel_kapi_acma_komutu_alindi"})");
   Serial.println("Yerel ag komutu: kapi acma pulse baslatildi.");
 }

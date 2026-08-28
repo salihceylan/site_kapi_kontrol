@@ -5145,6 +5145,38 @@ app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req
   }
 });
 
+app.post('/app/doors/:id/local-open-notify', authRequired, doorCommandRateLimiter, async (req, res) => {
+  const doorId = Number(req.params.id);
+  if (!Number.isInteger(doorId)) {
+    return res.status(400).json({ error: 'Gecersiz kapi id.' });
+  }
+
+  try {
+    const door = await getAccessibleDoorForUser({
+      authUser: req.authUser,
+      doorId,
+    });
+    if (!door) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+
+    const localIp = String(req.body.local_ip || '').trim();
+    auditLog('door_open_local_command', {
+      user_code: Number(req.authUser.id),
+      role: req.authUser.role,
+      door_id: Number(door.id),
+      site_code: Number(door.site_code),
+      device_uid: door.assigned_device_uid,
+      local_ip: localIp || null,
+      opened_at: new Date().toISOString(),
+    });
+
+    return res.status(200).json({ ok: true, recorded: true });
+  } catch (_error) {
+    return res.status(500).json({ error: 'Yerel kapi acilisi kaydedilemedi.' });
+  }
+});
+
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route bulunamadi.' });
 });

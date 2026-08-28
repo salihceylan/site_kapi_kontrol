@@ -249,6 +249,11 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS local_control_token TEXT
     `);
     await client.query(`
+      UPDATE devices
+      SET local_control_token = md5(random()::text || clock_timestamp()::text || device_uid || id::text)
+      WHERE local_control_token IS NULL OR TRIM(local_control_token) = ''
+    `);
+    await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique
       ON devices(mqtt_username)
       WHERE mqtt_username IS NOT NULL

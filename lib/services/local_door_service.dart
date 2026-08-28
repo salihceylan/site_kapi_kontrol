@@ -135,6 +135,28 @@ class LocalDoorService {
     }
   }
 
+  bool _isPrivateLocalIp(String ip) {
+    final parts = ip.split('.');
+    if (parts.length != 4) {
+      return false;
+    }
+    final first = int.tryParse(parts[0]);
+    final second = int.tryParse(parts[1]);
+    if (first == null || second == null) {
+      return false;
+    }
+    if (first == 192 && second == 168) {
+      return true;
+    }
+    if (first == 10) {
+      return true;
+    }
+    if (first == 172 && second >= 16 && second <= 31) {
+      return true;
+    }
+    return false;
+  }
+
   Future<List<String>> _candidateIps(String? knownIp) async {
     final ownIps = <String>{};
     final candidates = <String>{};
@@ -144,8 +166,19 @@ class LocalDoorService {
     );
 
     for (final interface in interfaces) {
+      final name = interface.name.toLowerCase();
+      if (name.contains('rmnet') ||
+          name.contains('ccmni') ||
+          name.contains('pdp') ||
+          name.contains('tun') ||
+          name.contains('ppp')) {
+        continue;
+      }
       for (final address in interface.addresses) {
         final ip = address.address;
+        if (!_isPrivateLocalIp(ip)) {
+          continue;
+        }
         ownIps.add(ip);
         final parts = ip.split('.');
         if (parts.length != 4) {

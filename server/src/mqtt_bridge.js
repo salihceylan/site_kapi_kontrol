@@ -231,7 +231,23 @@ async function syncLocalControlConfigFromDb(deviceUid) {
       `,
       [normalizedUid],
     );
-    const token = result.rows[0]?.local_control_token;
+    if (result.rowCount === 0) {
+      return;
+    }
+
+    let token = result.rows[0]?.local_control_token;
+    if (!token || !token.trim()) {
+      const generated = await pool.query(
+        `
+          UPDATE devices
+          SET local_control_token = md5(random()::text || clock_timestamp()::text || device_uid)
+          WHERE device_uid = $1
+          RETURNING local_control_token
+        `,
+        [normalizedUid],
+      );
+      token = generated.rows[0]?.local_control_token;
+    }
     if (!token) {
       return;
     }

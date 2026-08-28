@@ -635,6 +635,23 @@ class AuthApi {
     );
   }
 
+  Future<void> notifyLocalDoorOpened({
+    required String token,
+    required int doorId,
+    String? localIp,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/doors/$doorId/local-open-notify',
+      token: token,
+      body: {
+        if (localIp != null && localIp.trim().isNotEmpty)
+          'local_ip': localIp.trim(),
+      },
+    );
+    _ensureStatus(response, 200);
+  }
+
   Future<List<DoorRecord>> listMyDoors({required String token}) async {
     final response = await _authorizedRequest(
       method: 'GET',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -613,6 +614,18 @@ class AuthService extends ChangeNotifier {
       return (null, 'Oturum bulunamadi.');
     }
 
+    // Hizli yerel erisim: Eger kapinin yerel token ve IP bilgisi onbellekte varsa once yerel denenir
+    if (door != null && canTryLocalDoorOpen(door)) {
+      final localAccess =
+          _localDoorCache[door.assignedDeviceUid?.trim().toUpperCase()];
+      if (localAccess?.ip != null && localAccess!.ip!.isNotEmpty) {
+        final localResult = await _tryOpenDoorLocally(door);
+        if (localResult != null && localResult.$1 != null) {
+          return localResult;
+        }
+      }
+    }
+
     try {
       final status = await api.openDoor(token: active.token, doorId: doorId);
       await _cacheLocalDoorAccess(status);
@@ -622,14 +635,14 @@ class AuthService extends ChangeNotifier {
         return (null, e.message);
       }
       final local = await _tryOpenDoorLocally(door);
-      if (local != null) {
+      if (local != null && local.$1 != null) {
         return local;
       }
       return (null, e.message);
     } catch (_) {
       if (door != null) {
         final local = await _tryOpenDoorLocally(door);
-        if (local != null) {
+        if (local != null && local.$1 != null) {
           return local;
         }
       }
@@ -859,6 +872,19 @@ class AuthService extends ChangeNotifier {
     );
     _localDoorCache[uid] = updatedAccess;
     await _persistLocalDoorCache();
+
+    final active = session;
+    if (active != null) {
+      unawaited(
+        api
+            .notifyLocalDoorOpened(
+              token: active.token,
+              doorId: door.id,
+              localIp: result.ip ?? access.ip,
+            )
+            .catchError((_) {}),
+      );
+    }
 
     return (
       DoorRuntimeStatus(
