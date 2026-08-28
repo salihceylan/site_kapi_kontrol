@@ -415,7 +415,17 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isLoadingDoorStatus = false;
       _doorRuntimeStatus = status;
-      _doorStatusError = error;
+      final canLocal = _doorControlDoor != null &&
+          widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
+      if (canLocal &&
+          error != null &&
+          (error.contains('Sunucuya') ||
+              error.contains('Internet') ||
+              error.contains('baglanilamadi'))) {
+        _doorStatusError = null;
+      } else {
+        _doorStatusError = error;
+      }
     });
   }
 

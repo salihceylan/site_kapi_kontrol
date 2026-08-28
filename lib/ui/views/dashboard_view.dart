@@ -275,21 +275,23 @@ class DashboardView extends StatelessWidget {
         );
       }
 
-      final connectionText = runtimeStatus == null
-          ? 'Bilinmiyor'
-          : runtimeStatus!.mqttBridgeConnected
-              ? 'Hazır'
-              : 'Hazır değil';
-      final deviceOnlineText = runtimeStatus == null
-          ? 'Bilinmiyor'
-          : runtimeStatus!.mqttConnected
-              ? 'Online'
-              : 'Offline';
-      final stateText = runtimeStatus?.doorLocked == null
-          ? 'Bilinmiyor'
-          : (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık');
+      final hasLocal = canTryLocalDoorOpen;
+      final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
+      final isMqttConnected = runtimeStatus?.mqttConnected == true;
+
+      final connectionText = isMqttBridgeConnected
+          ? 'Hazır (Bulut)'
+          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Hazır değil');
+      final deviceOnlineText = isMqttConnected
+          ? 'Online (Bulut)'
+          : (hasLocal
+              ? 'Online (Yerel Ağ)'
+              : (runtimeStatus == null ? 'Bilinmiyor' : 'Offline'));
+      final stateText = runtimeStatus?.doorLocked != null
+          ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
+          : (hasLocal ? 'Hazır (Yerel Ağ)' : 'Bilinmiyor');
       final signalText = runtimeStatus?.wifiSignalPercent == null
-          ? '-'
+          ? (hasLocal ? 'Yerel Ağ Bağlı' : '-')
           : '%${runtimeStatus!.wifiSignalPercent}'
               '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}';
       final commandEnabled =
