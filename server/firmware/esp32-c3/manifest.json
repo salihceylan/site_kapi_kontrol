@@ -1,11 +1,11 @@
 {
   "enabled": true,
-  "version": "1.2.1",
+  "version": "1.3.0",
   "filename": "firmware.bin",
   "force": false,
   "interval_hours": 24,
   "allowed_uids": [],
-  "sha256": "2868ed927026ecfe5ce63562b265acb89c40069582573d7a0cfa627a6fe4ab5e",
-  "md5": "0ec2634f87d01498ed510ce6cbf42b9a",
-  "notes": "AHBU firmware v1.2.1."
+  "sha256": "470e446725910b658e602cb627ecac68609fef355aaf790f3c35199385943bc1",
+  "md5": "c0281ec4ec67865840e94a19db4a6dc8",
+  "notes": "AHBU firmware v1.3.0: NimBLE optimizasyonu, 0ms yerel kapi acma ve bellek iyilestirmesi."
 }
