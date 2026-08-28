@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
@@ -28,6 +29,7 @@ class DashboardView extends StatelessWidget {
     required this.onSelectDoor,
     required this.onOpenDoor,
     required this.onCreateGuestPass,
+    this.voiceDoorService,
   });
 
   final UserSession session;
@@ -46,6 +48,7 @@ class DashboardView extends StatelessWidget {
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
   final VoidCallback onCreateGuestPass;
+  final VoiceDoorService? voiceDoorService;
 
   @override
   Widget build(BuildContext context) {
@@ -105,9 +108,153 @@ class DashboardView extends StatelessWidget {
             ],
           ),
         ),
+        if (voiceDoorService != null) ...[
+          const SizedBox(height: 16),
+          _buildVoiceLiveBanner(context, roleColor),
+        ],
         const SizedBox(height: 16),
         _buildDoorControlPanel(context),
       ],
+    );
+  }
+
+  Widget _buildVoiceLiveBanner(BuildContext context, Color roleColor) {
+    final vService = voiceDoorService!;
+    return AnimatedBuilder(
+      animation: vService,
+      builder: (context, _) {
+        final status = vService.status;
+        final isListening = vService.isListening;
+
+        Color bannerBg;
+        Color borderColor;
+        Color iconColor;
+        IconData bannerIcon;
+        String title;
+        String subtitle;
+
+        switch (status) {
+          case VoiceStatus.listening:
+            bannerBg = const Color(0xFFE8F5E9);
+            borderColor = Colors.green.shade400;
+            iconColor = Colors.green.shade700;
+            bannerIcon = Icons.mic;
+            title = '🎙️ Sesli Dinleme Aktif';
+            subtitle = vService.recognizedWords.isNotEmpty
+                ? '"${vService.recognizedWords}"'
+                : 'Dinleniyor... "Kapıyı aç" veya "1. kapıyı aç" diyebilirsiniz.';
+            break;
+          case VoiceStatus.processing:
+            bannerBg = const Color(0xFFE3F2FD);
+            borderColor = Colors.blue.shade400;
+            iconColor = Colors.blue.shade700;
+            bannerIcon = Icons.hourglass_top_rounded;
+            title = 'Komut İşleniyor...';
+            subtitle = vService.feedbackText;
+            break;
+          case VoiceStatus.success:
+            bannerBg = const Color(0xFFE8F5E9);
+            borderColor = Colors.green.shade500;
+            iconColor = Colors.green.shade800;
+            bannerIcon = Icons.check_circle_outline_rounded;
+            title = 'Başarılı';
+            subtitle = vService.feedbackText;
+            break;
+          case VoiceStatus.error:
+            bannerBg = const Color(0xFFFFF3E0);
+            borderColor = Colors.orange.shade400;
+            iconColor = Colors.orange.shade800;
+            bannerIcon = Icons.info_outline_rounded;
+            title = 'Sesli Komut Bildirimi';
+            subtitle = vService.feedbackText;
+            break;
+          case VoiceStatus.initializing:
+            bannerBg = const Color(0xFFF3E5F5);
+            borderColor = Colors.purple.shade300;
+            iconColor = Colors.purple.shade700;
+            bannerIcon = Icons.mic_none_outlined;
+            title = 'Ses Motoru Başlatılıyor...';
+            subtitle = 'Mikrofon hazırlanıyor...';
+            break;
+          case VoiceStatus.idle:
+            bannerBg = Colors.white;
+            borderColor = AppColors.primarySoft.withValues(alpha: 0.25);
+            iconColor = roleColor;
+            bannerIcon = Icons.mic_none_outlined;
+            title = 'Sesli Komut Hazır';
+            subtitle = 'Dokunarak sesli dinlemeyi tekrar başlatabilirsiniz.';
+            break;
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: bannerBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1.4),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 8,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(bannerIcon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: iconColor,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textDark,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: () {
+                  if (isListening) {
+                    vService.stopListening();
+                  } else {
+                    vService.startListening(candidateDoors: doors);
+                  }
+                },
+                icon: Icon(
+                  isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                  color: iconColor,
+                ),
+                tooltip: isListening ? 'Durdur' : 'Tekrar Dinle',
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -280,4 +427,3 @@ class DashboardView extends StatelessWidget {
     );
   }
 }
-

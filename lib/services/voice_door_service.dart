@@ -2,9 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 
@@ -44,7 +42,8 @@ class VoiceDoorService extends ChangeNotifier {
   DoorRecord? _matchedDoor;
   bool _isSpeechAvailable = false;
   bool _ttsEnabled = true;
-  bool _handsFreeAutoListen = false;
+  bool _handsFreeAutoListen = true; // Varsayılan olarak açık
+  List<DoorRecord>? _lastCandidateDoors;
 
   VoiceDoorService({required AuthService authService})
       : _authService = authService {
@@ -69,7 +68,7 @@ class VoiceDoorService extends ChangeNotifier {
   Future<void> loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _handsFreeAutoListen = prefs.getBool(_prefHandsFreeKey) ?? false;
+      _handsFreeAutoListen = prefs.getBool(_prefHandsFreeKey) ?? true;
       notifyListeners();
     } catch (_) {}
   }
@@ -109,14 +108,17 @@ class VoiceDoorService extends ChangeNotifier {
       return true;
     }
     _status = VoiceStatus.initializing;
+    _feedbackText = 'Ses motoru başlatılıyor...';
     notifyListeners();
 
     try {
       _isSpeechAvailable = await _speech.initialize(
         onError: (val) {
-          _status = VoiceStatus.error;
-          _feedbackText = 'Ses algılanamadı (${val.errorMsg})';
-          notifyListeners();
+          if (_status == VoiceStatus.listening) {
+            _status = VoiceStatus.error;
+            _feedbackText = 'Ses algılanamadı (${val.errorMsg})';
+            notifyListeners();
+          }
         },
         onStatus: (val) {
           if (val == 'done' || val == 'notListening') {
@@ -143,6 +145,10 @@ class VoiceDoorService extends ChangeNotifier {
   }
 
   Future<void> startListening({List<DoorRecord>? candidateDoors}) async {
+    if (candidateDoors != null && candidateDoors.isNotEmpty) {
+      _lastCandidateDoors = candidateDoors;
+    }
+
     if (!_isSpeechAvailable) {
       final ready = await initializeSpeech();
       if (!ready) {
@@ -155,32 +161,46 @@ class VoiceDoorService extends ChangeNotifier {
     }
 
     _recognizedWords = '';
-    _feedbackText = 'Dinleniyor... "Site Kapısı 1\'i aç" diyebilirsiniz.';
+    _feedbackText = 'Dinleniyor... "Kapıyı aç" diyebilirsiniz.';
     _matchedDoor = null;
     _status = VoiceStatus.listening;
     notifyListeners();
 
     try {
+      String selectedLocaleId = 'tr_TR';
+      try {
+        final locales = await _speech.locales();
+        final tr = locales
+            .where((l) => l.localeId.toLowerCase().startsWith('tr'))
+            .firstOrNull;
+        if (tr != null) {
+          selectedLocaleId = tr.localeId;
+        }
+      } catch (_) {}
+
       await _speech.listen(
         listenOptions: SpeechListenOptions(
-          localeId: 'tr_TR',
-          listenFor: const Duration(seconds: 8),
-          pauseFor: const Duration(seconds: 2),
+          localeId: selectedLocaleId,
+          listenFor: const Duration(seconds: 12),
+          pauseFor: const Duration(seconds: 3),
           partialResults: true,
-          cancelOnError: true,
+          cancelOnError: false,
           listenMode: ListenMode.confirmation,
         ),
         onResult: (result) {
           _recognizedWords = result.recognizedWords;
           notifyListeners();
           if (result.finalResult) {
-            _processVoiceCommand(_recognizedWords, candidateDoors: candidateDoors);
+            _processVoiceCommand(
+              _recognizedWords,
+              candidateDoors: candidateDoors ?? _lastCandidateDoors,
+            );
           }
         },
       );
     } catch (e) {
       _status = VoiceStatus.error;
-      _feedbackText = 'Ses dinlenirken hata oluştu.';
+      _feedbackText = 'Mikrofon başlatılırken hata oluştu.';
       notifyListeners();
     }
   }
@@ -196,7 +216,7 @@ class VoiceDoorService extends ChangeNotifier {
 
   void _processCurrentRecognizedWords() {
     if (_recognizedWords.trim().isNotEmpty && _status == VoiceStatus.listening) {
-      _processVoiceCommand(_recognizedWords);
+      _processVoiceCommand(_recognizedWords, candidateDoors: _lastCandidateDoors);
     } else if (_status == VoiceStatus.listening) {
       _status = VoiceStatus.idle;
       _feedbackText = '';
@@ -209,7 +229,7 @@ class VoiceDoorService extends ChangeNotifier {
     List<DoorRecord>? candidateDoors,
   }) async {
     _status = VoiceStatus.processing;
-    _feedbackText = 'Komut işleniyor...';
+    _feedbackText = 'Komut işleniyor: "$rawCommand"...';
     notifyListeners();
 
     if (rawCommand.trim().isEmpty) {
@@ -225,26 +245,53 @@ class VoiceDoorService extends ChangeNotifier {
       );
     }
 
-    List<DoorRecord> doors = candidateDoors ?? <DoorRecord>[];
+    List<DoorRecord> doors = candidateDoors ?? _lastCandidateDoors ?? <DoorRecord>[];
     if (doors.isEmpty) {
       final (fetchedDoors, _) = await _authService.listMyDoors();
       if (fetchedDoors != null) {
         doors = fetchedDoors;
+        _lastCandidateDoors = doors;
       }
     }
 
-    final matched = matchDoorFromCommand(rawCommand, doors);
-    if (matched == null) {
-      final message = doors.isEmpty
-          ? 'Tanımlı bir kapı bulunamadı.'
-          : 'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
+    if (doors.isEmpty) {
+      const message = 'Tanımlı bir kapı bulunamadı.';
       _status = VoiceStatus.error;
-      _feedbackText = 'Anlaşılamadı';
+      _feedbackText = message;
       notifyListeners();
       await speak(message);
       return VoiceDoorResult(
         success: false,
         recognizedText: rawCommand,
+        feedbackMessage: message,
+      );
+    }
+
+    final matched = matchDoorFromCommand(rawCommand, doors);
+    if (matched == null) {
+      const message = 'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
+      _status = VoiceStatus.error;
+      _feedbackText = message;
+      notifyListeners();
+      await speak(message);
+      return VoiceDoorResult(
+        success: false,
+        recognizedText: rawCommand,
+        feedbackMessage: message,
+      );
+    }
+
+    if (matched.assignedDeviceUid == null ||
+        matched.assignedDeviceUid!.trim().isEmpty) {
+      final message = '${matched.doorName} kapısına henüz aktif bir cihaz atanmamış.';
+      _status = VoiceStatus.error;
+      _feedbackText = message;
+      notifyListeners();
+      await speak(message);
+      return VoiceDoorResult(
+        success: false,
+        recognizedText: rawCommand,
+        matchedDoor: matched,
         feedbackMessage: message,
       );
     }
@@ -263,6 +310,7 @@ class VoiceDoorService extends ChangeNotifier {
       _status = VoiceStatus.success;
       _feedbackText = '${matched.doorName} başarıyla açıldı.';
       notifyListeners();
+      await speak('${matched.doorName} başarıyla açıldı.');
       return VoiceDoorResult(
         success: true,
         recognizedText: rawCommand,
@@ -270,7 +318,7 @@ class VoiceDoorService extends ChangeNotifier {
         feedbackMessage: '${matched.doorName} açıldı.',
       );
     } else {
-      final errorMsg = error ?? 'Kapı açılamadı.';
+      final errorMsg = error ?? 'Kapı açılamadı. Cihaz bağlantısı çevrimdışı olabilir.';
       _status = VoiceStatus.error;
       _feedbackText = errorMsg;
       notifyListeners();
@@ -302,7 +350,8 @@ class VoiceDoorService extends ChangeNotifier {
     if (availableDoors.length == 1) {
       if (normalized.contains('ac') ||
           normalized.contains('kapi') ||
-          normalized.contains('kapiyi')) {
+          normalized.contains('kapiyi') ||
+          normalized.contains('kapi')) {
         return availableDoors.first;
       }
     }
@@ -371,13 +420,11 @@ class VoiceDoorService extends ChangeNotifier {
   }
 
   static int? _extractDoorNumber(String text) {
-    // Rakamlar
     final digitMatch = RegExp(r'\b(\d+)\b').firstMatch(text);
     if (digitMatch != null) {
       return int.tryParse(digitMatch.group(1)!);
     }
 
-    // Türkçe sayı kelimeleri
     if (text.contains('bir') || text.contains('1')) return 1;
     if (text.contains('iki') || text.contains('2')) return 2;
     if (text.contains('uc') || text.contains('3')) return 3;

@@ -280,6 +280,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadDoorControlSites() async {
+    final session = widget.authService.session;
+    if (session == null) return;
+
+    if (session.role == UserRole.apartmentOwner) {
+      setState(() => _isLoadingDoorControlStructure = true);
+      final (doors, _) = await widget.authService.listMyDoors();
+      if (!mounted) return;
+      setState(() {
+        _isLoadingDoorControlStructure = false;
+        if (doors != null && doors.isNotEmpty) {
+          _doorControlStructure = SiteStructureRecord(
+            site: SiteRecord(
+              id: 0,
+              name: 'Tanımlı Kapılarım',
+              address: null,
+              city: null,
+              district: null,
+              managerUserCode: session.id,
+              managerName: session.fullName,
+              mqttSiteId: 0,
+              approvedAt: DateTime.now(),
+              blockCount: 1,
+              doorCount: doors.length,
+              apartmentCount: 1,
+              approvalStatus: 'approved',
+              createdAt: DateTime.now(),
+            ),
+            doors: doors,
+            blocks: const [],
+            apartments: const [],
+          );
+          _selectDoorControlDoor(doors.first.id);
+        }
+      });
+      if (doors != null) {
+        _checkAndStartVoiceAssistance(doors);
+      }
+      return;
+    }
+
     setState(() => _isLoadingDoorControlSites = true);
     try {
       final data = await widget.authService.listSites(page: 1, pageSize: 100);
@@ -321,6 +361,31 @@ class _HomePageState extends State<HomePage> {
         _selectDoorControlDoor(structure.doors.first.id);
       }
     });
+    if (structure != null && structure.doors.isNotEmpty) {
+      _checkAndStartVoiceAssistance(structure.doors);
+    }
+  }
+
+  Future<void> _checkAndStartVoiceAssistance(List<DoorRecord> doors) async {
+    final session = widget.authService.session;
+    if (session == null || widget.voiceDoorService == null) return;
+
+    if (doors.isEmpty) {
+      await widget.voiceDoorService!.speak('Tanımlı bir kapı bulunamadı.');
+      return;
+    }
+
+    final hasActiveDevice = doors.any((d) =>
+        d.assignedDeviceUid != null && d.assignedDeviceUid!.trim().isNotEmpty);
+    if (!hasActiveDevice) {
+      await widget.voiceDoorService!.speak('Kapılara henüz bir cihaz atanmamış.');
+      return;
+    }
+
+    // Cihaz atanmış ve kapı hazır: otomatik dinlemeyi başlat
+    if (!widget.voiceDoorService!.isListening) {
+      await widget.voiceDoorService!.startListening(candidateDoors: doors);
+    }
   }
 
   void _selectDoorControlDoor(int doorId) {
@@ -970,6 +1035,7 @@ class _HomePageState extends State<HomePage> {
               );
             }
           },
+          voiceDoorService: widget.voiceDoorService,
         );
 
       case SirketMenuItem.profilim:
