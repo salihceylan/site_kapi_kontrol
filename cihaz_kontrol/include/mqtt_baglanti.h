@@ -41,6 +41,9 @@ inline void mqttPublishState(bool locked) {
   doc["ota_last_version"] = otaLastVersion();
   doc["wifi_rssi"] = wifiSinyalDbm();
   doc["wifi_signal_percent"] = wifiSinyalYuzde();
+  doc["local_ip"] = wifiIpAdresi();
+  doc["local_control_port"] = YEREL_KAPI_KONTROL_PORT;
+  doc["local_control_available"] = wifiHasLocalControlToken();
 
   String payload;
   serializeJson(doc, payload);
@@ -102,6 +105,23 @@ inline bool shouldTriggerOtaCheck(const String& message) {
   return String(action) == "ota_check";
 }
 
+inline bool readLocalControlConfig(const String& message, String& token) {
+  JsonDocument json;
+  const auto err = deserializeJson(json, message);
+  if (err) {
+    return false;
+  }
+
+  const char* action = json["action"] | "";
+  if (String(action) != "local_control_config") {
+    return false;
+  }
+
+  token = String(json["local_control_token"] | "");
+  token.trim();
+  return !token.isEmpty();
+}
+
 inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message;
   message.reserve(length);
@@ -122,6 +142,15 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (shouldTriggerOtaCheck(message)) {
     otaTalepEt("mqtt");
     mqttPublishEvent("ota_check_requested");
+    return;
+  }
+
+  String localControlToken;
+  if (readLocalControlConfig(message, localControlToken)) {
+    wifiPersistLocalControlToken(localControlToken);
+    mqttPublishEvent("local_control_configured");
+    mqttPublishState(gDoorLocked);
+    Serial.println("Yerel kapi kontrol anahtari MQTT ile kaydedildi.");
     return;
   }
 
@@ -210,11 +239,11 @@ inline void mqttLoopHandler() {
 }
 
 inline void mqttNotifyPulseCompleted() {
+  gDoorLocked = true;
   if (!client.connected()) {
     return;
   }
 
-  gDoorLocked = true;
   mqttPublishState(gDoorLocked);
   mqttPublishEvent("pulse_completed");
 }

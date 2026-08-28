@@ -48,16 +48,19 @@ Bu pencerede:
 
 ## Firmware Surumleme ve Yukleme
 
-1. `Env` secin (varsayilan: `esp32-s3-devkitc-1`).
+1. `Env` secin (su an yalniz `lolin_c3_mini` aktiftir).
 2. `Surum` alanina deger yazin (`1.2.3` formati).
-3. `Surum olustur` butonuna basin.
+3. `Firmware derle` butonuna basin.
+4. Derleme basarili olursa `Surum olustur` butonuna basin.
    Bu adim:
-   - `cihaz_kontrol` kodunu derler,
    - `firmware.bin`, `bootloader.bin`, `partitions.bin` dosyalarini
      `cihaz_kontrol/firmware_releases/...` altina kaydeder.
-4. Cihazi listeden secin.
-5. `Son surumu yukle` butonuna basin.
+5. Cihazi listeden secin.
+6. `Surumu USB ile cihaza yukle` butonuna basin.
    Yukleme ilerlemesi `%` olarak gosterilir, tamamlaninca `TMM` mesaji gelir.
+7. `Guncelleme Dosyasini Sunucuya gonder` butonu son surumu VPS'e tasir.
+8. `Calisma arkadasina guncelleme zip dosyasi olustur` butonu USB yukleme
+   paketini olusturur.
 
 ## Logo
 
@@ -70,5 +73,8 @@ ve `company_qr_tool/assets/ahbu_logo.png` dosyasina kopyalanir.
 ## Gereksinimler
 
 - Windows
-- Python 3.10+
+- Etiketleyici uygulamayi calistiran bilgisayarda Python 3.10+
 - USB driver (CH340 / CP210x, karta gore)
+
+Calisma arkadasina verilen ZIP paketinde Python ve esptool paket icine eklenir;
+o bilgisayarda Python kurulu olmak zorunda degildir.

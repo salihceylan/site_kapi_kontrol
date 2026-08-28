@@ -15,6 +15,7 @@ import {
 import {
   getDeviceRuntimeStatus,
   mqttBridgeHealth,
+  publishLocalControlConfig,
   publishOtaCheckToDevices,
   publishDoorPulse,
   startMqttBridge,
@@ -147,6 +148,10 @@ function mqttUsernameForDevice(deviceUid) {
 
 function generateMqttPassword() {
   return crypto.randomBytes(24).toString('base64url');
+}
+
+function generateLocalControlToken() {
+  return crypto.randomBytes(32).toString('base64url');
 }
 
 function normalizePhone(raw) {
@@ -320,7 +325,39 @@ function mapDeviceMqttCredentialsRow(row) {
     mqtt_port: Number(process.env.MQTT_PORT || 8883),
     mqtt_username: row.mqtt_username,
     mqtt_password: row.mqtt_password,
+    local_control_token: row.local_control_token,
   };
+}
+
+function mapLocalDoorControl({ token, status }) {
+  return {
+    token: token ?? null,
+    ip: status.local_ip ?? null,
+    port: status.local_control_port ?? 8765,
+    available: status.local_control_available === true,
+  };
+}
+
+async function localDoorControlForStatus({ deviceUid, currentToken, status }) {
+  const token = currentToken || await ensureDeviceLocalControlToken(deviceUid);
+  if (
+    token &&
+    status.mqtt_connected === true &&
+    status.local_control_available !== true
+  ) {
+    try {
+      await publishLocalControlConfig({
+        deviceUid,
+        localControlToken: token,
+      });
+    } catch (error) {
+      auditLog('local_control_config_failed', {
+        device_uid: deviceUid,
+        error: error.message,
+      });
+    }
+  }
+  return mapLocalDoorControl({ token, status });
 }
 
 function mapBlockRow(row) {
@@ -942,10 +979,11 @@ async function createDevice({
         assigned_user_code,
         site_code,
         mqtt_username,
-        mqtt_password
+        mqtt_password,
+        local_control_token
       )
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, device_uid, assigned_user_code, site_code, gate_name, mqtt_username, mqtt_password, created_at
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, device_uid, assigned_user_code, site_code, gate_name, mqtt_username, mqtt_password, local_control_token, created_at
     `,
     [
       normalizedUid,
@@ -953,6 +991,7 @@ async function createDevice({
       siteCode,
       mqttUsernameForDevice(normalizedUid),
       generateMqttPassword(),
+      generateLocalControlToken(),
     ],
   );
   return result.rows[0];
@@ -974,6 +1013,7 @@ async function findDeviceByUid(deviceUid) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        devices.local_control_token,
         runtime.mqtt_connected,
         runtime.firmware_version,
         runtime.ota_status,
@@ -1011,6 +1051,7 @@ async function findDeviceById(deviceId) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        devices.local_control_token,
         runtime.mqtt_connected,
         runtime.firmware_version,
         runtime.ota_status,
@@ -1040,7 +1081,7 @@ async function ensureDeviceMqttCredentialsByUid(deviceUid) {
 
   const existing = await pool.query(
     `
-      SELECT device_uid, mqtt_username, mqtt_password
+      SELECT device_uid, mqtt_username, mqtt_password, local_control_token
       FROM devices
       WHERE device_uid = $1
       LIMIT 1
@@ -1052,20 +1093,194 @@ async function ensureDeviceMqttCredentialsByUid(deviceUid) {
   }
 
   const row = existing.rows[0];
-  if (row.mqtt_username && row.mqtt_password) {
+  if (row.mqtt_username && row.mqtt_password && row.local_control_token) {
     return row;
   }
 
   const result = await pool.query(
     `
       UPDATE devices
-      SET mqtt_username = $1, mqtt_password = $2
-      WHERE device_uid = $3
-      RETURNING device_uid, mqtt_username, mqtt_password
+      SET
+        mqtt_username = COALESCE(mqtt_username, $1),
+        mqtt_password = COALESCE(mqtt_password, $2),
+        local_control_token = COALESCE(local_control_token, $3)
+      WHERE device_uid = $4
+      RETURNING device_uid, mqtt_username, mqtt_password, local_control_token
     `,
-    [mqttUsernameForDevice(normalizedUid), generateMqttPassword(), normalizedUid],
+    [
+      mqttUsernameForDevice(normalizedUid),
+      generateMqttPassword(),
+      generateLocalControlToken(),
+      normalizedUid,
+    ],
   );
   return result.rows[0] || null;
+}
+
+async function ensureDeviceLocalControlToken(deviceUid) {
+  const normalizedUid = normalizeDeviceUid(deviceUid);
+  if (normalizedUid.length < 6) {
+    return null;
+  }
+
+  const existing = await pool.query(
+    `
+      SELECT device_uid, local_control_token
+      FROM devices
+      WHERE device_uid = $1
+      LIMIT 1
+    `,
+    [normalizedUid],
+  );
+  if (existing.rowCount === 0) {
+    return null;
+  }
+
+  const row = existing.rows[0];
+  if (row.local_control_token) {
+    return row.local_control_token;
+  }
+
+  const result = await pool.query(
+    `
+      UPDATE devices
+      SET local_control_token = $1
+      WHERE device_uid = $2
+      RETURNING local_control_token
+    `,
+    [generateLocalControlToken(), normalizedUid],
+  );
+  return result.rows[0]?.local_control_token ?? null;
+}
+
+async function pushLocalControlTokenToDevice({ deviceUid, token, reason }) {
+  if (!deviceUid || !token) {
+    return false;
+  }
+
+  try {
+    const sent = await publishLocalControlConfig({
+      deviceUid,
+      localControlToken: token,
+    });
+    if (sent) {
+      auditLog('local_control_token_synced', {
+        device_uid: normalizeDeviceUid(deviceUid),
+        reason,
+      });
+    }
+    return sent;
+  } catch (error) {
+    auditLog('local_control_token_sync_failed', {
+      device_uid: normalizeDeviceUid(deviceUid),
+      reason,
+      error: error.message,
+    });
+    return false;
+  }
+}
+
+async function rotateLocalControlTokensForDeviceIds(deviceIds, reason) {
+  const uniqueIds = [
+    ...new Set(
+      deviceIds
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item > 0),
+    ),
+  ];
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const rotated = [];
+  for (const deviceId of uniqueIds) {
+    const token = generateLocalControlToken();
+    const result = await pool.query(
+      `
+        UPDATE devices
+        SET local_control_token = $1
+        WHERE id = $2
+        RETURNING device_uid, local_control_token
+      `,
+      [token, deviceId],
+    );
+    const row = result.rows[0];
+    if (row) {
+      rotated.push(row);
+    }
+  }
+
+  await Promise.all(
+    rotated.map((row) =>
+      pushLocalControlTokenToDevice({
+        deviceUid: row.device_uid,
+        token: row.local_control_token,
+        reason,
+      }),
+    ),
+  );
+  return rotated;
+}
+
+async function deviceIdsForSite(siteCode) {
+  if (siteCode == null) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+      SELECT DISTINCT devices.id
+      FROM devices
+      LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
+      WHERE devices.site_code = $1 OR door.site_code = $1
+    `,
+    [Number(siteCode)],
+  );
+  return result.rows.map((row) => Number(row.id));
+}
+
+async function rotateLocalControlTokensForSite(siteCode, reason) {
+  const deviceIds = await deviceIdsForSite(siteCode);
+  return rotateLocalControlTokensForDeviceIds(deviceIds, reason);
+}
+
+async function affectedSiteCodesForUser(userCode) {
+  if (userCode == null) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+      SELECT site_code
+      FROM site_manager_sites
+      WHERE manager_user_code = $1
+      UNION
+      SELECT site_code
+      FROM apartments
+      WHERE resident_user_code = $1
+    `,
+    [Number(userCode)],
+  );
+  return result.rows.map((row) => Number(row.site_code));
+}
+
+async function rotateLocalControlTokensForUserAccess(userCode, reason) {
+  const [siteCodes, directDevices] = await Promise.all([
+    affectedSiteCodesForUser(userCode),
+    pool.query(
+      `
+        SELECT id
+        FROM devices
+        WHERE assigned_user_code = $1
+      `,
+      [Number(userCode)],
+    ),
+  ]);
+  const deviceIds = directDevices.rows.map((row) => Number(row.id));
+  for (const siteCode of siteCodes) {
+    deviceIds.push(...await deviceIdsForSite(siteCode));
+  }
+  return rotateLocalControlTokensForDeviceIds(deviceIds, reason);
 }
 
 async function listCompanyDevices({ page, pageSize }) {
@@ -1085,6 +1300,7 @@ async function listCompanyDevices({ page, pageSize }) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        devices.local_control_token,
         runtime.mqtt_connected,
         runtime.firmware_version,
         runtime.ota_status,
@@ -1234,6 +1450,7 @@ async function listManagedDevicesForUser(authUser) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        devices.local_control_token,
         runtime.mqtt_connected,
         runtime.firmware_version,
         runtime.ota_status,
@@ -1281,6 +1498,7 @@ async function findManagedDeviceById({ authUser, deviceId }) {
         door.door_name AS assigned_door_name,
         devices.mqtt_username,
         devices.mqtt_password,
+        devices.local_control_token,
         runtime.mqtt_connected,
         runtime.firmware_version,
         runtime.ota_status,
@@ -2202,6 +2420,7 @@ async function upsertSiteManagerLink({ siteCode, managerUserCode }) {
       [siteCode, managerUserCode],
     );
   }
+  await rotateLocalControlTokensForSite(siteCode, 'site_manager_changed');
 }
 
 async function provisionApartmentResident({
@@ -2348,6 +2567,10 @@ async function provisionApartmentResident({
     );
 
     await client.query('COMMIT');
+    await rotateLocalControlTokensForDeviceIds(
+      [Number(device.id), door.assigned_device_id],
+      'door_device_assignment_changed',
+    );
     return finalResult.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2532,6 +2755,7 @@ async function listAccessibleDoorsForUser(authUser) {
           d.is_active,
           d.assigned_device_id,
           devices.device_uid AS assigned_device_uid,
+          devices.local_control_token,
           s.mqtt_site_id,
           d.created_at
         FROM site_doors d
@@ -2556,6 +2780,7 @@ async function listAccessibleDoorsForUser(authUser) {
           d.is_active,
           d.assigned_device_id,
           devices.device_uid AS assigned_device_uid,
+          devices.local_control_token,
           s.mqtt_site_id,
           d.created_at
         FROM site_doors d
@@ -2583,6 +2808,7 @@ async function listAccessibleDoorsForUser(authUser) {
         d.is_active,
         d.assigned_device_id,
         devices.device_uid AS assigned_device_uid,
+        devices.local_control_token,
         s.mqtt_site_id,
         d.created_at
       FROM apartments a
@@ -2621,6 +2847,12 @@ async function updateDeviceAssignment({
     `,
     [siteCode, gateName, deviceId],
   );
+  if (result.rowCount > 0) {
+    await rotateLocalControlTokensForDeviceIds(
+      [deviceId],
+      'device_assignment_changed',
+    );
+  }
   return result.rows[0] || null;
 }
 
@@ -2645,6 +2877,10 @@ async function updateDeviceDetails({
   if (result.rowCount === 0) {
     return null;
   }
+  await rotateLocalControlTokensForDeviceIds(
+    [deviceId],
+    'device_details_changed',
+  );
   return findDeviceById(deviceId);
 }
 
@@ -2908,11 +3144,26 @@ app.get('/firmware/:target/:file', (req, res) => {
     return res.status(404).json({ error: 'Firmware dosyasi bulunamadi.' });
   }
 
+  const headers = {
+    'Content-Type': 'application/octet-stream',
+    'Cache-Control': 'no-store',
+  };
+  const manifestPath = path.join(firmwareRoot, target, 'manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      const manifestFile = safeFirmwareFile(manifest.filename || 'firmware.bin');
+      const md5 = String(manifest.md5 || '').trim();
+      if (manifestFile === fileName && /^[0-9a-f]{32}$/i.test(md5)) {
+        headers['x-MD5'] = md5;
+      }
+    } catch (_error) {
+      // Manifest okunamazsa dosya sunulur; cihaz magic header ve TLS kontrolunu yine yapar.
+    }
+  }
+
   return res.sendFile(resolved, {
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      'Cache-Control': 'no-store',
-    },
+    headers,
   });
 });
 
@@ -3300,6 +3551,9 @@ app.patch('/me', authRequired, async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
+    if (isActive === false) {
+      await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');
+    }
     return res.status(200).json({ user: mapUserRow(updated) });
   } catch (error) {
     return handleUserMutationError(error, res, 'Profil guncellenemedi.');
@@ -3310,6 +3564,7 @@ app.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
   const role = parseRole(String(req.query.role || '').trim());
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
+  const search = String(req.query.search || '').trim();
 
   if (!role) {
     return res.status(400).json({ error: 'Gecersiz rol.' });
@@ -3317,12 +3572,28 @@ app.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
 
   try {
     const extraFilter = role === 'site_manager' ? ` AND approval_status <> 'pending'` : '';
+    const searchFilter = search
+      ? ` AND (
+          full_name ILIKE $2
+          OR email ILIKE $2
+          OR login_name ILIKE $2
+          OR user_code::TEXT = $3
+        )`
+      : '';
+    const countParams = search
+      ? [role, `%${search}%`, search]
+      : [role];
     const countResult = await pool.query(
-      `SELECT COUNT(*)::INTEGER AS total FROM users WHERE role = $1${extraFilter}`,
-      [role],
+      `SELECT COUNT(*)::INTEGER AS total FROM users WHERE role = $1${extraFilter}${searchFilter}`,
+      countParams,
     );
     const total = countResult.rows[0]?.total ?? 0;
     const offset = (page - 1) * pageSize;
+    const listParams = search
+      ? [role, `%${search}%`, search, pageSize, offset]
+      : [role, pageSize, offset];
+    const limitParam = search ? 4 : 2;
+    const offsetParam = search ? 5 : 3;
     const usersResult = await pool.query(
       `
       SELECT
@@ -3337,11 +3608,11 @@ app.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
         phone_number,
         created_at
       FROM users
-      WHERE role = $1${extraFilter}
+      WHERE role = $1${extraFilter}${searchFilter}
       ORDER BY created_at DESC
-      LIMIT $2 OFFSET $3
+      LIMIT $${limitParam} OFFSET $${offsetParam}
       `,
-      [role, pageSize, offset],
+      listParams,
     );
 
     return res.status(200).json({
@@ -3474,6 +3745,9 @@ app.patch(
       if (!updated) {
         return res.status(404).json({ error: 'Kullanici bulunamadi.' });
       }
+      if (isActive === false) {
+        await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');
+      }
       return res.status(200).json({ user: mapUserRow(updated) });
     } catch (error) {
       return handleUserMutationError(error, res, 'Aktivasyon guncellenemedi.');
@@ -3496,6 +3770,15 @@ app.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) 
   }
 
   try {
+    const affectedSiteCodes = await affectedSiteCodesForUser(targetCode);
+    const directDeviceResult = await pool.query(
+      `
+        SELECT id
+        FROM devices
+        WHERE assigned_user_code = $1
+      `,
+      [targetCode],
+    );
     const result = await pool.query(
       `DELETE FROM users WHERE user_code = $1`,
       [targetCode],
@@ -3503,6 +3786,11 @@ app.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
+    const deviceIds = directDeviceResult.rows.map((row) => Number(row.id));
+    for (const siteCode of affectedSiteCodes) {
+      deviceIds.push(...await deviceIdsForSite(siteCode));
+    }
+    await rotateLocalControlTokensForDeviceIds(deviceIds, 'user_deleted');
     return res.status(204).send();
   } catch (_error) {
     return res.status(500).json({ error: 'Kullanici silinemedi.' });
@@ -3979,6 +4267,10 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
       phoneNumber,
       isActive,
     });
+    await rotateLocalControlTokensForSite(
+      Number(apartment.site_code),
+      'apartment_resident_changed',
+    );
     return res.status(200).json({ apartment: mapApartmentRow(apartment) });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
@@ -4777,9 +5069,18 @@ app.get('/app/doors/:id/status', authRequired, async (req, res) => {
       return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });
     }
 
+    const deviceStatus = getDeviceRuntimeStatus(door.assigned_device_uid);
+    const localControl = await localDoorControlForStatus({
+      deviceUid: door.assigned_device_uid,
+      currentToken: door.local_control_token,
+      status: deviceStatus,
+    });
     return res.status(200).json({
       door: mapDoorRow(door),
-      device_status: getDeviceRuntimeStatus(door.assigned_device_uid),
+      device_status: {
+        ...deviceStatus,
+        local_control: localControl,
+      },
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Kapi durumu alinamadi.' });
@@ -4819,10 +5120,19 @@ app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req
       device_uid: door.assigned_device_uid,
     });
 
+    const deviceStatus = getDeviceRuntimeStatus(door.assigned_device_uid);
+    const localControl = await localDoorControlForStatus({
+      deviceUid: door.assigned_device_uid,
+      currentToken: door.local_control_token,
+      status: deviceStatus,
+    });
     return res.status(202).json({
       ok: true,
       door: mapDoorRow(door),
-      device_status: getDeviceRuntimeStatus(door.assigned_device_uid),
+      device_status: {
+        ...deviceStatus,
+        local_control: localControl,
+      },
     });
   } catch (error) {
     if (error?.code === 'MQTT_BRIDGE_NOT_CONNECTED') {

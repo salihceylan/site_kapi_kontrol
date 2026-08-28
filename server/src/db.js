@@ -245,6 +245,10 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS mqtt_password TEXT
     `);
     await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS local_control_token TEXT
+    `);
+    await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique
       ON devices(mqtt_username)
       WHERE mqtt_username IS NOT NULL
@@ -275,6 +279,18 @@ export async function ensureDbSchema() {
       )
     `);
     await client.query(`
+      ALTER TABLE device_runtime_status
+      ADD COLUMN IF NOT EXISTS local_ip TEXT
+    `);
+    await client.query(`
+      ALTER TABLE device_runtime_status
+      ADD COLUMN IF NOT EXISTS local_control_port INTEGER
+    `);
+    await client.query(`
+      ALTER TABLE device_runtime_status
+      ADD COLUMN IF NOT EXISTS local_control_available BOOLEAN
+    `);
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_device_runtime_status_last_seen
       ON device_runtime_status(last_seen_at DESC)
     `);
@@ -286,6 +302,8 @@ export async function ensureDbSchema() {
         requested_count INTEGER NOT NULL DEFAULT 0,
         sent_count INTEGER NOT NULL DEFAULT 0,
         failed_count INTEGER NOT NULL DEFAULT 0,
+        installed_count INTEGER NOT NULL DEFAULT 0,
+        install_failed_count INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'created',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         completed_at TIMESTAMPTZ
@@ -296,10 +314,38 @@ export async function ensureDbSchema() {
         job_id BIGINT NOT NULL REFERENCES ota_update_jobs(id) ON DELETE CASCADE,
         device_uid TEXT NOT NULL REFERENCES devices(device_uid) ON DELETE CASCADE,
         publish_status TEXT NOT NULL DEFAULT 'pending',
+        device_event_status TEXT,
+        device_event TEXT,
+        device_event_detail TEXT,
+        device_event_at TIMESTAMPTZ,
         error_message TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (job_id, device_uid)
       )
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_jobs
+      ADD COLUMN IF NOT EXISTS installed_count INTEGER NOT NULL DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_jobs
+      ADD COLUMN IF NOT EXISTS install_failed_count INTEGER NOT NULL DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_job_devices
+      ADD COLUMN IF NOT EXISTS device_event_status TEXT
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_job_devices
+      ADD COLUMN IF NOT EXISTS device_event TEXT
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_job_devices
+      ADD COLUMN IF NOT EXISTS device_event_detail TEXT
+    `);
+    await client.query(`
+      ALTER TABLE ota_update_job_devices
+      ADD COLUMN IF NOT EXISTS device_event_at TIMESTAMPTZ
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_ota_update_jobs_created_at

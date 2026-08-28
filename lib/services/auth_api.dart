@@ -71,12 +71,15 @@ class AuthApi {
     required UserRole role,
     required int page,
     required int pageSize,
+    String? search,
   }) async {
     final uri = Uri.parse('$baseUrl/admin/users').replace(
       queryParameters: {
         'role': role.apiValue,
         'page': '$page',
         'page_size': '$pageSize',
+        if (search != null && search.trim().isNotEmpty)
+          'search': search.trim(),
       },
     );
 

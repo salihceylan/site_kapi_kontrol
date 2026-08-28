@@ -43,6 +43,24 @@ class _MyAppState extends State<MyApp> {
     return AnimatedBuilder(
       animation: Listenable.merge([_authService, _networkService]),
       builder: (context, _) {
+        final authReady = _authService.isReady;
+        final networkReady = _networkService.isReady;
+        Widget home;
+        if (!authReady) {
+          home = const Scaffold(body: Center(child: CircularProgressIndicator()));
+        } else if (_authService.isLoggedIn) {
+          home = HomePage(authService: _authService);
+        } else if (!networkReady) {
+          home = const Scaffold(body: Center(child: CircularProgressIndicator()));
+        } else if (!_networkService.hasInternet) {
+          home = NoInternetPage(
+            isChecking: _networkService.isChecking,
+            onRetry: _networkService.refresh,
+          );
+        } else {
+          home = LoginPage(authService: _authService);
+        }
+
         return MaterialApp(
           title: 'Site Kapi Kontrol',
           debugShowCheckedModeBanner: false,
@@ -53,16 +71,7 @@ class _MyAppState extends State<MyApp> {
               child: child,
             );
           },
-          home: (!_authService.isReady || !_networkService.isReady)
-              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-              : !_networkService.hasInternet
-              ? NoInternetPage(
-                  isChecking: _networkService.isChecking,
-                  onRetry: _networkService.refresh,
-                )
-              : _authService.isLoggedIn
-              ? HomePage(authService: _authService)
-              : LoginPage(authService: _authService),
+          home: home,
         );
       },
     );

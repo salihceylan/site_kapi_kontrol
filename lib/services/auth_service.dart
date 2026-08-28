@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
+import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -16,15 +17,20 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
+import 'package:site_kapi_kontrol/services/local_door_service.dart';
 
 class AuthService extends ChangeNotifier {
   AuthService({required this.api});
 
   static const String _storageKey = 'auth_session';
+  static const String _localDoorCacheKey = 'local_door_cache';
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   final AuthApi api;
+  final LocalDoorService _localDoorService = LocalDoorService();
   UserSession? _session;
+  final Map<String, LocalDoorAccess> _localDoorCache =
+      <String, LocalDoorAccess>{};
   bool _isReady = false;
   bool _isDisposed = false;
 
@@ -52,6 +58,7 @@ class AuthService extends ChangeNotifier {
       }
     }
 
+    await _loadLocalDoorCache();
     _isReady = true;
     _notifySafely();
   }
@@ -102,7 +109,9 @@ class AuthService extends ChangeNotifier {
     _session = null;
     final prefs = await SharedPreferences.getInstance();
     await _secureStorage.delete(key: _storageKey);
+    await _secureStorage.delete(key: _localDoorCacheKey);
     await prefs.remove(_storageKey);
+    _localDoorCache.clear();
     _notifySafely();
   }
 
@@ -110,6 +119,7 @@ class AuthService extends ChangeNotifier {
     required UserRole role,
     required int page,
     int pageSize = 10,
+    String? search,
   }) async {
     final active = _requireSuperUserSession();
     return api.listManagedUsers(
@@ -117,6 +127,7 @@ class AuthService extends ChangeNotifier {
       role: role,
       page: page,
       pageSize: pageSize,
+      search: search,
     );
   }
 
@@ -584,6 +595,7 @@ class AuthService extends ChangeNotifier {
         token: active.token,
         doorId: doorId,
       );
+      await _cacheLocalDoorAccess(status);
       return (status, null);
     } on ApiException catch (e) {
       return (null, e.message);
@@ -592,7 +604,10 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<(DoorRuntimeStatus?, String?)> openDoor({required int doorId}) async {
+  Future<(DoorRuntimeStatus?, String?)> openDoor({
+    required int doorId,
+    DoorRecord? door,
+  }) async {
     final active = session;
     if (active == null) {
       return (null, 'Oturum bulunamadi.');
@@ -600,12 +615,34 @@ class AuthService extends ChangeNotifier {
 
     try {
       final status = await api.openDoor(token: active.token, doorId: doorId);
+      await _cacheLocalDoorAccess(status);
       return (status, null);
     } on ApiException catch (e) {
+      if (door == null) {
+        return (null, e.message);
+      }
+      final local = await _tryOpenDoorLocally(door);
+      if (local != null) {
+        return local;
+      }
       return (null, e.message);
     } catch (_) {
+      if (door != null) {
+        final local = await _tryOpenDoorLocally(door);
+        if (local != null) {
+          return local;
+        }
+      }
       return (null, 'Sunucuya baglanilamadi.');
     }
+  }
+
+  bool canTryLocalDoorOpen(DoorRecord door) {
+    final uid = door.assignedDeviceUid?.trim().toUpperCase();
+    if (uid == null || uid.isEmpty) {
+      return false;
+    }
+    return _localDoorCache[uid]?.isUsable == true;
   }
 
   Future<(List<DoorRecord>?, String?)> listMyDoors() async {
@@ -745,6 +782,106 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  Future<void> _loadLocalDoorCache() async {
+    _localDoorCache.clear();
+    final raw = await _secureStorage.read(key: _localDoorCacheKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      for (final entry in decoded.entries) {
+        final value = entry.value;
+        if (value is! Map<String, dynamic>) {
+          continue;
+        }
+        final access = LocalDoorAccess.fromJson(value);
+        if (access.isUsable) {
+          _localDoorCache[access.deviceUid.toUpperCase()] = access;
+        }
+      }
+    } catch (_) {
+      await _secureStorage.delete(key: _localDoorCacheKey);
+    }
+  }
+
+  Future<void> _persistLocalDoorCache() async {
+    final data = _localDoorCache.map(
+      (key, value) => MapEntry(key, value.toJson()),
+    );
+    await _secureStorage.write(
+      key: _localDoorCacheKey,
+      value: jsonEncode(data),
+    );
+  }
+
+  Future<void> _cacheLocalDoorAccess(DoorRuntimeStatus status) async {
+    final uid = status.deviceUid.trim().toUpperCase();
+    final token = status.localControlToken?.trim() ?? '';
+    if (uid.isEmpty || token.isEmpty) {
+      return;
+    }
+
+    _localDoorCache[uid] = LocalDoorAccess(
+      deviceUid: uid,
+      token: token,
+      ip: status.localIp,
+      port: status.localControlPort ?? 8765,
+      updatedAt: DateTime.now(),
+    );
+    await _persistLocalDoorCache();
+  }
+
+  Future<(DoorRuntimeStatus?, String?)?> _tryOpenDoorLocally(
+    DoorRecord door,
+  ) async {
+    final uid = door.assignedDeviceUid?.trim().toUpperCase();
+    if (uid == null || uid.isEmpty) {
+      return null;
+    }
+
+    final access = _localDoorCache[uid];
+    if (access == null || !access.isUsable) {
+      return null;
+    }
+
+    final result = await _localDoorService.openDoor(access);
+    if (!result.ok) {
+      return (null, result.message);
+    }
+
+    final updatedAccess = LocalDoorAccess(
+      deviceUid: access.deviceUid,
+      token: access.token,
+      ip: result.ip ?? access.ip,
+      port: access.port,
+      updatedAt: DateTime.now(),
+    );
+    _localDoorCache[uid] = updatedAccess;
+    await _persistLocalDoorCache();
+
+    return (
+      DoorRuntimeStatus(
+        door: door,
+        deviceUid: uid,
+        mqttBridgeConnected: false,
+        mqttConnected: false,
+        doorLocked: false,
+        firmwareVersion: null,
+        otaStatus: 'yerel komut',
+        wifiRssi: null,
+        wifiSignalPercent: null,
+        localIp: updatedAccess.ip,
+        localControlPort: updatedAccess.port,
+        localControlToken: updatedAccess.token,
+        localControlAvailable: true,
+        lastEvent: 'local_pulse_started',
+        lastSeenAt: DateTime.now(),
+      ),
+      null,
+    );
+  }
+
   void _notifySafely() {
     if (_isDisposed) {
       return;
@@ -755,6 +892,7 @@ class AuthService extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _localDoorService.dispose();
     super.dispose();
   }
 }

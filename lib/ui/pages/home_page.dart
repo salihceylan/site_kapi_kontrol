@@ -1184,6 +1184,7 @@ class _HomePageState extends State<HomePage> {
     final result = await showDialog<_SiteFormResult>(
       context: context,
       builder: (dialogContext) => _SiteDialog(
+        authService: widget.authService,
         site: site,
         structure: site != null && _selectedSiteStructure?.site.id == site.id
             ? _selectedSiteStructure
@@ -1608,7 +1609,10 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() => _isOpeningDoor = true);
-    final (status, error) = await widget.authService.openDoor(doorId: door.id);
+    final (status, error) = await widget.authService.openDoor(
+      doorId: door.id,
+      door: door,
+    );
     if (!mounted) {
       return;
     }
@@ -1981,8 +1985,12 @@ class _HomePageState extends State<HomePage> {
           ? '-'
           : '%${runtimeStatus!.wifiSignalPercent}'
                 '${runtimeStatus.wifiRssi == null ? '' : ' (${runtimeStatus.wifiRssi} dBm)'}';
+      final localCommandAvailable = widget.authService.canTryLocalDoorOpen(
+        selectedDoor,
+      );
       final commandEnabled =
-          runtimeStatus?.commandEnabled == true && !_isOpeningDoor;
+          (runtimeStatus?.commandEnabled == true || localCommandAvailable) &&
+          !_isOpeningDoor;
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1994,6 +2002,10 @@ class _HomePageState extends State<HomePage> {
           Text('Cihaz Baglantisi: $deviceOnlineText'),
           const SizedBox(height: 6),
           Text('Kapi Durumu: $stateText'),
+          const SizedBox(height: 6),
+          Text(
+            'Yerel Ag Kontrolu: ${localCommandAvailable ? 'Hazir' : 'Hazir degil'}',
+          ),
           const SizedBox(height: 6),
           Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
           const SizedBox(height: 6),
@@ -4048,8 +4060,13 @@ class _SubscriptionRequestCard extends StatelessWidget {
 }
 
 class _SiteDialog extends StatefulWidget {
-  const _SiteDialog({required this.site, this.structure});
+  const _SiteDialog({
+    required this.authService,
+    required this.site,
+    this.structure,
+  });
 
+  final AuthService authService;
   final SiteRecord? site;
   final SiteStructureRecord? structure;
 
@@ -4065,7 +4082,6 @@ class _SiteDialogState extends State<_SiteDialog> {
   late final TextEditingController _districtController;
   late final TextEditingController _blockCountController;
   late final TextEditingController _doorCountController;
-  late final TextEditingController _managerUserCodeController;
   late final TextEditingController _managerFullNameController;
   late final TextEditingController _managerEmailController;
   late final TextEditingController _managerPhoneController;
@@ -4073,6 +4089,10 @@ class _SiteDialogState extends State<_SiteDialog> {
   final List<TextEditingController> _blockApartmentControllers =
       <TextEditingController>[];
   late bool _createNewManager;
+  List<ManagedUserAccount> _siteManagers = <ManagedUserAccount>[];
+  bool _isLoadingManagers = true;
+  int? _selectedManagerUserCode;
+  ManagedUserAccount? _selectedManager;
 
   bool get _isEditing => widget.site != null;
 
@@ -4097,19 +4117,48 @@ class _SiteDialogState extends State<_SiteDialog> {
     _doorCountController = TextEditingController(
       text: '${widget.site?.doorCount ?? 1}',
     );
-    _managerUserCodeController = TextEditingController(
-      text: widget.site?.managerUserCode?.toString() ?? '',
-    );
+    _selectedManagerUserCode = widget.site?.managerUserCode;
     _managerFullNameController = TextEditingController();
     _managerEmailController = TextEditingController();
     _managerPhoneController = TextEditingController();
     _managerPasswordController = TextEditingController();
-    _createNewManager = !_isEditing;
+    _createNewManager = false;
     _syncBlockApartmentControllers(
       initialBlockApartmentCounts.length,
       seedCounts: initialBlockApartmentCounts,
     );
     _blockCountController.addListener(_handleBlockCountChanged);
+    _loadManagers();
+  }
+
+  Future<void> _loadManagers() async {
+    try {
+      final page = await widget.authService.listManagedUsers(
+        role: UserRole.siteManager,
+        page: 1,
+        pageSize: 20,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _siteManagers = page.users;
+        for (final manager in page.users) {
+          if (manager.id == _selectedManagerUserCode) {
+            _selectedManager = manager;
+            break;
+          }
+        }
+        _isLoadingManagers = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingManagers = false;
+      });
+    }
   }
 
   @override
@@ -4121,7 +4170,6 @@ class _SiteDialogState extends State<_SiteDialog> {
     _blockCountController.removeListener(_handleBlockCountChanged);
     _blockCountController.dispose();
     _doorCountController.dispose();
-    _managerUserCodeController.dispose();
     _managerFullNameController.dispose();
     _managerEmailController.dispose();
     _managerPhoneController.dispose();
@@ -4130,14 +4178,6 @@ class _SiteDialogState extends State<_SiteDialog> {
       controller.dispose();
     }
     super.dispose();
-  }
-
-  int? _parseOptionalInt(String raw) {
-    final text = raw.trim();
-    if (text.isEmpty) {
-      return null;
-    }
-    return int.tryParse(text);
   }
 
   void _handleBlockCountChanged() {
@@ -4179,6 +4219,48 @@ class _SiteDialogState extends State<_SiteDialog> {
       .map((controller) => int.tryParse(controller.text.trim()) ?? 0)
       .toList();
 
+  String get _selectedManagerTitle {
+    if (_selectedManagerUserCode == null) {
+      return 'Yonetici atanmamis';
+    }
+    return _selectedManager?.fullName ??
+        widget.site?.managerName ??
+        'Mevcut yonetici';
+  }
+
+  String get _selectedManagerSubtitle {
+    if (_selectedManagerUserCode == null) {
+      return 'Bu siteye henuz site yoneticisi bagli degil.';
+    }
+    final manager = _selectedManager;
+    if (manager != null) {
+      return '${manager.email} - Kod: ${manager.id}';
+    }
+    return 'Kod: $_selectedManagerUserCode';
+  }
+
+  Future<void> _selectExistingManager() async {
+    final result = await Navigator.of(context).push<_SiteManagerPickerResult>(
+      MaterialPageRoute(
+        builder: (_) => _SiteManagerPickerPage(
+          authService: widget.authService,
+          selectedUserCode: _selectedManagerUserCode,
+        ),
+      ),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    setState(() {
+      _selectedManagerUserCode = result.manager?.id;
+      _selectedManager = result.manager;
+      if (result.manager != null &&
+          !_siteManagers.any((manager) => manager.id == result.manager!.id)) {
+        _siteManagers = <ManagedUserAccount>[result.manager!, ..._siteManagers];
+      }
+    });
+  }
+
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -4191,9 +4273,7 @@ class _SiteDialogState extends State<_SiteDialog> {
         district: _districtController.text.trim(),
         blockApartmentCounts: _blockApartmentCounts,
         doorCount: int.parse(_doorCountController.text.trim()),
-        managerUserCode: _createNewManager
-            ? null
-            : _parseOptionalInt(_managerUserCodeController.text),
+        managerUserCode: _createNewManager ? null : _selectedManagerUserCode,
         managerUser: _createNewManager
             ? {
                 'full_name': _managerFullNameController.text.trim(),
@@ -4333,90 +4413,210 @@ class _SiteDialogState extends State<_SiteDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                if (!_isEditing) ...[
-                  SwitchListTile.adaptive(
-                    value: _createNewManager,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Yeni site yoneticisi olustur'),
-                    subtitle: Text(
-                      _createNewManager
-                          ? 'Site kaydedilirken yonetici kullanicisi da acilir ve siteye baglanir.'
-                          : 'Daha once olusturulmus yoneticinin kullanici kodunu girin.',
-                    ),
-                    onChanged: (value) =>
-                        setState(() => _createNewManager = value),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFB8D7F7)),
                   ),
-                  const SizedBox(height: 12),
-                ],
-                if (_createNewManager) ...[
-                  TextFormField(
-                    controller: _managerFullNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Site Yoneticisi Ad Soyad',
-                    ),
-                    validator: (value) => (value ?? '').trim().length < 3
-                        ? 'Ad Soyad en az 3 karakter olmali.'
-                        : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.manage_accounts_outlined,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Site Yoneticisi',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (!_isEditing) ...[
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment<bool>(
+                              value: false,
+                              label: Text('Listeden Sec'),
+                              icon: Icon(Icons.people_outline, size: 16),
+                            ),
+                            ButtonSegment<bool>(
+                              value: true,
+                              label: Text('Yeni Olustur'),
+                              icon: Icon(Icons.person_add_outlined, size: 16),
+                            ),
+                          ],
+                          selected: {_createNewManager},
+                          onSelectionChanged: (set) =>
+                              setState(() => _createNewManager = set.first),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (!_createNewManager) ...[
+                        if (_isLoadingManagers)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 10),
+                                Text('Yoneticiler yukleniyor...'),
+                              ],
+                            ),
+                          )
+                        else
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFB8D7F7),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.person_outline,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _selectedManagerTitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textDark,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _selectedManagerSubtitle,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: AppColors.textMuted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: _selectExistingManager,
+                                icon: const Icon(Icons.search),
+                                label: Text(
+                                  _selectedManagerUserCode == null
+                                      ? 'Site Yoneticisi Sec'
+                                      : 'Site Yoneticisini Degistir',
+                                ),
+                              ),
+                              if (_selectedManagerUserCode != null)
+                                TextButton.icon(
+                                  onPressed: () => setState(() {
+                                    _selectedManagerUserCode = null;
+                                    _selectedManager = null;
+                                  }),
+                                  icon: const Icon(
+                                    Icons.link_off_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Yonetici atamasini kaldir'),
+                                ),
+                            ],
+                          ),
+                        if (!_isLoadingManagers && _siteManagers.isEmpty) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Kayitli site yoneticisi bulunamadi. Bu ekranda "Yeni Olustur" secenegiyle yeni yonetici acabilirsiniz.',
+                            style: TextStyle(color: Colors.orange, fontSize: 12),
+                          ),
+                        ],
+                      ] else ...[
+                        TextFormField(
+                          controller: _managerFullNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Site Yoneticisi Ad Soyad',
+                          ),
+                          validator: (value) => (value ?? '').trim().length < 3
+                              ? 'Ad Soyad en az 3 karakter olmali.'
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _managerEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Site Yoneticisi E-posta',
+                          ),
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            return text.isEmpty || !text.contains('@')
+                                ? 'Gecerli bir e-posta girin.'
+                                : null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _managerPhoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: const InputDecoration(
+                            labelText: 'Site Yoneticisi Telefon (opsiyonel)',
+                          ),
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isEmpty) {
+                              return null;
+                            }
+                            return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
+                                ? null
+                                : 'Gecerli bir telefon numarasi girin.';
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _managerPasswordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Site Yoneticisi Sifre',
+                          ),
+                          validator: (value) => (value ?? '').trim().length < 6
+                              ? 'Sifre en az 6 karakter olmali.'
+                              : null,
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _managerEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Site Yoneticisi E-posta',
-                    ),
-                    validator: (value) {
-                      final text = (value ?? '').trim();
-                      return text.isEmpty || !text.contains('@')
-                          ? 'Gecerli bir e-posta girin.'
-                          : null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _managerPhoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Site Yoneticisi Telefon (opsiyonel)',
-                    ),
-                    validator: (value) {
-                      final text = (value ?? '').trim();
-                      if (text.isEmpty) {
-                        return null;
-                      }
-                      return RegExp(r'^\+?[0-9()\-\s]{10,20}$').hasMatch(text)
-                          ? null
-                          : 'Gecerli bir telefon numarasi girin.';
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _managerPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Site Yoneticisi Sifre',
-                    ),
-                    validator: (value) => (value ?? '').trim().length < 6
-                        ? 'Sifre en az 6 karakter olmali.'
-                        : null,
-                  ),
-                ] else
-                  TextFormField(
-                    controller: _managerUserCodeController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Yonetici Kullanici Kodu (opsiyonel)',
-                    ),
-                    validator: (value) {
-                      final text = (value ?? '').trim();
-                      if (text.isEmpty) {
-                        return null;
-                      }
-                      return int.tryParse(text) == null
-                          ? 'Yonetici kodu sayisal olmali.'
-                          : null;
-                    },
-                  ),
+                ),
               ],
             ),
           ),
@@ -4429,6 +4629,260 @@ class _SiteDialogState extends State<_SiteDialog> {
         ),
         ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
       ],
+    );
+  }
+}
+
+class _SiteManagerPickerResult {
+  const _SiteManagerPickerResult({required this.manager});
+
+  final ManagedUserAccount? manager;
+}
+
+class _SiteManagerPickerPage extends StatefulWidget {
+  const _SiteManagerPickerPage({
+    required this.authService,
+    required this.selectedUserCode,
+  });
+
+  final AuthService authService;
+  final int? selectedUserCode;
+
+  @override
+  State<_SiteManagerPickerPage> createState() => _SiteManagerPickerPageState();
+}
+
+class _SiteManagerPickerPageState extends State<_SiteManagerPickerPage> {
+  static const int _pageSize = 20;
+
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
+  List<ManagedUserAccount> _managers = <ManagedUserAccount>[];
+  int _page = 1;
+  int _total = 0;
+  bool _isLoading = false;
+  bool _isLoadingMore = false;
+  String? _error;
+
+  bool get _hasMore => _managers.length < _total;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+    _loadManagers(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleSearchChanged(String value) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _loadManagers(reset: true);
+    });
+  }
+
+  void _handleScroll() {
+    if (!_hasMore || _isLoading || _isLoadingMore) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 180) {
+      _loadManagers();
+    }
+  }
+
+  Future<void> _loadManagers({bool reset = false}) async {
+    if (_isLoading || _isLoadingMore) {
+      return;
+    }
+    final nextPage = reset ? 1 : _page + 1;
+    setState(() {
+      if (reset) {
+        _isLoading = true;
+        _error = null;
+      } else {
+        _isLoadingMore = true;
+      }
+    });
+
+    try {
+      final result = await widget.authService.listManagedUsers(
+        role: UserRole.siteManager,
+        page: nextPage,
+        pageSize: _pageSize,
+        search: _searchController.text,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _page = result.page;
+        _total = result.total;
+        _managers = reset
+            ? result.users
+            : <ManagedUserAccount>[..._managers, ...result.users];
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = e.message;
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = 'Site yoneticileri alinamadi.';
+        _isLoading = false;
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  void _select(ManagedUserAccount? manager) {
+    Navigator.of(context).pop(_SiteManagerPickerResult(manager: manager));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Site Yoneticisi Sec')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  labelText: 'Ad, e-posta veya kod ile ara',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Aramayi temizle',
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            _searchController.clear();
+                            _loadManagers(reset: true);
+                          },
+                        ),
+                ),
+                onChanged: _handleSearchChanged,
+                onSubmitted: (_) => _loadManagers(reset: true),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                onPressed: () => _select(null),
+                icon: const Icon(Icons.link_off_outlined),
+                label: const Text('Yonetici atamadan devam et'),
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => _loadManagers(reset: true),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildManagerList(accent),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManagerList(Color accent) {
+    if (_error != null) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(_error!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () => _loadManagers(reset: true),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Tekrar Dene'),
+          ),
+        ],
+      );
+    }
+
+    if (_managers.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: const [Text('Eslesen site yoneticisi bulunamadi.')],
+      );
+    }
+
+    return ListView.separated(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: _managers.length + (_isLoadingMore ? 1 : 0),
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        if (index >= _managers.length) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final manager = _managers[index];
+        final selected = manager.id == widget.selectedUserCode;
+        return ListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: selected ? accent : const Color(0xFFD6E8F8),
+            ),
+          ),
+          tileColor: selected ? accent.withValues(alpha: 0.08) : Colors.white,
+          leading: CircleAvatar(
+            backgroundColor: accent.withValues(alpha: 0.12),
+            foregroundColor: accent,
+            child: Text(
+              manager.fullName.isEmpty ? '?' : manager.fullName[0].toUpperCase(),
+            ),
+          ),
+          title: Text(
+            manager.fullName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            '${manager.email}\nKod: ${manager.id}${manager.isActive ? '' : ' - Pasif'}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          isThreeLine: true,
+          trailing: selected
+              ? Icon(Icons.check_circle, color: accent)
+              : const Icon(Icons.chevron_right),
+          onTap: () => _select(manager),
+        );
+      },
     );
   }
 }

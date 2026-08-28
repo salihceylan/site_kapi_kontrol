@@ -7,6 +7,7 @@
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
+#include "yerel_kapi_kontrol.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
@@ -99,6 +100,10 @@ void seriDurumYazdir() {
   Serial.println(mqttAktifPort());
   Serial.print("Role GPIO: ");
   Serial.println(ROLE_PIN);
+  Serial.print("Yerel kapi kontrol: ");
+  Serial.println(yerelKapiKontrolAktifMi() ? "aktif" : "pasif");
+  Serial.print("Yerel kapi kontrol port: ");
+  Serial.println(YEREL_KAPI_KONTROL_PORT);
   Serial.print("Firmware surumu: ");
   Serial.println(OTA_CURRENT_VERSION);
   Serial.print("OTA durum: ");
@@ -123,6 +128,7 @@ void setup() {
 void loop() {
   seriKomutKontrol();
   wifiLoop();
+  yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
   if (roleLoop()) {

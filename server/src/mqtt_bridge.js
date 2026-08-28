@@ -52,6 +52,9 @@ function ensureStatus(deviceUid) {
     ota_last_version: null,
     wifi_rssi: null,
     wifi_signal_percent: null,
+    local_ip: null,
+    local_control_port: null,
+    local_control_available: null,
     last_event: null,
     last_event_detail: null,
     last_seen_at: null,
@@ -82,13 +85,16 @@ async function persistRuntimeStatus(status) {
           ota_last_version,
           wifi_rssi,
           wifi_signal_percent,
+          local_ip,
+          local_control_port,
+          local_control_available,
           last_event,
           last_event_detail,
           last_payload_at,
           last_seen_at,
           updated_at
         )
-        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
         WHERE EXISTS (
           SELECT 1 FROM devices WHERE device_uid = $1
         )
@@ -100,6 +106,9 @@ async function persistRuntimeStatus(status) {
           ota_last_version = COALESCE(EXCLUDED.ota_last_version, device_runtime_status.ota_last_version),
           wifi_rssi = COALESCE(EXCLUDED.wifi_rssi, device_runtime_status.wifi_rssi),
           wifi_signal_percent = COALESCE(EXCLUDED.wifi_signal_percent, device_runtime_status.wifi_signal_percent),
+          local_ip = COALESCE(EXCLUDED.local_ip, device_runtime_status.local_ip),
+          local_control_port = COALESCE(EXCLUDED.local_control_port, device_runtime_status.local_control_port),
+          local_control_available = COALESCE(EXCLUDED.local_control_available, device_runtime_status.local_control_available),
           last_event = COALESCE(EXCLUDED.last_event, device_runtime_status.last_event),
           last_event_detail = COALESCE(EXCLUDED.last_event_detail, device_runtime_status.last_event_detail),
           last_payload_at = COALESCE(EXCLUDED.last_payload_at, device_runtime_status.last_payload_at),
@@ -115,6 +124,9 @@ async function persistRuntimeStatus(status) {
         status.ota_last_version,
         status.wifi_rssi,
         status.wifi_signal_percent,
+        status.local_ip,
+        status.local_control_port,
+        status.local_control_available,
         status.last_event,
         status.last_event_detail,
         status.last_payload_at,
@@ -123,6 +135,115 @@ async function persistRuntimeStatus(status) {
     );
   } catch (error) {
     lastBridgeError = `Device status DB yazilamadi: ${error.message}`;
+  }
+}
+
+function otaJobDeviceEventStatus(eventName) {
+  if (eventName === 'ota_success') {
+    return 'installed';
+  }
+  if (eventName === 'ota_failed' || eventName === 'ota_check_failed') {
+    return 'failed';
+  }
+  if (
+    eventName === 'ota_check_started' ||
+    eventName === 'ota_update_available'
+  ) {
+    return 'in_progress';
+  }
+  if (eventName === 'ota_up_to_date' || eventName === 'ota_no_updates') {
+    return 'already_current';
+  }
+  return null;
+}
+
+async function recordOtaJobDeviceEvent(deviceUid, eventName, detail) {
+  const eventStatus = otaJobDeviceEventStatus(eventName);
+  if (!eventStatus) {
+    return;
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        WITH latest AS (
+          SELECT ojd.job_id
+          FROM ota_update_job_devices ojd
+          INNER JOIN ota_update_jobs job ON job.id = ojd.job_id
+          WHERE ojd.device_uid = $1
+          ORDER BY job.created_at DESC
+          LIMIT 1
+        )
+        UPDATE ota_update_job_devices ojd
+        SET
+          device_event_status = $2,
+          device_event = $3,
+          device_event_detail = $4,
+          device_event_at = NOW(),
+          updated_at = NOW()
+        FROM latest
+        WHERE ojd.job_id = latest.job_id
+          AND ojd.device_uid = $1
+        RETURNING ojd.job_id
+      `,
+      [deviceUid, eventStatus, eventName, detail || null],
+    );
+    const jobId = result.rows[0]?.job_id;
+    if (!jobId) {
+      return;
+    }
+    await pool.query(
+      `
+        UPDATE ota_update_jobs
+        SET
+          installed_count = (
+            SELECT COUNT(*)::INTEGER
+            FROM ota_update_job_devices
+            WHERE job_id = $1 AND device_event_status = 'installed'
+          ),
+          install_failed_count = (
+            SELECT COUNT(*)::INTEGER
+            FROM ota_update_job_devices
+            WHERE job_id = $1 AND device_event_status = 'failed'
+          )
+        WHERE id = $1
+      `,
+      [jobId],
+    );
+  } catch (error) {
+    lastBridgeError = `OTA job event DB yazilamadi: ${error.message}`;
+  }
+}
+
+async function syncLocalControlConfigFromDb(deviceUid) {
+  if (!client || !client.connected) {
+    return;
+  }
+
+  const normalizedUid = normalizeDeviceTopicUid(deviceUid);
+  try {
+    const result = await pool.query(
+      `
+        SELECT local_control_token
+        FROM devices
+        WHERE device_uid = $1
+        LIMIT 1
+      `,
+      [normalizedUid],
+    );
+    const token = result.rows[0]?.local_control_token;
+    if (!token) {
+      return;
+    }
+    const payload = JSON.stringify({
+      action: 'local_control_config',
+      local_control_token: token,
+      requested_at: new Date().toISOString(),
+      reason: 'device_online_sync',
+    });
+    client.publish(`device/${normalizedUid}/cmd`, payload, { qos: 1, retain: false });
+  } catch (error) {
+    lastBridgeError = `Yerel kontrol token senkronu basarisiz: ${error.message}`;
   }
 }
 
@@ -143,6 +264,9 @@ function applyStatusMessage(topic, payload) {
       ? status.last_payload_at
       : status.last_seen_at;
     void persistRuntimeStatus(status);
+    if (status.mqtt_connected) {
+      void syncLocalControlConfigFromDb(status.device_uid);
+    }
     return;
   }
 
@@ -161,6 +285,11 @@ function applyStatusMessage(topic, payload) {
     }
     status.last_seen_at = status.last_payload_at;
     void persistRuntimeStatus(status);
+    void recordOtaJobDeviceEvent(
+      status.device_uid,
+      status.last_event,
+      status.last_event_detail,
+    );
     return;
   }
 
@@ -181,6 +310,11 @@ function applyStatusMessage(topic, payload) {
         : status.ota_last_version;
       status.wifi_rssi = optionalInteger(decoded.wifi_rssi);
       status.wifi_signal_percent = optionalInteger(decoded.wifi_signal_percent);
+      status.local_ip = decoded.local_ip ? String(decoded.local_ip) : status.local_ip;
+      status.local_control_port = optionalInteger(decoded.local_control_port);
+      if (typeof decoded.local_control_available === 'boolean') {
+        status.local_control_available = decoded.local_control_available;
+      }
     } catch (_error) {
       status.door_locked = null;
     }
@@ -290,6 +424,38 @@ export async function publishDoorPulse({
       resolve();
     });
   });
+}
+
+export async function publishLocalControlConfig({
+  deviceUid,
+  localControlToken,
+}) {
+  if (!client || !client.connected || !localControlToken) {
+    return false;
+  }
+
+  const normalizedUid = normalizeDeviceTopicUid(deviceUid);
+  const status = getDeviceRuntimeStatus(normalizedUid);
+  if (status.mqtt_connected !== true) {
+    return false;
+  }
+
+  const payload = JSON.stringify({
+    action: 'local_control_config',
+    local_control_token: localControlToken,
+    requested_at: new Date().toISOString(),
+  });
+
+  await new Promise((resolve, reject) => {
+    client.publish(`device/${normalizedUid}/cmd`, payload, { qos: 1, retain: false }, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+  return true;
 }
 
 export async function publishOtaCheckToDevices({

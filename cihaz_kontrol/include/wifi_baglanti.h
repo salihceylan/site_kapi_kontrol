@@ -19,6 +19,7 @@ inline constexpr char WIFI_PREF_MQTT_HOST[] = "mqtt_host";
 inline constexpr char WIFI_PREF_MQTT_PORT[] = "mqtt_port";
 inline constexpr char WIFI_PREF_MQTT_USER[] = "mqtt_user";
 inline constexpr char WIFI_PREF_MQTT_PASSWORD[] = "mqtt_pass";
+inline constexpr char WIFI_PREF_LOCAL_CONTROL_TOKEN[] = "local_token";
 
 inline constexpr char BLE_WIFI_SERVICE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f001";
 inline constexpr char BLE_WIFI_STATE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f002";
@@ -38,6 +39,7 @@ inline String gSavedMqttHost;
 inline uint16_t gSavedMqttPort = 0;
 inline String gSavedMqttUser;
 inline String gSavedMqttPassword;
+inline String gSavedLocalControlToken;
 inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
@@ -49,6 +51,7 @@ inline String gPendingMqttHost;
 inline uint16_t gPendingMqttPort = 0;
 inline String gPendingMqttUser;
 inline String gPendingMqttPassword;
+inline String gPendingLocalControlToken;
 inline String gBleNetworksPayload = R"({"networks":[]})";
 inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
@@ -97,6 +100,7 @@ inline void wifiLoadStoredCredentials() {
   gSavedMqttPort = static_cast<uint16_t>(gWifiPrefs.getUInt(WIFI_PREF_MQTT_PORT, 0));
   gSavedMqttUser = gWifiPrefs.getString(WIFI_PREF_MQTT_USER, "");
   gSavedMqttPassword = gWifiPrefs.getString(WIFI_PREF_MQTT_PASSWORD, "");
+  gSavedLocalControlToken = gWifiPrefs.getString(WIFI_PREF_LOCAL_CONTROL_TOKEN, "");
   gWifiConfigured = !gSavedWifiSsid.isEmpty();
 }
 
@@ -112,7 +116,8 @@ inline void wifiPersistMqttCredentials(
   const String& host,
   uint16_t port,
   const String& username,
-  const String& password
+  const String& password,
+  const String& localControlToken = ""
 ) {
   if (host.isEmpty() || port == 0 || username.isEmpty() || password.isEmpty()) {
     return;
@@ -126,6 +131,10 @@ inline void wifiPersistMqttCredentials(
   gSavedMqttPort = port;
   gSavedMqttUser = username;
   gSavedMqttPassword = password;
+  if (!localControlToken.isEmpty()) {
+    gWifiPrefs.putString(WIFI_PREF_LOCAL_CONTROL_TOKEN, localControlToken);
+    gSavedLocalControlToken = localControlToken;
+  }
 }
 
 inline void wifiForgetCredentials() {
@@ -154,6 +163,23 @@ inline String wifiMqttUser(const char* fallback) {
 
 inline String wifiMqttPassword(const char* fallback) {
   return gSavedMqttPassword.isEmpty() ? String(fallback) : gSavedMqttPassword;
+}
+
+inline bool wifiHasLocalControlToken() {
+  return !gSavedLocalControlToken.isEmpty();
+}
+
+inline String wifiLocalControlToken() {
+  return gSavedLocalControlToken;
+}
+
+inline void wifiPersistLocalControlToken(const String& token) {
+  if (token.isEmpty()) {
+    return;
+  }
+
+  gWifiPrefs.putString(WIFI_PREF_LOCAL_CONTROL_TOKEN, token);
+  gSavedLocalControlToken = token;
 }
 
 inline String wifiBuildStatePayload() {
@@ -317,6 +343,7 @@ inline void wifiApplyProvisioningRequest() {
   const uint16_t mqttPort = gPendingMqttPort;
   const String mqttUser = gPendingMqttUser;
   const String mqttPassword = gPendingMqttPassword;
+  const String localControlToken = gPendingLocalControlToken;
 
   if (ssid.isEmpty()) {
     wifiNotifyBleResult("error", "SSID zorunlu.");
@@ -324,7 +351,7 @@ inline void wifiApplyProvisioningRequest() {
   }
 
   wifiPersistCredentials(ssid, password);
-  wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword);
+  wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword, localControlToken);
   wifiNotifyBleResult("restarting", "WiFi ve MQTT bilgileri kaydedildi. Cihaz temiz baglanti icin yeniden baslatiliyor.");
   wifiNotifyBleState();
   delay(1500);
@@ -363,6 +390,7 @@ class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
     const uint16_t mqttPort = static_cast<uint16_t>(doc["mqtt_port"] | 0);
     const String mqttUser = String(doc["mqtt_username"] | "");
     const String mqttPassword = String(doc["mqtt_password"] | "");
+    const String localControlToken = String(doc["local_control_token"] | "");
     if (ssid.isEmpty()) {
       wifiNotifyBleResult("error", "SSID bilgisi eksik.");
       return;
@@ -383,6 +411,7 @@ class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
     gPendingMqttPort = mqttPort;
     gPendingMqttUser = mqttUser;
     gPendingMqttPassword = mqttPassword;
+    gPendingLocalControlToken = localControlToken;
     gPendingWifiProvision = true;
   }
 };
