@@ -3472,7 +3472,7 @@ class _DeviceActionTile extends StatelessWidget {
   }
 }
 
-class _ManagedUserCard extends StatelessWidget {
+class _ManagedUserCard extends StatefulWidget {
   const _ManagedUserCard({
     required this.user,
     required this.isSelf,
@@ -3488,87 +3488,169 @@ class _ManagedUserCard extends StatelessWidget {
   final ValueChanged<bool> onActivationChanged;
 
   @override
+  State<_ManagedUserCard> createState() => _ManagedUserCardState();
+}
+
+class _ManagedUserCardState extends State<_ManagedUserCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final user = widget.user;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: AppDecorations.infoCard,
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: user.isActive
+                  ? AppColors.primarySoft.withValues(alpha: 0.3)
+                  : Colors.grey.shade300,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x08000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                child: Text(
-                  user.fullName.trim().isEmpty
-                      ? '?'
-                      : user.fullName.trim()[0].toUpperCase(),
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      user.fullName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Kod: ${user.id}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Row(
                 children: [
-                  Text(
-                    user.isActive ? 'Aktif' : 'Pasif',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    child: Text(
+                      user.fullName.trim().isEmpty
+                          ? '?'
+                          : user.fullName.trim()[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                  activationBusy
-                      ? const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          user.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5,
+                            color: AppColors.textDark,
                           ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user.role.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  widget.activationBusy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Switch.adaptive(
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           value: user.isActive,
-                          onChanged: isSelf ? null : onActivationChanged,
+                          activeTrackColor: AppColors.primary,
+                          onChanged:
+                              widget.isSelf ? null : widget.onActivationChanged,
                         ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
                 ],
               ),
+              if (_expanded) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1),
+                ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      'Kod: ${user.id}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    if ((user.loginName ?? '').isNotEmpty)
+                      Text(
+                        'Kullanıcı: ${user.loginName}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    Text(
+                      'E-posta: ${user.email}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    if ((user.phoneNumber ?? '').isNotEmpty)
+                      Text(
+                        'Telefon: ${user.phoneNumber}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                    ),
+                    onPressed: widget.onTap,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Düzenle'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -3875,7 +3957,7 @@ class _SiteCardState extends State<_SiteCard> {
   }
 }
 
-class _ApartmentCard extends StatelessWidget {
+class _ApartmentCard extends StatefulWidget {
   const _ApartmentCard({
     required this.apartment,
     required this.busy,
@@ -3889,78 +3971,201 @@ class _ApartmentCard extends StatelessWidget {
   final VoidCallback? onSendCredentials;
 
   @override
+  State<_ApartmentCard> createState() => _ApartmentCardState();
+}
+
+class _ApartmentCardState extends State<_ApartmentCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final residentName = apartment.residentFullName ?? 'Atanmadi';
-    final loginName = apartment.residentLoginName ?? '-';
-    final pinCode = apartment.residentPinCode ?? '-';
+    final apartment = widget.apartment;
+    final hasResident = (apartment.residentFullName ?? '').trim().isNotEmpty;
     final active = apartment.residentIsActive ?? apartment.isActive;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: AppDecorations.infoCard,
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      apartment.label,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$residentName | Kullanici: $loginName | PIN: $pinCode',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasResident
+                  ? AppColors.primarySoft.withValues(alpha: 0.3)
+                  : Colors.orange.shade200,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x08000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
               ),
-              const SizedBox(width: 12),
-              busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: hasResident
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.home_outlined,
+                      color: hasResident
+                          ? AppColors.primary
+                          : Colors.orange.shade800,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (onSendCredentials != null)
-                          IconButton(
-                            tooltip: 'Giris bilgilerini mail gonder',
-                            onPressed: onSendCredentials,
-                            icon: const Icon(Icons.mail_outline),
+                        Text(
+                          apartment.label,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5,
+                            color: AppColors.textDark,
                           ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              active ? 'Aktif' : 'Pasif',
-                              style: TextStyle(
-                                color: active
-                                    ? Colors.green.shade700
-                                    : Colors.red.shade700,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (onTap != null) ...[
-                              const SizedBox(height: 4),
-                              const Icon(Icons.chevron_right),
-                            ],
-                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasResident
+                              ? 'Sakin: ${apartment.residentFullName}'
+                              : 'Daire Boş / Sakin Yok',
+                          style: TextStyle(
+                            color: hasResident
+                                ? AppColors.textMuted
+                                : Colors.orange.shade800,
+                            fontSize: 12,
+                            fontWeight: hasResident
+                                ? FontWeight.normal
+                                : FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? Colors.green.withValues(alpha: 0.12)
+                          : Colors.red.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      active ? 'Aktif' : 'Pasif',
+                      style: TextStyle(
+                        color: active
+                            ? Colors.green.shade800
+                            : Colors.red.shade800,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textMuted,
+                    size: 20,
+                  ),
+                ],
+              ),
+              if (_expanded) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(height: 1),
+                ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    if ((apartment.residentLoginName ?? '').isNotEmpty)
+                      Text(
+                        'Kullanıcı Adı: ${apartment.residentLoginName}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    if ((apartment.residentPinCode ?? '').isNotEmpty)
+                      Text(
+                        'PIN Kodu: ${apartment.residentPinCode}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    if ((apartment.residentEmail ?? '').isNotEmpty)
+                      Text(
+                        'E-posta: ${apartment.residentEmail}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    if ((apartment.residentPhoneNumber ?? '').isNotEmpty)
+                      Text(
+                        'Telefon: ${apartment.residentPhoneNumber}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (widget.onSendCredentials != null && hasResident)
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                        ),
+                        onPressed: widget.busy ? null : widget.onSendCredentials,
+                        icon: const Icon(Icons.mail_outline, size: 16),
+                        label: const Text('Mail Gönder'),
+                      ),
+                    if (widget.onTap != null) ...[
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                        ),
+                        onPressed: widget.busy ? null : widget.onTap,
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: Text(hasResident ? 'Düzenle' : 'Sakin Ata'),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ],
           ),
         ),
