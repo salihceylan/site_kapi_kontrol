@@ -42,7 +42,9 @@ class VoiceDoorService extends ChangeNotifier {
   DoorRecord? _matchedDoor;
   bool _isSpeechAvailable = false;
   bool _ttsEnabled = true;
-  bool _handsFreeAutoListen = true; // Varsayılan olarak açık
+  bool _handsFreeAutoListen = true;
+  bool _isProcessingCommand = false;
+  DateTime? _lastCommandProcessedAt;
   List<DoorRecord>? _lastCandidateDoors;
 
   VoiceDoorService({required AuthService authService})
@@ -114,7 +116,7 @@ class VoiceDoorService extends ChangeNotifier {
     try {
       _isSpeechAvailable = await _speech.initialize(
         onError: (val) {
-          if (_status == VoiceStatus.listening) {
+          if (_status == VoiceStatus.listening && !_isProcessingCommand) {
             _status = VoiceStatus.error;
             _feedbackText = 'Ses algılanamadı (${val.errorMsg})';
             notifyListeners();
@@ -122,7 +124,7 @@ class VoiceDoorService extends ChangeNotifier {
         },
         onStatus: (val) {
           if (val == 'done' || val == 'notListening') {
-            if (_status == VoiceStatus.listening) {
+            if (_status == VoiceStatus.listening && !_isProcessingCommand) {
               _processCurrentRecognizedWords();
             }
           }
@@ -147,6 +149,10 @@ class VoiceDoorService extends ChangeNotifier {
   Future<void> startListening({List<DoorRecord>? candidateDoors}) async {
     if (candidateDoors != null && candidateDoors.isNotEmpty) {
       _lastCandidateDoors = candidateDoors;
+    }
+
+    if (_isProcessingCommand) {
+      return;
     }
 
     if (!_isSpeechAvailable) {
@@ -190,7 +196,7 @@ class VoiceDoorService extends ChangeNotifier {
         onResult: (result) {
           _recognizedWords = result.recognizedWords;
           notifyListeners();
-          if (result.finalResult) {
+          if (result.finalResult && !_isProcessingCommand) {
             _processVoiceCommand(
               _recognizedWords,
               candidateDoors: candidateDoors ?? _lastCandidateDoors,
@@ -209,12 +215,15 @@ class VoiceDoorService extends ChangeNotifier {
     if (_speech.isListening) {
       await _speech.stop();
     }
-    if (_status == VoiceStatus.listening) {
+    if (_status == VoiceStatus.listening && !_isProcessingCommand) {
       _processCurrentRecognizedWords();
     }
   }
 
   void _processCurrentRecognizedWords() {
+    if (_isProcessingCommand) {
+      return;
+    }
     if (_recognizedWords.trim().isNotEmpty && _status == VoiceStatus.listening) {
       _processVoiceCommand(_recognizedWords, candidateDoors: _lastCandidateDoors);
     } else if (_status == VoiceStatus.listening) {
@@ -228,107 +237,143 @@ class VoiceDoorService extends ChangeNotifier {
     String rawCommand, {
     List<DoorRecord>? candidateDoors,
   }) async {
+    // Çift çalıştırmayı (duplicate execution) engellemek için mutex ve debouncing
+    if (_isProcessingCommand) {
+      return const VoiceDoorResult(
+        success: false,
+        recognizedText: '',
+        feedbackMessage: 'Komut zaten işleniyor.',
+      );
+    }
+
+    final now = DateTime.now();
+    if (_lastCommandProcessedAt != null &&
+        now.difference(_lastCommandProcessedAt!).inMilliseconds < 2000) {
+      return const VoiceDoorResult(
+        success: false,
+        recognizedText: '',
+        feedbackMessage: 'Komut zaten işlendi.',
+      );
+    }
+
+    _isProcessingCommand = true;
+    _lastCommandProcessedAt = now;
+
+    // Dinlemeyi derhal durdur
+    if (_speech.isListening) {
+      try {
+        await _speech.stop();
+      } catch (_) {}
+    }
+
     _status = VoiceStatus.processing;
     _feedbackText = 'Komut işleniyor: "$rawCommand"...';
     notifyListeners();
 
-    if (rawCommand.trim().isEmpty) {
-      const message = 'Ses algılanamadı.';
-      _status = VoiceStatus.error;
-      _feedbackText = message;
-      notifyListeners();
-      await speak(message);
-      return const VoiceDoorResult(
-        success: false,
-        recognizedText: '',
-        feedbackMessage: message,
-      );
-    }
-
-    List<DoorRecord> doors = candidateDoors ?? _lastCandidateDoors ?? <DoorRecord>[];
-    if (doors.isEmpty) {
-      final (fetchedDoors, _) = await _authService.listMyDoors();
-      if (fetchedDoors != null) {
-        doors = fetchedDoors;
-        _lastCandidateDoors = doors;
+    try {
+      if (rawCommand.trim().isEmpty) {
+        const message = 'Ses algılanamadı.';
+        _status = VoiceStatus.error;
+        _feedbackText = message;
+        notifyListeners();
+        await speak(message);
+        return const VoiceDoorResult(
+          success: false,
+          recognizedText: '',
+          feedbackMessage: message,
+        );
       }
-    }
 
-    if (doors.isEmpty) {
-      const message = 'Tanımlı bir kapı bulunamadı.';
-      _status = VoiceStatus.error;
-      _feedbackText = message;
+      List<DoorRecord> doors =
+          candidateDoors ?? _lastCandidateDoors ?? <DoorRecord>[];
+      if (doors.isEmpty) {
+        final (fetchedDoors, _) = await _authService.listMyDoors();
+        if (fetchedDoors != null) {
+          doors = fetchedDoors;
+          _lastCandidateDoors = doors;
+        }
+      }
+
+      if (doors.isEmpty) {
+        const message = 'Tanımlı bir kapı bulunamadı.';
+        _status = VoiceStatus.error;
+        _feedbackText = message;
+        notifyListeners();
+        await speak(message);
+        return VoiceDoorResult(
+          success: false,
+          recognizedText: rawCommand,
+          feedbackMessage: message,
+        );
+      }
+
+      final matched = matchDoorFromCommand(rawCommand, doors);
+      if (matched == null) {
+        const message =
+            'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
+        _status = VoiceStatus.error;
+        _feedbackText = message;
+        notifyListeners();
+        await speak(message);
+        return VoiceDoorResult(
+          success: false,
+          recognizedText: rawCommand,
+          feedbackMessage: message,
+        );
+      }
+
+      if (matched.assignedDeviceUid == null ||
+          matched.assignedDeviceUid!.trim().isEmpty) {
+        final message =
+            '${matched.doorName} kapısına henüz aktif bir cihaz atanmamış.';
+        _status = VoiceStatus.error;
+        _feedbackText = message;
+        notifyListeners();
+        await speak(message);
+        return VoiceDoorResult(
+          success: false,
+          recognizedText: rawCommand,
+          matchedDoor: matched,
+          feedbackMessage: message,
+        );
+      }
+
+      _matchedDoor = matched;
+      _feedbackText = '${matched.doorName} açılıyor...';
       notifyListeners();
-      await speak(message);
-      return VoiceDoorResult(
-        success: false,
-        recognizedText: rawCommand,
-        feedbackMessage: message,
-      );
-    }
 
-    final matched = matchDoorFromCommand(rawCommand, doors);
-    if (matched == null) {
-      const message = 'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
-      _status = VoiceStatus.error;
-      _feedbackText = message;
-      notifyListeners();
-      await speak(message);
-      return VoiceDoorResult(
-        success: false,
-        recognizedText: rawCommand,
-        feedbackMessage: message,
+      final (status, error) = await _authService.openDoor(
+        doorId: matched.id,
+        door: matched,
       );
-    }
 
-    if (matched.assignedDeviceUid == null ||
-        matched.assignedDeviceUid!.trim().isEmpty) {
-      final message = '${matched.doorName} kapısına henüz aktif bir cihaz atanmamış.';
-      _status = VoiceStatus.error;
-      _feedbackText = message;
-      notifyListeners();
-      await speak(message);
-      return VoiceDoorResult(
-        success: false,
-        recognizedText: rawCommand,
-        matchedDoor: matched,
-        feedbackMessage: message,
-      );
-    }
-
-    _matchedDoor = matched;
-    _feedbackText = '${matched.doorName} açılıyor...';
-    notifyListeners();
-    await speak('${matched.doorName} açılıyor.');
-
-    final (status, error) = await _authService.openDoor(
-      doorId: matched.id,
-      door: matched,
-    );
-
-    if (status != null && error == null) {
-      _status = VoiceStatus.success;
-      _feedbackText = '${matched.doorName} başarıyla açıldı.';
-      notifyListeners();
-      await speak('${matched.doorName} başarıyla açıldı.');
-      return VoiceDoorResult(
-        success: true,
-        recognizedText: rawCommand,
-        matchedDoor: matched,
-        feedbackMessage: '${matched.doorName} açıldı.',
-      );
-    } else {
-      final errorMsg = error ?? 'Kapı açılamadı. Cihaz bağlantısı çevrimdışı olabilir.';
-      _status = VoiceStatus.error;
-      _feedbackText = errorMsg;
-      notifyListeners();
-      await speak(errorMsg);
-      return VoiceDoorResult(
-        success: false,
-        recognizedText: rawCommand,
-        matchedDoor: matched,
-        feedbackMessage: errorMsg,
-      );
+      if (status != null && error == null) {
+        _status = VoiceStatus.success;
+        _feedbackText = '${matched.doorName} başarıyla açıldı.';
+        notifyListeners();
+        await speak('${matched.doorName} başarıyla açıldı.');
+        return VoiceDoorResult(
+          success: true,
+          recognizedText: rawCommand,
+          matchedDoor: matched,
+          feedbackMessage: '${matched.doorName} açıldı.',
+        );
+      } else {
+        final errorMsg =
+            error ?? 'Kapı açılamadı. Cihaz bağlantısı çevrimdışı olabilir.';
+        _status = VoiceStatus.error;
+        _feedbackText = errorMsg;
+        notifyListeners();
+        await speak(errorMsg);
+        return VoiceDoorResult(
+          success: false,
+          recognizedText: rawCommand,
+          matchedDoor: matched,
+          feedbackMessage: errorMsg,
+        );
+      }
+    } finally {
+      _isProcessingCommand = false;
     }
   }
 
@@ -357,7 +402,21 @@ class VoiceDoorService extends ChangeNotifier {
     }
 
     final extractedNumber = _extractDoorNumber(normalized);
-    const stopWords = {'kapi', 'kapisi', 'kapiyi', 'site', 'sitesi', 'ac', 'aci', 'acma', 'lutfen', 've', 'ile', 'bana', 'biraz'};
+    const stopWords = {
+      'kapi',
+      'kapisi',
+      'kapiyi',
+      'site',
+      'sitesi',
+      'ac',
+      'aci',
+      'acma',
+      'lutfen',
+      've',
+      'ile',
+      'bana',
+      'biraz'
+    };
 
     DoorRecord? bestDoor;
     int highestScore = 0;
@@ -383,7 +442,9 @@ class VoiceDoorService extends ChangeNotifier {
       // 3. Özgül kelime eşleşmesi (stop words hariç)
       final doorWords = doorNorm.split(RegExp(r'\s+'));
       for (final word in doorWords) {
-        if (word.length >= 3 && !stopWords.contains(word) && normalized.contains(word)) {
+        if (word.length >= 3 &&
+            !stopWords.contains(word) &&
+            normalized.contains(word)) {
           score += 10;
         }
       }
