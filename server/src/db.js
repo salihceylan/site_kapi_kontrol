@@ -507,7 +507,7 @@ export async function ensureDbSchema() {
       CREATE TABLE IF NOT EXISTS door_access_logs (
         id BIGSERIAL PRIMARY KEY,
         site_code INT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
-        door_id INT REFERENCES doors(id) ON DELETE SET NULL,
+        door_id INT REFERENCES site_doors(id) ON DELETE SET NULL,
         door_name TEXT NOT NULL,
         user_code INT REFERENCES users(user_code) ON DELETE SET NULL,
         user_name TEXT NOT NULL,
