@@ -9,12 +9,14 @@ class ApartmentCard extends StatefulWidget {
     required this.onEdit,
     required this.onSendMail,
     required this.sendingMail,
+    this.onDelete,
   });
 
   final ApartmentRecord apartment;
   final VoidCallback onEdit;
   final VoidCallback onSendMail;
   final bool sendingMail;
+  final VoidCallback? onDelete;
 
   @override
   State<ApartmentCard> createState() => _ApartmentCardState();
@@ -215,6 +217,15 @@ class _ApartmentCardState extends State<ApartmentCard> {
                       icon: const Icon(Icons.edit_outlined, size: 16),
                       label: const Text('Düzenle'),
                     ),
+                    if (hasResident && widget.onDelete != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.person_remove_outlined, size: 16, color: Colors.red),
+                        label: const Text('Sakini Sil', style: TextStyle(color: Colors.red)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                      ),
                   ],
                 ),
               ],

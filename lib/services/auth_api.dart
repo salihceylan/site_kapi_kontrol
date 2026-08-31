@@ -5,8 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
-import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
+import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -402,6 +403,61 @@ class AuthApi {
     );
 
     _ensureStatus(response, 200);
+  }
+
+  Future<void> deleteApartmentResident({
+    required String token,
+    required UserRole role,
+    required int apartmentId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '${_managementPrefix(role)}/apartments/$apartmentId/resident',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+  }
+
+  Future<DoorAccessLogPage> listDoorAccessLogs({
+    required String token,
+    required UserRole role,
+    int? siteCode,
+    int? doorId,
+    String? search,
+    DateTime? startDate,
+    DateTime? endDate,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final query = <String, String>{
+      'page': page.toString(),
+      'page_size': pageSize.toString(),
+      if (siteCode != null) 'site_code': siteCode.toString(),
+      if (doorId != null) 'door_id': doorId.toString(),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (startDate != null) 'start_date': startDate.toIso8601String(),
+      if (endDate != null) 'end_date': endDate.toIso8601String(),
+    };
+
+    final uri = Uri.parse('$baseUrl${_managementPrefix(role)}/door-logs')
+        .replace(queryParameters: query);
+
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Kapi gecis loglari',
+      () => DoorAccessLogPage.fromJson(payload),
+    );
   }
 
   Future<DoorRecord> assignDoorDevice({

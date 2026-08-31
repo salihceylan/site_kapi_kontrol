@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
@@ -405,9 +406,9 @@ class AuthService extends ChangeNotifier {
     String? phoneNumber,
     required bool isActive,
   }) async {
-    final active = _safeRequireSuperUserSession();
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin super user yetkisi gerekir.');
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
@@ -431,10 +432,31 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> sendApartmentCredentials({required int apartmentId}) async {
-    final active = _safeRequireSuperUserSession();
+  Future<String?> deleteApartmentResident({required int apartmentId}) async {
+    final active = _safeRequireManagementSession();
     if (active == null) {
-      return 'Bu islem icin super user yetkisi gerekir.';
+      return 'Bu islem icin site yonetim yetkisi gerekir.';
+    }
+
+    try {
+      await api.deleteApartmentResident(
+        token: active.token,
+        role: active.role,
+        apartmentId: apartmentId,
+      );
+      return null;
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> sendApartmentCredentials({required int apartmentId}) async {
+    final active = _safeRequireManagementSession();
+    if (active == null) {
+      return 'Bu islem icin site yonetim yetkisi gerekir.';
     }
 
     try {
@@ -449,6 +471,41 @@ class AuthService extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<(DoorAccessLogPage?, String?)> listDoorAccessLogs({
+    int? siteCode,
+    int? doorId,
+    String? search,
+    DateTime? startDate,
+    DateTime? endDate,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final active = _safeRequireManagementSession();
+    if (active == null) {
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
+    }
+
+    try {
+      final logPage = await api.listDoorAccessLogs(
+        token: active.token,
+        role: active.role,
+        siteCode: siteCode,
+        doorId: doorId,
+        search: search,
+        startDate: startDate,
+        endDate: endDate,
+        page: page,
+        pageSize: pageSize,
+      );
+      return (logPage, null);
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Sunucuya baglanilamadi.');
     }
   }
 

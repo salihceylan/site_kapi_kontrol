@@ -501,6 +501,28 @@ export async function ensureDbSchema() {
         [apartmentResetMaintenanceKey],
       );
     }
+
+    // Kapı Geçiş & Erişim Logları Tablosu
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS door_access_logs (
+        id BIGSERIAL PRIMARY KEY,
+        site_code INT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        door_id INT REFERENCES doors(id) ON DELETE SET NULL,
+        door_name TEXT NOT NULL,
+        user_code INT REFERENCES users(user_code) ON DELETE SET NULL,
+        user_name TEXT NOT NULL,
+        user_role TEXT,
+        apartment_label TEXT,
+        trigger_type TEXT NOT NULL,
+        opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ip_address TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_door_access_logs_site_date
+      ON door_access_logs(site_code, opened_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_door_access_logs_door
+      ON door_access_logs(door_id, opened_at DESC);
+    `);
   } finally {
     client.release();
   }

@@ -6,6 +6,7 @@
 #include <WiFi.h>
 
 #include "device_konfig.h"
+#include "offline_log.h"
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
@@ -20,6 +21,8 @@ struct YerelHttpIstek {
   String path;
   String token;
   String deviceUid;
+  String userName;
+  String apartmentLabel;
 };
 
 inline void yerelHttpCevap(WiFiClient& client, int code, const char* status, const String& body) {
@@ -101,6 +104,10 @@ inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
       request.token = value;
     } else if (name == "x-ahbu-device-uid") {
       request.deviceUid = value;
+    } else if (name == "x-ahbu-user-name") {
+      request.userName = value;
+    } else if (name == "x-ahbu-apartment") {
+      request.apartmentLabel = value;
     }
   }
 
@@ -153,6 +160,13 @@ inline void yerelOpenHandler(WiFiClient& client, const YerelHttpIstek& request) 
   gDoorLocked = false;
   mqttPublishEvent("local_pulse_started", "");
   mqttPublishState(gDoorLocked);
+
+  offlineLogKaydet(
+    "local_wifi",
+    request.userName.isEmpty() ? "Yerel Kullanici" : request.userName.c_str(),
+    request.apartmentLabel.c_str()
+  );
+
   yerelHttpCevap(client, 202, "Accepted", R"({"ok":true,"message":"yerel_kapi_acma_komutu_alindi"})");
   Serial.println("Yerel ag komutu: kapi acma pulse baslatildi.");
 }

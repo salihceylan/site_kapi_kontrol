@@ -12,6 +12,7 @@ enum SirketMenuItem {
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
   siteler,
+  kapiGecisLoglari,
   cihazEkle,
   kayitliCihazlar,
   bluetoothWifiKur,
@@ -154,6 +155,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.kapiGecisLoglari,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -163,6 +165,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
+        SirketMenuItem.kapiGecisLoglari,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
       ];
@@ -195,6 +198,8 @@ String _titleForItem(SirketMenuItem item) {
       return 'Daire Kullanicilari Yonetimi';
     case SirketMenuItem.siteler:
       return 'Site Yonetimi';
+    case SirketMenuItem.kapiGecisLoglari:
+      return 'Kapi Gecis Loglari';
     case SirketMenuItem.cihazEkle:
       return 'Sirket Veritabanina Cihaz Kaydet';
     case SirketMenuItem.kayitliCihazlar:
@@ -224,6 +229,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.groups_2_outlined;
     case SirketMenuItem.siteler:
       return Icons.location_city_outlined;
+    case SirketMenuItem.kapiGecisLoglari:
+      return Icons.history_edu_outlined;
     case SirketMenuItem.cihazEkle:
       return Icons.qr_code_scanner_outlined;
     case SirketMenuItem.kayitliCihazlar:

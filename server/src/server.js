@@ -417,6 +417,71 @@ function mapDoorRow(row) {
   };
 }
 
+function mapDoorAccessLogRow(row) {
+  return {
+    id: Number(row.id),
+    site_code: Number(row.site_code),
+    site_name: row.site_name || null,
+    door_id: row.door_id != null ? Number(row.door_id) : null,
+    door_name: row.door_name || '',
+    user_code: row.user_code != null ? Number(row.user_code) : null,
+    user_name: row.user_name || '',
+    user_role: row.user_role || null,
+    apartment_label: row.apartment_label || null,
+    trigger_type: row.trigger_type || 'cloud_app',
+    opened_at: row.opened_at ? new Date(row.opened_at).toISOString() : null,
+    ip_address: row.ip_address || null,
+    created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+async function recordDoorAccessLog({
+  siteCode,
+  doorId = null,
+  doorName,
+  userCode = null,
+  userName,
+  userRole = null,
+  apartmentLabel = null,
+  triggerType = 'cloud_app',
+  openedAt = new Date(),
+  ipAddress = null,
+}) {
+  try {
+    await pool.query(
+      `
+        INSERT INTO door_access_logs (
+          site_code,
+          door_id,
+          door_name,
+          user_code,
+          user_name,
+          user_role,
+          apartment_label,
+          trigger_type,
+          opened_at,
+          ip_address
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `,
+      [
+        siteCode,
+        doorId,
+        doorName,
+        userCode,
+        userName,
+        userRole,
+        apartmentLabel,
+        triggerType,
+        openedAt,
+        ipAddress,
+      ],
+    );
+  } catch (err) {
+    console.error('Error recording door access log:', err);
+  }
+}
+
 function validateCreateInput({
   fullName,
   email,
@@ -2567,16 +2632,66 @@ async function provisionApartmentResident({
     );
 
     await client.query('COMMIT');
-    await rotateLocalControlTokensForDeviceIds(
-      [Number(device.id), door.assigned_device_id],
-      'door_device_assignment_changed',
-    );
     return finalResult.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
+  }
+}
+
+async function resetApartmentResident(apartmentId, db = pool) {
+  const client = db === pool ? await pool.connect() : db;
+  const isDedicatedClient = db === pool;
+  try {
+    if (isDedicatedClient) {
+      await client.query('BEGIN');
+    }
+
+    const aptResult = await client.query(
+      `SELECT * FROM apartments WHERE id = $1 LIMIT 1`,
+      [apartmentId],
+    );
+    if (aptResult.rowCount === 0) {
+      throw new Error('APARTMENT_NOT_FOUND');
+    }
+    const apt = aptResult.rows[0];
+
+    if (apt.resident_user_code) {
+      await client.query(
+        `DELETE FROM users WHERE user_code = $1 AND role = 'apartment_owner'`,
+        [apt.resident_user_code],
+      );
+    }
+
+    const updated = await client.query(
+      `
+        UPDATE apartments
+        SET
+          resident_user_code = NULL,
+          resident_pin_code = NULL,
+          resident_email = NULL,
+          is_active = TRUE
+        WHERE id = $1
+        RETURNING *
+      `,
+      [apartmentId],
+    );
+
+    if (isDedicatedClient) {
+      await client.query('COMMIT');
+    }
+    return updated.rows[0];
+  } catch (error) {
+    if (isDedicatedClient) {
+      await client.query('ROLLBACK');
+    }
+    throw error;
+  } finally {
+    if (isDedicatedClient) {
+      client.release();
+    }
   }
 }
 
@@ -4280,6 +4395,27 @@ app.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, asyn
   }
 });
 
+app.delete('/admin/apartments/:id/resident', authRequired, requireSuperUser, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+
+  try {
+    const apartment = await resetApartmentResident(apartmentId);
+    await rotateLocalControlTokensForSite(
+      Number(apartment.site_code),
+      'apartment_resident_reset',
+    );
+    return res.status(200).json({ ok: true, message: 'Daire sakini sifirlandi.' });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    return res.status(500).json({ error: 'Daire sakini sifirlanamadi.' });
+  }
+});
+
 app.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser, async (req, res) => {
   const apartmentId = Number(req.params.id);
   if (!Number.isInteger(apartmentId)) {
@@ -4817,8 +4953,6 @@ app.get('/manager/devices', authRequired, requireSiteManager, async (req, res) =
 });
 
 app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
-  return res.status(403).json({ error: 'Daire kullanicisini yalnizca super user olusturabilir veya guncelleyebilir.' });
-
   const apartmentId = Number(req.params.id);
   if (!Number.isInteger(apartmentId)) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
@@ -4866,6 +5000,10 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
       phoneNumber,
       isActive,
     });
+    await rotateLocalControlTokensForSite(
+      Number(apartment.site_code),
+      'apartment_resident_changed_by_manager',
+    );
     return res.status(200).json({ apartment: mapApartmentRow(apartment) });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
@@ -4875,9 +5013,41 @@ app.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, 
   }
 });
 
-app.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteManager, async (req, res) => {
-  return res.status(403).json({ error: 'Daire kullanici bilgilerini yalnizca super user gonderebilir.' });
+app.delete('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
+  const apartmentId = Number(req.params.id);
+  if (!Number.isInteger(apartmentId)) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
 
+  const apartmentSiteResult = await pool.query(
+    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
+    [apartmentId],
+  );
+  if (apartmentSiteResult.rowCount === 0) {
+    return res.status(404).json({ error: 'Daire bulunamadi.' });
+  }
+
+  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+  }
+
+  try {
+    const apartment = await resetApartmentResident(apartmentId);
+    await rotateLocalControlTokensForSite(
+      Number(apartment.site_code),
+      'apartment_resident_reset_by_manager',
+    );
+    return res.status(200).json({ ok: true, message: 'Daire sakini sifirlandi.' });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    return res.status(500).json({ error: 'Daire sakini sifirlanamadi.' });
+  }
+});
+
+app.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteManager, async (req, res) => {
   const apartmentId = Number(req.params.id);
   if (!Number.isInteger(apartmentId)) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
@@ -5120,6 +5290,37 @@ app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req
       device_uid: door.assigned_device_uid,
     });
 
+    let apartmentLabel = null;
+    if (req.authUser.role === 'apartment_owner') {
+      const aptRes = await pool.query(
+        `
+          SELECT b.block_name, a.unit_label
+          FROM apartments a
+          JOIN site_blocks b ON b.id = a.block_id
+          WHERE a.resident_user_code = $1
+          LIMIT 1
+        `,
+        [Number(req.authUser.id)],
+      );
+      if (aptRes.rowCount > 0) {
+        apartmentLabel = `${aptRes.rows[0].block_name} - ${aptRes.rows[0].unit_label}`;
+      }
+    }
+
+    const triggerType = req.body.source === 'voice' ? 'voice' : 'cloud_app';
+    await recordDoorAccessLog({
+      siteCode: Number(door.site_code),
+      doorId: Number(door.id),
+      doorName: door.door_name || 'Site Kapısı',
+      userCode: Number(req.authUser.id),
+      userName: req.authUser.full_name || req.authUser.email,
+      userRole: req.authUser.role,
+      apartmentLabel,
+      triggerType,
+      openedAt: new Date(),
+      ipAddress: req.ip,
+    });
+
     const deviceStatus = getDeviceRuntimeStatus(door.assigned_device_uid);
     const localControl = await localDoorControlForStatus({
       deviceUid: door.assigned_device_uid,
@@ -5169,6 +5370,36 @@ app.post('/app/doors/:id/local-open-notify', authRequired, doorCommandRateLimite
       device_uid: door.assigned_device_uid,
       local_ip: localIp || null,
       opened_at: new Date().toISOString(),
+    });
+
+    let apartmentLabel = null;
+    if (req.authUser.role === 'apartment_owner') {
+      const aptRes = await pool.query(
+        `
+          SELECT b.block_name, a.unit_label
+          FROM apartments a
+          JOIN site_blocks b ON b.id = a.block_id
+          WHERE a.resident_user_code = $1
+          LIMIT 1
+        `,
+        [Number(req.authUser.id)],
+      );
+      if (aptRes.rowCount > 0) {
+        apartmentLabel = `${aptRes.rows[0].block_name} - ${aptRes.rows[0].unit_label}`;
+      }
+    }
+
+    await recordDoorAccessLog({
+      siteCode: Number(door.site_code),
+      doorId: Number(door.id),
+      doorName: door.door_name || 'Site Kapısı',
+      userCode: Number(req.authUser.id),
+      userName: req.authUser.full_name || req.authUser.email,
+      userRole: req.authUser.role,
+      apartmentLabel,
+      triggerType: 'local_wifi',
+      openedAt: new Date(),
+      ipAddress: req.ip,
     });
 
     return res.status(200).json({ ok: true, recorded: true });
@@ -5417,6 +5648,36 @@ app.post('/public/guest-pass/:token/open', doorCommandRateLimiter, async (req, r
       ip: req.ip,
     });
 
+    let apartmentLabel = null;
+    if (pass.created_by_user_code) {
+      const aptRes = await pool.query(
+        `
+          SELECT b.block_name, a.unit_label
+          FROM apartments a
+          JOIN site_blocks b ON b.id = a.block_id
+          WHERE a.resident_user_code = $1
+          LIMIT 1
+        `,
+        [Number(pass.created_by_user_code)],
+      );
+      if (aptRes.rowCount > 0) {
+        apartmentLabel = `${aptRes.rows[0].block_name} - ${aptRes.rows[0].unit_label}`;
+      }
+    }
+
+    await recordDoorAccessLog({
+      siteCode: Number(pass.site_code),
+      doorId: Number(pass.door_id),
+      doorName: pass.door_name || 'Site Kapısı',
+      userCode: pass.created_by_user_code ? Number(pass.created_by_user_code) : null,
+      userName: `${pass.title || 'Misafir'} (Geçiş Linki)`,
+      userRole: 'guest_pass',
+      apartmentLabel,
+      triggerType: 'guest_pass',
+      openedAt: new Date(),
+      ipAddress: req.ip,
+    });
+
     return res.status(200).json({
       ok: true,
       message: `${pass.door_name} aciliyor.`,
@@ -5562,6 +5823,227 @@ app.get('/guest/:token', async (req, res) => {
     `);
   } catch (error) {
     return res.status(500).send('Sunucu hatasi.');
+  }
+});
+
+// --- DOOR ACCESS LOGS & DEVICE SYNC ENDPOINTS ---
+
+app.post('/device/sync-logs', async (req, res) => {
+  const deviceUid = String(req.body.device_uid || req.headers['x-ahbu-device-uid'] || '').trim().toUpperCase();
+  const logs = Array.isArray(req.body.logs) ? req.body.logs : [];
+
+  if (!deviceUid) {
+    return res.status(400).json({ error: 'device_uid zorunlu.' });
+  }
+
+  try {
+    const device = await findDeviceByUid(deviceUid);
+    if (!device || !device.site_code) {
+      return res.status(404).json({ error: 'Cihaz veya bagli oldugu site bulunamadi.' });
+    }
+
+    const doors = await listSiteDoors(Number(device.site_code));
+    const assignedDoor = doors.find((d) => Number(d.assigned_device_id) === Number(device.id)) || doors[0];
+    const doorName = assignedDoor ? assignedDoor.door_name : (device.gate_name || 'Site Kapısı');
+    const doorId = assignedDoor ? Number(assignedDoor.id) : null;
+
+    let insertedCount = 0;
+    for (const item of logs) {
+      const triggerType = String(item.trigger_type || 'offline_sync').trim();
+      const userName = String(item.user_name || item.user_label || 'Yerel Yetkili Kullanıcı').trim();
+      const userRole = String(item.user_role || 'apartment_owner').trim();
+      const apartmentLabel = item.apartment_label ? String(item.apartment_label).trim() : null;
+      const openedAt = item.opened_at ? new Date(item.opened_at) : new Date();
+
+      await recordDoorAccessLog({
+        siteCode: Number(device.site_code),
+        doorId,
+        doorName,
+        userCode: null,
+        userName,
+        userRole,
+        apartmentLabel,
+        triggerType,
+        openedAt,
+        ipAddress: req.ip,
+      });
+      insertedCount++;
+    }
+
+    return res.status(200).json({ ok: true, synced_count: insertedCount });
+  } catch (error) {
+    console.error('Error syncing device offline logs:', error);
+    return res.status(500).json({ error: 'Log senkronizasyonu basarisiz.' });
+  }
+});
+
+app.get('/admin/door-logs', authRequired, requireSuperUser, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size || 50)));
+  const offset = (page - 1) * pageSize;
+  const siteCode = req.query.site_code ? Number(req.query.site_code) : null;
+  const doorId = req.query.door_id ? Number(req.query.door_id) : null;
+  const search = req.query.search ? String(req.query.search).trim() : null;
+  const startDate = req.query.start_date ? new Date(req.query.start_date) : null;
+  const endDate = req.query.end_date ? new Date(req.query.end_date) : null;
+
+  try {
+    const conditions = [];
+    const params = [];
+
+    if (siteCode && Number.isInteger(siteCode)) {
+      params.push(siteCode);
+      conditions.push(`l.site_code = $${params.length}`);
+    }
+    if (doorId && Number.isInteger(doorId)) {
+      params.push(doorId);
+      conditions.push(`l.door_id = $${params.length}`);
+    }
+    if (startDate && !isNaN(startDate.getTime())) {
+      params.push(startDate);
+      conditions.push(`l.opened_at >= $${params.length}`);
+    }
+    if (endDate && !isNaN(endDate.getTime())) {
+      params.push(endDate);
+      conditions.push(`l.opened_at <= $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(l.user_name ILIKE $${params.length} OR l.door_name ILIKE $${params.length} OR l.apartment_label ILIKE $${params.length} OR s.name ILIKE $${params.length})`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*) AS total
+        FROM door_access_logs l
+        JOIN sites s ON s.site_code = l.site_code
+        ${whereClause}
+      `,
+      params,
+    );
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    const listParams = [...params, pageSize, offset];
+    const listResult = await pool.query(
+      `
+        SELECT
+          l.*,
+          s.name AS site_name
+        FROM door_access_logs l
+        JOIN sites s ON s.site_code = l.site_code
+        ${whereClause}
+        ORDER BY l.opened_at DESC
+        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}
+      `,
+      listParams,
+    );
+
+    return res.status(200).json({
+      ok: true,
+      logs: listResult.rows.map(mapDoorAccessLogRow),
+      total,
+      page,
+      page_size: pageSize,
+      total_pages: Math.ceil(total / pageSize) || 1,
+    });
+  } catch (error) {
+    console.error('Error fetching admin door logs:', error);
+    return res.status(500).json({ error: 'Kapi loglari alinamadi.' });
+  }
+});
+
+app.get('/manager/door-logs', authRequired, requireSiteManager, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size || 50)));
+  const offset = (page - 1) * pageSize;
+  const siteCode = req.query.site_code ? Number(req.query.site_code) : null;
+  const doorId = req.query.door_id ? Number(req.query.door_id) : null;
+  const search = req.query.search ? String(req.query.search).trim() : null;
+  const startDate = req.query.start_date ? new Date(req.query.start_date) : null;
+  const endDate = req.query.end_date ? new Date(req.query.end_date) : null;
+
+  try {
+    const managedSiteCodes = await getManagedSiteCodes(req.authUser);
+    if (!managedSiteCodes || managedSiteCodes.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        logs: [],
+        total: 0,
+        page: 1,
+        page_size: pageSize,
+        total_pages: 1,
+      });
+    }
+
+    const conditions = [];
+    const params = [managedSiteCodes];
+    conditions.push(`l.site_code = ANY($1)`);
+
+    if (siteCode && Number.isInteger(siteCode)) {
+      if (!managedSiteCodes.includes(siteCode)) {
+        return res.status(403).json({ error: 'Bu sitenin loglarini gorme yetkiniz yok.' });
+      }
+      params.push(siteCode);
+      conditions.push(`l.site_code = $${params.length}`);
+    }
+    if (doorId && Number.isInteger(doorId)) {
+      params.push(doorId);
+      conditions.push(`l.door_id = $${params.length}`);
+    }
+    if (startDate && !isNaN(startDate.getTime())) {
+      params.push(startDate);
+      conditions.push(`l.opened_at >= $${params.length}`);
+    }
+    if (endDate && !isNaN(endDate.getTime())) {
+      params.push(endDate);
+      conditions.push(`l.opened_at <= $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(l.user_name ILIKE $${params.length} OR l.door_name ILIKE $${params.length} OR l.apartment_label ILIKE $${params.length} OR s.name ILIKE $${params.length})`);
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    const countResult = await pool.query(
+      `
+        SELECT COUNT(*) AS total
+        FROM door_access_logs l
+        JOIN sites s ON s.site_code = l.site_code
+        ${whereClause}
+      `,
+      params,
+    );
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    const listParams = [...params, pageSize, offset];
+    const listResult = await pool.query(
+      `
+        SELECT
+          l.*,
+          s.name AS site_name
+        FROM door_access_logs l
+        JOIN sites s ON s.site_code = l.site_code
+        ${whereClause}
+        ORDER BY l.opened_at DESC
+        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}
+      `,
+      listParams,
+    );
+
+    return res.status(200).json({
+      ok: true,
+      logs: listResult.rows.map(mapDoorAccessLogRow),
+      total,
+      page,
+      page_size: pageSize,
+      total_pages: Math.ceil(total / pageSize) || 1,
+    });
+  } catch (error) {
+    console.error('Error fetching manager door logs:', error);
+    return res.status(500).json({ error: 'Kapi loglari alinamadi.' });
   }
 });
 

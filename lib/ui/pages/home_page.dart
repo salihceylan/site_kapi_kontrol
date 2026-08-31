@@ -32,6 +32,7 @@ import 'package:site_kapi_kontrol/ui/views/bluetooth_wifi_view.dart';
 import 'package:site_kapi_kontrol/ui/views/company_devices_view.dart';
 import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/device_add_view.dart';
+import 'package:site_kapi_kontrol/ui/views/door_logs_view.dart';
 import 'package:site_kapi_kontrol/ui/views/managed_users_view.dart';
 import 'package:site_kapi_kontrol/ui/views/pending_site_approvals_view.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
@@ -215,6 +216,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Daire Sakinleri';
       case SirketMenuItem.siteler:
         return 'Site Yönetimi';
+      case SirketMenuItem.kapiGecisLoglari:
+        return 'Kapı Geçiş Logları';
       case SirketMenuItem.cihazEkle:
         return 'Cihaz Kaydet';
       case SirketMenuItem.kayitliCihazlar:
@@ -734,6 +737,43 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _deleteApartmentResident(ApartmentRecord apartment) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Daire Sakinini Sil / Sıfırla'),
+        content: Text(
+          '${apartment.label} dairesine ait ${apartment.residentFullName ?? ''} sakinini silmek ve daireyi boşa çıkarmak istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil / Sıfırla'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final error = await widget.authService.deleteApartmentResident(
+      apartmentId: apartment.id,
+    );
+
+    if (error != null) {
+      _showMessage(error);
+    } else {
+      _showMessage('Daire sakini başarıyla silindi.');
+      if (_selectedSite != null) {
+        _selectSite(_selectedSite!);
+      }
+    }
+  }
+
   Future<void> _sendApartmentCredentials(ApartmentRecord apartment) async {
     setState(() => _busyApartmentMails.add(apartment.id));
     final error = await widget.authService.sendApartmentCredentials(
@@ -1182,7 +1222,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.daireKullanicilariYonetimi:
         return SitesView(
           canManageSites: session.role == UserRole.superUser,
-          canManageApartmentUsers: session.role == UserRole.superUser,
+          canManageApartmentUsers: session.role == UserRole.superUser ||
+              session.role == UserRole.siteManager,
           canAssignDoorDevices: session.role == UserRole.superUser ||
               session.role == UserRole.siteManager,
           apartmentMode:
@@ -1213,8 +1254,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onEditApartmentResident: _openApartmentResidentDialog,
           onSendApartmentMail: _sendApartmentCredentials,
           onAssignDoorDevice: _assignDoorDevice,
+          onDeleteApartmentResident: _deleteApartmentResident,
           onDownloadCredentialsPdf: _exportSiteCredentialsPdf,
         );
+
+      case SirketMenuItem.kapiGecisLoglari:
+        return DoorLogsView(authService: widget.authService);
 
       case SirketMenuItem.superUserYonetimi:
         return ManagedUsersView(

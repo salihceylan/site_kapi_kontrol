@@ -38,6 +38,7 @@ class SitesView extends StatelessWidget {
     required this.onEditApartmentResident,
     required this.onSendApartmentMail,
     required this.onAssignDoorDevice,
+    this.onDeleteApartmentResident,
     this.onDownloadCredentialsPdf,
   });
 
@@ -65,6 +66,7 @@ class SitesView extends StatelessWidget {
   final ValueChanged<ApartmentRecord> onEditApartmentResident;
   final ValueChanged<ApartmentRecord> onSendApartmentMail;
   final ValueChanged<DoorRecord> onAssignDoorDevice;
+  final ValueChanged<ApartmentRecord>? onDeleteApartmentResident;
   final ValueChanged<SiteRecord>? onDownloadCredentialsPdf;
 
   @override
@@ -342,6 +344,9 @@ class SitesView extends StatelessWidget {
                         sendingMail: busyApartmentMails.contains(apartment.id),
                         onEdit: () => onEditApartmentResident(apartment),
                         onSendMail: () => onSendApartmentMail(apartment),
+                        onDelete: onDeleteApartmentResident != null
+                            ? () => onDeleteApartmentResident!(apartment)
+                            : null,
                       ),
                     ),
               ],

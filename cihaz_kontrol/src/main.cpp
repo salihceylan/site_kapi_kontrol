@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 
 #include "mqtt_baglanti.h"
+#include "offline_log.h"
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
@@ -124,6 +125,7 @@ void setup() {
   esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
   esp_task_wdt_add(NULL);
 
+  offlineLogInit();
   roleSetup();
   wifiBaglan();
   otaSetup();
@@ -137,6 +139,8 @@ void loop() {
   yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
+  offlineLogSenkronizeEt();
+  offlineLogHaftalikTemizle();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
   }
