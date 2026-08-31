@@ -147,7 +147,7 @@ inline void offlineLogSenkronizeEt() {
   String payload = "{\"device_uid\":\"" + cihazUniqueId() + "\",\"logs\":" + icerik + "}";
 
   WiFiClientSecure secureClient;
-  secureClient.setCACert(TLS_KOK_SERTIFIKA_ISRG_ROOT_X1);
+  secureClient.setCACert(TLS_ROOT_CA);
   secureClient.setTimeout(10);
 
   HTTPClient http;
@@ -172,3 +172,4 @@ inline void offlineLogSenkronizeEt() {
 }
 
 #endif
+

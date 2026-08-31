@@ -1640,6 +1640,27 @@ function resolveStoredBlockApartmentCounts(siteRow) {
   });
 }
 
+function formatBlockNameSegment(raw) {
+  let text = String(raw || '').trim();
+  text = text
+    .replaceAll('ç', 'c').replaceAll('Ç', 'C')
+    .replaceAll('ğ', 'g').replaceAll('Ğ', 'G')
+    .replaceAll('ı', 'i').replaceAll('İ', 'I')
+    .replaceAll('ö', 'o').replaceAll('Ö', 'O')
+    .replaceAll('ş', 's').replaceAll('Ş', 'S')
+    .replaceAll('ü', 'u').replaceAll('Ü', 'U')
+    .replaceAll(' ', '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '');
+
+  if (!text.toLowerCase().endsWith('blok')) {
+    text = `${text}Blok`;
+  } else {
+    const prefix = text.slice(0, -4);
+    text = `${prefix}Blok`;
+  }
+  return text;
+}
+
 function normalizeLoginSegment(raw) {
   return String(raw || '')
     .trim()
@@ -1657,12 +1678,9 @@ function apartmentResidentFullName({ blockName, unitLabel }) {
   return `${blockName} ${unitLabel}`.trim();
 }
 
-function apartmentBaseLoginName({ blockName, sortOrder }) {
-  let blockSegment = normalizeLoginSegment(blockName);
-  if (!blockSegment.endsWith('blok')) {
-    blockSegment = `${blockSegment}blok`;
-  }
-  return `${blockSegment}daire${sortOrder}`;
+function apartmentBaseLoginName({ siteCode, blockName, sortOrder }) {
+  const blockSegment = formatBlockNameSegment(blockName);
+  return `${siteCode}_${blockSegment}_Daire${sortOrder}`;
 }
 
 function generateApartmentPin() {
@@ -1676,7 +1694,7 @@ async function generateUniqueApartmentLoginName({
   siteCode,
   excludeUserCode = null,
 }) {
-  const baseLoginName = apartmentBaseLoginName({ blockName, sortOrder });
+  const baseLoginName = apartmentBaseLoginName({ siteCode, blockName, sortOrder });
   return ensureUniqueLoginName({
     db,
     desiredLoginName: baseLoginName,
@@ -1691,19 +1709,17 @@ async function ensureUniqueLoginName({
   siteCode,
   excludeUserCode = null,
 }) {
-  const baseLoginName = normalizeLoginSegment(desiredLoginName);
-  const siteSuffix = String(siteCode).slice(-4);
   let attempt = 0;
 
   while (attempt < 100) {
     const candidate = attempt === 0
-      ? baseLoginName
-      : `${baseLoginName}_${siteSuffix}${attempt === 1 ? '' : attempt}`;
+      ? desiredLoginName
+      : `${desiredLoginName}_${attempt + 1}`;
     const existing = await db.query(
       `
         SELECT user_code
         FROM users
-        WHERE login_name = $1
+        WHERE LOWER(login_name) = LOWER($1)
         LIMIT 1
       `,
       [candidate],
@@ -3576,7 +3592,7 @@ app.post('/auth/login', loginRateLimiter, async (req, res) => {
         created_at,
         password_hash
       FROM users
-      WHERE email = $1 OR login_name = $1
+      WHERE LOWER(email) = LOWER($1) OR LOWER(login_name) = LOWER($1)
       LIMIT 1
       `,
       [identifier],
