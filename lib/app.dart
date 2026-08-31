@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
@@ -51,6 +52,9 @@ class _MyAppState extends State<MyApp> {
       return;
     }
     if (actionType == 'voice_open') {
+      if (_authService.session?.role != UserRole.apartmentOwner) {
+        return;
+      }
       final context = _navigatorKey.currentContext;
       if (context != null) {
         VoiceControlModal.show(context, voiceService: _voiceDoorService);
@@ -77,6 +81,9 @@ class _MyAppState extends State<MyApp> {
 
     switch (action.type) {
       case DeepLinkActionType.triggerVoice:
+        if (_authService.session?.role != UserRole.apartmentOwner) {
+          return;
+        }
         final context = _navigatorKey.currentContext;
         if (context != null) {
           VoiceControlModal.show(context, voiceService: _voiceDoorService);

@@ -15,6 +15,8 @@ import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:printing/printing.dart';
+import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
@@ -391,14 +393,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _selectDoorControlDoor(structure.doors.first.id);
       }
     });
-    if (structure != null && structure.doors.isNotEmpty) {
+    if (structure != null &&
+        structure.doors.isNotEmpty &&
+        widget.authService.session?.role == UserRole.apartmentOwner) {
       _checkAndStartVoiceAssistance(structure.doors);
     }
   }
 
   Future<void> _checkAndStartVoiceAssistance(List<DoorRecord> doors) async {
     final session = widget.authService.session;
-    if (session == null || widget.voiceDoorService == null) return;
+    // YALNIZCA Daire Sakini (apartmentOwner) için ses motoru devrededir!
+    if (session == null ||
+        session.role != UserRole.apartmentOwner ||
+        widget.voiceDoorService == null) {
+      return;
+    }
 
     if (doors.isEmpty) {
       await widget.voiceDoorService!.speak('Tanımlı bir kapı bulunamadı.');
@@ -1001,6 +1010,62 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _exportSiteCredentialsPdf(SiteRecord site) async {
+    try {
+      _showMessage('${site.name} kullanıcı ve şifre raporu hazırlanıyor...');
+      final (structure, error) = await widget.authService.getSiteStructure(
+        siteCode: site.id,
+      );
+      if (structure == null) {
+        _showMessage(error ?? 'Site yapısı ve daireler alınamadı.');
+        return;
+      }
+
+      await PdfCredentialsService.printOrShareSitePdf(
+        structure: structure,
+        companyName: 'GÜDE TEKNOLOJİ',
+      );
+    } catch (e) {
+      _showMessage('PDF oluşturulurken hata oluştu: $e');
+    }
+  }
+
+  Future<void> _exportAllSitesCredentialsPdf() async {
+    try {
+      _showMessage('Tüm sitelerin şifre raporu hazırlanıyor...');
+      final sitesData = await widget.authService.listSites(page: 1, pageSize: 200);
+      if (sitesData.sites.isEmpty) {
+        _showMessage('Kayıtlı site bulunamadı.');
+        return;
+      }
+
+      final structures = <SiteStructureRecord>[];
+      for (final s in sitesData.sites) {
+        final (struct, _) = await widget.authService.getSiteStructure(siteCode: s.id);
+        if (struct != null) {
+          structures.add(struct);
+        }
+      }
+
+      if (structures.isEmpty) {
+        _showMessage('Site verileri alınamadı.');
+        return;
+      }
+
+      final bytes = await PdfCredentialsService.generateMultiSiteCredentialsPdf(
+        structures: structures,
+        companyName: 'GÜDE TEKNOLOJİ',
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => bytes,
+        name: 'Tum_Siteler_Kullanici_Giris_Bilgileri.pdf',
+      );
+    } catch (e) {
+      _showMessage('Toplu PDF oluşturulurken hata: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
@@ -1012,6 +1077,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: Text(_titleForMenu(_selectedMenu)),
         backgroundColor: roleColor,
         actions: [
+          if (session.role == UserRole.superUser) ...[
+            IconButton(
+              tooltip: 'Tüm Sitelerin Şifre Raporu (PDF)',
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: _exportAllSitesCredentialsPdf,
+            ),
+          ],
           IconButton(
             tooltip: 'Çıkış Yap',
             icon: const Icon(Icons.logout),
@@ -1086,7 +1158,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               );
             }
           },
-          voiceDoorService: widget.voiceDoorService,
+          onDownloadCredentialsPdf: _doorControlSite != null
+              ? () => _exportSiteCredentialsPdf(_doorControlSite!)
+              : null,
+          voiceDoorService: session.role == UserRole.apartmentOwner
+              ? widget.voiceDoorService
+              : null,
         );
 
       case SirketMenuItem.profilim:
@@ -1136,6 +1213,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onEditApartmentResident: _openApartmentResidentDialog,
           onSendApartmentMail: _sendApartmentCredentials,
           onAssignDoorDevice: _assignDoorDevice,
+          onDownloadCredentialsPdf: _exportSiteCredentialsPdf,
         );
 
       case SirketMenuItem.superUserYonetimi:

@@ -38,6 +38,7 @@ class SitesView extends StatelessWidget {
     required this.onEditApartmentResident,
     required this.onSendApartmentMail,
     required this.onAssignDoorDevice,
+    this.onDownloadCredentialsPdf,
   });
 
   final bool canManageSites;
@@ -64,6 +65,7 @@ class SitesView extends StatelessWidget {
   final ValueChanged<ApartmentRecord> onEditApartmentResident;
   final ValueChanged<ApartmentRecord> onSendApartmentMail;
   final ValueChanged<DoorRecord> onAssignDoorDevice;
+  final ValueChanged<SiteRecord>? onDownloadCredentialsPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +200,9 @@ class SitesView extends StatelessWidget {
                           canManageSites && site.approvalStatus == 'pending'
                               ? () => onRejectSite(site)
                               : null,
+                      onDownloadPdf: onDownloadCredentialsPdf != null
+                          ? () => onDownloadCredentialsPdf!(site)
+                          : null,
                     ),
                   ),
                 if (pageData != null)
@@ -282,14 +287,29 @@ class SitesView extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (canManageSites) ...[
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => onEditSite(structure.site),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Siteyi Düzenle'),
-                      ),
-                    ],
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (canManageSites)
+                          OutlinedButton.icon(
+                            onPressed: () => onEditSite(structure.site),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Siteyi Düzenle'),
+                          ),
+                        if (onDownloadCredentialsPdf != null)
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                onDownloadCredentialsPdf!(structure.site),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF1E3A8A),
+                              side: const BorderSide(color: Color(0xFF93C5FD)),
+                            ),
+                            icon: const Icon(Icons.picture_as_pdf_outlined),
+                            label: const Text('Şifreleri İndir (PDF)'),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ],

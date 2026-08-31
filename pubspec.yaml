@@ -21,6 +21,8 @@ dependencies:
   flutter_tts: ^4.2.3
   quick_actions: ^1.1.0
   app_links: ^6.4.1
+  pdf: ^3.11.1
+  printing: ^5.13.2
 
 dev_dependencies:
   flutter_test:

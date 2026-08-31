@@ -29,6 +29,7 @@ class DashboardView extends StatelessWidget {
     required this.onSelectDoor,
     required this.onOpenDoor,
     required this.onCreateGuestPass,
+    this.onDownloadCredentialsPdf,
     this.voiceDoorService,
   });
 
@@ -48,11 +49,12 @@ class DashboardView extends StatelessWidget {
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
   final VoidCallback onCreateGuestPass;
+  final VoidCallback? onDownloadCredentialsPdf;
   final VoiceDoorService? voiceDoorService;
 
   @override
   Widget build(BuildContext context) {
-    // Yalnızca Daire Sakini için Özel Minimalist Kumanda Arayüzü
+    // SADECE Daire Sakini için Modern Karanlık Akıllı Kumanda
     if (session.role == UserRole.apartmentOwner) {
       return _buildResidentDashboard(context);
     }
@@ -114,10 +116,6 @@ class DashboardView extends StatelessWidget {
             ],
           ),
         ),
-        if (voiceDoorService != null) ...[
-          const SizedBox(height: 16),
-          _buildVoiceLiveBanner(context, roleColor),
-        ],
         const SizedBox(height: 16),
         _buildDoorControlPanel(context),
       ],
@@ -667,6 +665,21 @@ class DashboardView extends StatelessWidget {
               label: const Text('Kurye / Misafir Geçişi Oluştur'),
             ),
           ),
+          if (onDownloadCredentialsPdf != null && selectedSite != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onDownloadCredentialsPdf,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1E3A8A),
+                  side: const BorderSide(color: Color(0xFF93C5FD)),
+                ),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('📄 Site Giriş Şifreleri PDF Raporu İndir'),
+              ),
+            ),
+          ],
         ],
       );
     }

@@ -150,7 +150,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
-        SirketMenuItem.ellerSerbest,
         SirketMenuItem.superUserYonetimi,
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
@@ -163,7 +162,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
-        SirketMenuItem.ellerSerbest,
         SirketMenuItem.siteler,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
