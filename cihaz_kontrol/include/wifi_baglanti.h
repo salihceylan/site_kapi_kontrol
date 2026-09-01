@@ -278,8 +278,11 @@ struct WifiNetworkInfo {
 inline void wifiPerformScan() {
   wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
 
+  WiFi.mode(WIFI_STA);
+  delay(100);
+
   std::vector<WifiNetworkInfo> networks;
-  const int count = WiFi.scanNetworks(false, true);
+  const int count = WiFi.scanNetworks(false, false);
   for (int index = 0; index < count; index += 1) {
     const String ssid = WiFi.SSID(index);
     if (ssid.isEmpty()) {
