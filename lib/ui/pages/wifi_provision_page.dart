@@ -100,12 +100,23 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     try {
       final BleWifiState state = await _service.connect(device);
       final BleWifiResult result = await _service.readResult();
+      List<BleWifiNetwork> initialNetworks = const <BleWifiNetwork>[];
+      try {
+        initialNetworks = await _service.readNetworks();
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() {
         _deviceState = state;
         _lastResult = result;
+        if (initialNetworks.isNotEmpty) {
+          _networks = initialNetworks;
+          _selectedSsid = initialNetworks.first.ssid;
+        }
       });
-      _loadNetworks();
+      if (initialNetworks.isEmpty) {
+        _loadNetworks();
+      }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
       _showMessage(error.message);
