@@ -190,6 +190,7 @@ inline bool mqttReconnect() {
     mqttPublishAvailability("online");
     mqttPublishState(gDoorLocked);
     mqttPublishEvent("device_connected");
+    otaTalepEt("mqtt_connect");
     return true;
   }
 
