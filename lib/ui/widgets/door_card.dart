@@ -35,66 +35,85 @@ class DoorCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 360;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: hasDevice
-                      ? AppColors.primary.withValues(alpha: 0.1)
-                      : Colors.orange.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.meeting_room_outlined,
-                  color: hasDevice
-                      ? AppColors.primary
-                      : Colors.orange.shade800,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      door.doorName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: AppColors.textDark,
-                      ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: hasDevice
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      hasDevice
-                          ? 'Cihaz: ${door.assignedDeviceUid}'
-                          : 'Cihaz atanmamış',
-                      style: TextStyle(
-                        color: hasDevice
-                            ? AppColors.textMuted
-                            : Colors.orange.shade800,
-                        fontSize: 12.5,
-                        fontWeight: hasDevice
-                            ? FontWeight.normal
-                            : FontWeight.w500,
-                      ),
+                    child: Icon(
+                      Icons.meeting_room_outlined,
+                      color: hasDevice
+                          ? AppColors.primary
+                          : Colors.orange.shade800,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          door.doorName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasDevice
+                              ? 'Cihaz: ${door.assignedDeviceUid}'
+                              : 'Cihaz atanmamış',
+                          style: TextStyle(
+                            color: hasDevice
+                                ? AppColors.textMuted
+                                : Colors.orange.shade800,
+                            fontSize: 12.5,
+                            fontWeight: hasDevice
+                                ? FontWeight.normal
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isNarrow) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: onAssignDevice,
+                      icon: const Icon(Icons.settings_input_component, size: 16),
+                      label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
                     ),
                   ],
+                ],
+              ),
+              if (isNarrow) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: onAssignDevice,
+                    icon: const Icon(Icons.settings_input_component, size: 16),
+                    label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
+                  ),
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: onAssignDevice,
-                icon: const Icon(Icons.settings_input_component, size: 16),
-                label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
-              ),
+              ],
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }

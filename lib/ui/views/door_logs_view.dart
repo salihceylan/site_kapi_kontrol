@@ -174,36 +174,35 @@ class _DoorLogsViewState extends State<DoorLogsView> {
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int?>(
-                    initialValue: _selectedSiteCode,
-                    decoration: const InputDecoration(
-                      labelText: 'Site Seçimi',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Tüm Siteler')),
-                      ..._sites.map(
-                        (s) => DropdownMenuItem(
-                          value: s.id,
-                          child: Text(s.name, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _selectedSiteCode = val;
-                        _page = 1;
-                      });
-                      _fetchLogs();
-                    },
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 420;
+                final dropdown = DropdownButtonFormField<int?>(
+                  initialValue: _selectedSiteCode,
+                  decoration: const InputDecoration(
+                    labelText: 'Site Seçimi',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Tüm Siteler')),
+                    ..._sites.map(
+                      (s) => DropdownMenuItem(
+                        value: s.id,
+                        child: Text(s.name, overflow: TextOverflow.ellipsis),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedSiteCode = val;
+                      _page = 1;
+                    });
+                    _fetchLogs();
+                  },
+                );
+
+                final pdfBtn = ElevatedButton.icon(
                   onPressed: _downloadPdfReport,
                   icon: const Icon(Icons.download, size: 18),
                   label: const Text('PDF İndir'),
@@ -212,8 +211,27 @@ class _DoorLogsViewState extends State<DoorLogsView> {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   ),
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      dropdown,
+                      const SizedBox(height: 8),
+                      pdfBtn,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: dropdown),
+                    const SizedBox(width: 8),
+                    pdfBtn,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 8),
             TextField(

@@ -245,73 +245,62 @@ class SitesView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Text(
+                  structure.site.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            structure.site.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
-                              fontSize: 20,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 16,
-                            runSpacing: 8,
-                            children: [
-                              Text('Site Kodu: ${structure.site.id}'),
-                              Text(
-                                'MQTT Site ID: ${structure.site.mqttSiteId}',
-                              ),
-                              Text('Blok: ${structure.site.blockCount}'),
-                              Text('Daire: ${structure.site.apartmentCount}'),
-                              Text('Kapı: ${structure.site.doorCount}'),
-                            ],
-                          ),
-                          if ((structure.site.managerName ?? '').isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                'Yönetici: ${structure.site.managerName} (${structure.site.managerUserCode ?? '-'})',
-                              ),
-                            ),
-                          if ((structure.site.address ?? '').isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text('Adres: ${structure.site.address}'),
-                            ),
-                        ],
+                    Text('Site Kodu: ${structure.site.id}'),
+                    Text(
+                      'MQTT Site ID: ${structure.site.mqttSiteId}',
+                    ),
+                    Text('Blok: ${structure.site.blockCount}'),
+                    Text('Daire: ${structure.site.apartmentCount}'),
+                    Text('Kapı: ${structure.site.doorCount}'),
+                  ],
+                ),
+                if ((structure.site.managerName ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Yönetici: ${structure.site.managerName} (${structure.site.managerUserCode ?? '-'})',
+                    ),
+                  ),
+                if ((structure.site.address ?? '').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('Adres: ${structure.site.address}'),
+                  ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (canManageSites)
+                      OutlinedButton.icon(
+                        onPressed: () => onEditSite(structure.site),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Siteyi Düzenle'),
                       ),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (canManageSites)
-                          OutlinedButton.icon(
-                            onPressed: () => onEditSite(structure.site),
-                            icon: const Icon(Icons.edit_outlined),
-                            label: const Text('Siteyi Düzenle'),
-                          ),
-                        if (onDownloadCredentialsPdf != null)
-                          OutlinedButton.icon(
-                            onPressed: () =>
-                                onDownloadCredentialsPdf!(structure.site),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF1E3A8A),
-                              side: const BorderSide(color: Color(0xFF93C5FD)),
-                            ),
-                            icon: const Icon(Icons.picture_as_pdf_outlined),
-                            label: const Text('Şifreleri İndir (PDF)'),
-                          ),
-                      ],
-                    ),
+                    if (onDownloadCredentialsPdf != null)
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            onDownloadCredentialsPdf!(structure.site),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF1E3A8A),
+                          side: const BorderSide(color: Color(0xFF93C5FD)),
+                        ),
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: const Text('Şifreleri İndir (PDF)'),
+                      ),
                   ],
                 ),
               ],
