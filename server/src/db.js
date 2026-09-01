@@ -506,10 +506,10 @@ export async function ensureDbSchema() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS door_access_logs (
         id BIGSERIAL PRIMARY KEY,
-        site_code INT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
-        door_id INT REFERENCES site_doors(id) ON DELETE SET NULL,
+        site_code BIGINT NOT NULL,
+        door_id BIGINT,
         door_name TEXT NOT NULL,
-        user_code INT REFERENCES users(user_code) ON DELETE SET NULL,
+        user_code BIGINT,
         user_name TEXT NOT NULL,
         user_role TEXT,
         apartment_label TEXT,
@@ -518,6 +518,9 @@ export async function ensureDbSchema() {
         ip_address TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;
+      ALTER TABLE door_access_logs ALTER COLUMN user_code TYPE BIGINT;
+      ALTER TABLE door_access_logs ALTER COLUMN door_id TYPE BIGINT;
       CREATE INDEX IF NOT EXISTS idx_door_access_logs_site_date
       ON door_access_logs(site_code, opened_at DESC);
       CREATE INDEX IF NOT EXISTS idx_door_access_logs_door
