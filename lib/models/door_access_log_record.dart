@@ -29,12 +29,12 @@ class DoorAccessLogRecord {
 
   factory DoorAccessLogRecord.fromJson(Map<String, dynamic> json) {
     return DoorAccessLogRecord(
-      id: json['id'] as int? ?? 0,
-      siteCode: json['site_code'] as int? ?? 0,
+      id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      siteCode: int.tryParse(json['site_code']?.toString() ?? '') ?? 0,
       siteName: json['site_name'] as String?,
-      doorId: json['door_id'] as int?,
+      doorId: int.tryParse(json['door_id']?.toString() ?? ''),
       doorName: (json['door_name'] as String?)?.trim() ?? 'Site Kapısı',
-      userCode: json['user_code'] as int?,
+      userCode: int.tryParse(json['user_code']?.toString() ?? ''),
       userName: (json['user_name'] as String?)?.trim() ?? 'Yetkili Kullanıcı',
       userRole: json['user_role'] as String?,
       apartmentLabel: json['apartment_label'] as String?,
@@ -98,10 +98,10 @@ class DoorAccessLogPage {
         .toList();
     return DoorAccessLogPage(
       logs: list,
-      total: json['total'] as int? ?? list.length,
-      page: json['page'] as int? ?? 1,
-      pageSize: json['page_size'] as int? ?? 50,
-      totalPages: json['total_pages'] as int? ?? 1,
+      total: int.tryParse(json['total']?.toString() ?? '') ?? list.length,
+      page: int.tryParse(json['page']?.toString() ?? '') ?? 1,
+      pageSize: int.tryParse(json['page_size']?.toString() ?? '') ?? 50,
+      totalPages: int.tryParse(json['total_pages']?.toString() ?? '') ?? 1,
     );
   }
 }

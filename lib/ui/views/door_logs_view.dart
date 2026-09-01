@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_logs_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
@@ -55,7 +56,8 @@ class _DoorLogsViewState extends State<DoorLogsView> {
       if (mounted) {
         setState(() {
           _sites = sitePage.sites;
-          if (_sites.isNotEmpty && _selectedSiteCode == null) {
+          final role = widget.authService.session?.role;
+          if (role == UserRole.siteManager && _sites.isNotEmpty) {
             _selectedSiteCode = _sites.first.id;
           }
         });
@@ -97,6 +99,47 @@ class _DoorLogsViewState extends State<DoorLogsView> {
         _totalCount = logPage.total;
       }
     });
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+    );
+    if (picked != null) {
+      setState(() {
+        _startDate = DateTime(picked.start.year, picked.start.month, picked.start.day);
+        _endDate = DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
+        _page = 1;
+      });
+      _fetchLogs();
+    }
+  }
+
+  void _setDateFilter(int days) {
+    setState(() {
+      if (days == 0) {
+        // Bugün
+        final now = DateTime.now();
+        _startDate = DateTime(now.year, now.month, now.day);
+        _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      } else if (days > 0) {
+        // Son X gün
+        final now = DateTime.now();
+        _startDate = now.subtract(Duration(days: days));
+        _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      } else {
+        // Tüm zamanlar
+        _startDate = null;
+        _endDate = null;
+      }
+      _page = 1;
+    });
+    _fetchLogs();
   }
 
   Future<void> _downloadPdfReport() async {
@@ -224,6 +267,7 @@ class _DoorLogsViewState extends State<DoorLogsView> {
       padding: const EdgeInsets.all(14),
       decoration: AppDecorations.glassCard,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
@@ -304,6 +348,46 @@ class _DoorLogsViewState extends State<DoorLogsView> {
             ),
             onSubmitted: (_) => _fetchLogs(),
           ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ActionChip(
+                  label: const Text('Tüm Zamanlar', style: TextStyle(fontSize: 11)),
+                  backgroundColor: _startDate == null ? primaryColor.withValues(alpha: 0.15) : null,
+                  onPressed: () => _setDateFilter(-1),
+                ),
+                const SizedBox(width: 6),
+                ActionChip(
+                  label: const Text('Bugün', style: TextStyle(fontSize: 11)),
+                  backgroundColor: _startDate != null && _endDate != null && _startDate!.day == DateTime.now().day && _startDate!.month == DateTime.now().month && _startDate!.year == DateTime.now().year && _startDate!.hour == 0
+                      ? primaryColor.withValues(alpha: 0.15)
+                      : null,
+                  onPressed: () => _setDateFilter(0),
+                ),
+                const SizedBox(width: 6),
+                ActionChip(
+                  label: const Text('Son 7 Gün', style: TextStyle(fontSize: 11)),
+                  backgroundColor: _startDate != null && _endDate != null && _startDate!.isBefore(DateTime.now().subtract(const Duration(days: 6)))
+                      ? primaryColor.withValues(alpha: 0.15)
+                      : null,
+                  onPressed: () => _setDateFilter(7),
+                ),
+                const SizedBox(width: 6),
+                ActionChip(
+                  avatar: const Icon(Icons.calendar_month, size: 14),
+                  label: Text(
+                    _startDate != null && _endDate != null
+                        ? '${DateFormat('dd.MM').format(_startDate!)} - ${DateFormat('dd.MM').format(_endDate!)}'
+                        : 'Tarih Seç',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onPressed: _selectDateRange,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -314,6 +398,7 @@ class _DoorLogsViewState extends State<DoorLogsView> {
     final localCount = _logs.where((l) => l.triggerType == 'local_wifi').length;
     final guestCount = _logs.where((l) => l.triggerType == 'guest_pass').length;
     final voiceCount = _logs.where((l) => l.triggerType == 'voice').length;
+    final offlineCount = _logs.where((l) => l.triggerType == 'offline_sync').length;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -328,6 +413,10 @@ class _DoorLogsViewState extends State<DoorLogsView> {
           _buildChip('Misafir', '$guestCount', Colors.orange),
           const SizedBox(width: 6),
           _buildChip('Sesli', '$voiceCount', Colors.purple),
+          if (offlineCount > 0) ...[
+            const SizedBox(width: 6),
+            _buildChip('Çevrimdışı (ESP)', '$offlineCount', Colors.brown),
+          ],
         ],
       ),
     );

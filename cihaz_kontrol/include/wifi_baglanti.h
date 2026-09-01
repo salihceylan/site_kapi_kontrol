@@ -8,11 +8,9 @@
 #include <WiFi.h>
 
 #include <algorithm>
-#include <esp_task_wdt.h>
 #include <vector>
 
 #include "device_konfig.h"
-#include "role_kontrol.h"
 
 inline constexpr char WIFI_PREFS_NAMESPACE[] = "wifi_cfg";
 inline constexpr char WIFI_PREF_SSID[] = "ssid";
@@ -247,17 +245,12 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
   gLastWifiAttemptAt = millis();
   WiFi.mode(WIFI_STA);
   delay(100);
-  WiFi.disconnect(false, false);
   delay(100);
   WiFi.begin(ssid.c_str(), password.c_str());
-
   const unsigned long startedAt = millis();
   while (millis() - startedAt < timeoutMs) {
     esp_task_wdt_reset();
     roleLoop();
-
-    if (WiFi.status() == WL_CONNECTED) {
-      gWifiConnected = true;
       Serial.print("WiFi baglandi, IP: ");
       Serial.println(WiFi.localIP());
       wifiNotifyBleState();
@@ -268,7 +261,6 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
     delay(100);
   }
 
-  gWifiConnected = false;
   Serial.println("WiFi baglantisi basarisiz.");
   wifiNotifyBleState();
   return false;
@@ -619,10 +611,6 @@ inline void wifiLoop() {
     Serial.println("WiFi baglantisi koptu; arka planda yeniden baglaniliyor...");
     WiFi.disconnect(false, false);
     WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
-  }
-
-  wifiUpdateLed();
-}
 
 inline bool wifiHazirMi() {
   return gWifiConnected;
