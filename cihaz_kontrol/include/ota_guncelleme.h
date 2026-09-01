@@ -13,7 +13,7 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "1.3.1";
+inline constexpr char OTA_CURRENT_VERSION[] = "2.0.0";
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
@@ -212,14 +212,32 @@ inline void otaCheckAndUpdate() {
   Serial.print(" boyut: ");
   Serial.println(updatePartition->size);
 
+  // WDT 8 saniye olduğu için 1.18MB indirme sırasında reset atmasını engelle
+  esp_task_wdt_delete(NULL);
+
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
+  otaClient.setTimeout(15);
+
   httpUpdate.rebootOnUpdate(true);
+  httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  httpUpdate.setLedPin(WIFI_STATUS_LED_PIN, LOW);
+
+  Update.onProgress([](size_t progress, size_t size) {
+    if (size > 0) {
+      Serial.printf("OTA Indiriliyor: %u%%\r", (progress * 100) / size);
+    }
+  });
+
   if (md5.length() == 32) {
     Serial.print("OTA manifest MD5: ");
     Serial.println(md5);
   }
   const t_httpUpdate_return result = httpUpdate.update(otaClient, url);
+
+  // Güncelleme başarısız olduysa veya yeniden başlamadıysa WDT'yi tekrar devreye al
+  esp_task_wdt_init(8, true);
+  esp_task_wdt_add(NULL);
 
   switch (result) {
     case HTTP_UPDATE_FAILED:
