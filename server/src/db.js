@@ -519,6 +519,7 @@ export async function ensureDbSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;
+      ALTER TABLE door_access_logs ALTER COLUMN site_code DROP NOT NULL;
       ALTER TABLE door_access_logs ALTER COLUMN user_code TYPE BIGINT;
       ALTER TABLE door_access_logs ALTER COLUMN door_id TYPE BIGINT;
       CREATE INDEX IF NOT EXISTS idx_door_access_logs_site_date
