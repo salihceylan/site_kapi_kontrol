@@ -106,26 +106,27 @@ class CompanyDevicesView extends StatelessWidget {
             ),
           ),
         if (pageData != null && pageData!.totalPages > 1) ...[
-          const SizedBox(height: 4),
-          Row(
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  'Sayfa ${pageData!.page} / ${pageData!.totalPages} | Toplam ${pageData!.total}',
-                ),
+              Text(
+                'Sayfa ${pageData!.page} / ${pageData!.totalPages} | Toplam ${pageData!.total}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-              TextButton(
+              OutlinedButton(
                 onPressed: pageData!.page > 1 && !isLoading
                     ? () => onLoadPage(pageData!.page - 1)
                     : null,
-                child: const Text('Önceki'),
+                child: const Icon(Icons.chevron_left),
               ),
-              const SizedBox(width: 8),
-              ElevatedButton(
+              OutlinedButton(
                 onPressed: pageData!.page < pageData!.totalPages && !isLoading
                     ? () => onLoadPage(pageData!.page + 1)
                     : null,
-                child: const Text('Sonraki'),
+                child: const Icon(Icons.chevron_right),
               ),
             ],
           ),

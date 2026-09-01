@@ -259,9 +259,7 @@ class SitesView extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     Text('Site Kodu: ${structure.site.id}'),
-                    Text(
-                      'MQTT Site ID: ${structure.site.mqttSiteId}',
-                    ),
+                    Text('MQTT Site ID: ${structure.site.mqttSiteId}'),
                     Text('Blok: ${structure.site.blockCount}'),
                     Text('Daire: ${structure.site.apartmentCount}'),
                     Text('Kapı: ${structure.site.doorCount}'),
@@ -330,9 +328,9 @@ class SitesView extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: ApartmentCard(
                         apartment: apartment,
-                        sendingMail: busyApartmentMails.contains(apartment.id),
                         onEdit: () => onEditApartmentResident(apartment),
                         onSendMail: () => onSendApartmentMail(apartment),
+                        sendingMail: busyApartmentMails.contains(apartment.id),
                         onDelete: onDeleteApartmentResident != null
                             ? () => onDeleteApartmentResident!(apartment)
                             : null,
