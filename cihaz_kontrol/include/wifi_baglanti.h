@@ -277,15 +277,17 @@ inline void wifiPerformScan() {
 
   WiFi.disconnect(false, false);
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
   delay(150);
 
-  int16_t count = WiFi.scanNetworks(false, false);
-  if (count < 0) {
+  int16_t count = WiFi.scanNetworks(false, false, false, 250);
+  if (count <= 0) {
     WiFi.disconnect(true, false);
     delay(100);
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     delay(200);
-    count = WiFi.scanNetworks(false, false);
+    count = WiFi.scanNetworks(false, false, false, 300);
   }
 
   std::vector<WifiNetworkInfo> networks;

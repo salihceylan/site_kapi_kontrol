@@ -375,8 +375,8 @@ class BleWifiProvisionService {
     );
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
-    for (int index = 0; index < 20; index += 1) {
-      await Future<void>.delayed(const Duration(milliseconds: 350));
+    for (int index = 0; index < 25; index += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
       result = await readResult();
       if (result.isFailure) {
         throw BleProvisionException(
@@ -384,15 +384,10 @@ class BleWifiProvisionService {
         );
       }
       if (result.isScanComplete) {
-        return readNetworks();
-      }
-      if (index >= 4) {
-        try {
-          final List<BleWifiNetwork> current = await readNetworks();
-          if (current.isNotEmpty) {
-            return current;
-          }
-        } catch (_) {}
+        final List<BleWifiNetwork> networks = await readNetworks();
+        if (networks.isNotEmpty) {
+          return networks;
+        }
       }
     }
 
