@@ -242,8 +242,22 @@ def find_platformio() -> str:
     raise FileNotFoundError("PlatformIO bulunamadi.")
 
 
+def find_esptool_python() -> str:
+    try:
+        res = subprocess.run([sys.executable, "-m", "esptool", "version"], capture_output=True, timeout=3, check=False)
+        if res.returncode == 0:
+            return sys.executable
+    except Exception:
+        pass
+    pio_py = Path.home() / ".platformio" / "penv" / "Scripts" / "python.exe"
+    if pio_py.exists():
+        return str(pio_py)
+    return sys.executable
+
+
 def read_mac(port: str) -> tuple[str, str]:
-    cmd = [sys.executable, "-m", "esptool", "--port", port, "read_mac"]
+    py_exe = find_esptool_python()
+    cmd = [py_exe, "-m", "esptool", "--port", port, "read_mac"]
     out = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
     text = f"{out.stdout}\n{out.stderr}"
     mm = MAC_RE.search(text)
@@ -1002,8 +1016,8 @@ class App:
                 "enabled": True,
                 "version": version,
                 "filename": "firmware.bin",
-                "force": False,
-                "interval_hours": 24,
+                "force": True,
+                "interval_hours": 1,
                 "allowed_uids": [],
                 "sha256": hashes["firmware_bin"]["sha256"],
                 "md5": hashes["firmware_bin"]["md5"],
@@ -1076,8 +1090,9 @@ class App:
                 if not p.exists():
                     raise FileNotFoundError(f"Firmware dosyasi yok: {p}")
 
+            py_exe = find_esptool_python()
             cmd = [
-                sys.executable,
+                py_exe,
                 "-m",
                 "esptool",
                 "--chip",
