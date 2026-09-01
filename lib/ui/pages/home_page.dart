@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:printing/printing.dart';
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
+import 'package:site_kapi_kontrol/services/pdf_device_firmware_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_logs_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
@@ -936,6 +937,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _exportFirmwareReportPdf() async {
+    final devices = _companyDevicesPage?.devices ?? const <DeviceRecord>[];
+    if (devices.isEmpty) {
+      _showMessage('Raporlanacak kayıtlı cihaz bulunamadı.');
+      return;
+    }
+
+    try {
+      _showMessage('Cihaz sürüm ve güncelleme raporu hazırlanıyor...');
+      await PdfDeviceFirmwareService.printOrShareFirmwareReportPdf(
+        devices: devices,
+        userEmail: widget.authService.session?.email,
+        latestTargetVersion: '2.0.0',
+      );
+    } catch (e) {
+      _showMessage('PDF oluşturulurken hata oluştu: $e');
+    }
+  }
+
   Future<void> _openWifiProvision() async {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1389,6 +1409,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onEditDevice: _editCompanyDevice,
           onAssignDeviceToDoor: _assignCompanyDeviceToDoor,
           onDeleteDevice: _deleteCompanyDevice,
+          onDownloadFirmwareReportPdf: _exportFirmwareReportPdf,
         );
 
       case SirketMenuItem.bluetoothWifiKur:

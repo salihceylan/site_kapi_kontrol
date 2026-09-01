@@ -45,12 +45,12 @@ class DeviceRecord {
 
   factory DeviceRecord.fromJson(Map<String, dynamic> json) {
     return DeviceRecord(
-      id: json['id'] as int,
+      id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
       deviceUid: json['device_uid'] as String? ?? '',
-      assignedUserCode: json['assigned_user_code'] as int?,
+      assignedUserCode: int.tryParse(json['assigned_user_code']?.toString() ?? ''),
       gateName: json['gate_name'] as String?,
-      assignedDoorId: json['assigned_door_id'] as int?,
-      siteCode: json['site_code'] as int?,
+      assignedDoorId: int.tryParse(json['assigned_door_id']?.toString() ?? ''),
+      siteCode: int.tryParse(json['site_code']?.toString() ?? ''),
       siteName: json['site_name'] as String?,
       assignedDoorName: json['assigned_door_name'] as String?,
       siteApprovalStatus: json['site_approval_status'] as String? ?? 'approved',
@@ -60,15 +60,15 @@ class DeviceRecord {
       firmwareVersion: json['firmware_version'] as String?,
       otaStatus: json['ota_status'] as String?,
       otaLastVersion: json['ota_last_version'] as String?,
-      wifiRssi: json['wifi_rssi'] as int?,
-      wifiSignalPercent: json['wifi_signal_percent'] as int?,
+      wifiRssi: int.tryParse(json['wifi_rssi']?.toString() ?? ''),
+      wifiSignalPercent: int.tryParse(json['wifi_signal_percent']?.toString() ?? ''),
       lastSeenAt: json['last_seen_at'] == null
           ? null
-          : DateTime.tryParse(json['last_seen_at'] as String),
+          : DateTime.tryParse(json['last_seen_at'].toString()),
       lastEvent: json['last_event'] as String?,
       createdAt: json['created_at'] == null
           ? null
-          : DateTime.tryParse(json['created_at'] as String),
+          : DateTime.tryParse(json['created_at'].toString()),
     );
   }
 }

@@ -19,6 +19,7 @@ class CompanyDevicesView extends StatelessWidget {
     required this.onEditDevice,
     required this.onAssignDeviceToDoor,
     required this.onDeleteDevice,
+    this.onDownloadFirmwareReportPdf,
   });
 
   final DevicePage? pageData;
@@ -32,6 +33,7 @@ class CompanyDevicesView extends StatelessWidget {
   final ValueChanged<DeviceRecord> onEditDevice;
   final ValueChanged<DeviceRecord> onAssignDeviceToDoor;
   final ValueChanged<DeviceRecord> onDeleteDevice;
+  final VoidCallback? onDownloadFirmwareReportPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +64,7 @@ class CompanyDevicesView extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (isSuperUser)
+                  if (isSuperUser) ...[
                     ElevatedButton.icon(
                       onPressed: isBroadcastingOta ||
                               isLoading ||
@@ -72,10 +74,18 @@ class CompanyDevicesView extends StatelessWidget {
                       icon: const Icon(Icons.system_update_alt),
                       label: Text(
                         isBroadcastingOta
-                            ? 'Gönderiliyor'
+                            ? 'Gönderiliyor...'
                             : 'Tümüne OTA Kontrolü',
                       ),
                     ),
+                    OutlinedButton.icon(
+                      onPressed: (pageData?.total ?? 0) == 0
+                          ? null
+                          : onDownloadFirmwareReportPdf,
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('Sürüm Raporu (PDF)'),
+                    ),
+                  ],
                   IconButton(
                     tooltip: 'Yenile',
                     onPressed: isLoading ? null : onRefresh,
