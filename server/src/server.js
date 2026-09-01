@@ -482,6 +482,24 @@ async function recordDoorAccessLog({
   }
 }
 
+// Haftalık (7 günlük) Log Temizleme Rutini - 7 günden eski logları otomatik temizler
+async function cleanupOldDoorLogs() {
+  try {
+    const res = await pool.query(
+      `DELETE FROM door_access_logs WHERE opened_at < NOW() - INTERVAL '7 days';`
+    );
+    if (res.rowCount > 0) {
+      console.log(`[Log Cleanup]: 7 günden eski ${res.rowCount} adet kapı geçiş kaydı temizlendi.`);
+    }
+  } catch (err) {
+    console.error('Eski log temizleme hatasi:', err.message);
+  }
+}
+
+// Sunucu açılışında ve her 24 saatte bir çalıştır
+void cleanupOldDoorLogs();
+setInterval(cleanupOldDoorLogs, 24 * 60 * 60 * 1000);
+
 function validateCreateInput({
   fullName,
   email,
@@ -5346,8 +5364,8 @@ app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req
           openedAt: new Date(),
           ipAddress: req.ip,
         });
-      } catch (logErr) {
-        console.error('Asenkron log kayit hatasi:', logErr.message);
+      } catch (err) {
+        console.error('Kapi gecis logu DB kayit hatasi:', err.message);
       }
     })();
 

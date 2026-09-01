@@ -12,7 +12,8 @@
 #include "wifi_baglanti.h"
 
 inline const char* OFFLINE_LOG_FILE = "/offline_logs.json";
-inline constexpr unsigned long OFFLINE_LOG_MAX_AGE_SECONDS = 7 * 24 * 3600; // 7 gün
+inline constexpr unsigned long OFFLINE_LOG_MAX_AGE_SECONDS = 24 * 3600; // 24 saat
+inline constexpr size_t OFFLINE_LOG_MAX_FILE_SIZE = 16 * 1024; // 16 KB max tampon
 inline unsigned long gSonLogTemizlemeMs = 0;
 inline unsigned long gSonLogSenkronizasyonMs = 0;
 inline bool gOfflineLogFsHazir = false;
@@ -52,8 +53,13 @@ inline void offlineLogKaydet(
   if (LittleFS.exists(OFFLINE_LOG_FILE)) {
     File f = LittleFS.open(OFFLINE_LOG_FILE, "r");
     if (f) {
-      mevcutIcerik = f.readString();
-      f.close();
+      if (f.size() > OFFLINE_LOG_MAX_FILE_SIZE) {
+        f.close();
+        LittleFS.remove(OFFLINE_LOG_FILE); // 16KB aşılmışsa OTA ve RAM güvenliği için sıfırla
+      } else {
+        mevcutIcerik = f.readString();
+        f.close();
+      }
     }
   }
 
@@ -81,7 +87,7 @@ inline void offlineLogKaydet(
   if (f) {
     f.print("[" + mevcutIcerik + "]");
     f.close();
-    Serial.println("Offline Log: Kapı gecisi LittleFS hafizasina kaydedildi.");
+    Serial.println("Offline Log: Kapı gecisi 24 saatlik LittleFS tamponuna kaydedildi.");
   } else {
     Serial.println("Offline Log: Dosya yazma hatasi!");
   }
@@ -93,30 +99,23 @@ inline void offlineLogHaftalikTemizle() {
   }
 
   const unsigned long simdikiMs = millis();
-  if (simdikiMs - gSonLogTemizlemeMs < 3600000ULL) { // Saatte bir kontrol et
+  if (simdikiMs - gSonLogTemizlemeMs < 1800000ULL) { // 30 dakikada bir kontrol et
     return;
   }
   gSonLogTemizlemeMs = simdikiMs;
 
-  const unsigned long epochNow = getMevcutZamanEpoch();
-  if (epochNow > 1600000000) {
-    // NTP aktifse 7 günden eski dosyaları temizle
-    File f = LittleFS.open(OFFLINE_LOG_FILE, "r");
-    if (!f) return;
-    const size_t fileSize = f.size();
-    f.close();
+  File f = LittleFS.open(OFFLINE_LOG_FILE, "r");
+  if (!f) return;
+  const size_t fileSize = f.size();
+  f.close();
 
-    // Dosya 7 günden eskiyse ve internet yoksa dosya boyutuna ve zamana göre temizle
-    if (fileSize > 64 * 1024) { // 64KB üzerinde ise
-      LittleFS.remove(OFFLINE_LOG_FILE);
-      Serial.println("Offline Log: 64KB uzeri eski loglar temizlendi.");
-    }
-  } else {
-    // İnternet hiç gelmediyse ve cihaz 7 günden uzun süredir aciksa (millis > 7 gun)
-    if (simdikiMs > OFFLINE_LOG_MAX_AGE_SECONDS * 1000ULL) {
-      LittleFS.remove(OFFLINE_LOG_FILE);
-      Serial.println("Offline Log: 7 gundur internete baglanmayan loglar temizlendi.");
-    }
+  // Dosya 16KB üzerinde ise veya 24 saatten eskiyse temizle
+  if (fileSize > OFFLINE_LOG_MAX_FILE_SIZE) {
+    LittleFS.remove(OFFLINE_LOG_FILE);
+    Serial.println("Offline Log: 16KB uzeri dosya temizlendi.");
+  } else if (simdikiMs > OFFLINE_LOG_MAX_AGE_SECONDS * 1000ULL) {
+    LittleFS.remove(OFFLINE_LOG_FILE);
+    Serial.println("Offline Log: 24 saatlik cevrimdisi log suresi doldugu icin temizlendi.");
   }
 }
 

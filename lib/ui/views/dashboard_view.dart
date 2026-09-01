@@ -30,6 +30,7 @@ class DashboardView extends StatelessWidget {
     required this.onOpenDoor,
     required this.onCreateGuestPass,
     this.onDownloadCredentialsPdf,
+    this.onDownloadLogsPdf,
     this.voiceDoorService,
   });
 
@@ -50,6 +51,7 @@ class DashboardView extends StatelessWidget {
   final VoidCallback onOpenDoor;
   final VoidCallback onCreateGuestPass;
   final VoidCallback? onDownloadCredentialsPdf;
+  final VoidCallback? onDownloadLogsPdf;
   final VoiceDoorService? voiceDoorService;
 
   @override
@@ -677,6 +679,21 @@ class DashboardView extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 label: const Text('📄 Site Giriş Şifreleri PDF Raporu İndir'),
+              ),
+            ),
+          ],
+          if (onDownloadLogsPdf != null && selectedSite != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onDownloadLogsPdf,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0D47A1),
+                  side: const BorderSide(color: Color(0xFF60A5FA)),
+                ),
+                icon: const Icon(Icons.assignment_outlined, size: 18),
+                label: const Text('📊 Haftalık Kapı Geçiş Raporu (PDF) İndir'),
               ),
             ),
           ],

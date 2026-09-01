@@ -251,6 +251,7 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
   while (millis() - startedAt < timeoutMs) {
     esp_task_wdt_reset();
     roleLoop();
+    if (WiFi.status() == WL_CONNECTED) {
       Serial.print("WiFi baglandi, IP: ");
       Serial.println(WiFi.localIP());
       wifiNotifyBleState();
@@ -611,6 +612,10 @@ inline void wifiLoop() {
     Serial.println("WiFi baglantisi koptu; arka planda yeniden baglaniliyor...");
     WiFi.disconnect(false, false);
     WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
+  }
+
+  wifiUpdateLed();
+}
 
 inline bool wifiHazirMi() {
   return gWifiConnected;

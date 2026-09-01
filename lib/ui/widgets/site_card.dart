@@ -16,6 +16,7 @@ class SiteCard extends StatefulWidget {
     this.onApprove,
     this.onReject,
     this.onDownloadPdf,
+    this.onDownloadLogsPdf,
   });
 
   final SiteRecord site;
@@ -29,6 +30,7 @@ class SiteCard extends StatefulWidget {
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
   final VoidCallback? onDownloadPdf;
+  final VoidCallback? onDownloadLogsPdf;
 
   @override
   State<SiteCard> createState() => _SiteCardState();
@@ -259,6 +261,16 @@ class _SiteCardState extends State<SiteCard> {
                             color: Color(0xFF1E3A8A),
                           ),
                           label: const Text('Şifreleri İndir (PDF)'),
+                        ),
+                      if (widget.onDownloadLogsPdf != null)
+                        OutlinedButton.icon(
+                          onPressed: widget.onDownloadLogsPdf,
+                          icon: const Icon(
+                            Icons.assignment_outlined,
+                            size: 16,
+                            color: Color(0xFF0D47A1),
+                          ),
+                          label: const Text('Geçiş Raporu (PDF)'),
                         ),
                     ],
                   ),

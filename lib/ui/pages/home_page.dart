@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:printing/printing.dart';
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
+import 'package:site_kapi_kontrol/services/pdf_logs_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
@@ -1106,6 +1107,61 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _exportSiteLogsPdf(SiteRecord site) async {
+    try {
+      _showMessage('${site.name} haftalık geçiş log raporu hazırlanıyor...');
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
+        siteCode: site.id,
+        startDate: sevenDaysAgo,
+        endDate: now,
+        pageSize: 200,
+      );
+
+      if (logsPage == null || logsPage.logs.isEmpty) {
+        _showMessage(error ?? '${site.name} için son 7 güne ait kapı geçiş kaydı bulunamadı.');
+        return;
+      }
+
+      await PdfLogsService.printOrShareLogsPdf(
+        logs: logsPage.logs,
+        siteName: site.name,
+        startDate: sevenDaysAgo,
+        endDate: now,
+      );
+    } catch (e) {
+      _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
+    }
+  }
+
+  Future<void> _exportAllLogsPdf() async {
+    try {
+      _showMessage('Tüm sitelerin haftalık geçiş log raporu hazırlanıyor...');
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
+        startDate: sevenDaysAgo,
+        endDate: now,
+        pageSize: 200,
+      );
+
+      if (logsPage == null || logsPage.logs.isEmpty) {
+        _showMessage(error ?? 'Son 7 güne ait kapı geçiş kaydı bulunamadı.');
+        return;
+      }
+
+      await PdfLogsService.printOrShareLogsPdf(
+        logs: logsPage.logs,
+        siteName: 'TÜM SİTELER',
+        startDate: sevenDaysAgo,
+        endDate: now,
+      );
+    } catch (e) {
+      _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
@@ -1120,8 +1176,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (session.role == UserRole.superUser) ...[
             IconButton(
               tooltip: 'Tüm Sitelerin Şifre Raporu (PDF)',
-              icon: const Icon(Icons.picture_as_pdf_outlined),
+              icon: const Icon(Icons.password_rounded),
               onPressed: _exportAllSitesCredentialsPdf,
+            ),
+            IconButton(
+              tooltip: 'Tüm Sitelerin Haftalık Geçiş Raporu (PDF)',
+              icon: const Icon(Icons.assignment_outlined),
+              onPressed: _exportAllLogsPdf,
             ),
           ],
           IconButton(
@@ -1201,6 +1262,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onDownloadCredentialsPdf: _doorControlSite != null
               ? () => _exportSiteCredentialsPdf(_doorControlSite!)
               : null,
+          onDownloadLogsPdf: _doorControlSite != null
+              ? () => _exportSiteLogsPdf(_doorControlSite!)
+              : null,
           voiceDoorService: session.role == UserRole.apartmentOwner
               ? widget.voiceDoorService
               : null,
@@ -1256,6 +1320,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onAssignDoorDevice: _assignDoorDevice,
           onDeleteApartmentResident: _deleteApartmentResident,
           onDownloadCredentialsPdf: _exportSiteCredentialsPdf,
+          onDownloadLogsPdf: _exportSiteLogsPdf,
         );
 
       case SirketMenuItem.kapiGecisLoglari:

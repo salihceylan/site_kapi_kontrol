@@ -155,7 +155,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
-        SirketMenuItem.kapiGecisLoglari,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -165,7 +164,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
-        SirketMenuItem.kapiGecisLoglari,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
       ];

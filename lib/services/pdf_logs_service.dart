@@ -243,13 +243,51 @@ class PdfLogsService {
                   _buildStatBox('Sesli Komut', voiceCount.toString(), PdfColor.fromHex('#8E24AA'), fontBold),
                   if (offlineCount > 0) ...[
                     pw.SizedBox(width: 6),
-                    _buildStatBox('Çevrimdışı', offlineCount.toString(), PdfColor.fromHex('#6D4C41'), fontBold),
+                    _buildStatBox('Çevrimdışı (ESP)', offlineCount.toString(), PdfColor.fromHex('#6D4C41'), fontBold),
                   ],
                 ],
               ),
             ),
 
-            // LOG TABLOSU
+            // KULLANICI BAZLI GEÇİŞ SAYACI (KİM KAÇ KEZ GİRDİ?)
+            if (logs.isNotEmpty) ...[
+              pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 6),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: pw.BoxDecoration(
+                  color: primaryColor,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                ),
+                child: pw.Text(
+                  'KULLANICI BAZLI GEÇİŞ SAYILARI (KİM KAÇ KEZ GİRDİ?)',
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 8.5,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              _buildUserCountsTable(logs, borderGray, primaryColor, _dateFormat),
+              pw.SizedBox(height: 14),
+            ],
+
+            // AYRINTILI LOG TABLOSU
+            pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 6),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: pw.BoxDecoration(
+                color: accentColor,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Text(
+                'AYRINTILI GEÇİŞ DÖKÜMÜ (ZAMAN DAMGALI)',
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontSize: 8.5,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
             if (logs.isEmpty)
               pw.Container(
                 padding: const pw.EdgeInsets.all(20),
@@ -263,12 +301,12 @@ class PdfLogsService {
               pw.TableHelper.fromTextArray(
                 border: pw.TableBorder.all(color: borderGray, width: 0.5),
                 headerDecoration: pw.BoxDecoration(
-                  color: primaryColor,
+                  color: secondaryBg,
                 ),
-                headerHeight: 22,
-                cellHeight: 18,
+                headerHeight: 20,
+                cellHeight: 16,
                 headerStyle: pw.TextStyle(
-                  color: PdfColors.white,
+                  color: primaryColor,
                   fontWeight: pw.FontWeight.bold,
                   fontSize: 7.5,
                 ),
@@ -354,6 +392,88 @@ class PdfLogsService {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  static pw.Widget _buildUserCountsTable(
+    List<DoorAccessLogRecord> logs,
+    PdfColor borderGray,
+    PdfColor primaryColor,
+    DateFormat dateFormat,
+  ) {
+    final userMap = <String, ({String name, String? apartment, String role, int count, DateTime lastSeen})>{};
+    for (final log in logs) {
+      final key = '${log.userName}_${log.apartmentLabel ?? ''}';
+      if (!userMap.containsKey(key)) {
+        userMap[key] = (
+          name: log.userName,
+          apartment: log.apartmentLabel,
+          role: log.userRoleDisplay,
+          count: 1,
+          lastSeen: log.openedAt,
+        );
+      } else {
+        final prev = userMap[key]!;
+        userMap[key] = (
+          name: prev.name,
+          apartment: prev.apartment,
+          role: prev.role,
+          count: prev.count + 1,
+          lastSeen: log.openedAt.isAfter(prev.lastSeen) ? log.openedAt : prev.lastSeen,
+        );
+      }
+    }
+
+    final sortedStats = userMap.values.toList()
+      ..sort((a, b) => b.count.compareTo(a.count));
+
+    return pw.TableHelper.fromTextArray(
+      border: pw.TableBorder.all(color: borderGray, width: 0.5),
+      headerDecoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#ECEFF1'),
+      ),
+      headerHeight: 20,
+      cellHeight: 16,
+      headerStyle: pw.TextStyle(
+        color: primaryColor,
+        fontWeight: pw.FontWeight.bold,
+        fontSize: 7.5,
+      ),
+      cellStyle: const pw.TextStyle(
+        fontSize: 7,
+        color: PdfColors.black,
+      ),
+      cellAlignment: pw.Alignment.centerLeft,
+      columnWidths: const {
+        0: pw.FixedColumnWidth(20),  // #
+        1: pw.FlexColumnWidth(2.2),  // Kullanıcı Adı
+        2: pw.FlexColumnWidth(1.8),  // Daire / Blok
+        3: pw.FixedColumnWidth(60),  // Rol
+        4: pw.FixedColumnWidth(55),  // Geçiş Sayısı
+        5: pw.FixedColumnWidth(75),  // Son Geçiş
+      },
+      headers: [
+        '#',
+        'Kullanıcı / Sakin Adı',
+        'Daire / Blok',
+        'Rol',
+        'Geçiş Sayısı',
+        'Son Giriş Zamanı',
+      ],
+      data: List<List<String>>.generate(
+        sortedStats.length,
+        (index) {
+          final item = sortedStats[index];
+          return [
+            (index + 1).toString(),
+            item.name,
+            item.apartment ?? '-',
+            item.role,
+            '${item.count} kez',
+            dateFormat.format(item.lastSeen),
+          ];
+        },
       ),
     );
   }

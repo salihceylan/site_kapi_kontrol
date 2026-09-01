@@ -40,6 +40,7 @@ class SitesView extends StatelessWidget {
     required this.onAssignDoorDevice,
     this.onDeleteApartmentResident,
     this.onDownloadCredentialsPdf,
+    this.onDownloadLogsPdf,
   });
 
   final bool canManageSites;
@@ -68,6 +69,7 @@ class SitesView extends StatelessWidget {
   final ValueChanged<DoorRecord> onAssignDoorDevice;
   final ValueChanged<ApartmentRecord>? onDeleteApartmentResident;
   final ValueChanged<SiteRecord>? onDownloadCredentialsPdf;
+  final ValueChanged<SiteRecord>? onDownloadLogsPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +206,9 @@ class SitesView extends StatelessWidget {
                               : null,
                       onDownloadPdf: onDownloadCredentialsPdf != null
                           ? () => onDownloadCredentialsPdf!(site)
+                          : null,
+                      onDownloadLogsPdf: onDownloadLogsPdf != null
+                          ? () => onDownloadLogsPdf!(site)
                           : null,
                     ),
                   ),
