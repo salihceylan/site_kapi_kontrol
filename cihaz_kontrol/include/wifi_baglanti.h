@@ -245,7 +245,6 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
   gLastWifiAttemptAt = millis();
   WiFi.mode(WIFI_STA);
   delay(100);
-  delay(100);
   WiFi.begin(ssid.c_str(), password.c_str());
   const unsigned long startedAt = millis();
   while (millis() - startedAt < timeoutMs) {

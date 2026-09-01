@@ -33,7 +33,6 @@ import 'package:site_kapi_kontrol/ui/views/bluetooth_wifi_view.dart';
 import 'package:site_kapi_kontrol/ui/views/company_devices_view.dart';
 import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/device_add_view.dart';
-import 'package:site_kapi_kontrol/ui/views/door_logs_view.dart';
 import 'package:site_kapi_kontrol/ui/views/managed_users_view.dart';
 import 'package:site_kapi_kontrol/ui/views/pending_site_approvals_view.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
@@ -217,8 +216,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return 'Daire Sakinleri';
       case SirketMenuItem.siteler:
         return 'Site Yönetimi';
-      case SirketMenuItem.kapiGecisLoglari:
-        return 'Kapı Geçiş Logları';
       case SirketMenuItem.cihazEkle:
         return 'Cihaz Kaydet';
       case SirketMenuItem.kayitliCihazlar:
@@ -1322,9 +1319,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onDownloadCredentialsPdf: _exportSiteCredentialsPdf,
           onDownloadLogsPdf: _exportSiteLogsPdf,
         );
-
-      case SirketMenuItem.kapiGecisLoglari:
-        return DoorLogsView(authService: widget.authService);
 
       case SirketMenuItem.superUserYonetimi:
         return ManagedUsersView(

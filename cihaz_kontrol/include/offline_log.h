@@ -5,11 +5,14 @@
 #include <LittleFS.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 #include <time.h>
 
 #include "device_konfig.h"
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
+
+extern PubSubClient client;
 
 inline const char* OFFLINE_LOG_FILE = "/offline_logs.json";
 inline constexpr unsigned long OFFLINE_LOG_MAX_AGE_SECONDS = 24 * 3600; // 24 saat
@@ -118,10 +121,6 @@ inline void offlineLogHaftalikTemizle() {
     Serial.println("Offline Log: 24 saatlik cevrimdisi log suresi doldugu icin temizlendi.");
   }
 }
-
-#include <PubSubClient.h>
-
-extern PubSubClient client;
 
 inline void offlineLogSenkronizeEt() {
   if (!gOfflineLogFsHazir || !wifiHazirMi() || !LittleFS.exists(OFFLINE_LOG_FILE)) {
