@@ -682,6 +682,32 @@
         }
       },
       "manifest": "firmware_releases\\20260901_231644_v2_0_0\\manifest.json"
+    },
+    {
+      "id": "20260901_233236_v2_0_1",
+      "version": "2.0.1",
+      "env": "lolin_c3_mini",
+      "created_at": "2026-09-01T20:32:36.745871+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260901_233236_v2_0_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260901_233236_v2_0_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260901_233236_v2_0_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "7763390c88bfc06da60b72bc6a84828a24ba183ed0a3bcd1e746590936302ada",
+          "md5": "dc83ac0688b8c5ef76295406e1691496"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "6d574ef034d3df9cc43f75e69b0ab9d6a6e6904c8393a1a8cb1a9e789e24adef",
+          "md5": "ac50dac03153f70a407af8be59a9efa8"
+        }
+      },
+      "manifest": "firmware_releases\\20260901_233236_v2_0_1\\manifest.json"
     }
   ]
 }

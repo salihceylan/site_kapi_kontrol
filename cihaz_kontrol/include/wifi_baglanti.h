@@ -275,35 +275,44 @@ struct WifiNetworkInfo {
 inline void wifiPerformScan() {
   wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
 
-  if (WiFi.getMode() != WIFI_STA) {
-    WiFi.mode(WIFI_STA);
+  WiFi.disconnect(false, false);
+  WiFi.mode(WIFI_STA);
+  delay(150);
+
+  int16_t count = WiFi.scanNetworks(false, false);
+  if (count < 0) {
+    WiFi.disconnect(true, false);
     delay(100);
+    WiFi.mode(WIFI_STA);
+    delay(200);
+    count = WiFi.scanNetworks(false, false);
   }
 
   std::vector<WifiNetworkInfo> networks;
-  const int count = WiFi.scanNetworks(false, true);
-  for (int index = 0; index < count; index += 1) {
-    const String ssid = WiFi.SSID(index);
-    if (ssid.isEmpty()) {
-      continue;
-    }
-
-    const bool exists = std::any_of(
-      networks.begin(),
-      networks.end(),
-      [&ssid](const WifiNetworkInfo& info) {
-        return info.ssid == ssid;
+  if (count > 0) {
+    for (int16_t index = 0; index < count; index += 1) {
+      const String ssid = WiFi.SSID(index);
+      if (ssid.isEmpty()) {
+        continue;
       }
-    );
-    if (exists) {
-      continue;
-    }
 
-    networks.push_back({
-      .ssid = ssid,
-      .rssi = WiFi.RSSI(index),
-      .secure = WiFi.encryptionType(index) != WIFI_AUTH_OPEN,
-    });
+      const bool exists = std::any_of(
+        networks.begin(),
+        networks.end(),
+        [&ssid](const WifiNetworkInfo& info) {
+          return info.ssid == ssid;
+        }
+      );
+      if (exists) {
+        continue;
+      }
+
+      networks.push_back({
+        .ssid = ssid,
+        .rssi = WiFi.RSSI(index),
+        .secure = WiFi.encryptionType(index) != WIFI_AUTH_OPEN,
+      });
+    }
   }
 
   WiFi.scanDelete();
@@ -325,12 +334,13 @@ inline void wifiPerformScan() {
     item["secure"] = networks[index].secure;
   }
 
+  gBleNetworksPayload = "";
   serializeJson(doc, gBleNetworksPayload);
   if (gBleNetworksCharacteristic != nullptr) {
     gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
     gBleNetworksCharacteristic->notify();
   }
-  wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
+  wifiNotifyBleResult("scan_complete", String(networks.size()) + " WiFi agi bulundu.");
 }
 
 inline String wifiBleDeviceName() {

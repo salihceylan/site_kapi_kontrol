@@ -118,6 +118,27 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     }
   }
 
+  String _resolveUid(BleProvisionDevice? device, BleWifiState? state) {
+    if (state != null &&
+        state.deviceUid.trim().isNotEmpty &&
+        state.deviceUid.trim() != '-') {
+      return state.deviceUid.trim();
+    }
+    if (device != null) {
+      final String name = device.name.trim();
+      final RegExp match = RegExp(r'AHBU([0-9A-Fa-f]+)', caseSensitive: false);
+      final RegExpMatch? m = match.firstMatch(name);
+      if (m != null && m.group(1) != null) {
+        return m.group(1)!.toUpperCase();
+      }
+      final String idClean = device.id.replaceAll(':', '').toUpperCase();
+      if (idClean.length >= 6) {
+        return idClean;
+      }
+    }
+    return '-';
+  }
+
   Future<void> _loadNetworks() async {
     setState(() {
       _loadingNetworks = true;
@@ -139,7 +160,9 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         }
       });
       if (networks.isEmpty) {
-        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı veya henüz listelenmedi.');
+        _showMessage(
+          'Ağ listesi boş geldi. SSID adını doğrudan aşağıya yazarak da kaydedebilirsiniz.',
+        );
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -167,8 +190,8 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
 
     setState(() => _savingWifi = true);
     try {
-      final String deviceUid = (_deviceState?.deviceUid ?? '').trim();
-      if (deviceUid.isEmpty) {
+      final String deviceUid = _resolveUid(_selectedDevice, _deviceState);
+      if (deviceUid.isEmpty || deviceUid == '-') {
         throw const BleProvisionException(
           'Cihaz unique id okunamadı. Önce Bluetooth cihazına bağlanın.',
         );
@@ -335,7 +358,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           if (state != null) ...<Widget>[
             const SizedBox(height: 8),
             Text(
-              'Unique ID: ${state.deviceUid.isEmpty ? '-' : state.deviceUid}',
+              'Unique ID: ${_resolveUid(device, state)}',
             ),
             Text('Kayıtlı SSID: ${state.ssid.isEmpty ? '-' : state.ssid}'),
             Text(
