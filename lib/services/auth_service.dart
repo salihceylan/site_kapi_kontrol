@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
@@ -42,26 +42,38 @@ class AuthService extends ChangeNotifier {
   bool get isReady => _isReady;
 
   Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? raw = await _secureStorage.read(key: _storageKey);
-    final legacyRaw = prefs.getString(_storageKey);
-    if ((raw == null || raw.isEmpty) && legacyRaw != null && legacyRaw.isNotEmpty) {
-      raw = legacyRaw;
-      await _secureStorage.write(key: _storageKey, value: legacyRaw);
-      await prefs.remove(_storageKey);
-    }
-
-    if (raw != null && raw.isNotEmpty) {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? raw;
       try {
-        final data = jsonDecode(raw) as Map<String, dynamic>;
-        _session = UserSession.fromJson(data);
-      } catch (_) {
-        await _secureStorage.delete(key: _storageKey);
-        await prefs.remove(_storageKey);
-      }
-    }
+        raw = await _secureStorage.read(key: _storageKey);
+      } catch (_) {}
 
-    await _loadLocalDoorCache();
+      final legacyRaw = prefs.getString(_storageKey);
+      if ((raw == null || raw.isEmpty) && legacyRaw != null && legacyRaw.isNotEmpty) {
+        raw = legacyRaw;
+        try {
+          await _secureStorage.write(key: _storageKey, value: legacyRaw);
+        } catch (_) {}
+      }
+
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final data = jsonDecode(raw) as Map<String, dynamic>;
+          _session = UserSession.fromJson(data);
+        } catch (_) {
+          try {
+            await _secureStorage.delete(key: _storageKey);
+          } catch (_) {}
+          await prefs.remove(_storageKey);
+        }
+      }
+
+      if (!kIsWeb) {
+        await _loadLocalDoorCache();
+      }
+    } catch (_) {}
+
     _isReady = true;
     _notifySafely();
   }
@@ -112,10 +124,14 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     _session = null;
-    final prefs = await SharedPreferences.getInstance();
-    await _secureStorage.delete(key: _storageKey);
-    await _secureStorage.delete(key: _localDoorCacheKey);
-    await prefs.remove(_storageKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_storageKey);
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: _storageKey);
+      await _secureStorage.delete(key: _localDoorCacheKey);
+    } catch (_) {}
     _localDoorCache.clear();
     _notifySafely();
   }
@@ -957,15 +973,31 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    await _secureStorage.write(
-      key: _storageKey,
-      value: jsonEncode(_session!.toJson()),
-    );
+    if (_session == null) {
+      return;
+    }
+    final raw = jsonEncode(_session!.toJson());
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, raw);
+    } catch (_) {}
+    try {
+      await _secureStorage.write(
+        key: _storageKey,
+        value: raw,
+      );
+    } catch (_) {}
   }
 
   Future<void> _loadLocalDoorCache() async {
+    if (kIsWeb) {
+      return;
+    }
     _localDoorCache.clear();
-    final raw = await _secureStorage.read(key: _localDoorCacheKey);
+    String? raw;
+    try {
+      raw = await _secureStorage.read(key: _localDoorCacheKey);
+    } catch (_) {}
     if (raw == null || raw.isEmpty) {
       return;
     }
@@ -982,18 +1014,25 @@ class AuthService extends ChangeNotifier {
         }
       }
     } catch (_) {
-      await _secureStorage.delete(key: _localDoorCacheKey);
+      try {
+        await _secureStorage.delete(key: _localDoorCacheKey);
+      } catch (_) {}
     }
   }
 
   Future<void> _persistLocalDoorCache() async {
+    if (kIsWeb) {
+      return;
+    }
     final data = _localDoorCache.map(
       (key, value) => MapEntry(key, value.toJson()),
     );
-    await _secureStorage.write(
-      key: _localDoorCacheKey,
-      value: jsonEncode(data),
-    );
+    try {
+      await _secureStorage.write(
+        key: _localDoorCacheKey,
+        value: jsonEncode(data),
+      );
+    } catch (_) {}
   }
 
   Future<void> _cacheLocalDoorAccess(DoorRuntimeStatus status) async {

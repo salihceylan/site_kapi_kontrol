@@ -49,7 +49,9 @@ class VoiceDoorService extends ChangeNotifier {
 
   VoiceDoorService({required AuthService authService})
       : _authService = authService {
-    _initTts();
+    if (!kIsWeb) {
+      _initTts();
+    }
     loadSettings();
   }
 
@@ -85,6 +87,9 @@ class VoiceDoorService extends ChangeNotifier {
   }
 
   Future<void> _initTts() async {
+    if (kIsWeb) {
+      return;
+    }
     try {
       await _tts.setLanguage('tr-TR');
       await _tts.setSpeechRate(0.5);
@@ -96,7 +101,7 @@ class VoiceDoorService extends ChangeNotifier {
   }
 
   Future<void> speak(String text) async {
-    if (!_ttsEnabled || text.trim().isEmpty) {
+    if (kIsWeb || !_ttsEnabled || text.trim().isEmpty) {
       return;
     }
     try {
@@ -106,6 +111,10 @@ class VoiceDoorService extends ChangeNotifier {
   }
 
   Future<bool> initializeSpeech() async {
+    if (kIsWeb) {
+      _isSpeechAvailable = false;
+      return false;
+    }
     if (_isSpeechAvailable) {
       return true;
     }

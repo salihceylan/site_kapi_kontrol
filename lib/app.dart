@@ -151,45 +151,44 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_authService, _networkService]),
-      builder: (context, _) {
-        final authReady = _authService.isReady;
-        final networkReady = _networkService.isReady;
-        Widget home;
-        if (!authReady) {
-          home = const Scaffold(body: Center(child: CircularProgressIndicator()));
-        } else if (_authService.isLoggedIn) {
-          home = HomePage(
-            authService: _authService,
-            voiceDoorService: _voiceDoorService,
-            quickActionsService: _quickActionsService,
-          );
-        } else if (!networkReady) {
-          home = const Scaffold(body: Center(child: CircularProgressIndicator()));
-        } else if (!_networkService.hasInternet) {
-          home = NoInternetPage(
-            isChecking: _networkService.isChecking,
-            onRetry: _networkService.refresh,
-          );
-        } else {
-          home = LoginPage(authService: _authService);
-        }
-
-        return MaterialApp(
-          navigatorKey: _navigatorKey,
-          title: 'Site Kapi Kontrol',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          builder: (context, child) {
-            return Container(
-              decoration: AppDecorations.pageBackground,
-              child: child,
-            );
-          },
-          home: home,
+    return MaterialApp(
+      navigatorKey: _navigatorKey,
+      title: 'Site Kapi Kontrol',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      builder: (context, child) {
+        return Container(
+          decoration: AppDecorations.pageBackground,
+          child: child,
         );
       },
+      home: AnimatedBuilder(
+        animation: Listenable.merge([_authService, _networkService]),
+        builder: (context, _) {
+          final authReady = _authService.isReady;
+          final networkReady = _networkService.isReady;
+          if (!authReady) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (_authService.isLoggedIn) {
+            return HomePage(
+              authService: _authService,
+              voiceDoorService: _voiceDoorService,
+              quickActionsService: _quickActionsService,
+            );
+          }
+          if (!networkReady) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (!_networkService.hasInternet) {
+            return NoInternetPage(
+              isChecking: _networkService.isChecking,
+              onRetry: _networkService.refresh,
+            );
+          }
+          return LoginPage(authService: _authService);
+        },
+      ),
     );
   }
 }

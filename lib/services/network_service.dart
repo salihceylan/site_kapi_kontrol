@@ -42,6 +42,9 @@ class NetworkService extends ChangeNotifier {
   }
 
   Future<bool> _probeInternet() async {
+    if (kIsWeb) {
+      return true;
+    }
     final urls = <Uri>[
       Uri.parse('$apiBaseUrl/health'),
       Uri.parse('https://clients3.google.com/generate_204'),

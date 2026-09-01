@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 
 class LocalDoorOpenResult {
@@ -85,6 +86,13 @@ class LocalDoorService {
   }
 
   Future<LocalDoorOpenResult> openDoor(LocalDoorAccess access) async {
+    if (kIsWeb) {
+      return const LocalDoorOpenResult(
+        ok: false,
+        ip: null,
+        message: 'Yerel ag ile kapi acma yalnizca mobil uygulamada desteklenir.',
+      );
+    }
     if (!access.isUsable) {
       return const LocalDoorOpenResult(
         ok: false,

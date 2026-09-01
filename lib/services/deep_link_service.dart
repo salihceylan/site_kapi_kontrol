@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:app_links/app_links.dart';
 
 enum DeepLinkActionType {
@@ -26,19 +27,24 @@ class DeepLinkService {
   void Function(DeepLinkAction action)? onAction;
 
   void initialize(void Function(DeepLinkAction action) handleAction) {
+    if (kIsWeb) {
+      return;
+    }
     onAction = handleAction;
 
-    // Check initial deep link
-    _appLinks.getInitialLink().then((uri) {
-      if (uri != null) {
-        _handleUri(uri);
-      }
-    }).catchError((_) {});
+    try {
+      // Check initial deep link
+      _appLinks.getInitialLink().then((uri) {
+        if (uri != null) {
+          _handleUri(uri);
+        }
+      }).catchError((_) {});
 
-    // Listen to incoming deep links while app is in background/foreground
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
-      _handleUri(uri);
-    }, onError: (_) {});
+      // Listen to incoming deep links while app is in background/foreground
+      _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+        _handleUri(uri);
+      }, onError: (_) {});
+    } catch (_) {}
   }
 
   void _handleUri(Uri uri) {

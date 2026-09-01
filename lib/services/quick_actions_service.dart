@@ -8,10 +8,15 @@ class QuickActionsService {
   void Function(String actionType)? onActionSelected;
 
   void initialize(void Function(String actionType) onAction) {
+    if (kIsWeb) {
+      return;
+    }
     onActionSelected = onAction;
-    _quickActions.initialize((String type) {
-      onActionSelected?.call(type);
-    });
+    try {
+      _quickActions.initialize((String type) {
+        onActionSelected?.call(type);
+      });
+    } catch (_) {}
   }
 
   Future<void> updateDoorShortcuts(List<DoorRecord> doors) async {

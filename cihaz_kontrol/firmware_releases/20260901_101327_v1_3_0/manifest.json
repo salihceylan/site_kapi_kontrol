@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "version": "1.3.0",
+  "filename": "firmware.bin",
+  "force": false,
+  "interval_hours": 24,
+  "allowed_uids": [],
+  "sha256": "d02ef09a5e8ca26d7a617199ca39b22b9d137f9c1454a325c23e75a52e79c030",
+  "md5": "afe1c043a5802f0104ce75a8c3120fca",
+  "notes": "AHBU firmware v1.3.0."
+}
