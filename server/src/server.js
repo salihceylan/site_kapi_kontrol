@@ -5298,51 +5298,59 @@ app.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter, async (req
       siteCode: Number(door.site_code),
     });
 
-    auditLog('door_open_command', {
-      user_code: Number(req.authUser.id),
-      role: req.authUser.role,
-      door_id: Number(door.id),
-      site_code: Number(door.site_code),
-      device_uid: door.assigned_device_uid,
-    });
-
-    let apartmentLabel = null;
-    if (req.authUser.role === 'apartment_owner') {
-      const aptRes = await pool.query(
-        `
-          SELECT b.block_name, a.unit_label
-          FROM apartments a
-          JOIN site_blocks b ON b.id = a.block_id
-          WHERE a.resident_user_code = $1
-          LIMIT 1
-        `,
-        [Number(req.authUser.id)],
-      );
-      if (aptRes.rowCount > 0) {
-        apartmentLabel = `${aptRes.rows[0].block_name} - ${aptRes.rows[0].unit_label}`;
-      }
-    }
-
-    const triggerType = req.body.source === 'voice' ? 'voice' : 'cloud_app';
-    await recordDoorAccessLog({
-      siteCode: Number(door.site_code),
-      doorId: Number(door.id),
-      doorName: door.door_name || 'Site Kapısı',
-      userCode: Number(req.authUser.id),
-      userName: req.authUser.full_name || req.authUser.email,
-      userRole: req.authUser.role,
-      apartmentLabel,
-      triggerType,
-      openedAt: new Date(),
-      ipAddress: req.ip,
-    });
-
     const deviceStatus = getDeviceRuntimeStatus(door.assigned_device_uid);
     const localControl = await localDoorControlForStatus({
       deviceUid: door.assigned_device_uid,
       currentToken: door.local_control_token,
       status: deviceStatus,
     });
+
+    // Log ve denetim kayıtlarını arka planda asenkron çalıştırarak cevabı anında dön
+    (async () => {
+      try {
+        auditLog('door_open_command', {
+          user_code: Number(req.authUser.id),
+          role: req.authUser.role,
+          door_id: Number(door.id),
+          site_code: Number(door.site_code),
+          device_uid: door.assigned_device_uid,
+        });
+
+        let apartmentLabel = null;
+        if (req.authUser.role === 'apartment_owner') {
+          const aptRes = await pool.query(
+            `
+              SELECT b.block_name, a.unit_label
+              FROM apartments a
+              JOIN site_blocks b ON b.id = a.block_id
+              WHERE a.resident_user_code = $1
+              LIMIT 1
+            `,
+            [Number(req.authUser.id)],
+          );
+          if (aptRes.rowCount > 0) {
+            apartmentLabel = `${aptRes.rows[0].block_name} - ${aptRes.rows[0].unit_label}`;
+          }
+        }
+
+        const triggerType = req.body.source === 'voice' ? 'voice' : 'cloud_app';
+        await recordDoorAccessLog({
+          siteCode: Number(door.site_code),
+          doorId: Number(door.id),
+          doorName: door.door_name || 'Site Kapısı',
+          userCode: Number(req.authUser.id),
+          userName: req.authUser.full_name || req.authUser.email,
+          userRole: req.authUser.role,
+          apartmentLabel,
+          triggerType,
+          openedAt: new Date(),
+          ipAddress: req.ip,
+        });
+      } catch (logErr) {
+        console.error('Asenkron log kayit hatasi:', logErr.message);
+      }
+    })();
+
     return res.status(202).json({
       ok: true,
       door: mapDoorRow(door),

@@ -120,13 +120,17 @@ inline void offlineLogHaftalikTemizle() {
   }
 }
 
+#include <PubSubClient.h>
+
+extern PubSubClient client;
+
 inline void offlineLogSenkronizeEt() {
   if (!gOfflineLogFsHazir || !wifiHazirMi() || !LittleFS.exists(OFFLINE_LOG_FILE)) {
     return;
   }
 
   const unsigned long simdikiMs = millis();
-  if (simdikiMs - gSonLogSenkronizasyonMs < 30000) { // 30 saniyede bir dene
+  if (simdikiMs - gSonLogSenkronizasyonMs < 20000) { // 20 saniyede bir dene
     return;
   }
   gSonLogSenkronizasyonMs = simdikiMs;
@@ -144,30 +148,14 @@ inline void offlineLogSenkronizeEt() {
     return;
   }
 
-  String payload = "{\"device_uid\":\"" + cihazUniqueId() + "\",\"logs\":" + icerik + "}";
-
-  WiFiClientSecure secureClient;
-  secureClient.setCACert(TLS_ROOT_CA);
-  secureClient.setTimeout(10);
-
-  HTTPClient http;
-  String syncUrl = "https://api.gudeteknoloji.com.tr/device/sync-logs";
-  if (http.begin(secureClient, syncUrl)) {
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("x-ahbu-device-uid", cihazUniqueId());
-    
-    int httpCode = http.POST(payload);
-    if (httpCode >= 200 && httpCode < 300) {
-      Serial.print("Offline Log: Sunucuya basariyla senkronize edildi (HTTP ");
-      Serial.print(httpCode);
-      Serial.println("). Yerel loglar silindi.");
+  // MQTT baglantisi varsa: 0ms bloklama ile dogrudan MQTT uzerinden senkronize et
+  if (client.connected()) {
+    const String topic = "device/" + cihazUniqueId() + "/logs";
+    if (client.publish(topic.c_str(), icerik.c_str(), false)) {
+      Serial.println("Offline Log: MQTT uzerinden aninda sunucuya aktarildi. Yerel loglar silindi.");
       LittleFS.remove(OFFLINE_LOG_FILE);
-    } else {
-      Serial.print("Offline Log: Senkronizasyon basarisiz (HTTP ");
-      Serial.print(httpCode);
-      Serial.println("). Sonra tekrar denenecek.");
+      return;
     }
-    http.end();
   }
 }
 

@@ -125,8 +125,10 @@ inline unsigned long otaIntervalFromManifest(JsonDocument& doc) {
 inline bool otaReadManifest(JsonDocument& doc) {
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
+  otaClient.setTimeout(4);
 
   HTTPClient http;
+  http.setTimeout(4000);
   String url = String(OTA_MANIFEST_URL) +
                "?current_version=" + OTA_CURRENT_VERSION +
                "&uid=" + cihazUniqueId();

@@ -8,9 +8,11 @@
 #include <WiFi.h>
 
 #include <algorithm>
+#include <esp_task_wdt.h>
 #include <vector>
 
 #include "device_konfig.h"
+#include "role_kontrol.h"
 
 inline constexpr char WIFI_PREFS_NAMESPACE[] = "wifi_cfg";
 inline constexpr char WIFI_PREF_SSID[] = "ssid";
@@ -244,13 +246,16 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
   Serial.printf("WiFi baglantisi deneniyor: %s\n", ssid.c_str());
   gLastWifiAttemptAt = millis();
   WiFi.mode(WIFI_STA);
-  delay(150);
+  delay(100);
   WiFi.disconnect(false, false);
-  delay(150);
+  delay(100);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   const unsigned long startedAt = millis();
   while (millis() - startedAt < timeoutMs) {
+    esp_task_wdt_reset();
+    roleLoop();
+
     if (WiFi.status() == WL_CONNECTED) {
       gWifiConnected = true;
       Serial.print("WiFi baglandi, IP: ");
@@ -260,7 +265,7 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
     }
 
     wifiUpdateLed();
-    delay(150);
+    delay(100);
   }
 
   gWifiConnected = false;
@@ -610,7 +615,10 @@ inline void wifiLoop() {
     }
     wifiStartProvisioningMode();
   } else if (millis() - gLastWifiAttemptAt >= WIFI_RETRY_INTERVAL_MS) {
-    wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 8000);
+    gLastWifiAttemptAt = millis();
+    Serial.println("WiFi baglantisi koptu; arka planda yeniden baglaniliyor...");
+    WiFi.disconnect(false, false);
+    WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
   }
 
   wifiUpdateLed();

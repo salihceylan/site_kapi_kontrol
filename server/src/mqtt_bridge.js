@@ -274,8 +274,50 @@ async function syncLocalControlConfigFromDb(deviceUid) {
   }
 }
 
+async function recordDeviceOfflineLogs(deviceUid, logs) {
+  try {
+    const devRes = await pool.query(
+      `
+        SELECT d.id, d.site_code, d.gate_name,
+               sd.id AS assigned_door_id, sd.door_name AS assigned_door_name
+        FROM devices d
+        LEFT JOIN site_doors sd ON sd.assigned_device_id = d.id
+        WHERE d.device_uid = $1
+        LIMIT 1
+      `,
+      [normalizeDeviceTopicUid(deviceUid)],
+    );
+    if (devRes.rowCount === 0) return;
+    const dev = devRes.rows[0];
+    const siteCode = dev.site_code ? Number(dev.site_code) : null;
+    const doorId = dev.assigned_door_id ? Number(dev.assigned_door_id) : null;
+    const doorName = dev.assigned_door_name || dev.gate_name || 'Site Kapısı';
+
+    for (const item of logs) {
+      const triggerType = String(item.trigger_type || 'offline_sync').trim();
+      const userName = String(item.user_name || 'Yerel Yetkili Kullanıcı').trim();
+      const apartmentLabel = item.apartment_label ? String(item.apartment_label).trim() : null;
+      let openedAt = new Date();
+      if (item.epoch_time && Number(item.epoch_time) > 1600000000) {
+        openedAt = new Date(Number(item.epoch_time) * 1000);
+      }
+
+      await pool.query(
+        `
+          INSERT INTO door_access_logs (
+            site_code, door_id, door_name, user_code, user_name, user_role, apartment_label, trigger_type, opened_at, ip_address
+          ) VALUES ($1, $2, $3, NULL, $4, 'apartment_owner', $5, $6, $7, 'mqtt_sync')
+        `,
+        [siteCode, doorId, doorName, userName, apartmentLabel, triggerType, openedAt],
+      );
+    }
+  } catch (err) {
+    console.error('MQTT offline log DB kayit hatasi:', err.message);
+  }
+}
+
 function applyStatusMessage(topic, payload) {
-  const match = /^device\/([^/]+)\/(availability|state|event)$/.exec(topic);
+  const match = /^device\/([^/]+)\/(availability|state|event|logs)$/.exec(topic);
   if (!match) {
     return;
   }
@@ -317,6 +359,19 @@ function applyStatusMessage(topic, payload) {
       status.last_event,
       status.last_event_detail,
     );
+    return;
+  }
+
+  if (kind === 'logs') {
+    try {
+      const decoded = JSON.parse(text);
+      const logs = Array.isArray(decoded) ? decoded : (Array.isArray(decoded.logs) ? decoded.logs : []);
+      if (logs.length > 0) {
+        void recordDeviceOfflineLogs(match[1], logs);
+      }
+    } catch (_error) {
+      console.error('MQTT logs parse hatasi:', _error.message);
+    }
     return;
   }
 
@@ -381,6 +436,7 @@ export function startMqttBridge() {
     client.subscribe('device/+/availability', { qos: 1 });
     client.subscribe('device/+/state', { qos: 1 });
     client.subscribe('device/+/event', { qos: 1 });
+    client.subscribe('device/+/logs', { qos: 1 });
     // eslint-disable-next-line no-console
     console.log(`MQTT bridge connected: ${config.host}:${config.port}`);
   });
