@@ -107,8 +107,10 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       });
       if (!state.provisioning) {
         _showMessage(
-          'Cihaz provisioning modunda degil. Gerekirse butona 3 saniye basip tekrar deneyin.',
+          'Cihaz provisioning modunda değil. Gerekirse butona 3 saniye basıp tekrar deneyin.',
         );
+      } else {
+        _loadNetworks();
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -137,7 +139,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _selectedSsid = networks.isEmpty ? null : networks.first.ssid;
       });
       if (networks.isEmpty) {
-        _showMessage('Yakinda gorunen Wi-Fi agi bulunamadi.');
+        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı.');
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -152,11 +154,11 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
   Future<void> _saveWifi() async {
     final String? ssid = _selectedSsid;
     if (ssid == null || ssid.isEmpty) {
-      _showMessage('Once bir Wi-Fi agi secin.');
+      _showMessage('Önce bir Wi-Fi ağı seçin.');
       return;
     }
     if (_passwordController.text.trim().isEmpty) {
-      _showMessage('Secilen ag icin sifre girin.');
+      _showMessage('Seçilen ağ için şifre girin.');
       return;
     }
 
@@ -165,14 +167,14 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       final String deviceUid = (_deviceState?.deviceUid ?? '').trim();
       if (deviceUid.isEmpty) {
         throw const BleProvisionException(
-          'Cihaz unique id okunamadi. Once Bluetooth cihazina baglanin.',
+          'Cihaz unique id okunamadı. Önce Bluetooth cihazına bağlanın.',
         );
       }
 
       final AuthService? authService = widget.authService;
       if (authService == null) {
         throw const BleProvisionException(
-          'MQTT kimligi alinacak oturum bulunamadi.',
+          'MQTT kimliği alınacak oturum bulunamadı.',
         );
       }
 
@@ -180,7 +182,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           await authService.getDeviceMqttCredentials(deviceUid: deviceUid);
       if (mqttError != null || mqttCredentials == null) {
         throw BleProvisionException(
-          mqttError ?? 'MQTT cihaz kimligi alinamadi.',
+          mqttError ?? 'MQTT cihaz kimliği alınamadı.',
         );
       }
 
@@ -196,7 +198,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _deviceState = state;
       });
       _showMessage(
-        result.message.isEmpty ? 'Wi-Fi ayari kaydedildi.' : result.message,
+        result.message.isEmpty ? 'Wi-Fi ayarı kaydedildi.' : result.message,
       );
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -209,10 +211,10 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
   }
 
   String _signalText(int rssi) {
-    if (rssi >= -55) return 'Cok guclu';
-    if (rssi >= -67) return 'Guclu';
+    if (rssi >= -55) return 'Çok güçlü';
+    if (rssi >= -67) return 'Güçlü';
     if (rssi >= -75) return 'Orta';
-    return 'Zayif';
+    return 'Zayıf';
   }
 
   Widget _sectionCard({required Widget child}) {

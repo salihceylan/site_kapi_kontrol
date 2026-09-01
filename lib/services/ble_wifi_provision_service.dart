@@ -209,19 +209,28 @@ class BleWifiProvisionService {
 
     final StreamSubscription<DiscoveredDevice> subscription = _ble
         .scanForDevices(
-          withServices: <Uuid>[_serviceUuid],
+          withServices: const <Uuid>[],
           scanMode: ScanMode.lowLatency,
           requireLocationServicesEnabled: false,
         )
         .listen(
           (DiscoveredDevice device) {
             final String name = device.name.trim();
-            if (!name.toUpperCase().startsWith('AHBU')) {
+            final bool hasAhbuName = name.toUpperCase().contains('AHBU');
+            final bool hasServiceUuid =
+                device.serviceUuids.contains(_serviceUuid);
+
+            if (!hasAhbuName && !hasServiceUuid) {
               return;
             }
+
+            final String displayName = hasAhbuName
+                ? name
+                : 'AHBU Cihaz (${device.id.length > 5 ? device.id.substring(device.id.length - 5) : device.id})';
+
             devices[device.id] = BleProvisionDevice(
               id: device.id,
-              name: name,
+              name: displayName,
               rssi: device.rssi,
             );
           },
@@ -233,7 +242,7 @@ class BleWifiProvisionService {
     await Future<void>.delayed(duration);
     await subscription.cancel();
 
-    if (scanError != null) {
+    if (scanError != null && devices.isEmpty) {
       throw BleProvisionException(_messageFromError(scanError!));
     }
 
@@ -274,7 +283,7 @@ class BleWifiProvisionService {
               if (!completer.isCompleted) {
                 completer.completeError(
                   const BleProvisionException(
-                    'Cihaza baglanilamadi veya baglanti koptu.',
+                    'Cihaza bağlanılamadı veya bağlantı koptu.',
                   ),
                 );
               }
@@ -294,31 +303,46 @@ class BleWifiProvisionService {
     await completer.future.timeout(
       const Duration(seconds: 15),
       onTimeout: () => throw const BleProvisionException(
-        'Bluetooth baglantisi zaman asimina ugradi.',
+        'Bluetooth bağlantısı zaman aşımına uğradı.',
       ),
     );
 
     try {
       await _ble.requestMtu(deviceId: device.id, mtu: 180);
     } catch (_) {
-      // MTU arttirimi zorunlu degil.
+      // MTU artırımı zorunlu değil.
     }
+
+    // GATT servis ve karakteristiklerinin yerleşmesi için kısa bekleme
+    await Future<void>.delayed(const Duration(milliseconds: 350));
 
     return readState();
   }
 
   Future<BleWifiState> readState() async {
-    final List<int> raw = await _ble.readCharacteristic(
-      _qualifiedCharacteristic(_stateUuid),
-    );
-    return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
+    try {
+      final List<int> raw = await _ble.readCharacteristic(
+        _qualifiedCharacteristic(_stateUuid),
+      );
+      return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final List<int> raw = await _ble.readCharacteristic(
+        _qualifiedCharacteristic(_stateUuid),
+      );
+      return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
+    }
   }
 
   Future<BleWifiResult> readResult() async {
-    final List<int> raw = await _ble.readCharacteristic(
-      _qualifiedCharacteristic(_resultUuid),
-    );
-    return BleWifiResult.fromPayload(utf8.decode(raw, allowMalformed: true));
+    try {
+      final List<int> raw = await _ble.readCharacteristic(
+        _qualifiedCharacteristic(_resultUuid),
+      );
+      return BleWifiResult.fromPayload(utf8.decode(raw, allowMalformed: true));
+    } catch (_) {
+      return const BleWifiResult(status: 'idle', message: '');
+    }
   }
 
   Future<List<BleWifiNetwork>> readNetworks() async {
