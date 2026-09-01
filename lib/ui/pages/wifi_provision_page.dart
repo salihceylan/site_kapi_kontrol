@@ -24,6 +24,7 @@ class WifiProvisionPage extends StatefulWidget {
 
 class _WifiProvisionPageState extends State<WifiProvisionPage> {
   final BleWifiProvisionService _service = BleWifiProvisionService();
+  final TextEditingController _ssidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   List<BleProvisionDevice> _devices = const <BleProvisionDevice>[];
@@ -45,6 +46,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
 
   @override
   void dispose() {
+    _ssidController.dispose();
     _passwordController.dispose();
     _service.disconnect();
     super.dispose();
@@ -120,7 +122,6 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     setState(() {
       _loadingNetworks = true;
       _networks = const <BleWifiNetwork>[];
-      _selectedSsid = null;
     });
 
     try {
@@ -130,10 +131,15 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       setState(() {
         _networks = networks;
         _lastResult = result;
-        _selectedSsid = networks.isEmpty ? null : networks.first.ssid;
+        if (networks.isNotEmpty) {
+          _selectedSsid = networks.first.ssid;
+          if (_ssidController.text.trim().isEmpty) {
+            _ssidController.text = networks.first.ssid;
+          }
+        }
       });
       if (networks.isEmpty) {
-        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı.');
+        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı veya henüz listelenmedi.');
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -146,9 +152,12 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
   }
 
   Future<void> _saveWifi() async {
-    final String? ssid = _selectedSsid;
-    if (ssid == null || ssid.isEmpty) {
-      _showMessage('Önce bir Wi-Fi ağı seçin.');
+    final String ssid = _ssidController.text.trim().isNotEmpty
+        ? _ssidController.text.trim()
+        : (_selectedSsid ?? '').trim();
+
+    if (ssid.isEmpty) {
+      _showMessage('Önce bir Wi-Fi SSID girin veya listeden seçin.');
       return;
     }
     if (_passwordController.text.trim().isEmpty) {
@@ -226,32 +235,28 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const <Widget>[
           Text(
-            'Kurulum Sirasi',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
-            ),
+            'Kurulum Sırası',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
-          SizedBox(height: 8),
+          SizedBox(height: 12),
           Text(
-            '1. Wi-Fi ayari olmayan veya resetlenen cihaz bu listede Bluetooth ile gorunur.',
+            '1. Wi-Fi ayarı olmayan veya resetlenen cihaz bu listede Bluetooth ile görünür.',
           ),
-          SizedBox(height: 4),
+          SizedBox(height: 6),
           Text(
-            '2. Cihaz once sirket veritabanina kayitli olmalidir; unique id ile MQTT kimligi hazirlanir.',
+            '2. Cihaz önce şirket veritabanına kayıtlı olmalıdır; unique id ile MQTT kimliği hazırlanır.',
           ),
-          SizedBox(height: 4),
+          SizedBox(height: 6),
           Text(
-            '3. Cihaza baglanin, yakindaki SSID listesini alin ve dogru agi secin.',
+            '3. Cihaza bağlanın, yakındaki SSID listesini alın veya Wi-Fi adını yazın.',
           ),
-          SizedBox(height: 4),
+          SizedBox(height: 6),
           Text(
-            '4. Wi-Fi sifresini girin. Uygulama, kayitli cihazin MQTT kimligini guvenli sekilde cihaza yazar.',
+            '4. Wi-Fi şifresini girin. Uygulama, kayıtlı cihazın MQTT kimliğini cihaza yazar.',
           ),
-          SizedBox(height: 4),
+          SizedBox(height: 6),
           Text(
-            '5. Ag degisirse cihazdaki butona 3 saniye basili tutarak Wi-Fi ayarini sifirlayin.',
+            '5. Ağ değişirse cihazdaki butona 3 saniye basılı tutarak Wi-Fi ayarını sıfırlayın.',
           ),
         ],
       ),
@@ -264,57 +269,44 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              const Expanded(
-                child: Text(
-                  'Bluetooth Cihazlari',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
+              const Text(
+                'Bluetooth Cihazları',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               IconButton(
                 onPressed: _loadingDevices ? null : _scanDevices,
-                icon: _loadingDevices
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          if (!_service.isSupportedPlatform)
+          if (_loadingDevices)
+            const Center(child: CircularProgressIndicator())
+          else if (_devices.isEmpty)
             const Text(
-              'Bu ekrani Android veya iPhone cihazdan acin. Masaustu derlemelerinde BLE provisioning kapali tutulur.',
-              style: TextStyle(color: AppColors.textMuted),
-            )
-          else if (_devices.isEmpty && !_loadingDevices)
-            const Text(
-              'Provision modunda cihaz bulunamadi. Gerekirse cihazdaki butona 3 saniye basin ve yeniden tara.',
+              'Görünürde Bluetooth cihazı bulunamadı.',
               style: TextStyle(color: AppColors.textMuted),
             )
           else
             ..._devices.map(
               (BleProvisionDevice device) => Card(
-                margin: const EdgeInsets.only(bottom: 10),
+                margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  selected: _selectedDevice?.id == device.id,
-                  title: Text(device.name),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  title: Text(
+                    device.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   subtitle: Text(
                     '${device.id}  -  ${_signalText(device.rssi)} (${device.rssi} dBm)',
                   ),
-                  trailing:
-                      _connectingDevice && _selectedDevice?.id == device.id
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.bluetooth_connected_outlined),
-                  onTap: _connectingDevice
-                      ? null
-                      : () => _connectDevice(device),
+                  trailing: const Icon(Icons.bluetooth, color: AppColors.primary),
+                  onTap: _connectingDevice ? null : () => _connectDevice(device),
                 ),
               ),
             ),
@@ -345,13 +337,13 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
             Text(
               'Unique ID: ${state.deviceUid.isEmpty ? '-' : state.deviceUid}',
             ),
-            Text('Kayitli SSID: ${state.ssid.isEmpty ? '-' : state.ssid}'),
+            Text('Kayıtlı SSID: ${state.ssid.isEmpty ? '-' : state.ssid}'),
             Text(
-              'Wi-Fi Durumu: ${state.wifiConnected ? 'Bagli' : 'Bagli degil'}',
+              'Wi-Fi Durumu: ${state.wifiConnected ? 'Bağlı' : 'Bağlı değil'}',
             ),
             Text('IP: ${state.ip.isEmpty ? '-' : state.ip}'),
             Text(
-              'MQTT Kimligi: ${state.mqttConfigured ? 'Hazir' : 'Eksik veya henuz yazilmadi'}',
+              'MQTT Kimliği: ${state.mqttConfigured ? 'Hazır' : 'Eksik veya henüz yazılmadı'}',
             ),
           ],
           if ((_lastResult?.message ?? '').isNotEmpty) ...<Widget>[
@@ -372,7 +364,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                     : _loadNetworks,
                 icon: const Icon(Icons.wifi_find_outlined),
                 label: Text(
-                  _loadingNetworks ? 'Taraniyor...' : 'Wi-Fi Aglarini Tara',
+                  _loadingNetworks ? 'Taranıyor...' : 'Wi-Fi Ağlarını Tara',
                 ),
               ),
               OutlinedButton.icon(
@@ -385,14 +377,9 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (_networks.isEmpty)
+          if (_networks.isNotEmpty) ...<Widget>[
             const Text(
-              'Wi-Fi listesi alinmadi. Once tarama yapin.',
-              style: TextStyle(color: AppColors.textMuted),
-            )
-          else ...<Widget>[
-            const Text(
-              'SSID Secimi',
+              'Yakındaki Wi-Fi Ağları',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -413,35 +400,50 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                   ),
                   title: Text(network.ssid),
                   subtitle: Text(
-                    '${network.secure ? 'Sifreli' : 'Acik ag'}  -  ${_signalText(network.rssi)} (${network.rssi} dBm)',
+                    '${network.secure ? 'Şifreli' : 'Açık ağ'}  -  ${_signalText(network.rssi)} (${network.rssi} dBm)',
                   ),
                   onTap: _savingWifi
                       ? null
-                      : () => setState(() => _selectedSsid = network.ssid),
+                      : () {
+                          setState(() {
+                            _selectedSsid = network.ssid;
+                            _ssidController.text = network.ssid;
+                          });
+                        },
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Wi-Fi Sifresi',
-                helperText: 'SSID otomatik gelir, yalnizca sifreyi girersiniz.',
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _savingWifi ? null : _saveWifi,
-                icon: const Icon(Icons.wifi_password_outlined),
-                label: Text(
-                  _savingWifi ? 'Baglaniyor...' : 'Wi-Fi Bilgilerini Kaydet',
-                ),
-              ),
-            ),
           ],
+          TextField(
+            controller: _ssidController,
+            decoration: const InputDecoration(
+              labelText: 'Wi-Fi Ağ Adı (SSID)',
+              helperText: 'Listeden seçebilir veya doğrudan yazabilirsiniz.',
+              prefixIcon: Icon(Icons.wifi),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Wi-Fi Şifresi',
+              helperText: 'Seçilen ağ için şifreyi girin.',
+              prefixIcon: Icon(Icons.lock_outline),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _savingWifi ? null : _saveWifi,
+              icon: const Icon(Icons.wifi_password_outlined),
+              label: Text(
+                _savingWifi ? 'Kaydediliyor...' : 'Wi-Fi Bilgilerini Kaydet',
+              ),
+            ),
+          ),
         ],
       ),
     );

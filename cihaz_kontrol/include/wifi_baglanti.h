@@ -275,6 +275,11 @@ struct WifiNetworkInfo {
 inline void wifiPerformScan() {
   wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
 
+  if (WiFi.getMode() != WIFI_STA) {
+    WiFi.mode(WIFI_STA);
+    delay(100);
+  }
+
   std::vector<WifiNetworkInfo> networks;
   const int count = WiFi.scanNetworks(false, true);
   for (int index = 0; index < count; index += 1) {
