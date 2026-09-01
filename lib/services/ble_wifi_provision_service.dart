@@ -308,7 +308,7 @@ class BleWifiProvisionService {
     );
 
     try {
-      await _ble.requestMtu(deviceId: device.id, mtu: 180);
+      await _ble.requestMtu(deviceId: device.id, mtu: 512);
     } catch (_) {
       // MTU artırımı zorunlu değil.
     }
@@ -349,18 +349,19 @@ class BleWifiProvisionService {
     final List<int> raw = await _ble.readCharacteristic(
       _qualifiedCharacteristic(_networksUuid),
     );
-    final Map<String, dynamic> json = _decodeJsonMap(
-      utf8.decode(raw, allowMalformed: true),
-    );
+    final String text = utf8.decode(raw, allowMalformed: true);
+    final Map<String, dynamic> json = _decodeJsonMap(text);
     final List<dynamic> items =
         (json['networks'] as List<dynamic>?) ?? <dynamic>[];
     return items
         .whereType<Map<String, dynamic>>()
         .map(
           (Map<String, dynamic> item) => BleWifiNetwork(
-            ssid: (item['ssid'] ?? '').toString(),
-            rssi: (item['rssi'] as num?)?.toInt() ?? 0,
-            secure: item['secure'] == true,
+            ssid: (item['ssid'] ?? item['s'] ?? '').toString(),
+            rssi: (item['rssi'] ?? item['r'] as num?)?.toInt() ?? 0,
+            secure: item['secure'] == true ||
+                item['sec'] == 1 ||
+                item['sec'] == true,
           ),
         )
         .where((BleWifiNetwork item) => item.ssid.isNotEmpty)

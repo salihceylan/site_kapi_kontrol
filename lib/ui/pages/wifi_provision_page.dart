@@ -24,7 +24,6 @@ class WifiProvisionPage extends StatefulWidget {
 
 class _WifiProvisionPageState extends State<WifiProvisionPage> {
   final BleWifiProvisionService _service = BleWifiProvisionService();
-  final TextEditingController _ssidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   List<BleProvisionDevice> _devices = const <BleProvisionDevice>[];
@@ -46,7 +45,6 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
 
   @override
   void dispose() {
-    _ssidController.dispose();
     _passwordController.dispose();
     _service.disconnect();
     super.dispose();
@@ -143,6 +141,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     setState(() {
       _loadingNetworks = true;
       _networks = const <BleWifiNetwork>[];
+      _selectedSsid = null;
     });
 
     try {
@@ -154,15 +153,10 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _lastResult = result;
         if (networks.isNotEmpty) {
           _selectedSsid = networks.first.ssid;
-          if (_ssidController.text.trim().isEmpty) {
-            _ssidController.text = networks.first.ssid;
-          }
         }
       });
       if (networks.isEmpty) {
-        _showMessage(
-          'Ağ listesi boş geldi. SSID adını doğrudan aşağıya yazarak da kaydedebilirsiniz.',
-        );
+        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı.');
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
@@ -175,12 +169,9 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
   }
 
   Future<void> _saveWifi() async {
-    final String ssid = _ssidController.text.trim().isNotEmpty
-        ? _ssidController.text.trim()
-        : (_selectedSsid ?? '').trim();
-
-    if (ssid.isEmpty) {
-      _showMessage('Önce bir Wi-Fi SSID girin veya listeden seçin.');
+    final String? ssid = _selectedSsid;
+    if (ssid == null || ssid.isEmpty) {
+      _showMessage('Önce listeden bir Wi-Fi ağı seçin.');
       return;
     }
     if (_passwordController.text.trim().isEmpty) {
@@ -271,7 +262,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           ),
           SizedBox(height: 6),
           Text(
-            '3. Cihaza bağlanın, yakındaki SSID listesini alın veya Wi-Fi adını yazın.',
+            '3. Cihaza bağlanın, yakındaki SSID listesinden doğru ağı seçin.',
           ),
           SizedBox(height: 6),
           Text(
@@ -400,9 +391,27 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (_networks.isNotEmpty) ...<Widget>[
+          if (_loadingNetworks)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Column(
+                  children: <Widget>[
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Yakındaki Wi-Fi ağları taranıyor...'),
+                  ],
+                ),
+              ),
+            )
+          else if (_networks.isEmpty)
             const Text(
-              'Yakındaki Wi-Fi Ağları',
+              'Wi-Fi listesi alınamadı veya henüz taranmadı. Yukarıdaki "Wi-Fi Ağlarını Tara" butonuna basın.',
+              style: TextStyle(color: AppColors.textMuted),
+            )
+          else ...<Widget>[
+            const Text(
+              'SSID Seçimi',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -427,46 +436,33 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                   ),
                   onTap: _savingWifi
                       ? null
-                      : () {
-                          setState(() {
-                            _selectedSsid = network.ssid;
-                            _ssidController.text = network.ssid;
-                          });
-                        },
+                      : () => setState(() => _selectedSsid = network.ssid),
                 ),
               ),
             ),
             const SizedBox(height: 12),
-          ],
-          TextField(
-            controller: _ssidController,
-            decoration: const InputDecoration(
-              labelText: 'Wi-Fi Ağ Adı (SSID)',
-              helperText: 'Listeden seçebilir veya doğrudan yazabilirsiniz.',
-              prefixIcon: Icon(Icons.wifi),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _passwordController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Wi-Fi Şifresi',
-              helperText: 'Seçilen ağ için şifreyi girin.',
-              prefixIcon: Icon(Icons.lock_outline),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _savingWifi ? null : _saveWifi,
-              icon: const Icon(Icons.wifi_password_outlined),
-              label: Text(
-                _savingWifi ? 'Kaydediliyor...' : 'Wi-Fi Bilgilerini Kaydet',
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'Wi-Fi Şifresi',
+                helperText:
+                    '${_selectedSsid ?? "Seçilen ağ"} için şifreyi girin.',
+                prefixIcon: const Icon(Icons.lock_outline),
               ),
             ),
-          ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _savingWifi ? null : _saveWifi,
+                icon: const Icon(Icons.wifi_password_outlined),
+                label: Text(
+                  _savingWifi ? 'Kaydediliyor...' : 'Wi-Fi Bilgilerini Kaydet',
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
