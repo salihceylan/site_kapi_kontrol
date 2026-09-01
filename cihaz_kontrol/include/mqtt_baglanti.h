@@ -57,6 +57,10 @@ inline void mqttPublishEvent(const char* eventName, const char* detail = "") {
   if (detail != nullptr && detail[0] != '\0') {
     doc["detail"] = detail;
   }
+  const String otaJobId = otaCurrentJobId();
+  if (!otaJobId.isEmpty()) {
+    doc["ota_job_id"] = otaJobId;
+  }
   doc["ms"] = millis();
   doc["firmware_version"] = OTA_CURRENT_VERSION;
   doc["ota_status"] = otaLastStatus();
@@ -90,7 +94,8 @@ inline bool shouldTriggerPulse(const String& message) {
   return String(action) == "pulse";
 }
 
-inline bool shouldTriggerOtaCheck(const String& message) {
+inline bool readOtaCheckCommand(const String& message, String& jobId) {
+  jobId = "";
   if (message == "ota" || message == "ota_check") {
     return true;
   }
@@ -102,7 +107,12 @@ inline bool shouldTriggerOtaCheck(const String& message) {
   }
 
   const char* action = json["action"] | "";
-  return String(action) == "ota_check";
+  if (String(action) != "ota_check") {
+    return false;
+  }
+  jobId = String(json["ota_job_id"] | "");
+  jobId.trim();
+  return true;
 }
 
 inline bool readLocalControlConfig(const String& message, String& token) {
@@ -139,8 +149,9 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  if (shouldTriggerOtaCheck(message)) {
-    otaTalepEt("mqtt");
+  String otaJobId;
+  if (readOtaCheckCommand(message, otaJobId)) {
+    otaTalepEt("mqtt", otaJobId);
     mqttPublishEvent("ota_check_requested");
     return;
   }

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, cast
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import qrcode
 from qrcode.constants import ERROR_CORRECT_H
@@ -1017,6 +1017,8 @@ class App:
                 "version": version,
                 "filename": "firmware.bin",
                 "force": True,
+                "usb_required": False,
+                "partition_scheme": "ota_4mb_littlefs_v1",
                 "interval_hours": 1,
                 "allowed_uids": [],
                 "sha256": hashes["firmware_bin"]["sha256"],
@@ -1159,13 +1161,23 @@ class App:
         if rel is None:
             messagebox.showwarning("Surum yok", "Sunucuya gonderilecek surum bulunamadi.")
             return
+        password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()
+        if not password:
+            password = simpledialog.askstring(
+                "VPS sifresi",
+                f"{VPS_USER}@{VPS_HOST} icin VPS sifresini girin:",
+                show="*",
+                parent=self.root,
+            ) or ""
+        if not password:
+            return
         self.fw_busy = True
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
-        threading.Thread(target=self._server_upload_worker, args=(rel,), daemon=True).start()
+        threading.Thread(target=self._server_upload_worker, args=(rel, password), daemon=True).start()
 
-    def _server_upload_worker(self, rel: dict) -> None:
+    def _server_upload_worker(self, rel: dict, password: str) -> None:
         try:
             _boot, _part, firm, manifest = self._release_file_paths(rel)
             if not firm.exists():
@@ -1190,7 +1202,7 @@ class App:
                 VPS_HOST,
                 port=int(VPS_PORT),
                 username=VPS_USER,
-                password="Fingon08.",
+                password=password,
                 timeout=12,
             )
 
@@ -1271,6 +1283,21 @@ class App:
             speed = int(self.upload_speeds.get(rel["env"], 460800))
             version = str(rel.get("version", ""))
             env = str(rel.get("env", ""))
+            required_bundle_paths = [
+                ("Paket Python", BUNDLED_PYTHON_DIR),
+                ("esptool", BUNDLED_ESPTOOL_DIR),
+                ("pyserial", BUNDLED_SITE_PACKAGES_DIR / "serial"),
+            ]
+            missing_bundle_paths = [
+                f"{label}: {path}"
+                for label, path in required_bundle_paths
+                if not path.exists()
+            ]
+            if missing_bundle_paths:
+                raise FileNotFoundError(
+                    "Calisma arkadasi ZIP paketi icin gerekli araclar eksik:\n" +
+                    "\n".join(missing_bundle_paths)
+                )
             bat = f"""@echo off
 setlocal
 cd /d "%~dp0"
@@ -1597,4 +1624,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

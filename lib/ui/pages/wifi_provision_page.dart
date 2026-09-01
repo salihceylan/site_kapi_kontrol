@@ -219,11 +219,20 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         password: _passwordController.text.trim(),
         mqttCredentials: mqttCredentials,
       );
-      final BleWifiState state = await _service.readState();
+      BleWifiState? state;
+      try {
+        state = await _service.readState();
+      } catch (_) {
+        if (!result.isProvisionAccepted) {
+          rethrow;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _lastResult = result;
-        _deviceState = state;
+        if (state != null) {
+          _deviceState = state;
+        }
       });
       _showMessage(
         result.message.isEmpty ? 'Wi-Fi ayarı kaydedildi.' : result.message,
@@ -231,6 +240,11 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     } on BleProvisionException catch (error) {
       if (!mounted) return;
       _showMessage(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage(
+        'Bluetooth islemi tamamlanamadi. Cihaza yeniden baglanip durumu kontrol edin.',
+      );
     } finally {
       if (mounted) {
         setState(() => _savingWifi = false);
@@ -330,8 +344,13 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                   subtitle: Text(
                     '${device.id}  -  ${_signalText(device.rssi)} (${device.rssi} dBm)',
                   ),
-                  trailing: const Icon(Icons.bluetooth, color: AppColors.primary),
-                  onTap: _connectingDevice ? null : () => _connectDevice(device),
+                  trailing: const Icon(
+                    Icons.bluetooth,
+                    color: AppColors.primary,
+                  ),
+                  onTap: _connectingDevice
+                      ? null
+                      : () => _connectDevice(device),
                 ),
               ),
             ),
@@ -359,9 +378,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           Text('Bluetooth ID: ${device.id}'),
           if (state != null) ...<Widget>[
             const SizedBox(height: 8),
-            Text(
-              'Unique ID: ${_resolveUid(device, state)}',
-            ),
+            Text('Unique ID: ${_resolveUid(device, state)}'),
             Text('Kayıtlı SSID: ${state.ssid.isEmpty ? '-' : state.ssid}'),
             Text(
               'Wi-Fi Durumu: ${state.wifiConnected ? 'Bağlı' : 'Bağlı değil'}',
@@ -484,10 +501,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     final accentColor = widget.accentColor ?? AppColors.primary;
     return Scaffold(
       backgroundColor: widget.surfaceColor,
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: accentColor,
-      ),
+      appBar: AppBar(title: Text(widget.title), backgroundColor: accentColor),
       body: Container(
         decoration: AppDecorations.pageBackground,
         child: SafeArea(

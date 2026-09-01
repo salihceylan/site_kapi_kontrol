@@ -118,9 +118,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _profileFullNameController = TextEditingController(
       text: session?.fullName ?? '',
     );
-    _profileEmailController = TextEditingController(
-      text: session?.email ?? '',
-    );
+    _profileEmailController = TextEditingController(text: session?.email ?? '');
     _profilePhoneController = TextEditingController(
       text: session?.phoneNumber ?? '',
     );
@@ -166,10 +164,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -182,7 +177,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _canAccessMenu(SirketMenuItem item, UserRole role) {
     switch (role) {
       case UserRole.superUser:
-        return true;
+        return item != SirketMenuItem.abonelikTalepleri &&
+            item != SirketMenuItem.siteOnayTalepleri;
       case UserRole.siteManager:
         return item == SirketMenuItem.dashboard ||
             item == SirketMenuItem.profilim ||
@@ -416,10 +412,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    final hasActiveDevice = doors.any((d) =>
-        d.assignedDeviceUid != null && d.assignedDeviceUid!.trim().isNotEmpty);
+    final hasActiveDevice = doors.any(
+      (d) =>
+          d.assignedDeviceUid != null && d.assignedDeviceUid!.trim().isNotEmpty,
+    );
     if (!hasActiveDevice) {
-      await widget.voiceDoorService!.speak('Kapılara henüz bir cihaz atanmamış.');
+      await widget.voiceDoorService!.speak(
+        'Kapılara henüz bir cihaz atanmamış.',
+      );
       return;
     }
 
@@ -465,7 +465,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (status != null || !isBackgroundRefresh) {
         _doorRuntimeStatus = status;
       }
-      final canLocal = _doorControlDoor != null &&
+      final canLocal =
+          _doorControlDoor != null &&
           widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
       if (canLocal &&
           error != null &&
@@ -505,7 +506,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadManagedUsers(UserRole role, {int page = 1, bool force = false}) async {
+  Future<void> _loadManagedUsers(
+    UserRole role, {
+    int page = 1,
+    bool force = false,
+  }) async {
     if (_loadingRoles.contains(role) && !force) return;
     setState(() => _loadingRoles.add(role));
     try {
@@ -542,7 +547,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (error != null) _showMessage(error);
   }
 
-  Future<void> _loadSubscriptionRequests({int page = 1, bool force = false}) async {
+  Future<void> _loadSubscriptionRequests({
+    int page = 1,
+    bool force = false,
+  }) async {
     if (_isLoadingSubscriptionRequests && !force) return;
     setState(() => _isLoadingSubscriptionRequests = true);
     try {
@@ -561,7 +569,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadPendingSiteApprovals({int page = 1, bool force = false}) async {
+  Future<void> _loadPendingSiteApprovals({
+    int page = 1,
+    bool force = false,
+  }) async {
     if (_isLoadingPendingSiteApprovals && !force) return;
     setState(() => _isLoadingPendingSiteApprovals = true);
     try {
@@ -681,7 +692,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (error != null) {
       _showMessage(error);
     } else {
-      _showMessage(action == 'approve' ? 'Site onaylandı.' : 'Site reddedildi.');
+      _showMessage(
+        action == 'approve' ? 'Site onaylandı.' : 'Site reddedildi.',
+      );
       _loadSites(force: true);
       _loadPendingSiteApprovals(force: true);
     }
@@ -813,9 +826,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openDeviceRegistrationFlow() async {
-    final scannedUid = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScanPage()),
-    );
+    final scannedUid = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanPage()));
     if (scannedUid == null || scannedUid.isEmpty) return;
     _openManualDeviceRegistrationFlow(initialUid: scannedUid);
   }
@@ -912,9 +925,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     if (confirm != true) return;
 
-    final error = await widget.authService.deleteDevice(
-      deviceId: device.id,
-    );
+    final error = await widget.authService.deleteDevice(deviceId: device.id);
     if (error != null) {
       _showMessage(error);
     } else {
@@ -1091,7 +1102,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _exportAllSitesCredentialsPdf() async {
     try {
       _showMessage('Tüm sitelerin şifre raporu hazırlanıyor...');
-      final sitesData = await widget.authService.listSites(page: 1, pageSize: 200);
+      final sitesData = await widget.authService.listSites(
+        page: 1,
+        pageSize: 200,
+      );
       if (sitesData.sites.isEmpty) {
         _showMessage('Kayıtlı site bulunamadı.');
         return;
@@ -1099,7 +1113,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       final structures = <SiteStructureRecord>[];
       for (final s in sitesData.sites) {
-        final (struct, _) = await widget.authService.getSiteStructure(siteCode: s.id);
+        final (struct, _) = await widget.authService.getSiteStructure(
+          siteCode: s.id,
+        );
         if (struct != null) {
           structures.add(struct);
         }
@@ -1137,7 +1153,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
 
       if (logsPage == null || logsPage.logs.isEmpty) {
-        _showMessage(error ?? '${site.name} için son 7 güne ait kapı geçiş kaydı bulunamadı.');
+        _showMessage(
+          error ??
+              '${site.name} için son 7 güne ait kapı geçiş kaydı bulunamadı.',
+        );
         return;
       }
 
@@ -1223,8 +1242,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final horizontalPadding =
-                constraints.maxWidth < 600 ? 16.0 : 20.0;
+            final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
             return SingleChildScrollView(
               padding: EdgeInsets.all(horizontalPadding),
               child: Align(
@@ -1261,7 +1279,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           isLoadingStatus: _isLoadingDoorStatus,
           isOpeningDoor: _isOpeningDoor,
           doorStatusError: _doorStatusError,
-          canTryLocalDoorOpen: _doorControlDoor != null &&
+          canTryLocalDoorOpen:
+              _doorControlDoor != null &&
               widget.authService.canTryLocalDoorOpen(_doorControlDoor!),
           onSelectSite: _selectDoorControlSite,
           onSelectDoor: _selectDoorControlDoor,
@@ -1303,9 +1322,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.daireKullanicilariYonetimi:
         return SitesView(
           canManageSites: session.role == UserRole.superUser,
-          canManageApartmentUsers: session.role == UserRole.superUser ||
+          canManageApartmentUsers:
+              session.role == UserRole.superUser ||
               session.role == UserRole.siteManager,
-          canAssignDoorDevices: session.role == UserRole.superUser ||
+          canAssignDoorDevices:
+              session.role == UserRole.superUser ||
               session.role == UserRole.siteManager,
           apartmentMode:
               _selectedMenu == SirketMenuItem.daireKullanicilariYonetimi,
@@ -1324,14 +1345,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onSelectSite: _selectSite,
           onEditSite: (site) => _openSiteDialog(site: site),
           onDeleteSite: _deleteSite,
-          onApproveSite: (site) => _resolveSiteApproval(
-            siteCode: site.id,
-            action: 'approve',
-          ),
-          onRejectSite: (site) => _resolveSiteApproval(
-            siteCode: site.id,
-            action: 'reject',
-          ),
+          onApproveSite: (site) =>
+              _resolveSiteApproval(siteCode: site.id, action: 'approve'),
+          onRejectSite: (site) =>
+              _resolveSiteApproval(siteCode: site.id, action: 'reject'),
           onEditApartmentResident: _openApartmentResidentDialog,
           onSendApartmentMail: _sendApartmentCredentials,
           onAssignDoorDevice: _assignDoorDevice,
@@ -1345,7 +1362,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           role: UserRole.superUser,
           session: session,
           pageData: _managedPages[UserRole.superUser],
-          users: _managedPages[UserRole.superUser]?.users ??
+          users:
+              _managedPages[UserRole.superUser]?.users ??
               const <ManagedUserAccount>[],
           loading: _loadingRoles.contains(UserRole.superUser),
           busyActivationUsers: _busyActivationUsers,
@@ -1359,10 +1377,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             user: user,
             value: val,
           ),
-          onShowUserDetails: (user) => _openManagedUserDialog(
-            role: UserRole.superUser,
-            user: user,
-          ),
+          onShowUserDetails: (user) =>
+              _openManagedUserDialog(role: UserRole.superUser, user: user),
         );
 
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -1370,7 +1386,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           role: UserRole.siteManager,
           session: session,
           pageData: _managedPages[UserRole.siteManager],
-          users: _managedPages[UserRole.siteManager]?.users ??
+          users:
+              _managedPages[UserRole.siteManager]?.users ??
               const <ManagedUserAccount>[],
           loading: _loadingRoles.contains(UserRole.siteManager),
           busyActivationUsers: _busyActivationUsers,
@@ -1384,10 +1401,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             user: user,
             value: val,
           ),
-          onShowUserDetails: (user) => _openManagedUserDialog(
-            role: UserRole.siteManager,
-            user: user,
-          ),
+          onShowUserDetails: (user) =>
+              _openManagedUserDialog(role: UserRole.siteManager, user: user),
         );
 
       case SirketMenuItem.cihazEkle:
@@ -1413,27 +1428,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
 
       case SirketMenuItem.bluetoothWifiKur:
-        return BluetoothWifiView(
-          onOpenWifiProvision: _openWifiProvision,
-        );
+        return BluetoothWifiView(onOpenWifiProvision: _openWifiProvision);
 
       case SirketMenuItem.abonelikTalepleri:
         return SubscriptionRequestsView(
           pageData: _subscriptionRequestsPage,
-          requests: _subscriptionRequestsPage?.requests ??
+          requests:
+              _subscriptionRequestsPage?.requests ??
               const <SubscriptionRequest>[],
           busyRequests: _busySubscriptionRequests,
           isLoading: _isLoadingSubscriptionRequests,
           onRefresh: () => _loadSubscriptionRequests(force: true),
           onLoadPage: (page) => _loadSubscriptionRequests(page: page),
-          onApprove: (code) => _resolveSubscriptionRequest(
-            userCode: code,
-            action: 'approve',
-          ),
-          onReject: (code) => _resolveSubscriptionRequest(
-            userCode: code,
-            action: 'reject',
-          ),
+          onApprove: (code) =>
+              _resolveSubscriptionRequest(userCode: code, action: 'approve'),
+          onReject: (code) =>
+              _resolveSubscriptionRequest(userCode: code, action: 'reject'),
         );
 
       case SirketMenuItem.siteOnayTalepleri:
@@ -1444,14 +1454,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           isLoading: _isLoadingPendingSiteApprovals,
           onRefresh: () => _loadPendingSiteApprovals(force: true),
           onLoadPage: (page) => _loadPendingSiteApprovals(page: page),
-          onApprove: (siteCode) => _resolveSiteApproval(
-            siteCode: siteCode,
-            action: 'approve',
-          ),
-          onReject: (siteCode) => _resolveSiteApproval(
-            siteCode: siteCode,
-            action: 'reject',
-          ),
+          onApprove: (siteCode) =>
+              _resolveSiteApproval(siteCode: siteCode, action: 'approve'),
+          onReject: (siteCode) =>
+              _resolveSiteApproval(siteCode: siteCode, action: 'reject'),
         );
     }
   }

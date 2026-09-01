@@ -44,6 +44,10 @@ const allowedCorsOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const devCorsOrigins = new Set([
+  'http://localhost',
+  'http://127.0.0.1',
+]);
 const firmwareRoot = path.resolve(process.env.FIRMWARE_DIR || path.join(process.cwd(), 'firmware'));
 
 app.disable('x-powered-by');
@@ -56,10 +60,16 @@ app.use((_req, res, next) => {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedCorsOrigins.length === 0) {
+      if (!origin) {
         return callback(null, true);
       }
       if (allowedCorsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (
+        allowedCorsOrigins.length === 0 &&
+        [...devCorsOrigins].some((allowed) => origin === allowed || origin.startsWith(`${allowed}:`))
+      ) {
         return callback(null, true);
       }
       return callback(new Error('CORS origin not allowed.'));
@@ -70,9 +80,18 @@ app.use(express.json({ limit: '64kb' }));
 
 function createRateLimiter({ windowMs, maxRequests, message }) {
   const buckets = new Map();
+  let lastCleanupAt = 0;
 
   return (req, res, next) => {
     const now = Date.now();
+    if (now - lastCleanupAt > windowMs) {
+      lastCleanupAt = now;
+      for (const [key, bucket] of buckets.entries()) {
+        if (bucket.resetAt <= now) {
+          buckets.delete(key);
+        }
+      }
+    }
     const key = `${req.ip}:${req.path}`;
     const existing = buckets.get(key);
     if (!existing || existing.resetAt <= now) {
@@ -2361,6 +2380,7 @@ async function syncSiteStructureCounts({
   blockApartmentCounts,
   doorCount,
 }) {
+  let shouldRotateLocalTokens = false;
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
     apartmentCount,
@@ -2424,6 +2444,7 @@ async function syncSiteStructureCounts({
         const removeCount = currentApartments.length - targetApartmentCount;
         for (const apartment of removableApartments.slice(0, removeCount)) {
           if (apartment.resident_user_code != null) {
+            shouldRotateLocalTokens = true;
             await client.query(
               `
                 DELETE FROM users
@@ -2500,6 +2521,17 @@ async function syncSiteStructureCounts({
     await ensureSiteApartmentResidents(siteCode, client);
 
     await client.query('COMMIT');
+    if (shouldRotateLocalTokens) {
+      try {
+        await rotateLocalControlTokensForSite(siteCode, 'site_structure_changed');
+      } catch (error) {
+        auditLog('local_control_token_rotation_failed', {
+          site_code: Number(siteCode),
+          reason: 'site_structure_changed',
+          error: error.message,
+        });
+      }
+    }
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -3250,9 +3282,11 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
       ? manifest.allowed_uids.map((item) => String(item).trim().toUpperCase()).filter(Boolean)
       : [];
     const blockedByUid = allowedUids.length > 0 && !allowedUids.includes(uid);
+    const usbRequired = manifest.usb_required === true;
     const updateAvailable =
       enabled &&
       !blockedByUid &&
+      !usbRequired &&
       version &&
       fileName &&
       (!currentVersion || compareVersionParts(version, currentVersion) > 0);
@@ -3262,6 +3296,7 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
       update_available: Boolean(updateAvailable),
       version,
       force: manifest.force === true,
+      usb_required: usbRequired,
       url: updateAvailable
         ? `${publicBaseUrl(req)}/firmware/${target}/${fileName}`
         : null,
@@ -3269,7 +3304,9 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
       md5: manifest.md5 ? String(manifest.md5) : null,
       notes: String(manifest.notes || ''),
       interval_hours: Number(manifest.interval_hours || 24),
-      message: blockedByUid ? 'Cihaz bu yayin grubunda degil.' : '',
+      message: blockedByUid
+        ? 'Cihaz bu yayin grubunda degil.'
+        : (usbRequired ? 'Bu surum icin USB ile tam yukleme gerekiyor.' : ''),
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Firmware manifest okunamadi.' });
@@ -4608,6 +4645,7 @@ app.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req,
     const result = await publishOtaCheckToDevices({
       deviceUids,
       requestedBy: req.authUser.email,
+      jobId,
     });
     await finishOtaUpdateJob({ jobId, result });
 

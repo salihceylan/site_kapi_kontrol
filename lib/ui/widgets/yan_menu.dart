@@ -58,7 +58,9 @@ class YanMenu extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.only(topRight: Radius.circular(24)),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(24),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,8 +167,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.ellerSerbest,
-        SirketMenuItem.abonelikTalepleri,
-        SirketMenuItem.siteOnayTalepleri,
         SirketMenuItem.superUserYonetimi,
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,

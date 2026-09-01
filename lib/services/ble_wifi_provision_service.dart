@@ -77,6 +77,26 @@ class BleWifiNetwork {
   final bool secure;
 }
 
+int _jsonInt(Map<String, dynamic> json, String longKey, String shortKey) {
+  final Object? value = json[longKey] ?? json[shortKey];
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+bool _jsonBool(Map<String, dynamic> json, String longKey, String shortKey) {
+  final Object? value = json[longKey] ?? json[shortKey];
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  final text = value?.toString().trim().toLowerCase();
+  return text == 'true' || text == '1' || text == 'yes';
+}
+
 class BleWifiResult {
   const BleWifiResult({required this.status, required this.message});
 
@@ -358,10 +378,8 @@ class BleWifiProvisionService {
         .map(
           (Map<String, dynamic> item) => BleWifiNetwork(
             ssid: (item['ssid'] ?? item['s'] ?? '').toString(),
-            rssi: (item['rssi'] ?? item['r'] as num?)?.toInt() ?? 0,
-            secure: item['secure'] == true ||
-                item['sec'] == 1 ||
-                item['sec'] == true,
+            rssi: _jsonInt(item, 'rssi', 'r'),
+            secure: _jsonBool(item, 'secure', 'sec'),
           ),
         )
         .where((BleWifiNetwork item) => item.ssid.isNotEmpty)
@@ -369,14 +387,19 @@ class BleWifiProvisionService {
   }
 
   Future<List<BleWifiNetwork>> scanNetworks() async {
-    await _ble.writeCharacteristicWithResponse(
-      _qualifiedCharacteristic(_commandUuid),
-      value: utf8.encode('{"action":"scan"}'),
-    );
+    await _writeCommand('{"action":"scan"}');
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
-    for (int index = 0; index < 25; index += 1) {
+    for (int index = 0; index < 35; index += 1) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
+      try {
+        final List<BleWifiNetwork> earlyNetworks = await readNetworks();
+        if (earlyNetworks.isNotEmpty) {
+          return earlyNetworks;
+        }
+      } catch (_) {
+        // Tarama devam ederken karakteristik henuz hazir olmayabilir.
+      }
       result = await readResult();
       if (result.isFailure) {
         throw BleProvisionException(
@@ -391,7 +414,11 @@ class BleWifiProvisionService {
       }
     }
 
-    return readNetworks();
+    try {
+      return await readNetworks();
+    } catch (error) {
+      throw BleProvisionException(_messageFromError(error));
+    }
   }
 
   Future<BleWifiResult> provisionWifi({
@@ -429,10 +456,7 @@ class BleWifiProvisionService {
       if (localControlToken.isNotEmpty)
         'local_control_token': localControlToken,
     });
-    await _ble.writeCharacteristicWithResponse(
-      _qualifiedCharacteristic(_commandUuid),
-      value: utf8.encode(payload),
-    );
+    await _writeCommand(payload);
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
     for (int index = 0; index < 28; index += 1) {
@@ -495,6 +519,23 @@ class BleWifiProvisionService {
       characteristicId: characteristicUuid,
       deviceId: deviceId,
     );
+  }
+
+  Future<void> _writeCommand(String payload) async {
+    final QualifiedCharacteristic characteristic =
+        _qualifiedCharacteristic(_commandUuid);
+    final List<int> value = utf8.encode(payload);
+    try {
+      await _ble.writeCharacteristicWithResponse(
+        characteristic,
+        value: value,
+      );
+    } catch (_) {
+      await _ble.writeCharacteristicWithoutResponse(
+        characteristic,
+        value: value,
+      );
+    }
   }
 
   String _messageFromError(Object error) {

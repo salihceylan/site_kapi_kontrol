@@ -153,7 +153,11 @@ function otaJobDeviceEventStatus(eventName) {
   if (eventName === 'ota_success') {
     return 'installed';
   }
-  if (eventName === 'ota_failed' || eventName === 'ota_check_failed') {
+  if (
+    eventName === 'ota_failed' ||
+    eventName === 'ota_check_failed' ||
+    eventName === 'ota_usb_required'
+  ) {
     return 'failed';
   }
   if (
@@ -168,11 +172,15 @@ function otaJobDeviceEventStatus(eventName) {
   return null;
 }
 
-async function recordOtaJobDeviceEvent(deviceUid, eventName, detail) {
+async function recordOtaJobDeviceEvent(deviceUid, eventName, detail, otaJobId = null) {
   const eventStatus = otaJobDeviceEventStatus(eventName);
   if (!eventStatus) {
     return;
   }
+  const parsedJobId =
+    otaJobId === null || otaJobId === undefined || otaJobId === ''
+      ? null
+      : Number(otaJobId);
 
   try {
     const result = await pool.query(
@@ -182,6 +190,13 @@ async function recordOtaJobDeviceEvent(deviceUid, eventName, detail) {
           FROM ota_update_job_devices ojd
           INNER JOIN ota_update_jobs job ON job.id = ojd.job_id
           WHERE ojd.device_uid = $1
+            AND (
+              ($5::INTEGER IS NOT NULL AND ojd.job_id = $5::INTEGER)
+              OR (
+                $5::INTEGER IS NULL
+                AND job.created_at > NOW() - INTERVAL '6 hours'
+              )
+            )
           ORDER BY job.created_at DESC
           LIMIT 1
         )
@@ -197,7 +212,13 @@ async function recordOtaJobDeviceEvent(deviceUid, eventName, detail) {
           AND ojd.device_uid = $1
         RETURNING ojd.job_id
       `,
-      [deviceUid, eventStatus, eventName, detail || null],
+      [
+        deviceUid,
+        eventStatus,
+        eventName,
+        detail || null,
+        Number.isInteger(parsedJobId) && parsedJobId > 0 ? parsedJobId : null,
+      ],
     );
     const jobId = result.rows[0]?.job_id;
     if (!jobId) {
@@ -340,10 +361,12 @@ function applyStatusMessage(topic, payload) {
   }
 
   if (kind === 'event') {
+    let otaJobId = null;
     try {
       const decoded = JSON.parse(text);
       status.last_event = decoded.event ? String(decoded.event) : text || null;
       status.last_event_detail = decoded.detail ? String(decoded.detail) : null;
+      otaJobId = decoded.ota_job_id ?? null;
       status.firmware_version = decoded.firmware_version
         ? String(decoded.firmware_version)
         : status.firmware_version;
@@ -358,6 +381,7 @@ function applyStatusMessage(topic, payload) {
       status.device_uid,
       status.last_event,
       status.last_event_detail,
+      otaJobId,
     );
     return;
   }
@@ -544,6 +568,7 @@ export async function publishLocalControlConfig({
 export async function publishOtaCheckToDevices({
   deviceUids,
   requestedBy,
+  jobId = null,
 }) {
   if (!client || !client.connected) {
     const error = new Error(lastBridgeError || 'MQTT_BRIDGE_NOT_CONNECTED');
@@ -560,6 +585,7 @@ export async function publishOtaCheckToDevices({
   ];
   const payload = JSON.stringify({
     action: 'ota_check',
+    ota_job_id: jobId,
     requested_by: requestedBy,
     requested_at: new Date().toISOString(),
   });

@@ -13,7 +13,14 @@ class LocalDoorAccess {
   final int port;
   final DateTime updatedAt;
 
-  bool get isUsable => deviceUid.isNotEmpty && token.isNotEmpty;
+  static const Duration cacheValidity = Duration(hours: 12);
+
+  bool get isUsable {
+    if (deviceUid.isEmpty || token.isEmpty) {
+      return false;
+    }
+    return DateTime.now().difference(updatedAt) <= cacheValidity;
+  }
 
   Map<String, dynamic> toJson() {
     return {

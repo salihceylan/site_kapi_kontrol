@@ -55,6 +55,12 @@ void seriKomutKontrol() {
     } else if (komut == 'p' || komut == 'P') {
       Serial.println("Seri komut: pin bulma testi");
       pinBulmaTesti();
+    } else if (komut == 'w') {
+      Serial.println("Seri komut: WiFi LED 5 saniye ON");
+      wifiStatusLedManuel(true);
+    } else if (komut == 'q') {
+      Serial.println("Seri komut: WiFi LED 5 saniye OFF");
+      wifiStatusLedManuel(false);
     }
   }
 }
@@ -87,6 +93,7 @@ void seriDurumYazdir() {
   Serial.println(wifiProvisioningAktifMi() ? wifiBleDeviceName() : "-");
   Serial.print("WiFi LED GPIO: ");
   Serial.println(WIFI_STATUS_LED_PIN);
+  wifiStatusLedDurumuYazdir();
   Serial.print("Bluetooth LED GPIO: ");
   if (BLE_STATUS_LED_PIN < 0) {
     Serial.println("-");
@@ -115,6 +122,7 @@ void seriDurumYazdir() {
   Serial.println(otaLastVersion().isEmpty() ? "-" : otaLastVersion());
   rolePinDurumuYazdir("Role pin okuma");
   Serial.println("Seri role test: h=HIGH, l=LOW, r=pulse, p=pin bulma");
+  Serial.println("Seri WiFi LED test: w=5sn ON, q=5sn OFF");
   Serial.println("------------------------");
 }
 

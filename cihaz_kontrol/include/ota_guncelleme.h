@@ -13,7 +13,7 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "2.0.1";
+inline constexpr char OTA_CURRENT_VERSION[] = "2.0.4";
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
@@ -36,6 +36,7 @@ inline bool gOtaPendingCheck = false;
 inline bool gOtaRunning = false;
 inline String gOtaLastStatus = "beklemede";
 inline String gOtaLastVersion = "";
+inline String gOtaCurrentJobId = "";
 inline Preferences gOtaPrefs;
 inline OtaEventPublisher gOtaEventPublisher = nullptr;
 
@@ -71,6 +72,10 @@ inline void otaPublishEvent(const char* eventName, const String& detail = "") {
   }
 }
 
+inline String otaCurrentJobId() {
+  return gOtaCurrentJobId;
+}
+
 inline void otaSetEventPublisher(OtaEventPublisher publisher) {
   gOtaEventPublisher = publisher;
 }
@@ -86,10 +91,15 @@ inline void otaSetup() {
   Serial.println(gOtaLastStatus);
 }
 
-inline void otaTalepEt(const char* reason = "manual") {
+inline void otaTalepEt(const char* reason = "manual", const String& jobId = "") {
   gOtaPendingCheck = true;
+  gOtaCurrentJobId = jobId;
   Serial.print("OTA kontrol talebi: ");
   Serial.println(reason);
+  if (!gOtaCurrentJobId.isEmpty()) {
+    Serial.print("OTA job id: ");
+    Serial.println(gOtaCurrentJobId);
+  }
 }
 
 inline String otaLastStatus() {
@@ -179,14 +189,35 @@ inline void otaCheckAndUpdate() {
 
   gOtaPeriodicIntervalMs = otaIntervalFromManifest(manifest);
   const bool updateAvailable = manifest["update_available"] | false;
+  const bool usbRequired = manifest["usb_required"] | false;
   const String version = String(manifest["version"] | "");
   const String url = String(manifest["url"] | "");
   const String md5 = String(manifest["md5"] | "");
+  if (usbRequired) {
+    otaPersistStatus("USB ile tam yukleme gerekli", version);
+    Serial.println("OTA: Bu surum partition/bootloader icin USB ile yukleme gerektiriyor.");
+    otaPublishEvent("ota_usb_required", version);
+    otaPlanNext(gOtaPeriodicIntervalMs);
+    gOtaCurrentJobId = "";
+    gOtaRunning = false;
+    return;
+  }
   if (!updateAvailable || url.isEmpty()) {
     otaPersistStatus("guncel", version);
     Serial.println("OTA: cihaz guncel.");
     otaPublishEvent("ota_up_to_date", version);
     otaPlanNext(gOtaPeriodicIntervalMs);
+    gOtaCurrentJobId = "";
+    gOtaRunning = false;
+    return;
+  }
+
+  if (md5.length() != 32) {
+    otaPersistStatus("manifest MD5 eksik veya gecersiz", version);
+    Serial.println("OTA: manifest MD5 eksik veya gecersiz; guncelleme iptal edildi.");
+    otaPublishEvent("ota_failed", gOtaLastStatus);
+    otaPlanNext(gOtaPeriodicIntervalMs);
+    gOtaCurrentJobId = "";
     gOtaRunning = false;
     return;
   }
@@ -232,6 +263,7 @@ inline void otaCheckAndUpdate() {
   if (md5.length() == 32) {
     Serial.print("OTA manifest MD5: ");
     Serial.println(md5);
+    Update.setMD5(md5.c_str());
   }
   const t_httpUpdate_return result = httpUpdate.update(otaClient, url);
 
@@ -262,6 +294,7 @@ inline void otaCheckAndUpdate() {
   }
 
   otaPlanNext(gOtaPeriodicIntervalMs);
+  gOtaCurrentJobId = "";
   gOtaRunning = false;
 }
 
