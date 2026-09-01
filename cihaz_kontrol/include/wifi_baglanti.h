@@ -27,6 +27,7 @@ inline constexpr char BLE_WIFI_RESULT_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5
 inline constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
 inline constexpr unsigned long WIFI_CONFIGURED_BLINK_INTERVAL_MS = 700;
 inline constexpr unsigned long WIFI_UNCONFIGURED_BLINK_INTERVAL_MS = 150;
+inline constexpr unsigned long WIFI_SCAN_TIMEOUT_MS = 16000;
 inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 6;
 
 inline Preferences gWifiPrefs;
@@ -41,6 +42,7 @@ inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
 inline bool gPendingWifiScan = false;
+inline bool gWifiScanRunning = false;
 inline bool gPendingWifiProvision = false;
 inline String gPendingProvisionSsid;
 inline String gPendingProvisionPassword;
@@ -56,6 +58,7 @@ inline unsigned long gLastLedToggleAt = 0;
 inline unsigned long gWifiLedManualUntil = 0;
 inline unsigned long gResetPressedAt = 0;
 inline unsigned long gResetLastProgressAt = 0;
+inline unsigned long gWifiScanStartedAt = 0;
 inline bool gLedLogicalState = false;
 inline bool gResetHandled = false;
 inline NimBLEServer* gBleServer = nullptr;
@@ -347,24 +350,7 @@ inline void wifiScanListInsert(WifiNetworkInfo networks[], size_t& count, const 
   networks[insertAt].secure = secure;
 }
 
-inline void wifiPerformScan() {
-  wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
-
-  WiFi.disconnect(false, false);
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  delay(150);
-
-  int16_t count = WiFi.scanNetworks(false, false, false, 250);
-  if (count <= 0) {
-    WiFi.disconnect(true, false);
-    delay(100);
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    delay(200);
-    count = WiFi.scanNetworks(false, false, false, 300);
-  }
-
+inline void wifiPublishScanResult(int16_t count) {
   WifiNetworkInfo networks[WIFI_SCAN_RESULT_LIMIT];
   size_t storedNetworkCount = 0;
   size_t foundNetworkCount = 0;
@@ -392,8 +378,11 @@ inline void wifiPerformScan() {
   JsonArray list = doc["networks"].to<JsonArray>();
   for (size_t index = 0; index < storedNetworkCount; index += 1) {
     JsonObject item = list.add<JsonObject>();
+    item["ssid"] = networks[index].ssid;
     item["s"] = networks[index].ssid;
+    item["rssi"] = networks[index].rssi;
     item["r"] = networks[index].rssi;
+    item["secure"] = networks[index].secure;
     item["sec"] = networks[index].secure ? 1 : 0;
   }
 
@@ -412,6 +401,61 @@ inline void wifiPerformScan() {
     }
   }
   wifiNotifyBleResult("scan_complete", String(foundNetworkCount) + " WiFi agi bulundu.");
+}
+
+inline void wifiStartScan() {
+  if (gWifiScanRunning) {
+    wifiNotifyBleResult("scanning", "WiFi taramasi devam ediyor.");
+    return;
+  }
+
+  wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
+
+  WiFi.scanDelete();
+
+  const int16_t result = WiFi.scanNetworks(true, false, false, 250);
+  if (result == WIFI_SCAN_RUNNING) {
+    gWifiScanRunning = true;
+    gWifiScanStartedAt = millis();
+    Serial.println("BLE WiFi taramasi asenkron baslatildi.");
+    return;
+  }
+
+  if (result >= 0) {
+    wifiPublishScanResult(result);
+    return;
+  }
+
+  WiFi.scanDelete();
+  wifiNotifyBleResult("error", "WiFi taramasi baslatilamadi.");
+  Serial.println("BLE WiFi taramasi baslatilamadi.");
+}
+
+inline void wifiPollScan() {
+  if (!gWifiScanRunning) {
+    return;
+  }
+
+  const int16_t result = WiFi.scanComplete();
+  if (result == WIFI_SCAN_RUNNING) {
+    if (millis() - gWifiScanStartedAt > WIFI_SCAN_TIMEOUT_MS) {
+      gWifiScanRunning = false;
+      WiFi.scanDelete();
+      wifiNotifyBleResult("error", "WiFi taramasi zaman asimina ugradi.");
+      Serial.println("BLE WiFi taramasi zaman asimina ugradi.");
+    }
+    return;
+  }
+
+  gWifiScanRunning = false;
+  if (result >= 0) {
+    wifiPublishScanResult(result);
+    return;
+  }
+
+  WiFi.scanDelete();
+  wifiNotifyBleResult("error", "WiFi taramasi tamamlanamadi.");
+  Serial.println("BLE WiFi taramasi tamamlanamadi.");
 }
 
 inline String wifiBleDeviceName() {
@@ -509,6 +553,7 @@ class WifiProvisionServerCallbacks : public NimBLEServerCallbacks {
     gBleClientConnected = true;
     Serial.println("BLE istemci baglandi.");
     wifiNotifyBleState();
+    gPendingWifiScan = true;
   }
 
   void onDisconnect(NimBLEServer* server) override {
@@ -526,6 +571,7 @@ inline void wifiStartProvisioningMode() {
   wifiSetBleStatusLed(true);
   if (gBleStarted) {
     wifiNotifyBleState();
+    gPendingWifiScan = true;
     return;
   }
 
@@ -567,6 +613,7 @@ inline void wifiStartProvisioningMode() {
   gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
   wifiNotifyBleResult("ready", "Bluetooth provisioning hazir.");
   wifiNotifyBleState();
+  gPendingWifiScan = true;
   Serial.printf("BLE WiFi provisioning aktif: %s\n", bleName.c_str());
 }
 
@@ -685,10 +732,11 @@ inline void wifiBaglan() {
 inline void wifiLoop() {
   wifiHandleResetButton();
   gWifiConnected = WiFi.status() == WL_CONNECTED;
+  wifiPollScan();
 
   if (gPendingWifiScan) {
     gPendingWifiScan = false;
-    wifiPerformScan();
+    wifiStartScan();
   }
 
   if (gPendingWifiProvision) {

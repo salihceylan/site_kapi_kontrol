@@ -237,8 +237,9 @@ class BleWifiProvisionService {
           (DiscoveredDevice device) {
             final String name = device.name.trim();
             final bool hasAhbuName = name.toUpperCase().contains('AHBU');
-            final bool hasServiceUuid =
-                device.serviceUuids.contains(_serviceUuid);
+            final bool hasServiceUuid = device.serviceUuids.contains(
+              _serviceUuid,
+            );
 
             if (!hasAhbuName && !hasServiceUuid) {
               return;
@@ -387,7 +388,23 @@ class BleWifiProvisionService {
   }
 
   Future<List<BleWifiNetwork>> scanNetworks() async {
-    await _writeCommand('{"action":"scan"}');
+    final List<BleWifiNetwork> cachedNetworks = await _tryReadNetworks();
+    if (cachedNetworks.isNotEmpty) {
+      try {
+        await _writeCommand('scan');
+      } catch (_) {}
+      return cachedNetworks;
+    }
+
+    try {
+      await _writeCommand('scan');
+    } on BleProvisionException {
+      final List<BleWifiNetwork> fallback = await _tryReadNetworks();
+      if (fallback.isNotEmpty) {
+        return fallback;
+      }
+      rethrow;
+    }
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
     for (int index = 0; index < 35; index += 1) {
@@ -418,6 +435,14 @@ class BleWifiProvisionService {
       return await readNetworks();
     } catch (error) {
       throw BleProvisionException(_messageFromError(error));
+    }
+  }
+
+  Future<List<BleWifiNetwork>> _tryReadNetworks() async {
+    try {
+      return await readNetworks();
+    } catch (_) {
+      return const <BleWifiNetwork>[];
     }
   }
 
@@ -466,7 +491,8 @@ class BleWifiProvisionService {
       } catch (_) {
         return const BleWifiResult(
           status: 'restarting',
-          message: 'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',
+          message:
+              'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',
         );
       }
       if (result.isProvisionAccepted) {
@@ -522,18 +548,28 @@ class BleWifiProvisionService {
   }
 
   Future<void> _writeCommand(String payload) async {
-    final QualifiedCharacteristic characteristic =
-        _qualifiedCharacteristic(_commandUuid);
+    final QualifiedCharacteristic characteristic = _qualifiedCharacteristic(
+      _commandUuid,
+    );
     final List<int> value = utf8.encode(payload);
+    Object? firstError;
+
     try {
-      await _ble.writeCharacteristicWithResponse(
-        characteristic,
-        value: value,
-      );
-    } catch (_) {
       await _ble.writeCharacteristicWithoutResponse(
         characteristic,
         value: value,
+      );
+      return;
+    } catch (error) {
+      firstError = error;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+
+    try {
+      await _ble.writeCharacteristicWithResponse(characteristic, value: value);
+    } catch (_) {
+      throw BleProvisionException(
+        'Bluetooth komutu cihaza yazılamadı. Bağlantı koptuysa cihazı yeniden seçip tekrar deneyin. ${_messageFromError(firstError)}',
       );
     }
   }
