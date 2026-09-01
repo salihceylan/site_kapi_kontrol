@@ -411,8 +411,6 @@ inline void wifiStartScan() {
 
   wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
 
-  WiFi.scanDelete();
-
   const int16_t result = WiFi.scanNetworks(true, false, false, 250);
   if (result == WIFI_SCAN_RUNNING) {
     gWifiScanRunning = true;
@@ -426,7 +424,6 @@ inline void wifiStartScan() {
     return;
   }
 
-  WiFi.scanDelete();
   wifiNotifyBleResult("error", "WiFi taramasi baslatilamadi.");
   Serial.println("BLE WiFi taramasi baslatilamadi.");
 }
@@ -440,7 +437,6 @@ inline void wifiPollScan() {
   if (result == WIFI_SCAN_RUNNING) {
     if (millis() - gWifiScanStartedAt > WIFI_SCAN_TIMEOUT_MS) {
       gWifiScanRunning = false;
-      WiFi.scanDelete();
       wifiNotifyBleResult("error", "WiFi taramasi zaman asimina ugradi.");
       Serial.println("BLE WiFi taramasi zaman asimina ugradi.");
     }
@@ -453,7 +449,6 @@ inline void wifiPollScan() {
     return;
   }
 
-  WiFi.scanDelete();
   wifiNotifyBleResult("error", "WiFi taramasi tamamlanamadi.");
   Serial.println("BLE WiFi taramasi tamamlanamadi.");
 }
@@ -613,7 +608,6 @@ inline void wifiStartProvisioningMode() {
   gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
   wifiNotifyBleResult("ready", "Bluetooth provisioning hazir.");
   wifiNotifyBleState();
-  gPendingWifiScan = true;
   Serial.printf("BLE WiFi provisioning aktif: %s\n", bleName.c_str());
 }
 

@@ -22,6 +22,7 @@ void pinBulmaTesti() {
   const uint8_t testPins[] = {3, 4, 5, 6, 7, 8, 9, 10, 20, 21};
   Serial.println("Pin bulma testi basladi. LED + ucunu yazilan GPIO pinine, - ucunu GND'ye baglayin.");
   for (uint8_t i = 0; i < sizeof(testPins); i++) {
+    esp_task_wdt_reset();
     const uint8_t pin = testPins[i];
     pinMode(pin, OUTPUT);
     digitalWrite(pin, HIGH);
