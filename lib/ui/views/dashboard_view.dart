@@ -129,8 +129,7 @@ class DashboardView extends StatelessWidget {
     final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
         selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
-    final isServerOffline = doorStatusError != null || runtimeStatus == null;
-    final canUseLocal = isServerOffline && canTryLocalDoorOpen;
+    final canUseLocal = canTryLocalDoorOpen;
 
     final commandEnabled = isDeviceAssigned &&
         (isCloudOnline || canUseLocal) &&
@@ -152,7 +151,7 @@ class DashboardView extends StatelessWidget {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
     } else if (canUseLocal) {
-      statusText = '🟢 Online (Yerel Ağ / Wi-Fi) - Kapıyı açmak için dokunun';
+      statusText = '🟢 Online (Yerel Ağ / Offline Mod) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
     } else {
       statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';
@@ -588,18 +587,17 @@ class DashboardView extends StatelessWidget {
       final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
           selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
       final isCloudOnline = runtimeStatus?.mqttConnected == true;
-      final isServerOffline = doorStatusError != null || runtimeStatus == null;
-      final canUseLocal = isServerOffline && canTryLocalDoorOpen;
+      final canUseLocal = canTryLocalDoorOpen;
 
       final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
 
       final connectionText = isMqttBridgeConnected
           ? 'Hazır (Bulut)'
-          : (canUseLocal ? 'Hazır (Yerel Ağ)' : 'Hazır değil');
+          : (canUseLocal ? 'Hazır (Yerel Ağ / Offline)' : 'Hazır değil');
       final deviceOnlineText = isCloudOnline
           ? 'Online (Bulut)'
           : (canUseLocal
-              ? 'Online (Yerel Ağ)'
+              ? 'Online (Yerel Ağ / Offline Mod)'
               : (runtimeStatus == null ? 'Bilinmiyor' : 'Offline'));
       final stateText = runtimeStatus?.doorLocked != null
           ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')

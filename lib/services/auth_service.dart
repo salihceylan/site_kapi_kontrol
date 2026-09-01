@@ -736,12 +736,8 @@ class AuthService extends ChangeNotifier {
     }
 
     final hasLocal = door != null && canTryLocalDoorOpen(door);
-    final localAccess = hasLocal
-        ? _localDoorCache[door.assignedDeviceUid?.trim().toUpperCase()]
-        : null;
-    final hasLocalIp = localAccess?.ip != null && localAccess!.ip!.isNotEmpty;
 
-    if (hasLocal && hasLocalIp) {
+    if (hasLocal) {
       final completer = Completer<(DoorRuntimeStatus?, String?)>();
       var cloudFinished = false;
       var localFinished = false;
@@ -764,13 +760,13 @@ class AuthService extends ChangeNotifier {
         if (res != null && res.$1 != null && !completer.isCompleted) {
           completer.complete(res);
         } else if (cloudFinished && !completer.isCompleted) {
-          completer.complete(cloudResult ?? res ?? (null, 'Kapi acilamadi.'));
+          completer.complete(localResult?.$1 != null ? localResult : (cloudResult ?? res ?? (null, 'Kapı açılamadı.')));
         }
       });
 
       return await completer.future.timeout(
         const Duration(seconds: 4),
-        onTimeout: () => (null, 'Kapi acma komutu zaman asimina ugradi.'),
+        onTimeout: () => (null, 'Kapı açma komutu zaman aşımına uğradı.'),
       );
     }
 
