@@ -5,7 +5,6 @@
 #include <PubSubClient.h>
 
 #include "mqtt_baglanti.h"
-#include "offline_log.h"
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
@@ -22,7 +21,6 @@ void pinBulmaTesti() {
   const uint8_t testPins[] = {3, 4, 5, 6, 7, 8, 9, 10, 20, 21};
   Serial.println("Pin bulma testi basladi. LED + ucunu yazilan GPIO pinine, - ucunu GND'ye baglayin.");
   for (uint8_t i = 0; i < sizeof(testPins); i++) {
-    esp_task_wdt_reset();
     const uint8_t pin = testPins[i];
     pinMode(pin, OUTPUT);
     digitalWrite(pin, HIGH);
@@ -56,12 +54,6 @@ void seriKomutKontrol() {
     } else if (komut == 'p' || komut == 'P') {
       Serial.println("Seri komut: pin bulma testi");
       pinBulmaTesti();
-    } else if (komut == 'w') {
-      Serial.println("Seri komut: WiFi LED 5 saniye ON");
-      wifiStatusLedManuel(true);
-    } else if (komut == 'q') {
-      Serial.println("Seri komut: WiFi LED 5 saniye OFF");
-      wifiStatusLedManuel(false);
     }
   }
 }
@@ -94,7 +86,6 @@ void seriDurumYazdir() {
   Serial.println(wifiProvisioningAktifMi() ? wifiBleDeviceName() : "-");
   Serial.print("WiFi LED GPIO: ");
   Serial.println(WIFI_STATUS_LED_PIN);
-  wifiStatusLedDurumuYazdir();
   Serial.print("Bluetooth LED GPIO: ");
   if (BLE_STATUS_LED_PIN < 0) {
     Serial.println("-");
@@ -123,7 +114,6 @@ void seriDurumYazdir() {
   Serial.println(otaLastVersion().isEmpty() ? "-" : otaLastVersion());
   rolePinDurumuYazdir("Role pin okuma");
   Serial.println("Seri role test: h=HIGH, l=LOW, r=pulse, p=pin bulma");
-  Serial.println("Seri WiFi LED test: w=5sn ON, q=5sn OFF");
   Serial.println("------------------------");
 }
 
@@ -134,7 +124,6 @@ void setup() {
   esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
   esp_task_wdt_add(NULL);
 
-  offlineLogInit();
   roleSetup();
   wifiBaglan();
   otaSetup();
@@ -148,8 +137,6 @@ void loop() {
   yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
-  offlineLogSenkronizeEt();
-  offlineLogHaftalikTemizle();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
   }

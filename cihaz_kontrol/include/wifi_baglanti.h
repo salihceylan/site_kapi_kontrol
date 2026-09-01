@@ -7,6 +7,9 @@
 #include <Preferences.h>
 #include <WiFi.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "device_konfig.h"
 
 inline constexpr char WIFI_PREFS_NAMESPACE[] = "wifi_cfg";
@@ -27,8 +30,7 @@ inline constexpr char BLE_WIFI_RESULT_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5
 inline constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
 inline constexpr unsigned long WIFI_CONFIGURED_BLINK_INTERVAL_MS = 700;
 inline constexpr unsigned long WIFI_UNCONFIGURED_BLINK_INTERVAL_MS = 150;
-inline constexpr unsigned long WIFI_SCAN_TIMEOUT_MS = 16000;
-inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 6;
+inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 8;
 
 inline Preferences gWifiPrefs;
 inline String gSavedWifiSsid;
@@ -42,7 +44,6 @@ inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
 inline bool gPendingWifiScan = false;
-inline bool gWifiScanRunning = false;
 inline bool gPendingWifiProvision = false;
 inline String gPendingProvisionSsid;
 inline String gPendingProvisionPassword;
@@ -55,10 +56,8 @@ inline String gBleNetworksPayload = R"({"networks":[]})";
 inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
 inline unsigned long gLastLedToggleAt = 0;
-inline unsigned long gWifiLedManualUntil = 0;
 inline unsigned long gResetPressedAt = 0;
 inline unsigned long gResetLastProgressAt = 0;
-inline unsigned long gWifiScanStartedAt = 0;
 inline bool gLedLogicalState = false;
 inline bool gResetHandled = false;
 inline NimBLEServer* gBleServer = nullptr;
@@ -68,7 +67,6 @@ inline NimBLECharacteristic* gBleStateCharacteristic = nullptr;
 inline NimBLECharacteristic* gBleNetworksCharacteristic = nullptr;
 inline NimBLECharacteristic* gBleResultCharacteristic = nullptr;
 inline bool gBleStarted = false;
-inline bool gBleClientConnected = false;
 
 inline void wifiSetStatusLed(bool on) {
   if (WIFI_STATUS_LED_PIN < 0) {
@@ -78,38 +76,6 @@ inline void wifiSetStatusLed(bool on) {
   pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
   const uint8_t level = WIFI_STATUS_LED_ACTIVE_HIGH ? (on ? HIGH : LOW) : (on ? LOW : HIGH);
   digitalWrite(WIFI_STATUS_LED_PIN, level);
-}
-
-inline int wifiStatusLedPinRead() {
-  if (WIFI_STATUS_LED_PIN < 0) {
-    return -1;
-  }
-
-  pinMode(WIFI_STATUS_LED_PIN, OUTPUT);
-  return digitalRead(WIFI_STATUS_LED_PIN);
-}
-
-inline void wifiStatusLedDurumuYazdir(const char* baslik = "WiFi LED pin okuma") {
-  if (WIFI_STATUS_LED_PIN < 0) {
-    Serial.print(baslik);
-    Serial.println(": -");
-    return;
-  }
-
-  Serial.print(baslik);
-  Serial.print(": GPIO ");
-  Serial.print(WIFI_STATUS_LED_PIN);
-  Serial.print(" = ");
-  Serial.print(wifiStatusLedPinRead() == HIGH ? "HIGH" : "LOW");
-  Serial.print(" (aktif ");
-  Serial.print(WIFI_STATUS_LED_ACTIVE_HIGH ? "HIGH" : "LOW");
-  Serial.println(")");
-}
-
-inline void wifiStatusLedManuel(bool on, unsigned long durationMs = 5000) {
-  gWifiLedManualUntil = millis() + durationMs;
-  wifiSetStatusLed(on);
-  wifiStatusLedDurumuYazdir(on ? "WiFi LED manuel ON" : "WiFi LED manuel OFF");
 }
 
 inline void wifiSetBleStatusLed(bool on) {
@@ -238,9 +204,7 @@ inline void wifiNotifyBleState() {
 
   const String payload = wifiBuildStatePayload();
   gBleStateCharacteristic->setValue(payload.c_str());
-  if (gBleClientConnected) {
-    gBleStateCharacteristic->notify();
-  }
+  gBleStateCharacteristic->notify();
 }
 
 inline void wifiNotifyBleResult(const String& status, const String& message = "") {
@@ -254,19 +218,10 @@ inline void wifiNotifyBleResult(const String& status, const String& message = ""
   }
 
   gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
-  if (gBleClientConnected) {
-    gBleResultCharacteristic->notify();
-  }
+  gBleResultCharacteristic->notify();
 }
 
 inline void wifiUpdateLed() {
-  if (gWifiLedManualUntil != 0) {
-    if (static_cast<long>(millis() - gWifiLedManualUntil) < 0) {
-      return;
-    }
-    gWifiLedManualUntil = 0;
-  }
-
   if (gWifiConnected) {
     wifiSetStatusLed(true);
     return;
@@ -289,13 +244,15 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
   Serial.printf("WiFi baglantisi deneniyor: %s\n", ssid.c_str());
   gLastWifiAttemptAt = millis();
   WiFi.mode(WIFI_STA);
-  delay(100);
+  delay(150);
+  WiFi.disconnect(false, false);
+  delay(150);
   WiFi.begin(ssid.c_str(), password.c_str());
+
   const unsigned long startedAt = millis();
   while (millis() - startedAt < timeoutMs) {
-    esp_task_wdt_reset();
-    roleLoop();
     if (WiFi.status() == WL_CONNECTED) {
+      gWifiConnected = true;
       Serial.print("WiFi baglandi, IP: ");
       Serial.println(WiFi.localIP());
       wifiNotifyBleState();
@@ -303,9 +260,10 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
     }
 
     wifiUpdateLed();
-    delay(100);
+    delay(150);
   }
 
+  gWifiConnected = false;
   Serial.println("WiFi baglantisi basarisiz.");
   wifiNotifyBleState();
   return false;
@@ -317,140 +275,60 @@ struct WifiNetworkInfo {
   bool secure;
 };
 
-inline bool wifiScanListHasSsid(const WifiNetworkInfo networks[], size_t count, const String& ssid) {
-  for (size_t index = 0; index < count; index += 1) {
-    if (networks[index].ssid == ssid) {
-      return true;
+inline void wifiPerformScan() {
+  wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
+
+  std::vector<WifiNetworkInfo> networks;
+  const int count = WiFi.scanNetworks(false, true);
+  for (int index = 0; index < count; index += 1) {
+    const String ssid = WiFi.SSID(index);
+    if (ssid.isEmpty()) {
+      continue;
     }
-  }
-  return false;
-}
 
-inline void wifiScanListInsert(WifiNetworkInfo networks[], size_t& count, const String& ssid, int32_t rssi, bool secure) {
-  if (wifiScanListHasSsid(networks, count, ssid)) {
-    return;
-  }
-
-  if (count >= WIFI_SCAN_RESULT_LIMIT && rssi <= networks[WIFI_SCAN_RESULT_LIMIT - 1].rssi) {
-    return;
-  }
-
-  size_t insertAt = count < WIFI_SCAN_RESULT_LIMIT ? count : WIFI_SCAN_RESULT_LIMIT - 1;
-  if (count < WIFI_SCAN_RESULT_LIMIT) {
-    count += 1;
-  }
-
-  while (insertAt > 0 && networks[insertAt - 1].rssi < rssi) {
-    networks[insertAt] = networks[insertAt - 1];
-    insertAt -= 1;
-  }
-
-  networks[insertAt].ssid = ssid;
-  networks[insertAt].rssi = rssi;
-  networks[insertAt].secure = secure;
-}
-
-inline void wifiPublishScanResult(int16_t count) {
-  WifiNetworkInfo networks[WIFI_SCAN_RESULT_LIMIT];
-  size_t storedNetworkCount = 0;
-  size_t foundNetworkCount = 0;
-  if (count > 0) {
-    for (int16_t index = 0; index < count; index += 1) {
-      const String ssid = WiFi.SSID(index);
-      if (ssid.isEmpty()) {
-        continue;
+    const bool exists = std::any_of(
+      networks.begin(),
+      networks.end(),
+      [&ssid](const WifiNetworkInfo& info) {
+        return info.ssid == ssid;
       }
-
-      foundNetworkCount += 1;
-      wifiScanListInsert(
-        networks,
-        storedNetworkCount,
-        ssid,
-        WiFi.RSSI(index),
-        WiFi.encryptionType(index) != WIFI_AUTH_OPEN
-      );
+    );
+    if (exists) {
+      continue;
     }
+
+    networks.push_back({
+      .ssid = ssid,
+      .rssi = WiFi.RSSI(index),
+      .secure = WiFi.encryptionType(index) != WIFI_AUTH_OPEN,
+    });
   }
 
   WiFi.scanDelete();
+  std::sort(
+    networks.begin(),
+    networks.end(),
+    [](const WifiNetworkInfo& left, const WifiNetworkInfo& right) {
+      return left.rssi > right.rssi;
+    }
+  );
 
   JsonDocument doc;
   JsonArray list = doc["networks"].to<JsonArray>();
-  for (size_t index = 0; index < storedNetworkCount; index += 1) {
+  const size_t limit = std::min(WIFI_SCAN_RESULT_LIMIT, networks.size());
+  for (size_t index = 0; index < limit; index += 1) {
     JsonObject item = list.add<JsonObject>();
     item["ssid"] = networks[index].ssid;
-    item["s"] = networks[index].ssid;
     item["rssi"] = networks[index].rssi;
-    item["r"] = networks[index].rssi;
     item["secure"] = networks[index].secure;
-    item["sec"] = networks[index].secure ? 1 : 0;
   }
 
-  gBleNetworksPayload = "";
   serializeJson(doc, gBleNetworksPayload);
-  Serial.print("BLE WiFi listesi hazir. Ag sayisi: ");
-  Serial.print(foundNetworkCount);
-  Serial.print(", gonderilen: ");
-  Serial.print(storedNetworkCount);
-  Serial.print(", payload byte: ");
-  Serial.println(gBleNetworksPayload.length());
   if (gBleNetworksCharacteristic != nullptr) {
     gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
-    if (gBleClientConnected) {
-      gBleNetworksCharacteristic->notify();
-    }
+    gBleNetworksCharacteristic->notify();
   }
-  wifiNotifyBleResult("scan_complete", String(foundNetworkCount) + " WiFi agi bulundu.");
-}
-
-inline void wifiStartScan() {
-  if (gWifiScanRunning) {
-    wifiNotifyBleResult("scanning", "WiFi taramasi devam ediyor.");
-    return;
-  }
-
-  wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
-
-  const int16_t result = WiFi.scanNetworks(true, false, false, 250);
-  if (result == WIFI_SCAN_RUNNING) {
-    gWifiScanRunning = true;
-    gWifiScanStartedAt = millis();
-    Serial.println("BLE WiFi taramasi asenkron baslatildi.");
-    return;
-  }
-
-  if (result >= 0) {
-    wifiPublishScanResult(result);
-    return;
-  }
-
-  wifiNotifyBleResult("error", "WiFi taramasi baslatilamadi.");
-  Serial.println("BLE WiFi taramasi baslatilamadi.");
-}
-
-inline void wifiPollScan() {
-  if (!gWifiScanRunning) {
-    return;
-  }
-
-  const int16_t result = WiFi.scanComplete();
-  if (result == WIFI_SCAN_RUNNING) {
-    if (millis() - gWifiScanStartedAt > WIFI_SCAN_TIMEOUT_MS) {
-      gWifiScanRunning = false;
-      wifiNotifyBleResult("error", "WiFi taramasi zaman asimina ugradi.");
-      Serial.println("BLE WiFi taramasi zaman asimina ugradi.");
-    }
-    return;
-  }
-
-  gWifiScanRunning = false;
-  if (result >= 0) {
-    wifiPublishScanResult(result);
-    return;
-  }
-
-  wifiNotifyBleResult("error", "WiFi taramasi tamamlanamadi.");
-  Serial.println("BLE WiFi taramasi tamamlanamadi.");
+  wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
 }
 
 inline String wifiBleDeviceName() {
@@ -541,32 +419,11 @@ class WifiProvisionCommandCallbacks : public NimBLECharacteristicCallbacks {
   }
 };
 
-class WifiProvisionServerCallbacks : public NimBLEServerCallbacks {
- public:
-  void onConnect(NimBLEServer* server) override {
-    (void)server;
-    gBleClientConnected = true;
-    Serial.println("BLE istemci baglandi.");
-    wifiNotifyBleState();
-    gPendingWifiScan = true;
-  }
-
-  void onDisconnect(NimBLEServer* server) override {
-    (void)server;
-    gBleClientConnected = false;
-    Serial.println("BLE istemci ayrildi.");
-    if (gProvisioningMode && gBleAdvertising != nullptr) {
-      gBleAdvertising->start();
-    }
-  }
-};
-
 inline void wifiStartProvisioningMode() {
   gProvisioningMode = true;
   wifiSetBleStatusLed(true);
   if (gBleStarted) {
     wifiNotifyBleState();
-    gPendingWifiScan = true;
     return;
   }
 
@@ -575,7 +432,6 @@ inline void wifiStartProvisioningMode() {
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
   gBleServer = NimBLEDevice::createServer();
-  gBleServer->setCallbacks(new WifiProvisionServerCallbacks());
   gBleService = gBleServer->createService(BLE_WIFI_SERVICE_UUID);
 
   gBleStateCharacteristic = gBleService->createCharacteristic(
@@ -592,7 +448,7 @@ inline void wifiStartProvisioningMode() {
   );
   NimBLECharacteristic* commandCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_COMMAND_UUID,
-    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+    NIMBLE_PROPERTY::WRITE
   );
   commandCharacteristic->setCallbacks(new WifiProvisionCommandCallbacks());
 
@@ -602,7 +458,6 @@ inline void wifiStartProvisioningMode() {
   gBleAdvertising->setScanResponse(true);
   gBleAdvertising->start();
   gBleStarted = true;
-  gBleClientConnected = false;
 
   gBleNetworksPayload = R"({"networks":[]})";
   gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
@@ -629,7 +484,6 @@ inline void wifiStopProvisioningMode() {
   gBleNetworksCharacteristic = nullptr;
   gBleResultCharacteristic = nullptr;
   gBleStarted = false;
-  gBleClientConnected = false;
   gProvisioningMode = false;
   wifiSetBleStatusLed(false);
   Serial.println("BLE WiFi provisioning kapatildi.");
@@ -688,11 +542,6 @@ inline void wifiBaglan() {
   wifiSetStatusLed(false);
   wifiSetBleStatusLed(false);
 
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.setAutoReconnect(true);
-  WiFi.persistent(false);
-
   gWifiPrefs.begin(WIFI_PREFS_NAMESPACE, false);
   wifiLoadStoredCredentials();
   gWifiConnected = false;
@@ -700,7 +549,8 @@ inline void wifiBaglan() {
 
   if (!gWifiConfigured) {
     Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");
-    WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    delay(150);
     wifiStartProvisioningMode();
     return;
   }
@@ -708,9 +558,16 @@ inline void wifiBaglan() {
   if (!wifiHasMqttCredentials()) {
     Serial.println("Kayitli WiFi var ama MQTT kimligi yok, BLE provisioning baslatiliyor.");
     WiFi.disconnect(true, false);
+    WiFi.mode(WIFI_OFF);
+    delay(150);
     wifiStartProvisioningMode();
     return;
   }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
 
   Serial.printf("Kayitli WiFi bulundu: %s\n", gSavedWifiSsid.c_str());
   if (wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 20000)) {
@@ -720,17 +577,18 @@ inline void wifiBaglan() {
 
   Serial.println("Kayitli WiFi'ye baglanamadi, BLE provisioning baslatiliyor.");
   WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  delay(150);
   wifiStartProvisioningMode();
 }
 
 inline void wifiLoop() {
   wifiHandleResetButton();
   gWifiConnected = WiFi.status() == WL_CONNECTED;
-  wifiPollScan();
 
   if (gPendingWifiScan) {
     gPendingWifiScan = false;
-    wifiStartScan();
+    wifiPerformScan();
   }
 
   if (gPendingWifiProvision) {
@@ -745,13 +603,14 @@ inline void wifiLoop() {
   } else if (!gWifiConfigured) {
     wifiStartProvisioningMode();
   } else if (!wifiHasMqttCredentials()) {
-    WiFi.disconnect(true, false);
+    if (WiFi.getMode() != WIFI_OFF) {
+      WiFi.disconnect(true, false);
+      WiFi.mode(WIFI_OFF);
+      delay(50);
+    }
     wifiStartProvisioningMode();
   } else if (millis() - gLastWifiAttemptAt >= WIFI_RETRY_INTERVAL_MS) {
-    gLastWifiAttemptAt = millis();
-    Serial.println("WiFi baglantisi koptu; arka planda yeniden baglaniliyor...");
-    WiFi.disconnect(false, false);
-    WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
+    wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 8000);
   }
 
   wifiUpdateLed();

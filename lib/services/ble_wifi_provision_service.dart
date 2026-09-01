@@ -77,26 +77,6 @@ class BleWifiNetwork {
   final bool secure;
 }
 
-int _jsonInt(Map<String, dynamic> json, String longKey, String shortKey) {
-  final Object? value = json[longKey] ?? json[shortKey];
-  if (value is num) {
-    return value.toInt();
-  }
-  return int.tryParse(value?.toString() ?? '') ?? 0;
-}
-
-bool _jsonBool(Map<String, dynamic> json, String longKey, String shortKey) {
-  final Object? value = json[longKey] ?? json[shortKey];
-  if (value is bool) {
-    return value;
-  }
-  if (value is num) {
-    return value != 0;
-  }
-  final text = value?.toString().trim().toLowerCase();
-  return text == 'true' || text == '1' || text == 'yes';
-}
-
 class BleWifiResult {
   const BleWifiResult({required this.status, required this.message});
 
@@ -229,29 +209,19 @@ class BleWifiProvisionService {
 
     final StreamSubscription<DiscoveredDevice> subscription = _ble
         .scanForDevices(
-          withServices: const <Uuid>[],
+          withServices: <Uuid>[_serviceUuid],
           scanMode: ScanMode.lowLatency,
           requireLocationServicesEnabled: false,
         )
         .listen(
           (DiscoveredDevice device) {
             final String name = device.name.trim();
-            final bool hasAhbuName = name.toUpperCase().contains('AHBU');
-            final bool hasServiceUuid = device.serviceUuids.contains(
-              _serviceUuid,
-            );
-
-            if (!hasAhbuName && !hasServiceUuid) {
+            if (!name.toUpperCase().startsWith('AHBU')) {
               return;
             }
-
-            final String displayName = hasAhbuName
-                ? name
-                : 'AHBU Cihaz (${device.id.length > 5 ? device.id.substring(device.id.length - 5) : device.id})';
-
             devices[device.id] = BleProvisionDevice(
               id: device.id,
-              name: displayName,
+              name: name,
               rssi: device.rssi,
             );
           },
@@ -263,7 +233,7 @@ class BleWifiProvisionService {
     await Future<void>.delayed(duration);
     await subscription.cancel();
 
-    if (scanError != null && devices.isEmpty) {
+    if (scanError != null) {
       throw BleProvisionException(_messageFromError(scanError!));
     }
 
@@ -304,7 +274,7 @@ class BleWifiProvisionService {
               if (!completer.isCompleted) {
                 completer.completeError(
                   const BleProvisionException(
-                    'Cihaza bağlanılamadı veya bağlantı koptu.',
+                    'Cihaza baglanilamadi veya baglanti koptu.',
                   ),
                 );
               }
@@ -324,63 +294,49 @@ class BleWifiProvisionService {
     await completer.future.timeout(
       const Duration(seconds: 15),
       onTimeout: () => throw const BleProvisionException(
-        'Bluetooth bağlantısı zaman aşımına uğradı.',
+        'Bluetooth baglantisi zaman asimina ugradi.',
       ),
     );
 
     try {
-      await _ble.requestMtu(deviceId: device.id, mtu: 512);
+      await _ble.requestMtu(deviceId: device.id, mtu: 180);
     } catch (_) {
-      // MTU artırımı zorunlu değil.
+      // MTU arttirimi zorunlu degil.
     }
-
-    // GATT servis ve karakteristiklerinin yerleşmesi için kısa bekleme
-    await Future<void>.delayed(const Duration(milliseconds: 350));
 
     return readState();
   }
 
   Future<BleWifiState> readState() async {
-    try {
-      final List<int> raw = await _ble.readCharacteristic(
-        _qualifiedCharacteristic(_stateUuid),
-      );
-      return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
-    } catch (_) {
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-      final List<int> raw = await _ble.readCharacteristic(
-        _qualifiedCharacteristic(_stateUuid),
-      );
-      return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
-    }
+    final List<int> raw = await _ble.readCharacteristic(
+      _qualifiedCharacteristic(_stateUuid),
+    );
+    return BleWifiState.fromPayload(utf8.decode(raw, allowMalformed: true));
   }
 
   Future<BleWifiResult> readResult() async {
-    try {
-      final List<int> raw = await _ble.readCharacteristic(
-        _qualifiedCharacteristic(_resultUuid),
-      );
-      return BleWifiResult.fromPayload(utf8.decode(raw, allowMalformed: true));
-    } catch (_) {
-      return const BleWifiResult(status: 'idle', message: '');
-    }
+    final List<int> raw = await _ble.readCharacteristic(
+      _qualifiedCharacteristic(_resultUuid),
+    );
+    return BleWifiResult.fromPayload(utf8.decode(raw, allowMalformed: true));
   }
 
   Future<List<BleWifiNetwork>> readNetworks() async {
     final List<int> raw = await _ble.readCharacteristic(
       _qualifiedCharacteristic(_networksUuid),
     );
-    final String text = utf8.decode(raw, allowMalformed: true);
-    final Map<String, dynamic> json = _decodeJsonMap(text);
+    final Map<String, dynamic> json = _decodeJsonMap(
+      utf8.decode(raw, allowMalformed: true),
+    );
     final List<dynamic> items =
         (json['networks'] as List<dynamic>?) ?? <dynamic>[];
     return items
         .whereType<Map<String, dynamic>>()
         .map(
           (Map<String, dynamic> item) => BleWifiNetwork(
-            ssid: (item['ssid'] ?? item['s'] ?? '').toString(),
-            rssi: _jsonInt(item, 'rssi', 'r'),
-            secure: _jsonBool(item, 'secure', 'sec'),
+            ssid: (item['ssid'] ?? '').toString(),
+            rssi: (item['rssi'] as num?)?.toInt() ?? 0,
+            secure: item['secure'] == true,
           ),
         )
         .where((BleWifiNetwork item) => item.ssid.isNotEmpty)
@@ -388,62 +344,26 @@ class BleWifiProvisionService {
   }
 
   Future<List<BleWifiNetwork>> scanNetworks() async {
-    final List<BleWifiNetwork> cachedNetworks = await _tryReadNetworks();
-    if (cachedNetworks.isNotEmpty) {
-      try {
-        await _writeCommand('scan');
-      } catch (_) {}
-      return cachedNetworks;
-    }
-
-    try {
-      await _writeCommand('scan');
-    } on BleProvisionException {
-      final List<BleWifiNetwork> fallback = await _tryReadNetworks();
-      if (fallback.isNotEmpty) {
-        return fallback;
-      }
-      rethrow;
-    }
+    await _ble.writeCharacteristicWithResponse(
+      _qualifiedCharacteristic(_commandUuid),
+      value: utf8.encode('{"action":"scan"}'),
+    );
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
-    for (int index = 0; index < 35; index += 1) {
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-      try {
-        final List<BleWifiNetwork> earlyNetworks = await readNetworks();
-        if (earlyNetworks.isNotEmpty) {
-          return earlyNetworks;
-        }
-      } catch (_) {
-        // Tarama devam ederken karakteristik henuz hazir olmayabilir.
-      }
+    for (int index = 0; index < 20; index += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
       result = await readResult();
       if (result.isFailure) {
         throw BleProvisionException(
-          result.message.isEmpty ? 'Wi-Fi taraması başarısız.' : result.message,
+          result.message.isEmpty ? 'Wi-Fi taramasi basarisiz.' : result.message,
         );
       }
       if (result.isScanComplete) {
-        final List<BleWifiNetwork> networks = await readNetworks();
-        if (networks.isNotEmpty) {
-          return networks;
-        }
+        return readNetworks();
       }
     }
 
-    try {
-      return await readNetworks();
-    } catch (error) {
-      throw BleProvisionException(_messageFromError(error));
-    }
-  }
-
-  Future<List<BleWifiNetwork>> _tryReadNetworks() async {
-    try {
-      return await readNetworks();
-    } catch (_) {
-      return const <BleWifiNetwork>[];
-    }
+    throw const BleProvisionException('Wi-Fi taramasi zaman asimina ugradi.');
   }
 
   Future<BleWifiResult> provisionWifi({
@@ -481,7 +401,10 @@ class BleWifiProvisionService {
       if (localControlToken.isNotEmpty)
         'local_control_token': localControlToken,
     });
-    await _writeCommand(payload);
+    await _ble.writeCharacteristicWithResponse(
+      _qualifiedCharacteristic(_commandUuid),
+      value: utf8.encode(payload),
+    );
 
     BleWifiResult result = const BleWifiResult(status: 'idle', message: '');
     for (int index = 0; index < 28; index += 1) {
@@ -491,8 +414,7 @@ class BleWifiProvisionService {
       } catch (_) {
         return const BleWifiResult(
           status: 'restarting',
-          message:
-              'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',
+          message: 'Wi-Fi bilgileri cihaza yazildi. Cihaz yeniden baslatiliyor.',
         );
       }
       if (result.isProvisionAccepted) {
@@ -545,33 +467,6 @@ class BleWifiProvisionService {
       characteristicId: characteristicUuid,
       deviceId: deviceId,
     );
-  }
-
-  Future<void> _writeCommand(String payload) async {
-    final QualifiedCharacteristic characteristic = _qualifiedCharacteristic(
-      _commandUuid,
-    );
-    final List<int> value = utf8.encode(payload);
-    Object? firstError;
-
-    try {
-      await _ble.writeCharacteristicWithoutResponse(
-        characteristic,
-        value: value,
-      );
-      return;
-    } catch (error) {
-      firstError = error;
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    }
-
-    try {
-      await _ble.writeCharacteristicWithResponse(characteristic, value: value);
-    } catch (_) {
-      throw BleProvisionException(
-        'Bluetooth komutu cihaza yazılamadı. Bağlantı koptuysa cihazı yeniden seçip tekrar deneyin. ${_messageFromError(firstError)}',
-      );
-    }
   }
 
   String _messageFromError(Object error) {
