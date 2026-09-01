@@ -1,9 +1,9 @@
-#ifndef WIFI_BAGLANTI_H
+﻿#ifndef WIFI_BAGLANTI_H
 #define WIFI_BAGLANTI_H
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <NimBLEDevice.h>
+#include <BLEDevice.h>
 #include <Preferences.h>
 #include <WiFi.h>
 
@@ -19,7 +19,6 @@ inline constexpr char WIFI_PREF_MQTT_HOST[] = "mqtt_host";
 inline constexpr char WIFI_PREF_MQTT_PORT[] = "mqtt_port";
 inline constexpr char WIFI_PREF_MQTT_USER[] = "mqtt_user";
 inline constexpr char WIFI_PREF_MQTT_PASSWORD[] = "mqtt_pass";
-inline constexpr char WIFI_PREF_LOCAL_CONTROL_TOKEN[] = "local_token";
 
 inline constexpr char BLE_WIFI_SERVICE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f001";
 inline constexpr char BLE_WIFI_STATE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f002";
@@ -39,7 +38,6 @@ inline String gSavedMqttHost;
 inline uint16_t gSavedMqttPort = 0;
 inline String gSavedMqttUser;
 inline String gSavedMqttPassword;
-inline String gSavedLocalControlToken;
 inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
@@ -51,7 +49,6 @@ inline String gPendingMqttHost;
 inline uint16_t gPendingMqttPort = 0;
 inline String gPendingMqttUser;
 inline String gPendingMqttPassword;
-inline String gPendingLocalControlToken;
 inline String gBleNetworksPayload = R"({"networks":[]})";
 inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
@@ -60,12 +57,12 @@ inline unsigned long gResetPressedAt = 0;
 inline unsigned long gResetLastProgressAt = 0;
 inline bool gLedLogicalState = false;
 inline bool gResetHandled = false;
-inline NimBLEServer* gBleServer = nullptr;
-inline NimBLEService* gBleService = nullptr;
-inline NimBLEAdvertising* gBleAdvertising = nullptr;
-inline NimBLECharacteristic* gBleStateCharacteristic = nullptr;
-inline NimBLECharacteristic* gBleNetworksCharacteristic = nullptr;
-inline NimBLECharacteristic* gBleResultCharacteristic = nullptr;
+inline BLEServer* gBleServer = nullptr;
+inline BLEService* gBleService = nullptr;
+inline BLEAdvertising* gBleAdvertising = nullptr;
+inline BLECharacteristic* gBleStateCharacteristic = nullptr;
+inline BLECharacteristic* gBleNetworksCharacteristic = nullptr;
+inline BLECharacteristic* gBleResultCharacteristic = nullptr;
 inline bool gBleStarted = false;
 
 inline void wifiSetStatusLed(bool on) {
@@ -100,7 +97,6 @@ inline void wifiLoadStoredCredentials() {
   gSavedMqttPort = static_cast<uint16_t>(gWifiPrefs.getUInt(WIFI_PREF_MQTT_PORT, 0));
   gSavedMqttUser = gWifiPrefs.getString(WIFI_PREF_MQTT_USER, "");
   gSavedMqttPassword = gWifiPrefs.getString(WIFI_PREF_MQTT_PASSWORD, "");
-  gSavedLocalControlToken = gWifiPrefs.getString(WIFI_PREF_LOCAL_CONTROL_TOKEN, "");
   gWifiConfigured = !gSavedWifiSsid.isEmpty();
 }
 
@@ -116,8 +112,7 @@ inline void wifiPersistMqttCredentials(
   const String& host,
   uint16_t port,
   const String& username,
-  const String& password,
-  const String& localControlToken = ""
+  const String& password
 ) {
   if (host.isEmpty() || port == 0 || username.isEmpty() || password.isEmpty()) {
     return;
@@ -131,10 +126,6 @@ inline void wifiPersistMqttCredentials(
   gSavedMqttPort = port;
   gSavedMqttUser = username;
   gSavedMqttPassword = password;
-  if (!localControlToken.isEmpty()) {
-    gWifiPrefs.putString(WIFI_PREF_LOCAL_CONTROL_TOKEN, localControlToken);
-    gSavedLocalControlToken = localControlToken;
-  }
 }
 
 inline void wifiForgetCredentials() {
@@ -165,23 +156,6 @@ inline String wifiMqttPassword(const char* fallback) {
   return gSavedMqttPassword.isEmpty() ? String(fallback) : gSavedMqttPassword;
 }
 
-inline bool wifiHasLocalControlToken() {
-  return !gSavedLocalControlToken.isEmpty();
-}
-
-inline String wifiLocalControlToken() {
-  return gSavedLocalControlToken;
-}
-
-inline void wifiPersistLocalControlToken(const String& token) {
-  if (token.isEmpty()) {
-    return;
-  }
-
-  gWifiPrefs.putString(WIFI_PREF_LOCAL_CONTROL_TOKEN, token);
-  gSavedLocalControlToken = token;
-}
-
 inline String wifiBuildStatePayload() {
   JsonDocument doc;
   doc["device_uid"] = cihazUniqueId();
@@ -204,7 +178,6 @@ inline void wifiNotifyBleState() {
 
   const String payload = wifiBuildStatePayload();
   gBleStateCharacteristic->setValue(payload.c_str());
-  gBleStateCharacteristic->notify();
 }
 
 inline void wifiNotifyBleResult(const String& status, const String& message = "") {
@@ -218,7 +191,6 @@ inline void wifiNotifyBleResult(const String& status, const String& message = ""
   }
 
   gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
-  gBleResultCharacteristic->notify();
 }
 
 inline void wifiUpdateLed() {
@@ -278,11 +250,8 @@ struct WifiNetworkInfo {
 inline void wifiPerformScan() {
   wifiNotifyBleResult("scanning", "Yakin WiFi aglari taraniyor.");
 
-  WiFi.mode(WIFI_STA);
-  delay(100);
-
   std::vector<WifiNetworkInfo> networks;
-  const int count = WiFi.scanNetworks(false, false);
+  const int count = WiFi.scanNetworks(false, true);
   for (int index = 0; index < count; index += 1) {
     const String ssid = WiFi.SSID(index);
     if (ssid.isEmpty()) {
@@ -329,7 +298,6 @@ inline void wifiPerformScan() {
   serializeJson(doc, gBleNetworksPayload);
   if (gBleNetworksCharacteristic != nullptr) {
     gBleNetworksCharacteristic->setValue(gBleNetworksPayload.c_str());
-    gBleNetworksCharacteristic->notify();
   }
   wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
 }
@@ -349,7 +317,6 @@ inline void wifiApplyProvisioningRequest() {
   const uint16_t mqttPort = gPendingMqttPort;
   const String mqttUser = gPendingMqttUser;
   const String mqttPassword = gPendingMqttPassword;
-  const String localControlToken = gPendingLocalControlToken;
 
   if (ssid.isEmpty()) {
     wifiNotifyBleResult("error", "SSID zorunlu.");
@@ -357,16 +324,16 @@ inline void wifiApplyProvisioningRequest() {
   }
 
   wifiPersistCredentials(ssid, password);
-  wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword, localControlToken);
+  wifiPersistMqttCredentials(mqttHost, mqttPort, mqttUser, mqttPassword);
   wifiNotifyBleResult("restarting", "WiFi ve MQTT bilgileri kaydedildi. Cihaz temiz baglanti icin yeniden baslatiliyor.");
   wifiNotifyBleState();
   delay(1500);
   ESP.restart();
 }
 
-class WifiProvisionCommandCallbacks : public NimBLECharacteristicCallbacks {
+class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
  public:
-  void onWrite(NimBLECharacteristic* characteristic) override {
+  void onWrite(BLECharacteristic* characteristic) override {
     const std::string value = characteristic->getValue();
     if (value.empty()) {
       return;
@@ -396,7 +363,6 @@ class WifiProvisionCommandCallbacks : public NimBLECharacteristicCallbacks {
     const uint16_t mqttPort = static_cast<uint16_t>(doc["mqtt_port"] | 0);
     const String mqttUser = String(doc["mqtt_username"] | "");
     const String mqttPassword = String(doc["mqtt_password"] | "");
-    const String localControlToken = String(doc["local_control_token"] | "");
     if (ssid.isEmpty()) {
       wifiNotifyBleResult("error", "SSID bilgisi eksik.");
       return;
@@ -417,7 +383,6 @@ class WifiProvisionCommandCallbacks : public NimBLECharacteristicCallbacks {
     gPendingMqttPort = mqttPort;
     gPendingMqttUser = mqttUser;
     gPendingMqttPassword = mqttPassword;
-    gPendingLocalControlToken = localControlToken;
     gPendingWifiProvision = true;
   }
 };
@@ -431,32 +396,32 @@ inline void wifiStartProvisioningMode() {
   }
 
   const String bleName = wifiBleDeviceName();
-  NimBLEDevice::init(bleName.c_str());
-  NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+  BLEDevice::init(bleName.c_str());
+  BLEDevice::setPower(ESP_PWR_LVL_P9);
 
-  gBleServer = NimBLEDevice::createServer();
+  gBleServer = BLEDevice::createServer();
   gBleService = gBleServer->createService(BLE_WIFI_SERVICE_UUID);
 
   gBleStateCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_STATE_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
   );
   gBleNetworksCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_NETWORKS_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
   );
   gBleResultCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_RESULT_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
   );
-  NimBLECharacteristic* commandCharacteristic = gBleService->createCharacteristic(
+  BLECharacteristic* commandCharacteristic = gBleService->createCharacteristic(
     BLE_WIFI_COMMAND_UUID,
-    NIMBLE_PROPERTY::WRITE
+    BLECharacteristic::PROPERTY_WRITE
   );
   commandCharacteristic->setCallbacks(new WifiProvisionCommandCallbacks());
 
   gBleService->start();
-  gBleAdvertising = NimBLEDevice::getAdvertising();
+  gBleAdvertising = BLEDevice::getAdvertising();
   gBleAdvertising->addServiceUUID(BLE_WIFI_SERVICE_UUID);
   gBleAdvertising->setScanResponse(true);
   gBleAdvertising->start();
@@ -479,7 +444,7 @@ inline void wifiStopProvisioningMode() {
   if (gBleAdvertising != nullptr) {
     gBleAdvertising->stop();
   }
-  NimBLEDevice::deinit(true);
+  BLEDevice::deinit(true);
   gBleAdvertising = nullptr;
   gBleService = nullptr;
   gBleServer = nullptr;

@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <esp_task_wdt.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
@@ -8,12 +7,10 @@
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
-#include "yerel_kapi_kontrol.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
 
-constexpr unsigned int WDT_TIMEOUT_SECONDS = 8;
 constexpr unsigned long STATUS_PRINT_INTERVAL_MS = 5000;
 unsigned long sonDurumYazdirmaMs = 0;
 
@@ -102,10 +99,6 @@ void seriDurumYazdir() {
   Serial.println(mqttAktifPort());
   Serial.print("Role GPIO: ");
   Serial.println(ROLE_PIN);
-  Serial.print("Yerel kapi kontrol: ");
-  Serial.println(yerelKapiKontrolAktifMi() ? "aktif" : "pasif");
-  Serial.print("Yerel kapi kontrol port: ");
-  Serial.println(YEREL_KAPI_KONTROL_PORT);
   Serial.print("Firmware surumu: ");
   Serial.println(OTA_CURRENT_VERSION);
   Serial.print("OTA durum: ");
@@ -121,9 +114,6 @@ void setup() {
   Serial.begin(115200);
   delay(300);
 
-  esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
-  esp_task_wdt_add(NULL);
-
   roleSetup();
   wifiBaglan();
   otaSetup();
@@ -131,10 +121,8 @@ void setup() {
 }
 
 void loop() {
-  esp_task_wdt_reset();
   seriKomutKontrol();
   wifiLoop();
-  yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
   if (roleLoop()) {

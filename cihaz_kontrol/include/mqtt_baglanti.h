@@ -41,9 +41,6 @@ inline void mqttPublishState(bool locked) {
   doc["ota_last_version"] = otaLastVersion();
   doc["wifi_rssi"] = wifiSinyalDbm();
   doc["wifi_signal_percent"] = wifiSinyalYuzde();
-  doc["local_ip"] = wifiIpAdresi();
-  doc["local_control_port"] = YEREL_KAPI_KONTROL_PORT;
-  doc["local_control_available"] = wifiHasLocalControlToken();
 
   String payload;
   serializeJson(doc, payload);
@@ -56,10 +53,6 @@ inline void mqttPublishEvent(const char* eventName, const char* detail = "") {
   doc["event"] = eventName;
   if (detail != nullptr && detail[0] != '\0') {
     doc["detail"] = detail;
-  }
-  const String otaJobId = otaCurrentJobId();
-  if (!otaJobId.isEmpty()) {
-    doc["ota_job_id"] = otaJobId;
   }
   doc["ms"] = millis();
   doc["firmware_version"] = OTA_CURRENT_VERSION;
@@ -94,8 +87,7 @@ inline bool shouldTriggerPulse(const String& message) {
   return String(action) == "pulse";
 }
 
-inline bool readOtaCheckCommand(const String& message, String& jobId) {
-  jobId = "";
+inline bool shouldTriggerOtaCheck(const String& message) {
   if (message == "ota" || message == "ota_check") {
     return true;
   }
@@ -107,29 +99,7 @@ inline bool readOtaCheckCommand(const String& message, String& jobId) {
   }
 
   const char* action = json["action"] | "";
-  if (String(action) != "ota_check") {
-    return false;
-  }
-  jobId = String(json["ota_job_id"] | "");
-  jobId.trim();
-  return true;
-}
-
-inline bool readLocalControlConfig(const String& message, String& token) {
-  JsonDocument json;
-  const auto err = deserializeJson(json, message);
-  if (err) {
-    return false;
-  }
-
-  const char* action = json["action"] | "";
-  if (String(action) != "local_control_config") {
-    return false;
-  }
-
-  token = String(json["local_control_token"] | "");
-  token.trim();
-  return !token.isEmpty();
+  return String(action) == "ota_check";
 }
 
 inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -149,19 +119,9 @@ inline void mqttCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  String otaJobId;
-  if (readOtaCheckCommand(message, otaJobId)) {
-    otaTalepEt("mqtt", otaJobId);
+  if (shouldTriggerOtaCheck(message)) {
+    otaTalepEt("mqtt");
     mqttPublishEvent("ota_check_requested");
-    return;
-  }
-
-  String localControlToken;
-  if (readLocalControlConfig(message, localControlToken)) {
-    wifiPersistLocalControlToken(localControlToken);
-    mqttPublishEvent("local_control_configured");
-    mqttPublishState(gDoorLocked);
-    Serial.println("Yerel kapi kontrol anahtari MQTT ile kaydedildi.");
     return;
   }
 
@@ -250,11 +210,11 @@ inline void mqttLoopHandler() {
 }
 
 inline void mqttNotifyPulseCompleted() {
-  gDoorLocked = true;
   if (!client.connected()) {
     return;
   }
 
+  gDoorLocked = true;
   mqttPublishState(gDoorLocked);
   mqttPublishEvent("pulse_completed");
 }

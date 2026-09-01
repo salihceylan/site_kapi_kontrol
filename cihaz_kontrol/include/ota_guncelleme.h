@@ -13,7 +13,7 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "2.0.5";
+inline constexpr char OTA_CURRENT_VERSION[] = "1.2.0";
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
@@ -36,7 +36,6 @@ inline bool gOtaPendingCheck = false;
 inline bool gOtaRunning = false;
 inline String gOtaLastStatus = "beklemede";
 inline String gOtaLastVersion = "";
-inline String gOtaCurrentJobId = "";
 inline Preferences gOtaPrefs;
 inline OtaEventPublisher gOtaEventPublisher = nullptr;
 
@@ -72,10 +71,6 @@ inline void otaPublishEvent(const char* eventName, const String& detail = "") {
   }
 }
 
-inline String otaCurrentJobId() {
-  return gOtaCurrentJobId;
-}
-
 inline void otaSetEventPublisher(OtaEventPublisher publisher) {
   gOtaEventPublisher = publisher;
 }
@@ -91,15 +86,10 @@ inline void otaSetup() {
   Serial.println(gOtaLastStatus);
 }
 
-inline void otaTalepEt(const char* reason = "manual", const String& jobId = "") {
+inline void otaTalepEt(const char* reason = "manual") {
   gOtaPendingCheck = true;
-  gOtaCurrentJobId = jobId;
   Serial.print("OTA kontrol talebi: ");
   Serial.println(reason);
-  if (!gOtaCurrentJobId.isEmpty()) {
-    Serial.print("OTA job id: ");
-    Serial.println(gOtaCurrentJobId);
-  }
 }
 
 inline String otaLastStatus() {
@@ -135,10 +125,8 @@ inline unsigned long otaIntervalFromManifest(JsonDocument& doc) {
 inline bool otaReadManifest(JsonDocument& doc) {
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
-  otaClient.setTimeout(4);
 
   HTTPClient http;
-  http.setTimeout(4000);
   String url = String(OTA_MANIFEST_URL) +
                "?current_version=" + OTA_CURRENT_VERSION +
                "&uid=" + cihazUniqueId();
@@ -189,35 +177,14 @@ inline void otaCheckAndUpdate() {
 
   gOtaPeriodicIntervalMs = otaIntervalFromManifest(manifest);
   const bool updateAvailable = manifest["update_available"] | false;
-  const bool usbRequired = manifest["usb_required"] | false;
   const String version = String(manifest["version"] | "");
   const String url = String(manifest["url"] | "");
   const String md5 = String(manifest["md5"] | "");
-  if (usbRequired) {
-    otaPersistStatus("USB ile tam yukleme gerekli", version);
-    Serial.println("OTA: Bu surum partition/bootloader icin USB ile yukleme gerektiriyor.");
-    otaPublishEvent("ota_usb_required", version);
-    otaPlanNext(gOtaPeriodicIntervalMs);
-    gOtaCurrentJobId = "";
-    gOtaRunning = false;
-    return;
-  }
   if (!updateAvailable || url.isEmpty()) {
     otaPersistStatus("guncel", version);
     Serial.println("OTA: cihaz guncel.");
     otaPublishEvent("ota_up_to_date", version);
     otaPlanNext(gOtaPeriodicIntervalMs);
-    gOtaCurrentJobId = "";
-    gOtaRunning = false;
-    return;
-  }
-
-  if (md5.length() != 32) {
-    otaPersistStatus("manifest MD5 eksik veya gecersiz", version);
-    Serial.println("OTA: manifest MD5 eksik veya gecersiz; guncelleme iptal edildi.");
-    otaPublishEvent("ota_failed", gOtaLastStatus);
-    otaPlanNext(gOtaPeriodicIntervalMs);
-    gOtaCurrentJobId = "";
     gOtaRunning = false;
     return;
   }
@@ -243,33 +210,14 @@ inline void otaCheckAndUpdate() {
   Serial.print(" boyut: ");
   Serial.println(updatePartition->size);
 
-  // WDT 8 saniye olduğu için 1.18MB indirme sırasında reset atmasını engelle
-  esp_task_wdt_delete(NULL);
-
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
-  otaClient.setTimeout(15);
-
   httpUpdate.rebootOnUpdate(true);
-  httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  httpUpdate.setLedPin(WIFI_STATUS_LED_PIN, LOW);
-
-  Update.onProgress([](size_t progress, size_t size) {
-    if (size > 0) {
-      Serial.printf("OTA Indiriliyor: %u%%\r", (progress * 100) / size);
-    }
-  });
-
   if (md5.length() == 32) {
     Serial.print("OTA manifest MD5: ");
     Serial.println(md5);
-    Update.setMD5(md5.c_str());
   }
   const t_httpUpdate_return result = httpUpdate.update(otaClient, url);
-
-  // Güncelleme başarısız olduysa veya yeniden başlamadıysa WDT'yi tekrar devreye al
-  esp_task_wdt_init(8, true);
-  esp_task_wdt_add(NULL);
 
   switch (result) {
     case HTTP_UPDATE_FAILED:
@@ -294,7 +242,6 @@ inline void otaCheckAndUpdate() {
   }
 
   otaPlanNext(gOtaPeriodicIntervalMs);
-  gOtaCurrentJobId = "";
   gOtaRunning = false;
 }
 

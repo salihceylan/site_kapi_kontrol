@@ -382,8 +382,6 @@ class BleWifiProvisionService {
         .toString();
     final String mqttPassword = (mqttCredentials['mqtt_password'] ?? '')
         .toString();
-    final String localControlToken =
-        (mqttCredentials['local_control_token'] ?? '').toString();
 
     if (mqttHost.isEmpty || mqttUsername.isEmpty || mqttPassword.isEmpty) {
       throw const BleProvisionException(
@@ -398,8 +396,6 @@ class BleWifiProvisionService {
       'mqtt_port': mqttPort,
       'mqtt_username': mqttUsername,
       'mqtt_password': mqttPassword,
-      if (localControlToken.isNotEmpty)
-        'local_control_token': localControlToken,
     });
     await _ble.writeCharacteristicWithResponse(
       _qualifiedCharacteristic(_commandUuid),
