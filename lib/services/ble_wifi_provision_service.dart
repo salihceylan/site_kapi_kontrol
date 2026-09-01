@@ -379,15 +379,23 @@ class BleWifiProvisionService {
       result = await readResult();
       if (result.isFailure) {
         throw BleProvisionException(
-          result.message.isEmpty ? 'Wi-Fi taramasi basarisiz.' : result.message,
+          result.message.isEmpty ? 'Wi-Fi taraması başarısız.' : result.message,
         );
       }
       if (result.isScanComplete) {
         return readNetworks();
       }
+      if (index >= 4) {
+        try {
+          final List<BleWifiNetwork> current = await readNetworks();
+          if (current.isNotEmpty) {
+            return current;
+          }
+        } catch (_) {}
+      }
     }
 
-    throw const BleProvisionException('Wi-Fi taramasi zaman asimina ugradi.');
+    return readNetworks();
   }
 
   Future<BleWifiResult> provisionWifi({

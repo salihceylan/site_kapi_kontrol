@@ -105,13 +105,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _deviceState = state;
         _lastResult = result;
       });
-      if (!state.provisioning) {
-        _showMessage(
-          'Cihaz provisioning modunda değil. Gerekirse butona 3 saniye basıp tekrar deneyin.',
-        );
-      } else {
-        _loadNetworks();
-      }
+      _loadNetworks();
     } on BleProvisionException catch (error) {
       if (!mounted) return;
       _showMessage(error.message);
