@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 
@@ -134,6 +135,28 @@ class YanMenu extends StatelessWidget {
                   selected: false,
                   color: roleColor,
                   onTap: onLogout,
+                ),
+                FutureBuilder<PackageInfo>(
+                  future: PackageInfo.fromPlatform(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      final info = snapshot.data!;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 12),
+                        child: Center(
+                          child: Text(
+                            'v${info.version} (Build ${info.buildNumber})',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    return const SizedBox(height: 12);
+                  },
                 ),
               ],
             ),
