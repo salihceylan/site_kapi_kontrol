@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 
@@ -136,27 +136,18 @@ class YanMenu extends StatelessWidget {
                   color: roleColor,
                   onTap: onLogout,
                 ),
-                FutureBuilder<PackageInfo>(
-                  future: PackageInfo.fromPlatform(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData) {
-                      final info = snapshot.data!;
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 12),
-                        child: Center(
-                          child: Text(
-                            'v${info.version} (Build ${info.buildNumber})',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    return const SizedBox(height: 12);
-                  },
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 12),
+                  child: Center(
+                    child: Text(
+                      AppConfig.versionDisplay,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -173,6 +164,9 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.ellerSerbest,
+        SirketMenuItem.abonelikTalepleri,
+        SirketMenuItem.siteOnayTalepleri,
         SirketMenuItem.superUserYonetimi,
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
@@ -185,6 +179,7 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.ellerSerbest,
         SirketMenuItem.siteler,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -211,19 +206,19 @@ String _titleForItem(SirketMenuItem item) {
     case SirketMenuItem.siteOnayTalepleri:
       return 'Site Onay Talepleri';
     case SirketMenuItem.superUserYonetimi:
-      return 'Super User Yonetimi';
+      return 'Süper Kullanıcı Yönetimi';
     case SirketMenuItem.siteYoneticileriYonetimi:
-      return 'Site Yoneticileri Yonetimi';
+      return 'Site Yöneticileri Yönetimi';
     case SirketMenuItem.daireKullanicilariYonetimi:
-      return 'Daire Kullanicilari Yonetimi';
+      return 'Daire Sakinleri';
     case SirketMenuItem.siteler:
-      return 'Site Yonetimi';
+      return 'Site Yönetimi';
     case SirketMenuItem.cihazEkle:
-      return 'Sirket Veritabanina Cihaz Kaydet';
+      return 'Cihaz Kaydet';
     case SirketMenuItem.kayitliCihazlar:
-      return 'Kayitli Cihazlar';
+      return 'Kayıtlı Cihazlar';
     case SirketMenuItem.bluetoothWifiKur:
-      return 'Bluetooth ile Wi-Fi Kur';
+      return 'Bluetooth ile Wi-Fi Kurulumu';
   }
 }
 

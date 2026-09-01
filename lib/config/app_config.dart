@@ -1,31 +1,12 @@
-const String apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://api.gudeteknoloji.com.tr',
-);
+const String apiBaseUrl = 'https://api.gudeteknoloji.com.tr';
 
-const String mqttHost = String.fromEnvironment(
-  'MQTT_HOST',
-  defaultValue: 'mqtt.gudeteknoloji.com.tr',
-);
+class AppConfig {
+  AppConfig._();
 
-const int mqttPort = int.fromEnvironment('MQTT_PORT', defaultValue: 8883);
+  static const String appName = 'Site Kapı Kontrol';
+  static const String appVersion = '1.0.0';
+  static const int buildNumber = 1;
+  static const String baseUrl = apiBaseUrl;
 
-const String mqttAppUser = String.fromEnvironment(
-  'MQTT_APP_USER',
-  defaultValue: '',
-);
-
-const String mqttAppPassword = String.fromEnvironment(
-  'MQTT_APP_PASSWORD',
-  defaultValue: '',
-);
-
-const String mqttSiteId = String.fromEnvironment(
-  'MQTT_SITE_ID',
-  defaultValue: '1',
-);
-
-const String mqttDoorId = String.fromEnvironment(
-  'MQTT_DOOR_ID',
-  defaultValue: '1',
-);
+  static String get versionDisplay => 'v$appVersion (Build $buildNumber)';
+}
