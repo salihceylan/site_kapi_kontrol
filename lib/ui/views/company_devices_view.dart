@@ -62,19 +62,20 @@ class CompanyDevicesView extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: isBroadcastingOta ||
-                            isLoading ||
-                            (pageData?.total ?? 0) == 0
-                        ? null
-                        : onBroadcastOta,
-                    icon: const Icon(Icons.system_update_alt),
-                    label: Text(
-                      isBroadcastingOta
-                          ? 'Gönderiliyor'
-                          : 'Tümüne OTA Kontrolü',
+                  if (isSuperUser)
+                    ElevatedButton.icon(
+                      onPressed: isBroadcastingOta ||
+                              isLoading ||
+                              (pageData?.total ?? 0) == 0
+                          ? null
+                          : onBroadcastOta,
+                      icon: const Icon(Icons.system_update_alt),
+                      label: Text(
+                        isBroadcastingOta
+                            ? 'Gönderiliyor'
+                            : 'Tümüne OTA Kontrolü',
+                      ),
                     ),
-                  ),
                   IconButton(
                     tooltip: 'Yenile',
                     onPressed: isLoading ? null : onRefresh,

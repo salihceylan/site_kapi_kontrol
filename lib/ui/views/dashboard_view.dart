@@ -630,8 +630,10 @@ class DashboardView extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
-          const SizedBox(height: 6),
-          Text('OTA Durumu: ${runtimeStatus?.otaStatus ?? '-'}'),
+          if (session.role == UserRole.superUser) ...[
+            const SizedBox(height: 6),
+            Text('OTA Durumu: ${runtimeStatus?.otaStatus ?? '-'}'),
+          ],
           const SizedBox(height: 6),
           Text('Wi-Fi Gücü: $signalText'),
           if (runtimeStatus?.lastSeenAt != null) ...[

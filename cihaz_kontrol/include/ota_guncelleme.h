@@ -13,19 +13,19 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "2.0.1";
+inline constexpr char OTA_CURRENT_VERSION[] = "2.0.0";
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
 inline constexpr char OTA_PREFS_NAMESPACE[] = "ota_cfg";
 inline constexpr char OTA_PREF_LAST_STATUS[] = "last_status";
 inline constexpr char OTA_PREF_LAST_VERSION[] = "last_version";
-inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 10000; // 10 saniye sonra ilk kontrol
-inline constexpr unsigned long OTA_BOOT_JITTER_MS = 15000; // 0-15 sn rastgele yayilma
-inline constexpr unsigned long OTA_PERIODIC_CHECK_MS = 60UL * 60UL * 1000UL; // 1 saatte bir periyodik kontrol
-inline constexpr unsigned long OTA_MIN_RETRY_MS = 30000; // Basarisiz olursa 30 sn sonra tekrar dene
-inline constexpr unsigned long OTA_MIN_INTERVAL_MS = 15UL * 60UL * 1000UL; // min 15 dk
-inline constexpr unsigned long OTA_MAX_INTERVAL_MS = 24UL * 60UL * 60UL * 1000UL; // max 24 saat
+inline constexpr unsigned long OTA_BOOT_CHECK_DELAY_MS = 30000;
+inline constexpr unsigned long OTA_BOOT_JITTER_MS = 120UL * 1000UL;
+inline constexpr unsigned long OTA_PERIODIC_CHECK_MS = 24UL * 60UL * 60UL * 1000UL;
+inline constexpr unsigned long OTA_MIN_RETRY_MS = 10UL * 60UL * 1000UL;
+inline constexpr unsigned long OTA_MIN_INTERVAL_MS = 60UL * 60UL * 1000UL;
+inline constexpr unsigned long OTA_MAX_INTERVAL_MS = 7UL * 24UL * 60UL * 60UL * 1000UL;
 
 using OtaEventPublisher = void (*)(const char* eventName, const char* detail);
 
@@ -125,11 +125,10 @@ inline unsigned long otaIntervalFromManifest(JsonDocument& doc) {
 inline bool otaReadManifest(JsonDocument& doc) {
   WiFiClientSecure otaClient;
   otaClient.setCACert(TLS_ROOT_CA);
-  otaClient.setTimeout(12);
+  otaClient.setTimeout(4);
 
   HTTPClient http;
-  http.setTimeout(12000);
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(4000);
   String url = String(OTA_MANIFEST_URL) +
                "?current_version=" + OTA_CURRENT_VERSION +
                "&uid=" + cihazUniqueId();
@@ -173,7 +172,7 @@ inline void otaCheckAndUpdate() {
     Serial.print("OTA manifest hatasi: ");
     Serial.println(gOtaLastStatus);
     otaPublishEvent("ota_check_failed", gOtaLastStatus);
-    otaPlanNext(45000); // Hata durumunda 45 saniye sonra tekrar dene
+    otaPlanNext(gOtaPeriodicIntervalMs);
     gOtaRunning = false;
     return;
   }
