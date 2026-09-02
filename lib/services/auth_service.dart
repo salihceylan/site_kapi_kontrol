@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
+import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -299,7 +300,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> createSite({
+  Future<(SiteRecord?, String?)> createSite({
     required String name,
     String? address,
     String? city,
@@ -311,11 +312,11 @@ class AuthService extends ChangeNotifier {
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
-      return 'Bu islem icin super user yetkisi gerekir.';
+      return (null, 'Bu islem icin super user yetkisi gerekir.');
     }
 
     try {
-      await api.createSite(
+      final site = await api.createSite(
         token: active.token,
         role: active.role,
         name: name,
@@ -327,12 +328,12 @@ class AuthService extends ChangeNotifier {
         managerUserCode: managerUserCode,
         managerUser: managerUser,
       );
-      return null;
+      return (site, null);
     } on ApiException catch (e) {
       _handleSessionError(e);
-      return e.message;
+      return (null, e.message);
     } catch (_) {
-      return 'Sunucuya baglanilamadi.';
+      return (null, 'Sunucuya baglanilamadi.');
     }
   }
 

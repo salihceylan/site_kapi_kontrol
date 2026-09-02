@@ -245,7 +245,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         break;
       case SirketMenuItem.siteler:
       case SirketMenuItem.daireKullanicilariYonetimi:
-        _loadSites();
+        _loadSites(force: true);
         break;
       case SirketMenuItem.superUserYonetimi:
         _loadManagedUsers(UserRole.superUser);
@@ -268,7 +268,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   // --- API Yükleyicileri ---
-  Future<void> _loadSites({int page = 1, bool force = false}) async {
+  Future<void> _loadSites({
+    int page = 1,
+    bool force = false,
+    int? preferredSiteId,
+  }) async {
     if (_isLoadingSites && !force) return;
     setState(() => _isLoadingSites = true);
     try {
@@ -277,8 +281,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _isLoadingSites = false;
         _sitesPage = data;
-        if (_selectedSite == null && data.sites.isNotEmpty) {
-          _selectSite(data.sites.first);
+        if (data.sites.isNotEmpty) {
+          if (preferredSiteId != null) {
+            final target =
+                data.sites.where((s) => s.id == preferredSiteId).firstOrNull;
+            _selectSite(target ?? data.sites.first);
+          } else if (_selectedSite == null ||
+              !data.sites.any((s) => s.id == _selectedSite!.id)) {
+            _selectSite(data.sites.first);
+          }
         }
       });
     } catch (e) {
@@ -306,7 +317,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (error != null) _showMessage(error);
   }
 
-  Future<void> _loadDoorControlSites() async {
+  Future<void> _loadDoorControlSites({int? preferredSiteId}) async {
     final session = widget.authService.session;
     if (session == null) return;
 
@@ -357,8 +368,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         _isLoadingDoorControlSites = false;
         _doorControlSitesPage = data;
-        if (data.sites.isNotEmpty && _doorControlSite == null) {
-          _selectDoorControlSite(data.sites.first.id);
+        if (data.sites.isNotEmpty) {
+          if (preferredSiteId != null) {
+            final target =
+                data.sites.where((s) => s.id == preferredSiteId).firstOrNull;
+            _selectDoorControlSite((target ?? data.sites.first).id);
+          } else if (_doorControlSite == null ||
+              !data.sites.any((s) => s.id == _doorControlSite!.id)) {
+            _selectDoorControlSite(data.sites.first.id);
+          }
         }
       });
     } catch (_) {
@@ -602,7 +620,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (result == null) return;
 
     if (site == null) {
-      final error = await widget.authService.createSite(
+      final (createdSite, error) = await widget.authService.createSite(
         name: result.name,
         address: result.address.isEmpty ? null : result.address,
         city: result.city.isEmpty ? null : result.city,
@@ -616,8 +634,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _showMessage(error);
       } else {
         _showMessage('Site başarıyla oluşturuldu.');
-        _loadSites(force: true);
-        _loadDoorControlSites();
+        await _loadSites(force: true, preferredSiteId: createdSite?.id);
+        await _loadDoorControlSites(preferredSiteId: createdSite?.id);
       }
     } else {
       final error = await widget.authService.updateSite(
@@ -634,8 +652,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _showMessage(error);
       } else {
         _showMessage('Site güncellendi.');
-        _loadSites(force: true);
-        _loadDoorControlSites();
+        await _loadSites(force: true, preferredSiteId: site.id);
+        await _loadDoorControlSites(preferredSiteId: site.id);
       }
     }
   }

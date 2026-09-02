@@ -722,7 +722,10 @@ class DashboardView extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
-            initialValue: selectedSite?.id,
+            key: ValueKey('site_${selectedSite?.id}_${sites.length}'),
+            initialValue: (selectedSite != null && sites.any((s) => s.id == selectedSite!.id))
+                ? selectedSite!.id
+                : (sites.isNotEmpty ? sites.first.id : null),
             decoration: const InputDecoration(labelText: 'Site seç'),
             items: [
               for (final site in sites)
@@ -745,7 +748,10 @@ class DashboardView extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            initialValue: selectedDoor?.id,
+            key: ValueKey('door_${selectedDoor?.id}_${doors.length}'),
+            initialValue: (selectedDoor != null && doors.any((d) => d.id == selectedDoor!.id))
+                ? selectedDoor!.id
+                : (doors.isNotEmpty ? doors.first.id : null),
             decoration: const InputDecoration(labelText: 'Kapı seç'),
             items: [
               for (final door in doors)

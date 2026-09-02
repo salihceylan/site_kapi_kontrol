@@ -1,13 +1,13 @@
 {
   "enabled": true,
-  "version": "2.0.4",
+  "version": "2.0.1",
   "filename": "firmware.bin",
   "force": true,
-  "usb_required": true,
+  "usb_required": false,
   "partition_scheme": "ota_4mb_littlefs_v1",
   "interval_hours": 1,
   "allowed_uids": [],
-  "sha256": "b1646611cc6dea75d34fe07dc994fec3cf304e304544655df6571db7ec1a60a4",
-  "md5": "b8ae9ff7dd22447f8afc114fd355353f",
-  "notes": "AHBU firmware v2.0.4: WiFi LED akisi, BLE tarama ve LittleFS partition duzeltmeleri."
+  "sha256": "0fabe573f17154542b6f402cd27e07bd4c43342f5e33afa6b394e03b3b9f4468",
+  "md5": "895af002e3de64d716a10a11e7cf8d1a",
+  "notes": "AHBU firmware v2.0.1."
 }
