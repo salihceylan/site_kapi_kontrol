@@ -82,3 +82,4 @@ export function getAuthUserCode(req) {
   const userCode = Number(req.authUser?.id);
   return Number.isInteger(userCode) ? userCode : null;
 }
+

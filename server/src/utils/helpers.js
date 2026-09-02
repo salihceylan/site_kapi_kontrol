@@ -607,3 +607,4 @@ export function buildBlockApartmentCounts({
   }
   return result;
 }
+
