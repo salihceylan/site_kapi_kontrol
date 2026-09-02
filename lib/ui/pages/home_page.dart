@@ -178,11 +178,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     switch (role) {
       case UserRole.superUser:
         return item != SirketMenuItem.abonelikTalepleri &&
-            item != SirketMenuItem.siteOnayTalepleri;
+            item != SirketMenuItem.siteOnayTalepleri &&
+            item != SirketMenuItem.ellerSerbest;
       case UserRole.siteManager:
         return item == SirketMenuItem.dashboard ||
             item == SirketMenuItem.profilim ||
-            item == SirketMenuItem.ellerSerbest ||
             item == SirketMenuItem.siteler ||
             item == SirketMenuItem.kayitliCihazlar ||
             item == SirketMenuItem.bluetoothWifiKur;
