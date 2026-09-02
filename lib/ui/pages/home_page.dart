@@ -289,6 +289,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               !data.sites.any((s) => s.id == _selectedSite!.id)) {
             _selectSite(data.sites.first);
           }
+        } else {
+          _selectedSite = null;
+          _selectedSiteStructure = null;
         }
       });
     } catch (e) {
@@ -376,6 +379,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               !data.sites.any((s) => s.id == _doorControlSite!.id)) {
             _selectDoorControlSite(data.sites.first.id);
           }
+        } else {
+          _doorControlSite = null;
+          _doorControlStructure = null;
+          _doorControlDoor = null;
+          _doorRuntimeStatus = null;
         }
       });
     } catch (_) {
@@ -683,14 +691,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _busyDeleteSites.add(site.id));
     final error = await widget.authService.deleteSite(siteCode: site.id);
     if (!mounted) return;
-    setState(() => _busyDeleteSites.remove(site.id));
+    setState(() {
+      _busyDeleteSites.remove(site.id);
+      if (_selectedSite?.id == site.id) {
+        _selectedSite = null;
+        _selectedSiteStructure = null;
+      }
+      if (_doorControlSite?.id == site.id) {
+        _doorControlSite = null;
+        _doorControlStructure = null;
+        _doorControlDoor = null;
+        _doorRuntimeStatus = null;
+      }
+    });
 
     if (error != null) {
       _showMessage(error);
     } else {
       _showMessage('Site silindi.');
-      _loadSites(force: true);
-      _loadDoorControlSites();
+      await _loadSites(force: true);
+      await _loadDoorControlSites();
+      final session = widget.authService.session;
+      if (session != null) {
+        if (session.role == UserRole.superUser) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+          _loadManagedUsers(UserRole.siteManager, force: true);
+        } else if (session.role == UserRole.siteManager) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+        }
+      }
     }
   }
 
