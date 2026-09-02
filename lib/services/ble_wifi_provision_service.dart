@@ -144,9 +144,29 @@ class BleWifiProvisionService {
 
     await _requestPermissions();
 
-    final BleStatus status = await _ble.statusStream
-        .firstWhere((BleStatus value) => value != BleStatus.unknown)
-        .timeout(const Duration(seconds: 8));
+    // Give native BLE bridge a brief moment to update its status after permission prompt
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    BleStatus status = _ble.status;
+    if (status != BleStatus.ready && status != BleStatus.poweredOff) {
+      try {
+        status = await _ble.statusStream
+            .firstWhere(
+              (BleStatus value) =>
+                  value == BleStatus.ready ||
+                  value == BleStatus.poweredOff ||
+                  value == BleStatus.locationServicesDisabled ||
+                  value == BleStatus.unsupported,
+            )
+            .timeout(const Duration(milliseconds: 1500));
+      } catch (_) {
+        status = _ble.status;
+      }
+    }
+
+    if (status == BleStatus.ready) {
+      return;
+    }
 
     switch (status) {
       case BleStatus.ready:
@@ -160,6 +180,10 @@ class BleWifiProvisionService {
           'Konum servislerini acip tekrar deneyin.',
         );
       case BleStatus.unauthorized:
+        final bool permissionsGranted = await _checkPermissionsGranted();
+        if (permissionsGranted) {
+          return;
+        }
         throw const BleProvisionException(
           'Bluetooth izni verilmedi. Uygulama izinlerini acin.',
         );
@@ -168,23 +192,44 @@ class BleWifiProvisionService {
           'Bu cihaz Bluetooth LE desteklemiyor.',
         );
       case BleStatus.unknown:
-        throw const BleProvisionException('Bluetooth durumu okunamadi.');
+        return;
     }
+  }
+
+  Future<bool> _checkPermissionsGranted() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final scan = await Permission.bluetoothScan.status;
+      final connect = await Permission.bluetoothConnect.status;
+      if (scan.isGranted || scan.isLimited || connect.isGranted || connect.isLimited) {
+        return true;
+      }
+      final location = await Permission.locationWhenInUse.status;
+      final bt = await Permission.bluetooth.status;
+      return location.isGranted || bt.isGranted;
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final bt = await Permission.bluetooth.status;
+      return bt.isGranted || bt.isLimited;
+    }
+    return true;
   }
 
   Future<void> _requestPermissions() async {
     if (defaultTargetPlatform == TargetPlatform.android) {
-      final Map<Permission, PermissionStatus> statuses = await <Permission>[
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-      ].request();
-      final bool denied = statuses.values.any(
-        (PermissionStatus status) => !status.isGranted,
-      );
-      if (denied) {
-        throw const BleProvisionException(
-          'Bluetooth tarama ve baglanti izinleri zorunludur.',
-        );
+      final scanStatus = await Permission.bluetoothScan.request();
+      final connectStatus = await Permission.bluetoothConnect.request();
+
+      final isScanGranted = scanStatus.isGranted || scanStatus.isLimited;
+      final isConnectGranted = connectStatus.isGranted || connectStatus.isLimited;
+
+      if (!isScanGranted && !isConnectGranted) {
+        final locationStatus = await Permission.locationWhenInUse.request();
+        final bluetoothStatus = await Permission.bluetooth.request();
+        if (!locationStatus.isGranted && !bluetoothStatus.isGranted) {
+          throw const BleProvisionException(
+            'Bluetooth tarama ve baglanti izinleri zorunludur.',
+          );
+        }
       }
       return;
     }
@@ -192,7 +237,7 @@ class BleWifiProvisionService {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       final PermissionStatus bluetoothStatus = await Permission.bluetooth
           .request();
-      if (!bluetoothStatus.isGranted) {
+      if (!bluetoothStatus.isGranted && !bluetoothStatus.isLimited) {
         throw const BleProvisionException('Bluetooth izni verilmedi.');
       }
     }
