@@ -149,7 +149,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _startStatusAutoRefreshTimer() {
     _statusAutoRefreshTimer?.cancel();
-    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
       if (_selectedMenu == SirketMenuItem.dashboard &&
           _doorControlDoor != null &&

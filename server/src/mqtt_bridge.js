@@ -489,10 +489,10 @@ export function mqttBridgeHealth() {
 export function getDeviceRuntimeStatus(deviceUid) {
   const status = ensureStatus(deviceUid);
   
-  // Kalp atisi (Heartbeat) zaman asimi: Cihazdan 75 saniyeden uzun suredir paket gelmemisse offline say
+  // Kalp atisi (Heartbeat) zaman asimi: Cihazdan 35 saniyeden uzun suredir paket gelmemisse offline say
   if (status.mqtt_connected === true && status.last_payload_at) {
     const elapsedMs = Date.now() - new Date(status.last_payload_at).getTime();
-    if (elapsedMs > 75000) {
+    if (elapsedMs > 35000) {
       status.mqtt_connected = false;
       void persistRuntimeStatus(status);
     }

@@ -129,10 +129,9 @@ class DashboardView extends StatelessWidget {
     final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
         selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
-    final canUseLocal = canTryLocalDoorOpen;
 
     final commandEnabled = isDeviceAssigned &&
-        (isCloudOnline || canUseLocal) &&
+        isCloudOnline &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -150,9 +149,6 @@ class DashboardView extends StatelessWidget {
     } else if (isCloudOnline) {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
-    } else if (canUseLocal) {
-      statusText = '🔴 Cihaz Çevrimdışı (Yerel Ağdan Açmayı Deneyin)';
-      statusColor = const Color(0xFFF87171);
     } else {
       statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';
       statusColor = const Color(0xFFF87171);
@@ -587,7 +583,6 @@ class DashboardView extends StatelessWidget {
       final isDeviceAssigned = selectedDoor?.assignedDeviceUid != null &&
           selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
       final isCloudOnline = runtimeStatus?.mqttConnected == true;
-      final canUseLocal = canTryLocalDoorOpen;
 
       final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
 
@@ -614,7 +609,7 @@ class DashboardView extends StatelessWidget {
               : '%${runtimeStatus!.wifiSignalPercent} (Son Sinyal)');
 
       final commandEnabled = isDeviceAssigned &&
-          (isCloudOnline || canUseLocal) &&
+          isCloudOnline &&
           !isOpeningDoor &&
           !isLoadingStatus;
 
