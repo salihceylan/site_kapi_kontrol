@@ -15,7 +15,6 @@ import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:printing/printing.dart';
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_device_firmware_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_logs_service.dart';
@@ -1162,44 +1161,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _exportAllSitesCredentialsPdf() async {
+  Future<void> _exportDoorLogsPdf(SiteRecord site, DoorRecord door) async {
     try {
-      _showMessage('Tüm sitelerin şifre raporu hazırlanıyor...');
-      final sitesData = await widget.authService.listSites(
-        page: 1,
+      _showMessage('${door.doorName} haftalık geçiş log raporu hazırlanıyor...');
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
+        siteCode: site.id,
+        doorId: door.id,
+        startDate: sevenDaysAgo,
+        endDate: now,
         pageSize: 200,
       );
-      if (sitesData.sites.isEmpty) {
-        _showMessage('Kayıtlı site bulunamadı.');
-        return;
-      }
 
-      final structures = <SiteStructureRecord>[];
-      for (final s in sitesData.sites) {
-        final (struct, _) = await widget.authService.getSiteStructure(
-          siteCode: s.id,
+      if (logsPage == null || logsPage.logs.isEmpty) {
+        _showMessage(
+          error ??
+              '${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',
         );
-        if (struct != null) {
-          structures.add(struct);
-        }
-      }
-
-      if (structures.isEmpty) {
-        _showMessage('Site verileri alınamadı.');
         return;
       }
 
-      final bytes = await PdfCredentialsService.generateMultiSiteCredentialsPdf(
-        structures: structures,
-        companyName: 'GÜDE TEKNOLOJİ',
-      );
-
-      await Printing.layoutPdf(
-        onLayout: (format) async => bytes,
-        name: 'Tum_Siteler_Kullanici_Giris_Bilgileri.pdf',
+      await PdfLogsService.printOrShareLogsPdf(
+        logs: logsPage.logs,
+        siteName: site.name,
+        doorNameFilter: door.doorName,
+        startDate: sevenDaysAgo,
+        endDate: now,
       );
     } catch (e) {
-      _showMessage('Toplu PDF oluşturulurken hata: $e');
+      _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
     }
   }
 
@@ -1234,33 +1225,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _exportAllLogsPdf() async {
-    try {
-      _showMessage('Tüm sitelerin haftalık geçiş log raporu hazırlanıyor...');
-      final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
-        startDate: sevenDaysAgo,
-        endDate: now,
-        pageSize: 200,
-      );
-
-      if (logsPage == null || logsPage.logs.isEmpty) {
-        _showMessage(error ?? 'Son 7 güne ait kapı geçiş kaydı bulunamadı.');
-        return;
-      }
-
-      await PdfLogsService.printOrShareLogsPdf(
-        logs: logsPage.logs,
-        siteName: 'TÜM SİTELER',
-        startDate: sevenDaysAgo,
-        endDate: now,
-      );
-    } catch (e) {
-      _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
@@ -1272,18 +1236,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: Text(_titleForMenu(_selectedMenu)),
         backgroundColor: roleColor,
         actions: [
-          if (session.role == UserRole.superUser) ...[
-            IconButton(
-              tooltip: 'Tüm Sitelerin Şifre Raporu (PDF)',
-              icon: const Icon(Icons.password_rounded),
-              onPressed: _exportAllSitesCredentialsPdf,
-            ),
-            IconButton(
-              tooltip: 'Tüm Sitelerin Haftalık Geçiş Raporu (PDF)',
-              icon: const Icon(Icons.assignment_outlined),
-              onPressed: _exportAllLogsPdf,
-            ),
-          ],
           IconButton(
             tooltip: 'Çıkış Yap',
             icon: const Icon(Icons.logout),
@@ -1361,9 +1313,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onDownloadCredentialsPdf: _doorControlSite != null
               ? () => _exportSiteCredentialsPdf(_doorControlSite!)
               : null,
-          onDownloadLogsPdf: _doorControlSite != null
-              ? () => _exportSiteLogsPdf(_doorControlSite!)
-              : null,
+          onDownloadLogsPdf: (_doorControlSite != null && _doorControlDoor != null)
+              ? () => _exportDoorLogsPdf(_doorControlSite!, _doorControlDoor!)
+              : (_doorControlSite != null
+                  ? () => _exportSiteLogsPdf(_doorControlSite!)
+                  : null),
           voiceDoorService: session.role == UserRole.apartmentOwner
               ? widget.voiceDoorService
               : null,

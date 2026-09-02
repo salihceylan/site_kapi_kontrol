@@ -678,11 +678,11 @@ class DashboardView extends StatelessWidget {
                   side: const BorderSide(color: Color(0xFF93C5FD)),
                 ),
                 icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                label: const Text('📄 Site Giriş Şifreleri PDF Raporu İndir'),
+                label: Text('📄 ${selectedSite!.name} Giriş Şifreleri (PDF)'),
               ),
             ),
           ],
-          if (onDownloadLogsPdf != null && selectedSite != null) ...[
+          if (onDownloadLogsPdf != null && (selectedDoor != null || selectedSite != null)) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -693,7 +693,11 @@ class DashboardView extends StatelessWidget {
                   side: const BorderSide(color: Color(0xFF60A5FA)),
                 ),
                 icon: const Icon(Icons.assignment_outlined, size: 18),
-                label: const Text('📊 Haftalık Kapı Geçiş Raporu (PDF) İndir'),
+                label: Text(
+                  selectedDoor != null
+                      ? '📊 ${selectedDoor!.doorName} Geçiş Logları (PDF)'
+                      : '📊 ${selectedSite!.name} Geçiş Logları (PDF)',
+                ),
               ),
             ),
           ],
