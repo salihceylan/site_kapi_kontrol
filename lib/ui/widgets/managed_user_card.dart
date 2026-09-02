@@ -11,6 +11,7 @@ class ManagedUserCard extends StatefulWidget {
     required this.activationBusy,
     required this.onTap,
     required this.onActivationChanged,
+    this.onDelete,
   });
 
   final ManagedUserAccount user;
@@ -18,6 +19,7 @@ class ManagedUserCard extends StatefulWidget {
   final bool activationBusy;
   final VoidCallback onTap;
   final ValueChanged<bool> onActivationChanged;
+  final VoidCallback? onDelete;
 
   @override
   State<ManagedUserCard> createState() => _ManagedUserCardState();
@@ -155,13 +157,27 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: widget.onTap,
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Düzenle'),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (!widget.isSelf && widget.onDelete != null) ...[
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        label: const Text('Sil'),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    ElevatedButton.icon(
+                      onPressed: widget.onTap,
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Düzenle'),
+                    ),
+                  ],
                 ),
               ],
             ],

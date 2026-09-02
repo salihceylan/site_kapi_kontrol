@@ -21,6 +21,7 @@ class ManagedUsersView extends StatelessWidget {
     required this.onOpenAddDialog,
     required this.onToggleActivation,
     required this.onShowUserDetails,
+    this.onDeleteUser,
   });
 
   final UserRole role;
@@ -34,6 +35,7 @@ class ManagedUsersView extends StatelessWidget {
   final VoidCallback onOpenAddDialog;
   final void Function(ManagedUserAccount user, bool value) onToggleActivation;
   final ValueChanged<ManagedUserAccount> onShowUserDetails;
+  final ValueChanged<ManagedUserAccount>? onDeleteUser;
 
   String _roleTitle(UserRole r) {
     switch (r) {
@@ -166,6 +168,9 @@ class ManagedUsersView extends StatelessWidget {
                       onActivationChanged: (value) =>
                           onToggleActivation(user, value),
                       onTap: () => onShowUserDetails(user),
+                      onDelete: onDeleteUser != null
+                          ? () => onDeleteUser!(user)
+                          : null,
                     ),
                   ),
                 if (pageData != null)

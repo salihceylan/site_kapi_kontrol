@@ -1097,6 +1097,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _deleteManagedUser({
+    required UserRole role,
+    required ManagedUserAccount user,
+  }) async {
+    final roleTitle = switch (role) {
+      UserRole.superUser => 'Süper Kullanıcı',
+      UserRole.siteManager => 'Site Yöneticisi',
+      UserRole.apartmentOwner => 'Daire Sakini',
+    };
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$roleTitle Sil'),
+        content: Text(
+          '${user.fullName} (${user.email}) adlı $roleTitle hesabını silmek istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final error = await widget.authService.deleteManagedUser(
+      userCode: user.id,
+    );
+
+    if (error != null) {
+      _showMessage(error);
+    } else {
+      _showMessage('$roleTitle silindi.');
+      _loadManagedUsers(role, force: true);
+      _loadSites(force: true);
+    }
+  }
+
   Future<void> _exportSiteCredentialsPdf(SiteRecord site) async {
     try {
       _showMessage('${site.name} kullanıcı ve şifre raporu hazırlanıyor...');
@@ -1397,6 +1442,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           onShowUserDetails: (user) =>
               _openManagedUserDialog(role: UserRole.superUser, user: user),
+          onDeleteUser: (user) =>
+              _deleteManagedUser(role: UserRole.superUser, user: user),
         );
 
       case SirketMenuItem.siteYoneticileriYonetimi:
@@ -1421,6 +1468,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           onShowUserDetails: (user) =>
               _openManagedUserDialog(role: UserRole.siteManager, user: user),
+          onDeleteUser: (user) =>
+              _deleteManagedUser(role: UserRole.siteManager, user: user),
         );
 
       case SirketMenuItem.cihazEkle:
