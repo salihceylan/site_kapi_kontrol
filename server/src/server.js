@@ -59,21 +59,8 @@ app.use((_req, res, next) => {
 });
 app.use(
   cors({
-    origin(origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
-      if (allowedCorsOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      if (
-        allowedCorsOrigins.length === 0 &&
-        [...devCorsOrigins].some((allowed) => origin === allowed || origin.startsWith(`${allowed}:`))
-      ) {
-        return callback(null, true);
-      }
-      return callback(new Error('CORS origin not allowed.'));
-    },
+    origin: true,
+    credentials: true,
   }),
 );
 app.use(express.json({ limit: '64kb' }));
@@ -6045,8 +6032,8 @@ app.get('/manager/door-logs', authRequired, requireSiteManager, async (req, res)
   const endDate = req.query.end_date ? new Date(req.query.end_date) : null;
 
   try {
-    const managedSiteCodes = await getManagedSiteCodes(req.authUser);
-    if (!managedSiteCodes || managedSiteCodes.length === 0) {
+    const managedSiteSet = await getManagedSiteCodes(req.authUser);
+    if (!managedSiteSet || managedSiteSet.size === 0) {
       return res.status(200).json({
         ok: true,
         logs: [],
@@ -6057,12 +6044,13 @@ app.get('/manager/door-logs', authRequired, requireSiteManager, async (req, res)
       });
     }
 
+    const managedSiteCodes = Array.from(managedSiteSet);
     const conditions = [];
     const params = [managedSiteCodes];
     conditions.push(`l.site_code = ANY($1)`);
 
     if (siteCode && Number.isInteger(siteCode)) {
-      if (!managedSiteCodes.includes(siteCode)) {
+      if (!managedSiteSet.has(siteCode)) {
         return res.status(403).json({ error: 'Bu sitenin loglarini gorme yetkiniz yok.' });
       }
       params.push(siteCode);
