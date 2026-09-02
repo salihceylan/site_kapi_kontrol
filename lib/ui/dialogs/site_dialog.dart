@@ -16,7 +16,7 @@ class SiteFormResult {
     required this.blockApartmentCounts,
     required this.doorCount,
     required this.managerUserCode,
-    required this.managerUser,
+    this.managerUser,
   });
 
   final String name;
@@ -66,16 +66,11 @@ class _SiteDialogState extends State<SiteDialog> {
   late final TextEditingController _blockCountController;
   late final TextEditingController _apartmentCountController;
   late final TextEditingController _doorCountController;
-  late final TextEditingController _managerFullNameController;
-  late final TextEditingController _managerEmailController;
-  late final TextEditingController _managerPhoneController;
-  late final TextEditingController _managerPasswordController;
 
   final List<TextEditingController> _blockApartmentControllers = [];
   bool _customBlockApartments = false;
   int? _selectedManagerUserCode;
   ManagedUserAccount? _selectedManager;
-  bool _createNewManager = false;
   List<ManagedUserAccount> _siteManagers = [];
   bool _isLoadingManagers = false;
 
@@ -98,10 +93,6 @@ class _SiteDialogState extends State<SiteDialog> {
     _doorCountController = TextEditingController(
       text: (site?.doorCount ?? 1).toString(),
     );
-    _managerFullNameController = TextEditingController();
-    _managerEmailController = TextEditingController();
-    _managerPhoneController = TextEditingController();
-    _managerPasswordController = TextEditingController();
 
     _selectedManagerUserCode = site?.managerUserCode;
     _syncBlockControllers();
@@ -119,10 +110,6 @@ class _SiteDialogState extends State<SiteDialog> {
     _blockCountController.dispose();
     _apartmentCountController.dispose();
     _doorCountController.dispose();
-    _managerFullNameController.dispose();
-    _managerEmailController.dispose();
-    _managerPhoneController.dispose();
-    _managerPasswordController.dispose();
     for (final controller in _blockApartmentControllers) {
       controller.dispose();
     }
@@ -203,18 +190,6 @@ class _SiteDialogState extends State<SiteDialog> {
       blockApartmentCounts = List.filled(blockCount, defaultApt);
     }
 
-    Map<String, dynamic>? managerUserData;
-    if (!_isEditing && _createNewManager) {
-      managerUserData = {
-        'fullName': _managerFullNameController.text.trim(),
-        'email': _managerEmailController.text.trim().toLowerCase(),
-        'phoneNumber': _managerPhoneController.text.trim().isEmpty
-            ? null
-            : _managerPhoneController.text.trim(),
-        'password': _managerPasswordController.text.trim(),
-      };
-    }
-
     Navigator.of(context).pop(
       SiteFormResult(
         name: _nameController.text.trim(),
@@ -223,8 +198,8 @@ class _SiteDialogState extends State<SiteDialog> {
         district: _districtController.text.trim(),
         blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
-        managerUserCode: _createNewManager ? null : _selectedManagerUserCode,
-        managerUser: managerUserData,
+        managerUserCode: _selectedManagerUserCode,
+        managerUser: null,
       ),
     );
   }
@@ -386,173 +361,100 @@ class _SiteDialogState extends State<SiteDialog> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (!_isEditing) ...[
-                        SegmentedButton<bool>(
-                          segments: const [
-                            ButtonSegment<bool>(
-                              value: false,
-                              label: Text('Listeden Seç'),
-                              icon: Icon(Icons.people_outline, size: 16),
-                            ),
-                            ButtonSegment<bool>(
-                              value: true,
-                              label: Text('Yeni Oluştur'),
-                              icon: Icon(Icons.person_add_outlined, size: 16),
-                            ),
-                          ],
-                          selected: {_createNewManager},
-                          onSelectionChanged: (set) =>
-                              setState(() => _createNewManager = set.first),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (!_createNewManager) ...[
-                        if (_isLoadingManagers)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Text('Yöneticiler yükleniyor...'),
-                              ],
-                            ),
-                          )
-                        else
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                      if (_isLoadingManagers)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFB8D7F7),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.person_outline,
-                                      color: AppColors.primary,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _selectedManager?.fullName ??
-                                                widget.site?.managerName ??
-                                                'Yönetici Seçilmedi',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13.5,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _selectedManager?.email ??
-                                                'Siteye bir yönetici atayabilirsiniz.',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: AppColors.textMuted,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(
-                                onPressed: _selectExistingManager,
-                                icon: const Icon(Icons.search),
-                                label: Text(
-                                  _selectedManagerUserCode == null
-                                      ? 'Site Yöneticisi Seç'
-                                      : 'Site Yöneticisini Değiştir',
-                                ),
-                              ),
-                              if (_selectedManagerUserCode != null)
-                                TextButton.icon(
-                                  onPressed: () => setState(() {
-                                    _selectedManagerUserCode = null;
-                                    _selectedManager = null;
-                                  }),
-                                  icon: const Icon(
-                                    Icons.link_off_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text(
-                                    'Yönetici atamasını kaldır',
-                                  ),
-                                ),
+                              SizedBox(width: 10),
+                              Text('Yöneticiler yükleniyor...'),
                             ],
                           ),
-                      ] else ...[
-                        TextFormField(
-                          controller: _managerFullNameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Site Yöneticisi Ad Soyad',
-                          ),
-                          validator: (value) => (value ?? '').trim().length < 3
-                              ? 'Ad Soyad en az 3 karakter olmalı.'
-                              : null,
+                        )
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFB8D7F7),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.person_outline,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _selectedManager?.fullName ??
+                                              widget.site?.managerName ??
+                                              'Yönetici Seçilmedi',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _selectedManager?.email ??
+                                              'Siteye bir yönetici atayabilirsiniz.',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: AppColors.textMuted,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _selectExistingManager,
+                              icon: const Icon(Icons.search),
+                              label: Text(
+                                _selectedManagerUserCode == null
+                                    ? 'Site Yöneticisi Seç'
+                                    : 'Site Yöneticisini Değiştir',
+                              ),
+                            ),
+                            if (_selectedManagerUserCode != null)
+                              TextButton.icon(
+                                onPressed: () => setState(() {
+                                  _selectedManagerUserCode = null;
+                                  _selectedManager = null;
+                                }),
+                                icon: const Icon(
+                                  Icons.link_off_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text(
+                                  'Yönetici atamasını kaldır',
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _managerEmailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Site Yöneticisi E-posta',
-                          ),
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            return text.isEmpty || !text.contains('@')
-                                ? 'Geçerli bir e-posta girin.'
-                                : null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _managerPhoneController,
-                          keyboardType: TextInputType.phone,
-                          decoration: const InputDecoration(
-                            labelText: 'Site Yöneticisi Telefon (opsiyonel)',
-                          ),
-                          validator: (value) {
-                            final text = (value ?? '').trim();
-                            if (text.isEmpty) return null;
-                            return RegExp(r'^\+?[0-9()\-\s]{10,20}$')
-                                    .hasMatch(text)
-                                ? null
-                                : 'Geçerli bir telefon numarası girin.';
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _managerPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Site Yöneticisi Şifre',
-                          ),
-                          validator: (value) => (value ?? '').trim().length < 6
-                              ? 'Şifre en az 6 karakter olmalı.'
-                              : null,
-                        ),
-                      ],
                     ],
                   ),
                 ),
