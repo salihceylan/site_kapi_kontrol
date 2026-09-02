@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "version": "2.0.1",
+  "filename": "firmware.bin",
+  "force": true,
+  "usb_required": false,
+  "partition_scheme": "ota_4mb_littlefs_v1",
+  "interval_hours": 1,
+  "allowed_uids": [],
+  "sha256": "0fabe573f17154542b6f402cd27e07bd4c43342f5e33afa6b394e03b3b9f4468",
+  "md5": "895af002e3de64d716a10a11e7cf8d1a",
+  "notes": "AHBU firmware v2.0.1."
+}
