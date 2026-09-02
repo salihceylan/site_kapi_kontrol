@@ -793,7 +793,7 @@ async function createUser({
   verificationCodeExpiresAt = null,
   db = pool,
 }) {
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, 10);
   const result = await db.query(
     `
       INSERT INTO users (

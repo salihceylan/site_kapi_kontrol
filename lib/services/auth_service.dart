@@ -332,8 +332,8 @@ class AuthService extends ChangeNotifier {
     } on ApiException catch (e) {
       _handleSessionError(e);
       return (null, e.message);
-    } catch (_) {
-      return (null, 'Sunucuya baglanilamadi.');
+    } catch (e) {
+      return (null, e.toString());
     }
   }
 

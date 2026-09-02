@@ -23,7 +23,7 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 class AuthApi {
   AuthApi({required this.baseUrl});
 
-  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const Duration _requestTimeout = Duration(seconds: 45);
   static const Duration _retryDelay = Duration(milliseconds: 350);
 
   final String baseUrl;

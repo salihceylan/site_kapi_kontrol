@@ -80,24 +80,28 @@ class SiteRecord {
 
   factory SiteRecord.fromJson(Map<String, dynamic> json) {
     return SiteRecord(
-      id: json['id'] as int,
+      id: (json['id'] is num
+          ? (json['id'] as num).toInt()
+          : int.tryParse(json['id']?.toString() ?? '') ?? 0),
       name: json['name'] as String? ?? '',
       address: json['address'] as String?,
       city: json['city'] as String?,
       district: json['district'] as String?,
-      blockCount: json['block_count'] as int? ?? 1,
-      apartmentCount: json['apartment_count'] as int? ?? 0,
-      doorCount: json['door_count'] as int? ?? 1,
+      blockCount: (json['block_count'] as num?)?.toInt() ?? 1,
+      apartmentCount: (json['apartment_count'] as num?)?.toInt() ?? 0,
+      doorCount: (json['door_count'] as num?)?.toInt() ?? 1,
       approvalStatus: json['approval_status'] as String? ?? 'approved',
       approvedAt: json['approved_at'] == null
           ? null
-          : DateTime.tryParse(json['approved_at'] as String),
-      mqttSiteId: json['mqtt_site_id'] as int? ?? 0,
-      managerUserCode: json['manager_user_code'] as int?,
+          : DateTime.tryParse(json['approved_at'].toString()),
+      mqttSiteId: (json['mqtt_site_id'] as num?)?.toInt() ?? 0,
+      managerUserCode: json['manager_user_code'] == null
+          ? null
+          : (json['manager_user_code'] as num?)?.toInt(),
       managerName: json['manager_name'] as String?,
       createdAt: json['created_at'] == null
           ? null
-          : DateTime.tryParse(json['created_at'] as String),
+          : DateTime.tryParse(json['created_at'].toString()),
     );
   }
 }
