@@ -204,13 +204,18 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<int>(
+                isExpanded: true,
                 initialValue: _selectedSite?.id,
                 decoration: const InputDecoration(labelText: 'Site'),
                 items: [
                   for (final site in widget.sites)
                     DropdownMenuItem<int>(
                       value: site.id,
-                      child: Text('${site.name} (${site.id})'),
+                      child: Text(
+                        '${site.name} (${site.id})',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -228,6 +233,7 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
                 Text(_error!, style: const TextStyle(color: Colors.red))
               else
                 DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: _selectedDoor?.id,
                   decoration: const InputDecoration(labelText: 'Kapı'),
                   items: [
@@ -236,6 +242,8 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
                         value: door.id,
                         child: Text(
                           '${door.doorName} - ${door.assignedDeviceUid ?? 'Boş'}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                   ],

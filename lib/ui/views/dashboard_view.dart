@@ -726,6 +726,7 @@ class DashboardView extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
+            isExpanded: true,
             key: ValueKey('site_${selectedSite?.id}_${sites.length}'),
             initialValue: (selectedSite != null && sites.any((s) => s.id == selectedSite!.id))
                 ? selectedSite!.id
@@ -735,7 +736,11 @@ class DashboardView extends StatelessWidget {
               for (final site in sites)
                 DropdownMenuItem<int>(
                   value: site.id,
-                  child: Text('${site.name} (${site.id})'),
+                  child: Text(
+                    '${site.name} (${site.id})',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
             ],
             onChanged: isLoadingSites
@@ -752,6 +757,7 @@ class DashboardView extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
+            isExpanded: true,
             key: ValueKey('door_${selectedDoor?.id}_${doors.length}'),
             initialValue: (selectedDoor != null && doors.any((d) => d.id == selectedDoor!.id))
                 ? selectedDoor!.id
@@ -763,6 +769,8 @@ class DashboardView extends StatelessWidget {
                   value: door.id,
                   child: Text(
                     '${door.doorName} - ${door.assignedDeviceUid ?? 'Cihaz yok'}',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
             ],
