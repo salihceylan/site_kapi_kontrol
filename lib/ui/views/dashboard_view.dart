@@ -151,8 +151,8 @@ class DashboardView extends StatelessWidget {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
     } else if (canUseLocal) {
-      statusText = '🟢 Online (Yerel Ağ / Offline Mod) - Kapıyı açmak için dokunun';
-      statusColor = const Color(0xFF4ADE80);
+      statusText = '🔴 Cihaz Çevrimdışı (Yerel Ağdan Açmayı Deneyin)';
+      statusColor = const Color(0xFFF87171);
     } else {
       statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';
       statusColor = const Color(0xFFF87171);
@@ -593,19 +593,25 @@ class DashboardView extends StatelessWidget {
 
       final connectionText = isMqttBridgeConnected
           ? 'Hazır (Bulut)'
-          : (canUseLocal ? 'Hazır (Yerel Ağ / Offline)' : 'Hazır değil');
+          : 'Bağlantı Yok';
       final deviceOnlineText = isCloudOnline
-          ? 'Online (Bulut)'
-          : (canUseLocal
-              ? 'Online (Yerel Ağ / Offline Mod)'
-              : (runtimeStatus == null ? 'Bilinmiyor' : 'Offline'));
-      final stateText = runtimeStatus?.doorLocked != null
-          ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
-          : (canUseLocal ? 'Hazır (Yerel Ağ)' : 'Bilinmiyor');
-      final signalText = runtimeStatus?.wifiSignalPercent == null
-          ? (canUseLocal ? 'Yerel Ağ Bağlı' : '-')
-          : '%${runtimeStatus!.wifiSignalPercent}'
-              '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}';
+          ? '🟢 Online (Bulut)'
+          : (runtimeStatus == null
+              ? 'Bilinmiyor'
+              : '🔴 Çevrimdışı (Offline)');
+      final stateText = isCloudOnline
+          ? (runtimeStatus?.doorLocked != null
+              ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
+              : 'Bilinmiyor')
+          : 'Bilinmiyor (Cihaz Çevrimdışı)';
+      final signalText = isCloudOnline
+          ? (runtimeStatus?.wifiSignalPercent == null
+              ? '-'
+              : '%${runtimeStatus!.wifiSignalPercent}'
+                  '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}')
+          : (runtimeStatus?.wifiSignalPercent == null
+              ? '-'
+              : '%${runtimeStatus!.wifiSignalPercent} (Son Sinyal)');
 
       final commandEnabled = isDeviceAssigned &&
           (isCloudOnline || canUseLocal) &&
@@ -624,7 +630,7 @@ class DashboardView extends StatelessWidget {
           Text('Kapı Durumu: $stateText'),
           const SizedBox(height: 6),
           Text(
-            'Yerel Ağ Kontrolü: ${canTryLocalDoorOpen ? 'Hazır' : 'Hazır değil'}',
+            'Yerel Ağ Kontrolü: ${canTryLocalDoorOpen ? 'Hazır (Yedek Yetki Var)' : 'Kayıt Yok'}',
           ),
           const SizedBox(height: 6),
           Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
