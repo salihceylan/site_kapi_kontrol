@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/data/turkey_cities_districts.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -61,11 +62,12 @@ class _SiteDialogState extends State<SiteDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
-  late final TextEditingController _cityController;
-  late final TextEditingController _districtController;
   late final TextEditingController _blockCountController;
   late final TextEditingController _apartmentCountController;
   late final TextEditingController _doorCountController;
+
+  String? _selectedCity;
+  String? _selectedDistrict;
 
   final List<TextEditingController> _blockApartmentControllers = [];
   bool _customBlockApartments = false;
@@ -82,8 +84,10 @@ class _SiteDialogState extends State<SiteDialog> {
     final site = widget.site;
     _nameController = TextEditingController(text: site?.name ?? '');
     _addressController = TextEditingController(text: site?.address ?? '');
-    _cityController = TextEditingController(text: site?.city ?? '');
-    _districtController = TextEditingController(text: site?.district ?? '');
+    final initialCity = (site?.city ?? '').trim();
+    final initialDistrict = (site?.district ?? '').trim();
+    _selectedCity = initialCity.isNotEmpty ? initialCity : null;
+    _selectedDistrict = initialDistrict.isNotEmpty ? initialDistrict : null;
     _blockCountController = TextEditingController(
       text: (site?.blockCount ?? 1).toString(),
     );
@@ -105,8 +109,6 @@ class _SiteDialogState extends State<SiteDialog> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
-    _cityController.dispose();
-    _districtController.dispose();
     _blockCountController.dispose();
     _apartmentCountController.dispose();
     _doorCountController.dispose();
@@ -194,8 +196,8 @@ class _SiteDialogState extends State<SiteDialog> {
       SiteFormResult(
         name: _nameController.text.trim(),
         address: _addressController.text.trim(),
-        city: _cityController.text.trim(),
-        district: _districtController.text.trim(),
+        city: _selectedCity ?? '',
+        district: _selectedDistrict ?? '',
         blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
         managerUserCode: _selectedManagerUserCode,
@@ -235,20 +237,70 @@ class _SiteDialogState extends State<SiteDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextFormField(
-                        controller: _cityController,
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: _selectedCity != null &&
+                                turkeyCityNames.contains(_selectedCity)
+                            ? _selectedCity
+                            : null,
                         decoration: const InputDecoration(
                           labelText: 'İl (opsiyonel)',
                         ),
+                        items: [
+                          for (final city in turkeyCityNames)
+                            DropdownMenuItem<String>(
+                              value: city,
+                              child: Text(
+                                city,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCity = value;
+                            _selectedDistrict = null;
+                          });
+                        },
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: TextFormField(
-                        controller: _districtController,
-                        decoration: const InputDecoration(
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('district_$_selectedCity'),
+                        isExpanded: true,
+                        initialValue: (_selectedCity != null &&
+                                _selectedDistrict != null &&
+                                getDistrictsForCity(_selectedCity)
+                                    .contains(_selectedDistrict))
+                            ? _selectedDistrict
+                            : null,
+                        decoration: InputDecoration(
                           labelText: 'İlçe (opsiyonel)',
+                          hintText: _selectedCity == null
+                              ? 'Önce İl Seçin'
+                              : 'İlçe Seçin',
                         ),
+                        items: [
+                          if (_selectedCity != null)
+                            for (final district in getDistrictsForCity(_selectedCity))
+                              DropdownMenuItem<String>(
+                                value: district,
+                                child: Text(
+                                  district,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                        ],
+                        onChanged: _selectedCity == null
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _selectedDistrict = value;
+                                });
+                              },
                       ),
                     ),
                   ],
