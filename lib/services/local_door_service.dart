@@ -126,28 +126,28 @@ class LocalDoorService {
     }
 
     final wifiAddr = await _getWifiAddress();
+    final knownIp = access.ip?.trim();
     debugPrint(
-      '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: ${access.ip}, Telefon Wi-Fi: ${wifiAddr?.address}',
+      '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
     );
 
-    // 1. Bilinen IP varsa doğrudan hızlı UDP ile açmayı dene (1-5 ms)
-    final knownIp = access.ip?.trim();
-    if (knownIp != null && knownIp.isNotEmpty) {
-      debugPrint('[YerelKapi] Kayıtlı IP üzerinden doğrudan UDP açma deneniyor: $knownIp...');
-      final udpOpened = await _directUdpOpen(knownIp, access);
-      if (udpOpened) {
-        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UDP ile ANINDA açıldı!');
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: knownIp,
-          message: 'Kapı yerel ağdan başarıyla açıldı.',
-        );
-      }
+    // 1. ANINDA Paralel UDP Açma (Hem kayıtlı IP hem Broadcast adreslerine tek soketle - 5ms)
+    final udpRes = await _directBroadcastUdpOpen(
+      access,
+      knownIp: knownIp,
+      wifiAddress: wifiAddr,
+    );
+    if (udpRes != null && udpRes.ok) {
+      debugPrint('[YerelKapi] Hızlı UDP ile ANINDA açıldı! IP: ${udpRes.ip}');
+      return udpRes;
+    }
 
+    // 2. HTTP Fallback (Eğer UDP kapalıysa veya AP Isolation varsa)
+    if (knownIp != null && knownIp.isNotEmpty) {
       final postOpened = await _directPostOpen(
         knownIp,
         access,
-        const Duration(milliseconds: 350),
+        const Duration(milliseconds: 300),
         wifiAddress: wifiAddr,
       );
       if (postOpened) {
@@ -325,6 +325,102 @@ class LocalDoorService {
     }
   }
 
+  Future<LocalDoorOpenResult?> _directBroadcastUdpOpen(
+    LocalDoorAccess access, {
+    String? knownIp,
+    InternetAddress? wifiAddress,
+  }) async {
+    RawDatagramSocket? socket;
+    try {
+      socket = await RawDatagramSocket.bind(
+        wifiAddress ?? InternetAddress.anyIPv4,
+        0,
+      );
+      socket.broadcastEnabled = true;
+      final completer = Completer<LocalDoorOpenResult?>();
+      final targetUid = access.deviceUid.trim().toUpperCase();
+      final payload = utf8.encode(jsonEncode({
+        'action': 'open',
+        'target_uid': targetUid,
+        'device_uid': targetUid,
+        'token': access.token,
+      }));
+
+      final targets = <InternetAddress>[];
+      if (knownIp != null && knownIp.isNotEmpty) {
+        try {
+          targets.add(InternetAddress(knownIp));
+        } catch (_) {}
+      }
+      targets.add(InternetAddress('255.255.255.255'));
+      if (wifiAddress != null) {
+        final parts = wifiAddress.address.split('.');
+        if (parts.length == 4) {
+          try {
+            targets.add(InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255'));
+          } catch (_) {}
+        }
+      }
+
+      for (final t in targets) {
+        try {
+          socket.send(payload, t, access.port);
+        } catch (_) {}
+      }
+
+      socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket?.receive();
+          if (dg != null) {
+            final text = utf8.decode(dg.data, allowMalformed: true);
+            try {
+              final json = jsonDecode(text) as Map<String, dynamic>;
+              final respUid =
+                  (json['device_uid'] as String?)?.trim().toUpperCase();
+              if (json['ok'] == true &&
+                  (respUid == null || respUid == targetUid)) {
+                if (!completer.isCompleted) {
+                  completer.complete(
+                    LocalDoorOpenResult(
+                      ok: true,
+                      ip: dg.address.address,
+                      message: 'Kapı yerel ağdan başarıyla açıldı.',
+                    ),
+                  );
+                }
+              }
+            } catch (_) {
+              if (text.contains('"ok":true') &&
+                  (text.contains(targetUid) || !text.contains('device_uid'))) {
+                if (!completer.isCompleted) {
+                  completer.complete(
+                    LocalDoorOpenResult(
+                      ok: true,
+                      ip: dg.address.address,
+                      message: 'Kapı yerel ağdan başarıyla açıldı.',
+                    ),
+                  );
+                }
+              }
+            }
+          }
+        }
+      });
+
+      final result = await completer.future.timeout(
+        const Duration(milliseconds: 300),
+        onTimeout: () => null,
+      );
+      return result;
+    } catch (_) {
+      return null;
+    } finally {
+      try {
+        socket?.close();
+      } catch (_) {}
+    }
+  }
+
   Future<bool> _directUdpOpen(
     String ip,
     LocalDoorAccess access, {
@@ -335,6 +431,7 @@ class LocalDoorService {
         wifiAddress ?? InternetAddress.anyIPv4,
         0,
       );
+      socket.broadcastEnabled = true;
       final completer = Completer<bool>();
       final targetUid = access.deviceUid.trim().toUpperCase();
       final payload = utf8.encode(jsonEncode({
