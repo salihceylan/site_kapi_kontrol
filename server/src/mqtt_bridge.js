@@ -429,11 +429,42 @@ function applyStatusMessage(topic, payload) {
   }
 }
 
+export async function loadInitialDeviceRuntimeStatuses() {
+  try {
+    const res = await pool.query(`
+      SELECT * FROM device_runtime_status
+    `);
+    for (const row of res.rows) {
+      const normalizedUid = normalizeDeviceTopicUid(row.device_uid);
+      const existing = ensureStatus(normalizedUid);
+      existing.mqtt_connected = Boolean(row.mqtt_connected);
+      existing.door_locked = row.door_locked;
+      existing.firmware_version = row.firmware_version;
+      existing.ota_status = row.ota_status;
+      existing.ota_last_version = row.ota_last_version;
+      existing.wifi_rssi = row.wifi_rssi;
+      existing.wifi_signal_percent = row.wifi_signal_percent;
+      existing.local_ip = row.local_ip;
+      existing.local_control_port = row.local_control_port;
+      existing.local_control_available = Boolean(row.local_control_available);
+      existing.last_event = row.last_event;
+      existing.last_event_detail = row.last_event_detail;
+      existing.last_seen_at = row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null;
+      existing.last_payload_at = row.last_payload_at ? new Date(row.last_payload_at).toISOString() : null;
+    }
+  } catch (error) {
+    console.warn('Initial device runtime statuses yuklenemedi:', error.message);
+  }
+}
+
 export function startMqttBridge() {
   if (connectStarted) {
     return;
   }
   connectStarted = true;
+
+  // Veritabanındaki son bilinen durumları hafızaya yükle
+  loadInitialDeviceRuntimeStatuses().catch(() => {});
 
   const config = mqttConfig();
   if (!config.host || !config.username || !config.password) {
