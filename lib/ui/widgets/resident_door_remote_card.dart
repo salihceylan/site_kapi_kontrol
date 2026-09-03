@@ -61,7 +61,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
     } else if (canTryLocalDoorOpen) {
-      statusText = '🟡 Yerel Ağda Aktif (İnternetsiz Wi-Fi) - Kapıyı açmak için dokunun';
+      statusText = '🟡 Bulut Çevrimdışı - Aynı Wi-Fi\'ye bağlıysanız açmak için dokunun';
       statusColor = const Color(0xFFFACC15);
     } else {
       statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';

@@ -15,10 +15,10 @@ class LocalDoorAccess {
 
   static const Duration cacheValidity = Duration(days: 90);
   bool get isUsable {
-    if (deviceUid.isEmpty || token.isEmpty) {
+    if (deviceUid.trim().isEmpty) {
       return false;
     }
-    return DateTime.now().difference(updatedAt) <= cacheValidity;
+    return true;
   }
 
   Map<String, dynamic> toJson() {

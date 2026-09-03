@@ -78,11 +78,11 @@ class LocalDoorService {
         message: 'Yerel ağ ile kapı açma yalnızca mobil uygulamada desteklenir.',
       );
     }
-    if (!access.isUsable) {
+    if (access.deviceUid.trim().isEmpty) {
       return const LocalDoorOpenResult(
         ok: false,
         ip: null,
-        message: 'Yerel kapı anahtarı bulunamadı.',
+        message: 'Cihaz kimliği bulunamadı.',
       );
     }
 
@@ -174,7 +174,7 @@ class LocalDoorService {
     Duration timeout, {
     InternetAddress? wifiAddress,
   }) async {
-    // 1. Raw Socket POST (Android'de Wi-Fi internetsizken en kararlı yöntem)
+    // 1. Raw Socket POST (Wi-Fi arayüzüne bağlı)
     final socketOk = await _rawSocketPost(
       ip,
       access.port,
@@ -187,13 +187,30 @@ class LocalDoorService {
       return true;
     }
 
-    // 2. HttpClient POST yedeği
+    // 2. Raw Socket POST (Bağlamasız direkt soket)
+    if (wifiAddress != null) {
+      final socketOk2 = await _rawSocketPost(
+        ip,
+        access.port,
+        access.deviceUid,
+        access.token,
+        timeout,
+        wifiAddress: null,
+      );
+      if (socketOk2) {
+        return true;
+      }
+    }
+
+    // 3. HttpClient POST yedeği
     final client = _createHttpClient(timeout, wifiAddress);
     try {
       final uri = Uri.parse('http://$ip:${access.port}/ahbu/open');
       final request = await client.postUrl(uri);
       request.headers.set('X-AHBU-Device-Uid', access.deviceUid);
-      request.headers.set('X-AHBU-Local-Token', access.token);
+      if (access.token.isNotEmpty) {
+        request.headers.set('X-AHBU-Local-Token', access.token);
+      }
       request.headers.set('Cache-Control', 'no-cache');
 
       final response = await request.close().timeout(timeout);
@@ -225,7 +242,7 @@ class LocalDoorService {
             timeout: timeout,
           );
         } catch (_) {
-          socket = await Socket.connect(host, port, timeout: timeout);
+          return false;
         }
       } else {
         socket = await Socket.connect(host, port, timeout: timeout);
@@ -235,7 +252,7 @@ class LocalDoorService {
           'POST /ahbu/open HTTP/1.1\r\n'
           'Host: $host:$port\r\n'
           'X-AHBU-Device-Uid: $deviceUid\r\n'
-          'X-AHBU-Local-Token: $token\r\n'
+          '${token.isNotEmpty ? 'X-AHBU-Local-Token: $token\r\n' : ''}'
           'Content-Length: 0\r\n'
           'Connection: close\r\n\r\n';
 

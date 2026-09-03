@@ -788,7 +788,7 @@ class AuthService extends ChangeNotifier {
     if (uid == null || uid.isEmpty) {
       return false;
     }
-    return _localDoorCache[uid]?.isUsable == true;
+    return true;
   }
 
   Future<(List<DoorRecord>?, String?)> listMyDoors() async {
@@ -1084,10 +1084,15 @@ class AuthService extends ChangeNotifier {
       return null;
     }
 
-    final access = _localDoorCache[uid];
-    if (access == null || !access.isUsable) {
-      return null;
-    }
+    final cached = _localDoorCache[uid];
+    final access = cached ??
+        LocalDoorAccess(
+          deviceUid: uid,
+          token: '',
+          ip: null,
+          port: 8765,
+          updatedAt: DateTime.now(),
+        );
 
     final result = await _localDoorService.openDoor(access);
     if (!result.ok) {
