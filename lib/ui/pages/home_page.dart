@@ -91,6 +91,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _doorStatusError;
   bool _isOpeningDoor = false;
   bool _isPhoneOnWifi = false;
+  bool _isDeviceLocalReachable = false;
 
   // Kullanıcı Yönetimi
   final Map<UserRole, ManagedUserPage> _managedPages = {};
@@ -482,15 +483,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         doorId: doorId,
       );
       final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
+      final hasUid = _doorControlDoor?.assignedDeviceUid?.trim().isNotEmpty == true;
+      bool localReachable = false;
+      if (status?.mqttConnected != true && isWifi && hasUid) {
+        localReachable = await widget.authService.isDeviceReachableOnLocalWifi(
+          _doorControlDoor!.assignedDeviceUid!,
+        );
+      }
+
       if (!mounted) return;
       setState(() {
         _isPhoneOnWifi = isWifi;
+        _isDeviceLocalReachable = localReachable;
         if (status != null) {
           _doorRuntimeStatus = status;
         }
-        final canLocal =
-            _doorControlDoor != null &&
-            widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
+        final canLocal = _doorControlDoor != null && localReachable;
         if (canLocal &&
             error != null &&
             (error.contains('Sunucuya') ||
@@ -1334,8 +1342,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           isOpeningDoor: _isOpeningDoor,
           doorStatusError: _doorStatusError,
           canTryLocalDoorOpen:
-              _doorControlDoor != null &&
-              widget.authService.canTryLocalDoorOpen(_doorControlDoor!),
+              _doorControlDoor != null && _isDeviceLocalReachable,
           isPhoneOnWifi: _isPhoneOnWifi,
           onSelectSite: _selectDoorControlSite,
           onSelectDoor: _selectDoorControlDoor,

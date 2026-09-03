@@ -719,6 +719,10 @@ class AuthService extends ChangeNotifier {
     return await _localDoorService.hasLocalWifiConnection();
   }
 
+  Future<bool> isDeviceReachableOnLocalWifi(String deviceUid) async {
+    return await _localDoorService.isDeviceReachableLocally(deviceUid);
+  }
+
   Future<(DoorRuntimeStatus?, String?)> openDoor({
     required int doorId,
     DoorRecord? door,

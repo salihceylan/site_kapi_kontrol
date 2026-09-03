@@ -308,6 +308,18 @@ class LocalDoorService {
     }
   }
 
+  Future<bool> isDeviceReachableLocally(String deviceUid) async {
+    if (kIsWeb || deviceUid.trim().isEmpty) return false;
+    try {
+      final wifiAddr = await _getWifiAddress();
+      if (wifiAddr == null) return false;
+      final ip = await _discoverDeviceIpViaUdp(deviceUid, wifiAddress: wifiAddr);
+      return ip != null && ip.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _directUdpOpen(
     String ip,
     LocalDoorAccess access, {
