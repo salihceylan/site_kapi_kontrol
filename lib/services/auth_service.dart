@@ -728,67 +728,43 @@ class AuthService extends ChangeNotifier {
       return (null, 'Oturum bulunamadı.');
     }
 
-    Future<(DoorRuntimeStatus?, String?)> cloudFuture() async {
-      try {
-        final status = await api.openDoor(token: active.token, doorId: doorId);
-        unawaited(_cacheLocalDoorAccess(status));
-        return (status, null);
-      } on ApiException catch (e) {
-        return (null, e.message);
-      } catch (_) {
-        return (null, 'Sunucuya bağlanılamadı.');
-      }
-    }
-
     final hasWifi = await _localDoorService.hasLocalWifiConnection();
-    final hasDeviceUid = door?.assignedDeviceUid != null &&
-        door!.assignedDeviceUid!.trim().isNotEmpty;
+    final hasDeviceUid = (door?.assignedDeviceUid?.trim().isNotEmpty) ?? false;
 
-    if (hasWifi && hasDeviceUid) {
-      final completer = Completer<(DoorRuntimeStatus?, String?)>();
-      var cloudFinished = false;
-      var localFinished = false;
-      (DoorRuntimeStatus?, String?)? cloudResult;
-      (DoorRuntimeStatus?, String?)? localResult;
-
-      cloudFuture().then((res) {
-        cloudFinished = true;
-        cloudResult = res;
-        if (res.$1 != null && !completer.isCompleted) {
-          completer.complete(res);
-        } else if (localFinished && !completer.isCompleted) {
-          completer.complete(
-            localResult?.$1 != null
-                ? localResult
-                : (localResult ?? res),
-          );
+    // 1. Önce Bulut üzerinden dene (Online modda tek tetik gider)
+    try {
+      final status = await api.openDoor(token: active.token, doorId: doorId);
+      unawaited(_cacheLocalDoorAccess(status));
+      return (status, null);
+    } on ApiException catch (e) {
+      // Bulut başarısız olduysa ve telefon Wi-Fi'ye bağlıysa yerel ağ yedeğini dene
+      if (hasWifi && hasDeviceUid && door != null) {
+        final localResult = await _tryOpenDoorLocally(door);
+        if (localResult != null && localResult.$1 != null) {
+          return localResult;
         }
-      });
-
-      _tryOpenDoorLocally(door).then((res) {
-        localFinished = true;
-        localResult = res;
-        if (res != null && res.$1 != null && !completer.isCompleted) {
-          completer.complete(res);
-        } else if (cloudFinished && !completer.isCompleted) {
-          completer.complete(
-            res?.$1 != null
-                ? res
-                : (res ?? cloudResult ?? (null, 'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.')),
-          );
+        return (
+          null,
+          localResult?.$2 ??
+              'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
+        );
+      }
+      return (null, e.message);
+    } catch (_) {
+      // İnternet veya sunucu bağlantı hatasında yerel ağ yedeğini dene
+      if (hasWifi && hasDeviceUid && door != null) {
+        final localResult = await _tryOpenDoorLocally(door);
+        if (localResult != null && localResult.$1 != null) {
+          return localResult;
         }
-      });
-
-      return await completer.future.timeout(
-        const Duration(seconds: 4),
-        onTimeout: () =>
-            localResult ??
-            cloudResult ??
-            (null, 'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.'),
-      );
+        return (
+          null,
+          localResult?.$2 ??
+              'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
+        );
+      }
+      return (null, 'Sunucuya bağlanılamadı.');
     }
-
-    return await cloudFuture();
   }
 
   bool canTryLocalDoorOpen(DoorRecord door) {

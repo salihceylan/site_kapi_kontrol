@@ -1,4 +1,4 @@
-﻿#ifndef ROLE_KONTROL_H
+#ifndef ROLE_KONTROL_H
 #define ROLE_KONTROL_H
 
 #include <Arduino.h>
@@ -8,6 +8,7 @@ constexpr unsigned long ROLE_SURE_MS = 1500;
 constexpr bool ROLE_ACTIVE_LOW = false;
 
 inline unsigned long roleBaslangic = 0;
+inline unsigned long roleSonTetikMs = 0;
 inline bool roleAktif = false;
 
 inline void rolePinDurumuYazdir(const char* baslik) {
@@ -35,6 +36,11 @@ inline void roleManuelSeviye(uint8_t level) {
 }
 
 inline void roleTetikle() {
+  if (roleAktif || (roleSonTetikMs > 0 && millis() - roleSonTetikMs < 2500)) {
+    Serial.println("Role debounce: Role zaten aktif veya son tetikten bu yana 2.5s gecmedi.");
+    return;
+  }
+  roleSonTetikMs = millis();
   digitalWrite(ROLE_PIN, ROLE_ACTIVE_LOW ? LOW : HIGH);
   roleBaslangic = millis();
   roleAktif = true;
