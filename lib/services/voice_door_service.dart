@@ -510,6 +510,16 @@ class VoiceDoorService extends ChangeNotifier {
     if (text.contains('sekiz') || text.contains('8')) return 8;
     if (text.contains('dokuz') || text.contains('9')) return 9;
     if (text.contains('on') || text.contains('10')) return 10;
+    if (RegExp(r'\b(bir|birinci|1|1\.)\b').hasMatch(text)) return 1;
+    if (RegExp(r'\b(iki|ikinci|2|2\.)\b').hasMatch(text)) return 2;
+    if (RegExp(r'\b(uc|ucuncu|3|3\.)\b').hasMatch(text)) return 3;
+    if (RegExp(r'\b(dort|dorduncu|4|4\.)\b').hasMatch(text)) return 4;
+    if (RegExp(r'\b(bes|besinci|5|5\.)\b').hasMatch(text)) return 5;
+    if (RegExp(r'\b(alti|altinci|6|6\.)\b').hasMatch(text)) return 6;
+    if (RegExp(r'\b(yedi|yedinci|7|7\.)\b').hasMatch(text)) return 7;
+    if (RegExp(r'\b(sekiz|sekizinci|8|8\.)\b').hasMatch(text)) return 8;
+    if (RegExp(r'\b(dokuz|dokuzuncu|9|9\.)\b').hasMatch(text)) return 9;
+    if (RegExp(r'\b(on|onuncu|10|10\.)\b').hasMatch(text)) return 10;
 
     return null;
   }
