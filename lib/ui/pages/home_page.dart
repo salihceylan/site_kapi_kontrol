@@ -371,14 +371,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _isLoadingDoorControlSites = false;
         _doorControlSitesPage = data;
         if (data.sites.isNotEmpty) {
-          if (preferredSiteId != null) {
-            final target =
-                data.sites.where((s) => s.id == preferredSiteId).firstOrNull;
-            _selectDoorControlSite((target ?? data.sites.first).id);
-          } else if (_doorControlSite == null ||
-              !data.sites.any((s) => s.id == _doorControlSite!.id)) {
-            _selectDoorControlSite(data.sites.first.id);
-          }
+          final targetSiteId = preferredSiteId ??
+              (_doorControlSite != null &&
+                      data.sites.any((s) => s.id == _doorControlSite!.id)
+                  ? _doorControlSite!.id
+                  : data.sites.first.id);
+          _selectDoorControlSite(targetSiteId);
         } else {
           _doorControlSite = null;
           _doorControlStructure = null;
@@ -945,6 +943,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _showMessage('Cihaz ${selectedDoor.doorName} kapısına atandı.');
       _loadCompanyDevices(force: true);
       _loadSites(force: true);
+      _loadDoorControlSites();
     }
   }
 
@@ -977,6 +976,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else {
       _showMessage('Cihaz silindi.');
       _loadCompanyDevices(force: true);
+      _loadSites(force: true);
+      _loadDoorControlSites();
     }
   }
 
