@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:site_kapi_kontrol/services/wifi_qr_parser.dart';
+import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
 
 void main() {
   group('WifiQrCredentials Parser Tests', () {
