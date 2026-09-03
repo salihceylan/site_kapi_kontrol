@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/data/turkey_cities_districts.dart';
-import 'package:site_kapi_kontrol/models/managed_user_account.dart';
-import 'package:site_kapi_kontrol/models/site_record.dart';
-import 'package:site_kapi_kontrol/models/user_role.dart';
-import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
-import 'package:site_kapi_kontrol/ui/pages/site_manager_picker_page.dart';
+import '../../data/turkey_cities_districts.dart';
+import '../../models/managed_user_account.dart';
+import '../../models/site_record.dart';
+import '../../models/user_role.dart';
+import '../../services/auth_service.dart';
+import '../../styles/app_colors.dart';
+import '../helpers/ui_helpers.dart';
+import '../pages/site_manager_picker_page.dart';
 
 class SiteFormResult {
   const SiteFormResult({
@@ -63,14 +63,12 @@ class _SiteDialogState extends State<SiteDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _addressController;
   late final TextEditingController _blockCountController;
-  late final TextEditingController _apartmentCountController;
   late final TextEditingController _doorCountController;
 
   String? _selectedCity;
   String? _selectedDistrict;
 
   final List<TextEditingController> _blockApartmentControllers = [];
-  bool _customBlockApartments = false;
   int? _selectedManagerUserCode;
   ManagedUserAccount? _selectedManager;
   List<ManagedUserAccount> _siteManagers = [];
@@ -88,17 +86,32 @@ class _SiteDialogState extends State<SiteDialog> {
     final initialDistrict = (site?.district ?? '').trim();
     _selectedCity = initialCity.isNotEmpty ? initialCity : null;
     _selectedDistrict = initialDistrict.isNotEmpty ? initialDistrict : null;
+    
+    final initialBlockCount = site?.blockCount ?? 1;
     _blockCountController = TextEditingController(
-      text: (site?.blockCount ?? 1).toString(),
-    );
-    _apartmentCountController = TextEditingController(
-      text: (site?.apartmentCount ?? 1).toString(),
+      text: initialBlockCount.toString(),
     );
     _doorCountController = TextEditingController(
       text: (site?.doorCount ?? 1).toString(),
     );
 
     _selectedManagerUserCode = site?.managerUserCode;
+    
+    // Var olan daire sayılarını yükle veya varsayılan 10 ata
+    if (site != null && site.blockApartmentCounts.isNotEmpty) {
+      for (final count in site.blockApartmentCounts) {
+        _blockApartmentControllers.add(
+          TextEditingController(text: count.toString()),
+        );
+      }
+    } else {
+      for (var i = 0; i < initialBlockCount; i++) {
+        _blockApartmentControllers.add(
+          TextEditingController(text: '10'),
+        );
+      }
+    }
+
     _syncBlockControllers();
     if (!_isEditing) {
       _loadSiteManagers();
@@ -110,7 +123,6 @@ class _SiteDialogState extends State<SiteDialog> {
     _nameController.dispose();
     _addressController.dispose();
     _blockCountController.dispose();
-    _apartmentCountController.dispose();
     _doorCountController.dispose();
     for (final controller in _blockApartmentControllers) {
       controller.dispose();
@@ -144,17 +156,24 @@ class _SiteDialogState extends State<SiteDialog> {
 
   void _syncBlockControllers() {
     final blockCount = int.tryParse(_blockCountController.text.trim()) ?? 1;
-    final defaultAptCount =
-        int.tryParse(_apartmentCountController.text.trim()) ?? 1;
+    final safeCount = blockCount.clamp(1, 50);
 
-    while (_blockApartmentControllers.length < blockCount) {
+    while (_blockApartmentControllers.length < safeCount) {
       _blockApartmentControllers.add(
-        TextEditingController(text: defaultAptCount.toString()),
+        TextEditingController(text: '10'),
       );
     }
-    while (_blockApartmentControllers.length > blockCount) {
+    while (_blockApartmentControllers.length > safeCount) {
       _blockApartmentControllers.removeLast().dispose();
     }
+  }
+
+  int get _calculatedTotalApartments {
+    int total = 0;
+    for (final c in _blockApartmentControllers) {
+      total += int.tryParse(c.text.trim()) ?? 0;
+    }
+    return total;
   }
 
   Future<void> _selectExistingManager() async {
@@ -179,18 +198,10 @@ class _SiteDialogState extends State<SiteDialog> {
       return;
     }
 
-    final blockCount = int.parse(_blockCountController.text.trim());
-    final defaultApt = int.parse(_apartmentCountController.text.trim());
     final doorCount = int.parse(_doorCountController.text.trim());
-
-    List<int> blockApartmentCounts;
-    if (_customBlockApartments) {
-      blockApartmentCounts = _blockApartmentControllers
-          .map((c) => int.tryParse(c.text.trim()) ?? defaultApt)
-          .toList();
-    } else {
-      blockApartmentCounts = List.filled(blockCount, defaultApt);
-    }
+    final blockApartmentCounts = _blockApartmentControllers
+        .map((c) => int.tryParse(c.text.trim()) ?? 1)
+        .toList();
 
     Navigator.of(context).pop(
       SiteFormResult(
@@ -218,6 +229,7 @@ class _SiteDialogState extends State<SiteDialog> {
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextFormField(
                   controller: _nameController,
@@ -305,7 +317,7 @@ class _SiteDialogState extends State<SiteDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -314,6 +326,7 @@ class _SiteDialogState extends State<SiteDialog> {
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Blok Sayısı',
+                          prefixIcon: Icon(Icons.apartment_rounded, size: 20),
                         ),
                         onChanged: (_) => setState(_syncBlockControllers),
                         validator: (value) {
@@ -327,63 +340,112 @@ class _SiteDialogState extends State<SiteDialog> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextFormField(
-                        controller: _apartmentCountController,
+                        controller: _doorCountController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Daire Sayısı / Blok',
+                          labelText: 'Site Kapı Sayısı',
+                          prefixIcon: Icon(Icons.sensor_door_outlined, size: 20),
                         ),
-                        onChanged: (_) => setState(_syncBlockControllers),
                         validator: (value) {
                           final val = int.tryParse((value ?? '').trim());
                           return val == null || val < 1
-                              ? 'En az 1 daire olmalı.'
+                              ? 'En az 1 kapı olmalı.'
                               : null;
                         },
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _doorCountController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Site Kapı Sayısı',
+                const SizedBox(height: 16),
+
+                // BLOKLARA GÖRE DAİRE SAYILARI LİSTESİ
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
                   ),
-                  validator: (value) {
-                    final val = int.tryParse((value ?? '').trim());
-                    return val == null || val < 1
-                        ? 'En az 1 kapı olmalı.'
-                        : null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                SwitchListTile.adaptive(
-                  value: _customBlockApartments,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Bloklara Göre Farklı Daire Sayısı'),
-                  onChanged: (val) => setState(() => _customBlockApartments = val),
-                ),
-                if (_customBlockApartments) ...[
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < _blockApartmentControllers.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: TextFormField(
-                        controller: _blockApartmentControllers[i],
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: '${blockLabelFromIndex(i)} Daire Sayısı',
-                        ),
-                        validator: (value) {
-                          final val = int.tryParse((value ?? '').trim());
-                          return val == null || val < 1
-                              ? 'Geçersiz daire sayısı.'
-                              : null;
-                        },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '🏢 Blok Daire Sayıları',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          Text(
+                            'Toplam: $_calculatedTotalApartments Daire',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                ],
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Her blok için daire sayısını aşağıdan ayrı ayrı belirleyin:',
+                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 12),
+                      for (var i = 0; i < _blockApartmentControllers.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 85,
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  '${blockLabelFromIndex(i)} Blok',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _blockApartmentControllers[i],
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Daire Sayısı',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                    suffixText: 'Daire',
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                  validator: (value) {
+                                    final val = int.tryParse((value ?? '').trim());
+                                    return val == null || val < 1
+                                        ? 'En az 1 daire olmalı.'
+                                        : null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -451,60 +513,38 @@ class _SiteDialogState extends State<SiteDialog> {
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _selectedManager?.fullName ??
-                                              widget.site?.managerName ??
-                                              'Yönetici Seçilmedi',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13.5,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _selectedManager?.email ??
-                                              'Siteye bir yönetici atayabilirsiniz.',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: AppColors.textMuted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
+                                    child: Text(
+                                      _selectedManager == null
+                                          ? 'Yönetici Atanmadı'
+                                          : '${_selectedManager!.fullName} (${_selectedManager!.email})',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
+                                  if (_selectedManager != null)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.clear,
+                                        size: 18,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedManager = null;
+                                          _selectedManagerUserCode = null;
+                                        });
+                                      },
+                                    ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             OutlinedButton.icon(
                               onPressed: _selectExistingManager,
-                              icon: const Icon(Icons.search),
-                              label: Text(
-                                _selectedManagerUserCode == null
-                                    ? 'Site Yöneticisi Seç'
-                                    : 'Site Yöneticisini Değiştir',
-                              ),
+                              icon: const Icon(Icons.person_search, size: 18),
+                              label: const Text('Yönetici Seç / Değiştir'),
                             ),
-                            if (_selectedManagerUserCode != null)
-                              TextButton.icon(
-                                onPressed: () => setState(() {
-                                  _selectedManagerUserCode = null;
-                                  _selectedManager = null;
-                                }),
-                                icon: const Icon(
-                                  Icons.link_off_outlined,
-                                  size: 18,
-                                ),
-                                label: const Text(
-                                  'Yönetici atamasını kaldır',
-                                ),
-                              ),
                           ],
                         ),
                     ],
@@ -520,7 +560,10 @@ class _SiteDialogState extends State<SiteDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('İptal'),
         ),
-        ElevatedButton(onPressed: _submit, child: const Text('Kaydet')),
+        ElevatedButton(
+          onPressed: _submit,
+          child: Text(_isEditing ? 'Güncelle' : 'Kaydet'),
+        ),
       ],
     );
   }

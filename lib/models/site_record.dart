@@ -7,6 +7,7 @@ class SiteRecord {
     required this.district,
     required this.blockCount,
     required this.apartmentCount,
+    this.blockApartmentCounts = const [],
     required this.doorCount,
     required this.approvalStatus,
     required this.approvedAt,
@@ -23,6 +24,7 @@ class SiteRecord {
   final String? district;
   final int blockCount;
   final int apartmentCount;
+  final List<int> blockApartmentCounts;
   final int doorCount;
   final String approvalStatus;
   final DateTime? approvedAt;
@@ -52,6 +54,7 @@ class SiteRecord {
     String? district,
     int? blockCount,
     int? apartmentCount,
+    List<int>? blockApartmentCounts,
     int? doorCount,
     String? approvalStatus,
     DateTime? approvedAt,
@@ -68,6 +71,7 @@ class SiteRecord {
       district: district ?? this.district,
       blockCount: blockCount ?? this.blockCount,
       apartmentCount: apartmentCount ?? this.apartmentCount,
+      blockApartmentCounts: blockApartmentCounts ?? this.blockApartmentCounts,
       doorCount: doorCount ?? this.doorCount,
       approvalStatus: approvalStatus ?? this.approvalStatus,
       approvedAt: approvedAt ?? this.approvedAt,
@@ -79,6 +83,12 @@ class SiteRecord {
   }
 
   factory SiteRecord.fromJson(Map<String, dynamic> json) {
+    final rawCounts = json['block_apartment_counts'];
+    List<int> counts = [];
+    if (rawCounts is List) {
+      counts = rawCounts.map((e) => (e as num).toInt()).toList();
+    }
+
     return SiteRecord(
       id: (json['id'] is num
           ? (json['id'] as num).toInt()
@@ -89,6 +99,7 @@ class SiteRecord {
       district: json['district'] as String?,
       blockCount: (json['block_count'] as num?)?.toInt() ?? 1,
       apartmentCount: (json['apartment_count'] as num?)?.toInt() ?? 0,
+      blockApartmentCounts: counts,
       doorCount: (json['door_count'] as num?)?.toInt() ?? 1,
       approvalStatus: json['approval_status'] as String? ?? 'approved',
       approvedAt: json['approved_at'] == null

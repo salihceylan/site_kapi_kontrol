@@ -279,6 +279,9 @@ function mapSiteRow(row) {
         ? null
         : Number(row.manager_user_code),
     manager_name: row.manager_name ?? null,
+    block_apartment_counts: Array.isArray(row.block_apartment_counts)
+      ? row.block_apartment_counts.map(Number)
+      : [],
     created_at: row.created_at,
   };
 }
