@@ -62,19 +62,42 @@ Bu pencerede:
 8. `Calisma arkadasina guncelleme zip dosyasi olustur` butonu USB yukleme
    paketini olusturur.
 
+## Cihaz Kaydı, Sunucu Depolama ve PDF Raporlama
+
+AHBU Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilgisayarda hem de sunucuda arşivler:
+
+### 1. Sunucu Tarafı Depolama (VPS)
+- **Karekod PNG Dosyaları:** `/var/www/site_kapi_kontrol/server/public/qrcodes/<device_uid>.png`
+- **Genel Erişim URL'si:** `https://api.gudeteknoloji.com.tr/qrcodes/<device_uid>.png`
+- **Etiketli Cihaz Veritabanı / İndeksi:** `/var/www/site_kapi_kontrol/server/data/labeled_devices.json`
+- **PostgreSQL Envanteri:** `devices` tablosu (`device_uid`, `created_at`)
+- **API Uçları:**
+  - `POST /api/company/labeled-devices` (Cihaz ve karekod görseli kaydetme / güncelleme - mükerrer kaydı engeller)
+  - `GET /api/company/labeled-devices` (Tüm kayıtlı cihaz listesi)
+  - `GET /qrcodes/:file` (Karekod görselini doğrudan tarayıcı/uygulamaya sunma)
+
+### 2. Yerel Bilgisayar Depolama
+- **Karekod PNG Dosyaları:** `company_qr_tool/output/qrcodes/<device_uid>.png`
+- **Cihaz İndeks Dosyası:** `company_qr_tool/output/labeled_devices.json`
+- **PDF Raporları:** İsteğe bağlı olarak seçilen dosya yolu (ör. `AHBU_Cihaz_Karekod_Raporu_YYYYMMDD.pdf`)
+
+### 3. Yeni Butonlar ve İşlevleri
+- **`[ Cihazı Sunucuya Kaydet ]`**: Seçili cihazın UID'sini, çipini ve karekod görselini sunucuya (`/var/www/site_kapi_kontrol/server/public/qrcodes/`) ve veritabanına aktarır.
+- **`[ Karekodlu PDF Raporu İndir ]`**: Sunucu ve yereldeki tüm cihazları toplayarak 300 DPI A4 boyutunda yüksek çözünürlüklü, taranabilir karekodlu çok sayfalı PDF envanter kataloğu oluşturur.
+- **`[ Kayıtlı Cihazlar & Karekodlar ]`**: Şimdiye kadar etiketlenmiş tüm cihazları listeleyen, tekil yazdırma ve önizleme sunan yönetim penceresini açar.
+
 ## Logo
 
-Logo otomatik olarak su yoldan cekilir:
+Logo otomatik olarak şu yoldan çekilir:
 
 `..\..\ahbu\assets\images\app_logo.png`
 
-ve `company_qr_tool/assets/ahbu_logo.png` dosyasina kopyalanir.
+ve `company_qr_tool/assets/ahbu_logo.png` dosyasına kopyalanır.
 
 ## Gereksinimler
 
 - Windows
-- Etiketleyici uygulamayi calistiran bilgisayarda Python 3.10+
-- USB driver (CH340 / CP210x, karta gore)
+- Etiketleyici uygulamayı çalıştıran bilgisayarda Python 3.10+
+- USB driver (CH340 / CP210x, karta göre)
 
-Calisma arkadasina verilen ZIP paketinde Python ve esptool paket icine eklenir;
-o bilgisayarda Python kurulu olmak zorunda degildir.
+Çalışma arkadaşına verilen ZIP paketinde Python ve esptool paket içine eklenir; o bilgisayarda Python kurulu olmak zorunda değildir.

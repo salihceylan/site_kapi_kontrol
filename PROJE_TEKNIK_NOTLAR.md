@@ -531,3 +531,34 @@ Bu dosya, yeni bilgisayarda veya yeni oturumda sohbet gecmisi olmasa bile:
 - hangi sorunlarin daha once yasandigini
 
 tek yerden anlamayi saglamak icin tutulur.
+
+## 19. Cihaz Etiketleme, Karekod Depolama ve PDF Raporlama Mimarisi
+
+AHBU Cihaz Etiketleyici masaüstü aracı (`company_qr_tool/app.py`), üretilen ve etiketlenen ESP32 cihazlarının envanterini tutar.
+
+### Depolama ve Dosya Yolları
+- **Sunucu Karekod Görselleri (VPS):**
+  - Dosya Yolu: `/var/www/site_kapi_kontrol/server/public/qrcodes/<device_uid>.png`
+  - Public URL: `https://api.gudeteknoloji.com.tr/qrcodes/<device_uid>.png`
+- **Sunucu Cihaz Veritabanı / İndeksi (VPS):**
+  - JSON İndeksi: `/var/www/site_kapi_kontrol/server/data/labeled_devices.json`
+  - PostgreSQL Tablosu: `devices` (`device_uid`, `created_at`)
+- **Yerel Depolama (Masaüstü):**
+  - Karekodlar: `company_qr_tool/output/qrcodes/<device_uid>.png`
+  - Yerel İndeks: `company_qr_tool/output/labeled_devices.json`
+
+### Backend API Uç Noktaları (`server/src/server.js`)
+- `POST /api/company/labeled-devices`:
+  - Gönderilen `device_uid`, `chip`, `port`, `description` ve `qr_image_base64` verisini kaydeder.
+  - Var olan `device_uid` varsa günceller (Upsert), mükerrer/çift kayıt oluşturmaz.
+  - Cihazı PostgreSQL `devices` tablosuna da otomatik işler.
+- `GET /api/company/labeled-devices`:
+  - Kayıtlı tüm etiketli cihazları JSON formatında döner.
+- `GET /qrcodes/:file`:
+  - PNG karekod görsellerini HTTP önbellekleme başlıklarıyla doğrudan sunar.
+
+### PDF Raporlama
+- `generate_devices_catalog_pdf`:
+  - Pillow tabanlıdır; harici bağımlılık gerektirmeden 300 DPI A4 boyutunda yüksek çözünürlüklü çok sayfalı katalog üretir.
+  - Sayfa başına 6 cihaz (2 sütun x 3 satır), taranabilir büyük karekodlar, UID, tarih ve donanım detaylarını içerir.
+
