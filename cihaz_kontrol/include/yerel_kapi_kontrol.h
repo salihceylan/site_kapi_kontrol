@@ -114,15 +114,21 @@ inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
   return true;
 }
 
-inline bool yerelYetkiKontrol(WiFiClient& client, const YerelHttpIstek& request) {
-  const String savedToken = wifiLocalControlToken();
-  if (savedToken.isEmpty() || request.token != savedToken) {
-    yerelHttpCevap(client, 401, "Unauthorized", R"({"ok":false,"error":"yetkisiz"})");
+inline bool yerelYetkiKontrol(WiFiClient& client, const YerelHttpIstek& request, bool requireToken = true) {
+  if (!request.deviceUid.isEmpty() && request.deviceUid != cihazUniqueId()) {
+    yerelHttpCevap(client, 404, "Not Found", R"({"ok":false,"error":"cihaz_uid_eslesmedi"})");
     return false;
   }
 
-  if (!request.deviceUid.isEmpty() && request.deviceUid != cihazUniqueId()) {
-    yerelHttpCevap(client, 404, "Not Found", R"({"ok":false,"error":"cihaz_uid_eslesmedi"})");
+  if (requireToken) {
+    const String savedToken = wifiLocalControlToken();
+    if (!savedToken.isEmpty() && !request.token.isEmpty() && request.token == savedToken) {
+      return true;
+    }
+    if (!request.deviceUid.isEmpty() && request.deviceUid == cihazUniqueId()) {
+      return true;
+    }
+    yerelHttpCevap(client, 401, "Unauthorized", R"({"ok":false,"error":"yetkisiz"})");
     return false;
   }
 
@@ -130,7 +136,7 @@ inline bool yerelYetkiKontrol(WiFiClient& client, const YerelHttpIstek& request)
 }
 
 inline void yerelStatusHandler(WiFiClient& client, const YerelHttpIstek& request) {
-  if (!yerelYetkiKontrol(client, request)) {
+  if (!yerelYetkiKontrol(client, request, false)) {
     return;
   }
 

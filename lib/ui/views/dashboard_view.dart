@@ -66,6 +66,7 @@ class DashboardView extends StatelessWidget {
         runtimeStatus: runtimeStatus,
         isLoadingStatus: isLoadingStatus,
         isOpeningDoor: isOpeningDoor,
+        canTryLocalDoorOpen: canTryLocalDoorOpen,
         onSelectDoor: onSelectDoor,
         onOpenDoor: onOpenDoor,
         onCreateGuestPass: onCreateGuestPass,

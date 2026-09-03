@@ -7,6 +7,7 @@
 #include "ota_guncelleme.h"
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
+#include "yerel_kapi_kontrol.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
@@ -123,6 +124,7 @@ void setup() {
 void loop() {
   seriKomutKontrol();
   wifiLoop();
+  yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
   if (roleLoop()) {

@@ -1,4 +1,4 @@
-﻿#ifndef WIFI_BAGLANTI_H
+#ifndef WIFI_BAGLANTI_H
 #define WIFI_BAGLANTI_H
 
 #include <Arduino.h>
@@ -154,6 +154,14 @@ inline String wifiMqttUser(const char* fallback) {
 
 inline String wifiMqttPassword(const char* fallback) {
   return gSavedMqttPassword.isEmpty() ? String(fallback) : gSavedMqttPassword;
+}
+
+inline String wifiLocalControlToken() {
+  return gSavedMqttPassword;
+}
+
+inline bool wifiHasLocalControlToken() {
+  return !gSavedMqttPassword.isEmpty();
 }
 
 inline String wifiBuildStatePayload() {
