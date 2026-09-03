@@ -14,7 +14,6 @@ class LocalDoorAccess {
   final DateTime updatedAt;
 
   static const Duration cacheValidity = Duration(days: 90);
-
   bool get isUsable {
     if (deviceUid.isEmpty || token.isEmpty) {
       return false;
