@@ -40,7 +40,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
 
     final commandEnabled = isDeviceAssigned &&
-        isCloudOnline &&
+        (isCloudOnline || canTryLocalDoorOpen) &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -58,6 +58,9 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     } else if (isCloudOnline) {
       statusText = '🟢 Online (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
+    } else if (canTryLocalDoorOpen) {
+      statusText = '🟡 Yerel Ağda Aktif (İnternetsiz Wi-Fi) - Kapıyı açmak için dokunun';
+      statusColor = const Color(0xFFFACC15);
     } else {
       statusText = '🔴 Cihaz Çevrimdışı (Offline) - Kapı açılamaz';
       statusColor = const Color(0xFFF87171);
@@ -262,7 +265,11 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                commandEnabled ? 'KAPIYI AÇ' : 'KAPALI',
+                                commandEnabled
+                                    ? (!isCloudOnline && canTryLocalDoorOpen
+                                        ? 'YEREL AĞDAN AÇ'
+                                        : 'KAPIYI AÇ')
+                                    : 'KAPALI',
                                 style: TextStyle(
                                   color: commandEnabled
                                       ? Colors.white

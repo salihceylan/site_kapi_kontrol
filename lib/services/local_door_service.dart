@@ -20,9 +20,9 @@ class LocalDoorOpenResult {
 class LocalDoorService {
   LocalDoorService();
 
-  static const Duration _knownIpTimeout = Duration(milliseconds: 1200);
-  static const Duration _scanTimeout = Duration(milliseconds: 400);
-  static const int _scanWorkers = 32;
+  static const Duration _knownIpTimeout = Duration(milliseconds: 1500);
+  static const Duration _scanTimeout = Duration(milliseconds: 500);
+  static const int _scanWorkers = 48;
 
   Future<InternetAddress?> _getWifiAddress() async {
     try {
@@ -47,7 +47,7 @@ class LocalDoorService {
         }
       }
 
-      // 2. Mobil veri arayüzleri dışındaki herhangi bir yerel IP
+      // 2. Mobil veri dışındaki herhangi bir yerel IP
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
         if (name.contains('rmnet') ||
@@ -70,16 +70,23 @@ class LocalDoorService {
     return null;
   }
 
-  HttpClient _createHttpClient(Duration timeout, InternetAddress? sourceAddress) {
+  HttpClient _createHttpClient(
+    Duration timeout,
+    InternetAddress? sourceAddress,
+  ) {
     final client = HttpClient();
     client.connectionTimeout = timeout;
     if (sourceAddress != null) {
-      client.connectionFactory = (uri, host, port) {
-        return Socket.startConnect(
-          host,
-          port ?? 80,
-          sourceAddress: sourceAddress,
-        );
+      client.connectionFactory = (uri, host, port) async {
+        try {
+          return await Socket.startConnect(
+            host,
+            port ?? 80,
+            sourceAddress: sourceAddress,
+          );
+        } catch (_) {
+          return await Socket.startConnect(host, port ?? 80);
+        }
       };
     }
     return client;
@@ -90,7 +97,8 @@ class LocalDoorService {
       return const LocalDoorOpenResult(
         ok: false,
         ip: null,
-        message: 'Yerel ag ile kapi acma yalnizca mobil uygulamada desteklenir.',
+        message:
+            'Yerel ağ ile kapı açma yalnızca mobil uygulamada desteklenir.',
       );
     }
     if (!access.isUsable) {
@@ -107,7 +115,8 @@ class LocalDoorService {
       return const LocalDoorOpenResult(
         ok: false,
         ip: null,
-        message: 'Cihaz aynı yerel ağda bulunamadı.',
+        message:
+            'Cihaz yerel ağda bulunamadı. Lütfen cihazla aynı Wi-Fi ağına bağlı olduğunuzdan emin olun.',
       );
     }
 
@@ -126,7 +135,7 @@ class LocalDoorService {
         return LocalDoorOpenResult(
           ok: true,
           ip: foundIp,
-          message: 'Kapı komutu yerel ağdan gönderildi.',
+          message: 'Kapı komutu yerel ağdan iletildi.',
         );
       }
       return LocalDoorOpenResult(
@@ -151,14 +160,24 @@ class LocalDoorService {
   }) async {
     final knownIp = access.ip?.trim();
     if (knownIp != null && knownIp.isNotEmpty) {
-      if (await _matchesDevice(knownIp, access, _knownIpTimeout, wifiAddress: wifiAddress)) {
+      if (await _matchesDevice(
+        knownIp,
+        access,
+        _knownIpTimeout,
+        wifiAddress: wifiAddress,
+      )) {
         return knownIp;
       }
     }
 
     // Hızlı mDNS çözümü: ahbu-<device_uid>.local
     final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
-    if (await _matchesDevice(mdnsHost, access, const Duration(milliseconds: 700), wifiAddress: wifiAddress)) {
+    if (await _matchesDevice(
+      mdnsHost,
+      access,
+      const Duration(milliseconds: 800),
+      wifiAddress: wifiAddress,
+    )) {
       return mdnsHost;
     }
 
@@ -170,7 +189,12 @@ class LocalDoorService {
       while (found == null && cursor < candidates.length) {
         final current = candidates[cursor];
         cursor += 1;
-        if (await _matchesDevice(current, access, _scanTimeout, wifiAddress: wifiAddress)) {
+        if (await _matchesDevice(
+          current,
+          access,
+          _scanTimeout,
+          wifiAddress: wifiAddress,
+        )) {
           found = current;
           return;
         }
@@ -287,6 +311,15 @@ class LocalDoorService {
           }
         }
       } catch (_) {}
+
+      // Eğer hiçbir arayüz bulunamazsa yaygın varsayılan alt ağları ekle
+      if (candidates.isEmpty) {
+        for (final prefix in const ['192.168.1', '192.168.0', '192.168.4']) {
+          for (var host = 1; host <= 254; host += 1) {
+            candidates.add('$prefix.$host');
+          }
+        }
+      }
     }
 
     candidates.removeAll(ownIps);

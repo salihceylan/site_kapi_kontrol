@@ -302,14 +302,18 @@ class AdminDoorStatusCard extends StatelessWidget {
         : 'Bağlantı Yok';
     final deviceOnlineText = isCloudOnline
         ? '🟢 Online (Bulut)'
-        : (runtimeStatus == null
-            ? 'Bilinmiyor'
-            : '🔴 Çevrimdışı (Offline)');
+        : (canTryLocalDoorOpen
+            ? '🟡 Yerel Ağda Aktif (İnternetsiz Wi-Fi)'
+            : (runtimeStatus == null
+                ? 'Bilinmiyor'
+                : '🔴 Çevrimdışı (Offline)'));
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
             ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
             : 'Bilinmiyor')
-        : 'Bilinmiyor (Cihaz Çevrimdışı)';
+        : (canTryLocalDoorOpen
+            ? 'Kapalı/Kilitli (Yerel Kontrol Hazır)'
+            : 'Bilinmiyor (Cihaz Çevrimdışı)');
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
             ? '-'
@@ -320,7 +324,7 @@ class AdminDoorStatusCard extends StatelessWidget {
             : '%${runtimeStatus!.wifiSignalPercent} (Son Sinyal)');
 
     final commandEnabled = isDeviceAssigned &&
-        isCloudOnline &&
+        (isCloudOnline || canTryLocalDoorOpen) &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -367,7 +371,13 @@ class AdminDoorStatusCard extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: commandEnabled ? onOpenDoor : null,
             icon: const Icon(Icons.lock_open),
-            label: Text(isOpeningDoor ? 'Gönderiliyor' : 'Kapı Aç'),
+            label: Text(
+              isOpeningDoor
+                  ? 'Gönderiliyor...'
+                  : (!isCloudOnline && canTryLocalDoorOpen
+                      ? 'Kapı Aç (Yerel Ağ)'
+                      : 'Kapı Aç'),
+            ),
           ),
         ),
         const SizedBox(height: 10),
