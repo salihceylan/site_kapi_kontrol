@@ -79,6 +79,9 @@ CLR_ROW_SEL_BG = "#DDF3E5"
 CLR_ROW_SEL_TEXT = "#103423"
 CLR_HEADER_BG = "#0F3A29"
 CLR_HEADER_TEXT = "#F5FFF8"
+CLR_DANGER = "#DC2626"
+CLR_DANGER_DARK = "#B91C1C"
+CLR_DANGER_SOFT = "#FEE2E2"
 
 
 @dataclass
@@ -311,6 +314,48 @@ def fetch_server_labeled_devices() -> list[dict]:
     except Exception:
         pass
     return []
+
+
+def delete_local_labeled_device(device_uid: str) -> list[dict]:
+    uid = str(device_uid).strip().upper()
+    if not uid:
+        return load_local_labeled_devices()
+
+    qr_path = QRCODES_DIR / f"{uid}.png"
+    if qr_path.exists():
+        try:
+            qr_path.unlink()
+        except Exception:
+            pass
+
+    devices = load_local_labeled_devices()
+    devices = [d for d in devices if str(d.get("device_uid", "")).strip().upper() != uid]
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    LABELED_DEVICES_FILE.write_text(json.dumps(devices, ensure_ascii=False, indent=2), encoding="utf-8")
+    return devices
+
+
+def delete_server_labeled_device(device_uid: str) -> tuple[bool, str]:
+    uid = str(device_uid).strip().upper()
+    if not uid:
+        return False, "Gecersiz cihaz UID."
+    import urllib.parse
+    url = f"{PUBLIC_API_URL}/api/company/labeled-devices/{urllib.parse.quote(uid)}"
+    req = urllib.request.Request(url, method="DELETE", headers={"User-Agent": "AHBU-Device-Tool/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                return True, data.get("message", f"{uid} basariyla silindi.")
+            return False, f"Sunucu yaniti: HTTP {response.status}"
+    except urllib.error.HTTPError as he:
+        try:
+            err_body = json.loads(he.read().decode("utf-8"))
+            return False, err_body.get("error", f"Sunucu hatasi: HTTP {he.code}")
+        except Exception:
+            return False, f"Sunucu hatasi: HTTP {he.code}"
+    except Exception as exc:
+        return False, f"Baglanti hatasi: {exc}"
 
 
 def generate_devices_catalog_pdf(
@@ -716,6 +761,22 @@ class App:
             "Soft.TButton",
             background=[("active", "#DDF3E8"), ("disabled", "#F2F7F4")],
             foreground=[("disabled", "#8DA394")],
+        )
+
+        s.configure(
+            "Danger.TButton",
+            background=CLR_DANGER,
+            foreground="#FFFFFF",
+            borderwidth=0,
+            focusthickness=0,
+            focuscolor=CLR_DANGER,
+            padding=(14, 8),
+            font=("Segoe UI", 10, "bold"),
+        )
+        s.map(
+            "Danger.TButton",
+            background=[("active", CLR_DANGER_DARK), ("disabled", "#FCA5A5")],
+            foreground=[("disabled", "#FFFFFF")],
         )
 
         s.configure(
@@ -1846,18 +1907,21 @@ class LabeledDevicesWindow:
         self.window = tk.Toplevel(parent)
         self.window.title("AHBU Kayıtlı Cihazlar ve Karekod Envanteri")
         self.window.configure(bg=CLR_APP_BG)
-        self.window.minsize(980, 640)
+        self.window.minsize(1080, 680)
         self.logo_path = logo_path
         self.on_download_pdf = on_download_pdf
 
         self.devices: list[dict] = []
+        self.filtered_devices: list[dict] = []
         self.selected_qr: Image.Image | None = None
         self.preview_photo: ImageTk.PhotoImage | None = None
 
+        self.search_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="Cihazlar yükleniyor...")
         self.selected_uid_var = tk.StringVar(value="Seçili Cihaz: -")
 
         self._ui()
+        self.search_var.trace_add("write", lambda *_args: self._on_search_changed())
         self.refresh_devices()
 
     def _ui(self) -> None:
@@ -1871,17 +1935,28 @@ class LabeledDevicesWindow:
         header = ttk.Frame(main, style="Header.TFrame", padding=(16, 12))
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
         ttk.Label(header, text="Kayıtlı Cihazlar ve Karekod Envanteri", style="Title.TLabel").pack(side=tk.LEFT)
+        ttk.Label(header, textvariable=self.status_var, style="Sub.TLabel").pack(side=tk.RIGHT, padx=10)
 
         # Left: Devices list
         left = ttk.Frame(main, style="Card.TFrame", padding=14)
         left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(1, weight=1)
+        left.rowconfigure(2, weight=1)
 
+        # Toolbar Buttons
         btn_row = ttk.Frame(left, style="Card.TFrame")
         btn_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(btn_row, text="Sunucudan / Yerelden Yenile", command=self.refresh_devices, style="Accent.TButton").pack(side=tk.LEFT)
-        ttk.Button(btn_row, text="Karekodlu PDF İndir", command=self.on_download_pdf, style="Accent.TButton").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(btn_row, text="🔄 Yenile", command=self.refresh_devices, style="Accent.TButton").pack(side=tk.LEFT)
+        ttk.Button(btn_row, text="📄 Karekodlu PDF İndir", command=self.on_download_pdf, style="Accent.TButton").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(btn_row, text="🗑️ Seçili Cihazı Sil", command=self._delete_selected_device, style="Danger.TButton").pack(side=tk.LEFT, padx=(12, 0))
+
+        # Search / Filter Bar
+        search_row = ttk.Frame(left, style="Card.TFrame")
+        search_row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(search_row, text="🔍 Ara:", style="Head.TLabel").pack(side=tk.LEFT, padx=(0, 6))
+        search_entry = ttk.Entry(search_row, textvariable=self.search_var)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        ttk.Button(search_row, text="✕ Temizle", command=lambda: self.search_var.set(""), style="Soft.TButton").pack(side=tk.LEFT)
 
         cols = ("device_uid", "chip", "created_at", "description")
         self.tree = ttk.Treeview(left, columns=cols, show="headings", height=16)
@@ -1889,18 +1964,34 @@ class LabeledDevicesWindow:
         self.tree.heading("chip", text="Çip Modeli")
         self.tree.heading("created_at", text="Kayıt Tarihi")
         self.tree.heading("description", text="Açıklama")
-        self.tree.column("device_uid", width=180, anchor=tk.CENTER)
-        self.tree.column("chip", width=120, anchor=tk.CENTER)
-        self.tree.column("created_at", width=160, anchor=tk.CENTER)
-        self.tree.column("description", width=220, anchor=tk.W)
-        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.column("device_uid", width=190, anchor=tk.CENTER)
+        self.tree.column("chip", width=110, anchor=tk.CENTER)
+        self.tree.column("created_at", width=150, anchor=tk.CENTER)
+        self.tree.column("description", width=200, anchor=tk.W)
+        self.tree.grid(row=2, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<Delete>", lambda _e: self._delete_selected_device())
+        self.tree.bind("<F5>", lambda _e: self.refresh_devices())
+
+        # Context Menu (Right Click)
+        self.context_menu = tk.Menu(self.window, tearoff=0)
+        self.context_menu.add_command(label="🗑️ Seçili Cihazı Sil (Kalıcı)", command=self._delete_selected_device)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🖨️ Karekodu Yazdır", command=self._print_selected_qr)
+        self.context_menu.add_command(label="💾 Karekodu Kaydet", command=self._save_selected_qr)
+        self.context_menu.add_command(label="📋 Unique ID Kopyala", command=self._copy_uid_to_clipboard)
+
+        def _popup_menu(event):
+            item = self.tree.identify_row(event.y)
+            if item:
+                self.tree.selection_set(item)
+                self.context_menu.post(event.x_root, event.y_root)
+
+        self.tree.bind("<Button-3>", _popup_menu)
 
         sc = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=sc.set)
-        sc.grid(row=1, column=1, sticky="ns")
-
-        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        sc.grid(row=2, column=1, sticky="ns")
 
         # Right: QR Preview
         right = ttk.Frame(main, style="Card.TFrame", padding=14)
@@ -1914,8 +2005,9 @@ class LabeledDevicesWindow:
 
         qr_actions = ttk.Frame(right, style="Card.TFrame")
         qr_actions.grid(row=3, column=0, sticky="ew", pady=(16, 0))
-        ttk.Button(qr_actions, text="Karekodu Yazdır", command=self._print_selected_qr, style="Soft.TButton").pack(side=tk.LEFT)
-        ttk.Button(qr_actions, text="Karekodu Kaydet", command=self._save_selected_qr, style="Soft.TButton").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(qr_actions, text="🖨️ Yazdır", command=self._print_selected_qr, style="Soft.TButton").pack(side=tk.LEFT)
+        ttk.Button(qr_actions, text="💾 Kaydet", command=self._save_selected_qr, style="Soft.TButton").pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(qr_actions, text="🗑️ Sil", command=self._delete_selected_device, style="Danger.TButton").pack(side=tk.LEFT, padx=(8, 0))
 
     def refresh_devices(self) -> None:
         self.status_var.set("Cihazlar güncelleniyor...")
@@ -1939,12 +2031,28 @@ class LabeledDevicesWindow:
         devices = list(device_map.values())
         devices.sort(key=lambda d: str(d.get("created_at", "")), reverse=True)
         self.devices = devices
-        self.window.after(0, self._apply_devices_list)
+        self.window.after(0, self._apply_search_and_render)
 
-    def _apply_devices_list(self) -> None:
+    def _on_search_changed(self) -> None:
+        self._apply_search_and_render()
+
+    def _apply_search_and_render(self) -> None:
+        q = self.search_var.get().strip().upper()
+        if not q:
+            self.filtered_devices = list(self.devices)
+        else:
+            self.filtered_devices = [
+                d
+                for d in self.devices
+                if q in str(d.get("device_uid", "")).upper()
+                or q in str(d.get("chip", "")).upper()
+                or q in str(d.get("description", "")).upper()
+            ]
+
         for x in self.tree.get_children():
             self.tree.delete(x)
-        for i, d in enumerate(self.devices):
+
+        for i, d in enumerate(self.filtered_devices):
             uid = str(d.get("device_uid", "")).upper()
             chip = str(d.get("chip", "ESP32"))
             date_val = str(d.get("created_at", "-"))
@@ -1957,18 +2065,26 @@ class LabeledDevicesWindow:
             desc = str(d.get("description", ""))
             self.tree.insert("", tk.END, iid=str(i), values=(uid, chip, date_val, desc))
 
-        self.status_var.set(f"Toplam {len(self.devices)} kayıtlı cihaz listelendi.")
-        if self.devices:
+        if q:
+            self.status_var.set(f"Filtrelendi: {len(self.filtered_devices)} / {len(self.devices)} cihaz")
+        else:
+            self.status_var.set(f"Toplam {len(self.devices)} kayıtlı cihaz")
+
+        if self.filtered_devices:
             self.tree.selection_set("0")
-            self._show_device_preview(self.devices[0])
+            self._show_device_preview(self.filtered_devices[0])
+        else:
+            self.selected_uid_var.set("Seçili Cihaz: -")
+            self.preview_label.configure(image="")
+            self.selected_qr = None
 
     def _on_select(self, _event: object) -> None:
         sel = self.tree.selection()
         if not sel:
             return
         idx = int(sel[0])
-        if 0 <= idx < len(self.devices):
-            self._show_device_preview(self.devices[idx])
+        if 0 <= idx < len(self.filtered_devices):
+            self._show_device_preview(self.filtered_devices[idx])
 
     def _show_device_preview(self, dev: dict) -> None:
         uid = str(dev.get("device_uid", "")).upper()
@@ -1980,15 +2096,73 @@ class LabeledDevicesWindow:
         self.preview_photo = ImageTk.PhotoImage(prev)
         self.preview_label.configure(image=self.preview_photo)
 
+    def _delete_selected_device(self) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Seçim Gerekli", "Lütfen silmek istediğiniz cihazı tablodan seçin.", parent=self.window)
+            return
+
+        idx = int(sel[0])
+        if idx < 0 or idx >= len(self.filtered_devices):
+            return
+
+        target_dev = self.filtered_devices[idx]
+        uid = str(target_dev.get("device_uid", "")).strip().upper()
+        if not uid:
+            return
+
+        confirm = messagebox.askyesno(
+            "Cihazı Sil",
+            f"'{uid}' kodlu cihazı kalıcı olarak silmek istediğinize emin misiniz?\n\n"
+            f"• Cihaz yerel envanter listesinden silinecektir.\n"
+            f"• Cihaz merkezi sunucudan ve varsa tanımlı kapısından tamamen silinecektir.\n"
+            f"• Cihaza ait yerel karekod görseli silinecektir.\n\n"
+            f"Bu işlem geri alınamaz!",
+            icon="warning",
+            parent=self.window,
+        )
+        if not confirm:
+            return
+
+        self.status_var.set(f"'{uid}' siliniyor...")
+
+        def _delete_worker():
+            # 1. Yerel JSON ve QR dosyasından sil
+            delete_local_labeled_device(uid)
+            # 2. Sunucudan ve DB'den sil
+            server_ok, server_msg = delete_server_labeled_device(uid)
+
+            def _done():
+                self.refresh_devices()
+                if server_ok:
+                    messagebox.showinfo("Cihaz Silindi", f"'{uid}' kodlu cihaz hem yerelden hem sunucudan başarıyla silindi.", parent=self.window)
+                else:
+                    messagebox.showwarning("Kısmi Silme", f"'{uid}' yerelden silindi fakat sunucu bildirimi:\n{server_msg}", parent=self.window)
+
+            self.window.after(0, _done)
+
+        threading.Thread(target=_delete_worker, daemon=True).start()
+
+    def _copy_uid_to_clipboard(self) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        if 0 <= idx < len(self.filtered_devices):
+            uid = str(self.filtered_devices[idx].get("device_uid", "")).upper()
+            self.window.clipboard_clear()
+            self.window.clipboard_append(uid)
+            self.status_var.set(f"Panoya kopyalandı: {uid}")
+
     def _print_selected_qr(self) -> None:
         if self.selected_qr is None:
-            messagebox.showinfo("Seçim gerekli", "Lütfen bir cihaz seçin.")
+            messagebox.showinfo("Seçim Gerekli", "Lütfen bir cihaz seçin.", parent=self.window)
             return
         if os.name != "nt":
-            messagebox.showerror("Yazdırma", "Yalnızca Windows işletim sisteminde desteklenir.")
+            messagebox.showerror("Yazdırma", "Yalnızca Windows işletim sisteminde desteklenir.", parent=self.window)
             return
         sel = self.tree.selection()
-        uid = self.devices[int(sel[0])].get("device_uid", "device") if sel else "device"
+        uid = self.filtered_devices[int(sel[0])].get("device_uid", "device") if sel else "device"
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         path = OUTPUT_DIR / f"print_{sanitize_filename(uid)}.png"
         self.selected_qr.save(path, format="PNG")
@@ -1997,14 +2171,14 @@ class LabeledDevicesWindow:
 
     def _save_selected_qr(self) -> None:
         if self.selected_qr is None:
-            messagebox.showinfo("Seçim gerekli", "Lütfen bir cihaz seçin.")
+            messagebox.showinfo("Seçim Gerekli", "Lütfen bir cihaz seçin.", parent=self.window)
             return
         sel = self.tree.selection()
-        uid = self.devices[int(sel[0])].get("device_uid", "device") if sel else "device"
+        uid = self.filtered_devices[int(sel[0])].get("device_uid", "device") if sel else "device"
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         path = OUTPUT_DIR / f"{sanitize_filename(uid)}.png"
         self.selected_qr.save(path, format="PNG")
-        messagebox.showinfo("Kaydedildi", f"Karekod kaydedildi:\n{path}")
+        messagebox.showinfo("Kaydedildi", f"Karekod kaydedildi:\n{path}", parent=self.window)
 
 
 class DeviceTesterWindow:

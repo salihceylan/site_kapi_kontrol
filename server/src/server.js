@@ -3471,6 +3471,72 @@ app.post('/api/company/labeled-devices', async (req, res) => {
   }
 });
 
+app.delete('/api/company/labeled-devices/:deviceUid', async (req, res) => {
+  try {
+    const deviceUid = String(req.params.deviceUid || '').trim().toUpperCase();
+    if (!deviceUid) {
+      return res.status(400).json({ error: 'device_uid zorunludur.' });
+    }
+
+    ensureDirectoryExists(qrcodesRoot);
+    ensureDirectoryExists(path.dirname(labeledDevicesDataFile));
+
+    // 1. QR resmini sil
+    const qrFilePath = path.join(qrcodesRoot, `${deviceUid}.png`);
+    if (fs.existsSync(qrFilePath)) {
+      try {
+        fs.unlinkSync(qrFilePath);
+      } catch (_) {}
+    }
+
+    // 2. JSON envanter dosyasından çıkar
+    let devices = [];
+    if (fs.existsSync(labeledDevicesDataFile)) {
+      try {
+        devices = JSON.parse(fs.readFileSync(labeledDevicesDataFile, 'utf8'));
+      } catch (_) {
+        devices = [];
+      }
+    }
+    const initialLen = devices.length;
+    devices = devices.filter((d) => String(d.device_uid || '').trim().toUpperCase() !== deviceUid);
+    fs.writeFileSync(labeledDevicesDataFile, JSON.stringify(devices, null, 2), 'utf8');
+
+    // 3. Veritabanındaki cihazlar tablosundan ve kapı atamasından temizle
+    try {
+      await pool.query(
+        `
+          UPDATE site_doors
+          SET assigned_device_id = NULL
+          WHERE assigned_device_id IN (
+            SELECT id FROM devices WHERE UPPER(device_uid) = $1
+          )
+        `,
+        [deviceUid],
+      );
+      await pool.query(
+        'DELETE FROM devices WHERE UPPER(device_uid) = $1',
+        [deviceUid],
+      );
+    } catch (dbErr) {
+      console.error('Cihaz DB silme hatasi:', dbErr);
+    }
+
+    auditLog('company_device_deleted', {
+      device_uid: deviceUid,
+      ip: req.ip,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: `${deviceUid} kodlu cihaz ve karekodu basariyla silindi.`,
+      count: devices.length,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Cihaz silinemedi: ' + err.message });
+  }
+});
+
 app.post('/auth/register', async (req, res) => {
   return res.status(410).json({
     error: 'Yeni kullanici kaydi yalnizca super user tarafindan yapilir.',
