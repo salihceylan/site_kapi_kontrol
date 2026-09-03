@@ -150,12 +150,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _startStatusAutoRefreshTimer() {
     _statusAutoRefreshTimer?.cancel();
-    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
-      if (_selectedMenu == SirketMenuItem.dashboard &&
-          _doorControlDoor != null &&
-          !_isOpeningDoor &&
-          !_isLoadingDoorStatus) {
+      if (_doorControlDoor != null && !_isOpeningDoor) {
         _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
       }
     });
@@ -480,34 +477,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
     }
 
-    final (status, error) = await widget.authService.getDoorRuntimeStatus(
-      doorId: doorId,
-    );
-    final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
-    if (!mounted) return;
-    setState(() {
-      _isPhoneOnWifi = isWifi;
-      if (!isBackgroundRefresh) {
-        _isLoadingDoorStatus = false;
-      }
-      if (status != null || !isBackgroundRefresh) {
-        _doorRuntimeStatus = status;
-      }
-      final canLocal =
-          _doorControlDoor != null &&
-          widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
-      if (canLocal &&
-          error != null &&
-          (error.contains('Sunucuya') ||
-              error.contains('Internet') ||
-              error.contains('baglanilamadi'))) {
-        _doorStatusError = null;
-      } else {
-        if (!isBackgroundRefresh || error == null) {
-          _doorStatusError = error;
+    try {
+      final (status, error) = await widget.authService.getDoorRuntimeStatus(
+        doorId: doorId,
+      );
+      final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
+      if (!mounted) return;
+      setState(() {
+        _isPhoneOnWifi = isWifi;
+        if (status != null) {
+          _doorRuntimeStatus = status;
         }
+        final canLocal =
+            _doorControlDoor != null &&
+            widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
+        if (canLocal &&
+            error != null &&
+            (error.contains('Sunucuya') ||
+                error.contains('Internet') ||
+                error.contains('baglanilamadi'))) {
+          _doorStatusError = null;
+        } else {
+          if (!isBackgroundRefresh || error == null) {
+            _doorStatusError = error;
+          }
+        }
+      });
+    } catch (_) {
+      // Background refresh hatalarında UI'ı bozma
+    } finally {
+      if (mounted && !isBackgroundRefresh) {
+        setState(() {
+          _isLoadingDoorStatus = false;
+        });
       }
-    });
+    }
   }
 
   Future<void> _openDoor() async {
