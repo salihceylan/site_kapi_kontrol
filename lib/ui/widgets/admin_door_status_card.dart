@@ -297,24 +297,19 @@ class AdminDoorStatusCard extends StatelessWidget {
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
     final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
 
-    final isLocalReady = canTryLocalDoorOpen;
     final connectionText = isMqttBridgeConnected
         ? 'Hazır (Bulut)'
         : 'Bağlantı Yok';
     final deviceOnlineText = isCloudOnline
         ? '🟢 Online (Bulut)'
-        : (isLocalReady
-            ? '🟡 Yerel Ağda Aktif (İnternetsiz Wi-Fi)'
-            : (runtimeStatus == null
-                ? 'Bilinmiyor'
-                : '🔴 Çevrimdışı (Offline)'));
+        : (runtimeStatus == null
+            ? 'Bilinmiyor'
+            : '🔴 Çevrimdışı (Offline)');
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
             ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
             : 'Bilinmiyor')
-        : (isLocalReady
-            ? 'Hazır (Yerel Ağdan Açılabilir)'
-            : 'Bilinmiyor (Cihaz Çevrimdışı)');
+        : 'Bilinmiyor (Cihaz Çevrimdışı)';
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
             ? '-'
@@ -325,7 +320,7 @@ class AdminDoorStatusCard extends StatelessWidget {
             : '%${runtimeStatus!.wifiSignalPercent} (Son Sinyal)');
 
     final commandEnabled = isDeviceAssigned &&
-        (isCloudOnline || isLocalReady) &&
+        isCloudOnline &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -341,7 +336,7 @@ class AdminDoorStatusCard extends StatelessWidget {
         Text('Kapı Durumu: $stateText'),
         const SizedBox(height: 6),
         Text(
-          'Yerel Ağ Kontrolü: ${isLocalReady ? 'Hazır (Yedek Yetki Var)' : 'Kayıt Yok'}',
+          'Yerel Ağ Kontrolü: ${canTryLocalDoorOpen ? 'Hazır (Yedek Yetki Var)' : 'Kayıt Yok'}',
         ),
         const SizedBox(height: 6),
         Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
@@ -371,14 +366,8 @@ class AdminDoorStatusCard extends StatelessWidget {
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: commandEnabled ? onOpenDoor : null,
-            icon: Icon(isCloudOnline ? Icons.lock_open : Icons.wifi_tethering),
-            label: Text(
-              isOpeningDoor
-                  ? 'Gönderiliyor'
-                  : (isCloudOnline
-                      ? 'Kapı Aç'
-                      : (isLocalReady ? 'Kapı Aç (Yerel Ağ)' : 'Kapı Aç')),
-            ),
+            icon: const Icon(Icons.lock_open),
+            label: Text(isOpeningDoor ? 'Gönderiliyor' : 'Kapı Aç'),
           ),
         ),
         const SizedBox(height: 10),
