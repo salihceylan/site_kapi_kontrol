@@ -20,7 +20,6 @@ class LocalDoorOpenResult {
 class LocalDoorService {
   LocalDoorService();
 
-  static const Duration _knownIpTimeout = Duration(milliseconds: 1500);
   static const Duration _scanTimeout = Duration(milliseconds: 600);
   static const int _scanWorkers = 64;
 
@@ -131,18 +130,28 @@ class LocalDoorService {
       '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: ${access.ip}, Telefon Wi-Fi: ${wifiAddr?.address}',
     );
 
-    // 1. Bilinen IP varsa doğrudan kapıyı açmayı dene
+    // 1. Bilinen IP varsa doğrudan hızlı UDP ile açmayı dene (1-5 ms)
     final knownIp = access.ip?.trim();
     if (knownIp != null && knownIp.isNotEmpty) {
-      debugPrint('[YerelKapi] Kayıtlı IP deneniyor: $knownIp...');
-      final opened = await _directPostOpen(
+      debugPrint('[YerelKapi] Kayıtlı IP üzerinden doğrudan UDP açma deneniyor: $knownIp...');
+      final udpOpened = await _directUdpOpen(knownIp, access);
+      if (udpOpened) {
+        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UDP ile ANINDA açıldı!');
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: knownIp,
+          message: 'Kapı yerel ağdan başarıyla açıldı.',
+        );
+      }
+
+      final postOpened = await _directPostOpen(
         knownIp,
         access,
-        _knownIpTimeout,
+        const Duration(milliseconds: 350),
         wifiAddress: wifiAddr,
       );
-      if (opened) {
-        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) üzerinden açıldı!');
+      if (postOpened) {
+        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) HTTP üzerinden açıldı!');
         return LocalDoorOpenResult(
           ok: true,
           ip: knownIp,
@@ -151,45 +160,37 @@ class LocalDoorService {
       }
     }
 
-    // 2. Anında UDP Broadcast Keşfi (1 Tek Paket ile ESP32 IP'sini Bulma - 50ms)
+    // 2. Anında UDP Broadcast Keşfi + Açma (Tek Paket - 15ms)
     debugPrint('[YerelKapi] UDP Broadcast ile cihaz aranıyor...');
     final discoveredIp = await _discoverDeviceIpViaUdp(
       access.deviceUid,
       wifiAddress: wifiAddr,
     );
     if (discoveredIp != null && discoveredIp.isNotEmpty) {
-      debugPrint('[YerelKapi] UDP ile bulunan IP ($discoveredIp) deneniyor...');
-      final opened = await _directPostOpen(
-        discoveredIp,
-        access,
-        _knownIpTimeout,
-        wifiAddress: wifiAddr,
-      );
-      if (opened) {
-        debugPrint('[YerelKapi] UDP Keşif IP ($discoveredIp) üzerinden açıldı!');
+      debugPrint('[YerelKapi] UDP ile bulunan IP ($discoveredIp) UDP ile açılıyor...');
+      final udpOpened = await _directUdpOpen(discoveredIp, access);
+      if (udpOpened) {
+        debugPrint('[YerelKapi] UDP Keşif IP ($discoveredIp) üzerinden UDP ile ANINDA açıldı!');
         return LocalDoorOpenResult(
           ok: true,
           ip: discoveredIp,
           message: 'Kapı yerel ağdan başarıyla açıldı.',
         );
       }
-    }
 
-    // 3. mDNS üzerinden dene (ahbu-<uid>.local)
-    final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
-    final mdnsOpened = await _directPostOpen(
-      mdnsHost,
-      access,
-      const Duration(milliseconds: 600),
-      wifiAddress: wifiAddr,
-    );
-    if (mdnsOpened) {
-      debugPrint('[YerelKapi] mDNS ($mdnsHost) üzerinden açıldı!');
-      return LocalDoorOpenResult(
-        ok: true,
-        ip: mdnsHost,
-        message: 'Kapı yerel ağdan başarıyla açıldı.',
+      final postOpened = await _directPostOpen(
+        discoveredIp,
+        access,
+        const Duration(milliseconds: 350),
+        wifiAddress: wifiAddr,
       );
+      if (postOpened) {
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: discoveredIp,
+          message: 'Kapı yerel ağdan başarıyla açıldı.',
+        );
+      }
     }
 
     // 3. Alt ağdaki tüm aday IP'leri hızlı paralel işçilerle dene

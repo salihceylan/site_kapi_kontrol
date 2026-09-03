@@ -735,27 +735,24 @@ class AuthService extends ChangeNotifier {
     final hasWifi = await _localDoorService.hasLocalWifiConnection();
     final hasDeviceUid = (door?.assignedDeviceUid?.trim().isNotEmpty) ?? false;
 
-    // Eğer Wi-Fi'ye bağlıysak ve cihaz atanmışsa:
+    // Eğer Wi-Fi'ye bağlıysak ve cihaz atanmışsa -> Önce ANINDA yerel UDP'yi dene (5ms)
     if (hasWifi && hasDeviceUid && door != null) {
-      debugPrint('[AuthService] Wi-Fi bağlı, kapı açma başlatılıyor... (Bulut deneniyor - 1.5s)');
+      debugPrint('[AuthService] Wi-Fi bağlı, yerel hızlı tetikleme deneniyor...');
+      final localResult = await _tryOpenDoorLocally(door);
+      if (localResult != null && localResult.$1 != null) {
+        debugPrint('[AuthService] Yerel ağ üzerinden kapı ANINDA açıldı!');
+        return localResult;
+      }
+
+      debugPrint('[AuthService] Yerel ağ yanıt vermedi -> Bulut üzerinden deneniyor...');
       try {
-        final status = await api
-            .openDoor(token: active.token, doorId: doorId)
-            .timeout(const Duration(milliseconds: 1500));
-        debugPrint('[AuthService] Bulut üzerinden başarıyla açıldı.');
+        final status = await api.openDoor(token: active.token, doorId: doorId);
         unawaited(_cacheLocalDoorAccess(status));
         return (status, null);
       } catch (e) {
-        debugPrint('[AuthService] Bulut yanıt vermedi/hata ($e) -> ANINDA yerel Wi-Fi moduna geçiliyor...');
-        final localResult = await _tryOpenDoorLocally(door);
-        if (localResult != null && localResult.$1 != null) {
-          debugPrint('[AuthService] Yerel Wi-Fi ile kapı açıldı!');
-          return localResult;
-        }
         return (
           null,
-          localResult?.$2 ??
-              'Cihaza yerel ağdan ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
+          localResult?.$2 ?? 'Kapı açılamadı. Cihazın açık olduğundan emin olun.',
         );
       }
     }

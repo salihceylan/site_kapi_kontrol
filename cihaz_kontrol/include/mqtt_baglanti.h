@@ -175,10 +175,13 @@ inline bool mqttReconnect() {
 
 inline void mqttSetup() {
   espClientSecure.setCACert(TLS_ROOT_CA);
+  espClientSecure.setTimeout(2);
   gMqttConfiguredHost = wifiMqttHost(MQTT_DEFAULT_SERVER);
   gMqttConfiguredPort = wifiMqttPort(MQTT_DEFAULT_PORT);
   client.setServer(gMqttConfiguredHost.c_str(), gMqttConfiguredPort);
   client.setCallback(mqttCallback);
+  client.setSocketTimeout(2);
+  client.setKeepAlive(10);
   otaSetEventPublisher(mqttPublishOtaEvent);
 }
 

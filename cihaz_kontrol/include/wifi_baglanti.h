@@ -521,19 +521,10 @@ inline void wifiBaglan() {
   gWifiPrefs.begin(WIFI_PREFS_NAMESPACE, false);
   wifiLoadStoredCredentials();
   gWifiConnected = false;
-  gLastWifiAttemptAt = 0;
+  gLastWifiAttemptAt = millis();
 
   if (!gWifiConfigured) {
     Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");
-    WiFi.mode(WIFI_OFF);
-    delay(150);
-    wifiStartProvisioningMode();
-    return;
-  }
-
-  if (!wifiHasMqttCredentials()) {
-    Serial.println("Kayitli WiFi var ama MQTT kimligi yok, BLE provisioning baslatiliyor.");
-    WiFi.disconnect(true, false);
     WiFi.mode(WIFI_OFF);
     delay(150);
     wifiStartProvisioningMode();
@@ -545,22 +536,13 @@ inline void wifiBaglan() {
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
-  Serial.printf("Kayitli WiFi bulundu: %s\n", gSavedWifiSsid.c_str());
-  if (wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 20000)) {
-    wifiStopProvisioningMode();
-    return;
-  }
-
-  Serial.println("Kayitli WiFi'ye baglanamadi, BLE provisioning baslatiliyor.");
-  WiFi.disconnect(true, false);
-  WiFi.mode(WIFI_OFF);
-  delay(150);
-  wifiStartProvisioningMode();
+  Serial.printf("Kayitli WiFi bulundu: %s, baglaniliyor...\n", gSavedWifiSsid.c_str());
+  WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
 }
 
 inline void wifiLoop() {
   wifiHandleResetButton();
-  gWifiConnected = WiFi.status() == WL_CONNECTED;
+  gWifiConnected = (WiFi.status() == WL_CONNECTED);
 
   if (gPendingWifiScan) {
     gPendingWifiScan = false;
@@ -571,22 +553,21 @@ inline void wifiLoop() {
     wifiApplyProvisioningRequest();
   }
 
-  if (gWifiConnected && wifiHasMqttCredentials()) {
-    wifiStopProvisioningMode();
-  } else if (gProvisioningMode) {
-    wifiUpdateLed();
-    return;
-  } else if (!gWifiConfigured) {
-    wifiStartProvisioningMode();
-  } else if (!wifiHasMqttCredentials()) {
-    if (WiFi.getMode() != WIFI_OFF) {
-      WiFi.disconnect(true, false);
-      WiFi.mode(WIFI_OFF);
-      delay(50);
+  if (gWifiConnected) {
+    if (gProvisioningMode && wifiHasMqttCredentials()) {
+      wifiStopProvisioningMode();
     }
-    wifiStartProvisioningMode();
-  } else if (millis() - gLastWifiAttemptAt >= WIFI_RETRY_INTERVAL_MS) {
-    wifiTryConnect(gSavedWifiSsid, gSavedWifiPassword, 8000);
+  } else if (!gWifiConfigured) {
+    if (!gProvisioningMode) {
+      wifiStartProvisioningMode();
+    }
+  } else {
+    // Kayıtlı Wi-Fi var ama bağlı değil -> Her 4 saniyede bir otomatik bağlanmayı dene (cihazı kapatıp açmaya gerek kalmaz)
+    if (millis() - gLastWifiAttemptAt >= 4000) {
+      gLastWifiAttemptAt = millis();
+      Serial.printf("WiFi baglantisi kontrol/yeniden deneniyor (%s)...\n", gSavedWifiSsid.c_str());
+      WiFi.reconnect();
+    }
   }
 
   wifiUpdateLed();
