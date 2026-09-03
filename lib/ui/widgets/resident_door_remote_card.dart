@@ -43,7 +43,6 @@ class ResidentDoorRemoteCard extends StatelessWidget {
         selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
     final isLocalOnline = !isCloudOnline && canTryLocalDoorOpen;
-    final isCompletelyOffline = !isCloudOnline && !canTryLocalDoorOpen;
 
     final commandEnabled = isDeviceAssigned &&
         (isCloudOnline || isLocalOnline) &&
