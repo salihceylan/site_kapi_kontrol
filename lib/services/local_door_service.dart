@@ -36,14 +36,21 @@ class LocalDoorService {
         type: InternetAddressType.IPv4,
       );
 
-      // 1. Wi-Fi / Ethernet arayüzleri
+      for (final iface in interfaces) {
+        debugPrint(
+          '[AğArayüzü] Bulundu: ${iface.name} -> ${iface.addresses.map((a) => a.address).join(', ')}',
+        );
+      }
+
+      // 1. Kesin Wi-Fi / Ethernet arayüzleri (wlan0, wlan1, wifi, eth)
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        if (name.contains('wlan') ||
-            name.contains('wifi') ||
-            name.contains('eth') ||
-            name.contains('en') ||
-            name.contains('ap')) {
+        final isWifiName = name.startsWith('wlan') ||
+            name.startsWith('wifi') ||
+            name == 'wlan0' ||
+            name == 'wlan1' ||
+            name.startsWith('eth');
+        if (isWifiName) {
           for (final addr in iface.addresses) {
             if (_isPrivateLocalIp(addr.address)) {
               return addr;
@@ -52,16 +59,21 @@ class LocalDoorService {
         }
       }
 
-      // 2. Mobil veri dışındaki herhangi bir yerel IP
+      // 2. İkincil kontrol: Kesinlikle hücresel/mobil olmayan özel yerel IP'ler
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
         if (name.contains('rmnet') ||
+            name.contains('ipa') ||
+            name.contains('radio') ||
+            name.contains('clat') ||
             name.contains('ccmni') ||
             name.contains('pdp') ||
             name.contains('tun') ||
             name.contains('ppp') ||
             name.contains('cellular') ||
             name.contains('mobile') ||
+            name.contains('wwan') ||
+            name.contains('epdg') ||
             name.contains('dummy')) {
           continue;
         }
@@ -371,6 +383,7 @@ class LocalDoorService {
     final ownIps = <String>{};
     final candidates = <String>{};
 
+    // 1. Eğer telefonun gerçek Wi-Fi IP'si bulunduysa öncelikle o bloğu ekle
     if (wifiAddress != null && _isPrivateLocalIp(wifiAddress.address)) {
       final ip = wifiAddress.address;
       ownIps.add(ip);
@@ -383,56 +396,16 @@ class LocalDoorService {
       }
     }
 
-    if (candidates.isEmpty) {
-      try {
-        final interfaces = await NetworkInterface.list(
-          includeLoopback: false,
-          type: InternetAddressType.IPv4,
-        );
-
-        for (final interface in interfaces) {
-          final name = interface.name.toLowerCase();
-          if (name.contains('rmnet') ||
-              name.contains('ccmni') ||
-              name.contains('pdp') ||
-              name.contains('tun') ||
-              name.contains('ppp') ||
-              name.contains('cellular') ||
-              name.contains('mobile')) {
-            continue;
-          }
-          for (final address in interface.addresses) {
-            final ip = address.address;
-            if (!_isPrivateLocalIp(ip)) {
-              continue;
-            }
-            ownIps.add(ip);
-            final parts = ip.split('.');
-            if (parts.length != 4) {
-              continue;
-            }
-            final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
-            for (var host = 1; host <= 254; host += 1) {
-              candidates.add('$prefix.$host');
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    // Yalnızca hiçbir yerel Wi-Fi IP bulunamadıysa en yaygın modem alt ağlarını ekle
-    if (candidates.isEmpty) {
-      for (final prefix in const [
-        '192.168.1',
-        '192.168.0',
-        '192.168.4',
-        '192.168.178',
-        '192.168.2',
-        '10.0.0',
-      ]) {
-        for (var host = 1; host <= 254; host += 1) {
-          candidates.add('$prefix.$host');
-        }
+    // 2. Standart ev/site modem ağlarını DAİMA adaylara ekle
+    for (final prefix in const [
+      '192.168.1',
+      '192.168.0',
+      '192.168.4',
+      '192.168.2',
+      '192.168.178',
+    ]) {
+      for (var host = 1; host <= 254; host += 1) {
+        candidates.add('$prefix.$host');
       }
     }
 
