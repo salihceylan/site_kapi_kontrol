@@ -751,7 +751,11 @@ class AuthService extends ChangeNotifier {
         if (res.$1 != null && !completer.isCompleted) {
           completer.complete(res);
         } else if (localFinished && !completer.isCompleted) {
-          completer.complete(localResult?.$1 != null ? localResult : res);
+          completer.complete(
+            localResult?.$1 != null
+                ? localResult
+                : (localResult ?? res),
+          );
         }
       });
 
@@ -761,13 +765,18 @@ class AuthService extends ChangeNotifier {
         if (res != null && res.$1 != null && !completer.isCompleted) {
           completer.complete(res);
         } else if (cloudFinished && !completer.isCompleted) {
-          completer.complete(localResult?.$1 != null ? localResult : (cloudResult ?? res ?? (null, 'Kapı açılamadı.')));
+          completer.complete(
+            res?.$1 != null
+                ? res
+                : (res ?? cloudResult ?? (null, 'Kapı açılamadı.')),
+          );
         }
       });
 
       return await completer.future.timeout(
-        const Duration(seconds: 4),
-        onTimeout: () => (null, 'Kapı açma komutu zaman aşımına uğradı.'),
+        const Duration(seconds: 6),
+        onTimeout: () =>
+            localResult ?? cloudResult ?? (null, 'Kapı açma komutu zaman aşımına uğradı.'),
       );
     }
 

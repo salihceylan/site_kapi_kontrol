@@ -21,8 +21,8 @@ class LocalDoorService {
   LocalDoorService();
 
   static const Duration _knownIpTimeout = Duration(milliseconds: 1500);
-  static const Duration _scanTimeout = Duration(milliseconds: 500);
-  static const int _scanWorkers = 48;
+  static const Duration _scanTimeout = Duration(milliseconds: 600);
+  static const int _scanWorkers = 64;
 
   Future<InternetAddress?> _getWifiAddress() async {
     try {
@@ -70,6 +70,223 @@ class LocalDoorService {
     return null;
   }
 
+  Future<LocalDoorOpenResult> openDoor(LocalDoorAccess access) async {
+    if (kIsWeb) {
+      return const LocalDoorOpenResult(
+        ok: false,
+        ip: null,
+        message: 'Yerel ağ ile kapı açma yalnızca mobil uygulamada desteklenir.',
+      );
+    }
+    if (!access.isUsable) {
+      return const LocalDoorOpenResult(
+        ok: false,
+        ip: null,
+        message: 'Yerel kapı anahtarı bulunamadı.',
+      );
+    }
+
+    final wifiAddr = await _getWifiAddress();
+
+    // 1. Bilinen IP varsa doğrudan kapıyı açmayı dene
+    final knownIp = access.ip?.trim();
+    if (knownIp != null && knownIp.isNotEmpty) {
+      final opened = await _directPostOpen(
+        knownIp,
+        access,
+        _knownIpTimeout,
+        wifiAddress: wifiAddr,
+      );
+      if (opened) {
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: knownIp,
+          message: 'Kapı yerel ağdan başarıyla açıldı.',
+        );
+      }
+    }
+
+    // 2. mDNS üzerinden dene (ahbu-<uid>.local)
+    final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
+    final mdnsOpened = await _directPostOpen(
+      mdnsHost,
+      access,
+      const Duration(milliseconds: 900),
+      wifiAddress: wifiAddr,
+    );
+    if (mdnsOpened) {
+      return LocalDoorOpenResult(
+        ok: true,
+        ip: mdnsHost,
+        message: 'Kapı yerel ağdan başarıyla açıldı.',
+      );
+    }
+
+    // 3. Alt ağdaki tüm aday IP'leri hızlı paralel işçilerle dene
+    final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
+    var cursor = 0;
+    String? foundIp;
+    var stopped = false;
+
+    Future<void> worker() async {
+      while (!stopped && cursor < candidates.length) {
+        final current = candidates[cursor];
+        cursor += 1;
+        final ok = await _directPostOpen(
+          current,
+          access,
+          _scanTimeout,
+          wifiAddress: wifiAddr,
+        );
+        if (ok && !stopped) {
+          foundIp = current;
+          stopped = true;
+          return;
+        }
+      }
+    }
+
+    final workerCount =
+        candidates.length < _scanWorkers ? candidates.length : _scanWorkers;
+    if (workerCount > 0) {
+      await Future.wait(List.generate(workerCount, (_) => worker()));
+    }
+
+    if (foundIp != null) {
+      return LocalDoorOpenResult(
+        ok: true,
+        ip: foundIp,
+        message: 'Kapı yerel ağdan başarıyla açıldı.',
+      );
+    }
+
+    return const LocalDoorOpenResult(
+      ok: false,
+      ip: null,
+      message:
+          'Cihaz yerel ağda bulunamadı. Lütfen telefonunuzun cihazla aynı Wi-Fi ağına bağlı olduğundan emin olun.',
+    );
+  }
+
+  Future<bool> _directPostOpen(
+    String ip,
+    LocalDoorAccess access,
+    Duration timeout, {
+    InternetAddress? wifiAddress,
+  }) async {
+    // 1. Raw Socket POST (Android'de Wi-Fi internetsizken en kararlı yöntem)
+    final socketOk = await _rawSocketPost(
+      ip,
+      access.port,
+      access.deviceUid,
+      access.token,
+      timeout,
+      wifiAddress: wifiAddress,
+    );
+    if (socketOk) {
+      return true;
+    }
+
+    // 2. HttpClient POST yedeği
+    final client = _createHttpClient(timeout, wifiAddress);
+    try {
+      final uri = Uri.parse('http://$ip:${access.port}/ahbu/open');
+      final request = await client.postUrl(uri);
+      request.headers.set('X-AHBU-Device-Uid', access.deviceUid);
+      request.headers.set('X-AHBU-Local-Token', access.token);
+      request.headers.set('Cache-Control', 'no-cache');
+
+      final response = await request.close().timeout(timeout);
+      await response.drain<void>();
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<bool> _rawSocketPost(
+    String host,
+    int port,
+    String deviceUid,
+    String token,
+    Duration timeout, {
+    InternetAddress? wifiAddress,
+  }) async {
+    Socket? socket;
+    try {
+      if (wifiAddress != null) {
+        try {
+          socket = await Socket.connect(
+            host,
+            port,
+            sourceAddress: wifiAddress,
+            timeout: timeout,
+          );
+        } catch (_) {
+          socket = await Socket.connect(host, port, timeout: timeout);
+        }
+      } else {
+        socket = await Socket.connect(host, port, timeout: timeout);
+      }
+
+      final payload =
+          'POST /ahbu/open HTTP/1.1\r\n'
+          'Host: $host:$port\r\n'
+          'X-AHBU-Device-Uid: $deviceUid\r\n'
+          'X-AHBU-Local-Token: $token\r\n'
+          'Content-Length: 0\r\n'
+          'Connection: close\r\n\r\n';
+
+      socket.write(payload);
+      await socket.flush();
+
+      final buffer = <int>[];
+      final completer = Completer<bool>();
+      late StreamSubscription<List<int>> sub;
+
+      sub = socket.listen(
+        (data) {
+          buffer.addAll(data);
+          final text = utf8.decode(buffer, allowMalformed: true);
+          if (text.contains('202') ||
+              text.contains('200') ||
+              text.contains('"ok":true')) {
+            if (!completer.isCompleted) completer.complete(true);
+          }
+        },
+        onError: (_) {
+          if (!completer.isCompleted) completer.complete(false);
+        },
+        onDone: () {
+          if (!completer.isCompleted) {
+            final text = utf8.decode(buffer, allowMalformed: true);
+            completer.complete(
+              text.contains('202') ||
+                  text.contains('200') ||
+                  text.contains('"ok":true'),
+            );
+          }
+        },
+        cancelOnError: true,
+      );
+
+      final result = await completer.future.timeout(
+        timeout,
+        onTimeout: () => false,
+      );
+      await sub.cancel();
+      return result;
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        socket?.destroy();
+      } catch (_) {}
+    }
+  }
+
   HttpClient _createHttpClient(
     Duration timeout,
     InternetAddress? sourceAddress,
@@ -90,151 +307,6 @@ class LocalDoorService {
       };
     }
     return client;
-  }
-
-  Future<LocalDoorOpenResult> openDoor(LocalDoorAccess access) async {
-    if (kIsWeb) {
-      return const LocalDoorOpenResult(
-        ok: false,
-        ip: null,
-        message:
-            'Yerel ağ ile kapı açma yalnızca mobil uygulamada desteklenir.',
-      );
-    }
-    if (!access.isUsable) {
-      return const LocalDoorOpenResult(
-        ok: false,
-        ip: null,
-        message: 'Yerel kapı anahtarı bulunamadı.',
-      );
-    }
-
-    final wifiAddr = await _getWifiAddress();
-    final foundIp = await _findDeviceIp(access, wifiAddress: wifiAddr);
-    if (foundIp == null) {
-      return const LocalDoorOpenResult(
-        ok: false,
-        ip: null,
-        message:
-            'Cihaz yerel ağda bulunamadı. Lütfen cihazla aynı Wi-Fi ağına bağlı olduğunuzdan emin olun.',
-      );
-    }
-
-    final client = _createHttpClient(_knownIpTimeout, wifiAddr);
-    try {
-      final uri = Uri.parse('http://$foundIp:${access.port}/ahbu/open');
-      final request = await client.postUrl(uri);
-      request.headers.set('X-AHBU-Device-Uid', access.deviceUid);
-      request.headers.set('X-AHBU-Local-Token', access.token);
-      request.headers.set('Cache-Control', 'no-cache');
-
-      final response = await request.close().timeout(_knownIpTimeout);
-      await response.drain<void>();
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: foundIp,
-          message: 'Kapı komutu yerel ağdan iletildi.',
-        );
-      }
-      return LocalDoorOpenResult(
-        ok: false,
-        ip: foundIp,
-        message: 'Yerel cihaz komutu reddetti (${response.statusCode}).',
-      );
-    } catch (_) {
-      return LocalDoorOpenResult(
-        ok: false,
-        ip: foundIp,
-        message: 'Yerel cihaza komut gönderilemedi.',
-      );
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<String?> _findDeviceIp(
-    LocalDoorAccess access, {
-    InternetAddress? wifiAddress,
-  }) async {
-    final knownIp = access.ip?.trim();
-    if (knownIp != null && knownIp.isNotEmpty) {
-      if (await _matchesDevice(
-        knownIp,
-        access,
-        _knownIpTimeout,
-        wifiAddress: wifiAddress,
-      )) {
-        return knownIp;
-      }
-    }
-
-    // Hızlı mDNS çözümü: ahbu-<device_uid>.local
-    final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
-    if (await _matchesDevice(
-      mdnsHost,
-      access,
-      const Duration(milliseconds: 800),
-      wifiAddress: wifiAddress,
-    )) {
-      return mdnsHost;
-    }
-
-    final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddress);
-    var cursor = 0;
-    String? found;
-
-    Future<void> worker() async {
-      while (found == null && cursor < candidates.length) {
-        final current = candidates[cursor];
-        cursor += 1;
-        if (await _matchesDevice(
-          current,
-          access,
-          _scanTimeout,
-          wifiAddress: wifiAddress,
-        )) {
-          found = current;
-          return;
-        }
-      }
-    }
-
-    final workerCount = candidates.length < _scanWorkers
-        ? candidates.length
-        : _scanWorkers;
-    await Future.wait(List.generate(workerCount, (_) => worker()));
-    return found;
-  }
-
-  Future<bool> _matchesDevice(
-    String ip,
-    LocalDoorAccess access,
-    Duration timeout, {
-    InternetAddress? wifiAddress,
-  }) async {
-    final client = _createHttpClient(timeout, wifiAddress);
-    try {
-      final uri = Uri.parse('http://$ip:${access.port}/ahbu/status');
-      final request = await client.getUrl(uri);
-      request.headers.set('X-AHBU-Device-Uid', access.deviceUid);
-      request.headers.set('X-AHBU-Local-Token', access.token);
-      request.headers.set('Cache-Control', 'no-cache');
-
-      final response = await request.close().timeout(timeout);
-      if (response.statusCode != 200) {
-        return false;
-      }
-      final body = await response.transform(utf8.decoder).join();
-      final payload = jsonDecode(body) as Map<String, dynamic>;
-      final uid = (payload['device_uid'] ?? '').toString().toUpperCase();
-      return uid == access.deviceUid.toUpperCase();
-    } catch (_) {
-      return false;
-    } finally {
-      client.close(force: true);
-    }
   }
 
   bool _isPrivateLocalIp(String ip) {
@@ -276,49 +348,54 @@ class LocalDoorService {
           candidates.add('$prefix.$host');
         }
       }
-    } else {
-      try {
-        final interfaces = await NetworkInterface.list(
-          includeLoopback: false,
-          type: InternetAddressType.IPv4,
-        );
+    }
 
-        for (final interface in interfaces) {
-          final name = interface.name.toLowerCase();
-          if (name.contains('rmnet') ||
-              name.contains('ccmni') ||
-              name.contains('pdp') ||
-              name.contains('tun') ||
-              name.contains('ppp') ||
-              name.contains('cellular') ||
-              name.contains('mobile')) {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+
+      for (final interface in interfaces) {
+        final name = interface.name.toLowerCase();
+        if (name.contains('rmnet') ||
+            name.contains('ccmni') ||
+            name.contains('pdp') ||
+            name.contains('tun') ||
+            name.contains('ppp') ||
+            name.contains('cellular') ||
+            name.contains('mobile')) {
+          continue;
+        }
+        for (final address in interface.addresses) {
+          final ip = address.address;
+          if (!_isPrivateLocalIp(ip)) {
             continue;
           }
-          for (final address in interface.addresses) {
-            final ip = address.address;
-            if (!_isPrivateLocalIp(ip)) {
-              continue;
-            }
-            ownIps.add(ip);
-            final parts = ip.split('.');
-            if (parts.length != 4) {
-              continue;
-            }
-            final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
-            for (var host = 1; host <= 254; host += 1) {
-              candidates.add('$prefix.$host');
-            }
+          ownIps.add(ip);
+          final parts = ip.split('.');
+          if (parts.length != 4) {
+            continue;
           }
-        }
-      } catch (_) {}
-
-      // Eğer hiçbir arayüz bulunamazsa yaygın varsayılan alt ağları ekle
-      if (candidates.isEmpty) {
-        for (final prefix in const ['192.168.1', '192.168.0', '192.168.4']) {
+          final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
           for (var host = 1; host <= 254; host += 1) {
             candidates.add('$prefix.$host');
           }
         }
+      }
+    } catch (_) {}
+
+    // En yaygın modem alt ağlarını her halükarda ekle
+    for (final prefix in const [
+      '192.168.1',
+      '192.168.0',
+      '192.168.4',
+      '192.168.178',
+      '192.168.2',
+      '10.0.0',
+    ]) {
+      for (var host = 1; host <= 254; host += 1) {
+        candidates.add('$prefix.$host');
       }
     }
 
