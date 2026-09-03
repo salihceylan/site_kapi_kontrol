@@ -413,7 +413,7 @@ class LocalDoorService {
       }
     }
 
-    // 1. Telefonun bağlı olduğu gerçek Wi-Fi alt ağını İLK SIRAYA ekle (örn: 192.168.1.1 - 254)
+    // 1. Telefonun bağlı olduğu gerçek Wi-Fi alt ağı varsa YALNIZCA o ağı tara (253 IP)
     if (wifiAddress != null && _isPrivateLocalIp(wifiAddress.address)) {
       final ip = wifiAddress.address;
       ownIps.add(ip);
@@ -423,10 +423,11 @@ class LocalDoorService {
         for (var host = 1; host <= 254; host += 1) {
           addIp('$prefix.$host');
         }
+        return candidates;
       }
     }
 
-    // 2. Diğer standart alt ağları ikincil olarak ekle
+    // 2. Wi-Fi IP alınamadıysa standart alt ağları tara
     for (final prefix in const [
       '192.168.1',
       '192.168.0',

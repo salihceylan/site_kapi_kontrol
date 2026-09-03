@@ -41,6 +41,9 @@ inline void mqttPublishState(bool locked) {
   doc["ota_last_version"] = otaLastVersion();
   doc["wifi_rssi"] = wifiSinyalDbm();
   doc["wifi_signal_percent"] = wifiSinyalYuzde();
+  doc["local_ip"] = wifiIpAdresi();
+  doc["local_control_port"] = YEREL_KAPI_KONTROL_PORT;
+  doc["local_control_available"] = wifiHasLocalControlToken();
 
   String payload;
   serializeJson(doc, payload);
