@@ -90,6 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isLoadingDoorStatus = false;
   String? _doorStatusError;
   bool _isOpeningDoor = false;
+  bool _isPhoneOnWifi = false;
 
   // Kullanıcı Yönetimi
   final Map<UserRole, ManagedUserPage> _managedPages = {};
@@ -482,8 +483,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final (status, error) = await widget.authService.getDoorRuntimeStatus(
       doorId: doorId,
     );
+    final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
     if (!mounted) return;
     setState(() {
+      _isPhoneOnWifi = isWifi;
       if (!isBackgroundRefresh) {
         _isLoadingDoorStatus = false;
       }
@@ -1329,6 +1332,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           canTryLocalDoorOpen:
               _doorControlDoor != null &&
               widget.authService.canTryLocalDoorOpen(_doorControlDoor!),
+          isPhoneOnWifi: _isPhoneOnWifi,
           onSelectSite: _selectDoorControlSite,
           onSelectDoor: _selectDoorControlDoor,
           onOpenDoor: _openDoor,

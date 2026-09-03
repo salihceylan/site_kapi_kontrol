@@ -15,6 +15,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     required this.isLoadingStatus,
     required this.isOpeningDoor,
     this.canTryLocalDoorOpen = false,
+    this.isPhoneOnWifi = false,
     required this.onSelectDoor,
     required this.onOpenDoor,
     required this.onCreateGuestPass,
@@ -29,6 +30,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
   final bool isLoadingStatus;
   final bool isOpeningDoor;
   final bool canTryLocalDoorOpen;
+  final bool isPhoneOnWifi;
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
   final VoidCallback onCreateGuestPass;
@@ -41,7 +43,9 @@ class ResidentDoorRemoteCard extends StatelessWidget {
         selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
 
+    final canOperate = isCloudOnline || isPhoneOnWifi;
     final commandEnabled = isDeviceAssigned &&
+        canOperate &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -59,8 +63,11 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     } else if (isCloudOnline) {
       statusText = '🟢 Çevrimiçi (Bulut) - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
+    } else if (isPhoneOnWifi) {
+      statusText = '🟡 Bulut Çevrimdışı - Yerel Wi-Fi üzerinden açmak için dokunun';
+      statusColor = const Color(0xFFFACC15);
     } else {
-      statusText = '🔴 Çevrimdışı - Aynı Wi-Fi\'ye bağlıysanız yerel ağdan açmayı deneyin';
+      statusText = '🔴 Cihaz Çevrimdışı - Yerel açma için aynı Wi-Fi ağına bağlanın';
       statusColor = const Color(0xFFF87171);
     }
 
@@ -265,9 +272,9 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                               Text(
                                 commandEnabled
                                     ? (!isCloudOnline
-                                        ? 'YEREL AĞDAN DENE'
+                                        ? 'YEREL AĞDAN AÇ'
                                         : 'KAPIYI AÇ')
-                                    : 'KAPALI',
+                                    : (isDeviceAssigned ? 'ÇEVRİMDİŞI' : 'KAPALI'),
                                 style: TextStyle(
                                   color: commandEnabled
                                       ? Colors.white

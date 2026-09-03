@@ -26,6 +26,7 @@ class DashboardView extends StatelessWidget {
     required this.isOpeningDoor,
     required this.doorStatusError,
     required this.canTryLocalDoorOpen,
+    this.isPhoneOnWifi = false,
     required this.onSelectSite,
     required this.onSelectDoor,
     required this.onOpenDoor,
@@ -47,6 +48,7 @@ class DashboardView extends StatelessWidget {
   final bool isOpeningDoor;
   final String? doorStatusError;
   final bool canTryLocalDoorOpen;
+  final bool isPhoneOnWifi;
   final ValueChanged<int> onSelectSite;
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
@@ -67,6 +69,7 @@ class DashboardView extends StatelessWidget {
         isLoadingStatus: isLoadingStatus,
         isOpeningDoor: isOpeningDoor,
         canTryLocalDoorOpen: canTryLocalDoorOpen,
+        isPhoneOnWifi: isPhoneOnWifi,
         onSelectDoor: onSelectDoor,
         onOpenDoor: onOpenDoor,
         onCreateGuestPass: onCreateGuestPass,
@@ -146,6 +149,7 @@ class DashboardView extends StatelessWidget {
           isOpeningDoor: isOpeningDoor,
           doorStatusError: doorStatusError,
           canTryLocalDoorOpen: canTryLocalDoorOpen,
+          isPhoneOnWifi: isPhoneOnWifi,
           onSelectSite: onSelectSite,
           onSelectDoor: onSelectDoor,
           onOpenDoor: onOpenDoor,

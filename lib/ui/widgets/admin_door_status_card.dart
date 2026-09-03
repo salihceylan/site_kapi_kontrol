@@ -25,6 +25,7 @@ class AdminDoorStatusCard extends StatelessWidget {
     required this.isOpeningDoor,
     required this.doorStatusError,
     required this.canTryLocalDoorOpen,
+    this.isPhoneOnWifi = false,
     required this.onSelectSite,
     required this.onSelectDoor,
     required this.onOpenDoor,
@@ -46,6 +47,7 @@ class AdminDoorStatusCard extends StatelessWidget {
   final bool isOpeningDoor;
   final String? doorStatusError;
   final bool canTryLocalDoorOpen;
+  final bool isPhoneOnWifi;
   final ValueChanged<int> onSelectSite;
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
@@ -302,12 +304,16 @@ class AdminDoorStatusCard extends StatelessWidget {
         : 'Bağlantı Yok';
     final deviceOnlineText = isCloudOnline
         ? '🟢 Çevrimiçi (Bulut)'
-        : '🔴 Çevrimdışı (Bulut Bağlantısı Yok)';
+        : (isPhoneOnWifi
+            ? '🟡 Bulut Çevrimdışı (Yerel Wi-Fi Denenebilir)'
+            : '🔴 Çevrimdışı (Bulut Bağlantısı Yok)');
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
             ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
             : 'Bilinmiyor')
-        : 'Bilinmiyor (Cihaz Çevrimdışı)';
+        : (isPhoneOnWifi
+            ? 'Bilinmiyor (Yerel Ağdan Deneyin)'
+            : 'Bilinmiyor (Cihaz Çevrimdışı)');
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
             ? '-'
@@ -315,7 +321,9 @@ class AdminDoorStatusCard extends StatelessWidget {
                 '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}')
         : '-';
 
+    final canOperate = isCloudOnline || isPhoneOnWifi;
     final commandEnabled = isDeviceAssigned &&
+        canOperate &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -331,7 +339,7 @@ class AdminDoorStatusCard extends StatelessWidget {
         Text('Kapı Durumu: $stateText'),
         const SizedBox(height: 6),
         Text(
-          'Yerel Ağ Kontrolü: ${isDeviceAssigned ? 'Aynı Wi-Fi Ağındayken Kullanılabilir' : 'Cihaz Yok'}',
+          'Yerel Ağ Kontrolü: ${isPhoneOnWifi ? 'Bağlı (Aynı Wi-Fi)' : 'Wi-Fi Bağlı Değil'}',
         ),
         const SizedBox(height: 6),
         Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
@@ -365,9 +373,11 @@ class AdminDoorStatusCard extends StatelessWidget {
             label: Text(
               isOpeningDoor
                   ? 'Gönderiliyor...'
-                  : (!isCloudOnline
-                      ? 'Kapı Aç (Yerel Wi-Fi Dene)'
-                      : 'Kapı Aç'),
+                  : (isCloudOnline
+                      ? 'Kapı Aç'
+                      : (isPhoneOnWifi
+                          ? 'Kapı Aç (Yerel Wi-Fi)'
+                          : 'Cihaz Çevrimdışı (Wi-Fi Bağlayın)')),
             ),
           ),
         ),
