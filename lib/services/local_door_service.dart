@@ -151,12 +151,36 @@ class LocalDoorService {
       }
     }
 
-    // 2. mDNS üzerinden dene (ahbu-<uid>.local)
+    // 2. Anında UDP Broadcast Keşfi (1 Tek Paket ile ESP32 IP'sini Bulma - 50ms)
+    debugPrint('[YerelKapi] UDP Broadcast ile cihaz aranıyor...');
+    final discoveredIp = await _discoverDeviceIpViaUdp(
+      access.deviceUid,
+      wifiAddress: wifiAddr,
+    );
+    if (discoveredIp != null && discoveredIp.isNotEmpty) {
+      debugPrint('[YerelKapi] UDP ile bulunan IP ($discoveredIp) deneniyor...');
+      final opened = await _directPostOpen(
+        discoveredIp,
+        access,
+        _knownIpTimeout,
+        wifiAddress: wifiAddr,
+      );
+      if (opened) {
+        debugPrint('[YerelKapi] UDP Keşif IP ($discoveredIp) üzerinden açıldı!');
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: discoveredIp,
+          message: 'Kapı yerel ağdan başarıyla açıldı.',
+        );
+      }
+    }
+
+    // 3. mDNS üzerinden dene (ahbu-<uid>.local)
     final mdnsHost = 'ahbu-${access.deviceUid.toLowerCase()}.local';
     final mdnsOpened = await _directPostOpen(
       mdnsHost,
       access,
-      const Duration(milliseconds: 900),
+      const Duration(milliseconds: 600),
       wifiAddress: wifiAddr,
     );
     if (mdnsOpened) {
@@ -217,6 +241,71 @@ class LocalDoorService {
       message:
           'Cihaz yerel ağda bulunamadı. Lütfen telefonunuzun cihazla aynı Wi-Fi ağına bağlı olduğundan emin olun.',
     );
+  }
+
+  Future<String?> _discoverDeviceIpViaUdp(
+    String deviceUid, {
+    InternetAddress? wifiAddress,
+  }) async {
+    try {
+      final socket = await RawDatagramSocket.bind(
+        wifiAddress ?? InternetAddress.anyIPv4,
+        0,
+      );
+      socket.broadcastEnabled = true;
+
+      final completer = Completer<String?>();
+      final payload = utf8.encode(jsonEncode({
+        'action': 'discover',
+        'target_uid': deviceUid,
+      }));
+
+      // Broadcast gönder: Genel 255.255.255.255 ve Alt ağ broadcast
+      socket.send(payload, InternetAddress('255.255.255.255'), 8765);
+      if (wifiAddress != null) {
+        final parts = wifiAddress.address.split('.');
+        if (parts.length == 4) {
+          socket.send(
+            payload,
+            InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255'),
+            8765,
+          );
+        }
+      }
+
+      socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket.receive();
+          if (dg != null) {
+            final text = utf8.decode(dg.data, allowMalformed: true);
+            if (text.contains(deviceUid) || text.contains('"ok":true')) {
+              try {
+                final json = jsonDecode(text) as Map<String, dynamic>;
+                final ip = json['ip'] as String?;
+                if (ip != null && ip.isNotEmpty) {
+                  debugPrint('[YerelKapi] UDP Keşif ile cihaz bulundu -> $ip');
+                  if (!completer.isCompleted) completer.complete(ip);
+                }
+              } catch (_) {
+                final fallbackIp = dg.address.address;
+                debugPrint('[YerelKapi] UDP Keşif IP -> $fallbackIp');
+                if (!completer.isCompleted) completer.complete(fallbackIp);
+              }
+            }
+          }
+        }
+      });
+
+      return await completer.future
+          .timeout(
+            const Duration(milliseconds: 350),
+            onTimeout: () => null,
+          )
+          .whenComplete(() => socket.close());
+    } catch (e) {
+      debugPrint('[YerelKapi] UDP Keşif hatası: $e');
+      return null;
+    }
   }
 
   Future<bool> _directPostOpen(

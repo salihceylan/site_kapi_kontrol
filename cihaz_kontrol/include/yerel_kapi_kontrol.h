@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 
 #include "device_konfig.h"
 #include "offline_log.h"
@@ -12,7 +13,9 @@
 #include "wifi_baglanti.h"
 
 inline WiFiServer gYerelKapiServer(YEREL_KAPI_KONTROL_PORT);
+inline WiFiUDP gYerelUdp;
 inline bool gYerelKapiServerAktif = false;
+inline bool gYerelUdpAktif = false;
 
 extern bool gDoorLocked;
 
@@ -186,6 +189,11 @@ inline void yerelKapiKontrolBaslat() {
   gYerelKapiServer.setNoDelay(true);
   gYerelKapiServerAktif = true;
 
+  if (!gYerelUdpAktif) {
+    gYerelUdp.begin(YEREL_KAPI_KONTROL_PORT);
+    gYerelUdpAktif = true;
+  }
+
   String mdnsHost = "ahbu-" + cihazUniqueId();
   mdnsHost.toLowerCase();
   if (MDNS.begin(mdnsHost.c_str())) {
@@ -204,6 +212,11 @@ inline void yerelKapiKontrolBaslat() {
 }
 
 inline void yerelKapiKontrolDurdur() {
+  if (gYerelUdpAktif) {
+    gYerelUdp.stop();
+    gYerelUdpAktif = false;
+  }
+
   if (!gYerelKapiServerAktif) {
     return;
   }
@@ -221,6 +234,26 @@ inline void yerelKapiKontrolLoop() {
   }
 
   yerelKapiKontrolBaslat();
+
+  // UDP Broadcast Discovery Yanıtlayıcı (Telefona anında IP bildirimi)
+  if (gYerelUdpAktif) {
+    int packetSize = gYerelUdp.parsePacket();
+    if (packetSize > 0) {
+      char packetBuffer[255];
+      int len = gYerelUdp.read(packetBuffer, 254);
+      if (len > 0) packetBuffer[len] = '\0';
+      String msg = String(packetBuffer);
+      if (msg.indexOf("discover") >= 0 || msg.indexOf("ahbu") >= 0 || msg.indexOf(cihazUniqueId()) >= 0) {
+        String reply = "{\"ok\":true,\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\",\"ip\":\"" + yerelJsonEscape(wifiIpAdresi()) + "\",\"port\":" + String(YEREL_KAPI_KONTROL_PORT) + "}";
+        gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
+        gYerelUdp.print(reply);
+        gYerelUdp.endPacket();
+        Serial.print("UDP Discovery yanitlandi -> ");
+        Serial.println(gYerelUdp.remoteIP());
+      }
+    }
+  }
+
   WiFiClient client = gYerelKapiServer.available();
   if (!client) {
     return;
