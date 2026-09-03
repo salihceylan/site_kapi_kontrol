@@ -42,44 +42,67 @@ class LocalDoorService {
         );
       }
 
-      // 1. Kesin Wi-Fi / Ethernet arayüzleri (wlan0, wlan1, wifi, eth)
+      // 1. ÖNCELİK: Doğrudan wlan0 veya 192.168.x.x / 172.x.x.x IP'ye sahip Wi-Fi arayüzü
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        final isWifiName = name.startsWith('wlan') ||
-            name.startsWith('wifi') ||
-            name == 'wlan0' ||
-            name == 'wlan1' ||
-            name.startsWith('eth');
-        if (isWifiName) {
+        if (name == 'wlan0' || name == 'wifi0' || name == 'eth0') {
           for (final addr in iface.addresses) {
             if (_isPrivateLocalIp(addr.address)) {
+              debugPrint(
+                '[AğArayüzü] Birincil Wi-Fi seçildi: ${iface.name} (${addr.address})',
+              );
               return addr;
             }
           }
         }
       }
 
-      // 2. İkincil kontrol: Kesinlikle hücresel/mobil olmayan özel yerel IP'ler
+      // 2. İKİNCİL: Herhangi bir wlan / wifi arayüzünde 192.168.x.x IP (wlan1 vb. tethering olmayanlar)
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        if (name.contains('rmnet') ||
-            name.contains('ipa') ||
-            name.contains('radio') ||
-            name.contains('clat') ||
-            name.contains('ccmni') ||
-            name.contains('pdp') ||
-            name.contains('tun') ||
-            name.contains('ppp') ||
-            name.contains('cellular') ||
-            name.contains('mobile') ||
-            name.contains('wwan') ||
-            name.contains('epdg') ||
-            name.contains('dummy')) {
-          continue;
+        if (name.startsWith('wlan') ||
+            name.startsWith('wifi') ||
+            name.startsWith('eth')) {
+          for (final addr in iface.addresses) {
+            if (addr.address.startsWith('192.168.') ||
+                addr.address.startsWith('172.')) {
+              debugPrint(
+                '[AğArayüzü] İkincil Wi-Fi seçildi: ${iface.name} (${addr.address})',
+              );
+              return addr;
+            }
+          }
         }
-        for (final addr in iface.addresses) {
-          if (_isPrivateLocalIp(addr.address)) {
-            return addr;
+      }
+
+      // 3. ÜÇÜNCÜL: Mobil/hücresel olmayan herhangi bir arayüzde 192.168.x.x IP
+      for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        if (!name.contains('rmnet') &&
+            !name.contains('dummy') &&
+            !name.contains('radio')) {
+          for (final addr in iface.addresses) {
+            if (addr.address.startsWith('192.168.')) {
+              debugPrint(
+                '[AğArayüzü] Üçüncül 192.168 IP seçildi: ${iface.name} (${addr.address})',
+              );
+              return addr;
+            }
+          }
+        }
+      }
+
+      // 4. DÖRDÜNCÜL: Herhangi bir wlan arayüzündeki özel IP
+      for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        if (name.startsWith('wlan') || name.startsWith('wifi')) {
+          for (final addr in iface.addresses) {
+            if (_isPrivateLocalIp(addr.address)) {
+              debugPrint(
+                '[AğArayüzü] Dördüncül Wi-Fi seçildi: ${iface.name} (${addr.address})',
+              );
+              return addr;
+            }
           }
         }
       }
@@ -381,9 +404,16 @@ class LocalDoorService {
     InternetAddress? wifiAddress,
   }) async {
     final ownIps = <String>{};
-    final candidates = <String>{};
+    final candidates = <String>[];
+    final added = <String>{};
 
-    // 1. Eğer telefonun gerçek Wi-Fi IP'si bulunduysa öncelikle o bloğu ekle
+    void addIp(String ip) {
+      if (ip != knownIp && !ownIps.contains(ip) && added.add(ip)) {
+        candidates.add(ip);
+      }
+    }
+
+    // 1. Telefonun bağlı olduğu gerçek Wi-Fi alt ağını İLK SIRAYA ekle (örn: 192.168.1.1 - 254)
     if (wifiAddress != null && _isPrivateLocalIp(wifiAddress.address)) {
       final ip = wifiAddress.address;
       ownIps.add(ip);
@@ -391,12 +421,12 @@ class LocalDoorService {
       if (parts.length == 4) {
         final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
         for (var host = 1; host <= 254; host += 1) {
-          candidates.add('$prefix.$host');
+          addIp('$prefix.$host');
         }
       }
     }
 
-    // 2. Standart ev/site modem ağlarını DAİMA adaylara ekle
+    // 2. Diğer standart alt ağları ikincil olarak ekle
     for (final prefix in const [
       '192.168.1',
       '192.168.0',
@@ -405,15 +435,11 @@ class LocalDoorService {
       '192.168.178',
     ]) {
       for (var host = 1; host <= 254; host += 1) {
-        candidates.add('$prefix.$host');
+        addIp('$prefix.$host');
       }
     }
 
-    candidates.removeAll(ownIps);
-    if (knownIp != null && knownIp.isNotEmpty) {
-      candidates.remove(knownIp);
-    }
-    return candidates.toList(growable: false);
+    return candidates;
   }
 
   void dispose() {}
