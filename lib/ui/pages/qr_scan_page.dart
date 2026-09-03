@@ -4,9 +4,18 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 
 class QrScanPage extends StatefulWidget {
-  const QrScanPage({super.key, this.accentColor});
+  const QrScanPage({
+    super.key,
+    this.accentColor,
+    this.title = 'QR Kod Oku',
+    this.instructionText = 'Cihazın QR kodunu kameraya gösterin.',
+    this.preserveCase = false,
+  });
 
   final Color? accentColor;
+  final String title;
+  final String instructionText;
+  final bool preserveCase;
 
   @override
   State<QrScanPage> createState() => _QrScanPageState();
@@ -54,7 +63,9 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!mounted) {
       return;
     }
-    Navigator.of(context).pop(rawValue.toUpperCase());
+    Navigator.of(context).pop(
+      widget.preserveCase ? rawValue : rawValue.toUpperCase(),
+    );
   }
 
   @override
@@ -69,14 +80,14 @@ class _QrScanPageState extends State<QrScanPage> {
     if (!_isSupportedPlatform) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('QR Kod Oku'),
+          title: Text(widget.title),
           backgroundColor: accentColor,
         ),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Bu platformda kamera ile QR tarama desteklenmiyor. Sirket uygulamasini Android veya iPhone uzerinde kullanin.',
+              'Bu platformda kamera ile QR tarama desteklenmiyor. Şirket uygulamasını Android veya iPhone üzerinde kullanın.',
               textAlign: TextAlign.center,
             ),
           ),
@@ -86,7 +97,7 @@ class _QrScanPageState extends State<QrScanPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('QR Kod Oku'),
+        title: Text(widget.title),
         backgroundColor: accentColor,
       ),
       body: LayoutBuilder(
@@ -108,10 +119,10 @@ class _QrScanPageState extends State<QrScanPage> {
                     color: Colors.black.withValues(alpha: 0.55),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text(
-                    'Cihazin QR kodunu kameraya gosterin.',
+                  child: Text(
+                    widget.instructionText,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
