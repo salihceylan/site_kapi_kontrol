@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
@@ -13,11 +14,37 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const String _savedIdentifierKey = 'saved_login_identifier';
+  static const String _rememberMeKey = 'remember_login_credentials';
+
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final remember = prefs.getBool(_rememberMeKey) ?? true;
+      final savedId = prefs.getString(_savedIdentifierKey) ?? '';
+      if (mounted) {
+        setState(() {
+          _rememberMe = remember;
+          if (remember && savedId.isNotEmpty) {
+            _identifierController.text = savedId;
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -31,10 +58,13 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    final identifier = _identifierController.text.trim().toLowerCase();
+    final password = _passwordController.text.trim();
+
     setState(() => _isLoading = true);
     final error = await widget.authService.login(
-      email: _identifierController.text.trim().toLowerCase(),
-      password: _passwordController.text.trim(),
+      email: identifier,
+      password: password,
     );
 
     if (!mounted) {
@@ -46,6 +76,17 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error)));
+    } else {
+      // Başarılı girişte kullanıcı adını hatırla
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_rememberMeKey, _rememberMe);
+        if (_rememberMe) {
+          await prefs.setString(_savedIdentifierKey, identifier);
+        } else {
+          await prefs.remove(_savedIdentifierKey);
+        }
+      } catch (_) {}
     }
   }
 
@@ -136,7 +177,41 @@ class _LoginPageState extends State<LoginPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _rememberMe,
+                            onChanged: (val) {
+                              setState(() => _rememberMe = val ?? true);
+                            },
+                            activeColor: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _rememberMe = !_rememberMe);
+                            },
+                            child: const Text(
+                              'Beni Hatırla (Kullanıcı adını kaydet)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textDark,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _submit,
                       style: ElevatedButton.styleFrom(

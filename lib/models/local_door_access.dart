@@ -13,7 +13,7 @@ class LocalDoorAccess {
   final int port;
   final DateTime updatedAt;
 
-  static const Duration cacheValidity = Duration(hours: 12);
+  static const Duration cacheValidity = Duration(days: 90);
 
   bool get isUsable {
     if (deviceUid.isEmpty || token.isEmpty) {
