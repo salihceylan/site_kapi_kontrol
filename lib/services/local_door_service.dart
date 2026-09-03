@@ -131,32 +131,40 @@ class LocalDoorService {
       '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
     );
 
-    // 1. Bilinen IP varsa doğrudan o cihaza UNICAST UDP ile açmayı dene (1-5 ms)
+    // 1. Bilinen IP varsa önce kimliğini doğrula ve aç
     if (knownIp != null && knownIp.isNotEmpty) {
-      debugPrint('[YerelKapi] Kayıtlı IP üzerinden UNICAST UDP deneniyor: $knownIp...');
-      final udpOpened = await _directUdpOpen(knownIp, access, wifiAddress: wifiAddr);
-      if (udpOpened) {
-        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UNICAST UDP ile açıldı!');
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: knownIp,
-          message: 'Kapı yerel ağdan başarıyla açıldı.',
-        );
-      }
-
-      final postOpened = await _directPostOpen(
+      final matches = await _probeDeviceIp(
         knownIp,
-        access,
-        const Duration(milliseconds: 300),
+        access.deviceUid,
         wifiAddress: wifiAddr,
+        timeout: const Duration(milliseconds: 100),
       );
-      if (postOpened) {
-        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) HTTP üzerinden açıldı!');
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: knownIp,
-          message: 'Kapı yerel ağdan başarıyla açıldı.',
+      if (matches) {
+        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) doğrulandı, UNICAST UDP deneniyor...');
+        final udpOpened = await _directUdpOpen(knownIp, access, wifiAddress: wifiAddr);
+        if (udpOpened) {
+          debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UNICAST UDP ile açıldı!');
+          return LocalDoorOpenResult(
+            ok: true,
+            ip: knownIp,
+            message: 'Kapı yerel ağdan başarıyla açıldı.',
+          );
+        }
+
+        final postOpened = await _directPostOpen(
+          knownIp,
+          access,
+          const Duration(milliseconds: 300),
+          wifiAddress: wifiAddr,
         );
+        if (postOpened) {
+          debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) HTTP üzerinden açıldı!');
+          return LocalDoorOpenResult(
+            ok: true,
+            ip: knownIp,
+            message: 'Kapı yerel ağdan başarıyla açıldı.',
+          );
+        }
       }
     }
 
@@ -193,10 +201,10 @@ class LocalDoorService {
       }
     }
 
-    // 3. Alt ağdaki tüm aday IP'leri hızlı paralel işçilerle dene
+    // 3. Alt ağdaki tüm aday IP'leri kimlik doğrulama sorgusuyla (discover) tara (ASLA röle tetiklemez!)
     final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
     debugPrint(
-      '[YerelKapi] Alt ağ taraması başlatılıyor (${candidates.length} aday IP)...',
+      '[YerelKapi] Alt ağ kimlik taraması başlatılıyor (${candidates.length} aday IP)...',
     );
     var cursor = 0;
     String? foundIp;
@@ -206,16 +214,26 @@ class LocalDoorService {
       while (!stopped && cursor < candidates.length) {
         final current = candidates[cursor];
         cursor += 1;
-        final ok = await _directPostOpen(
+        // ASLA RÖLE TETİKLEME PAKETİ ATMA! Yalnızca 'discover' kimlik sorgusu yap!
+        final matches = await _probeDeviceIp(
           current,
-          access,
-          _scanTimeout,
+          access.deviceUid,
           wifiAddress: wifiAddr,
+          timeout: _scanTimeout,
         );
-        if (ok && !stopped) {
-          foundIp = current;
-          stopped = true;
-          return;
+        if (matches && !stopped) {
+          debugPrint('[YerelKapi] Alt ağ taramasında eşleşen cihaz bulundu -> $current');
+          final ok = await _directPostOpen(
+            current,
+            access,
+            const Duration(milliseconds: 400),
+            wifiAddress: wifiAddr,
+          );
+          if (ok && !stopped) {
+            foundIp = current;
+            stopped = true;
+            return;
+          }
         }
       }
     }
@@ -322,6 +340,61 @@ class LocalDoorService {
       return ip != null && ip.isNotEmpty;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<bool> _probeDeviceIp(
+    String ip,
+    String targetUid, {
+    InternetAddress? wifiAddress,
+    Duration timeout = const Duration(milliseconds: 150),
+  }) async {
+    if (kIsWeb || ip.trim().isEmpty || targetUid.trim().isEmpty) return false;
+    RawDatagramSocket? socket;
+    try {
+      socket = await RawDatagramSocket.bind(
+        wifiAddress ?? InternetAddress.anyIPv4,
+        0,
+      );
+      final completer = Completer<bool>();
+      final cleanUid = targetUid.trim().toUpperCase();
+      final payload = utf8.encode(jsonEncode({
+        'action': 'discover',
+        'target_uid': cleanUid,
+      }));
+
+      socket.send(payload, InternetAddress(ip), 8765);
+
+      socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket?.receive();
+          if (dg != null) {
+            final text = utf8.decode(dg.data, allowMalformed: true);
+            try {
+              final json = jsonDecode(text) as Map<String, dynamic>;
+              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+              if (respUid != null && respUid == cleanUid) {
+                if (!completer.isCompleted) completer.complete(true);
+              }
+            } catch (_) {
+              if (text.contains(cleanUid)) {
+                if (!completer.isCompleted) completer.complete(true);
+              }
+            }
+          }
+        }
+      });
+
+      return await completer.future.timeout(
+        timeout,
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
