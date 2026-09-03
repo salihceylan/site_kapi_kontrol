@@ -733,16 +733,19 @@ class AuthService extends ChangeNotifier {
 
     // Eğer Wi-Fi'ye bağlıysak ve cihaz atanmışsa:
     if (hasWifi && hasDeviceUid && door != null) {
+      debugPrint('[AuthService] Wi-Fi bağlı, kapı açma başlatılıyor... (Bulut deneniyor - 1.5s)');
       try {
         final status = await api
             .openDoor(token: active.token, doorId: doorId)
             .timeout(const Duration(milliseconds: 1500));
+        debugPrint('[AuthService] Bulut üzerinden başarıyla açıldı.');
         unawaited(_cacheLocalDoorAccess(status));
         return (status, null);
-      } catch (_) {
-        // Bulut yanıt vermedi veya modem internetsiz -> ANINDA yerel Wi-Fi'den aç
+      } catch (e) {
+        debugPrint('[AuthService] Bulut yanıt vermedi/hata ($e) -> ANINDA yerel Wi-Fi moduna geçiliyor...');
         final localResult = await _tryOpenDoorLocally(door);
         if (localResult != null && localResult.$1 != null) {
+          debugPrint('[AuthService] Yerel Wi-Fi ile kapı açıldı!');
           return localResult;
         }
         return (

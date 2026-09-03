@@ -92,10 +92,14 @@ class LocalDoorService {
     }
 
     final wifiAddr = await _getWifiAddress();
+    debugPrint(
+      '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: ${access.ip}, Telefon Wi-Fi: ${wifiAddr?.address}',
+    );
 
     // 1. Bilinen IP varsa doğrudan kapıyı açmayı dene
     final knownIp = access.ip?.trim();
     if (knownIp != null && knownIp.isNotEmpty) {
+      debugPrint('[YerelKapi] Kayıtlı IP deneniyor: $knownIp...');
       final opened = await _directPostOpen(
         knownIp,
         access,
@@ -103,6 +107,7 @@ class LocalDoorService {
         wifiAddress: wifiAddr,
       );
       if (opened) {
+        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) üzerinden açıldı!');
         return LocalDoorOpenResult(
           ok: true,
           ip: knownIp,
@@ -120,6 +125,7 @@ class LocalDoorService {
       wifiAddress: wifiAddr,
     );
     if (mdnsOpened) {
+      debugPrint('[YerelKapi] mDNS ($mdnsHost) üzerinden açıldı!');
       return LocalDoorOpenResult(
         ok: true,
         ip: mdnsHost,
@@ -129,6 +135,9 @@ class LocalDoorService {
 
     // 3. Alt ağdaki tüm aday IP'leri hızlı paralel işçilerle dene
     final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
+    debugPrint(
+      '[YerelKapi] Alt ağ taraması başlatılıyor (${candidates.length} aday IP)...',
+    );
     var cursor = 0;
     String? foundIp;
     var stopped = false;
@@ -158,6 +167,7 @@ class LocalDoorService {
     }
 
     if (foundIp != null) {
+      debugPrint('[YerelKapi] Tarama başarılı! Cihaz bulundu: $foundIp');
       return LocalDoorOpenResult(
         ok: true,
         ip: foundIp,
@@ -165,6 +175,7 @@ class LocalDoorService {
       );
     }
 
+    debugPrint('[YerelKapi] Cihaz yerel ağda bulunamadı.');
     return const LocalDoorOpenResult(
       ok: false,
       ip: null,
