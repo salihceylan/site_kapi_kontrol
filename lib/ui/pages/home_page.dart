@@ -297,7 +297,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingSites = false);
-      _showMessage(e.toString());
+      if (force) {
+        _showMessage(e.toString());
+      }
     }
   }
 
@@ -316,7 +318,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _isLoadingSiteStructure = false;
       _selectedSiteStructure = structure;
     });
-    if (error != null) _showMessage(error);
+    if (error != null && structure == null) _showMessage(error);
   }
 
   Future<void> _loadDoorControlSites({int? preferredSiteId}) async {

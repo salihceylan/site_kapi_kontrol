@@ -981,7 +981,21 @@ class AuthApi {
       final raw = jsonDecode(response.body);
       return raw is Map<String, dynamic> ? raw : <String, dynamic>{};
     } on FormatException {
-      throw ApiException('Sunucudan gecersiz yanit alindi.');
+      final bodyLower = response.body.toLowerCase();
+      if (bodyLower.contains('<html') ||
+          bodyLower.contains('<!doctype') ||
+          bodyLower.contains('router') ||
+          bodyLower.contains('modem') ||
+          bodyLower.contains('gateway')) {
+        throw ApiException(
+          'İnternet bağlantısı yok (Modem internete bağlı değil).',
+          statusCode: response.statusCode,
+        );
+      }
+      throw ApiException(
+        'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',
+        statusCode: response.statusCode,
+      );
     }
   }
 
