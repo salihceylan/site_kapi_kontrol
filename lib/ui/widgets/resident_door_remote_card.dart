@@ -14,6 +14,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     required this.runtimeStatus,
     required this.isLoadingStatus,
     required this.isOpeningDoor,
+    this.canTryLocalDoorOpen = false,
     required this.onSelectDoor,
     required this.onOpenDoor,
     required this.onCreateGuestPass,
@@ -27,6 +28,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
   final DoorRuntimeStatus? runtimeStatus;
   final bool isLoadingStatus;
   final bool isOpeningDoor;
+  final bool canTryLocalDoorOpen;
   final ValueChanged<int> onSelectDoor;
   final VoidCallback onOpenDoor;
   final VoidCallback onCreateGuestPass;

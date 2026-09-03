@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 import hashlib
 import os
@@ -10,6 +12,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -27,6 +31,8 @@ from serial.tools import list_ports
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 OUTPUT_DIR = BASE_DIR / "output"
+QRCODES_DIR = OUTPUT_DIR / "qrcodes"
+LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"
 LOGO_PATH = ASSETS_DIR / "ahbu_logo.png"
 EXTERNAL_LOGO_PATH = (BASE_DIR / ".." / ".." / "ahbu" / "assets" / "images" / "app_logo.png").resolve()
 
@@ -40,6 +46,9 @@ VPS_HOST = "178.210.161.55"
 VPS_PORT = "22667"
 VPS_USER = "salihceylan"
 VPS_FIRMWARE_DIR = "/var/www/site_kapi_kontrol/server/firmware/esp32-c3"
+VPS_LABELED_DEVICES_DIR = "/var/www/site_kapi_kontrol/server/data"
+VPS_QRCODES_DIR = "/var/www/site_kapi_kontrol/server/public/qrcodes"
+PUBLIC_API_URL = "https://api.gudeteknoloji.com.tr"
 PUBLIC_FIRMWARE_MANIFEST_URL = "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json"
 PLATFORMIO_HOME = Path.home() / ".platformio"
 BUNDLED_PYTHON_DIR = PLATFORMIO_HOME / "python3"
@@ -230,6 +239,240 @@ def generate_qr(unique_id: str, logo_path: Path) -> Image.Image:
     y = QR_SIZE + (QR_LABEL_HEIGHT - (bbox[3] - bbox[1])) // 2 - 6
     draw.text((x, y), label, fill=(19, 40, 29, 255), font=font)
     return output
+
+
+def load_regular_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = [
+        Path("C:/Windows/Fonts/segoeui.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
+        Path("C:/Windows/Fonts/calibri.ttf"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return ImageFont.truetype(str(path), size)
+    return ImageFont.load_default()
+
+
+def load_local_labeled_devices() -> list[dict]:
+    if not LABELED_DEVICES_FILE.exists():
+        return []
+    try:
+        raw = json.loads(LABELED_DEVICES_FILE.read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            return raw
+    except Exception:
+        pass
+    return []
+
+
+def save_local_labeled_device(device_info: dict, qr_image: Image.Image | None = None) -> list[dict]:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    QRCODES_DIR.mkdir(parents=True, exist_ok=True)
+
+    uid = str(device_info.get("device_uid", "")).strip().upper()
+    if not uid:
+        return load_local_labeled_devices()
+
+    qr_path = QRCODES_DIR / f"{uid}.png"
+    if qr_image is not None:
+        qr_image.save(qr_path, format="PNG")
+
+    devices = load_local_labeled_devices()
+    existing_idx = next((i for i, d in enumerate(devices) if str(d.get("device_uid", "")).upper() == uid), -1)
+
+    entry = {
+        "device_uid": uid,
+        "chip": device_info.get("chip", "ESP32"),
+        "port": device_info.get("port", ""),
+        "description": device_info.get("description", ""),
+        "created_at": device_info.get("created_at") or (devices[existing_idx].get("created_at") if existing_idx >= 0 else datetime.now().isoformat()),
+        "updated_at": datetime.now().isoformat(),
+        "qr_path": str(qr_path),
+    }
+
+    if existing_idx >= 0:
+        devices[existing_idx] = entry
+    else:
+        devices.insert(0, entry)
+
+    LABELED_DEVICES_FILE.write_text(json.dumps(devices, ensure_ascii=False, indent=2), encoding="utf-8")
+    return devices
+
+
+def fetch_server_labeled_devices() -> list[dict]:
+    url = f"{PUBLIC_API_URL}/api/company/labeled-devices"
+    req = urllib.request.Request(url, headers={"User-Agent": "AHBU-Device-Tool/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                if isinstance(data, dict) and isinstance(data.get("devices"), list):
+                    return data["devices"]
+    except Exception:
+        pass
+    return []
+
+
+def generate_devices_catalog_pdf(
+    devices: list[dict],
+    output_pdf_path: Path,
+    logo_path: Path,
+    report_title: str = "AHBU CİHAZ VE KAREKOD ENVANTER RAPORU",
+) -> Path:
+    PAGE_WIDTH = 2480
+    PAGE_HEIGHT = 3508
+    MARGIN_X = 100
+    MARGIN_TOP = 80
+    MARGIN_BOTTOM = 80
+
+    font_title = load_label_font(42)
+    font_subtitle = load_regular_font(28)
+    font_meta = load_regular_font(26)
+    font_card_title = load_label_font(32)
+    font_card_label = load_regular_font(24)
+    font_card_val = load_label_font(24)
+    font_footer = load_regular_font(22)
+
+    CARDS_PER_PAGE = 6
+    COLS = 2
+    ROWS = 3
+
+    CARD_W = 1080
+    CARD_H = 920
+    CARD_GAP_X = 120
+    CARD_GAP_Y = 60
+
+    pages: list[Image.Image] = []
+    total_devices = len(devices)
+    total_pages = max(1, (total_devices + CARDS_PER_PAGE - 1) // CARDS_PER_PAGE)
+    current_time_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    for page_idx in range(total_pages):
+        page_img = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), "#F8FAFC")
+        draw = ImageDraw.Draw(page_img)
+
+        # 1. Header Banner
+        header_top = MARGIN_TOP
+        header_h = 240
+        draw.rounded_rectangle(
+            [MARGIN_X, header_top, PAGE_WIDTH - MARGIN_X, header_top + header_h],
+            radius=24,
+            fill="#0F3A29",
+        )
+
+        # Header Logo
+        logo_x = MARGIN_X + 30
+        logo_y = header_top + 30
+        if logo_path.exists():
+            try:
+                logo_im = trim_image(Image.open(logo_path))
+                logo_im = ImageOps.contain(logo_im, (180, 180), Image.Resampling.LANCZOS)
+                badge = Image.new("RGBA", (180, 180), (255, 255, 255, 0))
+                d_badge = ImageDraw.Draw(badge)
+                d_badge.ellipse((0, 0, 179, 179), fill=(255, 255, 255, 250))
+                badge.alpha_composite(logo_im, ((180 - logo_im.width) // 2, (180 - logo_im.height) // 2))
+                page_img.paste(badge, (logo_x, logo_y), badge)
+            except Exception:
+                pass
+
+        # Header Texts
+        text_x = logo_x + 210
+        draw.text((text_x, header_top + 45), report_title, fill="#FFFFFF", font=font_title)
+        draw.text((text_x, header_top + 105), "AHBU Akıllı Geçiş ve Kapı Kontrol Sistemleri", fill="#DDF3E5", font=font_subtitle)
+        draw.text((text_x, header_top + 155), f"Rapor Tarihi: {current_time_str}   |   Toplam Kayıtlı Cihaz: {total_devices}", fill="#93C5FD", font=font_meta)
+
+        # 2. Devices Grid
+        start_device_idx = page_idx * CARDS_PER_PAGE
+        page_devices = devices[start_device_idx : start_device_idx + CARDS_PER_PAGE]
+
+        grid_top = header_top + header_h + 50
+
+        for idx_in_page, dev in enumerate(page_devices):
+            row_idx = idx_in_page // COLS
+            col_idx = idx_in_page % COLS
+
+            cx = MARGIN_X + col_idx * (CARD_W + CARD_GAP_X)
+            cy = grid_top + row_idx * (CARD_H + CARD_GAP_Y)
+
+            # Card Container
+            draw.rounded_rectangle(
+                [cx, cy, cx + CARD_W, cy + CARD_H],
+                radius=20,
+                fill="#FFFFFF",
+                outline="#CBD5E1",
+                width=3,
+            )
+
+            # Card Top Header (Green Pill)
+            draw.rounded_rectangle(
+                [cx + 3, cy + 3, cx + CARD_W - 3, cy + 85],
+                radius=18,
+                fill="#16A34A",
+            )
+            uid_str = str(dev.get("device_uid", "")).strip().upper()
+            draw.text((cx + 30, cy + 22), f"CİHAZ UID: {uid_str}", fill="#FFFFFF", font=font_card_title)
+
+            # QR Code Generation / Render
+            qr_img = generate_qr(uid_str, logo_path)
+            qr_display_size = 540
+            qr_thumb = qr_img.resize((qr_display_size, int(qr_display_size * (QR_SIZE + QR_LABEL_HEIGHT) / QR_SIZE)), Image.Resampling.LANCZOS)
+
+            # Paste QR Code on left
+            qr_x = cx + 30
+            qr_y = cy + 115
+            page_img.paste(qr_thumb, (qr_x, qr_y))
+
+            # Details on right side of card
+            details_x = qr_x + qr_display_size + 40
+            details_y = cy + 130
+            line_spacing = 58
+
+            chip_val = str(dev.get("chip", "ESP32-C3")).strip()
+            date_val = str(dev.get("created_at", dev.get("labeled_at", "-"))).strip()
+            if "T" in date_val:
+                try:
+                    dt = datetime.fromisoformat(date_val.replace("Z", "+00:00"))
+                    date_val = dt.strftime("%d.%m.%Y %H:%M")
+                except Exception:
+                    pass
+            port_val = str(dev.get("port", "-")).strip()
+            desc_val = str(dev.get("description", "AHBU Kapı Kontrol")).strip()
+            if len(desc_val) > 28:
+                desc_val = desc_val[:26] + "..."
+
+            meta_items = [
+                ("Çip Modeli:", chip_val),
+                ("Kayıt Tarihi:", date_val),
+                ("Seri Port:", port_val or "USB"),
+                ("Durum:", "Etiketlendi (Hazır)"),
+                ("Açıklama:", desc_val),
+            ]
+
+            for l_idx, (lbl, val) in enumerate(meta_items):
+                curr_y = details_y + l_idx * line_spacing
+                draw.text((details_x, curr_y), lbl, fill="#64748B", font=font_card_label)
+                draw.text((details_x, curr_y + 26), val, fill="#0F172A", font=font_card_val)
+
+        # 3. Footer
+        footer_y = PAGE_HEIGHT - MARGIN_BOTTOM - 40
+        draw.line([MARGIN_X, footer_y, PAGE_WIDTH - MARGIN_X, footer_y], fill="#CBD5E1", width=2)
+        draw.text((MARGIN_X, footer_y + 15), "AHBU Akıllı Geçiş Sistemleri • Güde Teknoloji • www.gudeteknoloji.com.tr", fill="#64748B", font=font_footer)
+        page_str = f"Sayfa {page_idx + 1} / {total_pages}"
+        bbox = draw.textbbox((0, 0), page_str, font=font_footer)
+        draw.text((PAGE_WIDTH - MARGIN_X - (bbox[2] - bbox[0]), footer_y + 15), page_str, fill="#0F3A29", font=font_footer)
+
+        pages.append(page_img)
+
+    output_pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    if pages:
+        pages[0].save(
+            output_pdf_path,
+            "PDF",
+            resolution=300.0,
+            save_all=True,
+            append_images=pages[1:],
+        )
+    return output_pdf_path
 
 
 def find_platformio() -> str:
@@ -560,11 +803,11 @@ class App:
 
         left = ttk.Frame(main, style="Card.TFrame", padding=14)
         left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
-        left.rowconfigure(2, weight=1)
+        left.rowconfigure(3, weight=1)
         left.columnconfigure(0, weight=1)
 
         row = ttk.Frame(left, style="Card.TFrame")
-        row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        row.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.scan_btn = ttk.Button(row, text="Bagli cihazlari tara", command=self.scan_devices, style="Accent.TButton")
         self.scan_btn.pack(side=tk.LEFT)
         self.read_uid_btn = ttk.Button(row, text="Secili cihaz UID oku", command=self.read_selected_uid, style="Soft.TButton")
@@ -578,9 +821,33 @@ class App:
         self.test_btn = ttk.Button(row, text="Cihaz dene", command=self.open_device_tester, style="Soft.TButton")
         self.test_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 6))
+        row2 = ttk.Frame(left, style="Card.TFrame")
+        row2.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        self.server_save_device_btn = ttk.Button(
+            row2,
+            text="Cihazı Sunucuya Kaydet",
+            command=self.save_device_to_server,
+            style="Accent.TButton",
+        )
+        self.server_save_device_btn.pack(side=tk.LEFT)
+        self.pdf_report_btn = ttk.Button(
+            row2,
+            text="Karekodlu PDF Raporu İndir",
+            command=self.download_pdf_report,
+            style="Accent.TButton",
+        )
+        self.pdf_report_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.view_labeled_btn = ttk.Button(
+            row2,
+            text="Kayıtlı Cihazlar & Karekodlar",
+            command=self.open_labeled_devices_window,
+            style="Soft.TButton",
+        )
+        self.view_labeled_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 6))
         cols = ("port", "chip", "unique_id", "description")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=17)
+        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=15)
         self.tree.heading("port", text="Port")
         self.tree.heading("chip", text="Chip")
         self.tree.heading("unique_id", text="Unique ID")
@@ -589,12 +856,12 @@ class App:
         self.tree.column("chip", width=170, anchor=tk.W)
         self.tree.column("unique_id", width=180, anchor=tk.CENTER)
         self.tree.column("description", width=320, anchor=tk.W)
-        self.tree.grid(row=2, column=0, sticky="nsew")
+        self.tree.grid(row=3, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         sc = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=sc.set)
-        sc.grid(row=2, column=1, sticky="ns")
-        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=3, column=0, sticky="w", pady=(8, 0))
+        sc.grid(row=3, column=1, sticky="ns")
+        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=4, column=0, sticky="w", pady=(8, 0))
 
         right = ttk.Frame(main, style="Card.TFrame", padding=14)
         right.grid(row=1, column=1, sticky="nsew")
@@ -820,6 +1087,182 @@ class App:
         self.latest_qr.save(path, format="PNG")
         os.startfile(str(path), "print")
         self.set_status(f"Yazdirma gonderildi: {path.name}")
+
+    def save_device_to_server(self) -> None:
+        d = self.selected_device()
+        if d is None:
+            messagebox.showinfo("Secim gerekli", "Lutfen listeden bir cihaz secin.")
+            return
+        if not d.unique_id:
+            messagebox.showinfo("UID gerekli", "Once secili cihaz icin UID oku komutunu calistirin.")
+            return
+
+        if self.latest_qr is None or self.latest_uid != d.unique_id:
+            self.make_qr()
+
+        if self.latest_qr is None:
+            messagebox.showerror("QR hatasi", "QR kod olusturulamadi.")
+            return
+
+        # 1. Yerel veritabanına ve klasöre kaydet
+        save_local_labeled_device(
+            {
+                "device_uid": d.unique_id,
+                "chip": d.chip,
+                "port": d.port,
+                "description": d.description,
+                "created_at": datetime.now().isoformat(),
+            },
+            self.latest_qr,
+        )
+
+        self.set_status(f"Cihaz sunucuya gonderiliyor: {d.unique_id}...")
+
+        # 2. QR görselini base64 formatına çevir
+        buffer = io.BytesIO()
+        self.latest_qr.save(buffer, format="PNG")
+        qr_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        payload = {
+            "device_uid": d.unique_id,
+            "chip": d.chip,
+            "port": d.port,
+            "description": d.description,
+            "qr_image_base64": qr_b64,
+        }
+
+        threading.Thread(target=self._server_device_save_worker, args=(d, payload), daemon=True).start()
+
+    def _server_device_save_worker(self, dev: EspDevice, payload: dict) -> None:
+        success = False
+        error_msg = None
+
+        api_endpoints = [
+            f"{PUBLIC_API_URL}/api/company/labeled-devices",
+            f"http://{VPS_HOST}:3000/api/company/labeled-devices",
+        ]
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+
+        for endpoint in api_endpoints:
+            try:
+                req = urllib.request.Request(
+                    endpoint,
+                    data=data_bytes,
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "AHBU-Device-Tool/1.0",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    if resp.status == 200:
+                        success = True
+                        break
+            except Exception as exc:
+                error_msg = str(exc)
+
+        if success:
+            self.root.after(0, lambda: self.set_status(f"Cihaz sunucuya kaydedildi: {dev.unique_id}"))
+            self.root.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "Sunucuya Kaydedildi",
+                    f"Cihaz ve karekod görseli sunucuya başarıyla kaydedildi!\n\n"
+                    f"Cihaz UID: {dev.unique_id}\n"
+                    f"Çip: {dev.chip}\n"
+                    f"Karekod URL: {PUBLIC_API_URL}/qrcodes/{dev.unique_id}.png",
+                ),
+            )
+        else:
+            self.root.after(0, lambda: self.set_status(f"Sunucu kayıt uyarısı: {error_msg}"))
+            self.root.after(
+                0,
+                lambda: messagebox.showwarning(
+                    "Yerel Kayıt Başarılı / Sunucu Uyarısı",
+                    f"Cihaz yerel veritabanına kaydedildi ancak sunucu API'sine ulaşılamadı:\n{error_msg}\n\n"
+                    f"Cihaz UID: {dev.unique_id}",
+                ),
+            )
+
+    def download_pdf_report(self) -> None:
+        self.set_status("Cihaz listesi alınıyor ve PDF hazırlanıyor...")
+        threading.Thread(target=self._pdf_report_worker, daemon=True).start()
+
+    def _pdf_report_worker(self) -> None:
+        server_devices = fetch_server_labeled_devices()
+        local_devices = load_local_labeled_devices()
+
+        device_map: dict[str, dict] = {}
+        for d in server_devices:
+            uid = str(d.get("device_uid", "")).strip().upper()
+            if uid:
+                device_map[uid] = d
+
+        for d in local_devices:
+            uid = str(d.get("device_uid", "")).strip().upper()
+            if uid and uid not in device_map:
+                device_map[uid] = d
+
+        if self.latest_uid and self.latest_uid not in device_map:
+            sel_dev = self.selected_device()
+            device_map[self.latest_uid] = {
+                "device_uid": self.latest_uid,
+                "chip": getattr(sel_dev, "chip", "ESP32") if sel_dev else "ESP32",
+                "port": getattr(sel_dev, "port", "") if sel_dev else "",
+                "description": getattr(sel_dev, "description", "") if sel_dev else "",
+                "created_at": datetime.now().isoformat(),
+            }
+
+        all_devices = list(device_map.values())
+
+        if not all_devices:
+            self.root.after(0, lambda: self.set_status("Raporlanacak kayıtlı cihaz bulunamadı."))
+            self.root.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "Kayıtlı Cihaz Yok",
+                    "Rapor oluşturmak için önce en az 1 cihazı etiketleyip kaydedin.",
+                ),
+            )
+            return
+
+        all_devices.sort(key=lambda d: str(d.get("created_at", "")), reverse=True)
+        self.root.after(0, lambda: self._prompt_save_pdf(all_devices))
+
+    def _prompt_save_pdf(self, devices: list[dict]) -> None:
+        default_name = f"AHBU_Cihaz_Karekod_Raporu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        target_path = filedialog.asksaveasfilename(
+            title="Karekodlu Cihaz Listesi PDF Raporunu Kaydet",
+            defaultextension=".pdf",
+            initialfile=default_name,
+            filetypes=[("PDF Dosyası", "*.pdf"), ("Tüm Dosyalar", "*.*")],
+        )
+        if not target_path:
+            self.set_status("PDF kaydetme iptal edildi.")
+            return
+
+        out_path = Path(target_path)
+        try:
+            self.set_status(f"PDF raporu oluşturuluyor ({len(devices)} cihaz)...")
+            generate_devices_catalog_pdf(devices, out_path, self.logo_path)
+            self.set_status(f"PDF hazırlandı: {out_path.name}")
+
+            if os.name == "nt":
+                try:
+                    os.startfile(str(out_path))
+                except Exception:
+                    pass
+
+            messagebox.showinfo(
+                "PDF Raporu Hazır",
+                f"Toplam {len(devices)} cihaz için karekodlu envanter PDF raporu başarıyla oluşturuldu:\n\n{out_path}",
+            )
+        except Exception as exc:
+            self.set_status("PDF oluşturma hatası.")
+            messagebox.showerror("PDF Hatası", f"PDF raporu oluşturulurken hata oluştu:\n{exc}")
+
+    def open_labeled_devices_window(self) -> None:
+        LabeledDevicesWindow(self.root, self.logo_path, self.download_pdf_report)
 
     def refresh_latest_release(self) -> None:
         env = self.env_var.get().strip()
@@ -1396,6 +1839,172 @@ Paket icerigi:
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
+
+
+class LabeledDevicesWindow:
+    def __init__(self, parent: tk.Tk, logo_path: Path, on_download_pdf: Callable[[], None]) -> None:
+        self.window = tk.Toplevel(parent)
+        self.window.title("AHBU Kayıtlı Cihazlar ve Karekod Envanteri")
+        self.window.configure(bg=CLR_APP_BG)
+        self.window.minsize(980, 640)
+        self.logo_path = logo_path
+        self.on_download_pdf = on_download_pdf
+
+        self.devices: list[dict] = []
+        self.selected_qr: Image.Image | None = None
+        self.preview_photo: ImageTk.PhotoImage | None = None
+
+        self.status_var = tk.StringVar(value="Cihazlar yükleniyor...")
+        self.selected_uid_var = tk.StringVar(value="Seçili Cihaz: -")
+
+        self._ui()
+        self.refresh_devices()
+
+    def _ui(self) -> None:
+        main = ttk.Frame(self.window, style="App.TFrame", padding=16)
+        main.pack(fill=tk.BOTH, expand=True)
+        main.columnconfigure(0, weight=3)
+        main.columnconfigure(1, weight=2)
+        main.rowconfigure(1, weight=1)
+
+        # Header
+        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 12))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        ttk.Label(header, text="Kayıtlı Cihazlar ve Karekod Envanteri", style="Title.TLabel").pack(side=tk.LEFT)
+
+        # Left: Devices list
+        left = ttk.Frame(main, style="Card.TFrame", padding=14)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(1, weight=1)
+
+        btn_row = ttk.Frame(left, style="Card.TFrame")
+        btn_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(btn_row, text="Sunucudan / Yerelden Yenile", command=self.refresh_devices, style="Accent.TButton").pack(side=tk.LEFT)
+        ttk.Button(btn_row, text="Karekodlu PDF İndir", command=self.on_download_pdf, style="Accent.TButton").pack(side=tk.LEFT, padx=(8, 0))
+
+        cols = ("device_uid", "chip", "created_at", "description")
+        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=16)
+        self.tree.heading("device_uid", text="Cihaz Unique ID")
+        self.tree.heading("chip", text="Çip Modeli")
+        self.tree.heading("created_at", text="Kayıt Tarihi")
+        self.tree.heading("description", text="Açıklama")
+        self.tree.column("device_uid", width=180, anchor=tk.CENTER)
+        self.tree.column("chip", width=120, anchor=tk.CENTER)
+        self.tree.column("created_at", width=160, anchor=tk.CENTER)
+        self.tree.column("description", width=220, anchor=tk.W)
+        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.bind("<<TreeviewSelect>>", self._on_select)
+
+        sc = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sc.set)
+        sc.grid(row=1, column=1, sticky="ns")
+
+        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=2, column=0, sticky="w", pady=(8, 0))
+
+        # Right: QR Preview
+        right = ttk.Frame(main, style="Card.TFrame", padding=14)
+        right.grid(row=1, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+
+        ttk.Label(right, text="Karekod Önizleme", style="Head.TLabel").grid(row=0, column=0, sticky="w")
+        self.preview_label = ttk.Label(right, style="Card.TLabel", anchor="center")
+        self.preview_label.grid(row=1, column=0, sticky="ew", pady=(12, 12))
+        ttk.Label(right, textvariable=self.selected_uid_var, style="Value.TLabel").grid(row=2, column=0, sticky="w")
+
+        qr_actions = ttk.Frame(right, style="Card.TFrame")
+        qr_actions.grid(row=3, column=0, sticky="ew", pady=(16, 0))
+        ttk.Button(qr_actions, text="Karekodu Yazdır", command=self._print_selected_qr, style="Soft.TButton").pack(side=tk.LEFT)
+        ttk.Button(qr_actions, text="Karekodu Kaydet", command=self._save_selected_qr, style="Soft.TButton").pack(side=tk.LEFT, padx=(8, 0))
+
+    def refresh_devices(self) -> None:
+        self.status_var.set("Cihazlar güncelleniyor...")
+        threading.Thread(target=self._fetch_worker, daemon=True).start()
+
+    def _fetch_worker(self) -> None:
+        server_devices = fetch_server_labeled_devices()
+        local_devices = load_local_labeled_devices()
+
+        device_map: dict[str, dict] = {}
+        for d in server_devices:
+            uid = str(d.get("device_uid", "")).strip().upper()
+            if uid:
+                device_map[uid] = d
+
+        for d in local_devices:
+            uid = str(d.get("device_uid", "")).strip().upper()
+            if uid and uid not in device_map:
+                device_map[uid] = d
+
+        devices = list(device_map.values())
+        devices.sort(key=lambda d: str(d.get("created_at", "")), reverse=True)
+        self.devices = devices
+        self.window.after(0, self._apply_devices_list)
+
+    def _apply_devices_list(self) -> None:
+        for x in self.tree.get_children():
+            self.tree.delete(x)
+        for i, d in enumerate(self.devices):
+            uid = str(d.get("device_uid", "")).upper()
+            chip = str(d.get("chip", "ESP32"))
+            date_val = str(d.get("created_at", "-"))
+            if "T" in date_val:
+                try:
+                    dt = datetime.fromisoformat(date_val.replace("Z", "+00:00"))
+                    date_val = dt.strftime("%d.%m.%Y %H:%M")
+                except Exception:
+                    pass
+            desc = str(d.get("description", ""))
+            self.tree.insert("", tk.END, iid=str(i), values=(uid, chip, date_val, desc))
+
+        self.status_var.set(f"Toplam {len(self.devices)} kayıtlı cihaz listelendi.")
+        if self.devices:
+            self.tree.selection_set("0")
+            self._show_device_preview(self.devices[0])
+
+    def _on_select(self, _event: object) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = int(sel[0])
+        if 0 <= idx < len(self.devices):
+            self._show_device_preview(self.devices[idx])
+
+    def _show_device_preview(self, dev: dict) -> None:
+        uid = str(dev.get("device_uid", "")).upper()
+        self.selected_uid_var.set(f"Seçili: {uid}")
+        qr_img = generate_qr(uid, self.logo_path)
+        self.selected_qr = qr_img
+        prev = qr_img.copy()
+        prev.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE), Image.Resampling.LANCZOS)
+        self.preview_photo = ImageTk.PhotoImage(prev)
+        self.preview_label.configure(image=self.preview_photo)
+
+    def _print_selected_qr(self) -> None:
+        if self.selected_qr is None:
+            messagebox.showinfo("Seçim gerekli", "Lütfen bir cihaz seçin.")
+            return
+        if os.name != "nt":
+            messagebox.showerror("Yazdırma", "Yalnızca Windows işletim sisteminde desteklenir.")
+            return
+        sel = self.tree.selection()
+        uid = self.devices[int(sel[0])].get("device_uid", "device") if sel else "device"
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        path = OUTPUT_DIR / f"print_{sanitize_filename(uid)}.png"
+        self.selected_qr.save(path, format="PNG")
+        os.startfile(str(path), "print")
+        self.status_var.set(f"Yazdırmaya gönderildi: {path.name}")
+
+    def _save_selected_qr(self) -> None:
+        if self.selected_qr is None:
+            messagebox.showinfo("Seçim gerekli", "Lütfen bir cihaz seçin.")
+            return
+        sel = self.tree.selection()
+        uid = self.devices[int(sel[0])].get("device_uid", "device") if sel else "device"
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        path = OUTPUT_DIR / f"{sanitize_filename(uid)}.png"
+        self.selected_qr.save(path, format="PNG")
+        messagebox.showinfo("Kaydedildi", f"Karekod kaydedildi:\n{path}")
 
 
 class DeviceTesterWindow:
