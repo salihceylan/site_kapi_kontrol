@@ -731,38 +731,36 @@ class AuthService extends ChangeNotifier {
     final hasWifi = await _localDoorService.hasLocalWifiConnection();
     final hasDeviceUid = (door?.assignedDeviceUid?.trim().isNotEmpty) ?? false;
 
-    // 1. Önce Bulut üzerinden dene (Online modda tek tetik gider)
+    // Eğer Wi-Fi'ye bağlıysak ve cihaz atanmışsa:
+    if (hasWifi && hasDeviceUid && door != null) {
+      try {
+        final status = await api
+            .openDoor(token: active.token, doorId: doorId)
+            .timeout(const Duration(milliseconds: 1500));
+        unawaited(_cacheLocalDoorAccess(status));
+        return (status, null);
+      } catch (_) {
+        // Bulut yanıt vermedi veya modem internetsiz -> ANINDA yerel Wi-Fi'den aç
+        final localResult = await _tryOpenDoorLocally(door);
+        if (localResult != null && localResult.$1 != null) {
+          return localResult;
+        }
+        return (
+          null,
+          localResult?.$2 ??
+              'Cihaza yerel ağdan ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
+        );
+      }
+    }
+
+    // Yalnızca mobil verideyken / Wi-Fi yokken standart bulut isteği
     try {
       final status = await api.openDoor(token: active.token, doorId: doorId);
       unawaited(_cacheLocalDoorAccess(status));
       return (status, null);
     } on ApiException catch (e) {
-      // Bulut başarısız olduysa ve telefon Wi-Fi'ye bağlıysa yerel ağ yedeğini dene
-      if (hasWifi && hasDeviceUid && door != null) {
-        final localResult = await _tryOpenDoorLocally(door);
-        if (localResult != null && localResult.$1 != null) {
-          return localResult;
-        }
-        return (
-          null,
-          localResult?.$2 ??
-              'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
-        );
-      }
       return (null, e.message);
     } catch (_) {
-      // İnternet veya sunucu bağlantı hatasında yerel ağ yedeğini dene
-      if (hasWifi && hasDeviceUid && door != null) {
-        final localResult = await _tryOpenDoorLocally(door);
-        if (localResult != null && localResult.$1 != null) {
-          return localResult;
-        }
-        return (
-          null,
-          localResult?.$2 ??
-              'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.',
-        );
-      }
       return (null, 'Sunucuya bağlanılamadı.');
     }
   }

@@ -247,7 +247,7 @@ class LocalDoorService {
             timeout: timeout,
           );
         } catch (_) {
-          return false;
+          socket = await Socket.connect(host, port, timeout: timeout);
         }
       } else {
         socket = await Socket.connect(host, port, timeout: timeout);
@@ -372,52 +372,56 @@ class LocalDoorService {
       }
     }
 
-    try {
-      final interfaces = await NetworkInterface.list(
-        includeLoopback: false,
-        type: InternetAddressType.IPv4,
-      );
+    if (candidates.isEmpty) {
+      try {
+        final interfaces = await NetworkInterface.list(
+          includeLoopback: false,
+          type: InternetAddressType.IPv4,
+        );
 
-      for (final interface in interfaces) {
-        final name = interface.name.toLowerCase();
-        if (name.contains('rmnet') ||
-            name.contains('ccmni') ||
-            name.contains('pdp') ||
-            name.contains('tun') ||
-            name.contains('ppp') ||
-            name.contains('cellular') ||
-            name.contains('mobile')) {
-          continue;
-        }
-        for (final address in interface.addresses) {
-          final ip = address.address;
-          if (!_isPrivateLocalIp(ip)) {
+        for (final interface in interfaces) {
+          final name = interface.name.toLowerCase();
+          if (name.contains('rmnet') ||
+              name.contains('ccmni') ||
+              name.contains('pdp') ||
+              name.contains('tun') ||
+              name.contains('ppp') ||
+              name.contains('cellular') ||
+              name.contains('mobile')) {
             continue;
           }
-          ownIps.add(ip);
-          final parts = ip.split('.');
-          if (parts.length != 4) {
-            continue;
-          }
-          final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
-          for (var host = 1; host <= 254; host += 1) {
-            candidates.add('$prefix.$host');
+          for (final address in interface.addresses) {
+            final ip = address.address;
+            if (!_isPrivateLocalIp(ip)) {
+              continue;
+            }
+            ownIps.add(ip);
+            final parts = ip.split('.');
+            if (parts.length != 4) {
+              continue;
+            }
+            final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+            for (var host = 1; host <= 254; host += 1) {
+              candidates.add('$prefix.$host');
+            }
           }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
-    // En yaygın modem alt ağlarını her halükarda ekle
-    for (final prefix in const [
-      '192.168.1',
-      '192.168.0',
-      '192.168.4',
-      '192.168.178',
-      '192.168.2',
-      '10.0.0',
-    ]) {
-      for (var host = 1; host <= 254; host += 1) {
-        candidates.add('$prefix.$host');
+    // Yalnızca hiçbir yerel Wi-Fi IP bulunamadıysa en yaygın modem alt ağlarını ekle
+    if (candidates.isEmpty) {
+      for (final prefix in const [
+        '192.168.1',
+        '192.168.0',
+        '192.168.4',
+        '192.168.178',
+        '192.168.2',
+        '10.0.0',
+      ]) {
+        for (var host = 1; host <= 254; host += 1) {
+          candidates.add('$prefix.$host');
+        }
       }
     }
 
@@ -425,7 +429,7 @@ class LocalDoorService {
     if (knownIp != null && knownIp.isNotEmpty) {
       candidates.remove(knownIp);
     }
-    return candidates.toList();
+    return candidates.toList(growable: false);
   }
 
   void dispose() {}
