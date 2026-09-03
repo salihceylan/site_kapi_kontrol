@@ -307,6 +307,8 @@ class AdminDoorStatusCard extends StatelessWidget {
         : '🔴 Çevrimdışı';
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
+            ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
+            : 'Bilinmiyor')
         : 'Bilinmiyor';
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
