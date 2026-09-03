@@ -244,26 +244,43 @@ inline void yerelKapiKontrolLoop() {
       if (len > 0) packetBuffer[len] = '\0';
       String msg = String(packetBuffer);
 
-      if (msg.indexOf("open") >= 0 || msg.indexOf("pulse") >= 0) {
-        // Doğrudan UDP Kapı Açma
-        roleTetikle();
-        gDoorLocked = false;
-        mqttPublishEvent("local_udp_pulse_started", "");
-        mqttPublishState(gDoorLocked);
-        offlineLogKaydet("local_udp", "Yerel UDP", "");
+      JsonDocument doc;
+      DeserializationError err = deserializeJson(doc, msg);
+      if (!err) {
+        String action = doc["action"] | "";
+        String targetUid = doc["target_uid"] | (doc["device_uid"] | "");
+        targetUid.trim();
+        targetUid.toUpperCase();
+        String myUid = cihazUniqueId();
+        myUid.toUpperCase();
 
-        String reply = "{\"ok\":true,\"message\":\"yerel_kapi_acma_komutu_alindi\",\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\"}";
-        gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
-        gYerelUdp.print(reply);
-        gYerelUdp.endPacket();
-        Serial.println("Yerel UDP: KAPI ACILDI (role tetiklendi).");
-      } else if (msg.indexOf("discover") >= 0 || msg.indexOf("ahbu") >= 0 || msg.indexOf(cihazUniqueId()) >= 0) {
-        String reply = "{\"ok\":true,\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\",\"ip\":\"" + yerelJsonEscape(wifiIpAdresi()) + "\",\"port\":" + String(YEREL_KAPI_KONTROL_PORT) + "}";
-        gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
-        gYerelUdp.print(reply);
-        gYerelUdp.endPacket();
-        Serial.print("UDP Keşif yanıtlandı -> ");
-        Serial.println(gYerelUdp.remoteIP());
+        if (action == "discover") {
+          // Yalnızca hedef UID bu cihazla eşleşiyorsa veya genel arama (*) ise yanıt ver
+          if (targetUid.isEmpty() || targetUid == myUid || targetUid == "*") {
+            String reply = "{\"ok\":true,\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\",\"ip\":\"" + yerelJsonEscape(wifiIpAdresi()) + "\",\"port\":" + String(YEREL_KAPI_KONTROL_PORT) + "}";
+            gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
+            gYerelUdp.print(reply);
+            gYerelUdp.endPacket();
+            Serial.printf("UDP Kesif yanitlandi -> Hedef: %s, Gonderen IP: %s\n", targetUid.c_str(), gYerelUdp.remoteIP().toString().c_str());
+          }
+        } else if (action == "open" || action == "pulse") {
+          // Hedef UID belirtilmişse MUTLAKA bu cihazla eşleşmelidir!
+          if (!targetUid.isEmpty() && targetUid != myUid) {
+            Serial.printf("UDP Kapi Acma REDDEDILDI: Hedef UID (%s) bu cihazla (%s) eslesmiyor!\n", targetUid.c_str(), myUid.c_str());
+          } else {
+            roleTetikle();
+            gDoorLocked = false;
+            mqttPublishEvent("local_udp_pulse_started", "");
+            mqttPublishState(gDoorLocked);
+            offlineLogKaydet("local_udp", "Yerel UDP", "");
+
+            String reply = "{\"ok\":true,\"message\":\"yerel_kapi_acma_komutu_alindi\",\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\"}";
+            gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
+            gYerelUdp.print(reply);
+            gYerelUdp.endPacket();
+            Serial.println("Yerel UDP: KAPI ACILDI (role tetiklendi).");
+          }
+        }
       }
     }
   }

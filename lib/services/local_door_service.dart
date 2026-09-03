@@ -274,22 +274,26 @@ class LocalDoorService {
         }
       }
 
+      final targetUid = deviceUid.trim().toUpperCase();
+
       socket.listen((event) {
         if (event == RawSocketEvent.read) {
           final dg = socket.receive();
           if (dg != null) {
             final text = utf8.decode(dg.data, allowMalformed: true);
-            if (text.contains(deviceUid) || text.contains('"ok":true')) {
-              try {
-                final json = jsonDecode(text) as Map<String, dynamic>;
-                final ip = json['ip'] as String?;
-                if (ip != null && ip.isNotEmpty) {
-                  debugPrint('[YerelKapi] UDP Keşif ile cihaz bulundu -> $ip');
-                  if (!completer.isCompleted) completer.complete(ip);
-                }
-              } catch (_) {
+            try {
+              final json = jsonDecode(text) as Map<String, dynamic>;
+              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+              if (respUid != null && respUid == targetUid) {
+                final ip = json['ip'] as String? ?? dg.address.address;
+                debugPrint('[YerelKapi] UDP Keşif ile cihaz bulundu -> $ip ($respUid)');
+                if (!completer.isCompleted) completer.complete(ip);
+              }
+            } catch (_) {
+              // JSON çözülemezse yalnızca metin birebir UID'yi içeriyorsa kabul et
+              if (text.contains(targetUid)) {
                 final fallbackIp = dg.address.address;
-                debugPrint('[YerelKapi] UDP Keşif IP -> $fallbackIp');
+                debugPrint('[YerelKapi] UDP Keşif IP -> $fallbackIp ($targetUid)');
                 if (!completer.isCompleted) completer.complete(fallbackIp);
               }
             }
@@ -332,14 +336,16 @@ class LocalDoorService {
         0,
       );
       final completer = Completer<bool>();
+      final targetUid = access.deviceUid.trim().toUpperCase();
       final payload = utf8.encode(jsonEncode({
         'action': 'open',
-        'device_uid': access.deviceUid,
+        'target_uid': targetUid,
+        'device_uid': targetUid,
         'token': access.token,
       }));
 
       socket.send(payload, InternetAddress(ip), access.port);
-      debugPrint('[YerelKapi] Doğrudan UDP Kapı Açma paketi yollandı -> $ip:${access.port}');
+      debugPrint('[YerelKapi] Doğrudan UDP Kapı Açma paketi yollandı -> $ip:${access.port} ($targetUid)');
 
       socket.listen((event) {
         if (event == RawSocketEvent.read) {
@@ -347,8 +353,16 @@ class LocalDoorService {
           if (dg != null) {
             final text = utf8.decode(dg.data, allowMalformed: true);
             debugPrint('[YerelKapi] UDP Açma yanıtı geldi: $text');
-            if (text.contains('"ok":true') || text.contains('yerel_kapi_acma')) {
-              if (!completer.isCompleted) completer.complete(true);
+            try {
+              final json = jsonDecode(text) as Map<String, dynamic>;
+              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+              if (json['ok'] == true && (respUid == null || respUid == targetUid)) {
+                if (!completer.isCompleted) completer.complete(true);
+              }
+            } catch (_) {
+              if (text.contains('"ok":true') && (text.contains(targetUid) || !text.contains('device_uid'))) {
+                if (!completer.isCompleted) completer.complete(true);
+              }
             }
           }
         }
