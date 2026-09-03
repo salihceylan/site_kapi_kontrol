@@ -86,7 +86,7 @@ class _SiteDialogState extends State<SiteDialog> {
     final initialDistrict = (site?.district ?? '').trim();
     _selectedCity = initialCity.isNotEmpty ? initialCity : null;
     _selectedDistrict = initialDistrict.isNotEmpty ? initialDistrict : null;
-    
+
     final initialBlockCount = site?.blockCount ?? 1;
     _blockCountController = TextEditingController(
       text: initialBlockCount.toString(),
@@ -96,7 +96,7 @@ class _SiteDialogState extends State<SiteDialog> {
     );
 
     _selectedManagerUserCode = site?.managerUserCode;
-    
+
     // Var olan daire sayılarını yükle veya varsayılan 10 ata
     if (site != null && site.blockApartmentCounts.isNotEmpty) {
       for (final count in site.blockApartmentCounts) {
@@ -220,7 +220,7 @@ class _SiteDialogState extends State<SiteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
       title: Text(_isEditing ? 'Site Düzenle' : 'Yeni Site Ekle'),
       content: SizedBox(
         width: dialogWidthForScreen(context),
@@ -277,7 +277,7 @@ class _SiteDialogState extends State<SiteDialog> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         key: ValueKey('district_$_selectedCity'),
@@ -291,7 +291,7 @@ class _SiteDialogState extends State<SiteDialog> {
                         decoration: InputDecoration(
                           labelText: 'İlçe (opsiyonel)',
                           hintText: _selectedCity == null
-                              ? 'Önce İl Seçin'
+                              ? 'Önce İl'
                               : 'İlçe Seçin',
                         ),
                         items: [
@@ -317,7 +317,7 @@ class _SiteDialogState extends State<SiteDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -326,7 +326,7 @@ class _SiteDialogState extends State<SiteDialog> {
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
                           labelText: 'Blok Sayısı',
-                          prefixIcon: Icon(Icons.apartment_rounded, size: 20),
+                          prefixIcon: Icon(Icons.apartment_rounded, size: 18),
                         ),
                         onChanged: (_) => setState(_syncBlockControllers),
                         validator: (value) {
@@ -337,14 +337,14 @@ class _SiteDialogState extends State<SiteDialog> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: TextFormField(
                         controller: _doorCountController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Site Kapı Sayısı',
-                          prefixIcon: Icon(Icons.sensor_door_outlined, size: 20),
+                          labelText: 'Kapı Sayısı',
+                          prefixIcon: Icon(Icons.sensor_door_outlined, size: 18),
                         ),
                         validator: (value) {
                           final val = int.tryParse((value ?? '').trim());
@@ -356,57 +356,67 @@ class _SiteDialogState extends State<SiteDialog> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
                 // BLOKLARA GÖRE DAİRE SAYILARI LİSTESİ
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFFCBD5E1), width: 1.2),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            '🏢 Blok Daire Sayıları',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: AppColors.textDark,
+                          const Expanded(
+                            child: Text(
+                              '🏢 Blok Daireleri',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: AppColors.textDark,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            'Toplam: $_calculatedTotalApartments Daire',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: AppColors.primary,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Toplam: $_calculatedTotalApartments Daire',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       const Text(
-                        'Her blok için daire sayısını aşağıdan ayrı ayrı belirleyin:',
-                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        'Her blok için daire sayısını girin:',
+                        style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       for (var i = 0; i < _blockApartmentControllers.length; i++)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
                               Container(
-                                width: 85,
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                width: 72,
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(8),
                                   border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
@@ -414,21 +424,20 @@ class _SiteDialogState extends State<SiteDialog> {
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 13,
+                                    fontSize: 12.5,
                                     color: AppColors.primary,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: TextFormField(
                                   controller: _blockApartmentControllers[i],
                                   keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
+                                  decoration: const InputDecoration(
                                     labelText: 'Daire Sayısı',
                                     isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                                    suffixText: 'Daire',
+                                    contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                                   ),
                                   onChanged: (_) => setState(() {}),
                                   validator: (value) {
@@ -446,12 +455,12 @@ class _SiteDialogState extends State<SiteDialog> {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF0F7FF),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFFB8D7F7)),
                   ),
                   child: Column(
@@ -462,33 +471,34 @@ class _SiteDialogState extends State<SiteDialog> {
                           Icon(
                             Icons.manage_accounts_outlined,
                             color: AppColors.primary,
-                            size: 20,
+                            size: 18,
                           ),
-                          SizedBox(width: 8),
+                          SizedBox(width: 6),
                           Text(
                             'Site Yöneticisi',
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
+                              fontSize: 13,
                               color: AppColors.textDark,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       if (_isLoadingManagers)
                         const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
+                          padding: EdgeInsets.symmetric(vertical: 6),
                           child: Row(
                             children: [
                               SizedBox(
-                                width: 16,
-                                height: 16,
+                                width: 14,
+                                height: 14,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                 ),
                               ),
-                              SizedBox(width: 10),
-                              Text('Yöneticiler yükleniyor...'),
+                              SizedBox(width: 8),
+                              Text('Yöneticiler yükleniyor...', style: TextStyle(fontSize: 12)),
                             ],
                           ),
                         )
@@ -497,10 +507,10 @@ class _SiteDialogState extends State<SiteDialog> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
                                   color: const Color(0xFFB8D7F7),
                                 ),
@@ -510,8 +520,9 @@ class _SiteDialogState extends State<SiteDialog> {
                                   const Icon(
                                     Icons.person_outline,
                                     color: AppColors.primary,
+                                    size: 18,
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       _selectedManager == null
@@ -519,31 +530,40 @@ class _SiteDialogState extends State<SiteDialog> {
                                           : '${_selectedManager!.fullName} (${_selectedManager!.email})',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
+                                        fontSize: 12.5,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   if (_selectedManager != null)
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.clear,
-                                        size: 18,
-                                        color: Colors.red,
-                                      ),
-                                      onPressed: () {
+                                    InkWell(
+                                      onTap: () {
                                         setState(() {
                                           _selectedManager = null;
                                           _selectedManagerUserCode = null;
                                         });
                                       },
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.clear,
+                                          size: 16,
+                                          color: Colors.red,
+                                        ),
+                                      ),
                                     ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             OutlinedButton.icon(
                               onPressed: _selectExistingManager,
-                              icon: const Icon(Icons.person_search, size: 18),
-                              label: const Text('Yönetici Seç / Değiştir'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              icon: const Icon(Icons.person_search, size: 16),
+                              label: const Text('Yönetici Seç / Değiştir', style: TextStyle(fontSize: 12.5)),
                             ),
                           ],
                         ),

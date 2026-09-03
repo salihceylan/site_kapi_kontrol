@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 double dialogWidthForScreen(BuildContext context) {
   final screenWidth = MediaQuery.sizeOf(context).width;
-  return math.min(420, math.max(280, screenWidth - 48));
+  return math.min(420.0, math.max(260.0, screenWidth - 72.0));
 }
 
 String blockLabelFromIndex(int index) {
@@ -14,7 +14,7 @@ String blockLabelFromIndex(int index) {
     label = String.fromCharCode(65 + remainder) + label;
     current = ((current - 1) / 26).floor();
   }
-  return '$label Blok';
+  return label;
 }
 
 String formatDateTime(DateTime? dateTime) {
@@ -29,4 +29,3 @@ String formatDateTime(DateTime? dateTime) {
   final minute = local.minute.toString().padLeft(2, '0');
   return '$day.$month.$year $hour:$minute';
 }
-
