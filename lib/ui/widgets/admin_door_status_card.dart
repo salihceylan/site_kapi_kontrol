@@ -301,30 +301,21 @@ class AdminDoorStatusCard extends StatelessWidget {
         ? 'Hazır (Bulut)'
         : 'Bağlantı Yok';
     final deviceOnlineText = isCloudOnline
-        ? '🟢 Online (Bulut)'
-        : (canTryLocalDoorOpen
-            ? '🟡 Bulut Çevrimdışı (Yerel Ağdan Açılabilir)'
-            : (runtimeStatus == null
-                ? 'Bilinmiyor'
-                : '🔴 Çevrimdışı (Offline)'));
+        ? '🟢 Çevrimiçi (Bulut)'
+        : '🔴 Çevrimdışı (Bulut Bağlantısı Yok)';
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
             ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
             : 'Bilinmiyor')
-        : (canTryLocalDoorOpen
-            ? 'Kapalı/Kilitli (Yerel Ağ Modu)'
-            : 'Bilinmiyor (Cihaz Çevrimdışı)');
+        : 'Bilinmiyor (Cihaz Çevrimdışı)';
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
             ? '-'
             : '%${runtimeStatus!.wifiSignalPercent}'
                 '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}')
-        : (runtimeStatus?.wifiSignalPercent == null
-            ? '-'
-            : '%${runtimeStatus!.wifiSignalPercent} (Son Sinyal)');
+        : '-';
 
     final commandEnabled = isDeviceAssigned &&
-        (isCloudOnline || canTryLocalDoorOpen) &&
         !isOpeningDoor &&
         !isLoadingStatus;
 
@@ -340,7 +331,7 @@ class AdminDoorStatusCard extends StatelessWidget {
         Text('Kapı Durumu: $stateText'),
         const SizedBox(height: 6),
         Text(
-          'Yerel Ağ Kontrolü: ${canTryLocalDoorOpen ? 'Hazır (Yedek Yetki Var)' : 'Kayıt Yok'}',
+          'Yerel Ağ Kontrolü: ${isDeviceAssigned ? 'Aynı Wi-Fi Ağındayken Kullanılabilir' : 'Cihaz Yok'}',
         ),
         const SizedBox(height: 6),
         Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
@@ -374,8 +365,8 @@ class AdminDoorStatusCard extends StatelessWidget {
             label: Text(
               isOpeningDoor
                   ? 'Gönderiliyor...'
-                  : (!isCloudOnline && canTryLocalDoorOpen
-                      ? 'Kapı Aç (Yerel Ağ)'
+                  : (!isCloudOnline
+                      ? 'Kapı Aç (Yerel Wi-Fi Dene)'
                       : 'Kapı Aç'),
             ),
           ),

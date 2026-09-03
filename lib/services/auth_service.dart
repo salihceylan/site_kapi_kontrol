@@ -715,13 +715,17 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<bool> isPhoneConnectedToLocalWifi() async {
+    return await _localDoorService.hasLocalWifiConnection();
+  }
+
   Future<(DoorRuntimeStatus?, String?)> openDoor({
     required int doorId,
     DoorRecord? door,
   }) async {
     final active = session;
     if (active == null) {
-      return (null, 'Oturum bulunamadi.');
+      return (null, 'Oturum bulunamadı.');
     }
 
     Future<(DoorRuntimeStatus?, String?)> cloudFuture() async {
@@ -732,13 +736,15 @@ class AuthService extends ChangeNotifier {
       } on ApiException catch (e) {
         return (null, e.message);
       } catch (_) {
-        return (null, 'Sunucuya baglanilamadi.');
+        return (null, 'Sunucuya bağlanılamadı.');
       }
     }
 
-    final hasLocal = door != null && canTryLocalDoorOpen(door);
+    final hasWifi = await _localDoorService.hasLocalWifiConnection();
+    final hasDeviceUid = door?.assignedDeviceUid != null &&
+        door!.assignedDeviceUid!.trim().isNotEmpty;
 
-    if (hasLocal) {
+    if (hasWifi && hasDeviceUid) {
       final completer = Completer<(DoorRuntimeStatus?, String?)>();
       var cloudFinished = false;
       var localFinished = false;
@@ -768,15 +774,17 @@ class AuthService extends ChangeNotifier {
           completer.complete(
             res?.$1 != null
                 ? res
-                : (res ?? cloudResult ?? (null, 'Kapı açılamadı.')),
+                : (res ?? cloudResult ?? (null, 'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.')),
           );
         }
       });
 
       return await completer.future.timeout(
-        const Duration(seconds: 6),
+        const Duration(seconds: 4),
         onTimeout: () =>
-            localResult ?? cloudResult ?? (null, 'Kapı açma komutu zaman aşımına uğradı.'),
+            localResult ??
+            cloudResult ??
+            (null, 'Cihaza ulaşılamadı. Cihazın açık ve aynı Wi-Fi ağına bağlı olduğundan emin olun.'),
       );
     }
 

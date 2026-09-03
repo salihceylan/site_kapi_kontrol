@@ -24,6 +24,11 @@ class LocalDoorService {
   static const Duration _scanTimeout = Duration(milliseconds: 600);
   static const int _scanWorkers = 64;
 
+  Future<bool> hasLocalWifiConnection() async {
+    final addr = await _getWifiAddress();
+    return addr != null;
+  }
+
   Future<InternetAddress?> _getWifiAddress() async {
     try {
       final interfaces = await NetworkInterface.list(
