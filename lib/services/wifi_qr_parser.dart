@@ -73,7 +73,7 @@ class WifiQrCredentials {
           return WifiQrCredentials(
             ssid: rawSsid.toString().trim(),
             password: rawPass?.toString().trim() ?? '',
-            authType: json['type']?.toString() ?? 'WPA',
+            authType: (json['type']?.toString() ?? 'WPA').toUpperCase(),
           );
         }
       } catch (_) {}
