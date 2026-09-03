@@ -186,7 +186,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             item == SirketMenuItem.bluetoothWifiKur;
       case UserRole.apartmentOwner:
         return item == SirketMenuItem.dashboard ||
-            item == SirketMenuItem.profilim ||
             item == SirketMenuItem.ellerSerbest;
     }
   }
@@ -1044,6 +1043,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _saveProfile() async {
+    if (widget.authService.session?.role == UserRole.apartmentOwner) {
+      _showMessage('Daire sakinleri profil bilgilerini güncelleyemez.');
+      return;
+    }
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isSavingProfile = true);
@@ -1371,6 +1374,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
 
       case SirketMenuItem.profilim:
+        if (session.role == UserRole.apartmentOwner) {
+          return const SizedBox.shrink();
+        }
         return ProfileView(
           session: session,
           formKey: _profileFormKey,

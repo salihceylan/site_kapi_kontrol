@@ -75,12 +75,6 @@ class SitesView extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 680;
     final structure = selectedStructure;
-    final sitesDescription = canManageSites
-        ? 'Site, blok, daire, otomatik kapı yapısı ve site yöneticisini burada yönetirsiniz.'
-        : 'Yetkili olduğunuz siteleri, kapı cihaz atamalarını ve cihaz durumlarını burada görürsünüz.';
-    final apartmentsDescription = canManageApartmentUsers
-        ? 'Bir site seçin. Daire kullanıcıları yalnızca seçili site altında listelenir.'
-        : 'Yetkili olduğunuz sitelerin daire ve kapı yapısını görürsünüz.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,10 +94,6 @@ class SitesView extends StatelessWidget {
                         color: AppColors.textDark,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      apartmentMode ? apartmentsDescription : sitesDescription,
-                    ),
                     if (canManageSites) ...[
                       const SizedBox(height: 12),
                       SizedBox(
@@ -120,23 +110,12 @@ class SitesView extends StatelessWidget {
               : Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            apartmentMode ? 'Site Daireleri' : 'Siteler',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            apartmentMode
-                                ? apartmentsDescription
-                                : sitesDescription,
-                          ),
-                        ],
+                      child: Text(
+                        apartmentMode ? 'Site Daireleri' : 'Siteler',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ),
                     if (canManageSites) ...[

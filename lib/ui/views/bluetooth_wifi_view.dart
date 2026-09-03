@@ -30,10 +30,6 @@ class BluetoothWifiView extends StatelessWidget {
                   color: AppColors.textDark,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Kayıtlı Wi-Fi bilgisi olmayan cihazlar Bluetooth üzerinden bulunabilir olur. Bu ekrandan cihaza bağlanıp kullanacağı Wi-Fi adını ve şifresini gönderebilirsiniz.',
-              ),
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
@@ -45,11 +41,6 @@ class BluetoothWifiView extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Wi-Fi bilgisi doğruysa cihaz bilgileri kaydeder, yeniden başlar ve internete bağlandıktan sonra Bluetooth kapanır. Wi-Fi değişecekse cihazdaki reset düğmesine 3 saniye basın; bilgiler silinir ve Bluetooth tekrar bulunabilir olur.',
-          style: TextStyle(color: AppColors.textMuted),
         ),
       ],
     );

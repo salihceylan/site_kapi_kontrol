@@ -72,11 +72,6 @@ class AdminDoorStatusCard extends StatelessWidget {
               color: AppColors.textDark,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Önce siteyi seçin, sonra o siteye ait kapıyı seçin. Kapıya cihaz atanmış ve MQTT bağlantısı sağlıklıysa kapı açma komutu aktif olur.',
-            style: TextStyle(color: AppColors.textMuted),
-          ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
             isExpanded: true,

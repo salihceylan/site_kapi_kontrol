@@ -13,7 +13,7 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "2.0.2";
+inline constexpr char OTA_CURRENT_VERSION[] = "3.0.0";
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";

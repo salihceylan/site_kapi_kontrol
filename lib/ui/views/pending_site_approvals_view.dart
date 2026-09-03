@@ -37,21 +37,12 @@ class PendingSiteApprovalsView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: AppDecorations.glassCard,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Site Onay Talepleri',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Site yöneticilerinin oluşturduğu siteler burada şirket onayı bekler.',
-              ),
-            ],
+          child: const Text(
+            'Site Onay Talepleri',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
           ),
         ),
         const SizedBox(height: 16),

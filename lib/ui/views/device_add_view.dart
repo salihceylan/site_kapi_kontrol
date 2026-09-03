@@ -22,22 +22,13 @@ class DeviceAddView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(22),
           decoration: AppDecorations.glassCard,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Şirket Veritabanına Cihaz Kaydet',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Cihazın Unique ID bilgisini QR koddan okuyarak veya masaüstü kullanımda elle yazarak şirket veritabanına kaydedebilirsiniz.',
-              ),
-            ],
+          child: const Text(
+            'Şirket Veritabanına Cihaz Kaydet',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
           ),
         ),
         const SizedBox(height: 16),

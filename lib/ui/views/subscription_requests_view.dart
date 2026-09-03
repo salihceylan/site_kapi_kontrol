@@ -37,21 +37,12 @@ class SubscriptionRequestsView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: AppDecorations.glassCard,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Yeni Abonelik Talepleri',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Mail doğrulamasını tamamlayan site yöneticileri burada onay bekler.',
-              ),
-            ],
+          child: const Text(
+            'Yeni Abonelik Talepleri',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
           ),
         ),
         const SizedBox(height: 16),

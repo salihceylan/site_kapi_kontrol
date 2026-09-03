@@ -79,14 +79,6 @@ class DashboardView extends StatelessWidget {
     }
 
     // Süper Kullanıcı ve Site Yöneticisi için Klasik Yönetim Paneli
-    final dashboardDescription = switch (session.role) {
-      UserRole.superUser =>
-        'Tüm kullanıcıları, siteleri, cihazları ve kapı erişimlerini yönetebilirsiniz.',
-      UserRole.siteManager =>
-        'Yetkili olduğunuz siteleri, cihazları ve kapıları yönetebilirsiniz.',
-      UserRole.apartmentOwner =>
-        'Yetkili olduğunuz kapıları görüp kapı açma komutu verebilirsiniz.',
-    };
     final roleColor = session.role.accentColor;
 
     return Column(
@@ -114,8 +106,6 @@ class DashboardView extends StatelessWidget {
                   context,
                 ).textTheme.titleLarge?.copyWith(fontSize: 28),
               ),
-              const SizedBox(height: 8),
-              Text(dashboardDescription),
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,

@@ -55,10 +55,6 @@ class CompanyDevicesView extends StatelessWidget {
                   color: AppColors.textDark,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Şirket veritabanına kaydedilmiş cihazları, atandıkları site ve kapı bilgileriyle birlikte görebilirsiniz.',
-              ),
               const SizedBox(height: 14),
               Wrap(
                 spacing: 8,

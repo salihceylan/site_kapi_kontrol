@@ -185,7 +185,6 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
     case UserRole.apartmentOwner:
       return const [
         SirketMenuItem.dashboard,
-        SirketMenuItem.profilim,
         SirketMenuItem.ellerSerbest,
       ];
   }

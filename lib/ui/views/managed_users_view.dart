@@ -81,10 +81,6 @@ class ManagedUsersView extends StatelessWidget {
                         color: AppColors.textDark,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Ekle, düzenle, sil ve aktivasyon aç/kapat işlemleri bu ekrandan yapılır.',
-                    ),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -99,21 +95,12 @@ class ManagedUsersView extends StatelessWidget {
               : Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _rolePlural(role),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Ekle, düzenle, sil ve aktivasyon aç/kapat işlemleri bu ekrandan yapılır.',
-                          ),
-                        ],
+                      child: Text(
+                        _rolePlural(role),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
