@@ -481,16 +481,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final (status, error) = await widget.authService.getDoorRuntimeStatus(
         doorId: doorId,
       );
+      if (!mounted || _doorControlDoor?.id != doorId) return;
+
       final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
-      final hasUid = _doorControlDoor?.assignedDeviceUid?.trim().isNotEmpty == true;
+      if (!mounted || _doorControlDoor?.id != doorId) return;
+
+      final assignedUid = _doorControlDoor?.assignedDeviceUid?.trim();
+      final hasUid = assignedUid != null && assignedUid.isNotEmpty;
       bool localReachable = false;
       if (status?.mqttConnected != true && isWifi && hasUid) {
         localReachable = await widget.authService.isDeviceReachableOnLocalWifi(
-          _doorControlDoor!.assignedDeviceUid!,
+          assignedUid,
         );
       }
 
-      if (!mounted) return;
+      if (!mounted || _doorControlDoor?.id != doorId) return;
       setState(() {
         _isPhoneOnWifi = isWifi;
         _isDeviceLocalReachable = localReachable;

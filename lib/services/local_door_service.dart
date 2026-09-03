@@ -434,8 +434,10 @@ class LocalDoorService {
       request.headers.set('Cache-Control', 'no-cache');
 
       final response = await request.close().timeout(timeout);
-      await response.drain<void>();
-      return response.statusCode >= 200 && response.statusCode < 300;
+      final body = await response.transform(utf8.decoder).join();
+      return response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          body.contains('"ok":true');
     } catch (_) {
       return false;
     } finally {
@@ -487,9 +489,9 @@ class LocalDoorService {
         (data) {
           buffer.addAll(data);
           final text = utf8.decode(buffer, allowMalformed: true);
-          if (text.contains('202') ||
-              text.contains('200') ||
-              text.contains('"ok":true')) {
+          final isHttpSuccess = text.contains('HTTP/1.1 200') ||
+              text.contains('HTTP/1.1 202');
+          if (isHttpSuccess && text.contains('"ok":true')) {
             if (!completer.isCompleted) completer.complete(true);
           }
         },
@@ -499,11 +501,9 @@ class LocalDoorService {
         onDone: () {
           if (!completer.isCompleted) {
             final text = utf8.decode(buffer, allowMalformed: true);
-            completer.complete(
-              text.contains('202') ||
-                  text.contains('200') ||
-                  text.contains('"ok":true'),
-            );
+            final isHttpSuccess = text.contains('HTTP/1.1 200') ||
+                text.contains('HTTP/1.1 202');
+            completer.complete(isHttpSuccess && text.contains('"ok":true'));
           }
         },
         cancelOnError: true,
