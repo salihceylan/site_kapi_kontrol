@@ -61,13 +61,12 @@ class ResidentDoorRemoteCard extends StatelessWidget {
       statusText = 'Cihaz durumu kontrol ediliyor...';
       statusColor = const Color(0xFF94A3B8);
     } else if (isCloudOnline) {
-      statusText = '🟢 Çevrimiçi (Bulut) - Kapıyı açmak için dokunun';
+      statusText = '🟢 Çevrimiçi - Kapıyı açmak için dokunun';
       statusColor = const Color(0xFF4ADE80);
-    } else if (isPhoneOnWifi) {
-      statusText = '🟡 Bulut Çevrimdışı - Yerel Wi-Fi üzerinden açmak için dokunun';
-      statusColor = const Color(0xFFFACC15);
     } else {
-      statusText = '🔴 Cihaz Çevrimdışı - Yerel açma için aynı Wi-Fi ağına bağlanın';
+      statusText = isPhoneOnWifi
+          ? '🔴 Çevrimdışı (Yerel Ağ Aktif)'
+          : '🔴 Çevrimdışı';
       statusColor = const Color(0xFFF87171);
     }
 

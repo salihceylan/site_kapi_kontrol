@@ -303,24 +303,17 @@ class AdminDoorStatusCard extends StatelessWidget {
         ? 'Hazır (Bulut)'
         : 'Bağlantı Yok';
     final deviceOnlineText = isCloudOnline
-        ? '🟢 Çevrimiçi (Bulut)'
-        : (isPhoneOnWifi
-            ? '🟡 Bulut Çevrimdışı (Yerel Wi-Fi Denenebilir)'
-            : '🔴 Çevrimdışı (Bulut Bağlantısı Yok)');
+        ? '🟢 Çevrimiçi'
+        : '🔴 Çevrimdışı';
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
-            ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
-            : 'Bilinmiyor')
-        : (isPhoneOnWifi
-            ? 'Bilinmiyor (Yerel Ağdan Deneyin)'
-            : 'Bilinmiyor (Cihaz Çevrimdışı)');
+        : 'Bilinmiyor';
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
             ? '-'
             : '%${runtimeStatus!.wifiSignalPercent}'
                 '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}')
         : '-';
-
     final canOperate = isCloudOnline || isPhoneOnWifi;
     final commandEnabled = isDeviceAssigned &&
         canOperate &&
