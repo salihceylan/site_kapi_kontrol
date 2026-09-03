@@ -308,13 +308,66 @@ class LocalDoorService {
     }
   }
 
+  Future<bool> _directUdpOpen(
+    String ip,
+    LocalDoorAccess access, {
+    InternetAddress? wifiAddress,
+  }) async {
+    try {
+      final socket = await RawDatagramSocket.bind(
+        wifiAddress ?? InternetAddress.anyIPv4,
+        0,
+      );
+      final completer = Completer<bool>();
+      final payload = utf8.encode(jsonEncode({
+        'action': 'open',
+        'device_uid': access.deviceUid,
+        'token': access.token,
+      }));
+
+      socket.send(payload, InternetAddress(ip), access.port);
+      debugPrint('[YerelKapi] Doğrudan UDP Kapı Açma paketi yollandı -> $ip:${access.port}');
+
+      socket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = socket.receive();
+          if (dg != null) {
+            final text = utf8.decode(dg.data, allowMalformed: true);
+            debugPrint('[YerelKapi] UDP Açma yanıtı geldi: $text');
+            if (text.contains('"ok":true') || text.contains('yerel_kapi_acma')) {
+              if (!completer.isCompleted) completer.complete(true);
+            }
+          }
+        }
+      });
+
+      final res = await completer.future
+          .timeout(
+            const Duration(milliseconds: 600),
+            onTimeout: () => false,
+          )
+          .whenComplete(() => socket.close());
+      return res;
+    } catch (e) {
+      debugPrint('[YerelKapi] UDP Açma hatası: $e');
+      return false;
+    }
+  }
+
   Future<bool> _directPostOpen(
     String ip,
     LocalDoorAccess access,
     Duration timeout, {
     InternetAddress? wifiAddress,
   }) async {
-    // 1. Raw Socket POST (Wi-Fi arayüzüne bağlı)
+    // 1. Hızlı ve doğrudan UDP ile açmayı dene (1-5 ms)
+    final udpOk = await _directUdpOpen(ip, access, wifiAddress: wifiAddress);
+    if (udpOk) {
+      debugPrint('[YerelKapi] UDP doğrudan komutuyla kapı AÇILDI! ($ip)');
+      return true;
+    }
+
+    // 2. Raw Socket POST (Wi-Fi arayüzüne bağlı)
     final socketOk = await _rawSocketPost(
       ip,
       access.port,

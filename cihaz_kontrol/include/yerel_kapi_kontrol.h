@@ -61,7 +61,7 @@ inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
   const unsigned long startedAt = millis();
   String firstLine;
 
-  while (client.connected() && millis() - startedAt < 150) {
+  while (client.connected() && millis() - startedAt < 1000) {
     if (!client.available()) {
       yield();
       delay(1);
@@ -80,7 +80,7 @@ inline bool yerelHttpIstekOku(WiFiClient& client, YerelHttpIstek& request) {
   request.method = firstLine.substring(0, firstSpace);
   request.path = firstLine.substring(firstSpace + 1, secondSpace);
 
-  while (client.connected() && millis() - startedAt < 250) {
+  while (client.connected() && millis() - startedAt < 1500) {
     if (!client.available()) {
       yield();
       delay(1);
@@ -235,25 +235,40 @@ inline void yerelKapiKontrolLoop() {
 
   yerelKapiKontrolBaslat();
 
-  // UDP Broadcast Discovery Yanıtlayıcı (Telefona anında IP bildirimi)
+  // 1. UDP Keşif & Hızlı Komut Yanıtlayıcı
   if (gYerelUdpAktif) {
     int packetSize = gYerelUdp.parsePacket();
     if (packetSize > 0) {
-      char packetBuffer[255];
-      int len = gYerelUdp.read(packetBuffer, 254);
+      char packetBuffer[512];
+      int len = gYerelUdp.read(packetBuffer, 511);
       if (len > 0) packetBuffer[len] = '\0';
       String msg = String(packetBuffer);
-      if (msg.indexOf("discover") >= 0 || msg.indexOf("ahbu") >= 0 || msg.indexOf(cihazUniqueId()) >= 0) {
+
+      if (msg.indexOf("open") >= 0 || msg.indexOf("pulse") >= 0) {
+        // Doğrudan UDP Kapı Açma
+        roleTetikle();
+        gDoorLocked = false;
+        mqttPublishEvent("local_udp_pulse_started", "");
+        mqttPublishState(gDoorLocked);
+        offlineLogKaydet("local_udp", "Yerel UDP", "");
+
+        String reply = "{\"ok\":true,\"message\":\"yerel_kapi_acma_komutu_alindi\",\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\"}";
+        gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
+        gYerelUdp.print(reply);
+        gYerelUdp.endPacket();
+        Serial.println("Yerel UDP: KAPI ACILDI (role tetiklendi).");
+      } else if (msg.indexOf("discover") >= 0 || msg.indexOf("ahbu") >= 0 || msg.indexOf(cihazUniqueId()) >= 0) {
         String reply = "{\"ok\":true,\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\",\"ip\":\"" + yerelJsonEscape(wifiIpAdresi()) + "\",\"port\":" + String(YEREL_KAPI_KONTROL_PORT) + "}";
         gYerelUdp.beginPacket(gYerelUdp.remoteIP(), gYerelUdp.remotePort());
         gYerelUdp.print(reply);
         gYerelUdp.endPacket();
-        Serial.print("UDP Discovery yanitlandi -> ");
+        Serial.print("UDP Keşif yanıtlandı -> ");
         Serial.println(gYerelUdp.remoteIP());
       }
     }
   }
 
+  // 2. HTTP TCP Sunucu
   WiFiClient client = gYerelKapiServer.available();
   if (!client) {
     return;
