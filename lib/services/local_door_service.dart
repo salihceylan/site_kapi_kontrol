@@ -17,11 +17,96 @@ class LocalDoorOpenResult {
   final String message;
 }
 
+class CachedDeviceLocation {
+  const CachedDeviceLocation({
+    required this.deviceUid,
+    required this.ip,
+    required this.port,
+    required this.lastSeen,
+    this.rssi,
+  });
+
+  final String deviceUid;
+  final String ip;
+  final int port;
+  final DateTime lastSeen;
+  final int? rssi;
+
+  bool get isFresh =>
+      DateTime.now().difference(lastSeen).inSeconds < 15;
+}
+
 class LocalDoorService {
-  LocalDoorService();
+  LocalDoorService() {
+    startBeaconListener();
+  }
 
   static const Duration _scanTimeout = Duration(milliseconds: 600);
   static const int _scanWorkers = 64;
+
+  final Map<String, CachedDeviceLocation> _deviceIpCache = {};
+  RawDatagramSocket? _beaconListenerSocket;
+  bool _isListening = false;
+
+  void startBeaconListener() async {
+    if (kIsWeb || _isListening) return;
+    try {
+      _beaconListenerSocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        8765,
+        reuseAddress: true,
+        reusePort: !Platform.isWindows,
+      );
+      _beaconListenerSocket?.broadcastEnabled = true;
+      _isListening = true;
+
+      _beaconListenerSocket?.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final dg = _beaconListenerSocket?.receive();
+          if (dg != null) {
+            try {
+              final text = utf8.decode(dg.data, allowMalformed: true);
+              final json = jsonDecode(text) as Map<String, dynamic>;
+              final uid = (json['device_uid'] as String?)?.trim().toUpperCase();
+              if (uid != null && uid.isNotEmpty) {
+                final ip = (json['ip'] as String?)?.trim() ?? dg.address.address;
+                final port = (json['port'] as num?)?.toInt() ?? 8765;
+                final rssi = (json['rssi'] as num?)?.toInt();
+                _deviceIpCache[uid] = CachedDeviceLocation(
+                  deviceUid: uid,
+                  ip: ip,
+                  port: port,
+                  lastSeen: DateTime.now(),
+                  rssi: rssi,
+                );
+                debugPrint('[YerelKapi] 📡 Beacon alındı -> UID: $uid, IP: $ip, Port: $port, RSSI: $rssi');
+              }
+            } catch (_) {}
+          }
+        }
+      });
+      debugPrint('[YerelKapi] UDP Beacon dinleyicisi port 8765 üzerinde aktif.');
+    } catch (e) {
+      debugPrint('[YerelKapi] UDP Beacon dinleyicisi başlatılamadı: $e');
+    }
+  }
+
+  void stopBeaconListener() {
+    try {
+      _beaconListenerSocket?.close();
+      _beaconListenerSocket = null;
+      _isListening = false;
+    } catch (_) {}
+  }
+
+  CachedDeviceLocation? getCachedDevice(String deviceUid) {
+    final cleanUid = deviceUid.trim().toUpperCase();
+    final cached = _deviceIpCache[cleanUid];
+    if (cached != null && cached.isFresh) {
+      return cached;
+    }
+    return null;
+  }
 
   Future<bool> hasLocalWifiConnection() async {
     final addr = await _getWifiAddress();
@@ -117,7 +202,8 @@ class LocalDoorService {
         message: 'Yerel ağ ile kapı açma yalnızca mobil uygulamada desteklenir.',
       );
     }
-    if (access.deviceUid.trim().isEmpty) {
+    final targetUid = access.deviceUid.trim().toUpperCase();
+    if (targetUid.isEmpty) {
       return const LocalDoorOpenResult(
         ok: false,
         ip: null,
@@ -128,22 +214,43 @@ class LocalDoorService {
     final wifiAddr = await _getWifiAddress();
     final knownIp = access.ip?.trim();
     debugPrint(
-      '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
+      '[YerelKapi] Başlatıldı -> Cihaz: $targetUid, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
     );
+
+    // 0. SIFIR GECİKME ÖNCELİĞİ: Canlı Beacon Önbelleğindeki Doğrulanmış IP (0 ms Keşif)
+    final cached = getCachedDevice(targetUid);
+    if (cached != null && cached.ip.isNotEmpty) {
+      debugPrint('[YerelKapi] ⚡ CANLI BEACON ÖNBELLEĞİ KULLANILIYOR -> ${cached.ip}:8765 (0 ms Keşif Beklemesi)');
+      final udpOpened = await _directUdpOpen(cached.ip, access, wifiAddress: wifiAddr);
+      if (udpOpened) {
+        debugPrint('[YerelKapi] ⚡ CANLI ÖNBELLEK İLE ANINDA AÇILDI! (${cached.ip})');
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: cached.ip,
+          message: 'Kapı yerel ağdan anında açıldı.',
+        );
+      }
+    }
 
     // 1. Bilinen IP varsa önce kimliğini doğrula ve sadece ona özel aç
     if (knownIp != null && knownIp.isNotEmpty) {
       final matches = await _probeDeviceIp(
         knownIp,
-        access.deviceUid,
+        targetUid,
         wifiAddress: wifiAddr,
-        timeout: const Duration(milliseconds: 120),
+        timeout: const Duration(milliseconds: 100),
       );
       if (matches) {
         debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) doğrulandı, UNICAST UDP deneniyor...');
         final udpOpened = await _directUdpOpen(knownIp, access, wifiAddress: wifiAddr);
         if (udpOpened) {
           debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UNICAST UDP ile açıldı!');
+          _deviceIpCache[targetUid] = CachedDeviceLocation(
+            deviceUid: targetUid,
+            ip: knownIp,
+            port: access.port,
+            lastSeen: DateTime.now(),
+          );
           return LocalDoorOpenResult(
             ok: true,
             ip: knownIp,
@@ -169,9 +276,9 @@ class LocalDoorService {
     }
 
     // 2. IP bilinmiyorsa veya değiştiyse UDP Keşif ile hedef UID'ye sahip cihazın IP'sini bul
-    debugPrint('[YerelKapi] UDP Keşif ile hedef cihaz (${access.deviceUid}) aranıyor...');
+    debugPrint('[YerelKapi] UDP Keşif ile hedef cihaz ($targetUid) aranıyor...');
     final discoveredIp = await _discoverDeviceIpViaUdp(
-      access.deviceUid,
+      targetUid,
       wifiAddress: wifiAddr,
     );
     if (discoveredIp != null && discoveredIp.isNotEmpty) {
@@ -179,6 +286,12 @@ class LocalDoorService {
       final udpOpened = await _directUdpOpen(discoveredIp, access, wifiAddress: wifiAddr);
       if (udpOpened) {
         debugPrint('[YerelKapi] Hedef IP ($discoveredIp) UNICAST UDP ile açıldı!');
+        _deviceIpCache[targetUid] = CachedDeviceLocation(
+          deviceUid: targetUid,
+          ip: discoveredIp,
+          port: access.port,
+          lastSeen: DateTime.now(),
+        );
         return LocalDoorOpenResult(
           ok: true,
           ip: discoveredIp,
@@ -217,7 +330,7 @@ class LocalDoorService {
         // ASLA RÖLE TETİKLEME PAKETİ ATMA! Yalnızca 'discover' kimlik sorgusu yap!
         final matches = await _probeDeviceIp(
           current,
-          access.deviceUid,
+          targetUid,
           wifiAddress: wifiAddr,
           timeout: _scanTimeout,
         );
@@ -232,6 +345,12 @@ class LocalDoorService {
           if (ok && !stopped) {
             foundIp = current;
             stopped = true;
+            _deviceIpCache[targetUid] = CachedDeviceLocation(
+              deviceUid: targetUid,
+              ip: current,
+              port: access.port,
+              lastSeen: DateTime.now(),
+            );
             return;
           }
         }
@@ -335,6 +454,8 @@ class LocalDoorService {
 
   Future<bool> isDeviceReachableLocally(String deviceUid) async {
     if (kIsWeb || deviceUid.trim().isEmpty) return false;
+    final cached = getCachedDevice(deviceUid);
+    if (cached != null) return true;
     try {
       final wifiAddr = await _getWifiAddress();
       if (wifiAddr == null) return false;
@@ -690,5 +811,7 @@ class LocalDoorService {
     return candidates;
   }
 
-  void dispose() {}
+  void dispose() {
+    stopBeaconListener();
+  }
 }
