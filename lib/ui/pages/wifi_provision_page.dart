@@ -339,6 +339,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: AppDecorations.glassCard,
+      decoration: AppDecorations.glassCard(context),
       child: child,
     );
   }
@@ -635,7 +636,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         backgroundColor: accentColor,
       ),
       body: Container(
-        decoration: AppDecorations.pageBackground,
+        decoration: AppDecorations.pageBackground(context),
         child: SafeArea(
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {

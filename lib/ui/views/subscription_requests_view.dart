@@ -36,7 +36,7 @@ class SubscriptionRequestsView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: const Text(
             'Yeni Abonelik Talepleri',
             style: TextStyle(
@@ -49,7 +49,7 @@ class SubscriptionRequestsView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

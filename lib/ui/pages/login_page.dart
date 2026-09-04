@@ -99,6 +99,8 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -109,6 +111,7 @@ class _LoginPageState extends State<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 460),
               child: Container(
                 decoration: AppDecorations.glassCard,
+                decoration: AppDecorations.glassCard(context),
                 padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
                 child: Form(
                   key: _formKey,
@@ -129,6 +132,7 @@ class _LoginPageState extends State<LoginPage> {
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.primaryLight.withValues(alpha: 0.35),
+                                    color: AppColors.primaryLight.withValues(alpha: isDark ? 0.35 : 0.2),
                                     blurRadius: 36,
                                     spreadRadius: 8,
                                   ),
@@ -138,8 +142,10 @@ class _LoginPageState extends State<LoginPage> {
                             Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: const LinearGradient(
+                                gradient: LinearGradient(
                                   colors: [Color(0xFF38BDF8), Color(0xFF2563EB)],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
@@ -162,6 +168,7 @@ class _LoginPageState extends State<LoginPage> {
 
                       // Başlık
                       const Text(
+                      Text(
                         'AHBU Giriş',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -169,15 +176,18 @@ class _LoginPageState extends State<LoginPage> {
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                           color: AppColors.textLight,
+                          color: isDark ? AppColors.textLight : AppColors.textDark,
                         ),
                       ),
                       const SizedBox(height: 6),
                       const Text(
+                      Text(
                         'Akıllı Kapı & Site Otomasyon Paneli',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 13.5,
                           color: AppColors.textMutedLight,
+                          color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -187,6 +197,7 @@ class _LoginPageState extends State<LoginPage> {
                       TextFormField(
                         controller: _identifierController,
                         style: const TextStyle(color: Colors.white, fontSize: 15),
+                        style: TextStyle(color: isDark ? Colors.white : AppColors.textDark, fontSize: 15),
                         keyboardType: TextInputType.text,
                         autocorrect: false,
                         enableSuggestions: false,
@@ -209,6 +220,7 @@ class _LoginPageState extends State<LoginPage> {
                       TextFormField(
                         controller: _passwordController,
                         style: const TextStyle(color: Colors.white, fontSize: 15),
+                        style: TextStyle(color: isDark ? Colors.white : AppColors.textDark, fontSize: 15),
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: 'Şifre',
@@ -242,6 +254,9 @@ class _LoginPageState extends State<LoginPage> {
                             activeColor: AppColors.primaryLight,
                             checkColor: Colors.white,
                             side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                            side: BorderSide(
+                              color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFFCBD5E1),
+                            ),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                             onChanged: (val) {
                               setState(() => _rememberMe = val ?? true);
@@ -253,10 +268,12 @@ class _LoginPageState extends State<LoginPage> {
                                 setState(() => _rememberMe = !_rememberMe);
                               },
                               child: const Text(
+                              child: Text(
                                 'Beni Hatırla (Kullanıcı adını kaydet)',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: AppColors.textMutedLight,
+                                  color: isDark ? AppColors.textMutedLight : AppColors.textDarkSecondary,
                                   fontWeight: FontWeight.w500,
                                 ),
                                 maxLines: 1,

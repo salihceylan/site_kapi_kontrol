@@ -156,9 +156,12 @@ class _MyAppState extends State<MyApp> {
       title: 'Site Kapi Kontrol',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       builder: (context, child) {
         return Container(
           decoration: AppDecorations.pageBackground,
+          decoration: AppDecorations.pageBackground(context),
           child: child,
         );
       },

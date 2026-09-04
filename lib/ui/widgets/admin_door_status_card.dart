@@ -65,41 +65,45 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: AppDecorations.glassCard,
+      decoration: AppDecorations.glassCard(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Kapı Kontrol & Telemetri',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 16.5,
                   letterSpacing: -0.3,
-                  color: AppColors.textLight,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
+                  color: AppColors.primary.withValues(alpha: isDark ? 0.15 : 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AppColors.primaryLight.withValues(alpha: isDark ? 0.3 : 0.25),
+                  ),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.tune_rounded, color: AppColors.accent, size: 14),
+                    Icon(Icons.tune_rounded, color: AppColors.primary, size: 14),
                     SizedBox(width: 4),
                     Text(
                       'Yönetim',
                       style: TextStyle(
-                        color: AppColors.accent,
+                        color: AppColors.primary,
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -113,8 +117,8 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
           // Site Seçimi Dropdown
           DropdownButtonFormField<int>(
             isExpanded: true,
-            dropdownColor: const Color(0xFF1E293B),
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            style: TextStyle(color: isDark ? Colors.white : AppColors.textDark, fontSize: 14),
             key: ValueKey('site_${widget.selectedSite?.id}_${widget.sites.length}'),
             initialValue: (widget.selectedSite != null && widget.sites.any((s) => s.id == widget.selectedSite!.id))
                 ? widget.selectedSite!.id
@@ -131,7 +135,10 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                     '${site.name} (${site.id})',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: isDark ? Colors.white : AppColors.textDark,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
             ],
@@ -147,8 +154,8 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
           // Kapı Seçimi Dropdown
           DropdownButtonFormField<int>(
             isExpanded: true,
-            dropdownColor: const Color(0xFF1E293B),
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            style: TextStyle(color: isDark ? Colors.white : AppColors.textDark, fontSize: 14),
             key: ValueKey('door_${widget.selectedDoor?.id}_${widget.doors.length}'),
             initialValue: (widget.selectedDoor != null && widget.doors.any((d) => d.id == widget.selectedDoor!.id))
                 ? widget.selectedDoor!.id
@@ -167,7 +174,10 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                         : '${door.doorName} (${door.assignedDeviceUid})',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: isDark ? Colors.white : AppColors.textDark,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
             ],
@@ -317,6 +327,7 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
   }
 
   Widget _buildStatus(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (widget.selectedDoor == null) {
       return const Text(
         'Kontrol etmek için önce siteyi, sonra o siteye ait kapıyı seçin.',
@@ -449,32 +460,39 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             margin: const EdgeInsets.only(top: 10),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.7),
+              color: isDark
+                  ? const Color(0xFF0F172A).withValues(alpha: 0.7)
+                  : const Color(0xFFF1F5F9).withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0x22FFFFFF), width: 1.0),
+              border: Border.all(
+                color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
+                width: 1.0,
+              ),
             ),
             child: Column(
               children: [
-                _buildDetailRow('Cihaz UID', widget.selectedDoor!.assignedDeviceUid ?? '-'),
-                _buildDetailRow('Sunucu MQTT', connectionText),
-                _buildDetailRow('Kapı Durumu', stateText),
+                _buildDetailRow(context, 'Cihaz UID', widget.selectedDoor!.assignedDeviceUid ?? '-'),
+                _buildDetailRow(context, 'Sunucu MQTT', connectionText),
+                _buildDetailRow(context, 'Kapı Durumu', stateText),
                 _buildDetailRow(
+                  context,
                   'Yerel Ağ',
                   isLocalOnline
                       ? 'Aktif (Cihaz Ağda)'
                       : (widget.isPhoneOnWifi ? 'Wi-Fi Bağlı' : 'Wi-Fi Bağlı Değil'),
                 ),
                 _buildDetailRow(
+                  context,
                   'Yerel IP (LAN)',
                   widget.runtimeStatus?.localIp ?? (isLocalOnline ? 'Canlı Ağda' : '-'),
                 ),
-                _buildDetailRow('Genel IP (WAN)', widget.runtimeStatus?.publicIp ?? '-'),
-                _buildDetailRow('Firmware', widget.runtimeStatus?.firmwareVersion ?? '-'),
+                _buildDetailRow(context, 'Genel IP (WAN)', widget.runtimeStatus?.publicIp ?? '-'),
+                _buildDetailRow(context, 'Firmware', widget.runtimeStatus?.firmwareVersion ?? '-'),
                 if (widget.session.role == UserRole.superUser)
-                  _buildDetailRow('OTA Durumu', widget.runtimeStatus?.otaStatus ?? '-'),
-                _buildDetailRow('Wi-Fi Gücü', signalText),
+                  _buildDetailRow(context, 'OTA Durumu', widget.runtimeStatus?.otaStatus ?? '-'),
+                _buildDetailRow(context, 'Wi-Fi Gücü', signalText),
                 if (widget.runtimeStatus?.lastSeenAt != null)
-                  _buildDetailRow('Son Güncelleme', formatDateTime(widget.runtimeStatus!.lastSeenAt)),
+                  _buildDetailRow(context, 'Son Güncelleme', formatDateTime(widget.runtimeStatus!.lastSeenAt)),
               ],
             ),
           ),
@@ -509,9 +527,13 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                     : const LinearGradient(
                         colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
                       ))
-                : const LinearGradient(
-                    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                  ),
+                : (isDark
+                    ? const LinearGradient(
+                        colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
+                      )),
             boxShadow: commandEnabled
                 ? [
                     BoxShadow(
@@ -535,7 +557,9 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                   children: [
                     Icon(
                       isLocalOnline ? Icons.wifi : Icons.lock_open_rounded,
-                      color: commandEnabled ? Colors.white : AppColors.textMuted,
+                      color: commandEnabled
+                          ? Colors.white
+                          : (isDark ? AppColors.textMuted : const Color(0xFF94A3B8)),
                       size: 22,
                     ),
                     const SizedBox(width: 8),
@@ -551,7 +575,9 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.5,
-                        color: commandEnabled ? Colors.white : AppColors.textMuted,
+                        color: commandEnabled
+                            ? Colors.white
+                            : (isDark ? AppColors.textMuted : const Color(0xFF94A3B8)),
                       ),
                     ),
                   ],
@@ -577,8 +603,10 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             child: OutlinedButton.icon(
               onPressed: widget.onDownloadCredentialsPdf,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF93C5FD),
-                side: const BorderSide(color: Color(0x403B82F6)),
+                foregroundColor: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
+                side: BorderSide(
+                  color: isDark ? const Color(0x403B82F6) : const Color(0xFFBFDBFE),
+                ),
               ),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: Text('📄 ${widget.selectedSite!.name} Giriş Şifreleri (PDF)'),
@@ -592,8 +620,10 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             child: OutlinedButton.icon(
               onPressed: widget.onDownloadLogsPdf,
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF60A5FA),
-                side: const BorderSide(color: Color(0x4060A5FA)),
+                foregroundColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF0284C7),
+                side: BorderSide(
+                  color: isDark ? const Color(0x4060A5FA) : const Color(0xFFBAE6FD),
+                ),
               ),
               icon: const Icon(Icons.assignment_outlined, size: 18),
               label: Text(
@@ -608,7 +638,8 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(BuildContext context, String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -616,9 +647,9 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.textMutedLight,
+              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -626,9 +657,9 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
           Flexible(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
-                color: Color(0xFFF8FAFC),
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                 fontWeight: FontWeight.w700,
               ),
               textAlign: TextAlign.end,

@@ -28,6 +28,7 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final device = widget.device;
     final siteText = device.siteName == null
         ? (device.siteCode == null ? '-' : 'Site ID: ${device.siteCode}')
@@ -56,19 +57,21 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+              color: isDark
+                  ? const Color(0xFF1E293B).withValues(alpha: 0.85)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isOnline
                     ? AppColors.emerald.withValues(alpha: 0.4)
-                    : const Color(0x22FFFFFF),
+                    : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
                 width: isOnline ? 1.4 : 1.0,
               ),
-              boxShadow: const [
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x30000000),
+                  color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
                   blurRadius: 10,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -82,12 +85,12 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.2),
+                            color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.memory_rounded,
-                            color: AppColors.accent,
+                            color: isDark ? AppColors.accentLight : AppColors.primary,
                             size: 22,
                           ),
                         ),
@@ -98,9 +101,14 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                             width: 11,
                             height: 11,
                             decoration: BoxDecoration(
-                              color: isOnline ? AppColors.emeraldLight : AppColors.roseLight,
+                              color: isOnline
+                                  ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
+                                  : (isDark ? AppColors.roseLight : AppColors.rose),
                               shape: BoxShape.circle,
-                              border: Border.all(color: const Color(0xFF1E293B), width: 2),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -113,10 +121,10 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                         children: [
                           Text(
                             device.deviceUid,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15.5,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFFF8FAFC),
+                              color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -124,9 +132,9 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                             'Site: $siteText | Kapı: $doorText',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
-                              color: AppColors.textMutedLight,
+                              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                             ),
                           ),
                         ],
@@ -138,18 +146,20 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       decoration: BoxDecoration(
                         color: isOnline
                             ? AppColors.emerald.withValues(alpha: 0.15)
-                            : const Color(0x20FFFFFF),
+                            : (isDark ? const Color(0x20FFFFFF) : const Color(0xFFF1F5F9)),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isOnline
                               ? AppColors.emerald.withValues(alpha: 0.4)
-                              : const Color(0x20FFFFFF),
+                              : (isDark ? const Color(0x20FFFFFF) : const Color(0xFFE2E8F0)),
                         ),
                       ),
                       child: Text(
                         onlineText,
                         style: TextStyle(
-                          color: isOnline ? AppColors.emeraldLight : AppColors.textMutedLight,
+                          color: isOnline
+                              ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
+                              : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -160,35 +170,44 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       _expanded
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textMutedLight,
+                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                       size: 20,
                     ),
                   ],
                 ),
                 if (_expanded) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(color: Color(0x1FFFFFFF), height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(
+                      color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
+                      height: 1,
+                    ),
                   ),
                   Wrap(
-                    spacing: 14,
+                    spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _buildChip('Kullanıcı ID: $userText'),
-                      _buildChip('MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
-                      _buildChip('Firmware: ${device.firmwareVersion ?? "-"}'),
+                      _buildChip(context, 'Kullanıcı ID: $userText'),
+                      _buildChip(context, 'MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
+                      _buildChip(context, 'Firmware: ${device.firmwareVersion ?? "-"}'),
                       if (widget.isSuperUser)
-                        _buildChip('OTA Durumu: ${device.otaStatus ?? "-"}'),
-                      _buildChip('Wi-Fi Gücü: $signalText'),
-                      _buildChip('Yerel IP: ${device.localIp ?? "-"}'),
-                      _buildChip('Genel IP: ${device.publicIp ?? "-"}'),
-                      _buildChip('Son Görülme: $lastSeenText'),
+                        _buildChip(context, 'OTA Durumu: ${device.otaStatus ?? "-"}'),
+                      _buildChip(context, 'Wi-Fi Gücü: $signalText'),
+                      _buildChip(context, 'Yerel IP: ${device.localIp ?? "-"}'),
+                      _buildChip(context, 'Genel IP: ${device.publicIp ?? "-"}'),
+                      _buildChip(context, 'Son Görülme: $lastSeenText'),
                       if ((device.mqttUsername ?? '').isNotEmpty)
-                        _buildChip('MQTT Kullanıcı: ${device.mqttUsername}'),
+                        _buildChip(context, 'MQTT Kullanıcı: ${device.mqttUsername}'),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text('Kayıt: $dateText', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                  Text(
+                    'Kayıt: $dateText',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   Wrap(
                     spacing: 8,
@@ -224,20 +243,25 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
     );
   }
 
-  Widget _buildChip(String label) {
+  Widget _buildChip(BuildContext context, String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        color: isDark
+            ? const Color(0xFF0F172A).withValues(alpha: 0.6)
+            : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0x1FFFFFFF)),
+        border: Border.all(
+          color: isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE2E8F0),
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFCBD5E1),
+          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
         ),
       ),
     );

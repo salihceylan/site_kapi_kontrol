@@ -20,37 +20,42 @@ class DeviceActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: AppDecorations.glassCard,
+      decoration: AppDecorations.glassCard(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.2),
+              color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: AppColors.accent, size: 28),
+            child: Icon(
+              icon,
+              color: isDark ? AppColors.accentLight : AppColors.primary,
+              size: 28,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
-              color: Color(0xFFF8FAFC),
+              color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             description,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
-              color: AppColors.textMutedLight,
+              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
               height: 1.4,
             ),
           ),

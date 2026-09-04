@@ -22,7 +22,7 @@ class NoInternetPage extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Container(
-              decoration: AppDecorations.glassCard,
+              decoration: AppDecorations.glassCard(context),
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

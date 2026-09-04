@@ -21,7 +21,7 @@ class DeviceAddView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(22),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: const Text(
             'Şirket Veritabanına Cihaz Kaydet',
             style: TextStyle(

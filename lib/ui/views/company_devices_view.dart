@@ -43,7 +43,7 @@ class CompanyDevicesView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(22),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -99,7 +99,7 @@ class CompanyDevicesView extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
-            decoration: AppDecorations.glassCard,
+            decoration: AppDecorations.glassCard(context),
             child: const Text('Şirket hesabına kayıtlı cihaz bulunamadı.'),
           )
         else

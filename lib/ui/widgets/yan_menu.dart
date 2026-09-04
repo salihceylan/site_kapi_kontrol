@@ -39,11 +39,12 @@ class YanMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final roleColor = role.accentColor;
     final items = _itemsForRole(role);
 
     return Drawer(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(28),
@@ -58,10 +59,15 @@ class YanMenu extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  roleColor.withValues(alpha: 0.9),
-                  const Color(0xFF0F172A),
-                ],
+                colors: isDark
+                    ? [
+                        roleColor.withValues(alpha: 0.9),
+                        const Color(0xFF0F172A),
+                      ]
+                    : [
+                        roleColor,
+                        roleColor.withValues(alpha: 0.85),
+                      ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -70,7 +76,7 @@ class YanMenu extends StatelessWidget {
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: Colors.white.withValues(alpha: 0.15),
                   width: 1,
                 ),
               ),
@@ -112,10 +118,10 @@ class YanMenu extends StatelessWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
+                              color: Colors.white.withValues(alpha: 0.22),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
+                                color: Colors.white.withValues(alpha: 0.4),
                               ),
                             ),
                             child: Text(
@@ -149,8 +155,8 @@ class YanMenu extends StatelessWidget {
                   userEmail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textMutedLight,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -174,9 +180,12 @@ class YanMenu extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                 ],
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  child: Divider(color: Color(0x1AFFFFFF), height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  child: Divider(
+                    color: isDark ? const Color(0x1AFFFFFF) : const Color(0x150F172A),
+                    height: 1,
+                  ),
                 ),
                 _MenuTile(
                   icon: Icons.logout_rounded,
@@ -195,9 +204,9 @@ class YanMenu extends StatelessWidget {
             child: Center(
               child: Text(
                 AppConfig.versionDisplay,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
-                  color: AppColors.textMuted,
+                  color: isDark ? AppColors.textMuted : const Color(0xFF94A3B8),
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
                 ),
@@ -315,12 +324,19 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
+        color: selected
+            ? color.withValues(alpha: isDark ? 0.15 : 0.12)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         border: selected
-            ? Border.all(color: color.withValues(alpha: 0.4), width: 1.2)
+            ? Border.all(
+                color: color.withValues(alpha: isDark ? 0.4 : 0.35),
+                width: 1.2,
+              )
             : null,
       ),
       child: ListTile(
@@ -328,7 +344,9 @@ class _MenuTile extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         leading: Icon(
           icon,
-          color: selected ? color : AppColors.textMutedLight,
+          color: selected
+              ? color
+              : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
           size: 22,
         ),
         title: Text(
@@ -336,7 +354,9 @@ class _MenuTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? Colors.white : AppColors.textMutedLight,
+            color: selected
+                ? (isDark ? Colors.white : color)
+                : (isDark ? AppColors.textLight : AppColors.textDarkSecondary),
           ),
         ),
         trailing: selected

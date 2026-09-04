@@ -82,7 +82,7 @@ class SitesView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: compact
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +133,7 @@ class SitesView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -225,7 +225,7 @@ class SitesView extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
-            decoration: AppDecorations.glassCard,
+            decoration: AppDecorations.glassCard(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -292,7 +292,7 @@ class SitesView extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
-            decoration: AppDecorations.glassCard,
+            decoration: AppDecorations.glassCard(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -327,7 +327,7 @@ class SitesView extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
-            decoration: AppDecorations.glassCard,
+            decoration: AppDecorations.glassCard(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

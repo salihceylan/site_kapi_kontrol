@@ -18,7 +18,7 @@ class BluetoothWifiView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(22),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

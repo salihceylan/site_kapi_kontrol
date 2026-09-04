@@ -14,25 +14,28 @@ class DoorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasDevice = door.assignedDeviceUid != null &&
         door.assignedDeviceUid!.trim().isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+        color: isDark
+            ? const Color(0xFF1E293B).withValues(alpha: 0.85)
+            : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: hasDevice
-              ? const Color(0x333B82F6)
-              : const Color(0x33F59E0B),
+              ? (isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE))
+              : (isDark ? const Color(0x33F59E0B) : const Color(0xFFFED7AA)),
           width: 1.2,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x30000000),
+            color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
             blurRadius: 10,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -48,13 +51,15 @@ class DoorCard extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: hasDevice
-                          ? AppColors.primary.withValues(alpha: 0.2)
-                          : AppColors.amber.withValues(alpha: 0.2),
+                          ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1)
+                          : AppColors.amber.withValues(alpha: isDark ? 0.2 : 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.meeting_room_rounded,
-                      color: hasDevice ? AppColors.accent : AppColors.amberLight,
+                      color: hasDevice
+                          ? (isDark ? AppColors.accentLight : AppColors.primary)
+                          : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
                       size: 22,
                     ),
                   ),
@@ -65,10 +70,10 @@ class DoorCard extends StatelessWidget {
                       children: [
                         Text(
                           door.doorName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 15.5,
-                            color: Color(0xFFF8FAFC),
+                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -78,8 +83,8 @@ class DoorCard extends StatelessWidget {
                               : 'Cihaz atanmamış',
                           style: TextStyle(
                             color: hasDevice
-                                ? AppColors.textMutedLight
-                                : AppColors.amberLight,
+                                ? (isDark ? AppColors.textMutedLight : AppColors.textMuted)
+                                : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
                             fontSize: 12.5,
                             fontWeight: hasDevice
                                 ? FontWeight.normal

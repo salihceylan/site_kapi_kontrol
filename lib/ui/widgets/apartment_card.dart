@@ -27,6 +27,7 @@ class _ApartmentCardState extends State<ApartmentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final apartment = widget.apartment;
     final hasResident = apartment.residentFullName != null &&
         apartment.residentFullName!.trim().isNotEmpty;
@@ -41,19 +42,21 @@ class _ApartmentCardState extends State<ApartmentCard> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+            color: isDark
+                ? const Color(0xFF1E293B).withValues(alpha: 0.85)
+                : Colors.white,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: hasResident
-                  ? const Color(0x333B82F6)
-                  : const Color(0x33F59E0B),
+                  ? (isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE))
+                  : (isDark ? const Color(0x33F59E0B) : const Color(0xFFFED7AA)),
               width: 1.2,
             ),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x30000000),
+                color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
                 blurRadius: 10,
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -66,13 +69,15 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     padding: const EdgeInsets.all(9),
                     decoration: BoxDecoration(
                       color: hasResident
-                          ? AppColors.primary.withValues(alpha: 0.2)
-                          : AppColors.amber.withValues(alpha: 0.2),
+                          ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1)
+                          : AppColors.amber.withValues(alpha: isDark ? 0.2 : 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.home_rounded,
-                      color: hasResident ? AppColors.accent : AppColors.amberLight,
+                      color: hasResident
+                          ? (isDark ? AppColors.accentLight : AppColors.primary)
+                          : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
                       size: 20,
                     ),
                   ),
@@ -83,10 +88,10 @@ class _ApartmentCardState extends State<ApartmentCard> {
                       children: [
                         Text(
                           apartment.label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
-                            color: Color(0xFFF8FAFC),
+                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -96,8 +101,8 @@ class _ApartmentCardState extends State<ApartmentCard> {
                               : 'Daire Boş / Sakin Yok',
                           style: TextStyle(
                             color: hasResident
-                                ? AppColors.textMutedLight
-                                : AppColors.amberLight,
+                                ? (isDark ? AppColors.textMutedLight : AppColors.textMuted)
+                                : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
                             fontSize: 12,
                             fontWeight: hasResident
                                 ? FontWeight.normal
@@ -126,7 +131,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     child: Text(
                       active ? 'Aktif' : 'Pasif',
                       style: TextStyle(
-                        color: active ? AppColors.emeraldLight : AppColors.roseLight,
+                        color: active
+                            ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
+                            : (isDark ? AppColors.roseLight : AppColors.rose),
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
                       ),
@@ -137,15 +144,18 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     _expanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textMutedLight,
+                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                     size: 20,
                   ),
                 ],
               ),
               if (_expanded) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: Color(0x1FFFFFFF), height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(
+                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
+                    height: 1,
+                  ),
                 ),
                 Wrap(
                   spacing: 12,
@@ -154,27 +164,27 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     if ((apartment.residentLoginName ?? '').isNotEmpty)
                       Text(
                         'Kullanıcı Adı: ${apartment.residentLoginName}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
-                          color: Color(0xFFF8FAFC),
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     if ((apartment.residentPinCode ?? '').isNotEmpty)
                       Text(
                         'Şifre (PIN): ${apartment.residentPinCode}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
-                          color: Color(0xFFF8FAFC),
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     if (apartment.residentUserCode != null)
                       Text(
                         'Kullanıcı ID: ${apartment.residentUserCode}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textMutedLight,
+                          color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                         ),
                       ),
                   ],
@@ -183,9 +193,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
                   const SizedBox(height: 4),
                   Text(
                     'E-posta: ${apartment.residentEmail}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMutedLight,
+                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                     ),
                   ),
                 ],
@@ -193,9 +203,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
                   const SizedBox(height: 2),
                   Text(
                     'Telefon: ${apartment.residentPhoneNumber}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMutedLight,
+                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                     ),
                   ),
                 ],

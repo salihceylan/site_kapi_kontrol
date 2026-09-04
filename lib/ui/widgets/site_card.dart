@@ -41,13 +41,16 @@ class _SiteCardState extends State<SiteCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final site = widget.site;
     final isSelected = widget.selected;
     final hasManager =
         site.managerName != null && site.managerName!.trim().isNotEmpty;
     final approvalColor = site.approvalStatus == 'approved'
-        ? AppColors.emeraldLight
-        : (site.approvalStatus == 'rejected' ? AppColors.roseLight : AppColors.amberLight);
+        ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
+        : (site.approvalStatus == 'rejected'
+            ? (isDark ? AppColors.roseLight : AppColors.rose)
+            : (isDark ? AppColors.amberLight : const Color(0xFFD97706)));
 
     return Material(
       color: Colors.transparent,
@@ -60,21 +63,25 @@ class _SiteCardState extends State<SiteCard> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFF1E293B).withValues(alpha: 0.95)
-                : const Color(0xFF1E293B).withValues(alpha: 0.75),
+            color: isDark
+                ? (isSelected
+                    ? const Color(0xFF1E293B).withValues(alpha: 0.95)
+                    : const Color(0xFF1E293B).withValues(alpha: 0.75))
+                : (isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.9)),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected
-                  ? AppColors.primaryLight
-                  : const Color(0x22FFFFFF),
+                  ? AppColors.primary
+                  : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
               width: isSelected ? 1.8 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
                 color: isSelected
-                    ? AppColors.primary.withValues(alpha: 0.25)
-                    : const Color(0x30000000),
+                    ? AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.15)
+                    : (isDark ? const Color(0x30000000) : const Color(0x080F172A)),
                 blurRadius: isSelected ? 16 : 8,
                 offset: const Offset(0, 4),
               ),
@@ -88,13 +95,15 @@ class _SiteCardState extends State<SiteCard> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.2),
+                      color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: AppColors.primaryLight.withValues(alpha: isDark ? 0.3 : 0.2),
+                      ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.apartment_rounded,
-                      color: AppColors.accent,
+                      color: isDark ? AppColors.accentLight : AppColors.primary,
                       size: 20,
                     ),
                   ),
@@ -105,11 +114,11 @@ class _SiteCardState extends State<SiteCard> {
                       children: [
                         Text(
                           site.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 15.5,
                             letterSpacing: -0.2,
-                            color: Color(0xFFF8FAFC),
+                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -119,8 +128,8 @@ class _SiteCardState extends State<SiteCard> {
                               : 'Yönetici atanmamış',
                           style: TextStyle(
                             color: hasManager
-                                ? AppColors.textMutedLight
-                                : AppColors.amberLight,
+                                ? (isDark ? AppColors.textMutedLight : AppColors.textMuted)
+                                : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
                             fontSize: 12.5,
                             fontWeight: hasManager
                                 ? FontWeight.normal
@@ -155,125 +164,93 @@ class _SiteCardState extends State<SiteCard> {
                     _expanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textMutedLight,
+                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
                   ),
                 ],
               ),
               if (_expanded) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Divider(color: Color(0x1FFFFFFF), height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(
+                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
+                    height: 1,
+                  ),
                 ),
                 Wrap(
-                  spacing: 12,
+                  spacing: 8,
                   runSpacing: 6,
                   children: [
-                    _buildChip('ID: ${site.id}'),
-                    _buildChip('MQTT: ${site.mqttSiteId}'),
-                    _buildChip('Blok: ${site.blockCount}'),
-                    _buildChip('Daire: ${site.apartmentCount}'),
-                    _buildChip('Kapı: ${site.doorCount}'),
+                    _buildChip(context, 'ID: ${site.id}'),
+                    _buildChip(context, 'Oluşturulma: ${widget.formattedCreatedAt}'),
+                    if (site.address != null && site.address!.isNotEmpty)
+                      _buildChip(context, 'Adres: ${site.address}'),
+                    if (site.city != null && site.city!.isNotEmpty)
+                      _buildChip(context, 'Şehir: ${site.city}'),
                   ],
                 ),
-                if (site.managerUserCode != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Yönetici Kodu: ${site.managerUserCode}',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textMutedLight,
-                    ),
-                  ),
-                ],
-                if ((site.address ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Adres: ${site.address}',
-                    style: const TextStyle(fontSize: 12.5, color: Color(0xFFCBD5E1)),
-                  ),
-                ],
-                if ((site.city ?? '').isNotEmpty ||
-                    (site.district ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Konum: ${site.city ?? '-'} / ${site.district ?? '-'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMutedLight,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Text(
-                  'Kayıt: ${widget.formattedCreatedAt}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
-                  ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (widget.onApprove != null)
+                      ElevatedButton.icon(
+                        onPressed: widget.approvalBusy ? null : widget.onApprove,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.emerald,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.check_circle_outline, size: 16),
+                        label: const Text('Onayla'),
+                      ),
+                    if (widget.onReject != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.approvalBusy ? null : widget.onReject,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.roseLight,
+                          side: const BorderSide(color: AppColors.rose),
+                        ),
+                        icon: const Icon(Icons.cancel_outlined, size: 16),
+                        label: const Text('Reddet'),
+                      ),
+                    if (widget.onEdit != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onEdit,
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Düzenle'),
+                      ),
+                    if (widget.onDelete != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.deleteBusy ? null : widget.onDelete,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.roseLight,
+                          side: const BorderSide(color: AppColors.rose),
+                        ),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                        label: const Text('Sil'),
+                      ),
+                    if (widget.onDownloadPdf != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onDownloadPdf,
+                        icon: Icon(
+                          Icons.key_outlined,
+                          size: 16,
+                          color: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
+                        ),
+                        label: const Text('Şifreleri İndir (PDF)'),
+                      ),
+                    if (widget.onDownloadLogsPdf != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onDownloadLogsPdf,
+                        icon: Icon(
+                          Icons.assignment_outlined,
+                          size: 16,
+                          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF0284C7),
+                        ),
+                        label: const Text('Geçiş Raporu (PDF)'),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 14),
-                if (widget.approvalBusy || widget.deleteBusy)
-                  const Center(child: CircularProgressIndicator())
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (widget.onEdit != null)
-                        OutlinedButton.icon(
-                          onPressed: widget.onEdit,
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: const Text('Düzenle'),
-                        ),
-                      if (widget.onDelete != null)
-                        OutlinedButton.icon(
-                          onPressed: widget.onDelete,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.roseLight,
-                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
-                          ),
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          label: const Text('Sil'),
-                        ),
-                      if (widget.onApprove != null)
-                        FilledButton.icon(
-                          onPressed: widget.onApprove,
-                          style: FilledButton.styleFrom(backgroundColor: AppColors.emerald),
-                          icon: const Icon(Icons.check_circle_outline, size: 16),
-                          label: const Text('Onayla'),
-                        ),
-                      if (widget.onReject != null)
-                        OutlinedButton.icon(
-                          onPressed: widget.onReject,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.roseLight,
-                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
-                          ),
-                          icon: const Icon(Icons.block_outlined, size: 16),
-                          label: const Text('Reddet'),
-                        ),
-                      if (widget.onDownloadPdf != null)
-                        OutlinedButton.icon(
-                          onPressed: widget.onDownloadPdf,
-                          icon: const Icon(
-                            Icons.picture_as_pdf_outlined,
-                            size: 16,
-                            color: Color(0xFF93C5FD),
-                          ),
-                          label: const Text('Şifreleri İndir (PDF)'),
-                        ),
-                      if (widget.onDownloadLogsPdf != null)
-                        OutlinedButton.icon(
-                          onPressed: widget.onDownloadLogsPdf,
-                          icon: const Icon(
-                            Icons.assignment_outlined,
-                            size: 16,
-                            color: Color(0xFF60A5FA),
-                          ),
-                          label: const Text('Geçiş Raporu (PDF)'),
-                        ),
-                    ],
-                  ),
               ],
             ],
           ),
@@ -282,20 +259,25 @@ class _SiteCardState extends State<SiteCard> {
     );
   }
 
-  Widget _buildChip(String label) {
+  Widget _buildChip(BuildContext context, String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        color: isDark
+            ? const Color(0xFF0F172A).withValues(alpha: 0.6)
+            : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0x1FFFFFFF)),
+        border: Border.all(
+          color: isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE2E8F0),
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFCBD5E1),
+          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
         ),
       ),
     );

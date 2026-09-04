@@ -30,7 +30,7 @@ class ProfileView extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
-      decoration: AppDecorations.glassCard,
+      decoration: AppDecorations.glassCard(context),
       child: Form(
         key: formKey,
         child: Column(

@@ -36,7 +36,7 @@ class PendingSiteApprovalsView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: const Text(
             'Site Onay Talepleri',
             style: TextStyle(
@@ -49,7 +49,7 @@ class PendingSiteApprovalsView extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard,
+          decoration: AppDecorations.glassCard(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

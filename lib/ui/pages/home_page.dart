@@ -1283,6 +1283,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final session = widget.authService.session!;
 
     return Scaffold(
@@ -1294,9 +1295,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Text(
               _titleForMenu(_selectedMenu),
               style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Color(0xFFF8FAFC),
+                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                 letterSpacing: -0.3,
               ),
             ),
@@ -1306,6 +1309,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 color: session.role.lightAccentColor,
+                color: isDark ? session.role.lightAccentColor : session.role.accentColor,
               ),
             ),
           ],
@@ -1313,6 +1317,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         elevation: 0,
         backgroundColor: const Color(0xFF0F172A).withValues(alpha: 0.8),
         iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: isDark
+            ? const Color(0xFF0F172A).withValues(alpha: 0.8)
+            : Colors.white.withValues(alpha: 0.88),
+        iconTheme: IconThemeData(
+          color: isDark ? Colors.white : AppColors.textDark,
+        ),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
             bottomLeft: Radius.circular(20),
@@ -1323,6 +1333,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           IconButton(
             tooltip: 'Çıkış Yap',
             icon: Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
+            icon: const Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
             onPressed: () => widget.authService.logout(),
           ),
           const SizedBox(width: 4),
