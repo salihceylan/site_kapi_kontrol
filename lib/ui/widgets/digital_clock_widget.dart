@@ -88,28 +88,21 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF1E293B),
-          ],
-        ),
+        color: const Color(0xFF1E293B).withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: roleColor.withValues(alpha: 0.35),
-          width: 1.5,
+          width: 1.4,
         ),
         boxShadow: [
           BoxShadow(
-            color: roleColor.withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            color: roleColor.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
           const BoxShadow(
             color: Color(0x40000000),
-            blurRadius: 12,
+            blurRadius: 14,
             offset: Offset(0, 4),
           ),
         ],
@@ -122,30 +115,36 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Dijital Saat (Geniş Monospace Tipografi)
+              // Dijital Saat (Geniş Monospace Tipografi & Neon Parıltı)
               Row(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.access_time_filled_rounded,
-                    color: Color(0xFF38BDF8),
-                    size: 22,
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.access_time_filled_rounded,
+                      color: Color(0xFF38BDF8),
+                      size: 20,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Text(
                     timeStr,
                     style: const TextStyle(
                       fontSize: 28,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                       letterSpacing: 2.0,
                       fontFamily: 'monospace',
                       color: Color(0xFFF8FAFC),
                       shadows: [
                         Shadow(
                           color: Color(0x8038BDF8),
-                          blurRadius: 10,
+                          blurRadius: 12,
                         ),
                       ],
                     ),
@@ -156,7 +155,7 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0284C7).withValues(alpha: 0.18),
+                  color: const Color(0xFF0284C7).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
@@ -170,7 +169,7 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
                       'TSİ (UTC+3)',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: Color(0xFF38BDF8),
                         letterSpacing: 0.5,
                       ),
@@ -187,14 +186,14 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
             children: [
               const Icon(
                 Icons.calendar_today_rounded,
-                size: 15,
-                color: AppColors.textMuted,
+                size: 14,
+                color: AppColors.textMutedLight,
               ),
               const SizedBox(width: 6),
               Text(
                 dateStr,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFFCBD5E1),
                 ),
@@ -205,36 +204,66 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
           if (widget.showUserInfo) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(color: Color(0x20FFFFFF), height: 1),
+              child: Divider(color: Color(0x1FFFFFFF), height: 1),
             ),
             // Kullanıcı Bilgisi ve Rolü
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.session.fullName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFF8FAFC),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: roleColor,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.session.fullName,
+                          style: const TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFF8FAFC),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  backgroundColor: roleColor.withValues(alpha: 0.15),
-                  side: BorderSide(color: roleColor.withValues(alpha: 0.45)),
-                  avatar: Icon(Icons.verified_user_outlined, color: roleColor, size: 16),
-                  label: Text(
-                    widget.session.role.label,
-                    style: TextStyle(
-                      color: roleColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: roleColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: roleColor.withValues(alpha: 0.4),
                     ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.shield_outlined, color: roleColor, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.session.role.label,
+                        style: TextStyle(
+                          color: roleColor,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

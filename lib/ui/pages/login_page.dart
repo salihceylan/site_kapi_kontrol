@@ -73,11 +73,18 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = false);
     if (error != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppColors.roseLight, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text(error)),
+            ],
+          ),
+        ),
+      );
     } else {
-      // Başarılı girişte kullanıcı adını hatırla
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_rememberMeKey, _rememberMe);
@@ -93,142 +100,222 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AHBU Giris')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Container(
-              decoration: AppDecorations.glassCard,
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(22),
-                        child: Image.asset(
-                          'assets/images/app_logo.png',
-                          width: 88,
-                          height: 88,
-                          fit: BoxFit.cover,
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Container(
+                decoration: AppDecorations.glassCard,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Parlayan Logo ve Başlık Alanı
+                      Center(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Neon Halo Parıltısı
+                            Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primaryLight.withValues(alpha: 0.35),
+                                    blurRadius: 36,
+                                    spreadRadius: 8,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF38BDF8), Color(0xFF2563EB)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: Image.asset(
+                                  'assets/images/app_logo.png',
+                                  width: 82,
+                                  height: 82,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'AHBU hesabınızla giriş yapın',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                      const SizedBox(height: 20),
+
+                      // Başlık
+                      const Text(
+                        'AHBU Giriş',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: AppColors.textLight,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Yetkili olduğunuz siteler, kapılar ve menü işlemleri rolünüze göre açılır.',
-                      style: TextStyle(color: AppColors.textMuted),
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: _identifierController,
-                      keyboardType: TextInputType.text,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: const InputDecoration(
-                        labelText: 'E-posta veya Kullanıcı Adı',
-                        hintText: 'örn: ornek@email.com veya ablokdaire1',
-                        prefixIcon: Icon(Icons.person_outline),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Akıllı Kapı & Site Otomasyon Paneli',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: AppColors.textMutedLight,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      validator: (value) {
-                        final text = (value ?? '').trim();
-                        if (text.isEmpty) {
-                          return 'Lütfen e-posta veya kullanıcı adınızı girin.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Şifre',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                      const SizedBox(height: 28),
+
+                      // E-posta / Kullanıcı Adı
+                      TextFormField(
+                        controller: _identifierController,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        keyboardType: TextInputType.text,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          labelText: 'E-posta veya Kullanıcı Adı',
+                          hintText: 'ornek@email.com veya daire1',
+                          prefixIcon: Icon(Icons.person_outline_rounded),
+                        ),
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (text.isEmpty) {
+                            return 'Lütfen e-posta veya kullanıcı adınızı girin.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Şifre Alanı
+                      TextFormField(
+                        controller: _passwordController,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Şifre',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () {
+                              setState(() => _obscurePassword = !_obscurePassword);
+                            },
                           ),
-                          onPressed: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
-                          },
                         ),
+                        validator: (value) {
+                          final text = (value ?? '').trim();
+                          if (text.isEmpty) {
+                            return 'Lütfen şifrenizi girin.';
+                          }
+                          return null;
+                        },
                       ),
-                      validator: (value) {
-                        final text = (value ?? '').trim();
-                        if (text.isEmpty) {
-                          return 'Lütfen şifrenizi girin.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: Checkbox(
+                      const SizedBox(height: 12),
+
+                      // Beni Hatırla
+                      Row(
+                        children: [
+                          Checkbox(
                             value: _rememberMe,
+                            activeColor: AppColors.primaryLight,
+                            checkColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                             onChanged: (val) {
                               setState(() => _rememberMe = val ?? true);
                             },
-                            activeColor: AppColors.primary,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() => _rememberMe = !_rememberMe);
-                            },
-                            child: const Text(
-                              'Beni Hatırla (Kullanıcı adını kaydet)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textDark,
-                                fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _rememberMe = !_rememberMe);
+                              },
+                              child: const Text(
+                                'Beni Hatırla (Kullanıcı adını kaydet)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textMutedLight,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Giriş Yap Butonu (Gradientli Lüks Buton)
+                      Container(
+                        height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x502563EB),
+                              blurRadius: 18,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: _isLoading ? null : _submit,
+                            child: Center(
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Giriş Yap',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Giris Yap', style: TextStyle(fontSize: 16)),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

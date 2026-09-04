@@ -46,28 +46,29 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
     final lastSeenText = formatDateTime(device.lastSeenAt);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           onTap: () => setState(() => _expanded = !_expanded),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isOnline
-                    ? Colors.green.shade200
-                    : AppColors.primarySoft.withValues(alpha: 0.25),
+                    ? AppColors.emerald.withValues(alpha: 0.4)
+                    : const Color(0x22FFFFFF),
+                width: isOnline ? 1.4 : 1.0,
               ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x08000000),
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
+                  color: Color(0x30000000),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -79,33 +80,33 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                     Stack(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: AppColors.primary.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             Icons.memory_rounded,
-                            color: AppColors.primary,
-                            size: 20,
+                            color: AppColors.accent,
+                            size: 22,
                           ),
                         ),
                         Positioned(
                           right: 0,
                           bottom: 0,
                           child: Container(
-                            width: 10,
-                            height: 10,
+                            width: 11,
+                            height: 11,
                             decoration: BoxDecoration(
-                              color: isOnline ? Colors.green : Colors.grey,
+                              color: isOnline ? AppColors.emeraldLight : AppColors.roseLight,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
+                              border: Border.all(color: const Color(0xFF1E293B), width: 2),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,9 +114,9 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                           Text(
                             device.deviceUid,
                             style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFF8FAFC),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -124,8 +125,8 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
+                              fontSize: 12.5,
+                              color: AppColors.textMutedLight,
                             ),
                           ),
                         ],
@@ -133,19 +134,24 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: isOnline
-                            ? Colors.green.withValues(alpha: 0.12)
-                            : Colors.grey.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
+                            ? AppColors.emerald.withValues(alpha: 0.15)
+                            : const Color(0x20FFFFFF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isOnline
+                              ? AppColors.emerald.withValues(alpha: 0.4)
+                              : const Color(0x20FFFFFF),
+                        ),
                       ),
                       child: Text(
                         onlineText,
                         style: TextStyle(
-                          color: isOnline ? Colors.green.shade800 : Colors.grey.shade700,
+                          color: isOnline ? AppColors.emeraldLight : AppColors.textMutedLight,
                           fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -154,35 +160,36 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       _expanded
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedLight,
                       size: 20,
                     ),
                   ],
                 ),
                 if (_expanded) ...[
                   const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    child: Divider(height: 1),
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(color: Color(0x1FFFFFFF), height: 1),
                   ),
                   Wrap(
                     spacing: 14,
                     runSpacing: 6,
                     children: [
-                      Text('Kullanıcı ID: $userText', style: const TextStyle(fontSize: 12.5)),
-                      Text('MQTT: ${device.mqttConfigured ? 'Hazır' : 'Eksik'}', style: const TextStyle(fontSize: 12.5)),
-                      Text('Firmware: ${device.firmwareVersion ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                      _buildChip('Kullanıcı ID: $userText'),
+                      _buildChip('MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
+                      _buildChip('Firmware: ${device.firmwareVersion ?? "-"}'),
                       if (widget.isSuperUser)
-                        Text('OTA Durumu: ${device.otaStatus ?? '-'}', style: const TextStyle(fontSize: 12.5)),
-                      Text('Wi-Fi Gücü: $signalText', style: const TextStyle(fontSize: 12.5)),
-                      Text('Yerel IP: ${device.localIp ?? '-'}', style: const TextStyle(fontSize: 12.5)),
-                      Text('Genel IP: ${device.publicIp ?? '-'}', style: const TextStyle(fontSize: 12.5)),
-                      Text('Son Görülme: $lastSeenText', style: const TextStyle(fontSize: 12.5)),
+                        _buildChip('OTA Durumu: ${device.otaStatus ?? "-"}'),
+                      _buildChip('Wi-Fi Gücü: $signalText'),
+                      _buildChip('Yerel IP: ${device.localIp ?? "-"}'),
+                      _buildChip('Genel IP: ${device.publicIp ?? "-"}'),
+                      _buildChip('Son Görülme: $lastSeenText'),
                       if ((device.mqttUsername ?? '').isNotEmpty)
-                        Text('MQTT Kullanıcı: ${device.mqttUsername}', style: const TextStyle(fontSize: 12.5)),
-                      Text('Kayıt: $dateText', style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                        _buildChip('MQTT Kullanıcı: ${device.mqttUsername}'),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
+                  Text('Kayıt: $dateText', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                  const SizedBox(height: 14),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -200,10 +207,10 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       if (widget.isSuperUser)
                         OutlinedButton.icon(
                           onPressed: widget.onDelete,
-                          icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                          label: const Text('Sil', style: TextStyle(color: Colors.red)),
+                          icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.roseLight),
+                          label: const Text('Sil', style: TextStyle(color: AppColors.roseLight)),
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.red),
+                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
                           ),
                         ),
                     ],
@@ -216,5 +223,23 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
       ),
     );
   }
-}
 
+  Widget _buildChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x1FFFFFFF)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFFCBD5E1),
+        ),
+      ),
+    );
+  }
+}

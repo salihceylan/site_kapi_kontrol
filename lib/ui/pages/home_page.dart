@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/services/pdf_device_firmware_service.dart';
 import 'package:site_kapi_kontrol/services/pdf_logs_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
+import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
@@ -1283,19 +1284,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final session = widget.authService.session!;
-    final roleColor = session.role.accentColor;
 
     return Scaffold(
-      backgroundColor: session.role.surfaceColor,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(_titleForMenu(_selectedMenu)),
-        backgroundColor: roleColor,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _titleForMenu(_selectedMenu),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFF8FAFC),
+                letterSpacing: -0.3,
+              ),
+            ),
+            Text(
+              '${session.fullName} • ${session.role.label}',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: session.role.lightAccentColor,
+              ),
+            ),
+          ],
+        ),
+        elevation: 0,
+        backgroundColor: const Color(0xFF0F172A).withValues(alpha: 0.8),
+        iconTheme: const IconThemeData(color: Colors.white),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Çıkış Yap',
-            icon: const Icon(Icons.logout),
+            icon: Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
             onPressed: () => widget.authService.logout(),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       drawer: YanMenu(

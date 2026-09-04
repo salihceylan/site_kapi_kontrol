@@ -4,6 +4,7 @@ import '../../models/door_runtime_status.dart';
 import '../../models/site_record.dart';
 import '../../services/voice_door_service.dart';
 import '../../styles/app_colors.dart';
+import '../../styles/app_decorations.dart';
 
 class ResidentDoorRemoteCard extends StatelessWidget {
   const ResidentDoorRemoteCard({
@@ -53,22 +54,22 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     Color statusColor;
     if (!isDeviceAssigned) {
       statusText = 'Bu kapıya henüz cihaz atanmamış.';
-      statusColor = const Color(0xFFF87171);
+      statusColor = AppColors.roseLight;
     } else if (isOpeningDoor) {
-      statusText = 'Kapı açılıyor, lütfen bekleyin...';
+      statusText = 'Kapı tetikleniyor, lütfen bekleyin...';
       statusColor = const Color(0xFF93C5FD);
     } else if (isLoadingStatus) {
       statusText = 'Cihaz durumu kontrol ediliyor...';
-      statusColor = const Color(0xFF94A3B8);
+      statusColor = AppColors.textMutedLight;
     } else if (isCloudOnline) {
       statusText = '🟢 Çevrimiçi - Kapıyı açmak için dokunun';
-      statusColor = const Color(0xFF4ADE80);
+      statusColor = AppColors.emeraldLight;
     } else if (isLocalOnline) {
       statusText = '🟡 Yerel Ağda Aktif - Kapıyı açmak için dokunun';
-      statusColor = const Color(0xFFF59E0B);
+      statusColor = AppColors.amberLight;
     } else {
       statusText = '🔴 Cihaz Çevrimdışı';
-      statusColor = const Color(0xFFF87171);
+      statusColor = AppColors.roseLight;
     }
 
     return Column(
@@ -76,57 +77,60 @@ class ResidentDoorRemoteCard extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF0F172A),
-                Color(0xFF1E293B),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x40000000),
-                blurRadius: 24,
-                offset: Offset(0, 10),
-              ),
-            ],
-            border: Border.all(color: const Color(0x28FFFFFF), width: 1.2),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+          decoration: AppDecorations.glassCard,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // AHBU Rozeti
+              // Üst Kapsül Rozet
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
                   color: isLocalOnline
-                      ? const Color(0x33F59E0B)
-                      : const Color(0x333B82F6),
+                      ? AppColors.amber.withValues(alpha: 0.18)
+                      : AppColors.primary.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: isLocalOnline
-                        ? const Color(0x66F59E0B)
-                        : const Color(0x663B82F6),
+                        ? AppColors.amber.withValues(alpha: 0.45)
+                        : AppColors.primaryLight.withValues(alpha: 0.45),
+                    width: 1.2,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isLocalOnline
+                          ? AppColors.amber.withValues(alpha: 0.2)
+                          : AppColors.primary.withValues(alpha: 0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  isLocalOnline ? 'AHBU YEREL AĞ GEÇİŞ' : 'AHBU AKILLI GEÇİŞ',
-                  style: TextStyle(
-                    color: isLocalOnline
-                        ? const Color(0xFFFBBF24)
-                        : const Color(0xFF93C5FD),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isLocalOnline ? Icons.wifi_rounded : Icons.sensors_rounded,
+                      size: 14,
+                      color: isLocalOnline ? AppColors.amberLight : const Color(0xFF93C5FD),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isLocalOnline ? 'AHBU YEREL AĞ GEÇİŞ' : 'AHBU AKILLI GEÇİŞ',
+                      style: TextStyle(
+                        color: isLocalOnline
+                            ? AppColors.amberLight
+                            : const Color(0xFF93C5FD),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
               // Site Adı
               Text(
@@ -135,7 +139,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xFFF8FAFC),
                   fontSize: 24,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -148,15 +152,15 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                     : 'Kapı Seçilmedi',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMutedLight,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
 
               // Birden fazla kapı varsa: Hızlı Yatay Kapı Seçici
               if (doors.length > 1) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -168,21 +172,25 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                           child: ChoiceChip(
                             label: Text(door.doorName),
                             selected: selectedDoor?.id == door.id,
-                            selectedColor: const Color(0xFF2563EB),
-                            backgroundColor: const Color(0x1FFFFFFF),
+                            selectedColor: AppColors.primary,
+                            backgroundColor: const Color(0x1AFFFFFF),
                             labelStyle: TextStyle(
                               color: selectedDoor?.id == door.id
                                   ? Colors.white
                                   : const Color(0xFFCBD5E1),
                               fontWeight: selectedDoor?.id == door.id
-                                  ? FontWeight.w700
+                                  ? FontWeight.w800
                                   : FontWeight.w500,
                               fontSize: 12.5,
                             ),
                             side: BorderSide(
                               color: selectedDoor?.id == door.id
-                                  ? const Color(0xFF60A5FA)
-                                  : const Color(0x33FFFFFF),
+                                  ? AppColors.accent
+                                  : const Color(0x22FFFFFF),
+                              width: selectedDoor?.id == door.id ? 1.5 : 1.0,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             onSelected: (selected) {
                               if (selected) {
@@ -196,15 +204,15 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                 ),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 26),
 
-              // DEV DAİRESEL KAPI AÇ BUTONU (170x170 px)
+              // DEV DAİRESEL DOKUNSAL KAPI AÇ BUTONU (180x180 px)
               GestureDetector(
                 onTap: commandEnabled ? onOpenDoor : null,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 170,
-                  height: 170,
+                  duration: const Duration(milliseconds: 250),
+                  width: 180,
+                  height: 180,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: commandEnabled
@@ -217,45 +225,53 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                             : const LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
                               ))
                         : const LinearGradient(
-                            colors: [Color(0xFF334155), Color(0xFF1E293B)],
+                            colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
                           ),
                     boxShadow: commandEnabled
                         ? (isLocalOnline
                             ? const [
                                 BoxShadow(
-                                  color: Color(0x66F59E0B),
-                                  blurRadius: 28,
-                                  offset: Offset(0, 10),
+                                  color: Color(0x70F59E0B),
+                                  blurRadius: 36,
+                                  spreadRadius: 4,
+                                  offset: Offset(0, 8),
                                 ),
                                 BoxShadow(
-                                  color: Color(0x22FFFFFF),
-                                  blurRadius: 6,
-                                  offset: Offset(0, -2),
+                                  color: Color(0x30FFFFFF),
+                                  blurRadius: 8,
+                                  offset: Offset(0, -3),
                                 ),
                               ]
                             : const [
                                 BoxShadow(
-                                  color: Color(0x662563EB),
-                                  blurRadius: 28,
-                                  offset: Offset(0, 10),
+                                  color: Color(0x703B82F6),
+                                  blurRadius: 36,
+                                  spreadRadius: 4,
+                                  offset: Offset(0, 8),
                                 ),
                                 BoxShadow(
-                                  color: Color(0x22FFFFFF),
-                                  blurRadius: 6,
-                                  offset: Offset(0, -2),
+                                  color: Color(0x30FFFFFF),
+                                  blurRadius: 8,
+                                  offset: Offset(0, -3),
                                 ),
                               ])
-                        : const [],
+                        : const [
+                            BoxShadow(
+                              color: Color(0x40000000),
+                              blurRadius: 16,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
                     border: Border.all(
                       color: commandEnabled
                           ? (isLocalOnline
-                              ? const Color(0x80FBBF24)
-                              : const Color(0x8060A5FA))
+                              ? const Color(0xFFFDE047)
+                              : const Color(0xFF93C5FD))
                           : const Color(0x22FFFFFF),
-                      width: 2,
+                      width: 2.4,
                     ),
                   ),
                   child: Material(
@@ -270,21 +286,21 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                           children: [
                             if (isOpeningDoor) ...[
                               const SizedBox(
-                                width: 40,
-                                height: 40,
+                                width: 44,
+                                height: 44,
                                 child: CircularProgressIndicator(
-                                  strokeWidth: 3.5,
+                                  strokeWidth: 4,
                                   color: Colors.white,
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
                               const Text(
                                 'AÇILIYOR',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.5,
                                 ),
                               ),
                             ] else ...[
@@ -294,12 +310,12 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                                         ? Icons.wifi_rounded
                                         : Icons.lock_open_rounded)
                                     : Icons.lock_outline_rounded,
-                                size: 46,
+                                size: 50,
                                 color: commandEnabled
                                     ? Colors.white
                                     : const Color(0xFF64748B),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               Text(
                                 commandEnabled
                                     ? (isLocalOnline
@@ -312,7 +328,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                                       ? Colors.white
                                       : const Color(0xFF64748B),
                                   fontSize: 15,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w900,
                                   letterSpacing: 0.8,
                                 ),
                               ),
@@ -325,7 +341,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
 
               // Durum Mesajı
               Padding(
@@ -336,7 +352,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -345,43 +361,43 @@ class ResidentDoorRemoteCard extends StatelessWidget {
               if (runtimeStatus != null &&
                   ((runtimeStatus!.localIp != null && runtimeStatus!.localIp!.isNotEmpty) ||
                       (runtimeStatus!.publicIp != null && runtimeStatus!.publicIp!.isNotEmpty))) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 8,
-                  runSpacing: 4,
+                  runSpacing: 6,
                   children: [
                     if (runtimeStatus!.localIp != null && runtimeStatus!.localIp!.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0x1A4ADE80),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0x334ADE80), width: 0.8),
+                          color: const Color(0x1A10B981),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0x4010B981), width: 1),
                         ),
                         child: Text(
                           'Yerel IP: ${runtimeStatus!.localIp}',
                           style: const TextStyle(
-                            color: Color(0xFF4ADE80),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF34D399),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     if (runtimeStatus!.publicIp != null && runtimeStatus!.publicIp!.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0x1A93C5FD),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0x3393C5FD), width: 0.8),
+                          color: const Color(0x1A3B82F6),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0x403B82F6), width: 1),
                         ),
                         child: Text(
                           'Genel IP: ${runtimeStatus!.publicIp}',
                           style: const TextStyle(
                             color: Color(0xFF93C5FD),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -395,24 +411,40 @@ class ResidentDoorRemoteCard extends StatelessWidget {
           const SizedBox(height: 16),
           _buildVoiceLiveBanner(context, roleColor),
         ],
-        const SizedBox(height: 14),
-        SizedBox(
+        const SizedBox(height: 16),
+        // Kurye / Misafir Geçişi Butonu
+        Container(
           width: double.infinity,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              side: BorderSide(color: Colors.grey.shade300, width: 1.2),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              backgroundColor: Colors.white,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              colors: [Color(0x1A3B82F6), Color(0x101E293B)],
             ),
-            onPressed: onCreateGuestPass,
-            icon: const Icon(Icons.share_rounded, color: AppColors.primary, size: 20),
-            label: const Text(
-              '📦 Kurye / Misafir Geçiş Linki Oluştur',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: AppColors.primary,
+            border: Border.all(color: const Color(0x333B82F6), width: 1.2),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: onCreateGuestPass,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.share_rounded, color: AppColors.accent, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      '📦 Kurye / Misafir Geçiş Linki Oluştur',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: Color(0xFFF8FAFC),
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -439,44 +471,44 @@ class ResidentDoorRemoteCard extends StatelessWidget {
 
         switch (status) {
           case VoiceStatus.listening:
-            bannerBg = const Color(0xFFE8F5E9);
-            borderColor = Colors.green.shade400;
-            iconColor = Colors.green.shade700;
-            bannerIcon = Icons.mic;
+            bannerBg = const Color(0x2A10B981);
+            borderColor = AppColors.emerald;
+            iconColor = AppColors.emeraldLight;
+            bannerIcon = Icons.mic_rounded;
             title = '🎙️ Sesli Dinleme Aktif';
             subtitle = vService.recognizedWords.isNotEmpty
                 ? '"${vService.recognizedWords}"'
                 : 'Dinleniyor... "Kapıyı aç" diyebilirsiniz.';
             break;
           case VoiceStatus.processing:
-            bannerBg = const Color(0xFFE3F2FD);
-            borderColor = Colors.blue.shade400;
-            iconColor = Colors.blue.shade700;
-            bannerIcon = Icons.auto_awesome;
+            bannerBg = const Color(0x2A3B82F6);
+            borderColor = AppColors.primaryLight;
+            iconColor = const Color(0xFF93C5FD);
+            bannerIcon = Icons.auto_awesome_rounded;
             title = '🤖 Komut Algılanıyor...';
             subtitle = '"${vService.recognizedWords}"';
             break;
           case VoiceStatus.success:
-            bannerBg = const Color(0xFFE8F5E9);
-            borderColor = Colors.green.shade600;
-            iconColor = Colors.green.shade800;
+            bannerBg = const Color(0x2A10B981);
+            borderColor = AppColors.emerald;
+            iconColor = AppColors.emeraldLight;
             bannerIcon = Icons.lock_open_rounded;
             title = '🔓 Kapı Açılıyor!';
             subtitle = 'Sesli komut onaylandı, kapı tetikleniyor...';
             break;
           case VoiceStatus.error:
-            bannerBg = const Color(0xFFFFEBEE);
-            borderColor = Colors.red.shade300;
-            iconColor = Colors.red.shade700;
+            bannerBg = const Color(0x2AEF4444);
+            borderColor = AppColors.rose;
+            iconColor = AppColors.roseLight;
             bannerIcon = Icons.error_outline_rounded;
             title = '⚠️ Sesli Komut Hatası';
             subtitle = vService.feedbackText.isNotEmpty ? vService.feedbackText : 'Bilinmeyen hata';
             break;
           case VoiceStatus.idle:
           case VoiceStatus.initializing:
-            bannerBg = const Color(0xFFF8FAFC);
-            borderColor = Colors.grey.shade300;
-            iconColor = Colors.grey.shade600;
+            bannerBg = const Color(0xFF1E293B).withValues(alpha: 0.8);
+            borderColor = const Color(0x22FFFFFF);
+            iconColor = AppColors.textMutedLight;
             bannerIcon = Icons.mic_none_rounded;
             title = '🎙️ Sesli Kapı Açma';
             subtitle = 'Başlatmak için dokunun';
@@ -488,12 +520,26 @@ class ResidentDoorRemoteCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: bannerBg,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: borderColor, width: 1.2),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x30000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Icon(bannerIcon, color: iconColor, size: 28),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(bannerIcon, color: iconColor, size: 22),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -503,16 +549,17 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                       title,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: iconColor,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: iconColor.withValues(alpha: 0.85),
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFFCBD5E1),
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -520,7 +567,10 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
+              IconButton.filledTonal(
+                style: IconButton.styleFrom(
+                  backgroundColor: iconColor.withValues(alpha: 0.15),
+                ),
                 onPressed: () {
                   if (isListening) {
                     vService.stopListening();
@@ -529,9 +579,9 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                   }
                 },
                 icon: Icon(
-                  isListening ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded,
+                  isListening ? Icons.stop_rounded : Icons.mic_rounded,
                   color: iconColor,
-                  size: 32,
+                  size: 20,
                 ),
               ),
             ],

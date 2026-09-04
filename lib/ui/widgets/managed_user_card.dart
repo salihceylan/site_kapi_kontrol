@@ -35,23 +35,24 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: user.isActive
-                  ? AppColors.primarySoft.withValues(alpha: 0.3)
-                  : Colors.grey.shade300,
+                  ? const Color(0x333B82F6)
+                  : const Color(0x22FFFFFF),
+              width: 1.2,
             ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x08000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
+                color: Color(0x30000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -61,16 +62,16 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
               Row(
                 children: [
                   CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                    radius: 20,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.2),
                     child: Text(
                       user.fullName.trim().isEmpty
                           ? '?'
                           : user.fullName.trim()[0].toUpperCase(),
                       style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
                       ),
                     ),
                   ),
@@ -85,9 +86,9 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14.5,
-                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: Color(0xFFF8FAFC),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -96,8 +97,9 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
+                            color: AppColors.textMutedLight,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -112,6 +114,7 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
                         )
                       : Switch.adaptive(
                           value: user.isActive,
+                          activeThumbColor: AppColors.primaryLight,
                           onChanged: widget.isSelf
                               ? null
                               : widget.onActivationChanged,
@@ -120,51 +123,43 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
                     _expanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textMuted,
+                    color: AppColors.textMutedLight,
                     size: 20,
                   ),
                 ],
               ),
               if (_expanded) ...[
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(height: 1),
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(color: Color(0x1FFFFFFF), height: 1),
                 ),
                 Wrap(
                   spacing: 12,
                   runSpacing: 4,
                   children: [
-                    Text(
-                      'Kullanıcı ID: ${user.id}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                    Text(
-                      'E-posta: ${user.email}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
+                    _buildChip('Kullanıcı ID: ${user.id}'),
+                    _buildChip('E-posta: ${user.email}'),
                     if ((user.phoneNumber ?? '').isNotEmpty)
-                      Text(
-                        'Telefon: ${user.phoneNumber}',
-                        style: const TextStyle(fontSize: 12.5),
-                      ),
-                    Text(
-                      'Kayıt: ${formatDateTime(user.createdAt)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
+                      _buildChip('Telefon: ${user.phoneNumber}'),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
+                Text(
+                  'Kayıt: ${formatDateTime(user.createdAt)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     if (!widget.isSelf && widget.onDelete != null) ...[
                       OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
+                          foregroundColor: AppColors.roseLight,
+                          side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
                         ),
                         onPressed: widget.onDelete,
                         icon: const Icon(Icons.delete_outline, size: 16),
@@ -182,6 +177,25 @@ class _ManagedUserCardState extends State<ManagedUserCard> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x1FFFFFFF)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFFCBD5E1),
         ),
       ),
     );

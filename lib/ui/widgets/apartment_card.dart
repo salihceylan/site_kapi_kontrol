@@ -36,23 +36,24 @@ class _ApartmentCardState extends State<ApartmentCard> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         onTap: () => setState(() => _expanded = !_expanded),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFF1E293B).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: hasResident
-                  ? AppColors.primarySoft.withValues(alpha: 0.3)
-                  : Colors.orange.shade200,
+                  ? const Color(0x333B82F6)
+                  : const Color(0x33F59E0B),
+              width: 1.2,
             ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x08000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
+                color: Color(0x30000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -62,22 +63,20 @@ class _ApartmentCardState extends State<ApartmentCard> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    padding: const EdgeInsets.all(9),
                     decoration: BoxDecoration(
                       color: hasResident
-                          ? AppColors.primary.withValues(alpha: 0.1)
-                          : Colors.orange.withValues(alpha: 0.1),
+                          ? AppColors.primary.withValues(alpha: 0.2)
+                          : AppColors.amber.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      Icons.home_outlined,
-                      color: hasResident
-                          ? AppColors.primary
-                          : Colors.orange.shade800,
-                      size: 18,
+                      Icons.home_rounded,
+                      color: hasResident ? AppColors.accent : AppColors.amberLight,
+                      size: 20,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,9 +84,9 @@ class _ApartmentCardState extends State<ApartmentCard> {
                         Text(
                           apartment.label,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14.5,
-                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: Color(0xFFF8FAFC),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -97,12 +96,12 @@ class _ApartmentCardState extends State<ApartmentCard> {
                               : 'Daire Boş / Sakin Yok',
                           style: TextStyle(
                             color: hasResident
-                                ? AppColors.textMuted
-                                : Colors.orange.shade800,
+                                ? AppColors.textMutedLight
+                                : AppColors.amberLight,
                             fontSize: 12,
                             fontWeight: hasResident
                                 ? FontWeight.normal
-                                : FontWeight.w500,
+                                : FontWeight.w600,
                           ),
                         ),
                       ],
@@ -111,39 +110,42 @@ class _ApartmentCardState extends State<ApartmentCard> {
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 3,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: active
-                          ? Colors.green.withValues(alpha: 0.12)
-                          : Colors.red.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
+                          ? AppColors.emerald.withValues(alpha: 0.15)
+                          : AppColors.rose.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: active
+                            ? AppColors.emerald.withValues(alpha: 0.4)
+                            : AppColors.rose.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Text(
                       active ? 'Aktif' : 'Pasif',
                       style: TextStyle(
-                        color: active
-                            ? Colors.green.shade800
-                            : Colors.red.shade800,
-                        fontWeight: FontWeight.w600,
+                        color: active ? AppColors.emeraldLight : AppColors.roseLight,
+                        fontWeight: FontWeight.w700,
                         fontSize: 11,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Icon(
                     _expanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textMuted,
+                    color: AppColors.textMutedLight,
                     size: 20,
                   ),
                 ],
               ),
               if (_expanded) ...[
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Divider(height: 1),
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(color: Color(0x1FFFFFFF), height: 1),
                 ),
                 Wrap(
                   spacing: 12,
@@ -154,7 +156,8 @@ class _ApartmentCardState extends State<ApartmentCard> {
                         'Kullanıcı Adı: ${apartment.residentLoginName}',
                         style: const TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textDark,
+                          color: Color(0xFFF8FAFC),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     if ((apartment.residentPinCode ?? '').isNotEmpty)
@@ -162,7 +165,8 @@ class _ApartmentCardState extends State<ApartmentCard> {
                         'Şifre (PIN): ${apartment.residentPinCode}',
                         style: const TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textDark,
+                          color: Color(0xFFF8FAFC),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     if (apartment.residentUserCode != null)
@@ -170,18 +174,18 @@ class _ApartmentCardState extends State<ApartmentCard> {
                         'Kullanıcı ID: ${apartment.residentUserCode}',
                         style: const TextStyle(
                           fontSize: 12.5,
-                          color: AppColors.textMuted,
+                          color: AppColors.textMutedLight,
                         ),
                       ),
                   ],
                 ),
                 if ((apartment.residentEmail ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
                     'E-posta: ${apartment.residentEmail}',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedLight,
                     ),
                   ),
                 ],
@@ -191,11 +195,11 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     'Telefon: ${apartment.residentPhoneNumber}',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedLight,
                     ),
                   ),
                 ],
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -220,10 +224,10 @@ class _ApartmentCardState extends State<ApartmentCard> {
                     if (hasResident && widget.onDelete != null)
                       OutlinedButton.icon(
                         onPressed: widget.onDelete,
-                        icon: const Icon(Icons.person_remove_outlined, size: 16, color: Colors.red),
-                        label: const Text('Sakini Sil', style: TextStyle(color: Colors.red)),
+                        icon: const Icon(Icons.person_remove_outlined, size: 16, color: AppColors.roseLight),
+                        label: const Text('Sakini Sil', style: TextStyle(color: AppColors.roseLight)),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.red),
+                          side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
                         ),
                       ),
                   ],
@@ -236,4 +240,3 @@ class _ApartmentCardState extends State<ApartmentCard> {
     );
   }
 }
-

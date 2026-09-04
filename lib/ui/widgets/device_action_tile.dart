@@ -22,29 +22,44 @@ class DeviceActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: AppDecorations.glassCard,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppColors.primary, size: 30),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: AppColors.accent, size: 28),
+          ),
+          const SizedBox(height: 14),
           Text(
             title,
             style: const TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: Color(0xFFF8FAFC),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(description),
-          const SizedBox(height: 16),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.textMutedLight,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: onPressed,
-              icon: Icon(icon),
+              icon: Icon(icon, size: 18),
               label: Text(buttonLabel),
             ),
           ),
@@ -53,4 +68,3 @@ class DeviceActionTile extends StatelessWidget {
     );
   }
 }
-

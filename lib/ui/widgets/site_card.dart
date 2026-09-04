@@ -46,36 +46,36 @@ class _SiteCardState extends State<SiteCard> {
     final hasManager =
         site.managerName != null && site.managerName!.trim().isNotEmpty;
     final approvalColor = site.approvalStatus == 'approved'
-        ? Colors.green
-        : (site.approvalStatus == 'rejected' ? Colors.red : Colors.orange);
+        ? AppColors.emeraldLight
+        : (site.approvalStatus == 'rejected' ? AppColors.roseLight : AppColors.amberLight);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           widget.onTap();
           setState(() => _expanded = !_expanded);
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
             color: isSelected
-                ? AppColors.primarySoft.withValues(alpha: 0.12)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
+                ? const Color(0xFF1E293B).withValues(alpha: 0.95)
+                : const Color(0xFF1E293B).withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected
-                  ? AppColors.primary
-                  : AppColors.primarySoft.withValues(alpha: 0.25),
-              width: isSelected ? 1.6 : 1,
+                  ? AppColors.primaryLight
+                  : const Color(0x22FFFFFF),
+              width: isSelected ? 1.8 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
                 color: isSelected
-                    ? AppColors.shadowDark
-                    : Colors.black.withValues(alpha: 0.03),
-                blurRadius: isSelected ? 14 : 6,
+                    ? AppColors.primary.withValues(alpha: 0.25)
+                    : const Color(0x30000000),
+                blurRadius: isSelected ? 16 : 8,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -86,18 +86,19 @@ class _SiteCardState extends State<SiteCard> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
                     ),
                     child: const Icon(
                       Icons.apartment_rounded,
-                      color: AppColors.primary,
+                      color: AppColors.accent,
                       size: 20,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,9 +106,10 @@ class _SiteCardState extends State<SiteCard> {
                         Text(
                           site.name,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15.5,
+                            letterSpacing: -0.2,
+                            color: Color(0xFFF8FAFC),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -117,12 +119,12 @@ class _SiteCardState extends State<SiteCard> {
                               : 'Yönetici atanmamış',
                           style: TextStyle(
                             color: hasManager
-                                ? AppColors.textMuted
-                                : Colors.orange.shade800,
+                                ? AppColors.textMutedLight
+                                : AppColors.amberLight,
                             fontSize: 12.5,
                             fontWeight: hasManager
                                 ? FontWeight.normal
-                                : FontWeight.w500,
+                                : FontWeight.w600,
                           ),
                         ),
                       ],
@@ -133,17 +135,18 @@ class _SiteCardState extends State<SiteCard> {
                       margin: const EdgeInsets.only(right: 6),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 3,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: approvalColor.withValues(alpha: 0.12),
+                        color: approvalColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: approvalColor.withValues(alpha: 0.4)),
                       ),
                       child: Text(
                         'Onay Bekliyor',
                         style: TextStyle(
                           color: approvalColor,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           fontSize: 11,
                         ),
                       ),
@@ -152,45 +155,33 @@ class _SiteCardState extends State<SiteCard> {
                     _expanded
                         ? Icons.keyboard_arrow_up_rounded
                         : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textMuted,
+                    color: AppColors.textMutedLight,
                   ),
                 ],
               ),
               if (_expanded) ...[
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(height: 1),
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(color: Color(0x1FFFFFFF), height: 1),
                 ),
                 Wrap(
                   spacing: 12,
                   runSpacing: 6,
                   children: [
-                    Text('ID: ${site.id}', style: const TextStyle(fontSize: 12.5)),
-                    Text(
-                      'MQTT Site ID: ${site.mqttSiteId}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                    Text(
-                      'Blok: ${site.blockCount}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                    Text(
-                      'Daire: ${site.apartmentCount}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                    Text(
-                      'Kapı: ${site.doorCount}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
+                    _buildChip('ID: ${site.id}'),
+                    _buildChip('MQTT: ${site.mqttSiteId}'),
+                    _buildChip('Blok: ${site.blockCount}'),
+                    _buildChip('Daire: ${site.apartmentCount}'),
+                    _buildChip('Kapı: ${site.doorCount}'),
                   ],
                 ),
                 if (site.managerUserCode != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     'Yönetici Kodu: ${site.managerUserCode}',
                     style: const TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedLight,
                     ),
                   ),
                 ],
@@ -198,7 +189,7 @@ class _SiteCardState extends State<SiteCard> {
                   const SizedBox(height: 4),
                   Text(
                     'Adres: ${site.address}',
-                    style: const TextStyle(fontSize: 12.5),
+                    style: const TextStyle(fontSize: 12.5, color: Color(0xFFCBD5E1)),
                   ),
                 ],
                 if ((site.city ?? '').isNotEmpty ||
@@ -208,7 +199,7 @@ class _SiteCardState extends State<SiteCard> {
                     'Konum: ${site.city ?? '-'} / ${site.district ?? '-'}',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedLight,
                     ),
                   ),
                 ],
@@ -220,7 +211,7 @@ class _SiteCardState extends State<SiteCard> {
                     color: AppColors.textMuted,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 if (widget.approvalBusy || widget.deleteBusy)
                   const Center(child: CircularProgressIndicator())
                 else
@@ -237,18 +228,27 @@ class _SiteCardState extends State<SiteCard> {
                       if (widget.onDelete != null)
                         OutlinedButton.icon(
                           onPressed: widget.onDelete,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.roseLight,
+                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
+                          ),
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('Sil'),
                         ),
                       if (widget.onApprove != null)
                         FilledButton.icon(
                           onPressed: widget.onApprove,
+                          style: FilledButton.styleFrom(backgroundColor: AppColors.emerald),
                           icon: const Icon(Icons.check_circle_outline, size: 16),
                           label: const Text('Onayla'),
                         ),
                       if (widget.onReject != null)
                         OutlinedButton.icon(
                           onPressed: widget.onReject,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.roseLight,
+                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
+                          ),
                           icon: const Icon(Icons.block_outlined, size: 16),
                           label: const Text('Reddet'),
                         ),
@@ -258,7 +258,7 @@ class _SiteCardState extends State<SiteCard> {
                           icon: const Icon(
                             Icons.picture_as_pdf_outlined,
                             size: 16,
-                            color: Color(0xFF1E3A8A),
+                            color: Color(0xFF93C5FD),
                           ),
                           label: const Text('Şifreleri İndir (PDF)'),
                         ),
@@ -268,7 +268,7 @@ class _SiteCardState extends State<SiteCard> {
                           icon: const Icon(
                             Icons.assignment_outlined,
                             size: 16,
-                            color: Color(0xFF0D47A1),
+                            color: Color(0xFF60A5FA),
                           ),
                           label: const Text('Geçiş Raporu (PDF)'),
                         ),
@@ -281,5 +281,23 @@ class _SiteCardState extends State<SiteCard> {
       ),
     );
   }
-}
 
+  Widget _buildChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x1FFFFFFF)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFFCBD5E1),
+        ),
+      ),
+    );
+  }
+}
