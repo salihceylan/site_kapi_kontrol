@@ -749,10 +749,12 @@ class AuthService extends ChangeNotifier {
         final status = await api.openDoor(token: active.token, doorId: doorId);
         unawaited(_cacheLocalDoorAccess(status));
         return (status, null);
-      } catch (e) {
+      } on ApiException catch (e) {
+        return (null, e.message);
+      } catch (_) {
         return (
           null,
-          localResult?.$2 ?? 'Kapı açılamadı. Cihazın açık olduğundan emin olun.',
+          localResult?.$2 ?? 'Kapı açılamadı. Cihazın açık veya ağda olduğundan emin olun.',
         );
       }
     }
