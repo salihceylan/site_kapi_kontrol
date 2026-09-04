@@ -3,7 +3,57 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
+
+class NativeWifiHelper {
+  static const MethodChannel _channel =
+      MethodChannel('com.example.site_kapi_kontrol/wifi_helper');
+
+  static Future<bool> isWifiConnected() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('isWifiConnected');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> bindToWifiNetwork() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('bindToWifiNetwork');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> unbindNetwork() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('unbindNetwork');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> acquireMulticastLock() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod('acquireMulticastLock');
+    } catch (_) {}
+  }
+
+  static Future<void> releaseMulticastLock() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod('releaseMulticastLock');
+    } catch (_) {}
+  }
+}
 
 class LocalDoorOpenResult {
   const LocalDoorOpenResult({
@@ -71,6 +121,7 @@ class LocalDoorService {
   void startBeaconListener() async {
     if (kIsWeb) return;
     stopBeaconListener();
+    unawaited(NativeWifiHelper.acquireMulticastLock());
 
     void bindAndListen(InternetAddress bindAddr) async {
       try {
@@ -157,6 +208,11 @@ class LocalDoorService {
   }
 
   Future<bool> hasLocalWifiConnection() async {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      final nativeWifi = await NativeWifiHelper.isWifiConnected();
+      if (nativeWifi) return true;
+    }
     final addrs = await getAllLocalWifiAddresses();
     return addrs.isNotEmpty;
   }
@@ -227,173 +283,181 @@ class LocalDoorService {
       );
     }
 
-    final wifiAddr = await _getWifiAddress();
-    final knownIp = access.ip?.trim();
-    debugPrint(
-      '[YerelKapi] Başlatıldı -> Cihaz: $targetUid, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
-    );
+    // Android: Hücresel açık olsa bile tüm soketleri Wi-Fi arayüzüne bağla
+    await NativeWifiHelper.bindToWifiNetwork();
 
-    // 0. SIFIR GECİKME ÖNCELİĞİ: Canlı Beacon Önbelleğindeki Doğrulanmış IP (0 ms Keşif)
-    final cached = getCachedDevice(targetUid);
-    if (cached != null && cached.ip.isNotEmpty) {
-      debugPrint('[YerelKapi] ⚡ CANLI BEACON ÖNBELLEĞİ KULLANILIYOR -> ${cached.ip}:8765 (0 ms Keşif)');
-      final udpOpened = await _directUdpOpen(cached.ip, access, wifiAddress: wifiAddr);
-      if (udpOpened) {
-        debugPrint('[YerelKapi] ⚡ CANLI ÖNBELLEK İLE ANINDA AÇILDI! (${cached.ip})');
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: cached.ip,
-          message: 'Kapı yerel ağdan anında açıldı.',
-        );
+    try {
+      final wifiAddr = await _getWifiAddress();
+      final knownIp = access.ip?.trim();
+      debugPrint(
+        '[YerelKapi] Başlatıldı -> Cihaz: $targetUid, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
+      );
+
+      // 0. SIFIR GECİKME ÖNCELİĞİ: Canlı Beacon Önbelleğindeki Doğrulanmış IP (0 ms Keşif)
+      final cached = getCachedDevice(targetUid);
+      if (cached != null && cached.ip.isNotEmpty) {
+        debugPrint('[YerelKapi] ⚡ CANLI BEACON ÖNBELLEĞİ KULLANILIYOR -> ${cached.ip}:8765 (0 ms Keşif)');
+        final udpOpened = await _directUdpOpen(cached.ip, access, wifiAddress: wifiAddr);
+        if (udpOpened) {
+          debugPrint('[YerelKapi] ⚡ CANLI ÖNBELLEK İLE ANINDA AÇILDI! (${cached.ip})');
+          return LocalDoorOpenResult(
+            ok: true,
+            ip: cached.ip,
+            message: 'Kapı yerel ağdan anında açıldı.',
+          );
+        }
       }
-    }
 
-    // 1. Bilinen IP varsa önce kimliğini doğrula ve sadece ona özel aç
-    if (knownIp != null && knownIp.isNotEmpty) {
-      final matches = await _probeDeviceIp(
-        knownIp,
+      // 1. Bilinen IP varsa önce kimliğini doğrula ve sadece ona özel aç
+      if (knownIp != null && knownIp.isNotEmpty) {
+        final matches = await _probeDeviceIp(
+          knownIp,
+          targetUid,
+          wifiAddress: wifiAddr,
+          timeout: const Duration(milliseconds: 100),
+        );
+        if (matches) {
+          debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) doğrulandı, UNICAST UDP deneniyor...');
+          final udpOpened = await _directUdpOpen(knownIp, access, wifiAddress: wifiAddr);
+          if (udpOpened) {
+            debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UNICAST UDP ile açıldı!');
+            _deviceIpCache[targetUid] = CachedDeviceLocation(
+              deviceUid: targetUid,
+              ip: knownIp,
+              port: access.port,
+              lastSeen: DateTime.now(),
+            );
+            return LocalDoorOpenResult(
+              ok: true,
+              ip: knownIp,
+              message: 'Kapı yerel ağdan başarıyla açıldı.',
+            );
+          }
+
+          final postOpened = await _directPostOpen(
+            knownIp,
+            access,
+            const Duration(milliseconds: 300),
+            wifiAddress: wifiAddr,
+          );
+          if (postOpened) {
+            debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) HTTP üzerinden açıldı!');
+            return LocalDoorOpenResult(
+              ok: true,
+              ip: knownIp,
+              message: 'Kapı yerel ağdan başarıyla açıldı.',
+            );
+          }
+        }
+      }
+
+      // 2. IP bilinmiyorsa veya değiştiyse UDP Alt Ağ Keşif ile hedef UID'ye sahip cihazın IP'sini bul
+      debugPrint('[YerelKapi] UDP Keşif ile hedef cihaz ($targetUid) aranıyor...');
+      final discoveredIp = await _discoverDeviceIpViaUdp(
         targetUid,
         wifiAddress: wifiAddr,
-        timeout: const Duration(milliseconds: 100),
       );
-      if (matches) {
-        debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) doğrulandı, UNICAST UDP deneniyor...');
-        final udpOpened = await _directUdpOpen(knownIp, access, wifiAddress: wifiAddr);
+      if (discoveredIp != null && discoveredIp.isNotEmpty) {
+        debugPrint('[YerelKapi] Hedef IP ($discoveredIp) bulundu, UNICAST UDP ile açılıyor...');
+        final udpOpened = await _directUdpOpen(discoveredIp, access, wifiAddress: wifiAddr);
         if (udpOpened) {
-          debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) UNICAST UDP ile açıldı!');
+          debugPrint('[YerelKapi] Hedef IP ($discoveredIp) UNICAST UDP ile açıldı!');
           _deviceIpCache[targetUid] = CachedDeviceLocation(
             deviceUid: targetUid,
-            ip: knownIp,
+            ip: discoveredIp,
             port: access.port,
             lastSeen: DateTime.now(),
           );
           return LocalDoorOpenResult(
             ok: true,
-            ip: knownIp,
+            ip: discoveredIp,
             message: 'Kapı yerel ağdan başarıyla açıldı.',
           );
         }
 
         final postOpened = await _directPostOpen(
-          knownIp,
+          discoveredIp,
           access,
-          const Duration(milliseconds: 300),
+          const Duration(milliseconds: 350),
           wifiAddress: wifiAddr,
         );
         if (postOpened) {
-          debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) HTTP üzerinden açıldı!');
           return LocalDoorOpenResult(
             ok: true,
-            ip: knownIp,
+            ip: discoveredIp,
             message: 'Kapı yerel ağdan başarıyla açıldı.',
           );
         }
       }
-    }
 
-    // 2. IP bilinmiyorsa veya değiştiyse UDP Alt Ağ Keşif ile hedef UID'ye sahip cihazın IP'sini bul
-    debugPrint('[YerelKapi] UDP Keşif ile hedef cihaz ($targetUid) aranıyor...');
-    final discoveredIp = await _discoverDeviceIpViaUdp(
-      targetUid,
-      wifiAddress: wifiAddr,
-    );
-    if (discoveredIp != null && discoveredIp.isNotEmpty) {
-      debugPrint('[YerelKapi] Hedef IP ($discoveredIp) bulundu, UNICAST UDP ile açılıyor...');
-      final udpOpened = await _directUdpOpen(discoveredIp, access, wifiAddress: wifiAddr);
-      if (udpOpened) {
-        debugPrint('[YerelKapi] Hedef IP ($discoveredIp) UNICAST UDP ile açıldı!');
-        _deviceIpCache[targetUid] = CachedDeviceLocation(
-          deviceUid: targetUid,
-          ip: discoveredIp,
-          port: access.port,
-          lastSeen: DateTime.now(),
-        );
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: discoveredIp,
-          message: 'Kapı yerel ağdan başarıyla açıldı.',
-        );
-      }
-
-      final postOpened = await _directPostOpen(
-        discoveredIp,
-        access,
-        const Duration(milliseconds: 350),
-        wifiAddress: wifiAddr,
+      // 3. Alt ağdaki tüm aday IP'leri kimlik sorgusuyla (discover) tara (ASLA röle tetiklemez!)
+      final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
+      debugPrint(
+        '[YerelKapi] Alt ağ kimlik taraması başlatılıyor (${candidates.length} aday IP)...',
       );
-      if (postOpened) {
-        return LocalDoorOpenResult(
-          ok: true,
-          ip: discoveredIp,
-          message: 'Kapı yerel ağdan başarıyla açıldı.',
-        );
-      }
-    }
+      var cursor = 0;
+      String? foundIp;
+      var stopped = false;
 
-    // 3. Alt ağdaki tüm aday IP'leri kimlik sorgusuyla (discover) tara (ASLA röle tetiklemez!)
-    final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
-    debugPrint(
-      '[YerelKapi] Alt ağ kimlik taraması başlatılıyor (${candidates.length} aday IP)...',
-    );
-    var cursor = 0;
-    String? foundIp;
-    var stopped = false;
-
-    Future<void> worker() async {
-      while (!stopped && cursor < candidates.length) {
-        final current = candidates[cursor];
-        cursor += 1;
-        final matches = await _probeDeviceIp(
-          current,
-          targetUid,
-          wifiAddress: wifiAddr,
-          timeout: _scanTimeout,
-        );
-        if (matches && !stopped) {
-          debugPrint('[YerelKapi] Alt ağ taramasında eşleşen cihaz bulundu -> $current');
-          final ok = await _directPostOpen(
+      Future<void> worker() async {
+        while (!stopped && cursor < candidates.length) {
+          final current = candidates[cursor];
+          cursor += 1;
+          final matches = await _probeDeviceIp(
             current,
-            access,
-            const Duration(milliseconds: 350),
+            targetUid,
             wifiAddress: wifiAddr,
+            timeout: _scanTimeout,
           );
-          if (ok && !stopped) {
-            foundIp = current;
-            stopped = true;
-            _deviceIpCache[targetUid] = CachedDeviceLocation(
-              deviceUid: targetUid,
-              ip: current,
-              port: access.port,
-              lastSeen: DateTime.now(),
+          if (matches && !stopped) {
+            debugPrint('[YerelKapi] Alt ağ taramasında eşleşen cihaz bulundu -> $current');
+            final ok = await _directPostOpen(
+              current,
+              access,
+              const Duration(milliseconds: 350),
+              wifiAddress: wifiAddr,
             );
-            return;
+            if (ok && !stopped) {
+              foundIp = current;
+              stopped = true;
+              _deviceIpCache[targetUid] = CachedDeviceLocation(
+                deviceUid: targetUid,
+                ip: current,
+                port: access.port,
+                lastSeen: DateTime.now(),
+              );
+              return;
+            }
           }
         }
       }
-    }
 
-    final workerCount =
-        candidates.length < _scanWorkers ? candidates.length : _scanWorkers;
-    if (workerCount > 0) {
-      await Future.wait(List.generate(workerCount, (_) => worker()));
-    }
+      final workerCount =
+          candidates.length < _scanWorkers ? candidates.length : _scanWorkers;
+      if (workerCount > 0) {
+        await Future.wait(List.generate(workerCount, (_) => worker()));
+      }
 
-    if (foundIp != null) {
-      debugPrint('[YerelKapi] Tarama başarılı! Cihaz bulundu: $foundIp');
-      return LocalDoorOpenResult(
-        ok: true,
-        ip: foundIp,
-        message: 'Kapı yerel ağdan başarıyla açıldı.',
+      if (foundIp != null) {
+        debugPrint('[YerelKapi] Tarama başarılı! Cihaz bulundu: $foundIp');
+        return LocalDoorOpenResult(
+          ok: true,
+          ip: foundIp,
+          message: 'Kapı yerel ağdan başarıyla açıldı.',
+        );
+      }
+
+      debugPrint('[YerelKapi] Cihaz yerel ağda bulunamadı.');
+      return const LocalDoorOpenResult(
+        ok: false,
+        ip: null,
+        message:
+            'Cihaz yerel ağda bulunamadı. Lütfen telefonunuzun cihazla aynı Wi-Fi ağına bağlı olduğundan emin olun.',
       );
+    } finally {
+      // Bulut isteklerinin hücresel veya varsayılan ağdan devam edebilmesi için bağı çöz
+      await NativeWifiHelper.unbindNetwork();
     }
-
-    debugPrint('[YerelKapi] Cihaz yerel ağda bulunamadı.');
-    return const LocalDoorOpenResult(
-      ok: false,
-      ip: null,
-      message:
-          'Cihaz yerel ağda bulunamadı. Lütfen telefonunuzun cihazla aynı Wi-Fi ağına bağlı olduğundan emin olun.',
-    );
   }
 
   Future<String?> _discoverDeviceIpViaUdp(
@@ -492,6 +556,7 @@ class LocalDoorService {
     if (kIsWeb || deviceUid.trim().isEmpty) return false;
     final cached = getCachedDevice(deviceUid);
     if (cached != null) return true;
+    await NativeWifiHelper.bindToWifiNetwork();
     try {
       final wifiAddr = await _getWifiAddress();
       if (wifiAddr == null) return false;
@@ -499,6 +564,8 @@ class LocalDoorService {
       return ip != null && ip.isNotEmpty;
     } catch (_) {
       return false;
+    } finally {
+      await NativeWifiHelper.unbindNetwork();
     }
   }
 
