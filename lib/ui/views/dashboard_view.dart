@@ -9,6 +9,7 @@ import '../../styles/app_colors.dart';
 import '../../styles/app_decorations.dart';
 import '../../styles/role_theme.dart';
 import '../widgets/admin_door_status_card.dart';
+import '../widgets/digital_clock_widget.dart';
 import '../widgets/resident_door_remote_card.dart';
 
 class DashboardView extends StatelessWidget {
@@ -75,6 +76,27 @@ class DashboardView extends StatelessWidget {
         onCreateGuestPass: onCreateGuestPass,
         voiceDoorService: voiceDoorService,
         roleColor: session.role.accentColor,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DigitalClockWidget(session: session),
+          const SizedBox(height: 16),
+          ResidentDoorRemoteCard(
+            selectedSite: selectedSite,
+            selectedDoor: selectedDoor,
+            doors: doors,
+            runtimeStatus: runtimeStatus,
+            isLoadingStatus: isLoadingStatus,
+            isOpeningDoor: isOpeningDoor,
+            canTryLocalDoorOpen: canTryLocalDoorOpen,
+            isPhoneOnWifi: isPhoneOnWifi,
+            onSelectDoor: onSelectDoor,
+            onOpenDoor: onOpenDoor,
+            onCreateGuestPass: onCreateGuestPass,
+            voiceDoorService: voiceDoorService,
+            roleColor: session.role.accentColor,
+          ),
+        ],
       );
     }
 
@@ -125,6 +147,7 @@ class DashboardView extends StatelessWidget {
             ],
           ),
         ),
+        DigitalClockWidget(session: session),
         const SizedBox(height: 16),
         AdminDoorStatusCard(
           session: session,

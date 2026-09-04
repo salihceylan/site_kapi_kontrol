@@ -1,3 +1,5 @@
+process.env.TZ = 'Europe/Istanbul';
+
 import mqtt from 'mqtt';
 
 import { pool } from './db.js';

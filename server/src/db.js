@@ -1,3 +1,5 @@
+process.env.TZ = 'Europe/Istanbul';
+
 import pg from 'pg';
 import dotenv from 'dotenv';
 
@@ -11,6 +13,10 @@ export const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+});
+
+pool.on('connect', (client) => {
+  client.query("SET timezone = 'Europe/Istanbul';").catch(() => {});
 });
 
 export async function checkDbConnection() {

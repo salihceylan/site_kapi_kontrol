@@ -235,6 +235,7 @@ inline bool wifiTryConnect(const String& ssid, const String& password, unsigned 
       gWifiConnected = true;
       Serial.print("WiFi baglandi, IP: ");
       Serial.println(WiFi.localIP());
+      configTime(3 * 3600, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
       wifiNotifyBleState();
       return true;
     }
@@ -553,15 +554,22 @@ inline void wifiLoop() {
     wifiApplyProvisioningRequest();
   }
 
+  static bool sNtpConfigured = false;
   if (gWifiConnected) {
+    if (!sNtpConfigured) {
+      configTime(3 * 3600, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+      sNtpConfigured = true;
+    }
     if (gProvisioningMode && wifiHasMqttCredentials()) {
       wifiStopProvisioningMode();
     }
   } else if (!gWifiConfigured) {
+    sNtpConfigured = false;
     if (!gProvisioningMode) {
       wifiStartProvisioningMode();
     }
   } else {
+    sNtpConfigured = false;
     // Kayıtlı Wi-Fi var ama bağlı değil -> Her 4 saniyede bir otomatik bağlanmayı dene (cihazı kapatıp açmaya gerek kalmaz)
     if (millis() - gLastWifiAttemptAt >= 4000) {
       gLastWifiAttemptAt = millis();
