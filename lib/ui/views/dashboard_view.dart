@@ -5,8 +5,6 @@ import '../../models/site_record.dart';
 import '../../models/user_role.dart';
 import '../../models/user_session.dart';
 import '../../services/voice_door_service.dart';
-import '../../styles/app_colors.dart';
-import '../../styles/app_decorations.dart';
 import '../../styles/role_theme.dart';
 import '../widgets/admin_door_status_card.dart';
 import '../widgets/digital_clock_widget.dart';
@@ -62,20 +60,6 @@ class DashboardView extends StatelessWidget {
   Widget build(BuildContext context) {
     // SADECE Daire Sakini için Modern Karanlık Akıllı Kumanda Modülü
     if (session.role == UserRole.apartmentOwner) {
-      return ResidentDoorRemoteCard(
-        selectedSite: selectedSite,
-        selectedDoor: selectedDoor,
-        doors: doors,
-        runtimeStatus: runtimeStatus,
-        isLoadingStatus: isLoadingStatus,
-        isOpeningDoor: isOpeningDoor,
-        canTryLocalDoorOpen: canTryLocalDoorOpen,
-        isPhoneOnWifi: isPhoneOnWifi,
-        onSelectDoor: onSelectDoor,
-        onOpenDoor: onOpenDoor,
-        onCreateGuestPass: onCreateGuestPass,
-        voiceDoorService: voiceDoorService,
-        roleColor: session.role.accentColor,
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -101,52 +85,9 @@ class DashboardView extends StatelessWidget {
     }
 
     // Süper Kullanıcı ve Site Yöneticisi için Klasik Yönetim Paneli
-    final roleColor = session.role.accentColor;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(22),
-          decoration: AppDecorations.glassCard,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Hoş Geldiniz',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                session.fullName,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontSize: 28),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Chip(
-                  backgroundColor: roleColor.withValues(alpha: 0.12),
-                  side: BorderSide(color: roleColor.withValues(alpha: 0.35)),
-                  avatar: Icon(Icons.verified_user_outlined, color: roleColor),
-                  label: Text(
-                    session.role.label,
-                    style: TextStyle(
-                      color: roleColor,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
         DigitalClockWidget(session: session),
         const SizedBox(height: 16),
         AdminDoorStatusCard(
