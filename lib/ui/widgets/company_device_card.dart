@@ -174,6 +174,8 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       if (widget.isSuperUser)
                         Text('OTA Durumu: ${device.otaStatus ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                       Text('Wi-Fi Gücü: $signalText', style: const TextStyle(fontSize: 12.5)),
+                      Text('Yerel IP: ${device.localIp ?? '-'}', style: const TextStyle(fontSize: 12.5)),
+                      Text('Genel IP: ${device.publicIp ?? '-'}', style: const TextStyle(fontSize: 12.5)),
                       Text('Son Görülme: $lastSeenText', style: const TextStyle(fontSize: 12.5)),
                       if ((device.mqttUsername ?? '').isNotEmpty)
                         Text('MQTT Kullanıcı: ${device.mqttUsername}', style: const TextStyle(fontSize: 12.5)),

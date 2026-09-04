@@ -12,6 +12,7 @@ class DoorRuntimeStatus {
     required this.wifiRssi,
     required this.wifiSignalPercent,
     required this.localIp,
+    this.publicIp,
     required this.localControlPort,
     required this.localControlToken,
     required this.localControlAvailable,
@@ -29,6 +30,7 @@ class DoorRuntimeStatus {
   final int? wifiRssi;
   final int? wifiSignalPercent;
   final String? localIp;
+  final String? publicIp;
   final int? localControlPort;
   final String? localControlToken;
   final bool localControlAvailable;
@@ -57,6 +59,7 @@ class DoorRuntimeStatus {
       wifiSignalPercent: status['wifi_signal_percent'] as int?,
       localIp:
           localControl['ip'] as String? ?? status['local_ip'] as String?,
+      publicIp: status['public_ip'] as String? ?? status['client_ip'] as String?,
       localControlPort:
           localControl['port'] as int? ?? status['local_control_port'] as int?,
       localControlToken: localControl['token'] as String?,

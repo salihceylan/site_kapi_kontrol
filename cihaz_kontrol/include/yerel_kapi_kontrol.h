@@ -235,16 +235,6 @@ inline void yerelKapiKontrolLoop() {
 
   yerelKapiKontrolBaslat();
 
-  // 0. Periyodik UDP Varlık Duyurusu (Her 3 saniyede bir hafif varlık anonsu - 0 ms keşif için)
-  static unsigned long sSonBeaconZamani = 0;
-  if (gYerelUdpAktif && (millis() - sSonBeaconZamani >= 3000 || sSonBeaconZamani == 0)) {
-    sSonBeaconZamani = millis();
-    String beacon = "{\"event\":\"beacon\",\"device_uid\":\"" + yerelJsonEscape(cihazUniqueId()) + "\",\"ip\":\"" + yerelJsonEscape(wifiIpAdresi()) + "\",\"port\":" + String(YEREL_KAPI_KONTROL_PORT) + ",\"rssi\":" + String(WiFi.RSSI()) + "}";
-    gYerelUdp.beginPacket(IPAddress(255, 255, 255, 255), 8765);
-    gYerelUdp.print(beacon);
-    gYerelUdp.endPacket();
-  }
-
   // 1. UDP Keşif & Hızlı Komut Yanıtlayıcı
   if (gYerelUdpAktif) {
     int packetSize = gYerelUdp.parsePacket();

@@ -228,6 +228,8 @@ export function mapDeviceRow(row) {
       row.wifi_signal_percent === null || row.wifi_signal_percent === undefined
         ? null
         : Number(row.wifi_signal_percent),
+    local_ip: row.local_ip ?? null,
+    public_ip: row.public_ip ?? null,
     last_seen_at: row.last_seen_at ?? null,
     last_event: row.last_event ?? null,
     created_at: row.created_at,

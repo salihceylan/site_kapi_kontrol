@@ -335,6 +335,10 @@ class AdminDoorStatusCard extends StatelessWidget {
           'Yerel Ağ Kontrolü: ${isLocalOnline ? 'Aktif (Cihaz Ağda Bulundu)' : (isPhoneOnWifi ? 'Wi-Fi Bağlı (Cihaz Aranıyor)' : 'Wi-Fi Bağlı Değil')}',
         ),
         const SizedBox(height: 6),
+        Text('Yerel IP (LAN): ${runtimeStatus?.localIp ?? (isLocalOnline ? 'Canlı Ağda' : '-')}'),
+        const SizedBox(height: 6),
+        Text('Genel IP (WAN): ${runtimeStatus?.publicIp ?? '-'}'),
+        const SizedBox(height: 6),
         Text('Firmware: ${runtimeStatus?.firmwareVersion ?? '-'}'),
         if (session.role == UserRole.superUser) ...[
           const SizedBox(height: 6),

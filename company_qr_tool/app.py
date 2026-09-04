@@ -2196,6 +2196,7 @@ class DeviceTesterWindow:
         self.status = DeviceStatus()
         self._collecting_status = False
         self._status_lines: list[str] = []
+        self._stop_beacon = False
 
         self.port_var = tk.StringVar()
         self.connection_var = tk.StringVar(value="Bagli degil")
@@ -2204,6 +2205,7 @@ class DeviceTesterWindow:
 
         self._ui()
         self.refresh_ports()
+        self._start_beacon_listener()
         self.window.after(100, self._drain_lines)
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -2251,6 +2253,8 @@ class DeviceTesterWindow:
             "WiFi SSID",
             "WiFi bagli",
             "WiFi IP",
+            "Yerel Beacon (UDP)",
+            "Genel IP (WAN)",
             "WiFi gucu",
             "Bluetooth provisioning",
             "Bluetooth adi",
@@ -2296,6 +2300,44 @@ class DeviceTesterWindow:
         scrollbar = ttk.Scrollbar(log_card, orient=tk.VERTICAL, command=self.log_text.yview)
         scrollbar.grid(row=1, column=1, sticky="ns")
         self.log_text.configure(yscrollcommand=scrollbar.set)
+
+    def _start_beacon_listener(self) -> None:
+        def _worker():
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if hasattr(socket, "SO_BROADCAST"):
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                s.bind(("", 8765))
+                s.settimeout(1.0)
+                while not self._stop_beacon:
+                    try:
+                        data, addr = s.recvfrom(1024)
+                        if data:
+                            text = data.decode("utf-8", errors="ignore")
+                            obj = json.loads(text)
+                            uid = str(obj.get("device_uid", "")).strip().upper()
+                            ip = str(obj.get("ip", addr[0])).strip()
+                            port = obj.get("port", 8765)
+                            rssi = obj.get("rssi", "")
+                            self.window.after(0, lambda u=uid, i=ip, p=port, r=rssi: self._on_beacon(u, i, p, r))
+                    except socket.timeout:
+                        continue
+                    except Exception:
+                        time.sleep(0.5)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_beacon(self, uid: str, ip: str, port: int, rssi: object) -> None:
+        current_uid = self.status_vars.get("Cihaz UID", tk.StringVar()).get().strip().upper()
+        if not current_uid or current_uid == "-" or current_uid == uid:
+            rssi_str = f" ({rssi} dBm)" if rssi != "" and rssi is not None else ""
+            if "Yerel Beacon (UDP)" in self.status_vars:
+                self.status_vars["Yerel Beacon (UDP)"].set(f"🟢 {ip}:{port}{rssi_str} (Canlı)")
+            if "WiFi IP" in self.status_vars and (not self.status_vars["WiFi IP"].get() or self.status_vars["WiFi IP"].get() == "-"):
+                self.status_vars["WiFi IP"].set(ip)
 
     def refresh_ports(self) -> None:
         ports = list(list_ports.comports())
@@ -2390,11 +2432,33 @@ class DeviceTesterWindow:
         if role_line:
             self.status_vars["Role pin okuma"].set(role_line.replace("Role pin okuma ", ""))
 
+        uid = values.get("Cihaz UID", "").strip()
+        if uid and uid != "-":
+            threading.Thread(target=self._fetch_public_ip, args=(uid,), daemon=True).start()
+
+    def _fetch_public_ip(self, uid: str) -> None:
+        try:
+            url = f"{API_BASE_URL}/api/devices"
+            req = urllib.request.Request(url, headers={"User-Agent": "AHBU-Tester/1.0"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    devices = data if isinstance(data, list) else data.get("devices", [])
+                    for d in devices:
+                        if str(d.get("device_uid", "")).upper() == uid.upper():
+                            pub_ip = d.get("public_ip") or d.get("client_ip") or d.get("last_ip")
+                            if pub_ip and "Genel IP (WAN)" in self.status_vars:
+                                self.window.after(0, lambda p=pub_ip: self.status_vars["Genel IP (WAN)"].set(f"🌐 {p}"))
+                            break
+        except Exception:
+            pass
+
     def _append_log(self, line: str) -> None:
         self.log_text.insert(tk.END, f"{line}\n")
         self.log_text.see(tk.END)
 
     def _on_close(self) -> None:
+        self._stop_beacon = True
         if self.worker is not None:
             self.worker.stop()
         self.window.destroy()

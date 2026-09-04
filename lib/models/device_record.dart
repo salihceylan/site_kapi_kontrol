@@ -19,6 +19,8 @@ class DeviceRecord {
     required this.wifiSignalPercent,
     required this.lastSeenAt,
     required this.lastEvent,
+    this.localIp,
+    this.publicIp,
     required this.createdAt,
   });
 
@@ -39,6 +41,8 @@ class DeviceRecord {
   final String? otaLastVersion;
   final int? wifiRssi;
   final int? wifiSignalPercent;
+  final String? localIp;
+  final String? publicIp;
   final DateTime? lastSeenAt;
   final String? lastEvent;
   final DateTime? createdAt;
@@ -62,6 +66,8 @@ class DeviceRecord {
       otaLastVersion: json['ota_last_version'] as String?,
       wifiRssi: int.tryParse(json['wifi_rssi']?.toString() ?? ''),
       wifiSignalPercent: int.tryParse(json['wifi_signal_percent']?.toString() ?? ''),
+      localIp: json['local_ip'] as String?,
+      publicIp: json['public_ip'] as String? ?? json['client_ip'] as String?,
       lastSeenAt: json['last_seen_at'] == null
           ? null
           : DateTime.tryParse(json['last_seen_at'].toString()),

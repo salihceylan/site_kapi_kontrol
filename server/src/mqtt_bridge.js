@@ -53,6 +53,7 @@ function ensureStatus(deviceUid) {
     wifi_rssi: null,
     wifi_signal_percent: null,
     local_ip: null,
+    public_ip: null,
     local_control_port: null,
     local_control_available: null,
     last_event: null,
@@ -86,6 +87,7 @@ async function persistRuntimeStatus(status) {
           wifi_rssi,
           wifi_signal_percent,
           local_ip,
+          public_ip,
           local_control_port,
           local_control_available,
           last_event,
@@ -94,7 +96,7 @@ async function persistRuntimeStatus(status) {
           last_seen_at,
           updated_at
         )
-        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW()
         WHERE EXISTS (
           SELECT 1 FROM devices WHERE device_uid = $1
         )
@@ -107,6 +109,7 @@ async function persistRuntimeStatus(status) {
           wifi_rssi = COALESCE(EXCLUDED.wifi_rssi, device_runtime_status.wifi_rssi),
           wifi_signal_percent = COALESCE(EXCLUDED.wifi_signal_percent, device_runtime_status.wifi_signal_percent),
           local_ip = COALESCE(EXCLUDED.local_ip, device_runtime_status.local_ip),
+          public_ip = COALESCE(EXCLUDED.public_ip, device_runtime_status.public_ip),
           local_control_port = COALESCE(EXCLUDED.local_control_port, device_runtime_status.local_control_port),
           local_control_available = COALESCE(EXCLUDED.local_control_available, device_runtime_status.local_control_available),
           last_event = COALESCE(EXCLUDED.last_event, device_runtime_status.last_event),
@@ -125,6 +128,7 @@ async function persistRuntimeStatus(status) {
         status.wifi_rssi,
         status.wifi_signal_percent,
         status.local_ip,
+        status.public_ip,
         status.local_control_port,
         status.local_control_available,
         status.last_event,
@@ -445,6 +449,7 @@ export async function loadInitialDeviceRuntimeStatuses() {
       existing.wifi_rssi = row.wifi_rssi;
       existing.wifi_signal_percent = row.wifi_signal_percent;
       existing.local_ip = row.local_ip;
+      existing.public_ip = row.public_ip;
       existing.local_control_port = row.local_control_port;
       existing.local_control_available = Boolean(row.local_control_available);
       existing.last_event = row.last_event;
@@ -455,6 +460,15 @@ export async function loadInitialDeviceRuntimeStatuses() {
   } catch (error) {
     console.warn('Initial device runtime statuses yuklenemedi:', error.message);
   }
+}
+
+export async function updateDevicePublicIp(deviceUid, publicIp) {
+  if (!deviceUid || !publicIp) return;
+  const normalizedUid = normalizeDeviceTopicUid(deviceUid);
+  const status = ensureStatus(normalizedUid);
+  status.public_ip = String(publicIp);
+  status.last_seen_at = new Date().toISOString();
+  await persistRuntimeStatus(status);
 }
 
 export function startMqttBridge() {

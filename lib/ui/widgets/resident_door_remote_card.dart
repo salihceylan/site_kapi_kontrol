@@ -340,6 +340,54 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // IP Bilgisi Rozetleri (Yerel LAN & Genel WAN)
+              if (runtimeStatus != null &&
+                  ((runtimeStatus!.localIp != null && runtimeStatus!.localIp!.isNotEmpty) ||
+                      (runtimeStatus!.publicIp != null && runtimeStatus!.publicIp!.isNotEmpty))) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (runtimeStatus!.localIp != null && runtimeStatus!.localIp!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1A4ADE80),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0x334ADE80), width: 0.8),
+                        ),
+                        child: Text(
+                          'Yerel IP: ${runtimeStatus!.localIp}',
+                          style: const TextStyle(
+                            color: Color(0xFF4ADE80),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    if (runtimeStatus!.publicIp != null && runtimeStatus!.publicIp!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1A93C5FD),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0x3393C5FD), width: 0.8),
+                        ),
+                        child: Text(
+                          'Genel IP: ${runtimeStatus!.publicIp}',
+                          style: const TextStyle(
+                            color: Color(0xFF93C5FD),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

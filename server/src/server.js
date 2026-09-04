@@ -23,6 +23,7 @@ import {
   publishOtaCheckToDevices,
   publishDoorPulse,
   startMqttBridge,
+  updateDevicePublicIp,
 } from './mqtt_bridge.js';
 import { mqttAclSyncConfigured, syncMqttAclOrThrow } from './mqtt_acl_sync.js';
 
@@ -325,6 +326,8 @@ function mapDeviceRow(row) {
       row.wifi_signal_percent === null || row.wifi_signal_percent === undefined
         ? null
         : Number(row.wifi_signal_percent),
+    local_ip: row.local_ip ?? null,
+    public_ip: row.public_ip ?? null,
     last_seen_at: row.last_seen_at ?? null,
     last_event: row.last_event ?? null,
     created_at: row.created_at,
@@ -1116,6 +1119,8 @@ async function findDeviceByUid(deviceUid) {
         runtime.ota_last_version,
         runtime.wifi_rssi,
         runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.public_ip,
         runtime.last_seen_at,
         runtime.last_event,
         devices.created_at
@@ -1154,6 +1159,8 @@ async function findDeviceById(deviceId) {
         runtime.ota_last_version,
         runtime.wifi_rssi,
         runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.public_ip,
         runtime.last_seen_at,
         runtime.last_event,
         devices.created_at
@@ -1403,6 +1410,8 @@ async function listCompanyDevices({ page, pageSize }) {
         runtime.ota_last_version,
         runtime.wifi_rssi,
         runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.public_ip,
         runtime.last_seen_at,
         runtime.last_event,
         devices.created_at,
@@ -1553,6 +1562,8 @@ async function listManagedDevicesForUser(authUser) {
         runtime.ota_last_version,
         runtime.wifi_rssi,
         runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.public_ip,
         runtime.last_seen_at,
         runtime.last_event,
         devices.created_at
@@ -1601,6 +1612,8 @@ async function findManagedDeviceById({ authUser, deviceId }) {
         runtime.ota_last_version,
         runtime.wifi_rssi,
         runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.public_ip,
         runtime.last_seen_at,
         runtime.last_event,
         devices.created_at
@@ -3256,7 +3269,16 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
   }
 
   const currentVersion = String(req.query.current_version || '').trim();
-  const uid = String(req.query.uid || '').trim().toUpperCase();
+  const uid = String(req.query.uid || req.query.device_uid || '').trim().toUpperCase();
+  if (uid) {
+    const rawIp = req.headers['x-forwarded-for']
+      ? String(req.headers['x-forwarded-for']).split(',')[0].trim()
+      : (req.ip || req.socket.remoteAddress || '');
+    const clientIp = rawIp.replace(/^::ffff:/, '').trim();
+    if (clientIp) {
+      void updateDevicePublicIp(uid, clientIp);
+    }
+  }
   const manifestPath = path.join(firmwareRoot, target, 'manifest.json');
 
   try {
