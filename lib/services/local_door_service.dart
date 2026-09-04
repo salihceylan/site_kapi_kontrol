@@ -56,7 +56,7 @@ class LocalDoorService {
         }
       }
 
-      // 2. İKİNCİL: Herhangi bir wlan / wifi arayüzünde 192.168.x.x IP (wlan1 vb. tethering olmayanlar)
+      // 2. İKİNCİL: Herhangi bir wlan / wifi arayüzünde 192.168.x.x IP
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
         if (name.startsWith('wlan') ||
@@ -131,13 +131,13 @@ class LocalDoorService {
       '[YerelKapi] Başlatıldı -> Cihaz: ${access.deviceUid}, Kayıtlı IP: $knownIp, Telefon Wi-Fi: ${wifiAddr?.address}',
     );
 
-    // 1. Bilinen IP varsa önce kimliğini doğrula ve aç
+    // 1. Bilinen IP varsa önce kimliğini doğrula ve sadece ona özel aç
     if (knownIp != null && knownIp.isNotEmpty) {
       final matches = await _probeDeviceIp(
         knownIp,
         access.deviceUid,
         wifiAddress: wifiAddr,
-        timeout: const Duration(milliseconds: 100),
+        timeout: const Duration(milliseconds: 120),
       );
       if (matches) {
         debugPrint('[YerelKapi] Kayıtlı IP ($knownIp) doğrulandı, UNICAST UDP deneniyor...');
@@ -201,7 +201,7 @@ class LocalDoorService {
       }
     }
 
-    // 3. Alt ağdaki tüm aday IP'leri kimlik doğrulama sorgusuyla (discover) tara (ASLA röle tetiklemez!)
+    // 3. Alt ağdaki tüm aday IP'leri kimlik sorgusuyla (discover) tara (ASLA röle tetiklemez!)
     final candidates = await _candidateIps(knownIp, wifiAddress: wifiAddr);
     debugPrint(
       '[YerelKapi] Alt ağ kimlik taraması başlatılıyor (${candidates.length} aday IP)...',
@@ -266,17 +266,19 @@ class LocalDoorService {
     String deviceUid, {
     InternetAddress? wifiAddress,
   }) async {
+    RawDatagramSocket? socket;
     try {
-      final socket = await RawDatagramSocket.bind(
+      socket = await RawDatagramSocket.bind(
         wifiAddress ?? InternetAddress.anyIPv4,
         0,
       );
       socket.broadcastEnabled = true;
 
       final completer = Completer<String?>();
+      final targetUid = deviceUid.trim().toUpperCase();
       final payload = utf8.encode(jsonEncode({
         'action': 'discover',
-        'target_uid': deviceUid,
+        'target_uid': targetUid,
       }));
 
       // Broadcast gönder: Genel 255.255.255.255 ve Alt ağ broadcast
@@ -292,11 +294,9 @@ class LocalDoorService {
         }
       }
 
-      final targetUid = deviceUid.trim().toUpperCase();
-
       socket.listen((event) {
         if (event == RawSocketEvent.read) {
-          final dg = socket.receive();
+          final dg = socket?.receive();
           if (dg != null) {
             final text = utf8.decode(dg.data, allowMalformed: true);
             try {
@@ -308,7 +308,6 @@ class LocalDoorService {
                 if (!completer.isCompleted) completer.complete(ip);
               }
             } catch (_) {
-              // JSON çözülemezse yalnızca metin birebir UID'yi içeriyorsa kabul et
               if (text.contains(targetUid)) {
                 final fallbackIp = dg.address.address;
                 debugPrint('[YerelKapi] UDP Keşif IP -> $fallbackIp ($targetUid)');
@@ -323,11 +322,14 @@ class LocalDoorService {
           .timeout(
             const Duration(milliseconds: 350),
             onTimeout: () => null,
-          )
-          .whenComplete(() => socket.close());
+          );
     } catch (e) {
       debugPrint('[YerelKapi] UDP Keşif hatası: $e');
       return null;
+    } finally {
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
@@ -403,12 +405,12 @@ class LocalDoorService {
     LocalDoorAccess access, {
     InternetAddress? wifiAddress,
   }) async {
+    RawDatagramSocket? socket;
     try {
-      final socket = await RawDatagramSocket.bind(
+      socket = await RawDatagramSocket.bind(
         wifiAddress ?? InternetAddress.anyIPv4,
         0,
       );
-      socket.broadcastEnabled = true;
       final completer = Completer<bool>();
       final targetUid = access.deviceUid.trim().toUpperCase();
       final payload = utf8.encode(jsonEncode({
@@ -419,11 +421,11 @@ class LocalDoorService {
       }));
 
       socket.send(payload, InternetAddress(ip), access.port);
-      debugPrint('[YerelKapi] Doğrudan UDP Kapı Açma paketi yollandı -> $ip:${access.port} ($targetUid)');
+      debugPrint('[YerelKapi] Doğrudan UNICAST UDP Açma yollandı -> $ip:${access.port} ($targetUid)');
 
       socket.listen((event) {
         if (event == RawSocketEvent.read) {
-          final dg = socket.receive();
+          final dg = socket?.receive();
           if (dg != null) {
             final text = utf8.decode(dg.data, allowMalformed: true);
             debugPrint('[YerelKapi] UDP Açma yanıtı geldi: $text');
@@ -442,16 +444,18 @@ class LocalDoorService {
         }
       });
 
-      final res = await completer.future
+      return await completer.future
           .timeout(
             const Duration(milliseconds: 600),
             onTimeout: () => false,
-          )
-          .whenComplete(() => socket.close());
-      return res;
+          );
     } catch (e) {
       debugPrint('[YerelKapi] UDP Açma hatası: $e');
       return false;
+    } finally {
+      try {
+        socket?.close();
+      } catch (_) {}
     }
   }
 
@@ -461,7 +465,7 @@ class LocalDoorService {
     Duration timeout, {
     InternetAddress? wifiAddress,
   }) async {
-    // 1. Hızlı ve doğrudan UDP ile açmayı dene (1-5 ms)
+    // 1. Hızlı ve doğrudan UNICAST UDP ile açmayı dene (1-5 ms)
     final udpOk = await _directUdpOpen(ip, access, wifiAddress: wifiAddress);
     if (udpOk) {
       debugPrint('[YerelKapi] UDP doğrudan komutuyla kapı AÇILDI! ($ip)');
