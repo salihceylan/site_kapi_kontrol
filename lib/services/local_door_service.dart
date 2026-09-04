@@ -33,7 +33,7 @@ class CachedDeviceLocation {
   final int? rssi;
 
   bool get isFresh =>
-      DateTime.now().difference(lastSeen).inSeconds < 15;
+      DateTime.now().difference(lastSeen).inSeconds < 60;
 }
 
 class LocalDoorService {
@@ -41,62 +41,110 @@ class LocalDoorService {
     startBeaconListener();
   }
 
-  static const Duration _scanTimeout = Duration(milliseconds: 600);
+  static const Duration _scanTimeout = Duration(milliseconds: 250);
   static const int _scanWorkers = 64;
 
+  static const _cellularKeywords = [
+    'rmnet',
+    'ccmni',
+    'pdp',
+    'wwan',
+    'cellular',
+    'mobile',
+    'radio',
+    'dummy',
+    'tun',
+    'tap',
+    'v4-rmnet',
+    'v6-rmnet',
+    'lo',
+    'p2p',
+    'sit',
+    'ip6',
+    'bond',
+  ];
+
   final Map<String, CachedDeviceLocation> _deviceIpCache = {};
-  RawDatagramSocket? _beaconListenerSocket;
-  bool _isListening = false;
+  final List<RawDatagramSocket> _beaconListenerSockets = [];
+  Timer? _beaconRefreshTimer;
 
   void startBeaconListener() async {
-    if (kIsWeb || _isListening) return;
-    try {
-      _beaconListenerSocket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        8765,
-        reuseAddress: true,
-        reusePort: !Platform.isWindows,
-      );
-      _beaconListenerSocket?.broadcastEnabled = true;
-      _isListening = true;
+    if (kIsWeb) return;
+    stopBeaconListener();
 
-      _beaconListenerSocket?.listen((event) {
-        if (event == RawSocketEvent.read) {
-          final dg = _beaconListenerSocket?.receive();
-          if (dg != null) {
-            try {
-              final text = utf8.decode(dg.data, allowMalformed: true);
-              final json = jsonDecode(text) as Map<String, dynamic>;
-              final uid = (json['device_uid'] as String?)?.trim().toUpperCase();
-              if (uid != null && uid.isNotEmpty) {
-                final ip = (json['ip'] as String?)?.trim() ?? dg.address.address;
-                final port = (json['port'] as num?)?.toInt() ?? 8765;
-                final rssi = (json['rssi'] as num?)?.toInt();
-                _deviceIpCache[uid] = CachedDeviceLocation(
-                  deviceUid: uid,
-                  ip: ip,
-                  port: port,
-                  lastSeen: DateTime.now(),
-                  rssi: rssi,
-                );
-                debugPrint('[YerelKapi] 📡 Beacon alındı -> UID: $uid, IP: $ip, Port: $port, RSSI: $rssi');
-              }
-            } catch (_) {}
+    void bindAndListen(InternetAddress bindAddr) async {
+      try {
+        final socket = await RawDatagramSocket.bind(
+          bindAddr,
+          8765,
+          reuseAddress: true,
+          reusePort: !Platform.isWindows,
+        );
+        socket.broadcastEnabled = true;
+        _beaconListenerSockets.add(socket);
+
+        socket.listen((event) {
+          if (event == RawSocketEvent.read) {
+            final dg = socket.receive();
+            if (dg != null) {
+              try {
+                final text = utf8.decode(dg.data, allowMalformed: true);
+                final json = jsonDecode(text) as Map<String, dynamic>;
+                final uid = (json['device_uid'] as String?)?.trim().toUpperCase();
+                if (uid != null && uid.isNotEmpty) {
+                  final ip = (json['ip'] as String?)?.trim() ?? dg.address.address;
+                  final port = (json['port'] as num?)?.toInt() ?? 8765;
+                  final rssi = (json['rssi'] as num?)?.toInt();
+                  _deviceIpCache[uid] = CachedDeviceLocation(
+                    deviceUid: uid,
+                    ip: ip,
+                    port: port,
+                    lastSeen: DateTime.now(),
+                    rssi: rssi,
+                  );
+                  debugPrint('[YerelKapi] 📡 Beacon alındı (${bindAddr.address}) -> UID: $uid, IP: $ip, Port: $port, RSSI: $rssi');
+                }
+              } catch (_) {}
+            }
           }
-        }
-      });
-      debugPrint('[YerelKapi] UDP Beacon dinleyicisi port 8765 üzerinde aktif.');
-    } catch (e) {
-      debugPrint('[YerelKapi] UDP Beacon dinleyicisi başlatılamadı: $e');
+        });
+      } catch (_) {}
     }
+
+    // anyIPv4 soketi
+    bindAndListen(InternetAddress.anyIPv4);
+
+    // Wi-Fi arayüzlerine özel soketler (Hücresel açıkken Wi-Fi paketlerinin kaçırılmaması için)
+    final wifiAddrs = await getAllLocalWifiAddresses();
+    for (final addr in wifiAddrs) {
+      bindAndListen(addr);
+    }
+
+    // Periyodik olarak (her 10 sn) yeni bağlanan Wi-Fi arayüzü varsa dinleyiciyi güncelle
+    _beaconRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      final currentAddrs = await getAllLocalWifiAddresses();
+      for (final addr in currentAddrs) {
+        final alreadyBound = _beaconListenerSockets.any(
+          (s) => s.address.address == addr.address,
+        );
+        if (!alreadyBound) {
+          bindAndListen(addr);
+        }
+      }
+    });
+
+    debugPrint('[YerelKapi] UDP Beacon dinleyicisi port 8765 üzerinde aktif.');
   }
 
   void stopBeaconListener() {
-    try {
-      _beaconListenerSocket?.close();
-      _beaconListenerSocket = null;
-      _isListening = false;
-    } catch (_) {}
+    _beaconRefreshTimer?.cancel();
+    _beaconRefreshTimer = null;
+    for (final s in _beaconListenerSockets) {
+      try {
+        s.close();
+      } catch (_) {}
+    }
+    _beaconListenerSockets.clear();
   }
 
   CachedDeviceLocation? getCachedDevice(String deviceUid) {
@@ -109,89 +157,57 @@ class LocalDoorService {
   }
 
   Future<bool> hasLocalWifiConnection() async {
-    final addr = await _getWifiAddress();
-    return addr != null;
+    final addrs = await getAllLocalWifiAddresses();
+    return addrs.isNotEmpty;
   }
 
-  Future<InternetAddress?> _getWifiAddress() async {
+  Future<List<InternetAddress>> getAllLocalWifiAddresses() async {
+    final results = <InternetAddress>[];
     try {
       final interfaces = await NetworkInterface.list(
         includeLoopback: false,
         type: InternetAddressType.IPv4,
       );
 
-      for (final iface in interfaces) {
-        debugPrint(
-          '[AğArayüzü] Bulundu: ${iface.name} -> ${iface.addresses.map((a) => a.address).join(', ')}',
-        );
-      }
-
-      // 1. ÖNCELİK: Doğrudan wlan0 veya 192.168.x.x / 172.x.x.x IP'ye sahip Wi-Fi arayüzü
+      // 1. ÖNCE: Kesin Wi-Fi / Ethernet arayüzleri (wlan*, wifi*, eth*, en*, wl*, lan*)
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        if (name == 'wlan0' || name == 'wifi0' || name == 'eth0') {
-          for (final addr in iface.addresses) {
-            if (_isPrivateLocalIp(addr.address)) {
-              debugPrint(
-                '[AğArayüzü] Birincil Wi-Fi seçildi: ${iface.name} (${addr.address})',
-              );
-              return addr;
-            }
-          }
+        if (_cellularKeywords.any((k) => name.contains(k))) {
+          continue;
         }
-      }
-
-      // 2. İKİNCİL: Herhangi bir wlan / wifi arayüzünde 192.168.x.x IP
-      for (final iface in interfaces) {
-        final name = iface.name.toLowerCase();
         if (name.startsWith('wlan') ||
             name.startsWith('wifi') ||
-            name.startsWith('eth')) {
+            name.startsWith('eth') ||
+            name.startsWith('en') ||
+            name.startsWith('wl') ||
+            name.startsWith('lan')) {
           for (final addr in iface.addresses) {
-            if (addr.address.startsWith('192.168.') ||
-                addr.address.startsWith('172.')) {
-              debugPrint(
-                '[AğArayüzü] İkincil Wi-Fi seçildi: ${iface.name} (${addr.address})',
-              );
-              return addr;
+            if (_isPrivateLocalIp(addr.address) && !results.any((a) => a.address == addr.address)) {
+              results.add(addr);
             }
           }
         }
       }
 
-      // 3. ÜÇÜNCÜL: Mobil/hücresel olmayan herhangi bir arayüzde 192.168.x.x IP
+      // 2. İKİNCİL: Diğer hücresel olmayan yerel arayüzler
       for (final iface in interfaces) {
         final name = iface.name.toLowerCase();
-        if (!name.contains('rmnet') &&
-            !name.contains('dummy') &&
-            !name.contains('radio')) {
-          for (final addr in iface.addresses) {
-            if (addr.address.startsWith('192.168.')) {
-              debugPrint(
-                '[AğArayüzü] Üçüncül 192.168 IP seçildi: ${iface.name} (${addr.address})',
-              );
-              return addr;
-            }
-          }
+        if (_cellularKeywords.any((k) => name.contains(k))) {
+          continue;
         }
-      }
-
-      // 4. DÖRDÜNCÜL: Herhangi bir wlan arayüzündeki özel IP
-      for (final iface in interfaces) {
-        final name = iface.name.toLowerCase();
-        if (name.startsWith('wlan') || name.startsWith('wifi')) {
-          for (final addr in iface.addresses) {
-            if (_isPrivateLocalIp(addr.address)) {
-              debugPrint(
-                '[AğArayüzü] Dördüncül Wi-Fi seçildi: ${iface.name} (${addr.address})',
-              );
-              return addr;
-            }
+        for (final addr in iface.addresses) {
+          if (_isPrivateLocalIp(addr.address) && !results.any((a) => a.address == addr.address)) {
+            results.add(addr);
           }
         }
       }
     } catch (_) {}
-    return null;
+    return results;
+  }
+
+  Future<InternetAddress?> _getWifiAddress() async {
+    final list = await getAllLocalWifiAddresses();
+    return list.isNotEmpty ? list.first : null;
   }
 
   Future<LocalDoorOpenResult> openDoor(LocalDoorAccess access) async {
@@ -220,7 +236,7 @@ class LocalDoorService {
     // 0. SIFIR GECİKME ÖNCELİĞİ: Canlı Beacon Önbelleğindeki Doğrulanmış IP (0 ms Keşif)
     final cached = getCachedDevice(targetUid);
     if (cached != null && cached.ip.isNotEmpty) {
-      debugPrint('[YerelKapi] ⚡ CANLI BEACON ÖNBELLEĞİ KULLANILIYOR -> ${cached.ip}:8765 (0 ms Keşif Beklemesi)');
+      debugPrint('[YerelKapi] ⚡ CANLI BEACON ÖNBELLEĞİ KULLANILIYOR -> ${cached.ip}:8765 (0 ms Keşif)');
       final udpOpened = await _directUdpOpen(cached.ip, access, wifiAddress: wifiAddr);
       if (udpOpened) {
         debugPrint('[YerelKapi] ⚡ CANLI ÖNBELLEK İLE ANINDA AÇILDI! (${cached.ip})');
@@ -275,7 +291,7 @@ class LocalDoorService {
       }
     }
 
-    // 2. IP bilinmiyorsa veya değiştiyse UDP Keşif ile hedef UID'ye sahip cihazın IP'sini bul
+    // 2. IP bilinmiyorsa veya değiştiyse UDP Alt Ağ Keşif ile hedef UID'ye sahip cihazın IP'sini bul
     debugPrint('[YerelKapi] UDP Keşif ile hedef cihaz ($targetUid) aranıyor...');
     final discoveredIp = await _discoverDeviceIpViaUdp(
       targetUid,
@@ -327,7 +343,6 @@ class LocalDoorService {
       while (!stopped && cursor < candidates.length) {
         final current = candidates[cursor];
         cursor += 1;
-        // ASLA RÖLE TETİKLEME PAKETİ ATMA! Yalnızca 'discover' kimlik sorgusu yap!
         final matches = await _probeDeviceIp(
           current,
           targetUid,
@@ -339,7 +354,7 @@ class LocalDoorService {
           final ok = await _directPostOpen(
             current,
             access,
-            const Duration(milliseconds: 400),
+            const Duration(milliseconds: 350),
             wifiAddress: wifiAddr,
           );
           if (ok && !stopped) {
@@ -385,70 +400,91 @@ class LocalDoorService {
     String deviceUid, {
     InternetAddress? wifiAddress,
   }) async {
-    RawDatagramSocket? socket;
-    try {
-      socket = await RawDatagramSocket.bind(
-        wifiAddress ?? InternetAddress.anyIPv4,
-        0,
-      );
-      socket.broadcastEnabled = true;
+    final cleanUid = deviceUid.trim().toUpperCase();
+    final wifiAddrs = await getAllLocalWifiAddresses();
+    final bindAddrs = <InternetAddress>[
+      ?wifiAddress,
+      ...wifiAddrs,
+      InternetAddress.anyIPv4,
+    ];
 
-      final completer = Completer<String?>();
-      final targetUid = deviceUid.trim().toUpperCase();
-      final payload = utf8.encode(jsonEncode({
-        'action': 'discover',
-        'target_uid': targetUid,
-      }));
-
-      // Broadcast gönder: Genel 255.255.255.255 ve Alt ağ broadcast
-      socket.send(payload, InternetAddress('255.255.255.255'), 8765);
-      if (wifiAddress != null) {
-        final parts = wifiAddress.address.split('.');
-        if (parts.length == 4) {
-          socket.send(
-            payload,
-            InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255'),
-            8765,
-          );
-        }
+    final distinctBindAddrs = <InternetAddress>[];
+    for (final a in bindAddrs) {
+      if (!distinctBindAddrs.any((x) => x.address == a.address)) {
+        distinctBindAddrs.add(a);
       }
+    }
 
-      socket.listen((event) {
-        if (event == RawSocketEvent.read) {
-          final dg = socket?.receive();
-          if (dg != null) {
-            final text = utf8.decode(dg.data, allowMalformed: true);
-            try {
-              final json = jsonDecode(text) as Map<String, dynamic>;
-              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
-              if (respUid != null && respUid == targetUid) {
-                final ip = json['ip'] as String? ?? dg.address.address;
-                debugPrint('[YerelKapi] UDP Keşif ile cihaz bulundu -> $ip ($respUid)');
-                if (!completer.isCompleted) completer.complete(ip);
-              }
-            } catch (_) {
-              if (text.contains(targetUid)) {
-                final fallbackIp = dg.address.address;
-                debugPrint('[YerelKapi] UDP Keşif IP -> $fallbackIp ($targetUid)');
-                if (!completer.isCompleted) completer.complete(fallbackIp);
+    final targetBroadcasts = <InternetAddress>{};
+    for (final a in wifiAddrs) {
+      final parts = a.address.split('.');
+      if (parts.length == 4) {
+        targetBroadcasts.add(InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255'));
+      }
+    }
+    targetBroadcasts.add(InternetAddress('255.255.255.255'));
+    targetBroadcasts.add(InternetAddress('192.168.1.255'));
+    targetBroadcasts.add(InternetAddress('192.168.0.255'));
+    targetBroadcasts.add(InternetAddress('192.168.4.255'));
+    targetBroadcasts.add(InternetAddress('192.168.2.255'));
+    targetBroadcasts.add(InternetAddress('192.168.178.255'));
+
+    final payload = utf8.encode(jsonEncode({
+      'action': 'discover',
+      'target_uid': cleanUid,
+    }));
+
+    final completer = Completer<String?>();
+    final activeSockets = <RawDatagramSocket>[];
+
+    for (final bindAddr in distinctBindAddrs) {
+      try {
+        final socket = await RawDatagramSocket.bind(bindAddr, 0);
+        socket.broadcastEnabled = true;
+        activeSockets.add(socket);
+
+        for (final bcast in targetBroadcasts) {
+          try {
+            socket.send(payload, bcast, 8765);
+          } catch (_) {}
+        }
+
+        socket.listen((event) {
+          if (event == RawSocketEvent.read) {
+            final dg = socket.receive();
+            if (dg != null) {
+              final text = utf8.decode(dg.data, allowMalformed: true);
+              try {
+                final json = jsonDecode(text) as Map<String, dynamic>;
+                final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+                if (respUid != null && respUid == cleanUid) {
+                  final ip = json['ip'] as String? ?? dg.address.address;
+                  debugPrint('[YerelKapi] UDP Keşif ile cihaz bulundu -> $ip ($respUid)');
+                  if (!completer.isCompleted) completer.complete(ip);
+                }
+              } catch (_) {
+                if (text.contains(cleanUid)) {
+                  final fallbackIp = dg.address.address;
+                  if (!completer.isCompleted) completer.complete(fallbackIp);
+                }
               }
             }
           }
-        }
-      });
-
-      return await completer.future
-          .timeout(
-            const Duration(milliseconds: 350),
-            onTimeout: () => null,
-          );
-    } catch (e) {
-      debugPrint('[YerelKapi] UDP Keşif hatası: $e');
-      return null;
-    } finally {
-      try {
-        socket?.close();
+        });
       } catch (_) {}
+    }
+
+    try {
+      return await completer.future.timeout(
+        const Duration(milliseconds: 350),
+        onTimeout: () => null,
+      );
+    } finally {
+      for (final s in activeSockets) {
+        try {
+          s.close();
+        } catch (_) {}
+      }
     }
   }
 
@@ -470,44 +506,61 @@ class LocalDoorService {
     String ip,
     String targetUid, {
     InternetAddress? wifiAddress,
-    Duration timeout = const Duration(milliseconds: 150),
+    Duration timeout = const Duration(milliseconds: 120),
   }) async {
     if (kIsWeb || ip.trim().isEmpty || targetUid.trim().isEmpty) return false;
-    RawDatagramSocket? socket;
-    try {
-      socket = await RawDatagramSocket.bind(
-        wifiAddress ?? InternetAddress.anyIPv4,
-        0,
-      );
-      final completer = Completer<bool>();
-      final cleanUid = targetUid.trim().toUpperCase();
-      final payload = utf8.encode(jsonEncode({
-        'action': 'discover',
-        'target_uid': cleanUid,
-      }));
+    final cleanUid = targetUid.trim().toUpperCase();
+    final payload = utf8.encode(jsonEncode({
+      'action': 'discover',
+      'target_uid': cleanUid,
+    }));
 
-      socket.send(payload, InternetAddress(ip), 8765);
+    final wifiAddrs = await getAllLocalWifiAddresses();
+    final bindAddrs = <InternetAddress>[
+      ?wifiAddress,
+      ...wifiAddrs,
+      InternetAddress.anyIPv4,
+    ];
 
-      socket.listen((event) {
-        if (event == RawSocketEvent.read) {
-          final dg = socket?.receive();
-          if (dg != null) {
-            final text = utf8.decode(dg.data, allowMalformed: true);
-            try {
-              final json = jsonDecode(text) as Map<String, dynamic>;
-              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
-              if (respUid != null && respUid == cleanUid) {
-                if (!completer.isCompleted) completer.complete(true);
-              }
-            } catch (_) {
-              if (text.contains(cleanUid)) {
-                if (!completer.isCompleted) completer.complete(true);
+    final distinctBindAddrs = <InternetAddress>[];
+    for (final a in bindAddrs) {
+      if (!distinctBindAddrs.any((x) => x.address == a.address)) {
+        distinctBindAddrs.add(a);
+      }
+    }
+
+    final completer = Completer<bool>();
+    final activeSockets = <RawDatagramSocket>[];
+
+    for (final bindAddr in distinctBindAddrs) {
+      try {
+        final socket = await RawDatagramSocket.bind(bindAddr, 0);
+        activeSockets.add(socket);
+        socket.send(payload, InternetAddress(ip), 8765);
+
+        socket.listen((event) {
+          if (event == RawSocketEvent.read) {
+            final dg = socket.receive();
+            if (dg != null) {
+              final text = utf8.decode(dg.data, allowMalformed: true);
+              try {
+                final json = jsonDecode(text) as Map<String, dynamic>;
+                final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+                if (respUid != null && respUid == cleanUid) {
+                  if (!completer.isCompleted) completer.complete(true);
+                }
+              } catch (_) {
+                if (text.contains(cleanUid)) {
+                  if (!completer.isCompleted) completer.complete(true);
+                }
               }
             }
           }
-        }
-      });
+        });
+      } catch (_) {}
+    }
 
+    try {
       return await completer.future.timeout(
         timeout,
         onTimeout: () => false,
@@ -515,9 +568,11 @@ class LocalDoorService {
     } catch (_) {
       return false;
     } finally {
-      try {
-        socket?.close();
-      } catch (_) {}
+      for (final s in activeSockets) {
+        try {
+          s.close();
+        } catch (_) {}
+      }
     }
   }
 
@@ -526,57 +581,83 @@ class LocalDoorService {
     LocalDoorAccess access, {
     InternetAddress? wifiAddress,
   }) async {
-    RawDatagramSocket? socket;
-    try {
-      socket = await RawDatagramSocket.bind(
-        wifiAddress ?? InternetAddress.anyIPv4,
-        0,
-      );
-      final completer = Completer<bool>();
-      final targetUid = access.deviceUid.trim().toUpperCase();
-      final payload = utf8.encode(jsonEncode({
-        'action': 'open',
-        'target_uid': targetUid,
-        'device_uid': targetUid,
-        'token': access.token,
-      }));
+    final targetUid = access.deviceUid.trim().toUpperCase();
+    final wifiAddrs = await getAllLocalWifiAddresses();
+    final bindAddrs = <InternetAddress>[
+      ?wifiAddress,
+      ...wifiAddrs,
+      InternetAddress.anyIPv4,
+    ];
 
-      socket.send(payload, InternetAddress(ip), access.port);
-      debugPrint('[YerelKapi] Doğrudan UNICAST UDP Açma yollandı -> $ip:${access.port} ($targetUid)');
+    final distinctBindAddrs = <InternetAddress>[];
+    for (final a in bindAddrs) {
+      if (!distinctBindAddrs.any((x) => x.address == a.address)) {
+        distinctBindAddrs.add(a);
+      }
+    }
 
-      socket.listen((event) {
-        if (event == RawSocketEvent.read) {
-          final dg = socket?.receive();
-          if (dg != null) {
-            final text = utf8.decode(dg.data, allowMalformed: true);
-            debugPrint('[YerelKapi] UDP Açma yanıtı geldi: $text');
+    final payload = utf8.encode(jsonEncode({
+      'action': 'open',
+      'target_uid': targetUid,
+      'device_uid': targetUid,
+      'token': access.token,
+    }));
+
+    final completer = Completer<bool>();
+    final activeSockets = <RawDatagramSocket>[];
+
+    for (final bindAddr in distinctBindAddrs) {
+      try {
+        final socket = await RawDatagramSocket.bind(bindAddr, 0);
+        activeSockets.add(socket);
+
+        socket.send(payload, InternetAddress(ip), access.port);
+        // Hızlı güvenilirlik için 25ms sonra 2. paket
+        Future.delayed(const Duration(milliseconds: 25), () {
+          if (!completer.isCompleted) {
             try {
-              final json = jsonDecode(text) as Map<String, dynamic>;
-              final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
-              if (json['ok'] == true && (respUid == null || respUid == targetUid)) {
-                if (!completer.isCompleted) completer.complete(true);
-              }
-            } catch (_) {
-              if (text.contains('"ok":true') && (text.contains(targetUid) || !text.contains('device_uid'))) {
-                if (!completer.isCompleted) completer.complete(true);
+              socket.send(payload, InternetAddress(ip), access.port);
+            } catch (_) {}
+          }
+        });
+
+        socket.listen((event) {
+          if (event == RawSocketEvent.read) {
+            final dg = socket.receive();
+            if (dg != null) {
+              final text = utf8.decode(dg.data, allowMalformed: true);
+              debugPrint('[YerelKapi] UDP Açma yanıtı geldi: $text');
+              try {
+                final json = jsonDecode(text) as Map<String, dynamic>;
+                final respUid = (json['device_uid'] as String?)?.trim().toUpperCase();
+                if (json['ok'] == true && (respUid == null || respUid == targetUid)) {
+                  if (!completer.isCompleted) completer.complete(true);
+                }
+              } catch (_) {
+                if (text.contains('"ok":true') && (text.contains(targetUid) || !text.contains('device_uid'))) {
+                  if (!completer.isCompleted) completer.complete(true);
+                }
               }
             }
           }
-        }
-      });
+        });
+      } catch (_) {}
+    }
 
-      return await completer.future
-          .timeout(
-            const Duration(milliseconds: 600),
-            onTimeout: () => false,
-          );
+    try {
+      return await completer.future.timeout(
+        const Duration(milliseconds: 500),
+        onTimeout: () => false,
+      );
     } catch (e) {
       debugPrint('[YerelKapi] UDP Açma hatası: $e');
       return false;
     } finally {
-      try {
-        socket?.close();
-      } catch (_) {}
+      for (final s in activeSockets) {
+        try {
+          s.close();
+        } catch (_) {}
+      }
     }
   }
 
@@ -781,8 +862,20 @@ class LocalDoorService {
       }
     }
 
-    // 1. Telefonun bağlı olduğu gerçek Wi-Fi alt ağı varsa YALNIZCA o ağı tara (253 IP)
-    if (wifiAddress != null && _isPrivateLocalIp(wifiAddress.address)) {
+    final wifiAddrs = await getAllLocalWifiAddresses();
+    for (final a in wifiAddrs) {
+      final ip = a.address;
+      ownIps.add(ip);
+      final parts = ip.split('.');
+      if (parts.length == 4) {
+        final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+        for (var host = 1; host <= 254; host += 1) {
+          addIp('$prefix.$host');
+        }
+      }
+    }
+
+    if (wifiAddress != null) {
       final ip = wifiAddress.address;
       ownIps.add(ip);
       final parts = ip.split('.');
@@ -791,11 +884,10 @@ class LocalDoorService {
         for (var host = 1; host <= 254; host += 1) {
           addIp('$prefix.$host');
         }
-        return candidates;
       }
     }
 
-    // 2. Wi-Fi IP alınamadıysa standart alt ağları tara
+    // Standart alt ağlar
     for (final prefix in const [
       '192.168.1',
       '192.168.0',

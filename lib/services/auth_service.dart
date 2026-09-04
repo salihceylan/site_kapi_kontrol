@@ -1071,14 +1071,14 @@ class AuthService extends ChangeNotifier {
     }
 
     final cached = _localDoorCache[uid];
-    final access = cached ??
-        LocalDoorAccess(
-          deviceUid: uid,
-          token: '',
-          ip: null,
-          port: 8765,
-          updatedAt: DateTime.now(),
-        );
+    final liveBeacon = _localDoorService.getCachedDevice(uid);
+    final access = LocalDoorAccess(
+      deviceUid: uid,
+      token: cached?.token ?? '',
+      ip: liveBeacon?.ip ?? cached?.ip,
+      port: liveBeacon?.port ?? cached?.port ?? 8765,
+      updatedAt: DateTime.now(),
+    );
 
     final result = await _localDoorService.openDoor(access);
     if (!result.ok) {
