@@ -11,6 +11,7 @@ import '../../styles/role_theme.dart';
 import '../helpers/ui_helpers.dart';
 
 class AdminDoorStatusCard extends StatelessWidget {
+class AdminDoorStatusCard extends StatefulWidget {
   const AdminDoorStatusCard({
     super.key,
     required this.session,
@@ -57,6 +58,13 @@ class AdminDoorStatusCard extends StatelessWidget {
   final VoiceDoorService? voiceDoorService;
 
   @override
+  State<AdminDoorStatusCard> createState() => _AdminDoorStatusCardState();
+}
+
+class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
+  bool _isDetailsExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -79,9 +87,14 @@ class AdminDoorStatusCard extends StatelessWidget {
             initialValue: (selectedSite != null && sites.any((s) => s.id == selectedSite!.id))
                 ? selectedSite!.id
                 : (sites.isNotEmpty ? sites.first.id : null),
+            key: ValueKey('site_${widget.selectedSite?.id}_${widget.sites.length}'),
+            initialValue: (widget.selectedSite != null && widget.sites.any((s) => s.id == widget.selectedSite!.id))
+                ? widget.selectedSite!.id
+                : (widget.sites.isNotEmpty ? widget.sites.first.id : null),
             decoration: const InputDecoration(labelText: 'Site seç'),
             items: [
               for (final site in sites)
+              for (final site in widget.sites)
                 DropdownMenuItem<int>(
                   value: site.id,
                   child: Text(
@@ -92,10 +105,12 @@ class AdminDoorStatusCard extends StatelessWidget {
                 ),
             ],
             onChanged: isLoadingSites
+            onChanged: widget.isLoadingSites
                 ? null
                 : (value) {
                     if (value != null) {
                       onSelectSite(value);
+                      widget.onSelectSite(value);
                     }
                   },
           ),
@@ -106,9 +121,14 @@ class AdminDoorStatusCard extends StatelessWidget {
             initialValue: (selectedDoor != null && doors.any((d) => d.id == selectedDoor!.id))
                 ? selectedDoor!.id
                 : (doors.isNotEmpty ? doors.first.id : null),
+            key: ValueKey('door_${widget.selectedDoor?.id}_${widget.doors.length}'),
+            initialValue: (widget.selectedDoor != null && widget.doors.any((d) => d.id == widget.selectedDoor!.id))
+                ? widget.selectedDoor!.id
+                : (widget.doors.isNotEmpty ? widget.doors.first.id : null),
             decoration: const InputDecoration(labelText: 'Kapı seç'),
             items: [
               for (final door in doors)
+              for (final door in widget.doors)
                 DropdownMenuItem<int>(
                   value: door.id,
                   child: Text(
@@ -121,16 +141,20 @@ class AdminDoorStatusCard extends StatelessWidget {
                 ),
             ],
             onChanged: (isLoadingStructure || doors.isEmpty)
+            onChanged: (widget.isLoadingStructure || widget.doors.isEmpty)
                 ? null
                 : (value) {
                     if (value != null) {
                       onSelectDoor(value);
+                      widget.onSelectDoor(value);
                     }
                   },
           ),
           const SizedBox(height: 14),
           if (voiceDoorService != null) ...[
             _buildVoiceLiveBanner(context, session.role.accentColor),
+          if (widget.voiceDoorService != null) ...[
+            _buildVoiceLiveBanner(context, widget.session.role.accentColor),
             const SizedBox(height: 14),
           ],
           _buildStatus(context),
@@ -141,6 +165,7 @@ class AdminDoorStatusCard extends StatelessWidget {
 
   Widget _buildVoiceLiveBanner(BuildContext context, Color roleColor) {
     final vService = voiceDoorService!;
+    final vService = widget.voiceDoorService!;
     return AnimatedBuilder(
       animation: vService,
       builder: (context, _) {
@@ -257,6 +282,7 @@ class AdminDoorStatusCard extends StatelessWidget {
                     vService.stopListening();
                   } else {
                     vService.startListening(candidateDoors: doors);
+                    vService.startListening(candidateDoors: widget.doors);
                   }
                 },
                 icon: Icon(
@@ -275,6 +301,7 @@ class AdminDoorStatusCard extends StatelessWidget {
 
   Widget _buildStatus(BuildContext context) {
     if (selectedDoor == null) {
+    if (widget.selectedDoor == null) {
       return const Text(
         'Kontrol etmek için önce siteyi, sonra o siteye ait kapıyı seçin.',
         style: TextStyle(color: AppColors.textMuted),
@@ -283,6 +310,8 @@ class AdminDoorStatusCard extends StatelessWidget {
 
     if (selectedDoor!.assignedDeviceUid == null ||
         selectedDoor!.assignedDeviceUid!.trim().isEmpty) {
+    if (widget.selectedDoor!.assignedDeviceUid == null ||
+        widget.selectedDoor!.assignedDeviceUid!.trim().isEmpty) {
       return const Text(
         'Bu kapıya henüz cihaz atanmamış. Kapı açma komutu aktif olmaz.',
         style: TextStyle(color: Colors.red),
@@ -294,6 +323,11 @@ class AdminDoorStatusCard extends StatelessWidget {
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
     final isLocalOnline = !isCloudOnline && canTryLocalDoorOpen;
     final isMqttBridgeConnected = runtimeStatus?.mqttBridgeConnected == true;
+    final isDeviceAssigned = widget.selectedDoor?.assignedDeviceUid != null &&
+        widget.selectedDoor!.assignedDeviceUid!.trim().isNotEmpty;
+    final isCloudOnline = widget.runtimeStatus?.mqttConnected == true;
+    final isLocalOnline = !isCloudOnline && widget.canTryLocalDoorOpen;
+    final isMqttBridgeConnected = widget.runtimeStatus?.mqttBridgeConnected == true;
 
     final connectionText = isMqttBridgeConnected
         ? 'Hazır (Bulut)'
@@ -302,23 +336,53 @@ class AdminDoorStatusCard extends StatelessWidget {
         ? '🟢 Çevrimiçi (Bulut)'
         : (isLocalOnline
             ? '🟡 Yerel Ağda Aktif (İnternet Yok)'
+            ? '🟡 Yerel Ağda Aktif'
             : '🔴 Çevrimdışı');
     final stateText = isCloudOnline
         ? (runtimeStatus?.doorLocked != null
             ? (runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
+        ? (widget.runtimeStatus?.doorLocked != null
+            ? (widget.runtimeStatus!.doorLocked! ? 'Kapalı/Kilitli' : 'Açık')
             : 'Bilinmiyor')
         : (isLocalOnline ? 'Canlı (Yerel Ağ)' : 'Bilinmiyor (Çevrimdışı)');
     final signalText = isCloudOnline
         ? (runtimeStatus?.wifiSignalPercent == null
+        ? (widget.runtimeStatus?.wifiSignalPercent == null
             ? '-'
             : '%${runtimeStatus!.wifiSignalPercent}'
                 '${runtimeStatus!.wifiRssi == null ? '' : ' (${runtimeStatus!.wifiRssi} dBm)'}')
+            : '%${widget.runtimeStatus!.wifiSignalPercent}'
+                '${widget.runtimeStatus!.wifiRssi == null ? '' : ' (${widget.runtimeStatus!.wifiRssi} dBm)'}')
         : '-';
     final canOperate = isCloudOnline || isLocalOnline;
     final commandEnabled = isDeviceAssigned &&
         canOperate &&
         !isOpeningDoor &&
         !isLoadingStatus;
+        !widget.isOpeningDoor &&
+        !widget.isLoadingStatus;
+
+    Color statusBgColor;
+    Color statusBorderColor;
+    Color statusTextColor;
+    IconData statusIcon;
+
+    if (isCloudOnline) {
+      statusBgColor = const Color(0xFFF0FDF4);
+      statusBorderColor = const Color(0xFFBBF7D0);
+      statusTextColor = const Color(0xFF15803D);
+      statusIcon = Icons.cloud_done_rounded;
+    } else if (isLocalOnline) {
+      statusBgColor = const Color(0xFFFEFCE8);
+      statusBorderColor = const Color(0xFFFEF08A);
+      statusTextColor = const Color(0xFFA16207);
+      statusIcon = Icons.wifi_rounded;
+    } else {
+      statusBgColor = const Color(0xFFFEF2F2);
+      statusBorderColor = const Color(0xFFFECACA);
+      statusTextColor = const Color(0xFFB91C1C);
+      statusIcon = Icons.cloud_off_rounded;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,6 +397,57 @@ class AdminDoorStatusCard extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           'Yerel Ağ Kontrolü: ${isLocalOnline ? 'Aktif (Cihaz Ağda Bulundu)' : (isPhoneOnWifi ? 'Wi-Fi Bağlı (Cihaz Aranıyor)' : 'Wi-Fi Bağlı Değil')}',
+        // Açılır / Kapanır Kayar Durum Çubuğu
+        InkWell(
+          onTap: () {
+            setState(() {
+              _isDetailsExpanded = !_isDetailsExpanded;
+            });
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: statusBgColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: statusBorderColor, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                Icon(statusIcon, color: statusTextColor, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    deviceOnlineText,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: statusTextColor,
+                    ),
+                  ),
+                ),
+                Text(
+                  _isDetailsExpanded ? 'Gizle' : 'Detaylar',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _isDetailsExpanded ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 6),
         Text('Yerel IP (LAN): ${runtimeStatus?.localIp ?? (isLocalOnline ? 'Canlı Ağda' : '-')}'),
@@ -351,13 +466,58 @@ class AdminDoorStatusCard extends StatelessWidget {
           Text('Son Güncelleme: ${formatDateTime(runtimeStatus!.lastSeenAt)}'),
         ],
         if (isLoadingStatus) ...[
+
+        // Açılır Kapanır Kayar Detay Paneli
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity, height: 0),
+          secondChild: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            ),
+            child: Column(
+              children: [
+                _buildDetailRow('Cihaz UID', widget.selectedDoor!.assignedDeviceUid ?? '-'),
+                _buildDetailRow('Sunucu MQTT', connectionText),
+                _buildDetailRow('Kapı Durumu', stateText),
+                _buildDetailRow(
+                  'Yerel Ağ',
+                  isLocalOnline
+                      ? 'Aktif (Cihaz Ağda)'
+                      : (widget.isPhoneOnWifi ? 'Wi-Fi Bağlı' : 'Wi-Fi Bağlı Değil'),
+                ),
+                _buildDetailRow(
+                  'Yerel IP (LAN)',
+                  widget.runtimeStatus?.localIp ?? (isLocalOnline ? 'Canlı Ağda' : '-'),
+                ),
+                _buildDetailRow('Genel IP (WAN)', widget.runtimeStatus?.publicIp ?? '-'),
+                _buildDetailRow('Firmware', widget.runtimeStatus?.firmwareVersion ?? '-'),
+                if (widget.session.role == UserRole.superUser)
+                  _buildDetailRow('OTA Durumu', widget.runtimeStatus?.otaStatus ?? '-'),
+                _buildDetailRow('Wi-Fi Gücü', signalText),
+                if (widget.runtimeStatus?.lastSeenAt != null)
+                  _buildDetailRow('Son Güncelleme', formatDateTime(widget.runtimeStatus!.lastSeenAt)),
+              ],
+            ),
+          ),
+          crossFadeState: _isDetailsExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 250),
+        ),
+
+        if (widget.isLoadingStatus) ...[
           const SizedBox(height: 8),
           const LinearProgressIndicator(),
         ],
         if (doorStatusError != null) ...[
+        if (widget.doorStatusError != null) ...[
           const SizedBox(height: 8),
           Text(
             doorStatusError!,
+            widget.doorStatusError!,
             style: const TextStyle(color: Colors.red),
           ),
         ],
@@ -366,6 +526,7 @@ class AdminDoorStatusCard extends StatelessWidget {
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: commandEnabled ? onOpenDoor : null,
+            onPressed: commandEnabled ? widget.onOpenDoor : null,
             style: isLocalOnline && commandEnabled
                 ? ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF59E0B),
@@ -375,6 +536,7 @@ class AdminDoorStatusCard extends StatelessWidget {
             icon: Icon(isLocalOnline ? Icons.wifi : Icons.lock_open),
             label: Text(
               isOpeningDoor
+              widget.isOpeningDoor
                   ? 'Gönderiliyor...'
                   : (isCloudOnline
                       ? 'Kapı Aç'
@@ -389,31 +551,37 @@ class AdminDoorStatusCard extends StatelessWidget {
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: onCreateGuestPass,
+            onPressed: widget.onCreateGuestPass,
             icon: const Icon(Icons.share_outlined, size: 18),
             label: const Text('Kurye / Misafir Geçişi Oluştur'),
           ),
         ),
         if (onDownloadCredentialsPdf != null && selectedSite != null) ...[
+        if (widget.onDownloadCredentialsPdf != null && widget.selectedSite != null) ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: onDownloadCredentialsPdf,
+              onPressed: widget.onDownloadCredentialsPdf,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF1E3A8A),
                 side: const BorderSide(color: Color(0xFF93C5FD)),
               ),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: Text('📄 ${selectedSite!.name} Giriş Şifreleri (PDF)'),
+              label: Text('📄 ${widget.selectedSite!.name} Giriş Şifreleri (PDF)'),
             ),
           ),
         ],
         if (onDownloadLogsPdf != null && (selectedDoor != null || selectedSite != null)) ...[
+        if (widget.onDownloadLogsPdf != null && (widget.selectedDoor != null || widget.selectedSite != null)) ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: onDownloadLogsPdf,
+              onPressed: widget.onDownloadLogsPdf,
               style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xFF0D47A1),
                 side: const BorderSide(color: Color(0xFF60A5FA)),
@@ -423,11 +591,46 @@ class AdminDoorStatusCard extends StatelessWidget {
                 selectedDoor != null
                     ? '📊 ${selectedDoor!.doorName} Geçiş Logları (PDF)'
                     : '📊 ${selectedSite!.name} Geçiş Logları (PDF)',
+                widget.selectedDoor != null
+                    ? '📊 ${widget.selectedDoor!.doorName} Geçiş Logları (PDF)'
+                    : '📊 ${widget.selectedSite!.name} Geçiş Logları (PDF)',
               ),
             ),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textDark,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
