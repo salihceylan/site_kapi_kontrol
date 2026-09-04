@@ -1294,11 +1294,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           children: [
             Text(
               _titleForMenu(_selectedMenu),
-              style: const TextStyle(
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFFF8FAFC),
                 color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                 letterSpacing: -0.3,
               ),
@@ -1308,15 +1306,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                color: session.role.lightAccentColor,
                 color: isDark ? session.role.lightAccentColor : session.role.accentColor,
               ),
             ),
           ],
         ),
         elevation: 0,
-        backgroundColor: const Color(0xFF0F172A).withValues(alpha: 0.8),
-        iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: isDark
             ? const Color(0xFF0F172A).withValues(alpha: 0.8)
             : Colors.white.withValues(alpha: 0.88),
@@ -1332,7 +1327,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         actions: [
           IconButton(
             tooltip: 'Çıkış Yap',
-            icon: Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
             icon: const Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
             onPressed: () => widget.authService.logout(),
           ),

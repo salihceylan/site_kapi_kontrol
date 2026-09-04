@@ -219,7 +219,6 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         titleTextStyle: TextStyle(
           color: Colors.white,
-          fontSize: 20,
           fontSize: 18,
           fontWeight: FontWeight.w800,
           letterSpacing: -0.3,
@@ -325,7 +324,6 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.accent,
           foregroundColor: AppColors.accentLight,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(

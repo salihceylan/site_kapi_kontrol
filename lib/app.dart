@@ -160,7 +160,6 @@ class _MyAppState extends State<MyApp> {
       themeMode: ThemeMode.system,
       builder: (context, child) {
         return Container(
-          decoration: AppDecorations.pageBackground,
           decoration: AppDecorations.pageBackground(context),
           child: child,
         );

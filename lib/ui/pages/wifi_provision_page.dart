@@ -338,7 +338,6 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: AppDecorations.glassCard,
       decoration: AppDecorations.glassCard(context),
       child: child,
     );
