@@ -2938,6 +2938,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
               : null,
 
+          authService: widget.authService,
+
         );
 
 

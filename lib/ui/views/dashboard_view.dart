@@ -4,6 +4,7 @@ import '../../models/door_runtime_status.dart';
 import '../../models/site_record.dart';
 import '../../models/user_role.dart';
 import '../../models/user_session.dart';
+import '../../services/auth_service.dart';
 import '../../services/voice_door_service.dart';
 import '../../styles/role_theme.dart';
 import '../widgets/admin_door_status_card.dart';
@@ -33,6 +34,7 @@ class DashboardView extends StatelessWidget {
     this.onDownloadCredentialsPdf,
     this.onDownloadLogsPdf,
     this.voiceDoorService,
+    this.authService,
   });
 
   final UserSession session;
@@ -55,6 +57,7 @@ class DashboardView extends StatelessWidget {
   final VoidCallback? onDownloadCredentialsPdf;
   final VoidCallback? onDownloadLogsPdf;
   final VoiceDoorService? voiceDoorService;
+  final AuthService? authService;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +114,7 @@ class DashboardView extends StatelessWidget {
           onDownloadCredentialsPdf: onDownloadCredentialsPdf,
           onDownloadLogsPdf: onDownloadLogsPdf,
           voiceDoorService: voiceDoorService,
+          authService: authService,
         ),
       ],
     );

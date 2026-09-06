@@ -4,11 +4,13 @@ import '../../models/door_runtime_status.dart';
 import '../../models/site_record.dart';
 import '../../models/user_role.dart';
 import '../../models/user_session.dart';
+import '../../services/auth_service.dart';
 import '../../services/voice_door_service.dart';
 import '../../styles/app_colors.dart';
 import '../../styles/app_decorations.dart';
 import '../../styles/role_theme.dart';
 import '../helpers/ui_helpers.dart';
+import 'door_logs_accordion.dart';
 
 class AdminDoorStatusCard extends StatefulWidget {
   const AdminDoorStatusCard({
@@ -33,6 +35,7 @@ class AdminDoorStatusCard extends StatefulWidget {
     this.onDownloadCredentialsPdf,
     this.onDownloadLogsPdf,
     this.voiceDoorService,
+    this.authService,
   });
 
   final UserSession session;
@@ -55,6 +58,7 @@ class AdminDoorStatusCard extends StatefulWidget {
   final VoidCallback? onDownloadCredentialsPdf;
   final VoidCallback? onDownloadLogsPdf;
   final VoiceDoorService? voiceDoorService;
+  final AuthService? authService;
 
   @override
   State<AdminDoorStatusCard> createState() => _AdminDoorStatusCardState();
@@ -613,25 +617,13 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             ),
           ),
         ],
-        if (widget.onDownloadLogsPdf != null && (widget.selectedDoor != null || widget.selectedSite != null)) ...[
+        if (widget.selectedDoor != null || widget.selectedSite != null) ...[
           const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: widget.onDownloadLogsPdf,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: isDark ? const Color(0xFF60A5FA) : const Color(0xFF0284C7),
-                side: BorderSide(
-                  color: isDark ? const Color(0x4060A5FA) : const Color(0xFFBAE6FD),
-                ),
-              ),
-              icon: const Icon(Icons.assignment_outlined, size: 18),
-              label: Text(
-                widget.selectedDoor != null
-                    ? '📊 ${widget.selectedDoor!.doorName} Geçiş Logları (PDF)'
-                    : '📊 ${widget.selectedSite!.name} Geçiş Logları (PDF)',
-              ),
-            ),
+          DoorLogsAccordion(
+            selectedSite: widget.selectedSite,
+            selectedDoor: widget.selectedDoor,
+            authService: widget.authService,
+            onDownloadPdf: widget.onDownloadLogsPdf,
           ),
         ],
       ],
