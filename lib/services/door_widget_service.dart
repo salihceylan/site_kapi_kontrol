@@ -417,9 +417,6 @@ class DoorWidgetService {
 
 
       final activeDoor = doors[activeIndex];
-      final online = isSelectedDoorOnline ??
-          (activeDoor.assignedDeviceUid != null && activeDoor.assignedDeviceUid!.isNotEmpty);
-
       final online = isSelectedDoorOnline ?? false;
 
 
