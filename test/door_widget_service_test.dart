@@ -4,167 +4,116 @@ import 'package:site_kapi_kontrol/models/door_record.dart';
 
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 
-
-
 void main() {
-
   TestWidgetsFlutterBinding.ensureInitialized();
 
-
-
   group('DoorWidgetService Tests', () {
-
     test('Service instance is singleton', () {
-
       final s1 = DoorWidgetService.instance;
 
       final s2 = DoorWidgetService.instance;
 
       expect(identical(s1, s2), isTrue);
-
     });
 
-
-
     test('Widget constants are defined properly', () {
-
       expect(kDoorWidgetAndroid, 'DoorWidgetProvider');
 
       expect(kDoorWidgetIOS, 'DoorWidget');
 
       expect(kDoorWidgetAppGroup, isNotEmpty);
-
     });
 
+    test(
+      'syncDoorsList accepts multiple doors and syncs without errors',
+      () async {
+        final door1 = DoorRecord(
+          id: 1,
 
+          siteCode: 1,
 
-    test('syncDoorsList accepts multiple doors and syncs without errors', () async {
+          siteName: 'Güneş Sitesi',
 
-      final door1 = DoorRecord(
+          doorName: 'Ana Giriş Kapısı',
 
-        id: 1,
+          doorIndex: 1,
 
-        siteCode: 1,
+          isActive: true,
 
-        siteName: 'Güneş Sitesi',
+          assignedDeviceId: 1,
 
-        doorName: 'Ana Giriş Kapısı',
+          assignedDeviceUid: 'UID123',
 
-        doorIndex: 1,
+          mqttSiteId: 1,
 
-        isActive: true,
+          createdAt: DateTime.now(),
+        );
 
-        assignedDeviceId: 1,
+        final door2 = DoorRecord(
+          id: 2,
 
-        assignedDeviceUid: 'UID123',
+          siteCode: 1,
 
-        mqttSiteId: 1,
+          siteName: 'Güneş Sitesi',
 
-        createdAt: DateTime.now(),
+          doorName: 'Otopark Kapısı',
 
-      );
+          doorIndex: 2,
 
-      final door2 = DoorRecord(
+          isActive: true,
 
-        id: 2,
+          assignedDeviceId: 2,
 
-        siteCode: 1,
+          assignedDeviceUid: 'UID456',
 
-        siteName: 'Güneş Sitesi',
+          mqttSiteId: 1,
 
-        doorName: 'Otopark Kapısı',
+          createdAt: DateTime.now(),
+        );
 
-        doorIndex: 2,
+        // On non-Android runtime (test environment), HomeWidget gracefully catches missing platform channel
 
-        isActive: true,
+        await expectLater(
+          DoorWidgetService.instance.syncDoorsList(
+            doors: [door1, door2],
 
-        assignedDeviceId: 2,
+            token: 'mock_jwt_token',
 
-        assignedDeviceUid: 'UID456',
+            apiBaseUrl: 'http://localhost:3000',
 
-        mqttSiteId: 1,
+            selectedDoor: door1,
 
-        createdAt: DateTime.now(),
+            isSelectedDoorOnline: true,
+          ),
 
-      );
-
-
-
-      // On non-Android runtime (test environment), HomeWidget gracefully catches missing platform channel
-
-      await expectLater(
-
-        DoorWidgetService.instance.syncDoorsList(
-
-          doors: [door1, door2],
-
-          token: 'mock_jwt_token',
-
-          apiBaseUrl: 'http://localhost:3000',
-
-          selectedDoor: door1,
-
-          isSelectedDoorOnline: true,
-
-        ),
-
-        completes,
-
-      );
-
-    });
-
-
+          completes,
+        );
+      },
+    );
 
     test('requestPinWidget completes cleanly', () async {
-
       await expectLater(
-
         DoorWidgetService.instance.requestPinWidget(),
 
         completes,
-
       );
-
     });
-
-
 
     test('clearDoorData completes cleanly', () async {
-
-      await expectLater(
-
-        DoorWidgetService.instance.clearDoorData(),
-
-        completes,
-
-      );
-
+      await expectLater(DoorWidgetService.instance.clearDoorData(), completes);
     });
 
+    test(
+      'doorWidgetBackgroundCallback ignores null or unrelated URIs safely',
+      () async {
+        await expectLater(doorWidgetBackgroundCallback(null), completes);
 
+        await expectLater(
+          doorWidgetBackgroundCallback(Uri.parse('sitekapi://other_action')),
 
-    test('doorWidgetBackgroundCallback ignores null or unrelated URIs safely', () async {
-
-      await expectLater(
-
-        doorWidgetBackgroundCallback(null),
-
-        completes,
-
-      );
-
-      await expectLater(
-
-        doorWidgetBackgroundCallback(Uri.parse('sitekapi://other_action')),
-
-        completes,
-
-      );
-
-    });
-
+          completes,
+        );
+      },
+    );
   });
-
 }
-

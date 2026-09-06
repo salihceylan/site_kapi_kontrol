@@ -38,18 +38,37 @@ class DoorWidgetProvider : HomeWidgetProvider() {
                     setTextViewText(R.id.widget_door_counter, "")
                 }
 
-                // Prev & Next door intents
-                val prevIntent = HomeWidgetBackgroundIntent.getBroadcast(
-                    context,
-                    Uri.parse("sitekapi://prev_door")
-                )
-                setOnClickPendingIntent(R.id.widget_btn_prev, prevIntent)
+                // Prev & Next door buttons logic
+                val hasPrev = doorCount > 1 && doorIndex > 0
+                val hasNext = doorCount > 1 && doorIndex < doorCount - 1
 
-                val nextIntent = HomeWidgetBackgroundIntent.getBroadcast(
-                    context,
-                    Uri.parse("sitekapi://next_door")
-                )
-                setOnClickPendingIntent(R.id.widget_btn_next, nextIntent)
+                if (hasPrev) {
+                    setInt(R.id.widget_btn_prev, "setBackgroundResource", R.drawable.widget_nav_button)
+                    setTextColor(R.id.widget_btn_prev, Color.WHITE)
+                    val prevIntent = HomeWidgetBackgroundIntent.getBroadcast(
+                        context,
+                        Uri.parse("sitekapi://prev_door")
+                    )
+                    setOnClickPendingIntent(R.id.widget_btn_prev, prevIntent)
+                } else {
+                    setInt(R.id.widget_btn_prev, "setBackgroundResource", R.drawable.widget_nav_button_disabled)
+                    setTextColor(R.id.widget_btn_prev, Color.parseColor("#475569"))
+                    setOnClickPendingIntent(R.id.widget_btn_prev, null)
+                }
+
+                if (hasNext) {
+                    setInt(R.id.widget_btn_next, "setBackgroundResource", R.drawable.widget_nav_button)
+                    setTextColor(R.id.widget_btn_next, Color.WHITE)
+                    val nextIntent = HomeWidgetBackgroundIntent.getBroadcast(
+                        context,
+                        Uri.parse("sitekapi://next_door")
+                    )
+                    setOnClickPendingIntent(R.id.widget_btn_next, nextIntent)
+                } else {
+                    setInt(R.id.widget_btn_next, "setBackgroundResource", R.drawable.widget_nav_button_disabled)
+                    setTextColor(R.id.widget_btn_next, Color.parseColor("#475569"))
+                    setOnClickPendingIntent(R.id.widget_btn_next, null)
+                }
 
                 // Online vs Offline styling & behavior
                 if (isOnline) {
