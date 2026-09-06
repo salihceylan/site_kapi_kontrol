@@ -337,6 +337,69 @@ class AuthApi {
     );
   }
 
+  Future<SiteRecord> updateSiteFeatures({
+    required String token,
+    required int siteCode,
+    bool? featureQrEnabled,
+    bool? featureRemoteOpenEnabled,
+    bool? featureLocalUdpEnabled,
+    bool? featureGuestPassEnabled,
+  }) async {
+    final body = <String, dynamic>{
+      'feature_qr_enabled': featureQrEnabled,
+      'feature_remote_open_enabled': featureRemoteOpenEnabled,
+      'feature_local_udp_enabled': featureLocalUdpEnabled,
+      'feature_guest_pass_enabled': featureGuestPassEnabled,
+    }..removeWhere((_, value) => value == null);
+
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/sites/$siteCode/features',
+      token: token,
+      body: body,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Site modulleri',
+      () => SiteRecord.fromJson(payload['site'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<SiteRecord> updateSiteSecurityPolicy({
+    required String token,
+    required UserRole role,
+    required int siteCode,
+    bool? qrEntryActive,
+    bool? requireGeofence,
+    double? geofenceLatitude,
+    double? geofenceLongitude,
+    int? geofenceRadiusMeters,
+  }) async {
+    final body = <String, dynamic>{
+      'qr_entry_active': qrEntryActive,
+      'require_geofence': requireGeofence,
+      'geofence_latitude': geofenceLatitude,
+      'geofence_longitude': geofenceLongitude,
+      'geofence_radius_meters': geofenceRadiusMeters,
+    }..removeWhere((_, value) => value == null);
+
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '${_managementPrefix(role)}/sites/$siteCode/security-policy',
+      token: token,
+      body: body,
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Guvenlik politikasi',
+      () => SiteRecord.fromJson(payload['site'] as Map<String, dynamic>),
+    );
+  }
+
   Future<SiteStructureRecord> getSiteStructure({
     required String token,
     required UserRole role,

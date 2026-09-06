@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../../models/door_record.dart';
 import '../../models/door_runtime_status.dart';
 import '../../models/site_record.dart';
+import '../../services/geofence_service.dart';
 import '../../services/voice_door_service.dart';
 import '../../styles/app_colors.dart';
 import '../../styles/app_decorations.dart';
+import 'dynamic_qr_pass_modal.dart';
 
 class ResidentDoorRemoteCard extends StatelessWidget {
   const ResidentDoorRemoteCard({
@@ -420,65 +422,182 @@ class ResidentDoorRemoteCard extends StatelessWidget {
           const SizedBox(height: 16),
           _buildVoiceLiveBanner(context, roleColor),
         ],
-        const SizedBox(height: 16),
-        // Kurye / Misafir Geçişi Butonu
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: isDark
-                ? const LinearGradient(
-                    colors: [Color(0x1A3B82F6), Color(0x101E293B)],
-                  )
-                : const LinearGradient(
-                    colors: [Colors.white, Color(0xFFF8FAFC)],
-                  ),
-            border: Border.all(
-              color: isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE),
-              width: 1.2,
-            ),
-            boxShadow: isDark
-                ? null
-                : const [
-                    BoxShadow(
-                      color: Color(0x0A0F172A),
-                      blurRadius: 10,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
+        // QR ile Giriş Butonu (Eğer bu kapıda/sitede QR aktifse)
+        if (selectedDoor?.canOpenQr == true) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              onTap: onCreateGuestPass,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.share_rounded,
-                      color: isDark ? AppColors.accentLight : AppColors.primary,
-                      size: 20,
+              gradient: isDark
+                  ? const LinearGradient(
+                      colors: [Color(0x2A10B981), Color(0x101E293B)],
+                    )
+                  : const LinearGradient(
+                      colors: [Color(0xFFECFDF5), Colors.white],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '📦 Kurye / Misafir Geçiş Linki Oluştur',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.primary,
-                        letterSpacing: 0.3,
+              border: Border.all(
+                color: isDark ? const Color(0x3310B981) : const Color(0xFFA7F3D0),
+                width: 1.2,
+              ),
+              boxShadow: isDark
+                  ? null
+                  : const [
+                      BoxShadow(
+                        color: Color(0x0A0F172A),
+                        blurRadius: 10,
+                        offset: Offset(0, 3),
                       ),
-                    ),
-                  ],
+                    ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => _handleQrPass(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.qr_code_2_rounded,
+                        color: AppColors.emerald,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '📲 QR Kod ile Giriş Yap',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
+        // Kurye / Misafir Geçişi Butonu (Eğer bu sitede izin verilmişse)
+        if (selectedDoor?.canCreateGuestPass == true) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: isDark
+                  ? const LinearGradient(
+                      colors: [Color(0x1A3B82F6), Color(0x101E293B)],
+                    )
+                  : const LinearGradient(
+                      colors: [Colors.white, Color(0xFFF8FAFC)],
+                    ),
+              border: Border.all(
+                color: isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE),
+                width: 1.2,
+              ),
+              boxShadow: isDark
+                  ? null
+                  : const [
+                      BoxShadow(
+                        color: Color(0x0A0F172A),
+                        blurRadius: 10,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: onCreateGuestPass,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.share_rounded,
+                        color: isDark ? AppColors.accentLight : AppColors.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '📦 Kurye / Misafir Geçiş Linki Oluştur',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.primary,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  Future<void> _handleQrPass(BuildContext context) async {
+    final door = selectedDoor;
+    if (door == null) return;
+
+    if (door.requireGeofence) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Konum kontrol ediliyor...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      final result = await GeofenceService.instance.verifyWithinGeofence(
+        targetLat: door.geofenceLatitude,
+        targetLng: door.geofenceLongitude,
+        radiusMeters: door.geofenceRadiusMeters,
+      );
+
+      if (!context.mounted) return;
+
+      if (!result.allowed) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.location_off_outlined, color: AppColors.rose),
+                SizedBox(width: 8),
+                Text('Konum Hatası'),
+              ],
+            ),
+            content: Text(
+              result.errorMessage ?? 'Kapı çevresinde olmadığınız tespit edildi.',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Anladım'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => DynamicQrPassModal(door: door),
     );
   }
 

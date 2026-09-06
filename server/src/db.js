@@ -173,6 +173,46 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS mqtt_site_id INTEGER
     `);
     await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS feature_qr_enabled BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS feature_remote_open_enabled BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS feature_local_udp_enabled BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS feature_guest_pass_enabled BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS qr_entry_active BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS require_geofence BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS geofence_latitude DOUBLE PRECISION
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS geofence_longitude DOUBLE PRECISION
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER NOT NULL DEFAULT 75
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS qr_totp_secret TEXT
+    `);
+    await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -237,6 +277,10 @@ export async function ensureDbSchema() {
         gate_name TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS hardware_type TEXT NOT NULL DEFAULT 'esp32_c3'
     `);
     await client.query(`
       ALTER TABLE devices

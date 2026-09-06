@@ -8,6 +8,7 @@
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
 #include "yerel_kapi_kontrol.h"
+#include "gm60_scanner.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
@@ -100,6 +101,8 @@ void seriDurumYazdir() {
   Serial.println(mqttAktifPort());
   Serial.print("Role GPIO: ");
   Serial.println(ROLE_PIN);
+  Serial.print("GM60 QR Okuyucu: ");
+  Serial.println(gm60Aktif ? "aktif" : "pasif");
   Serial.print("Firmware surumu: ");
   Serial.println(OTA_CURRENT_VERSION);
   Serial.print("OTA durum: ");
@@ -116,6 +119,7 @@ void setup() {
   delay(300);
 
   roleSetup();
+  gm60Setup();
   wifiBaglan();
   otaSetup();
   mqttSetup();
@@ -123,6 +127,7 @@ void setup() {
 
 void loop() {
   seriKomutKontrol();
+  gm60Loop();
   wifiLoop();
   yerelKapiKontrolLoop();
   mqttLoopHandler();

@@ -3,9 +3,16 @@
 
 #include <Arduino.h>
 
+#if defined(BOARD_ESP32_WROOM_RELAY)
+// Standard opto-isolated relay on ESP32-WROOM-32E Relay Module is GPIO 16 (or GPIO 23)
+constexpr uint8_t ROLE_PIN = 16;
+constexpr unsigned long ROLE_SURE_MS = 1500;
+constexpr bool ROLE_ACTIVE_LOW = false;
+#else
 constexpr uint8_t ROLE_PIN = 10;
 constexpr unsigned long ROLE_SURE_MS = 1500;
 constexpr bool ROLE_ACTIVE_LOW = false;
+#endif
 
 inline unsigned long roleBaslangic = 0;
 inline unsigned long roleSonTetikMs = 0;

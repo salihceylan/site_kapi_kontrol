@@ -14,6 +14,16 @@ class SiteRecord {
     required this.mqttSiteId,
     required this.managerUserCode,
     required this.managerName,
+    this.featureQrEnabled = true,
+    this.featureRemoteOpenEnabled = true,
+    this.featureLocalUdpEnabled = true,
+    this.featureGuestPassEnabled = true,
+    this.qrEntryActive = true,
+    this.requireGeofence = false,
+    this.geofenceLatitude,
+    this.geofenceLongitude,
+    this.geofenceRadiusMeters = 75,
+    this.qrTotpSecret,
     required this.createdAt,
   });
 
@@ -31,6 +41,16 @@ class SiteRecord {
   final int mqttSiteId;
   final int? managerUserCode;
   final String? managerName;
+  final bool featureQrEnabled;
+  final bool featureRemoteOpenEnabled;
+  final bool featureLocalUdpEnabled;
+  final bool featureGuestPassEnabled;
+  final bool qrEntryActive;
+  final bool requireGeofence;
+  final double? geofenceLatitude;
+  final double? geofenceLongitude;
+  final int geofenceRadiusMeters;
+  final String? qrTotpSecret;
   final DateTime? createdAt;
 
   bool get isApproved => approvalStatus == 'approved';
@@ -61,6 +81,16 @@ class SiteRecord {
     int? mqttSiteId,
     int? managerUserCode,
     String? managerName,
+    bool? featureQrEnabled,
+    bool? featureRemoteOpenEnabled,
+    bool? featureLocalUdpEnabled,
+    bool? featureGuestPassEnabled,
+    bool? qrEntryActive,
+    bool? requireGeofence,
+    double? geofenceLatitude,
+    double? geofenceLongitude,
+    int? geofenceRadiusMeters,
+    String? qrTotpSecret,
     DateTime? createdAt,
   }) {
     return SiteRecord(
@@ -78,6 +108,16 @@ class SiteRecord {
       mqttSiteId: mqttSiteId ?? this.mqttSiteId,
       managerUserCode: managerUserCode ?? this.managerUserCode,
       managerName: managerName ?? this.managerName,
+      featureQrEnabled: featureQrEnabled ?? this.featureQrEnabled,
+      featureRemoteOpenEnabled: featureRemoteOpenEnabled ?? this.featureRemoteOpenEnabled,
+      featureLocalUdpEnabled: featureLocalUdpEnabled ?? this.featureLocalUdpEnabled,
+      featureGuestPassEnabled: featureGuestPassEnabled ?? this.featureGuestPassEnabled,
+      qrEntryActive: qrEntryActive ?? this.qrEntryActive,
+      requireGeofence: requireGeofence ?? this.requireGeofence,
+      geofenceLatitude: geofenceLatitude ?? this.geofenceLatitude,
+      geofenceLongitude: geofenceLongitude ?? this.geofenceLongitude,
+      geofenceRadiusMeters: geofenceRadiusMeters ?? this.geofenceRadiusMeters,
+      qrTotpSecret: qrTotpSecret ?? this.qrTotpSecret,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -110,6 +150,16 @@ class SiteRecord {
           ? null
           : (json['manager_user_code'] as num?)?.toInt(),
       managerName: json['manager_name'] as String?,
+      featureQrEnabled: json['feature_qr_enabled'] as bool? ?? true,
+      featureRemoteOpenEnabled: json['feature_remote_open_enabled'] as bool? ?? true,
+      featureLocalUdpEnabled: json['feature_local_udp_enabled'] as bool? ?? true,
+      featureGuestPassEnabled: json['feature_guest_pass_enabled'] as bool? ?? true,
+      qrEntryActive: json['qr_entry_active'] as bool? ?? true,
+      requireGeofence: json['require_geofence'] as bool? ?? false,
+      geofenceLatitude: (json['geofence_latitude'] as num?)?.toDouble(),
+      geofenceLongitude: (json['geofence_longitude'] as num?)?.toDouble(),
+      geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 75,
+      qrTotpSecret: json['qr_totp_secret'] as String?,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString()),

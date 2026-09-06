@@ -39,6 +39,7 @@ class SitesView extends StatelessWidget {
     required this.onSendApartmentMail,
     required this.onAssignDoorDevice,
     this.onDeleteApartmentResident,
+    this.onConfigurePolicy,
     this.onDownloadCredentialsPdf,
     this.onDownloadLogsPdf,
   });
@@ -68,6 +69,7 @@ class SitesView extends StatelessWidget {
   final ValueChanged<ApartmentRecord> onSendApartmentMail;
   final ValueChanged<DoorRecord> onAssignDoorDevice;
   final ValueChanged<ApartmentRecord>? onDeleteApartmentResident;
+  final ValueChanged<SiteRecord>? onConfigurePolicy;
   final ValueChanged<SiteRecord>? onDownloadCredentialsPdf;
   final ValueChanged<SiteRecord>? onDownloadLogsPdf;
 
@@ -183,6 +185,9 @@ class SitesView extends StatelessWidget {
                           canManageSites && site.approvalStatus == 'pending'
                               ? () => onRejectSite(site)
                               : null,
+                      onConfigurePolicy: onConfigurePolicy != null
+                          ? () => onConfigurePolicy!(site)
+                          : null,
                       onDownloadPdf: onDownloadCredentialsPdf != null
                           ? () => onDownloadCredentialsPdf!(site)
                           : null,

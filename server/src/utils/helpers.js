@@ -181,6 +181,16 @@ export function mapSiteRow(row) {
       : 'approved',
     approved_at: row.approved_at ?? null,
     mqtt_site_id: Number(row.mqtt_site_id ?? 0),
+    feature_qr_enabled: row.feature_qr_enabled === undefined ? true : Boolean(row.feature_qr_enabled),
+    feature_remote_open_enabled: row.feature_remote_open_enabled === undefined ? true : Boolean(row.feature_remote_open_enabled),
+    feature_local_udp_enabled: row.feature_local_udp_enabled === undefined ? true : Boolean(row.feature_local_udp_enabled),
+    feature_guest_pass_enabled: row.feature_guest_pass_enabled === undefined ? true : Boolean(row.feature_guest_pass_enabled),
+    qr_entry_active: row.qr_entry_active === undefined ? true : Boolean(row.qr_entry_active),
+    require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
+    geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
+    geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
+    qr_totp_secret: row.qr_totp_secret ?? null,
     manager_user_code:
       row.manager_user_code === null || row.manager_user_code === undefined
         ? null
@@ -199,6 +209,7 @@ export function mapDeviceRow(row) {
     device_uid: row.device_uid,
     assigned_user_code: row.assigned_user_code,
     gate_name: row.gate_name,
+    hardware_type: row.hardware_type || 'esp32_c3',
     assigned_door_id:
       row.assigned_door_id === null || row.assigned_door_id === undefined
         ? null
@@ -309,6 +320,16 @@ export function mapDoorRow(row) {
       row.mqtt_site_id === null || row.mqtt_site_id === undefined
         ? null
         : Number(row.mqtt_site_id),
+    feature_qr_enabled: row.feature_qr_enabled === undefined ? true : Boolean(row.feature_qr_enabled),
+    feature_remote_open_enabled: row.feature_remote_open_enabled === undefined ? true : Boolean(row.feature_remote_open_enabled),
+    feature_local_udp_enabled: row.feature_local_udp_enabled === undefined ? true : Boolean(row.feature_local_udp_enabled),
+    feature_guest_pass_enabled: row.feature_guest_pass_enabled === undefined ? true : Boolean(row.feature_guest_pass_enabled),
+    qr_entry_active: row.qr_entry_active === undefined ? true : Boolean(row.qr_entry_active),
+    require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
+    geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
+    geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
+    qr_totp_secret: row.qr_totp_secret ?? null,
     created_at: row.created_at,
   };
 }

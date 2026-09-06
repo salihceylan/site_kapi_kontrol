@@ -281,6 +281,16 @@ function mapSiteRow(row) {
       : 'approved',
     approved_at: row.approved_at ?? null,
     mqtt_site_id: Number(row.mqtt_site_id ?? 0),
+    feature_qr_enabled: row.feature_qr_enabled === undefined ? true : Boolean(row.feature_qr_enabled),
+    feature_remote_open_enabled: row.feature_remote_open_enabled === undefined ? true : Boolean(row.feature_remote_open_enabled),
+    feature_local_udp_enabled: row.feature_local_udp_enabled === undefined ? true : Boolean(row.feature_local_udp_enabled),
+    feature_guest_pass_enabled: row.feature_guest_pass_enabled === undefined ? true : Boolean(row.feature_guest_pass_enabled),
+    qr_entry_active: row.qr_entry_active === undefined ? true : Boolean(row.qr_entry_active),
+    require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
+    geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
+    geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
+    qr_totp_secret: row.qr_totp_secret ?? null,
     manager_user_code:
       row.manager_user_code === null || row.manager_user_code === undefined
         ? null
@@ -299,6 +309,7 @@ function mapDeviceRow(row) {
     device_uid: row.device_uid,
     assigned_user_code: row.assigned_user_code,
     gate_name: row.gate_name,
+    hardware_type: row.hardware_type || 'esp32_c3',
     assigned_door_id:
       row.assigned_door_id === null || row.assigned_door_id === undefined
         ? null
@@ -431,6 +442,16 @@ function mapDoorRow(row) {
       row.mqtt_site_id === null || row.mqtt_site_id === undefined
         ? null
         : Number(row.mqtt_site_id),
+    feature_qr_enabled: row.feature_qr_enabled === undefined ? true : Boolean(row.feature_qr_enabled),
+    feature_remote_open_enabled: row.feature_remote_open_enabled === undefined ? true : Boolean(row.feature_remote_open_enabled),
+    feature_local_udp_enabled: row.feature_local_udp_enabled === undefined ? true : Boolean(row.feature_local_udp_enabled),
+    feature_guest_pass_enabled: row.feature_guest_pass_enabled === undefined ? true : Boolean(row.feature_guest_pass_enabled),
+    qr_entry_active: row.qr_entry_active === undefined ? true : Boolean(row.qr_entry_active),
+    require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
+    geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
+    geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
+    qr_totp_secret: row.qr_totp_secret ?? null,
     created_at: row.created_at,
   };
 }
@@ -995,6 +1016,16 @@ async function updateSiteByCode({
   doorCount,
   blockApartmentCounts,
   approvalStatus,
+  featureQrEnabled,
+  featureRemoteOpenEnabled,
+  featureLocalUdpEnabled,
+  featureGuestPassEnabled,
+  qrEntryActive,
+  requireGeofence,
+  geofenceLatitude,
+  geofenceLongitude,
+  geofenceRadiusMeters,
+  qrTotpSecret,
 }) {
   const sets = [];
   const values = [];
@@ -1037,6 +1068,46 @@ async function updateSiteByCode({
     values.push(approvalStatus === 'approved' ? new Date() : null);
     sets.push(`approved_at = $${values.length}`);
   }
+  if (featureQrEnabled !== undefined) {
+    values.push(featureQrEnabled);
+    sets.push(`feature_qr_enabled = $${values.length}`);
+  }
+  if (featureRemoteOpenEnabled !== undefined) {
+    values.push(featureRemoteOpenEnabled);
+    sets.push(`feature_remote_open_enabled = $${values.length}`);
+  }
+  if (featureLocalUdpEnabled !== undefined) {
+    values.push(featureLocalUdpEnabled);
+    sets.push(`feature_local_udp_enabled = $${values.length}`);
+  }
+  if (featureGuestPassEnabled !== undefined) {
+    values.push(featureGuestPassEnabled);
+    sets.push(`feature_guest_pass_enabled = $${values.length}`);
+  }
+  if (qrEntryActive !== undefined) {
+    values.push(qrEntryActive);
+    sets.push(`qr_entry_active = $${values.length}`);
+  }
+  if (requireGeofence !== undefined) {
+    values.push(requireGeofence);
+    sets.push(`require_geofence = $${values.length}`);
+  }
+  if (geofenceLatitude !== undefined) {
+    values.push(geofenceLatitude);
+    sets.push(`geofence_latitude = $${values.length}`);
+  }
+  if (geofenceLongitude !== undefined) {
+    values.push(geofenceLongitude);
+    sets.push(`geofence_longitude = $${values.length}`);
+  }
+  if (geofenceRadiusMeters !== undefined) {
+    values.push(geofenceRadiusMeters);
+    sets.push(`geofence_radius_meters = $${values.length}`);
+  }
+  if (qrTotpSecret !== undefined) {
+    values.push(qrTotpSecret);
+    sets.push(`qr_totp_secret = $${values.length}`);
+  }
 
   if (sets.length === 0) {
     return null;
@@ -1060,6 +1131,16 @@ async function updateSiteByCode({
         approval_status,
         approved_at,
         mqtt_site_id,
+        feature_qr_enabled,
+        feature_remote_open_enabled,
+        feature_local_udp_enabled,
+        feature_guest_pass_enabled,
+        qr_entry_active,
+        require_geofence,
+        geofence_latitude,
+        geofence_longitude,
+        geofence_radius_meters,
+        qr_totp_secret,
         created_at
     `,
     values,
@@ -2005,6 +2086,16 @@ async function getSiteByCode(siteCode) {
         s.approval_status,
         s.approved_at,
         s.mqtt_site_id,
+        s.feature_qr_enabled,
+        s.feature_remote_open_enabled,
+        s.feature_local_udp_enabled,
+        s.feature_guest_pass_enabled,
+        s.qr_entry_active,
+        s.require_geofence,
+        s.geofence_latitude,
+        s.geofence_longitude,
+        s.geofence_radius_meters,
+        s.qr_totp_secret,
         sm.manager_user_code,
         manager.full_name AS manager_name,
         s.created_at
@@ -2056,6 +2147,16 @@ async function listSitesForAuthUser({
           s.approval_status,
           s.approved_at,
           s.mqtt_site_id,
+          s.feature_qr_enabled,
+          s.feature_remote_open_enabled,
+          s.feature_local_udp_enabled,
+          s.feature_guest_pass_enabled,
+          s.qr_entry_active,
+          s.require_geofence,
+          s.geofence_latitude,
+          s.geofence_longitude,
+          s.geofence_radius_meters,
+          s.qr_totp_secret,
           sm.manager_user_code,
           manager.full_name AS manager_name,
           s.created_at
@@ -2105,6 +2206,16 @@ async function listSitesForAuthUser({
         s.approval_status,
         s.approved_at,
         s.mqtt_site_id,
+        s.feature_qr_enabled,
+        s.feature_remote_open_enabled,
+        s.feature_local_udp_enabled,
+        s.feature_guest_pass_enabled,
+        s.qr_entry_active,
+        s.require_geofence,
+        s.geofence_latitude,
+        s.geofence_longitude,
+        s.geofence_radius_meters,
+        s.qr_totp_secret,
         sms.manager_user_code,
         manager.full_name AS manager_name,
         s.created_at
@@ -2243,6 +2354,15 @@ async function createSiteWithStructure({
   managerUserCode,
   managerUser,
   approvalStatus = 'approved',
+  featureQrEnabled = true,
+  featureRemoteOpenEnabled = true,
+  featureLocalUdpEnabled = true,
+  featureGuestPassEnabled = true,
+  qrEntryActive = true,
+  requireGeofence = false,
+  geofenceLatitude = null,
+  geofenceLongitude = null,
+  geofenceRadiusMeters = 75,
 }) {
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
@@ -2270,9 +2390,21 @@ async function createSiteWithStructure({
           block_apartment_counts,
           mqtt_site_id,
           approval_status,
-          approved_at
+          approved_at,
+          feature_qr_enabled,
+          feature_remote_open_enabled,
+          feature_local_udp_enabled,
+          feature_guest_pass_enabled,
+          qr_entry_active,
+          require_geofence,
+          geofence_latitude,
+          geofence_longitude,
+          geofence_radius_meters
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10)
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10,
+          $11, $12, $13, $14, $15, $16, $17, $18, $19
+        )
         RETURNING
           site_code AS id,
           name,
@@ -2285,6 +2417,15 @@ async function createSiteWithStructure({
           approval_status,
           approved_at,
           mqtt_site_id,
+          feature_qr_enabled,
+          feature_remote_open_enabled,
+          feature_local_udp_enabled,
+          feature_guest_pass_enabled,
+          qr_entry_active,
+          require_geofence,
+          geofence_latitude,
+          geofence_longitude,
+          geofence_radius_meters,
           created_at
       `,
       [
@@ -2298,6 +2439,15 @@ async function createSiteWithStructure({
         resolvedBlockApartmentCounts,
         approvalStatus,
         approvalStatus === 'approved' ? new Date() : null,
+        featureQrEnabled,
+        featureRemoteOpenEnabled,
+        featureLocalUdpEnabled,
+        featureGuestPassEnabled,
+        qrEntryActive,
+        requireGeofence,
+        geofenceLatitude,
+        geofenceLongitude,
+        geofenceRadiusMeters,
       ],
     );
     const site = siteResult.rows[0];
@@ -2947,6 +3097,16 @@ async function listAccessibleDoorsForUser(authUser) {
           devices.device_uid AS assigned_device_uid,
           devices.local_control_token,
           s.mqtt_site_id,
+          s.feature_qr_enabled,
+          s.feature_remote_open_enabled,
+          s.feature_local_udp_enabled,
+          s.feature_guest_pass_enabled,
+          s.qr_entry_active,
+          s.require_geofence,
+          s.geofence_latitude,
+          s.geofence_longitude,
+          s.geofence_radius_meters,
+          s.qr_totp_secret,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
@@ -2972,6 +3132,16 @@ async function listAccessibleDoorsForUser(authUser) {
           devices.device_uid AS assigned_device_uid,
           devices.local_control_token,
           s.mqtt_site_id,
+          s.feature_qr_enabled,
+          s.feature_remote_open_enabled,
+          s.feature_local_udp_enabled,
+          s.feature_guest_pass_enabled,
+          s.qr_entry_active,
+          s.require_geofence,
+          s.geofence_latitude,
+          s.geofence_longitude,
+          s.geofence_radius_meters,
+          s.qr_totp_secret,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
@@ -3000,6 +3170,16 @@ async function listAccessibleDoorsForUser(authUser) {
         devices.device_uid AS assigned_device_uid,
         devices.local_control_token,
         s.mqtt_site_id,
+        s.feature_qr_enabled,
+        s.feature_remote_open_enabled,
+        s.feature_local_udp_enabled,
+        s.feature_guest_pass_enabled,
+        s.qr_entry_active,
+        s.require_geofence,
+        s.geofence_latitude,
+        s.geofence_longitude,
+        s.geofence_radius_meters,
+        s.qr_totp_secret,
         d.created_at
       FROM apartments a
       INNER JOIN sites s ON s.site_code = a.site_code
@@ -4586,6 +4766,68 @@ app.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) =
     return res.status(200).json({ site: mapSiteRow(updated) });
   } catch (error) {
     return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+  }
+});
+
+app.patch('/admin/sites/:id/features', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+  const featureQrEnabled = normalizeOptionalBool(req.body.feature_qr_enabled);
+  const featureRemoteOpenEnabled = normalizeOptionalBool(req.body.feature_remote_open_enabled);
+  const featureLocalUdpEnabled = normalizeOptionalBool(req.body.feature_local_udp_enabled);
+  const featureGuestPassEnabled = normalizeOptionalBool(req.body.feature_guest_pass_enabled);
+
+  try {
+    const existing = await getSiteByCode(siteCode);
+    if (!existing) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    const updated = await updateSiteByCode({
+      siteCode,
+      featureQrEnabled: featureQrEnabled === null ? undefined : featureQrEnabled,
+      featureRemoteOpenEnabled: featureRemoteOpenEnabled === null ? undefined : featureRemoteOpenEnabled,
+      featureLocalUdpEnabled: featureLocalUdpEnabled === null ? undefined : featureLocalUdpEnabled,
+      featureGuestPassEnabled: featureGuestPassEnabled === null ? undefined : featureGuestPassEnabled,
+    });
+    return res.status(200).json({ site: mapSiteRow(updated || existing) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Site modulleri guncellenemedi.');
+  }
+});
+
+app.patch('/manager/sites/:id/security-policy', authRequired, requireSiteManager, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+  }
+
+  const qrEntryActive = normalizeOptionalBool(req.body.qr_entry_active);
+  const requireGeofence = normalizeOptionalBool(req.body.require_geofence);
+  const geofenceLatitude = req.body.geofence_latitude === null ? null : (req.body.geofence_latitude !== undefined ? Number(req.body.geofence_latitude) : undefined);
+  const geofenceLongitude = req.body.geofence_longitude === null ? null : (req.body.geofence_longitude !== undefined ? Number(req.body.geofence_longitude) : undefined);
+  const geofenceRadiusMeters = req.body.geofence_radius_meters !== undefined ? Math.max(10, Math.min(1000, Number(req.body.geofence_radius_meters) || 75)) : undefined;
+
+  try {
+    const existing = await getSiteByCode(siteCode);
+    if (!existing) {
+      return res.status(404).json({ error: 'Site bulunamadi.' });
+    }
+    const updated = await updateSiteByCode({
+      siteCode,
+      qrEntryActive: qrEntryActive === null ? undefined : qrEntryActive,
+      requireGeofence: requireGeofence === null ? undefined : requireGeofence,
+      geofenceLatitude: Number.isNaN(geofenceLatitude) ? undefined : geofenceLatitude,
+      geofenceLongitude: Number.isNaN(geofenceLongitude) ? undefined : geofenceLongitude,
+      geofenceRadiusMeters: Number.isNaN(geofenceRadiusMeters) ? undefined : geofenceRadiusMeters,
+    });
+    return res.status(200).json({ site: mapSiteRow(updated || existing) });
+  } catch (error) {
+    return handleSiteMutationError(error, res, 'Guvenlik politikasi guncellenemedi.');
   }
 });
 

@@ -15,6 +15,7 @@ class SiteCard extends StatefulWidget {
     this.onDelete,
     this.onApprove,
     this.onReject,
+    this.onConfigurePolicy,
     this.onDownloadPdf,
     this.onDownloadLogsPdf,
   });
@@ -29,6 +30,7 @@ class SiteCard extends StatefulWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onConfigurePolicy;
   final VoidCallback? onDownloadPdf;
   final VoidCallback? onDownloadLogsPdf;
 
@@ -212,6 +214,16 @@ class _SiteCardState extends State<SiteCard> {
                         ),
                         icon: const Icon(Icons.cancel_outlined, size: 16),
                         label: const Text('Reddet'),
+                      ),
+                    if (widget.onConfigurePolicy != null)
+                      OutlinedButton.icon(
+                        onPressed: widget.onConfigurePolicy,
+                        icon: Icon(
+                          Icons.security_outlined,
+                          size: 16,
+                          color: isDark ? const Color(0xFF6EE7B7) : AppColors.emerald,
+                        ),
+                        label: const Text('Giriş & Güvenlik Politikaları'),
                       ),
                     if (widget.onEdit != null)
                       OutlinedButton.icon(

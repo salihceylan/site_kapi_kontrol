@@ -21,6 +21,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
+import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 
 class AuthService extends ChangeNotifier {
@@ -134,6 +135,7 @@ class AuthService extends ChangeNotifier {
       await _secureStorage.delete(key: _localDoorCacheKey);
     } catch (_) {}
     _localDoorCache.clear();
+    unawaited(DoorWidgetService.instance.clearDoorData());
     _notifySafely();
   }
 
@@ -364,6 +366,70 @@ class AuthService extends ChangeNotifier {
         blockApartmentCounts: blockApartmentCounts,
         doorCount: doorCount,
         managerUserCode: managerUserCode,
+      );
+      return null;
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> updateSiteFeatures({
+    required int siteCode,
+    bool? featureQrEnabled,
+    bool? featureRemoteOpenEnabled,
+    bool? featureLocalUdpEnabled,
+    bool? featureGuestPassEnabled,
+  }) async {
+    final active = _safeRequireSuperUserSession();
+    if (active == null) {
+      return 'Bu islem icin super user yetkisi gerekir.';
+    }
+
+    try {
+      await api.updateSiteFeatures(
+        token: active.token,
+        siteCode: siteCode,
+        featureQrEnabled: featureQrEnabled,
+        featureRemoteOpenEnabled: featureRemoteOpenEnabled,
+        featureLocalUdpEnabled: featureLocalUdpEnabled,
+        featureGuestPassEnabled: featureGuestPassEnabled,
+      );
+      return null;
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya baglanilamadi.';
+    }
+  }
+
+  Future<String?> updateSiteSecurityPolicy({
+    required int siteCode,
+    bool? qrEntryActive,
+    bool? requireGeofence,
+    double? geofenceLatitude,
+    double? geofenceLongitude,
+    int? geofenceRadiusMeters,
+  }) async {
+    final active = session;
+    if (active == null ||
+        (active.role != UserRole.superUser && active.role != UserRole.siteManager)) {
+      return 'Bu islem icin yetkiniz bulunmamaktadir.';
+    }
+
+    try {
+      await api.updateSiteSecurityPolicy(
+        token: active.token,
+        role: active.role,
+        siteCode: siteCode,
+        qrEntryActive: qrEntryActive,
+        requireGeofence: requireGeofence,
+        geofenceLatitude: geofenceLatitude,
+        geofenceLongitude: geofenceLongitude,
+        geofenceRadiusMeters: geofenceRadiusMeters,
       );
       return null;
     } on ApiException catch (e) {

@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
+import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/network_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
@@ -42,6 +43,7 @@ class _MyAppState extends State<MyApp> {
 
     _authService.initialize();
     _networkService.initialize();
+    DoorWidgetService.instance.initialize();
 
     _quickActionsService.initialize(_handleQuickAction);
     _deepLinkService.initialize(_handleDeepLinkAction);

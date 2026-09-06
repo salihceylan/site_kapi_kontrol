@@ -36,6 +36,8 @@
 	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kapı yanında olup olmadığınızı doğrulamak ve güvenli QR kod oluşturmak için konum izni gereklidir.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
