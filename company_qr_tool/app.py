@@ -41,15 +41,22 @@ PLATFORMIO_INI_PATH = DEVICE_PROJECT_DIR / "platformio.ini"
 BUILD_DIR = DEVICE_PROJECT_DIR / ".pio" / "build"
 RELEASES_DIR = DEVICE_PROJECT_DIR / "firmware_releases"
 RELEASE_INDEX = RELEASES_DIR / "index.json"
-LOCAL_SERVER_FIRMWARE_DIR = (BASE_DIR / ".." / "server" / "firmware" / "esp32-c3").resolve()
+LOCAL_SERVER_FIRMWARE_BASE_DIR = (BASE_DIR / ".." / "server" / "firmware").resolve()
 VPS_HOST = "178.210.161.55"
 VPS_PORT = "22667"
 VPS_USER = "salihceylan"
-VPS_FIRMWARE_DIR = "/var/www/site_kapi_kontrol/server/firmware/esp32-c3"
+VPS_FIRMWARE_BASE_DIR = "/var/www/site_kapi_kontrol/server/firmware"
 VPS_LABELED_DEVICES_DIR = "/var/www/site_kapi_kontrol/server/data"
 VPS_QRCODES_DIR = "/var/www/site_kapi_kontrol/server/public/qrcodes"
 PUBLIC_API_URL = "https://api.gudeteknoloji.com.tr"
-PUBLIC_FIRMWARE_MANIFEST_URL = "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json"
+
+
+def target_for_env(env: str) -> str:
+    env_clean = str(env).lower()
+    if "wroom" in env_clean or "esp32dev" in env_clean:
+        return "esp32-wroom"
+    return "esp32-c3"
+
 PLATFORMIO_HOME = Path.home() / ".platformio"
 BUNDLED_PYTHON_DIR = PLATFORMIO_HOME / "python3"
 BUNDLED_ESPTOOL_DIR = PLATFORMIO_HOME / "packages" / "tool-esptoolpy"
@@ -1516,8 +1523,10 @@ class App:
                     "md5": file_hash(dst, "md5"),
                 }
 
+            target = target_for_env(env)
             ota_manifest = {
                 "enabled": True,
+                "target": target,
                 "version": version,
                 "filename": "firmware.bin",
                 "force": True,
@@ -1527,7 +1536,7 @@ class App:
                 "allowed_uids": [],
                 "sha256": hashes["firmware_bin"]["sha256"],
                 "md5": hashes["firmware_bin"]["md5"],
-                "notes": f"AHBU firmware v{version}.",
+                "notes": f"AHBU firmware v{version} ({target}).",
             }
             manifest_path = folder / "manifest.json"
             manifest_path.write_text(json.dumps(ota_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1536,6 +1545,7 @@ class App:
                 "id": folder.name,
                 "version": version,
                 "env": env,
+                "target": target,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "files": out_files,
                 "hashes": hashes,
@@ -1689,9 +1699,11 @@ class App:
             if not manifest.exists():
                 raise FileNotFoundError(f"Manifest dosyasi yok: {manifest}")
 
-            LOCAL_SERVER_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-            local_firm = LOCAL_SERVER_FIRMWARE_DIR / "firmware.bin"
-            local_manifest = LOCAL_SERVER_FIRMWARE_DIR / "manifest.json"
+            target = target_for_env(rel.get("env", "lolin_c3_mini"))
+            local_target_dir = LOCAL_SERVER_FIRMWARE_BASE_DIR / target
+            local_target_dir.mkdir(parents=True, exist_ok=True)
+            local_firm = local_target_dir / "firmware.bin"
+            local_manifest = local_target_dir / "manifest.json"
             shutil.copy2(firm, local_firm)
             shutil.copy2(manifest, local_manifest)
 
@@ -1711,29 +1723,39 @@ class App:
             )
 
             sftp = client.open_sftp()
-            self.root.after(0, lambda: self.set_status("firmware.bin sunucuya gonderiliyor..."))
+            vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"
+            try:
+                sftp.stat(vps_target_dir)
+            except IOError:
+                try:
+                    sftp.mkdir(vps_target_dir)
+                except Exception:
+                    pass
+
+            self.root.after(0, lambda: self.set_status(f"firmware.bin ({target}) sunucuya gonderiliyor..."))
             self.root.after(0, lambda: self.progress_var.set(50))
             self.root.after(0, lambda: self.progress_text_var.set("%50"))
-            sftp.put(str(local_firm), f"{VPS_FIRMWARE_DIR}/firmware.bin")
+            sftp.put(str(local_firm), f"{vps_target_dir}/firmware.bin")
 
-            self.root.after(0, lambda: self.set_status("manifest.json sunucuya gonderiliyor..."))
+            self.root.after(0, lambda: self.set_status(f"manifest.json ({target}) sunucuya gonderiliyor..."))
             self.root.after(0, lambda: self.progress_var.set(80))
             self.root.after(0, lambda: self.progress_text_var.set("%80"))
-            sftp.put(str(local_manifest), f"{VPS_FIRMWARE_DIR}/manifest.json")
+            sftp.put(str(local_manifest), f"{vps_target_dir}/manifest.json")
             sftp.close()
             client.close()
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
-            self.root.after(0, lambda: self.set_status(f"TMM: v{rel['version']} guncelleme dosyasi sunucuya gonderildi."))
+            self.root.after(0, lambda: self.set_status(f"TMM: v{rel['version']} ({target}) guncelleme dosyasi sunucuya gonderildi."))
             self.root.after(
                 0,
                 lambda: messagebox.showinfo(
                     "TMM",
                     f"Firmware guncelleme paketi sunucuya basariyla gonderildi!\n\n"
+                    f"Hedef Donanim: {target}\n"
                     f"Surum: v{rel['version']}\n"
                     f"Sunucu: {VPS_HOST}\n\n"
-                    "Sahadaki tum cihazlar bu surumu OTA uzerinden otomatik olarak indirecektir.",
+                    f"Sahadaki {target} cihazlari bu surumu OTA uzerinden otomatik olarak indirecektir.",
                 ),
             )
         except Exception as exc:

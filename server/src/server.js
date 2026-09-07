@@ -3491,6 +3491,7 @@ app.get('/firmware/:target/manifest.json', (req, res) => {
 
     return res.status(200).json({
       enabled,
+      target,
       update_available: Boolean(updateAvailable),
       version,
       force: manifest.force === true,

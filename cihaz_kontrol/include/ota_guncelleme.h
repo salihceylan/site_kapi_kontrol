@@ -14,9 +14,15 @@
 #include "wifi_baglanti.h"
 
 inline constexpr char OTA_CURRENT_VERSION[] = "3.0.3";
+#if defined(BOARD_ESP32_WROOM_RELAY) || defined(BOARD_ESP32_WROOM)
+inline constexpr char OTA_TARGET[] = "esp32-wroom";
+inline constexpr char OTA_MANIFEST_URL[] =
+  "https://api.gudeteknoloji.com.tr/firmware/esp32-wroom/manifest.json";
+#else
 inline constexpr char OTA_TARGET[] = "esp32-c3";
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
+#endif
 inline constexpr char OTA_PREFS_NAMESPACE[] = "ota_cfg";
 inline constexpr char OTA_PREF_LAST_STATUS[] = "last_status";
 inline constexpr char OTA_PREF_LAST_VERSION[] = "last_version";
@@ -176,6 +182,19 @@ inline void otaCheckAndUpdate() {
   }
 
   gOtaPeriodicIntervalMs = otaIntervalFromManifest(manifest);
+  const String manifestTarget = String(manifest["target"] | "");
+  if (!manifestTarget.isEmpty() && manifestTarget != OTA_TARGET) {
+    otaPersistStatus("hedef uyusmazligi: " + manifestTarget + " != " + String(OTA_TARGET));
+    Serial.print("OTA HATA: Hedef mimari uyusmuyor! Cihaz hedefi: ");
+    Serial.print(OTA_TARGET);
+    Serial.print(", Manifestten gelen: ");
+    Serial.println(manifestTarget);
+    otaPublishEvent("ota_target_mismatch", manifestTarget);
+    otaPlanNext(gOtaPeriodicIntervalMs);
+    gOtaRunning = false;
+    return;
+  }
+
   const bool updateAvailable = manifest["update_available"] | false;
   const String version = String(manifest["version"] | "");
   const String url = String(manifest["url"] | "");
