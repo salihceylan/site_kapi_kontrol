@@ -62,3 +62,4 @@ void main() {
     expect(find.text('Haftalık Geçiş Geçmişi'), findsOneWidget);
   });
 }
+
