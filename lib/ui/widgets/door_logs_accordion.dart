@@ -30,6 +30,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
   String? _errorMessage;
   DoorAccessLogPage? _logPage;
   int _currentPage = 1;
+  int _requestToken = 0;
   static const int _pageSize = 10;
 
   @override
@@ -39,19 +40,19 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     final siteChanged = oldWidget.selectedSite?.id != widget.selectedSite?.id;
 
     if (doorChanged || siteChanged) {
+      setState(() {
+        _logPage = null;
+        _currentPage = 1;
+        _errorMessage = null;
+      });
       if (_isExpanded) {
         _loadLogs(page: 1);
-      } else {
-        setState(() {
-          _logPage = null;
-          _currentPage = 1;
-          _errorMessage = null;
-        });
       }
     }
   }
 
   Future<void> _loadLogs({int? page}) async {
+    final currentToken = ++_requestToken;
     final targetPage = page ?? _currentPage;
     final service = widget.authService;
     if (service == null) {
@@ -80,7 +81,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         pageSize: _pageSize,
       );
 
-      if (!mounted) return;
+      if (!mounted || currentToken != _requestToken) return;
 
       if (result != null) {
         setState(() {
@@ -96,7 +97,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || currentToken != _requestToken) return;
       setState(() {
         _errorMessage = 'Bağlantı hatası: $e';
         _isLoading = false;
@@ -369,9 +370,17 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     final (triggerIcon, triggerColor) = _getTriggerInfo(log.triggerType);
 
     final roleLabel = log.userRoleDisplay;
-    final aptLabel = (log.apartmentLabel != null && log.apartmentLabel!.trim().isNotEmpty)
-        ? ' • D:${log.apartmentLabel!.trim()}'
-        : '';
+    final aptText = log.apartmentLabel?.trim();
+    final String aptLabel;
+    if (aptText == null || aptText.isEmpty) {
+      aptLabel = '';
+    } else if (aptText.toLowerCase().startsWith('d:') ||
+        aptText.toLowerCase().startsWith('daire') ||
+        aptText.toLowerCase().contains('blok')) {
+      aptLabel = ' • $aptText';
+    } else {
+      aptLabel = ' • D:$aptText';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
