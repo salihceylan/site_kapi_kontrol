@@ -1,0 +1,98 @@
+name: iOS Simulator Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-simulator:
+    name: Build and run on iPhone Simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Select and boot an iPhone Simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); devices=[x for runtime in d["devices"].values() for x in runtime if x.get("isAvailable") and x.get("name", "").startswith("iPhone")]; print(devices[0]["udid"] if devices else "")')
+          if [ -z "$DEVICE_ID" ]; then
+            echo "No available iPhone Simulator found."
+            exit 1
+          fi
+          DEVICE_NAME=$(xcrun simctl list devices available -j | DEVICE_ID="$DEVICE_ID" python3 -c 'import json,sys,os; d=json.load(sys.stdin); uid=os.environ["DEVICE_ID"]; print(next(x["name"] for runtime in d["devices"].values() for x in runtime if x.get("udid")==uid))')
+          echo "device_id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
+          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+          echo "Using simulator: $DEVICE_NAME ($DEVICE_ID)"
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+
+      - name: Build Flutter app for iOS Simulator
+        run: flutter build ios --simulator --debug --no-codesign
+
+      - name: Install and launch app
+        id: launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphonesimulator/Runner.app"
+          DEVICE_ID="${{ steps.simulator.outputs.device_id }}"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Runner.app not found at $APP_PATH"
+            exit 1
+          fi
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")
+          echo "bundle_id=$BUNDLE_ID" >> "$GITHUB_OUTPUT"
+          echo "Installing $BUNDLE_ID on ${{ steps.simulator.outputs.device_name }}"
+          xcrun simctl install "$DEVICE_ID" "$APP_PATH"
+          xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID"
+          sleep 10
+
+      - name: Capture Simulator screenshot
+        if: always()
+        shell: bash
+        run: |
+          DEVICE_ID="${{ steps.simulator.outputs.device_id }}"
+          if [ -n "$DEVICE_ID" ]; then
+            xcrun simctl io "$DEVICE_ID" screenshot ios-simulator.png || true
+          fi
+
+      - name: Collect app logs
+        if: always()
+        shell: bash
+        run: |
+          DEVICE_ID="${{ steps.simulator.outputs.device_id }}"
+          BUNDLE_ID="${{ steps.launch.outputs.bundle_id }}"
+          if [ -n "$DEVICE_ID" ] && [ -n "$BUNDLE_ID" ]; then
+            xcrun simctl spawn "$DEVICE_ID" log show --last 2m --style compact --predicate "process == 'Runner'" > ios-runner.log 2>&1 || true
+          fi
+
+      - name: Upload Simulator result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-result
+          path: |
+            ios-simulator.png
+            ios-runner.log
+            build/ios/iphonesimulator/Runner.app
+          if-no-files-found: warn
+          retention-days: 7
