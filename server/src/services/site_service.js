@@ -590,6 +590,15 @@ export async function listSiteDoors(siteCode, db = pool) {
         d.is_active,
         d.assigned_device_id,
         devices.device_uid AS assigned_device_uid,
+        devices.hardware_target AS assigned_device_hardware_target,
+        devices.hardware_type AS assigned_device_hardware_type,
+        devices.firmware_version AS assigned_device_firmware_version,
+        devices.is_online AS assigned_device_is_online,
+        devices.local_ip AS assigned_device_local_ip,
+        devices.public_ip AS assigned_device_public_ip,
+        devices.wifi_rssi AS assigned_device_wifi_rssi,
+        devices.wifi_signal_percent AS assigned_device_wifi_signal_percent,
+        devices.last_seen_at AS assigned_device_last_seen_at,
         sites.mqtt_site_id,
         d.created_at
       FROM site_doors d

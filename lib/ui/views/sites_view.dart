@@ -91,9 +91,9 @@ class SitesView extends StatelessWidget {
                   children: [
                     Text(
                       apartmentMode ? 'Site Daireleri' : 'Siteler',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                        color: AppColors.text(context),
                       ),
                     ),
                     if (canManageSites) ...[
@@ -114,9 +114,9 @@ class SitesView extends StatelessWidget {
                     Expanded(
                       child: Text(
                         apartmentMode ? 'Site Daireleri' : 'Siteler',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
+                          color: AppColors.text(context),
                         ),
                       ),
                     ),
@@ -146,9 +146,9 @@ class SitesView extends StatelessWidget {
                       pageData == null
                           ? 'Site Listesi'
                           : 'Site Listesi (${pageData!.total})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                        color: AppColors.text(context),
                       ),
                     ),
                   ),
@@ -236,9 +236,9 @@ class SitesView extends StatelessWidget {
               children: [
                 Text(
                   structure.site.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
+                    color: AppColors.text(context),
                     fontSize: 20,
                   ),
                 ),
@@ -301,11 +301,11 @@ class SitesView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Daireler',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
+                    color: AppColors.text(context),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -336,11 +336,11 @@ class SitesView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Kapılar',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
+                    color: AppColors.text(context),
                   ),
                 ),
                 const SizedBox(height: 10),

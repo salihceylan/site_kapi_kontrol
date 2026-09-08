@@ -175,7 +175,7 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                   child: Text(
                     door.assignedDeviceUid == null
                         ? '${door.doorName} (Cihaz yok)'
-                        : '${door.doorName} (${door.assignedDeviceUid})',
+                        : '${door.doorName} • ${door.hardwareBadgeText} (${door.assignedDeviceUid})',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                     style: TextStyle(
@@ -476,6 +476,10 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             child: Column(
               children: [
                 _buildDetailRow(context, 'Cihaz UID', widget.selectedDoor!.assignedDeviceUid ?? '-'),
+                if (widget.selectedDoor!.hasDevice) ...[
+                  _buildDetailRow(context, 'Donanım Modeli', widget.selectedDoor!.hardwareModelTitle),
+                  _buildDetailRow(context, 'Donanım Hedefi', widget.selectedDoor!.hardwareBadgeText),
+                ],
                 _buildDetailRow(context, 'Sunucu MQTT', connectionText),
                 _buildDetailRow(context, 'Kapı Durumu', stateText),
                 _buildDetailRow(

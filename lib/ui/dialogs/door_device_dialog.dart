@@ -99,6 +99,19 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
                     ),
                   ),
                 ),
+                if (widget.door.hasDevice) ...[
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Donanım Modeli: ${widget.door.hardwareModelTitle} (${widget.door.hardwareBadgeText})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMutedColor(context),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -241,7 +254,9 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
                       DropdownMenuItem<int>(
                         value: door.id,
                         child: Text(
-                          '${door.doorName} - ${door.assignedDeviceUid ?? 'Boş'}',
+                          door.assignedDeviceUid == null
+                              ? '${door.doorName} - Boş'
+                              : '${door.doorName} • ${door.hardwareBadgeText} (${door.assignedDeviceUid})',
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),

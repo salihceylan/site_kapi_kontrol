@@ -318,6 +318,26 @@ export function mapDoorRow(row) {
         ? null
         : Number(row.assigned_device_id),
     assigned_device_uid: row.assigned_device_uid ?? null,
+    assigned_device_hardware_target: row.assigned_device_hardware_target ?? row.hardware_target ?? null,
+    assigned_device_hardware_type: row.assigned_device_hardware_type ?? row.hardware_type ?? null,
+    assigned_device_firmware_version: row.assigned_device_firmware_version ?? row.firmware_version ?? null,
+    assigned_device_is_online:
+      row.assigned_device_is_online !== undefined && row.assigned_device_is_online !== null
+        ? Boolean(row.assigned_device_is_online)
+        : (row.assigned_device_mqtt_connected !== undefined && row.assigned_device_mqtt_connected !== null
+            ? Boolean(row.assigned_device_mqtt_connected)
+            : null),
+    assigned_device_local_ip: row.assigned_device_local_ip ?? row.local_ip ?? null,
+    assigned_device_public_ip: row.assigned_device_public_ip ?? row.public_ip ?? null,
+    assigned_device_wifi_rssi:
+      row.assigned_device_wifi_rssi !== undefined && row.assigned_device_wifi_rssi !== null
+        ? Number(row.assigned_device_wifi_rssi)
+        : null,
+    assigned_device_wifi_signal_percent:
+      row.assigned_device_wifi_signal_percent !== undefined && row.assigned_device_wifi_signal_percent !== null
+        ? Number(row.assigned_device_wifi_signal_percent)
+        : null,
+    assigned_device_last_seen_at: row.assigned_device_last_seen_at ?? row.last_seen_at ?? null,
     mqtt_site_id:
       row.mqtt_site_id === null || row.mqtt_site_id === undefined
         ? null
