@@ -13,13 +13,18 @@
 #include "tls_kok_sertifika.h"
 #include "wifi_baglanti.h"
 
-inline constexpr char OTA_CURRENT_VERSION[] = "3.0.3";
+// Hedef donanimlara ozel surumler (C3 sahadaki cihazlar ile WROOM ayri takip edilir)
+inline constexpr char OTA_VERSION_C3[] = "3.0.3";
+inline constexpr char OTA_VERSION_WROOM[] = "1.0.0";
+
 #if defined(BOARD_ESP32_WROOM_RELAY) || defined(BOARD_ESP32_WROOM)
 inline constexpr char OTA_TARGET[] = "esp32-wroom";
+inline constexpr char OTA_CURRENT_VERSION[] = OTA_VERSION_WROOM;
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-wroom/manifest.json";
 #else
 inline constexpr char OTA_TARGET[] = "esp32-c3";
+inline constexpr char OTA_CURRENT_VERSION[] = OTA_VERSION_C3;
 inline constexpr char OTA_MANIFEST_URL[] =
   "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json";
 #endif

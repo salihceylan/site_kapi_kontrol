@@ -73,7 +73,9 @@ ENV_RE = re.compile(r"^\s*\[env:([^\]]+)\]")
 UPL_RE = re.compile(r"^\s*upload_speed\s*=\s*(\d+)")
 PROG_RE = re.compile(r"\((\d{1,3})\s*%\)")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
-OTA_VERSION_RE = re.compile(r'OTA_CURRENT_VERSION\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
+OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
+OTA_VERSION_WROOM_RE = re.compile(r'OTA_VERSION_WROOM\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
+OTA_VERSION_RE = re.compile(r'OTA_(?:CURRENT_)?VERSION(?:_[A-Z0-9]+)?\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
 PREVIEW_SIZE = 180
 QR_SIZE = 1200
 QR_LABEL_HEIGHT = 150
@@ -606,20 +608,43 @@ def save_releases(releases: list[dict]) -> None:
     RELEASE_INDEX.write_text(json.dumps({"releases": releases}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def read_firmware_source_version() -> str | None:
+def read_firmware_source_version(env: str | None = None) -> str | None:
     header = DEVICE_PROJECT_DIR / "include" / "ota_guncelleme.h"
     try:
         text = header.read_text(encoding="utf-8")
     except Exception:
         return None
-    match = OTA_VERSION_RE.search(text)
-    return match.group(1) if match else None
+    target = target_for_env(env) if env else None
+    if target == "esp32-wroom":
+        match = OTA_VERSION_WROOM_RE.search(text)
+        if match:
+            return match.group(1)
+    elif target == "esp32-c3":
+        match = OTA_VERSION_C3_RE.search(text)
+        if match:
+            return match.group(1)
+    for rgx in (OTA_VERSION_C3_RE, OTA_VERSION_WROOM_RE, OTA_VERSION_RE):
+        match = rgx.search(text)
+        if match:
+            return match.group(1)
+    return None
 
 
-def write_firmware_source_version(version: str) -> bool:
+def write_firmware_source_version(version: str, env: str | None = None) -> bool:
     header = DEVICE_PROJECT_DIR / "include" / "ota_guncelleme.h"
     try:
         text = header.read_text(encoding="utf-8")
+        target = target_for_env(env) if env else None
+        if target == "esp32-wroom":
+            if OTA_VERSION_WROOM_RE.search(text):
+                updated = OTA_VERSION_WROOM_RE.sub(f'OTA_VERSION_WROOM[] = "{version}"', text)
+                header.write_text(updated, encoding="utf-8")
+                return True
+        else:
+            if OTA_VERSION_C3_RE.search(text):
+                updated = OTA_VERSION_C3_RE.sub(f'OTA_VERSION_C3[] = "{version}"', text)
+                header.write_text(updated, encoding="utf-8")
+                return True
         if OTA_VERSION_RE.search(text):
             updated = OTA_VERSION_RE.sub(f'OTA_CURRENT_VERSION[] = "{version}"', text)
             header.write_text(updated, encoding="utf-8")
@@ -651,9 +676,14 @@ def zip_directory(zf: zipfile.ZipFile, source: Path, arc_root: str) -> None:
         zf.write(item, arc_name.as_posix())
 
 
-def suggest_version(releases: list[dict]) -> str:
+def suggest_version(releases: list[dict], env: str | None = None) -> str:
+    target = target_for_env(env) if env else None
     versions: list[tuple[int, int, int]] = []
     for r in releases:
+        if target:
+            r_env = str(r.get("env", ""))
+            if target_for_env(r_env) != target:
+                continue
         v = str(r.get("version", "")).strip()
         if SEMVER_RE.match(v):
             a, b, c = v.split(".")
@@ -662,6 +692,7 @@ def suggest_version(releases: list[dict]) -> str:
         return "1.0.0"
     a, b, c = sorted(versions)[-1]
     return f"{a}.{b}.{c + 1}"
+
 
 
 def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
@@ -711,7 +742,10 @@ class App:
         self.status_var = tk.StringVar(value="Hazir.")
         self.uid_var = tk.StringVar(value="Unique ID: -")
         self.env_var = tk.StringVar(value=self.envs[0] if self.envs else "lolin_c3_mini")
-        self.version_var = tk.StringVar(value=read_firmware_source_version() or suggest_version(self.releases))
+        self.version_var = tk.StringVar(
+            value=read_firmware_source_version(self.env_var.get())
+            or suggest_version(self.releases, self.env_var.get())
+        )
         self.latest_release_var = tk.StringVar(value="Son surum: -")
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_text_var = tk.StringVar(value="%0")
@@ -1362,7 +1396,10 @@ class App:
         return (self.env_var.get().strip(), self.version_var.get().strip())
 
     def _on_env_changed(self) -> None:
+        env = self.env_var.get().strip()
         self.refresh_latest_release()
+        suggested = read_firmware_source_version(env) or suggest_version(self.releases, env)
+        self.version_var.set(suggested)
         self._on_fw_input_changed()
 
     def _on_fw_input_changed(self) -> None:
@@ -1443,7 +1480,7 @@ class App:
             messagebox.showerror("Surum", "Surum formati 1.2.3 olmali.")
             return
         # Otomatik versiyon senkronizasyonu: ota_guncelleme.h dosyasini guncelle
-        write_firmware_source_version(version)
+        write_firmware_source_version(version, env)
         self.fw_build_ready = False
         self.fw_release_ready = False
         self.fw_build_key = None
@@ -1494,7 +1531,7 @@ class App:
             messagebox.showerror("Surum", "Surum formati 1.2.3 olmali.")
             return
         # Otomatik versiyon senkronizasyonu
-        write_firmware_source_version(version)
+        write_firmware_source_version(version, env)
         self.fw_busy = True
         self.fw_release_ready = False
         self.fw_release_key = None
@@ -1573,7 +1610,7 @@ class App:
             self.fw_release_ready = True
 
             self.root.after(0, self.refresh_latest_release)
-            self.root.after(0, lambda: self.version_var.set(read_firmware_source_version() or suggest_version(self.releases)))
+            self.root.after(0, lambda: self.version_var.set(read_firmware_source_version(env) or suggest_version(self.releases, env)))
             self.root.after(0, lambda: self.set_status(f"Surum olusturuldu: v{version}"))
             self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Surum olusturuldu: v{version}\n{folder}"))
         except Exception as exc:
