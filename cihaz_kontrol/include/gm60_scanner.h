@@ -1,10 +1,12 @@
-﻿#ifndef GM60_SCANNER_H
+#ifndef GM60_SCANNER_H
 #define GM60_SCANNER_H
 
 #include <Arduino.h>
 #include "device_konfig.h"
 #include "role_kontrol.h"
 #include "qr_dogrulama.h"
+#include "display_uart.h"
+#include "display_protocol.h"
 
 #if defined(BOARD_ESP32_WROOM_RELAY)
 static HardwareSerial GM60Serial(2);
@@ -61,10 +63,13 @@ inline void gm60Loop() {
           Serial.print("GM60 QR Onaylandi: ");
           Serial.println(reason);
           gm60SonOkumaMs = millis();
+          displayUartSend(String(CMD_QR_OK_PREFIX) + qrData);
+          displayUartSend(CMD_DOOR_OPENED);
           roleTetikle();
         } else {
           Serial.print("GM60 QR Reddedildi: ");
           Serial.println(reason);
+          displayUartSend(CMD_QR_DENIED);
         }
       }
     } else {

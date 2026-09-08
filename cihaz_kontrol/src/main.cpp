@@ -10,6 +10,7 @@
 #include "yerel_kapi_kontrol.h"
 #include "gm60_scanner.h"
 #include "display_uart.h"
+#include "display_protocol.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
@@ -54,6 +55,25 @@ void seriKomutKontrol() {
     } else if (komut == 'p' || komut == 'P') {
       Serial.println("Seri komut: pin bulma testi");
       pinBulmaTesti();
+    }
+  }
+}
+
+static bool sonWifiDurum = false;
+static bool sonMqttDurum = false;
+
+void displayDurumSenkronizasyonLoop() {
+  const bool aktifWifi = wifiHazirMi();
+  if (aktifWifi != sonWifiDurum) {
+    sonWifiDurum = aktifWifi;
+    displayUartSend(aktifWifi ? CMD_WIFI_CONNECTED : CMD_WIFI_DISCONNECTED);
+  }
+
+  const bool aktifMqtt = client.connected();
+  if (aktifMqtt != sonMqttDurum) {
+    sonMqttDurum = aktifMqtt;
+    if (aktifMqtt) {
+      displayUartSend(CMD_MQTT_CONNECTED);
     }
   }
 }
@@ -133,12 +153,14 @@ void loop() {
   seriKomutKontrol();
   gm60Loop();
   displayUartLoop();
+  displayDurumSenkronizasyonLoop();
   wifiLoop();
   yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
+    displayUartSend(CMD_DOOR_CLOSED);
   }
 
   if (millis() - sonDurumYazdirmaMs >= STATUS_PRINT_INTERVAL_MS) {

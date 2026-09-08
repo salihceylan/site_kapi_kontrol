@@ -14,8 +14,9 @@ constexpr bool WIFI_RESET_BUTTON_ACTIVE_LOW = true;
 constexpr unsigned long WIFI_RESET_HOLD_MS = 3000;
 constexpr uint16_t YEREL_KAPI_KONTROL_PORT = 8765;
 
-// GM60 Barcode & QR Scanner UART2 Pins (Pin 18 RX, Pin 17 TX)
-constexpr int GM60_RX_PIN = 18;
+// GM60 Barcode & QR Scanner UART2 Pins
+// GM60 TX -> ESP32 GPIO16 (RX), GM60 RX <- ESP32 GPIO17 (TX)
+constexpr int GM60_RX_PIN = 16;
 constexpr int GM60_TX_PIN = 17;
 constexpr uint32_t GM60_BAUD_RATE = 9600;
 #else

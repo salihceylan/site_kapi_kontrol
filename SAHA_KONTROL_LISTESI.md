@@ -134,45 +134,39 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 
 ---
 
-## 8. Display UART Sürücüsü (ESP32-WROOM ↔ ESP32-C3 Ekran Kartı)
+## 8. GM60 ve Display UART Entegrasyonu (ESP32-WROOM)
 
-- [ ] **8.1. Display UART Başlatma:**
-  - **Nasıl Test Edilir:** ESP32-WROOM'u seri porta bağlayın ve seri monitörü açın (`115200 baud`).
-  - **Beklenen Sonuç:** Boot sırasında `[Display UART] initialized (RX=32, TX=33)` mesajı görünmeli.
-
-- [ ] **8.2. DOOR_OPEN Komutu ile Röle Tetikleme:**
-  - **Nasıl Test Edilir:** Ekran kartından (ESP32-C3) UART üzerinden `DOOR_OPEN\n` mesajı gönderin.
-  - **Beklenen Sonuç:** WROOM seri monitörde `[Display UART] Door open command received` görünmeli ve röle tetiklenmeli (kapı açılmalı).
-
-- [ ] **8.3. QR Kodu Alma:**
-  - **Nasıl Test Edilir:** Ekran kartından `QR:TESTDATA\n` gönderin.
-  - **Beklenen Sonuç:** `[Display UART] QR received: TESTDATA` çıktısı görünmeli.
-
-- [ ] **8.4. READY Komutu:**
-  - **Nasıl Test Edilir:** Ekran kartı başlangıçta `READY\n` gönderdiğinde.
-  - **Beklenen Sonuç:** `[Display UART] Display reports READY` çıktısı görünmeli.
+- [ ] **8.1. GM60 Pin 16/17 UART2 Okuma:**
+  - **Nasıl Test Edilir:** GM60 TX -> WROOM GPIO16 (RX), GM60 RX -> WROOM GPIO17 (TX) bağlayın. Barkod/QR okutun.
+  - **Beklenen Sonuç:** Seri monitörde `GM60 QR Okundu: <data>` görünmeli, geçerli QR ise röle tetiklenmeli ve ekrana `QR_OK|<data>` ile `DOOR_OPENED` gönderilmeli.
+- [ ] **8.2. Display UART Başlatma:**
+  - **Nasıl Test Edilir:** ESP32-WROOM'u açın, seri monitörü (`115200 baud`) izleyin.
+  - **Beklenen Sonuç:** Boot sırasında `[DISPLAY] UART1 initialized (RX=32, TX=33)` ve `[DISPLAY] TX: READY` görünmeli.
+- [ ] **8.3. Ekrandan Buton Komutu ile Röle Tetikleme (BTN_OPEN):**
+  - **Nasıl Test Edilir:** Ekran kartından UART üzerinden `BTN_OPEN\n` gönderin (veya ekrandaki "KAPIYI AÇ" butonuna basın).
+  - **Beklenen Sonuç:** WROOM seri monitörde `[DISPLAY] Kapi acma butonu alindi -> Role tetikleniyor` görünmeli ve röle çekmeli; röle süresi bitince ekrana `DOOR_CLOSED` bildirilmeli.
+- [ ] **8.4. Wi-Fi ve MQTT Durum Senkronizasyonu:**
+  - **Nasıl Test Edilir:** WROOM Wi-Fi'a bağlandığında veya koptuğunda.
+  - **Beklenen Sonuç:** WROOM tarafından ekrana otomatik `WIFI_CONNECTED` / `WIFI_DISCONNECTED` ve `MQTT_CONNECTED` satırları aktarılmalı.
 
 ---
 
 ## 9. Ekran Yazılımı (ESP32-C3 + ST7789 TFT)
 
-- [ ] **9.1. TFT Başlatma:**
-  - **Nasıl Test Edilir:** `ekran_yazilimi` firmware'ini ESP32-C3 + ST7789 kartına yükleyin.
-  - **Beklenen Sonuç:** Ekranda "ESP32 WROOM Screen Firmware" metni ve kırmızı OFFLINE göstergesi görünmeli.
+- [ ] **9.1. Modern Ana Ekran (Home UI):**
+  - **Nasıl Test Edilir:** `ekran_yazilimi` yüklü ESP32-C3 kartını açın.
+  - **Beklenen Sonuç:** Üst barda Wi-Fi ve Bulut durum göstergesi (nokta ve metin), ortada büyük QR kod alanı ("Giris Icin QR Okutunuz"), altta yeşil "KAPIYI AC" butonu ve gri "AYARLAR" butonu çizilmeli.
+- [ ] **9.2. "KAPI AÇILDI" Ekran Durumu:**
+  - **Nasıl Test Edilir:** WROOM'dan `DOOR_OPENED\n` komutu gönderin veya ekrandaki butona basın.
+  - **Beklenen Sonuç:** Ekranda büyük yeşil zemin üzerinde "KAPI ACILDI - Lutfen geciniz..." gösterilmeli; 4 saniye sonra veya `DOOR_CLOSED` gelince otomatik ana ekrana dönmeli.
+- [ ] **9.3. "GİRİŞ ONAYLANDI" ve "GEÇERSİZ QR" Ekranları:**
+  - **Nasıl Test Edilir:** WROOM'dan sırasıyla `QR_OK|123456\n` ve `QR_DENIED\n` komutları gönderin.
+  - **Beklenen Sonuç:** Geçerli QR için yeşil "GIRIS ONAYLANDI", geçersiz için kırmızı "GECERSIZ QR - Yetkisiz veya suresi dolmus!" ekranı gelmeli ve 3 saniye sonra ana ekrana dönmeli.
+- [ ] **9.4. Ayarlar Ekranı ve Geri Dönüş:**
+  - **Nasıl Test Edilir:** Ekrandaki "AYARLAR" butonuna basın veya `SHOW_SETTINGS\n` gönderin.
+  - **Beklenen Sonuç:** Cihaz bilgisi (ESP32-C3, ST7789, WiFi/MQTT durumu) görüntülenmeli, "GERI" butonuna basıldığında ana ekrana dönmeli ve WROOM'a `BTN_BACK` iletilmeli.
+- [ ] **9.5. Non-Blocking Çalışma Doğrulaması:**
+  - **Nasıl Test Edilir:** UART iletişimi sürerken butonlara basın ve seri monitörü izleyin.
+  - **Beklenen Sonuç:** Hiçbir `delay()` blokajı olmadan, millis() state machine ile akıcı çalışmalı.
 
-- [ ] **9.2. JSON Payload ile QR Kod Gösterimi:**
-  - **Nasıl Test Edilir:** WROOM'dan `{"qr":"TESTQR123"}` JSON'ını UART üzerinden gönderin.
-  - **Beklenen Sonuç:** Ekranda QR kodu çizilmeli.
-
-- [ ] **9.3. Kapı Durumu Gösterimi:**
-  - **Nasıl Test Edilir:** `{"door":"open"}` gönderin.
-  - **Beklenen Sonuç:** Ekran altında "Door: OPEN" yazısı görünmeli.
-
-- [ ] **9.4. Online/Offline Göstergesi:**
-  - **Nasıl Test Edilir:** `{"online":true}` gönderin.
-  - **Beklenen Sonuç:** Sağ üst köşedeki daire yeşile dönmeli ve "ONLINE" yazmalı.
-
-- [ ] **9.5. Ayarlar Butonu:**
-  - **Nasıl Test Edilir:** GPIO 0 butonuna basın.
-  - **Beklened Sonuç:** Ekranda ayarlar menüsü açılmalı.
 
