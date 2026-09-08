@@ -2,6 +2,9 @@ import express from 'express';
 import { pool } from '../db.js';
 import { authRequired, requireSuperUser, requireSiteManager } from '../middlewares/auth_middleware.js';
 import { mapDoorAccessLogRow } from '../utils/helpers.js';
+import { findDeviceByUid } from '../services/device_service.js';
+import { listSiteDoors } from '../services/site_service.js';
+import { recordDoorAccessLog } from '../services/door_service.js';
 
 export const doorLogRouter = express.Router();
 
@@ -188,6 +191,56 @@ doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async 
   } catch (error) {
     console.error('Error fetching manager door logs:', error);
     return res.status(500).json({ error: 'Kapi loglari alinamadi.' });
+  }
+});
+
+// POST /device/sync-logs
+doorLogRouter.post('/device/sync-logs', async (req, res) => {
+  const deviceUid = String(req.body.device_uid || req.headers['x-ahbu-device-uid'] || '').trim().toUpperCase();
+  const logs = Array.isArray(req.body.logs) ? req.body.logs : [];
+
+  if (!deviceUid) {
+    return res.status(400).json({ error: 'device_uid zorunlu.' });
+  }
+
+  try {
+    const device = await findDeviceByUid(deviceUid);
+    if (!device || !device.site_code) {
+      return res.status(404).json({ error: 'Cihaz veya bagli oldugu site bulunamadi.' });
+    }
+
+    const doors = await listSiteDoors(Number(device.site_code));
+    const assignedDoor = doors.find((d) => Number(d.assigned_device_id) === Number(device.id)) || doors[0];
+    const doorName = assignedDoor ? assignedDoor.door_name : (device.gate_name || 'Site Kapısı');
+    const doorId = assignedDoor ? Number(assignedDoor.id) : null;
+
+    let insertedCount = 0;
+    for (const item of logs) {
+      const triggerType = String(item.trigger_type || 'offline_sync').trim();
+      const userName = String(item.user_name || item.user_label || 'Yerel Yetkili Kullanıcı').trim();
+      const userRole = String(item.user_role || 'apartment_owner').trim();
+      const apartmentLabel = item.apartment_label ? String(item.apartment_label).trim() : null;
+      const openedAt = item.opened_at ? new Date(item.opened_at) : new Date();
+
+      await recordDoorAccessLog({
+        siteCode: Number(device.site_code),
+        doorId,
+        doorName,
+        userCode: null,
+        userName,
+        userRole,
+        apartmentLabel,
+        triggerType,
+        openedAt,
+        ipAddress: req.ip,
+      });
+      insertedCount++;
+    }
+
+    return res.status(200).json({ ok: true, synced_count: insertedCount });
+  } catch (error) {
+    console.error('Error syncing device offline logs:', error);
+    return res.status(500).json({ error: 'Log senkronizasyonu basarisiz.' });
   }
 });
 
