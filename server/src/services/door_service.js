@@ -1,4 +1,4 @@
-﻿import { pool } from '../db.js';
+import { pool } from '../db.js';
 import { publishLocalControlConfig } from '../mqtt_bridge.js';
 import { ensureDeviceLocalControlToken } from './device_service.js';
 import { getManagedSiteCodes, isDeviceAssignableToManagedSite } from './site_service.js';
@@ -235,6 +235,7 @@ export async function listAccessibleDoorsForUser(authUser) {
           s.geofence_longitude,
           s.geofence_radius_meters,
           s.qr_totp_secret,
+          s.qr_rotation_seconds,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
@@ -270,6 +271,7 @@ export async function listAccessibleDoorsForUser(authUser) {
           s.geofence_longitude,
           s.geofence_radius_meters,
           s.qr_totp_secret,
+          s.qr_rotation_seconds,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
@@ -308,6 +310,7 @@ export async function listAccessibleDoorsForUser(authUser) {
         s.geofence_longitude,
         s.geofence_radius_meters,
         s.qr_totp_secret,
+        s.qr_rotation_seconds,
         d.created_at
       FROM apartments a
       INNER JOIN sites s ON s.site_code = a.site_code

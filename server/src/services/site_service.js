@@ -1,4 +1,4 @@
-﻿import { pool } from '../db.js';
+import { pool } from '../db.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import { rotateLocalControlTokensForSite } from './device_service.js';
 import { createUser } from './user_service.js';
@@ -96,6 +96,7 @@ export async function updateSiteByCode({
   geofenceLongitude,
   geofenceRadiusMeters,
   qrTotpSecret,
+  qrRotationSeconds,
 }) {
   const sets = [];
   const values = [];
@@ -178,6 +179,10 @@ export async function updateSiteByCode({
     values.push(qrTotpSecret);
     sets.push(`qr_totp_secret = $${values.length}`);
   }
+  if (qrRotationSeconds !== undefined) {
+    values.push(qrRotationSeconds);
+    sets.push(`qr_rotation_seconds = $${values.length}`);
+  }
 
   if (sets.length === 0) {
     return null;
@@ -211,6 +216,7 @@ export async function updateSiteByCode({
         geofence_longitude,
         geofence_radius_meters,
         qr_totp_secret,
+        qr_rotation_seconds,
         created_at
     `,
     values,

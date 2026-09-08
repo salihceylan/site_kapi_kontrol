@@ -19,6 +19,7 @@ class DoorRecord {
     this.geofenceLongitude,
     this.geofenceRadiusMeters = 75,
     this.qrTotpSecret,
+    this.qrRotationSeconds = 30,
     required this.createdAt,
   });
 
@@ -41,6 +42,7 @@ class DoorRecord {
   final double? geofenceLongitude;
   final int geofenceRadiusMeters;
   final String? qrTotpSecret;
+  final int qrRotationSeconds;
   final DateTime? createdAt;
 
   bool get canOpenRemote => featureRemoteOpenEnabled;
@@ -69,6 +71,7 @@ class DoorRecord {
       geofenceLongitude: (json['geofence_longitude'] as num?)?.toDouble(),
       geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 75,
       qrTotpSecret: json['qr_totp_secret'] as String?,
+      qrRotationSeconds: (json['qr_rotation_seconds'] as num?)?.toInt() ?? 30,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'] as String),

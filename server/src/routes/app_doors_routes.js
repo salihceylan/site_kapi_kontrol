@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import { pool } from '../db.js';
 import { authRequired } from '../middlewares/auth_middleware.js';
 import { doorCommandRateLimiter } from '../middlewares/rate_limiters.js';
@@ -79,6 +79,12 @@ appDoorsRouter.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter,
     }
     if (!door.assigned_device_uid) {
       return res.status(409).json({ error: 'Bu kapiya cihaz atanmamis.' });
+    }
+
+    if (door.feature_remote_open_enabled === false && req.authUser.role !== 'super_user') {
+      return res.status(403).json({
+        error: 'Bu sitede uygulama uzerinden uzaktan kapi acma yetkisi kapalidir. Lutfen kapi onundeki QR okuyucuyu kullanin.',
+      });
     }
 
     await publishDoorPulse({

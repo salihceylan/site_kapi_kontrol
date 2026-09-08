@@ -48,7 +48,12 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     final isCloudOnline = runtimeStatus?.mqttConnected == true;
     final isLocalOnline = !isCloudOnline && canTryLocalDoorOpen;
 
+    final canRemote = selectedDoor?.canOpenRemote ?? true;
+    final canQr = selectedDoor?.canOpenQr ?? false;
+    final isQrOnly = selectedDoor != null && !canRemote && canQr;
+
     final commandEnabled = isDeviceAssigned &&
+        canRemote &&
         (isCloudOnline || isLocalOnline) &&
         !isOpeningDoor &&
         !isLoadingStatus;
@@ -64,6 +69,12 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     } else if (isLoadingStatus) {
       statusText = 'Cihaz durumu kontrol ediliyor...';
       statusColor = isDark ? AppColors.textMutedLight : AppColors.textMuted;
+    } else if (isQrOnly) {
+      statusText = '📷 Bu sitede yalnızca QR Kod ile giriş aktiftir.';
+      statusColor = isDark ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
+    } else if (!canRemote) {
+      statusText = '🚫 Bu kapıda uzaktan açma yetkisi kapalıdır.';
+      statusColor = AppColors.roseLight;
     } else if (isCloudOnline) {
       statusText = '🟢 Çevrimiçi - Kapıyı açmak için dokunun';
       statusColor = isDark ? AppColors.emeraldLight : const Color(0xFF059669);
@@ -215,73 +226,95 @@ class ResidentDoorRemoteCard extends StatelessWidget {
 
               // DEV DAİRESEL DOKUNSAL KAPI AÇ BUTONU (180x180 px)
               GestureDetector(
-                onTap: commandEnabled ? onOpenDoor : null,
+                onTap: isQrOnly ? () => _handleQrPass(context) : (commandEnabled ? onOpenDoor : null),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   width: 180,
                   height: 180,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: commandEnabled
-                        ? (isLocalOnline
-                            ? const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                              )
-                            : const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                              ))
-                        : (isDark
-                            ? const LinearGradient(
-                                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                              )
-                            : const LinearGradient(
-                                colors: [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
-                              )),
-                    boxShadow: commandEnabled
-                        ? (isLocalOnline
-                            ? const [
-                                BoxShadow(
-                                  color: Color(0x70F59E0B),
-                                  blurRadius: 36,
-                                  spreadRadius: 4,
-                                  offset: Offset(0, 8),
-                                ),
-                                BoxShadow(
-                                  color: Color(0x30FFFFFF),
-                                  blurRadius: 8,
-                                  offset: Offset(0, -3),
-                                ),
-                              ]
-                            : const [
-                                BoxShadow(
-                                  color: Color(0x703B82F6),
-                                  blurRadius: 36,
-                                  spreadRadius: 4,
-                                  offset: Offset(0, 8),
-                                ),
-                                BoxShadow(
-                                  color: Color(0x30FFFFFF),
-                                  blurRadius: 8,
-                                  offset: Offset(0, -3),
-                                ),
-                              ])
-                        : [
+                    gradient: isQrOnly
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF10B981), Color(0xFF047857)],
+                          )
+                        : (commandEnabled
+                            ? (isLocalOnline
+                                ? const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                                  ))
+                            : (isDark
+                                ? const LinearGradient(
+                                    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                                  )
+                                : const LinearGradient(
+                                    colors: [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
+                                  ))),
+                    boxShadow: isQrOnly
+                        ? const [
                             BoxShadow(
-                              color: isDark ? const Color(0x40000000) : const Color(0x15000000),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
+                              color: Color(0x7010B981),
+                              blurRadius: 36,
+                              spreadRadius: 4,
+                              offset: Offset(0, 8),
                             ),
-                          ],
+                            BoxShadow(
+                              color: Color(0x30FFFFFF),
+                              blurRadius: 8,
+                              offset: Offset(0, -3),
+                            ),
+                          ]
+                        : (commandEnabled
+                            ? (isLocalOnline
+                                ? const [
+                                    BoxShadow(
+                                      color: Color(0x70F59E0B),
+                                      blurRadius: 36,
+                                      spreadRadius: 4,
+                                      offset: Offset(0, 8),
+                                    ),
+                                    BoxShadow(
+                                      color: Color(0x30FFFFFF),
+                                      blurRadius: 8,
+                                      offset: Offset(0, -3),
+                                    ),
+                                  ]
+                                : const [
+                                    BoxShadow(
+                                      color: Color(0x703B82F6),
+                                      blurRadius: 36,
+                                      spreadRadius: 4,
+                                      offset: Offset(0, 8),
+                                    ),
+                                    BoxShadow(
+                                      color: Color(0x30FFFFFF),
+                                      blurRadius: 8,
+                                      offset: Offset(0, -3),
+                                    ),
+                                  ])
+                            : [
+                                BoxShadow(
+                                  color: isDark ? const Color(0x40000000) : const Color(0x15000000),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ]),
                     border: Border.all(
-                      color: commandEnabled
-                          ? (isLocalOnline
-                              ? const Color(0xFFFDE047)
-                              : const Color(0xFF93C5FD))
-                          : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFCBD5E1)),
+                      color: isQrOnly
+                          ? const Color(0xFF6EE7B7)
+                          : (commandEnabled
+                              ? (isLocalOnline
+                                  ? const Color(0xFFFDE047)
+                                  : const Color(0xFF93C5FD))
+                              : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFCBD5E1))),
                       width: 2.4,
                     ),
                   ),
@@ -290,7 +323,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                     shape: const CircleBorder(),
                     child: InkWell(
                       customBorder: const CircleBorder(),
-                      onTap: commandEnabled ? onOpenDoor : null,
+                      onTap: isQrOnly ? () => _handleQrPass(context) : (commandEnabled ? onOpenDoor : null),
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -316,29 +349,37 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                               ),
                             ] else ...[
                               Icon(
-                                commandEnabled
-                                    ? (isLocalOnline
-                                        ? Icons.wifi_rounded
-                                        : Icons.lock_open_rounded)
-                                    : Icons.lock_outline_rounded,
+                                isQrOnly
+                                    ? Icons.qr_code_2_rounded
+                                    : (commandEnabled
+                                        ? (isLocalOnline
+                                            ? Icons.wifi_rounded
+                                            : Icons.lock_open_rounded)
+                                        : (!canRemote
+                                            ? Icons.block_rounded
+                                            : Icons.lock_outline_rounded)),
                                 size: 50,
-                                color: commandEnabled
+                                color: (isQrOnly || commandEnabled)
                                     ? Colors.white
                                     : const Color(0xFF64748B),
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                commandEnabled
-                                    ? (isLocalOnline
-                                        ? 'YEREL AĞDAN AÇ'
-                                        : 'KAPIYI AÇ')
-                                    : (isDeviceAssigned ? 'ÇEVRİMDİŞI' : 'KAPALI'),
+                                isQrOnly
+                                    ? 'QR KOD İLE AÇ'
+                                    : (commandEnabled
+                                        ? (isLocalOnline
+                                            ? 'YEREL AĞDAN AÇ'
+                                            : 'KAPIYI AÇ')
+                                        : (!canRemote
+                                            ? 'UZAKTAN KAPALI'
+                                            : (isDeviceAssigned ? 'ÇEVRİMDİŞI' : 'KAPALI'))),
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: commandEnabled
+                                  color: (isQrOnly || commandEnabled)
                                       ? Colors.white
                                       : const Color(0xFF64748B),
-                                  fontSize: 15,
+                                  fontSize: isQrOnly ? 14 : 15,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0.8,
                                 ),

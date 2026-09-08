@@ -63,3 +63,4 @@ CREATE TABLE IF NOT EXISTS door_access_logs (
 
 CREATE INDEX IF NOT EXISTS idx_door_access_logs_site_date ON door_access_logs(site_code, opened_at DESC);
 CREATE INDEX IF NOT EXISTS idx_door_access_logs_door ON door_access_logs(door_id);
+

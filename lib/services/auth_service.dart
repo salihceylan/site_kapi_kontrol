@@ -408,11 +408,16 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> updateSiteSecurityPolicy({
     required int siteCode,
+    bool? featureRemoteOpenEnabled,
+    bool? featureQrEnabled,
+    bool? featureLocalUdpEnabled,
+    bool? featureGuestPassEnabled,
     bool? qrEntryActive,
     bool? requireGeofence,
     double? geofenceLatitude,
     double? geofenceLongitude,
     int? geofenceRadiusMeters,
+    int? qrRotationSeconds,
   }) async {
     final active = session;
     if (active == null ||
@@ -425,11 +430,16 @@ class AuthService extends ChangeNotifier {
         token: active.token,
         role: active.role,
         siteCode: siteCode,
+        featureRemoteOpenEnabled: featureRemoteOpenEnabled,
+        featureQrEnabled: featureQrEnabled,
+        featureLocalUdpEnabled: featureLocalUdpEnabled,
+        featureGuestPassEnabled: featureGuestPassEnabled,
         qrEntryActive: qrEntryActive,
         requireGeofence: requireGeofence,
         geofenceLatitude: geofenceLatitude,
         geofenceLongitude: geofenceLongitude,
         geofenceRadiusMeters: geofenceRadiusMeters,
+        qrRotationSeconds: qrRotationSeconds,
       );
       return null;
     } on ApiException catch (e) {

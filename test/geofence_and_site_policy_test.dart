@@ -188,11 +188,65 @@ void main() {
       expect(site.id, 42);
       expect(site.name, 'Güneş Sitesi');
       expect(site.featureQrEnabled, isTrue);
+      expect(site.featureRemoteOpenEnabled, isTrue);
+      expect(site.isHybrid, isTrue);
+      expect(site.isAppOnly, isFalse);
+      expect(site.isQrOnly, isFalse);
+      expect(site.accessModeLabel, 'Hibrit (Uygulama + QR)');
+      expect(site.qrRotationSeconds, 30);
       expect(site.featureLocalUdpEnabled, isFalse);
       expect(site.requireGeofence, isTrue);
       expect(site.geofenceLatitude, 41.012345);
       expect(site.geofenceLongitude, 28.976543);
       expect(site.geofenceRadiusMeters, 80);
+    });
+
+    test('SiteRecord access mode getters detect QR-only and App-only properly', () {
+      final qrOnlySite = SiteRecord(
+        id: 1,
+        name: 'QR Only Site',
+        address: null,
+        city: null,
+        district: null,
+        blockCount: 1,
+        apartmentCount: 5,
+        doorCount: 1,
+        approvalStatus: 'approved',
+        approvedAt: null,
+        mqttSiteId: 101,
+        managerUserCode: null,
+        managerName: null,
+        featureRemoteOpenEnabled: false,
+        featureQrEnabled: true,
+        createdAt: DateTime.now(),
+      );
+      expect(qrOnlySite.isQrOnly, isTrue);
+      expect(qrOnlySite.isAppOnly, isFalse);
+      expect(qrOnlySite.isHybrid, isFalse);
+      expect(qrOnlySite.accessModeLabel, 'Sadece QR Kod');
+
+      final appOnlySite = SiteRecord(
+        id: 2,
+        name: 'App Only Site',
+        address: null,
+        city: null,
+        district: null,
+        blockCount: 1,
+        apartmentCount: 5,
+        doorCount: 1,
+        approvalStatus: 'approved',
+        approvedAt: null,
+        mqttSiteId: 102,
+        managerUserCode: null,
+        managerName: null,
+        featureRemoteOpenEnabled: true,
+        featureQrEnabled: false,
+        createdAt: DateTime.now(),
+      );
+      expect(appOnlySite.isAppOnly, isTrue);
+      expect(appOnlySite.isQrOnly, isFalse);
+      expect(appOnlySite.isHybrid, isFalse);
+      expect(appOnlySite.accessModeLabel, 'Sadece Uygulama');
     });
   });
 }

@@ -371,18 +371,28 @@ class AuthApi {
     required String token,
     required UserRole role,
     required int siteCode,
+    bool? featureRemoteOpenEnabled,
+    bool? featureQrEnabled,
+    bool? featureLocalUdpEnabled,
+    bool? featureGuestPassEnabled,
     bool? qrEntryActive,
     bool? requireGeofence,
     double? geofenceLatitude,
     double? geofenceLongitude,
     int? geofenceRadiusMeters,
+    int? qrRotationSeconds,
   }) async {
     final body = <String, dynamic>{
+      'feature_remote_open_enabled': featureRemoteOpenEnabled,
+      'feature_qr_enabled': featureQrEnabled,
+      'feature_local_udp_enabled': featureLocalUdpEnabled,
+      'feature_guest_pass_enabled': featureGuestPassEnabled,
       'qr_entry_active': qrEntryActive,
       'require_geofence': requireGeofence,
       'geofence_latitude': geofenceLatitude,
       'geofence_longitude': geofenceLongitude,
       'geofence_radius_meters': geofenceRadiusMeters,
+      'qr_rotation_seconds': qrRotationSeconds,
     }..removeWhere((_, value) => value == null);
 
     final response = await _authorizedRequest(

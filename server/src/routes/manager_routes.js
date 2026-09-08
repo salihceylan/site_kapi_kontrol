@@ -68,24 +68,51 @@ managerRouter.patch('/manager/sites/:id/security-policy', authRequired, requireS
     return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
   }
 
+  const isSuperUser = req.authUser?.role === 'super_user';
+  const rawRemoteOpen = normalizeOptionalBool(req.body.feature_remote_open_enabled);
+  const rawQrEnabled = normalizeOptionalBool(req.body.feature_qr_enabled);
+  const rawLocalUdp = normalizeOptionalBool(req.body.feature_local_udp_enabled);
+  const rawGuestPass = normalizeOptionalBool(req.body.feature_guest_pass_enabled);
   const qrEntryActive = normalizeOptionalBool(req.body.qr_entry_active);
   const requireGeofence = normalizeOptionalBool(req.body.require_geofence);
   const geofenceLatitude = req.body.geofence_latitude === null ? null : (req.body.geofence_latitude !== undefined ? Number(req.body.geofence_latitude) : undefined);
   const geofenceLongitude = req.body.geofence_longitude === null ? null : (req.body.geofence_longitude !== undefined ? Number(req.body.geofence_longitude) : undefined);
   const geofenceRadiusMeters = req.body.geofence_radius_meters !== undefined ? Math.max(10, Math.min(1000, Number(req.body.geofence_radius_meters) || 75)) : undefined;
+  const qrRotationSeconds = req.body.qr_rotation_seconds !== undefined
+    ? Math.max(10, Math.min(300, Number(req.body.qr_rotation_seconds) || 30))
+    : undefined;
+
+  if (!isSuperUser && (rawRemoteOpen !== null || rawQrEnabled !== null || rawLocalUdp !== null || rawGuestPass !== null)) {
+    return res.status(403).json({ error: 'Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapilabilir.' });
+  }
 
   try {
     const existing = await getSiteByCode(siteCode);
     if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
+
+    const effRemote = isSuperUser && rawRemoteOpen !== null ? rawRemoteOpen : existing.feature_remote_open_enabled;
+    const effQr = isSuperUser && rawQrEnabled !== null ? rawQrEnabled : existing.feature_qr_enabled;
+    if (!effRemote && !effQr) {
+      return res.status(400).json({ error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.' });
+    }
+
+    // Eger super user QR ozelligini tamamen kapattiysa veya sitede kapaliysa qrEntryActive de false yapilir
+    const resolvedQrEntryActive = effQr ? (qrEntryActive === null ? undefined : qrEntryActive) : false;
+
     const updated = await updateSiteByCode({
       siteCode,
-      qrEntryActive: qrEntryActive === null ? undefined : qrEntryActive,
+      featureRemoteOpenEnabled: isSuperUser && rawRemoteOpen !== null ? rawRemoteOpen : undefined,
+      featureQrEnabled: isSuperUser && rawQrEnabled !== null ? rawQrEnabled : undefined,
+      featureLocalUdpEnabled: isSuperUser && rawLocalUdp !== null ? rawLocalUdp : undefined,
+      featureGuestPassEnabled: isSuperUser && rawGuestPass !== null ? rawGuestPass : undefined,
+      qrEntryActive: resolvedQrEntryActive,
       requireGeofence: requireGeofence === null ? undefined : requireGeofence,
       geofenceLatitude: Number.isNaN(geofenceLatitude) ? undefined : geofenceLatitude,
       geofenceLongitude: Number.isNaN(geofenceLongitude) ? undefined : geofenceLongitude,
       geofenceRadiusMeters: Number.isNaN(geofenceRadiusMeters) ? undefined : geofenceRadiusMeters,
+      qrRotationSeconds: Number.isNaN(qrRotationSeconds) ? undefined : qrRotationSeconds,
     });
     return res.status(200).json({ site: mapSiteRow(updated || existing) });
   } catch (error) {

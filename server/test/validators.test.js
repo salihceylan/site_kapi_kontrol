@@ -91,4 +91,20 @@ describe('Server Validators Tests', () => {
       }), null);
     });
   });
+
+  describe('Site Access Policies', () => {
+    it('ensures at least one entry method is enabled', () => {
+      const validateAccessMode = (remote, qr) => {
+        if (!remote && !qr) {
+          return 'En az bir giris yontemi acik olmalidir.';
+        }
+        return null;
+      };
+
+      assert.equal(validateAccessMode(true, true), null); // Hibrit
+      assert.equal(validateAccessMode(true, false), null); // Sadece Uygulama
+      assert.equal(validateAccessMode(false, true), null); // Sadece QR
+      assert.ok(validateAccessMode(false, false)); // Ikisi de kapaliysa gecersiz
+    });
+  });
 });

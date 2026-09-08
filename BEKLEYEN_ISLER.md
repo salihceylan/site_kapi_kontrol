@@ -35,6 +35,10 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
   - `lib/config/app_config.dart` içerisindeki API ve bağlantı bilgilerinin derleme zamanı argümanları (`--dart-define=API_BASE_URL=...`) ile güvenli yapılandırılması tamamlandı.
 - [x] **Gelişmiş Cihaz Detay & Telemetri Görünümü:**
   - Admin panelinde cihazın anlık Wi-Fi sinyal gücü (dBm / yüzde), son IP'si, donanım hedefi (`ESP32-C3` / `ESP32-WROOM` rozeti) ve anlık MQTT durumu kart detayında sunuldu.
+- [x] **Site Bazlı Giriş Yetkilendirme & Geçiş Politikaları (Süper Kullanıcı Kontrolü):**
+  - Süper kullanıcı tarafından her siteye özel olarak "Sadece Mobil Uygulama", "Sadece QR Kod" veya "Hibrit (Uygulama + QR)" erişim kuralı belirleme.
+  - Sadece QR seçili sitelerde resident kartında otomatik QR açılışı ve uzaktan butona basma engeli (sunucu + istemci seviyesinde 403 kontrolü).
+  - Dinamik QR rotasyon süresi ayarı (15s, 30s, 60s), Misafir geçiş kodu yetkilendirme açma/kapama ve GPS Geofencing (enlem, boylam, yarıçap) parametreleri entegre edildi.
 
 ### 2.2 Kullanıcı & Yönetici Uygulaması (`ahbu`)
 - [ ] **Daire Sakini (`apartment_owner`) Giriş ve Aktivasyon Akışı:**
@@ -62,7 +66,7 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 
 ### 3.2 Veritabanı & Şema Yönetimi
 - [x] **Migration Standardizasyonu:**
-  - `server/migrations/008_guest_passes_and_door_logs.sql` oluşturularak `server/src/db.js` içindeki `ensureDbSchema()` fonksiyonunun son şeması ile birebir senkronize edildi.
+  - `server/migrations/008_guest_passes_and_door_logs.sql` ve `009_site_feature_and_access_policies.sql` oluşturularak `server/src/db.js` içindeki `ensureDbSchema()` fonksiyonunun son şeması ile birebir senkronize edildi.
 - [ ] **Detaylı Audit Log Altyapısı:**
   - Yetki değişiklikleri, kapı atamaları, uzaktan açma ve token rotasyonları için veritabanında saklanan audit log tablosunun raporlama ekranı.
 
@@ -70,15 +74,16 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 
 ## 4. 🧪 Test & Kalite Güvencesi (QA)
 - [x] Mobil uygulama statik analizi (`flutter analyze` - 0 sorun).
-- [x] Mobil widget & servis testleri (31 test başarılı).
+- [x] Mobil widget & servis testleri (32 test başarılı).
 - [x] Backend modül import ve runtime kontrolü (tüm servis ve router'lar doğrulandı).
-- [x] Backend için otomatik birim testlerinin (`node:test`) eklenmesi (`helpers.test.js`, `validators.test.js`, `npm test` - 18 test başarılı).
+- [x] Backend için otomatik birim testlerinin (`node:test`) eklenmesi (`helpers.test.js`, `validators.test.js`, `npm test` - 19 test başarılı).
 
 ---
 
 ## 5. 📦 Tamamlanan Önemli Kilometre Taşları (Referans)
 - ✅ `server.js` monolitik yapısının tamamen servis ve router katmanlarına ayrılması (75 satırlık ana orkestratör).
 - ✅ Çift donanım hedefli (ESP32-C3 ve ESP32-WROOM) izole OTA manifest ve firmware dağıtım sistemi.
+- ✅ Siteye özel geçiş modelleri: Süper kullanıcı kontrollü Sadece QR, Sadece Uygulama veya Hibrit geçiş modu + Geofence + Dinamik QR rotasyonu.
 - ✅ GM60 QR / barkod okuyucunun UART üzerinden firmware'e entegre edilmesi.
 - ✅ Misafir geçiş sistemi: Dinamik süre/tek kullanımlık linkler, mobil kartlar ve `/guest/:token` web açılış sayfası.
 - ✅ Yerel UDP fallback ve dinamik token rotasyon sistemi (internet kesintisinde kapı kontrolü).

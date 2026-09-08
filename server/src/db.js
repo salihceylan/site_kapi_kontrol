@@ -213,6 +213,10 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS qr_totp_secret TEXT
     `);
     await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS qr_rotation_seconds INTEGER NOT NULL DEFAULT 30
+    `);
+    await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (

@@ -24,6 +24,7 @@ class SiteRecord {
     this.geofenceLongitude,
     this.geofenceRadiusMeters = 75,
     this.qrTotpSecret,
+    this.qrRotationSeconds = 30,
     required this.createdAt,
   });
 
@@ -51,9 +52,20 @@ class SiteRecord {
   final double? geofenceLongitude;
   final int geofenceRadiusMeters;
   final String? qrTotpSecret;
+  final int qrRotationSeconds;
   final DateTime? createdAt;
 
   bool get isApproved => approvalStatus == 'approved';
+
+  bool get isAppOnly => featureRemoteOpenEnabled && !featureQrEnabled;
+  bool get isQrOnly => !featureRemoteOpenEnabled && featureQrEnabled;
+  bool get isHybrid => featureRemoteOpenEnabled && featureQrEnabled;
+
+  String get accessModeLabel {
+    if (isAppOnly) return 'Sadece Uygulama';
+    if (isQrOnly) return 'Sadece QR Kod';
+    return 'Hibrit (Uygulama + QR)';
+  }
 
   String get approvalLabel {
     switch (approvalStatus) {
@@ -91,6 +103,7 @@ class SiteRecord {
     double? geofenceLongitude,
     int? geofenceRadiusMeters,
     String? qrTotpSecret,
+    int? qrRotationSeconds,
     DateTime? createdAt,
   }) {
     return SiteRecord(
@@ -118,6 +131,7 @@ class SiteRecord {
       geofenceLongitude: geofenceLongitude ?? this.geofenceLongitude,
       geofenceRadiusMeters: geofenceRadiusMeters ?? this.geofenceRadiusMeters,
       qrTotpSecret: qrTotpSecret ?? this.qrTotpSecret,
+      qrRotationSeconds: qrRotationSeconds ?? this.qrRotationSeconds,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -160,6 +174,7 @@ class SiteRecord {
       geofenceLongitude: (json['geofence_longitude'] as num?)?.toDouble(),
       geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 75,
       qrTotpSecret: json['qr_totp_secret'] as String?,
+      qrRotationSeconds: (json['qr_rotation_seconds'] as num?)?.toInt() ?? 30,
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString()),

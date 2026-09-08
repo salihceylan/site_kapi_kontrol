@@ -191,6 +191,7 @@ export function mapSiteRow(row) {
     geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
     geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
     qr_totp_secret: row.qr_totp_secret ?? null,
+    qr_rotation_seconds: Number(row.qr_rotation_seconds ?? 30),
     manager_user_code:
       row.manager_user_code === null || row.manager_user_code === undefined
         ? null
@@ -331,6 +332,7 @@ export function mapDoorRow(row) {
     geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
     geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
     qr_totp_secret: row.qr_totp_secret ?? null,
+    qr_rotation_seconds: Number(row.qr_rotation_seconds ?? 30),
     created_at: row.created_at,
   };
 }

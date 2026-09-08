@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import crypto from 'crypto';
 import { pool } from '../db.js';
 import { authRequired } from '../middlewares/auth_middleware.js';
@@ -27,6 +27,10 @@ guestPassesRouter.post('/app/guest-passes', authRequired, async (req, res) => {
     });
     if (!door) {
       return res.status(404).json({ error: 'Kapi bulunamadi veya yetkiniz yok.' });
+    }
+
+    if (door.feature_guest_pass_enabled === false && req.authUser.role !== 'super_user') {
+      return res.status(403).json({ error: 'Bu sitede misafir/kurye gecis kodu olusturma kapalidir.' });
     }
 
     const token = crypto.randomBytes(24).toString('hex');
@@ -188,7 +192,8 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
           d.door_name,
           d.assigned_device_id,
           dev.device_uid,
-          s.name AS site_name
+          s.name AS site_name,
+          s.feature_guest_pass_enabled
         FROM guest_passes gp
         JOIN site_doors d ON d.id = gp.door_id
         JOIN sites s ON s.site_code = gp.site_code
@@ -204,6 +209,10 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
     }
 
     const pass = result.rows[0];
+
+    if (pass.feature_guest_pass_enabled === false) {
+      return res.status(403).json({ error: 'Bu sitede misafir gecisleri yonetim tarafindan devre disi birakilmistir.' });
+    }
 
     if (!pass.is_active) {
       return res.status(410).json({ error: 'Bu gecis linki iptal edilmis.' });

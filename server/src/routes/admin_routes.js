@@ -727,18 +727,29 @@ adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, a
   const featureRemoteOpenEnabled = normalizeOptionalBool(req.body.feature_remote_open_enabled);
   const featureLocalUdpEnabled = normalizeOptionalBool(req.body.feature_local_udp_enabled);
   const featureGuestPassEnabled = normalizeOptionalBool(req.body.feature_guest_pass_enabled);
+  const qrRotationSeconds = req.body.qr_rotation_seconds !== undefined
+    ? Math.max(10, Math.min(300, Number(req.body.qr_rotation_seconds) || 30))
+    : undefined;
 
   try {
     const existing = await getSiteByCode(siteCode);
     if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
+    const effRemote = featureRemoteOpenEnabled !== null ? featureRemoteOpenEnabled : existing.feature_remote_open_enabled;
+    const effQr = featureQrEnabled !== null ? featureQrEnabled : existing.feature_qr_enabled;
+    if (!effRemote && !effQr) {
+      return res.status(400).json({ error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.' });
+    }
+
     const updated = await updateSiteByCode({
       siteCode,
       featureQrEnabled: featureQrEnabled === null ? undefined : featureQrEnabled,
       featureRemoteOpenEnabled: featureRemoteOpenEnabled === null ? undefined : featureRemoteOpenEnabled,
       featureLocalUdpEnabled: featureLocalUdpEnabled === null ? undefined : featureLocalUdpEnabled,
       featureGuestPassEnabled: featureGuestPassEnabled === null ? undefined : featureGuestPassEnabled,
+      qrRotationSeconds: Number.isNaN(qrRotationSeconds) ? undefined : qrRotationSeconds,
+      ...(featureQrEnabled === false ? { qrEntryActive: false } : {}),
     });
     return res.status(200).json({ site: mapSiteRow(updated || existing) });
   } catch (error) {
