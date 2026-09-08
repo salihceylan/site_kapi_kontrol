@@ -289,20 +289,23 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
 
   Widget _buildContent(BuildContext context, bool isDark) {
     if (_isLoading && _logPage == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
           child: Column(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2.5),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               Text(
                 'Geçiş logları getiriliyor...',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
+                ),
               ),
             ],
           ),

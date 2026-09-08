@@ -329,7 +329,7 @@ class _LoginPageState extends State<LoginPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11.5,
-                            color: isDark ? AppColors.textMuted : const Color(0xFF94A3B8),
+                            color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
                             fontWeight: FontWeight.w500,
                           ),
                         ),

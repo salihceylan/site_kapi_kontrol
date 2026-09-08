@@ -401,9 +401,9 @@ class _SiteDialogState extends State<SiteDialog> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Her blok için daire sayısını girin:',
-                        style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                        style: TextStyle(fontSize: 11.5, color: AppColors.textMutedColor(context)),
                       ),
                       const SizedBox(height: 10),
                       for (var i = 0; i < _blockApartmentControllers.length; i++)

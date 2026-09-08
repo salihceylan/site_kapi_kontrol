@@ -188,13 +188,13 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                       : (value) => setState(() => _isActive = value),
                 ),
                 if (widget.isSelf)
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'Kendi süper kullanıcı hesabınızı burada pasif yapamazsınız.',
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textMuted,
+                        color: AppColors.textMutedColor(context),
                       ),
                     ),
                   ),

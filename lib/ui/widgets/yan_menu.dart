@@ -206,7 +206,7 @@ class YanMenu extends StatelessWidget {
                 AppConfig.versionDisplay,
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isDark ? AppColors.textMuted : const Color(0xFF94A3B8),
+                  color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
                 ),
@@ -339,44 +339,49 @@ class _MenuTile extends StatelessWidget {
               )
             : null,
       ),
-      child: ListTile(
-        dense: true,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        leading: Icon(
-          icon,
-          color: selected
-              ? color
-              : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
-          size: 22,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          dense: true,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          leading: Icon(
+            icon,
             color: selected
-                ? (isDark ? Colors.white : color)
-                : (isDark ? AppColors.textLight : AppColors.textDarkSecondary),
+                ? color
+                : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
+            size: 22,
           ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? (isDark ? Colors.white : color)
+                  : (isDark ? AppColors.textLight : AppColors.textDarkSecondary),
+            ),
+          ),
+          trailing: selected
+              ? Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.8),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                )
+              : null,
+          onTap: onTap,
         ),
-        trailing: selected
-            ? Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.8),
-                      blurRadius: 6,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              )
-            : null,
-        onTap: onTap,
       ),
     );
   }

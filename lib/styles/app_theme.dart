@@ -180,6 +180,8 @@ class AppTheme {
       primary: AppColors.primary,
       secondary: AppColors.accentLight,
       surface: AppColors.surface,
+      onSurface: Colors.white,
+      onSurfaceVariant: const Color(0xFFCBD5E1),
       brightness: Brightness.dark,
     );
 
@@ -211,6 +213,23 @@ class AppTheme {
           color: AppColors.textMutedLight,
           fontSize: 13.5,
         ),
+        bodySmall: TextStyle(
+          color: AppColors.textMutedLight,
+          fontSize: 12,
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: AppColors.textLight,
+        iconColor: AppColors.textLight,
+        titleTextStyle: TextStyle(
+          color: AppColors.textLight,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: Color(0xFFCBD5E1),
+          fontSize: 12.5,
+        ),
       ),
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -228,7 +247,7 @@ class AppTheme {
         filled: true,
         fillColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
         labelStyle: const TextStyle(color: AppColors.textMutedLight),
-        hintStyle: const TextStyle(color: AppColors.textMuted),
+        hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
         prefixIconColor: AppColors.primarySoft,
         suffixIconColor: AppColors.textMutedLight,
         contentPadding: const EdgeInsets.symmetric(
@@ -274,6 +293,10 @@ class AppTheme {
           fontSize: 18,
           fontWeight: FontWeight.w800,
           color: AppColors.textLight,
+        ),
+        contentTextStyle: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFFCBD5E1),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(

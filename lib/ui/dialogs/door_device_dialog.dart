@@ -93,9 +93,9 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Mevcut cihaz: ${widget.door.assignedDeviceUid ?? 'Atanmadı'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textMuted,
+                      color: AppColors.textMutedColor(context),
                     ),
                   ),
                 ),

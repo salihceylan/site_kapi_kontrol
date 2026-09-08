@@ -50,13 +50,17 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+    final cardBg = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.6) : Colors.white;
+    final cardBorder = Border.all(color: isDark ? const Color(0x22FFFFFF) : Colors.black.withValues(alpha: 0.06));
+    final mutedText = isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted;
 
     return Container(
       constraints: BoxConstraints(maxHeight: maxHeight),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface : AppColors.surfaceLight,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -66,7 +70,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
             width: 44,
             height: 5,
             decoration: BoxDecoration(
-              color: Colors.black26,
+              color: isDark ? Colors.white24 : Colors.black26,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -103,7 +107,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                       Text(
                         'Ekrana dokunmadan sesle veya kestirmelerle kapı açma',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textMuted,
+                          color: mutedText,
                         ),
                       ),
                     ],
@@ -121,9 +125,9 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                    border: cardBorder,
                   ),
                   child: Row(
                     children: [
@@ -139,10 +143,10 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
+                            Text(
                               'Uygulama açılır açılmaz butona basmanıza gerek kalmadan mikrofonu açar ve sesli komutunuzu dinler.',
                               style: TextStyle(
-                                color: AppColors.textMuted,
+                                color: mutedText,
                                 fontSize: 12.5,
                               ),
                             ),
@@ -167,9 +171,9 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                    border: cardBorder,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,10 +205,10 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Telefonunuz kilitliyken veya Apple CarPlay ekranındayken "Hey Siri, Kapıyı Aç" diyerek dokunmadan açabilirsiniz.',
                         style: TextStyle(
-                          color: AppColors.textMuted,
+                          color: mutedText,
                           fontSize: 12.5,
                         ),
                       ),
@@ -212,23 +216,31 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: isDark ? const Color(0xFF1E293B) : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? const Color(0x33FFFFFF) : Colors.black.withValues(alpha: 0.04),
+                          ),
                         ),
                         child: Row(
                           children: [
-                            const Expanded(
+                            Expanded(
                               child: Text(
                                 'sitekapi://open?doorIndex=1',
                                 style: TextStyle(
                                   fontFamily: 'monospace',
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
+                                  color: isDark ? const Color(0xFF93C5FD) : Colors.black87,
                                 ),
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.copy_rounded, size: 18),
+                              icon: Icon(
+                                Icons.copy_rounded,
+                                size: 18,
+                                color: isDark ? const Color(0xFFCBD5E1) : Colors.black54,
+                              ),
                               tooltip: 'Kopyala',
                               onPressed: () => _copyToClipboard(
                                 'sitekapi://open?doorIndex=1',
@@ -242,7 +254,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                       Text(
                         'Kurulum: iPhone Kestirmeler (Shortcuts) uygulamasında yeni kestirme oluşturun ➡️ "URL Aç" eylemini seçin ➡️ Yukarıdaki bağlantıyı yapıştırın.',
                         style: TextStyle(
-                          color: Colors.grey.shade700,
+                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade700,
                           fontSize: 11.5,
                           fontStyle: FontStyle.italic,
                         ),
@@ -256,9 +268,9 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                    border: cardBorder,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,10 +302,10 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Android ana ekranınızda uygulama simgesine basılı tutarak doğrudan kapıyı açabilir veya Google Asistan rutinlerine ekleyebilirsiniz.',
                         style: TextStyle(
-                          color: AppColors.textMuted,
+                          color: mutedText,
                           fontSize: 12.5,
                         ),
                       ),
@@ -306,9 +318,9 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                    border: cardBorder,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,10 +352,10 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Arabanızın telefon tutacağına yapıştırılan standart bir NFC etiketine "sitekapi://open?doorIndex=1" bağlantısını yazarak, telefonu tutacağa koyduğunuz anda kapıyı temassız açabilirsiniz.',
                         style: TextStyle(
-                          color: AppColors.textMuted,
+                          color: mutedText,
                           fontSize: 12.5,
                         ),
                       ),

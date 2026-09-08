@@ -323,9 +323,12 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                           '📦 Misafir & Kurye Geçiş İzni',
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                         ),
-                        subtitle: const Text(
+                        subtitle: Text(
                           'Daire sakinlerinin tek kullanımlık veya süreli misafir linki üretmesine izin ver.',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                          ),
                         ),
                         value: _featureGuestPassEnabled,
                         onChanged: widget.isSuperUser
@@ -376,9 +379,12 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                           '📍 Konum Doğrulama (GPS Geofence)',
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                         ),
-                        subtitle: const Text(
+                        subtitle: Text(
                           'QR kodun yalnızca site kapısına yakınken üretilmesini zorunlu kıl (ekran görüntüsü paylaşımını engeller).',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                          ),
                         ),
                         value: _requireGeofence,
                         onChanged: (val) => setState(() => _requireGeofence = val),
@@ -583,7 +589,7 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 11.5,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
                     ),
                   ),
                 ],

@@ -563,7 +563,7 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                       isLocalOnline ? Icons.wifi : Icons.lock_open_rounded,
                       color: commandEnabled
                           ? Colors.white
-                          : (isDark ? AppColors.textMuted : const Color(0xFF94A3B8)),
+                          : (isDark ? const Color(0xFF94A3B8) : AppColors.textMuted),
                       size: 22,
                     ),
                     const SizedBox(width: 8),
@@ -581,7 +581,7 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
                         letterSpacing: 0.5,
                         color: commandEnabled
                             ? Colors.white
-                            : (isDark ? AppColors.textMuted : const Color(0xFF94A3B8)),
+                            : (isDark ? const Color(0xFF94A3B8) : AppColors.textMuted),
                       ),
                     ),
                   ],

@@ -145,11 +145,11 @@ class _DeviceDialogState extends State<DeviceDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                const Align(
+                Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Kullanıcı ID ve Site ID alanlarını boş bırakabilirsiniz.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 12, color: AppColors.textMutedColor(context)),
                   ),
                 ),
               ],

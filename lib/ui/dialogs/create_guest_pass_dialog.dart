@@ -157,6 +157,8 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: Text('${widget.door.doorName} - Gecis Linki'),
@@ -169,9 +171,12 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Kurye veya misafirlerinizin uygulamayi yuklemesine gerek kalmadan tek tikla kapiyi acabilmesi icin gecici baglanti uretin.',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -251,6 +256,7 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
     required String title,
     required String subtitle,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = _selectedPreset == key;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -259,11 +265,13 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withValues(alpha: 0.08)
-              : Colors.grey.shade50,
+              ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
+              : (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : Colors.grey.shade50),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.grey.shade300,
+            color: selected
+                ? AppColors.primary
+                : (isDark ? const Color(0x22FFFFFF) : Colors.grey.shade300),
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -273,7 +281,9 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
               selected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              color: selected ? AppColors.primary : Colors.grey.shade500,
+              color: selected
+                  ? AppColors.primary
+                  : (isDark ? const Color(0xFF64748B) : Colors.grey.shade500),
               size: 20,
             ),
             const SizedBox(width: 10),
@@ -286,15 +296,17 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                       fontSize: 13,
-                      color: selected ? AppColors.primary : AppColors.textDark,
+                      color: selected
+                          ? (isDark ? const Color(0xFF93C5FD) : AppColors.primary)
+                          : (isDark ? Colors.white : AppColors.textDark),
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
-                      color: AppColors.textMuted,
+                      color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
                     ),
                   ),
                 ],

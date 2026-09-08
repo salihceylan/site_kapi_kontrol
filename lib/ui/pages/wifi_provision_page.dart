@@ -408,14 +408,14 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           ),
           const SizedBox(height: 12),
           if (!_service.isSupportedPlatform)
-            const Text(
+            Text(
               'Bu ekranı Android veya iPhone cihazdan açın. Masaüstü derlemelerinde BLE provisioning kapalı tutulur.',
-              style: TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMutedColor(context)),
             )
           else if (_devices.isEmpty && !_loadingDevices)
-            const Text(
+            Text(
               'Kurulum modunda cihaz bulunamadı. Gerekirse cihazdaki butona 3 saniye basın ve yeniden tarayın.',
-              style: TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMutedColor(context)),
             )
           else
             ..._devices.map(
@@ -487,7 +487,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
             const SizedBox(height: 8),
             Text(
               _lastResult!.message,
-              style: const TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMutedColor(context)),
             ),
           ],
           const SizedBox(height: 16),
@@ -524,9 +524,9 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
           ),
           const SizedBox(height: 16),
           if (!hasScannedNetworks && _selectedSsid == null)
-            const Text(
+            Text(
               'Wi-Fi bilgisi girmek için "Wi-Fi Ağlarını Tara" butonuna basın veya "Karekod ile Wi-Fi Oku" seçeneğiyle modem karekodunu okutun.',
-              style: TextStyle(color: AppColors.textMuted),
+              style: TextStyle(color: AppColors.textMutedColor(context)),
             )
           else ...<Widget>[
             const Text(

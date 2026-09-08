@@ -37,7 +37,7 @@ class AppColors {
   static const Color textDarkSecondary = Color(0xFF334155);
   static const Color textLight = Color(0xFFF8FAFC);
   static const Color textMuted = Color(0xFF64748B);
-  static const Color textMutedLight = Color(0xFF94A3B8);
+  static const Color textMutedLight = Color(0xFFCBD5E1);
 
   // Gölgeler ve Kenarlıklar
   static const Color shadowDark = Color(0x50000000);
