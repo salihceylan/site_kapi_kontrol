@@ -63,6 +63,7 @@ function ensureStatus(deviceUid) {
     last_event_detail: null,
     last_seen_at: null,
     last_payload_at: null,
+    online_since: null,
   };
   statusByDeviceUid.set(normalizedUid, created);
   return created;
@@ -347,6 +348,63 @@ async function recordDeviceOfflineLogs(deviceUid, logs) {
   }
 }
 
+async function recordDeviceOfflineTransition(status, reason = 'Wi-Fi/MQTT Bağlantısı Kesildi') {
+  if (!status || !status.device_uid) return;
+  const normalizedUid = normalizeDeviceTopicUid(status.device_uid);
+  try {
+    let onlineAt = status.online_since;
+    if (!onlineAt) {
+      const devRes = await pool.query(
+        'SELECT last_online_at FROM devices WHERE device_uid = $1 LIMIT 1',
+        [normalizedUid],
+      );
+      if (devRes.rowCount > 0 && devRes.rows[0].last_online_at) {
+        onlineAt = new Date(devRes.rows[0].last_online_at);
+      }
+    }
+
+    const offlineAt = new Date();
+    let durationSeconds = null;
+    if (onlineAt) {
+      const diffMs = offlineAt.getTime() - new Date(onlineAt).getTime();
+      if (diffMs > 0) {
+        durationSeconds = Math.round(diffMs / 1000);
+      }
+    }
+
+    await pool.query(
+      `
+        INSERT INTO device_connectivity_logs (
+          device_uid,
+          event_type,
+          online_at,
+          offline_at,
+          duration_seconds,
+          reason,
+          wifi_rssi,
+          wifi_signal_percent,
+          local_ip,
+          created_at
+        ) VALUES ($1, 'offline', $2, $3, $4, $5, $6, $7, $8, NOW())
+      `,
+      [
+        normalizedUid,
+        onlineAt,
+        offlineAt,
+        durationSeconds,
+        reason,
+        status.wifi_rssi,
+        status.wifi_signal_percent,
+        status.local_ip,
+      ],
+    );
+  } catch (err) {
+    console.error('Offline baglanti log DB kayit hatasi:', err.message);
+  } finally {
+    status.online_since = null;
+  }
+}
+
 function applyStatusMessage(topic, payload) {
   const match = /^device\/([^/]+)\/(availability|state|event|logs)$/.exec(topic);
   if (!match) {
@@ -359,10 +417,20 @@ function applyStatusMessage(topic, payload) {
   status.last_payload_at = new Date().toISOString();
 
   if (kind === 'availability') {
-    status.mqtt_connected = text.toLowerCase() === 'online';
-    status.last_seen_at = status.mqtt_connected
+    const isNowOnline = text.toLowerCase() === 'online';
+    const wasOnline = status.mqtt_connected === true;
+
+    status.mqtt_connected = isNowOnline;
+    status.last_seen_at = isNowOnline
       ? status.last_payload_at
       : status.last_seen_at;
+
+    if (isNowOnline && !wasOnline) {
+      status.online_since = new Date();
+    } else if (!isNowOnline && wasOnline) {
+      void recordDeviceOfflineTransition(status, 'Wi-Fi/MQTT Bağlantısı Kesildi (LWT)');
+    }
+
     void persistRuntimeStatus(status);
     if (status.mqtt_connected) {
       void syncLocalControlConfigFromDb(status.device_uid);
@@ -448,12 +516,17 @@ function applyStatusMessage(topic, payload) {
 export async function loadInitialDeviceRuntimeStatuses() {
   try {
     const res = await pool.query(`
-      SELECT * FROM device_runtime_status
+      SELECT drs.*, d.last_online_at
+      FROM device_runtime_status drs
+      LEFT JOIN devices d ON d.device_uid = drs.device_uid
     `);
     for (const row of res.rows) {
       const normalizedUid = normalizeDeviceTopicUid(row.device_uid);
       const existing = ensureStatus(normalizedUid);
       existing.mqtt_connected = Boolean(row.mqtt_connected);
+      if (existing.mqtt_connected && row.last_online_at) {
+        existing.online_since = new Date(row.last_online_at);
+      }
       existing.door_locked = row.door_locked;
       existing.firmware_version = row.firmware_version;
       existing.hardware_target = row.hardware_target;

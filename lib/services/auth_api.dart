@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
@@ -530,6 +531,37 @@ class AuthApi {
     return _parsePayload(
       'Kapi gecis loglari',
       () => DoorAccessLogPage.fromJson(payload),
+    );
+  }
+
+  Future<DeviceConnectivityReport> getDeviceConnectivityLogs({
+    required String token,
+    required String deviceUid,
+    int page = 1,
+    int pageSize = 10,
+  }) async {
+    final query = <String, String>{
+      'page': page.toString(),
+      'page_size': pageSize.toString(),
+    };
+
+    final uri = Uri.parse('$baseUrl/admin/devices/$deviceUid/connectivity-logs')
+        .replace(queryParameters: query);
+
+    final response = await _sendRequest(
+      method: 'GET',
+      uri: uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Cihaz baglanti raporu',
+      () => DeviceConnectivityReport.fromJson(payload),
     );
   }
 

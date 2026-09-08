@@ -588,6 +588,25 @@ export async function ensureDbSchema() {
       CREATE INDEX IF NOT EXISTS idx_door_access_logs_door
       ON door_access_logs(door_id, opened_at DESC);
     `);
+
+    // Cihaz Çevrimiçi Kalma Süreleri ve Wi-Fi Kopma / Offline Logları Tablosu
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_connectivity_logs (
+        id BIGSERIAL PRIMARY KEY,
+        device_uid TEXT NOT NULL REFERENCES devices(device_uid) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        online_at TIMESTAMPTZ,
+        offline_at TIMESTAMPTZ,
+        duration_seconds INTEGER,
+        reason TEXT,
+        wifi_rssi INTEGER,
+        wifi_signal_percent INTEGER,
+        local_ip TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_device_connectivity_logs_uid_created
+      ON device_connectivity_logs(device_uid, created_at DESC);
+    `);
   } finally {
     client.release();
   }

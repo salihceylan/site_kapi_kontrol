@@ -3180,6 +3180,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           isSuperUser: session.role == UserRole.superUser,
 
+          authService: widget.authService,
+
           isLoading: _isLoadingCompanyDevices,
 
           isBroadcastingOta: _isBroadcastingOtaCheck,

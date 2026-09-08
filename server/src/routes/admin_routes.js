@@ -65,6 +65,7 @@ import {
   updateDeviceDetails,
   deleteDeviceById,
   createDevice,
+  getDeviceConnectivityLogs,
 } from '../services/device_service.js';
 import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
 import { publishOtaCheckToDevices } from '../mqtt_bridge.js';
@@ -940,6 +941,29 @@ adminRouter.get('/admin/devices', authRequired, requireSuperUser, async (req, re
     });
   } catch (_error) {
     return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  }
+});
+
+// GET /admin/devices/:deviceUid/connectivity-logs
+adminRouter.get('/admin/devices/:deviceUid/connectivity-logs', authRequired, requireSuperUser, async (req, res) => {
+  const deviceUid = normalizeDeviceUid(req.params.deviceUid);
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 10)));
+
+  try {
+    const report = await getDeviceConnectivityLogs({
+      deviceUid,
+      page,
+      pageSize,
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+    }
+
+    return res.status(200).json(report);
+  } catch (error) {
+    return res.status(500).json({ error: 'Baglanti loglari yuklenemedi.' });
   }
 });
 

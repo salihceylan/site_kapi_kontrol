@@ -1,8 +1,9 @@
-﻿import { pool } from '../db.js';
+import { pool } from '../db.js';
 import { getAuthUserCode } from '../middlewares/auth_middleware.js';
 import { publishLocalControlConfig } from '../mqtt_bridge.js';
 import {
   auditLog,
+  formatDurationTurkish,
   generateLocalControlToken,
   generateMqttPassword,
   mqttUsernameForDevice,
@@ -661,4 +662,119 @@ export async function deleteDeviceById(deviceId) {
   } finally {
     client.release();
   }
+}
+
+export async function getDeviceConnectivityLogs({
+  deviceUid,
+  page = 1,
+  pageSize = 10,
+}) {
+  const normalizedUid = normalizeDeviceUid(deviceUid);
+  const targetPage = Math.max(1, Number(page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(pageSize) || 10));
+  const offset = (targetPage - 1) * limit;
+
+  const devRes = await pool.query(
+    `
+      SELECT
+        d.id,
+        d.device_uid,
+        d.is_online,
+        d.last_online_at,
+        d.last_offline_at,
+        runtime.mqtt_connected,
+        runtime.wifi_rssi,
+        runtime.wifi_signal_percent,
+        runtime.local_ip,
+        runtime.last_seen_at
+      FROM devices d
+      LEFT JOIN device_runtime_status runtime ON runtime.device_uid = d.device_uid
+      WHERE d.device_uid = $1
+      LIMIT 1
+    `,
+    [normalizedUid],
+  );
+
+  if (devRes.rowCount === 0) {
+    return null;
+  }
+
+  const dev = devRes.rows[0];
+  const isOnline = dev.mqtt_connected === true || (dev.mqtt_connected !== false && dev.is_online === true);
+  const lastOnlineAt = dev.last_online_at ? new Date(dev.last_online_at).toISOString() : null;
+  const lastOfflineAt = dev.last_offline_at ? new Date(dev.last_offline_at).toISOString() : null;
+
+  let currentOnlineDurationSeconds = null;
+  let currentOnlineDurationText = null;
+
+  if (isOnline && dev.last_online_at) {
+    const diffMs = Date.now() - new Date(dev.last_online_at).getTime();
+    if (diffMs >= 0) {
+      currentOnlineDurationSeconds = Math.floor(diffMs / 1000);
+      currentOnlineDurationText = formatDurationTurkish(currentOnlineDurationSeconds);
+    }
+  }
+
+  const countRes = await pool.query(
+    `
+      SELECT COUNT(*)::int AS total
+      FROM device_connectivity_logs
+      WHERE device_uid = $1
+    `,
+    [normalizedUid],
+  );
+  const total = Number(countRes.rows[0]?.total || 0);
+
+  const logsRes = await pool.query(
+    `
+      SELECT
+        id,
+        device_uid,
+        event_type,
+        online_at,
+        offline_at,
+        duration_seconds,
+        reason,
+        wifi_rssi,
+        wifi_signal_percent,
+        local_ip,
+        created_at
+      FROM device_connectivity_logs
+      WHERE device_uid = $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `,
+    [normalizedUid, limit, offset],
+  );
+
+  const logs = logsRes.rows.map((row) => ({
+    id: Number(row.id),
+    device_uid: row.device_uid,
+    event_type: row.event_type,
+    online_at: row.online_at ? new Date(row.online_at).toISOString() : null,
+    offline_at: row.offline_at ? new Date(row.offline_at).toISOString() : null,
+    duration_seconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+    duration_text: formatDurationTurkish(row.duration_seconds),
+    reason: row.reason || 'Wi-Fi / Bağlantı Kesildi',
+    wifi_rssi: row.wifi_rssi === null ? null : Number(row.wifi_rssi),
+    wifi_signal_percent: row.wifi_signal_percent === null ? null : Number(row.wifi_signal_percent),
+    local_ip: row.local_ip,
+    created_at: new Date(row.created_at).toISOString(),
+  }));
+
+  return {
+    device_uid: normalizedUid,
+    is_online: isOnline,
+    current_online_since: isOnline ? lastOnlineAt : null,
+    current_online_duration_seconds: currentOnlineDurationSeconds,
+    current_online_duration_text: currentOnlineDurationText,
+    last_offline_at: lastOfflineAt,
+    logs,
+    pagination: {
+      page: targetPage,
+      pageSize: limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
 }

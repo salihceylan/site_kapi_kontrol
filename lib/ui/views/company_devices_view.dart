@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/widgets/company_device_card.dart';
@@ -11,6 +12,7 @@ class CompanyDevicesView extends StatelessWidget {
     required this.pageData,
     required this.devices,
     required this.isSuperUser,
+    this.authService,
     required this.isLoading,
     required this.isBroadcastingOta,
     required this.onBroadcastOta,
@@ -25,6 +27,7 @@ class CompanyDevicesView extends StatelessWidget {
   final DevicePage? pageData;
   final List<DeviceRecord> devices;
   final bool isSuperUser;
+  final AuthService? authService;
   final bool isLoading;
   final bool isBroadcastingOta;
   final VoidCallback onBroadcastOta;
@@ -107,6 +110,7 @@ class CompanyDevicesView extends StatelessWidget {
             (device) => CompanyDeviceCard(
               device: device,
               isSuperUser: isSuperUser,
+              authService: authService,
               onEdit: () => onEditDevice(device),
               onAssignToDoor: () => onAssignDeviceToDoor(device),
               onDelete: () => onDeleteDevice(device),

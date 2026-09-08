@@ -718,3 +718,24 @@ export function getAuthUserCode(req) {
   return Number.isInteger(num) ? num : null;
 }
 
+export function formatDurationTurkish(seconds) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) {
+    return '-';
+  }
+  const total = Math.max(0, Math.floor(Number(seconds)));
+  if (total === 0) return '0 saniye';
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  const parts = [];
+  if (days > 0) parts.push(`${days} gün`);
+  if (hours > 0) parts.push(`${hours} saat`);
+  if (minutes > 0) parts.push(`${minutes} dk`);
+  if (parts.length === 0 || (days === 0 && hours === 0 && secs > 0)) {
+    parts.push(`${secs} sn`);
+  }
+  return parts.join(' ');
+}
+

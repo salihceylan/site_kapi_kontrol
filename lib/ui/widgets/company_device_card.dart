@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
+import 'package:site_kapi_kontrol/ui/widgets/device_connectivity_logs_accordion.dart';
 
 class CompanyDeviceCard extends StatefulWidget {
   const CompanyDeviceCard({
     super.key,
     required this.device,
     required this.isSuperUser,
+    this.authService,
     required this.onEdit,
     required this.onAssignToDoor,
     required this.onDelete,
@@ -15,6 +18,7 @@ class CompanyDeviceCard extends StatefulWidget {
 
   final DeviceRecord device;
   final bool isSuperUser;
+  final AuthService? authService;
   final VoidCallback onEdit;
   final VoidCallback onAssignToDoor;
   final VoidCallback onDelete;
@@ -262,6 +266,13 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                         ),
                     ],
                   ),
+                  if (widget.isSuperUser && widget.authService != null) ...[
+                    const SizedBox(height: 14),
+                    DeviceConnectivityLogsAccordion(
+                      device: widget.device,
+                      authService: widget.authService!,
+                    ),
+                  ],
                 ],
               ],
             ),

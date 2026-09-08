@@ -12,6 +12,7 @@ import {
   blockLabelFromIndex,
   blockNameFromIndex,
   buildBlockApartmentCounts,
+  formatDurationTurkish,
 } from '../src/utils/helpers.js';
 
 describe('Server Helpers Tests', () => {
@@ -94,6 +95,20 @@ describe('Server Helpers Tests', () => {
         blockApartmentCounts: null,
       });
       assert.deepEqual(counts, [4, 3, 3]);
+    });
+  });
+
+  describe('formatDurationTurkish', () => {
+    it('formats seconds, minutes, hours, and days correctly in Turkish', () => {
+      assert.equal(formatDurationTurkish(0), '0 saniye');
+      assert.equal(formatDurationTurkish(45), '45 sn');
+      assert.equal(formatDurationTurkish(125), '2 dk 5 sn');
+      assert.equal(formatDurationTurkish(3600), '1 saat');
+      assert.equal(formatDurationTurkish(3660), '1 saat 1 dk');
+      assert.equal(formatDurationTurkish(90000), '1 gün 1 saat');
+      assert.equal(formatDurationTurkish(176400), '2 gün 1 saat');
+      assert.equal(formatDurationTurkish(null), '-');
+      assert.equal(formatDurationTurkish(undefined), '-');
     });
   });
 });

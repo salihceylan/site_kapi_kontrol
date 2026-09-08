@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
@@ -599,6 +600,32 @@ class AuthService extends ChangeNotifier {
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  Future<(DeviceConnectivityReport?, String?)> getDeviceConnectivityLogs({
+    required String deviceUid,
+    int page = 1,
+    int pageSize = 10,
+  }) async {
+    final active = _safeRequireManagementSession();
+    if (active == null) {
+      return (null, 'Bu islem icin yonetim yetkisi gerekir.');
+    }
+
+    try {
+      final report = await api.getDeviceConnectivityLogs(
+        token: active.token,
+        deviceUid: deviceUid,
+        page: page,
+        pageSize: pageSize,
+      );
+      return (report, null);
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Baglanti loglari yuklenirken bir hata olustu.');
     }
   }
 
