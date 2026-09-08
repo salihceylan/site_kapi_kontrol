@@ -2,10 +2,12 @@
 #include "display_protocol.h"
 #include <Arduino.h>
 
+#if defined(BOARD_ESP32_WROOM_RELAY)
+
 // Forward declarations
 void roleTetikle();
 
-// HardwareSerial(1) for communication with ESP32-C3 display controller
+// HardwareSerial(1) for communication with ESP32-C3 display controller on WROOM
 static HardwareSerial displaySerial(1);
 
 void displayUartSetup() {
@@ -60,7 +62,6 @@ static void handleDisplayCommand(const String &rawCmd) {
     String qrData = cmd.substring(strlen(CMD_QR_PREFIX));
     qrData.trim();
     Serial.print("[DISPLAY] QR verisi alindi: ");
-    // Production güvenlik kuralı: tamamı hassas ise özet bas
     Serial.println(qrData);
   } else {
     Serial.print("[DISPLAY] Bilinmeyen komut (yoksayildi): ");
@@ -87,3 +88,14 @@ void displayUartLoop() {
     }
   }
 }
+
+#else
+
+// Sahadaki ESP32-C3 Super Mini cihazlarinda harici ekran yoktur (Kural 3).
+// Bu nedenle fonksiyonlar C3 hedefleri icin guvenli no-op olarak calisir.
+void displayUartSetup() {}
+void displayUartLoop() {}
+void displayUartSend(const char* cmd) {}
+void displayUartSend(const String& cmd) {}
+
+#endif
