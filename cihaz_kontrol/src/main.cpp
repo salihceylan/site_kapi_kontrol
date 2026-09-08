@@ -9,6 +9,7 @@
 #include "wifi_baglanti.h"
 #include "yerel_kapi_kontrol.h"
 #include "gm60_scanner.h"
+#include "display_uart.h"
 
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
@@ -122,6 +123,7 @@ void setup() {
 
   roleSetup();
   gm60Setup();
+  displayUartSetup();
   wifiBaglan();
   otaSetup();
   mqttSetup();
@@ -130,6 +132,7 @@ void setup() {
 void loop() {
   seriKomutKontrol();
   gm60Loop();
+  displayUartLoop();
   wifiLoop();
   yerelKapiKontrolLoop();
   mqttLoopHandler();
