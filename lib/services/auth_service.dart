@@ -592,6 +592,26 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<(int, String?)> syncDeviceLogs({
+    required String deviceUid,
+    required List<Map<String, dynamic>> logs,
+  }) async {
+    try {
+      final token = session?.token;
+      final count = await api.syncDeviceLogs(
+        deviceUid: deviceUid,
+        logs: logs,
+        token: token,
+      );
+      return (count, null);
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (0, e.message);
+    } catch (_) {
+      return (0, 'Log senkronizasyonu icin sunucuya baglanilamadi.');
+    }
+  }
+
   Future<(DoorRecord?, String?)> assignDoorDevice({
     required int doorId,
     required String deviceUid,

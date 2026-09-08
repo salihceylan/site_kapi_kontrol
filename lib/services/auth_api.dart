@@ -523,6 +523,31 @@ class AuthApi {
     );
   }
 
+  Future<int> syncDeviceLogs({
+    required String deviceUid,
+    required List<Map<String, dynamic>> logs,
+    String? token,
+  }) async {
+    final uri = Uri.parse('$baseUrl/device/sync-logs');
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: uri,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        'X-Ahbu-Device-Uid': deviceUid,
+      },
+      body: {
+        'device_uid': deviceUid,
+        'logs': logs,
+      },
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return (payload['synced_count'] as num?)?.toInt() ?? 0;
+  }
+
   Future<DoorRecord> assignDoorDevice({
     required String token,
     required UserRole role,

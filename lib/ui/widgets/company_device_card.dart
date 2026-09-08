@@ -119,13 +119,40 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            device.deviceUid,
-                            style: TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                device.deviceUid,
+                                style: TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
+                                ),
+                              ),
+                              if (device.hardwareTarget != null && device.hardwareTarget!.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: (device.hardwareTarget == 'esp32-wroom'
+                                            ? const Color(0xFF7C3AED)
+                                            : AppColors.primary)
+                                        .withValues(alpha: isDark ? 0.2 : 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    device.hardwareTarget!.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: device.hardwareTarget == 'esp32-wroom'
+                                          ? (isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED))
+                                          : (isDark ? AppColors.accentLight : AppColors.primary),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -190,6 +217,7 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                       _buildChip(context, 'Kullanıcı ID: $userText'),
                       _buildChip(context, 'MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
                       _buildChip(context, 'Firmware: ${device.firmwareVersion ?? "-"}'),
+                      _buildChip(context, 'Model: ${device.hardwareTarget?.toUpperCase() ?? "ESP32-C3"}'),
                       if (widget.isSuperUser)
                         _buildChip(context, 'OTA Durumu: ${device.otaStatus ?? "-"}'),
                       _buildChip(context, 'Wi-Fi Gücü: $signalText'),

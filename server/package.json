@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "node --test test/**/*.test.js",
     "mqtt:sync": "node scripts/sync_mqtt_acl.js"
   },
   "dependencies": {

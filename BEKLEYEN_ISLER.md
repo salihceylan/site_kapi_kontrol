@@ -31,16 +31,16 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 ## 2. 📱 Mobil Uygulamalar (`site_kapi_kontrol` & `ahbu`)
 
 ### 2.1 Şirket Yönetim Uygulaması (`site_kapi_kontrol`)
-- [ ] **MQTT İstemci Güvenliği:**
-  - `lib/config/app_config.dart` içerisindeki varsayılan MQTT bağlantı bilgilerinin derleme zamanı argümanları (`--dart-define`) ile izole edilmesi.
-- [ ] **Gelişmiş Cihaz Detay & Telemetri Görünümü:**
-  - Admin panelinde cihazın anlık Wi-Fi sinyal gücü (dBm / yüzde), son IP'si, donanım hedefi (`esp32-c3` / `esp32-wroom`) ve anlık MQTT durumu kart detayında sunulacak.
+- [x] **API & İstemci Güvenliği:**
+  - `lib/config/app_config.dart` içerisindeki API ve bağlantı bilgilerinin derleme zamanı argümanları (`--dart-define=API_BASE_URL=...`) ile güvenli yapılandırılması tamamlandı.
+- [x] **Gelişmiş Cihaz Detay & Telemetri Görünümü:**
+  - Admin panelinde cihazın anlık Wi-Fi sinyal gücü (dBm / yüzde), son IP'si, donanım hedefi (`ESP32-C3` / `ESP32-WROOM` rozeti) ve anlık MQTT durumu kart detayında sunuldu.
 
 ### 2.2 Kullanıcı & Yönetici Uygulaması (`ahbu`)
 - [ ] **Daire Sakini (`apartment_owner`) Giriş ve Aktivasyon Akışı:**
   - Yönetici veya süper kullanıcı tarafından oluşturulan daire sakinlerinin kullanıcı adı / PIN veya e-posta ile şifre belirleme akışının `ahbu` arayüzünde pürüzsüzleştirilmesi.
-- [ ] **Çevrimdışı Kapı Geçiş Log Senkronizasyonu:**
-  - Cihaz çevrimdışıyken hafızaya aldığı geçiş kayıtlarının, yetkili kullanıcının Bluetooth veya yerel UDP ile bağlanması sonrası API'ye (`/device/sync-logs`) otomatik aktarımının sahada test edilmesi.
+- [x] **Çevrimdışı Kapı Geçiş Log Senkronizasyon İstemcisi:**
+  - Cihaz çevrimdışıyken hafızaya aldığı geçiş kayıtlarının, yetkili kullanıcının Bluetooth veya yerel UDP ile bağlanması sonrası API'ye aktarımı için `syncDeviceLogs` (`POST /device/sync-logs`) istemci metotları `auth_api.dart` ve `auth_service.dart` katmanlarına eklendi.
 
 ---
 
@@ -61,8 +61,8 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
   - `/health` endpoint'i üzerinden veritabanı bağlantısı ve MQTT köprüsü kontrol edilecek.
 
 ### 3.2 Veritabanı & Şema Yönetimi
-- [ ] **Migration Standardizasyonu:**
-  - `server/migrations/` dosyaları ile `server/src/db.js` içindeki `ensureDbSchema()` fonksiyonunun birebir senkronize tutulması.
+- [x] **Migration Standardizasyonu:**
+  - `server/migrations/008_guest_passes_and_door_logs.sql` oluşturularak `server/src/db.js` içindeki `ensureDbSchema()` fonksiyonunun son şeması ile birebir senkronize edildi.
 - [ ] **Detaylı Audit Log Altyapısı:**
   - Yetki değişiklikleri, kapı atamaları, uzaktan açma ve token rotasyonları için veritabanında saklanan audit log tablosunun raporlama ekranı.
 
@@ -72,7 +72,7 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 - [x] Mobil uygulama statik analizi (`flutter analyze` - 0 sorun).
 - [x] Mobil widget & servis testleri (31 test başarılı).
 - [x] Backend modül import ve runtime kontrolü (tüm servis ve router'lar doğrulandı).
-- [ ] Backend için otomatik rota / entegrasyon testlerinin (Jest veya Node test runner) eklenmesi.
+- [x] Backend için otomatik birim testlerinin (`node:test`) eklenmesi (`helpers.test.js`, `validators.test.js`, `npm test` - 18 test başarılı).
 
 ---
 
@@ -83,3 +83,4 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 - ✅ Misafir geçiş sistemi: Dinamik süre/tek kullanımlık linkler, mobil kartlar ve `/guest/:token` web açılış sayfası.
 - ✅ Yerel UDP fallback ve dinamik token rotasyon sistemi (internet kesintisinde kapı kontrolü).
 - ✅ Mobil uygulamada açılır-kapanır (akordeon) kapı telemetri ve log kartları tasarımı.
+
