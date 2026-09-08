@@ -2,12 +2,11 @@
 #include "ScreenManager.h"
 #include "display_protocol.h"
 #include "config.h"
+#include "cst816d_touch.h"
 
 // Communication with main ESP32-WROOM
-// On ESP32-C3, Serial is the primary hardware serial (USB/CDC or UART0 pins 20/21)
-// If dedicated pins are used, HardwareSerial(1) can be utilized.
-// Default: use Serial for UART link to WROOM (115200 baud)
 ScreenManager screen;
+CST816DTouch touch;
 
 // Forward declaration for sending commands to ESP32-WROOM
 void sendToWroom(const char* cmd) {
@@ -37,6 +36,22 @@ void processUartInput() {
   }
 }
 
+// Non-blocking capacitive touch polling
+static unsigned long lastTouchPollMs = 0;
+
+void processTouchInput() {
+  if (!touch.isAvailable()) return;
+
+  // Poll touch controller at ~20 Hz (non-blocking 50ms)
+  if (millis() - lastTouchPollMs < 50) return;
+  lastTouchPollMs = millis();
+
+  int16_t tx, ty;
+  if (touch.readTouch(tx, ty)) {
+    screen.onTouch(tx, ty);
+  }
+}
+
 // Non-blocking hardware test button (active LOW with pullup)
 static bool lastBtnState = HIGH;
 static unsigned long lastBtnDebounceMs = 0;
@@ -60,6 +75,11 @@ void setup() {
   screen.setSendCallback(sendToWroom);
   screen.begin();
 
+  // Initialize capacitive touch controller
+  if (touch.begin(TOUCH_SDA_PIN, TOUCH_SCL_PIN, TOUCH_RST_PIN, TOUCH_INT_PIN)) {
+    sendToWroom(CMD_TOUCH_READY);
+  }
+
   // Notify WROOM that display controller has booted
   sendToWroom(CMD_DISP_READY);
 }
@@ -68,9 +88,12 @@ void loop() {
   // 1. Process UART commands from WROOM (non-blocking)
   processUartInput();
 
-  // 2. Process hardware inputs (non-blocking)
+  // 2. Process capacitive touch events (non-blocking)
+  processTouchInput();
+
+  // 3. Process hardware inputs / test button (non-blocking)
   processButtonInput();
 
-  // 3. Update screen manager (non-blocking timeouts, animations)
+  // 4. Update screen manager (non-blocking timeouts, animations)
   screen.update();
 }
