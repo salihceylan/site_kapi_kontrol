@@ -590,20 +590,21 @@ export async function listSiteDoors(siteCode, db = pool) {
         d.is_active,
         d.assigned_device_id,
         devices.device_uid AS assigned_device_uid,
-        devices.hardware_target AS assigned_device_hardware_target,
+        rs.hardware_target AS assigned_device_hardware_target,
         devices.hardware_type AS assigned_device_hardware_type,
-        devices.firmware_version AS assigned_device_firmware_version,
-        devices.is_online AS assigned_device_is_online,
-        devices.local_ip AS assigned_device_local_ip,
-        devices.public_ip AS assigned_device_public_ip,
-        devices.wifi_rssi AS assigned_device_wifi_rssi,
-        devices.wifi_signal_percent AS assigned_device_wifi_signal_percent,
-        devices.last_seen_at AS assigned_device_last_seen_at,
+        rs.firmware_version AS assigned_device_firmware_version,
+        COALESCE(rs.mqtt_connected, devices.is_online, FALSE) AS assigned_device_is_online,
+        rs.local_ip AS assigned_device_local_ip,
+        rs.public_ip AS assigned_device_public_ip,
+        rs.wifi_rssi AS assigned_device_wifi_rssi,
+        rs.wifi_signal_percent AS assigned_device_wifi_signal_percent,
+        COALESCE(rs.last_seen_at, devices.last_online_at) AS assigned_device_last_seen_at,
         sites.mqtt_site_id,
         d.created_at
       FROM site_doors d
       INNER JOIN sites ON sites.site_code = d.site_code
       LEFT JOIN devices ON devices.id = d.assigned_device_id
+      LEFT JOIN device_runtime_status rs ON rs.device_uid = devices.device_uid
       WHERE d.site_code = $1
       ORDER BY d.door_index ASC
     `,
