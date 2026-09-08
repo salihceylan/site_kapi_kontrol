@@ -131,3 +131,48 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 ---
 
 *Eklenmesini istediğiniz veya test aşamasında özel olarak kontrol etmek istediğiniz bir madde olursa lütfen bildirin.*
+
+---
+
+## 8. Display UART Sürücüsü (ESP32-WROOM ↔ ESP32-C3 Ekran Kartı)
+
+- [ ] **8.1. Display UART Başlatma:**
+  - **Nasıl Test Edilir:** ESP32-WROOM'u seri porta bağlayın ve seri monitörü açın (`115200 baud`).
+  - **Beklenen Sonuç:** Boot sırasında `[Display UART] initialized (RX=32, TX=33)` mesajı görünmeli.
+
+- [ ] **8.2. DOOR_OPEN Komutu ile Röle Tetikleme:**
+  - **Nasıl Test Edilir:** Ekran kartından (ESP32-C3) UART üzerinden `DOOR_OPEN\n` mesajı gönderin.
+  - **Beklenen Sonuç:** WROOM seri monitörde `[Display UART] Door open command received` görünmeli ve röle tetiklenmeli (kapı açılmalı).
+
+- [ ] **8.3. QR Kodu Alma:**
+  - **Nasıl Test Edilir:** Ekran kartından `QR:TESTDATA\n` gönderin.
+  - **Beklenen Sonuç:** `[Display UART] QR received: TESTDATA` çıktısı görünmeli.
+
+- [ ] **8.4. READY Komutu:**
+  - **Nasıl Test Edilir:** Ekran kartı başlangıçta `READY\n` gönderdiğinde.
+  - **Beklenen Sonuç:** `[Display UART] Display reports READY` çıktısı görünmeli.
+
+---
+
+## 9. Ekran Yazılımı (ESP32-C3 + ST7789 TFT)
+
+- [ ] **9.1. TFT Başlatma:**
+  - **Nasıl Test Edilir:** `ekran_yazilimi` firmware'ini ESP32-C3 + ST7789 kartına yükleyin.
+  - **Beklenen Sonuç:** Ekranda "ESP32 WROOM Screen Firmware" metni ve kırmızı OFFLINE göstergesi görünmeli.
+
+- [ ] **9.2. JSON Payload ile QR Kod Gösterimi:**
+  - **Nasıl Test Edilir:** WROOM'dan `{"qr":"TESTQR123"}` JSON'ını UART üzerinden gönderin.
+  - **Beklenen Sonuç:** Ekranda QR kodu çizilmeli.
+
+- [ ] **9.3. Kapı Durumu Gösterimi:**
+  - **Nasıl Test Edilir:** `{"door":"open"}` gönderin.
+  - **Beklenen Sonuç:** Ekran altında "Door: OPEN" yazısı görünmeli.
+
+- [ ] **9.4. Online/Offline Göstergesi:**
+  - **Nasıl Test Edilir:** `{"online":true}` gönderin.
+  - **Beklenen Sonuç:** Sağ üst köşedeki daire yeşile dönmeli ve "ONLINE" yazmalı.
+
+- [ ] **9.5. Ayarlar Butonu:**
+  - **Nasıl Test Edilir:** GPIO 0 butonuna basın.
+  - **Beklened Sonuç:** Ekranda ayarlar menüsü açılmalı.
+
