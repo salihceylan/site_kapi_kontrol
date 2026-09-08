@@ -21,6 +21,7 @@ class DeviceRecord {
     required this.lastEvent,
     this.localIp,
     this.publicIp,
+    this.hardwareTarget,
     required this.createdAt,
   });
 
@@ -37,6 +38,7 @@ class DeviceRecord {
   final bool mqttConfigured;
   final bool? mqttConnected;
   final String? firmwareVersion;
+  final String? hardwareTarget;
   final String? otaStatus;
   final String? otaLastVersion;
   final int? wifiRssi;
@@ -62,6 +64,7 @@ class DeviceRecord {
       mqttConfigured: json['mqtt_configured'] as bool? ?? false,
       mqttConnected: json['mqtt_connected'] as bool?,
       firmwareVersion: json['firmware_version'] as String?,
+      hardwareTarget: json['hardware_target'] as String?,
       otaStatus: json['ota_status'] as String?,
       otaLastVersion: json['ota_last_version'] as String?,
       wifiRssi: int.tryParse(json['wifi_rssi']?.toString() ?? ''),

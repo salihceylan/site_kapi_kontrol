@@ -57,6 +57,11 @@ def target_for_env(env: str) -> str:
         return "esp32-wroom"
     return "esp32-c3"
 
+
+def bootloader_offset_for_env(env: str) -> str:
+    return "0x1000" if target_for_env(env) == "esp32-wroom" else "0x0"
+
+
 PLATFORMIO_HOME = Path.home() / ".platformio"
 BUNDLED_PYTHON_DIR = PLATFORMIO_HOME / "python3"
 BUNDLED_ESPTOOL_DIR = PLATFORMIO_HOME / "packages" / "tool-esptoolpy"
@@ -660,6 +665,17 @@ def suggest_version(releases: list[dict]) -> str:
 
 
 def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
+    chip_lower = (chip or "").lower()
+    if "c3" in chip_lower:
+        for e in envs:
+            if "c3" in e.lower():
+                return e
+        return "lolin_c3_mini" if "lolin_c3_mini" in envs else (envs[0] if envs else None)
+    elif "esp32" in chip_lower or "wroom" in chip_lower or "d0wd" in chip_lower:
+        for e in envs:
+            if "wroom" in e.lower() or "esp32dev" in e.lower():
+                return e
+        return "esp32_relay_wroom" if "esp32_relay_wroom" in envs else (envs[0] if envs else None)
     if "lolin_c3_mini" in envs:
         return "lolin_c3_mini"
     return envs[0] if envs else None
@@ -1607,6 +1623,7 @@ class App:
                     raise FileNotFoundError(f"Firmware dosyasi yok: {p}")
 
             py_exe = find_esptool_python()
+            boot_offset = bootloader_offset_for_env(rel.get("env", "lolin_c3_mini"))
             cmd = [
                 py_exe,
                 "-m",
@@ -1623,7 +1640,7 @@ class App:
                 "hard-reset",
                 "write_flash",
                 "-z",
-                "0x0",
+                boot_offset,
                 str(boot),
                 "0x8000",
                 str(part),
@@ -1809,6 +1826,8 @@ class App:
             speed = int(self.upload_speeds.get(rel["env"], 460800))
             version = str(rel.get("version", ""))
             env = str(rel.get("env", ""))
+            target = target_for_env(env)
+            boot_offset = bootloader_offset_for_env(env)
             required_bundle_paths = [
                 ("Paket Python", BUNDLED_PYTHON_DIR),
                 ("esptool", BUNDLED_ESPTOOL_DIR),
@@ -1837,7 +1856,7 @@ if not exist "%PYEXE%" (
 )
 set PYTHONPATH=%~dp0tools\\site-packages;%~dp0tools\\tool-esptoolpy;%~dp0tools\\tool-esptoolpy\\_contrib
 if "%PORT%"=="" (
-  echo ESP32 COM portu otomatik araniyor...
+  echo ESP32 ({target}) COM portu otomatik araniyor...
   for /f "delims=" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-CimInstance Win32_SerialPort | Where-Object {{ $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty DeviceID; if(-not $p){{ $n=Get-CimInstance Win32_PnPEntity | Where-Object {{ $_.Name -match '(COM[0-9]+)' -and $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty Name; if($n -match '(COM[0-9]+)'){{ $p=$Matches[1] }} }}; if($p){{ $p.ToUpper() }}"') do set PORT=%%P
 )
 if "%PORT%"=="" (
@@ -1858,7 +1877,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-%PYEXE% -m esptool --chip auto --port "%PORT%" --baud {speed} --before default_reset --after hard_reset write_flash -z 0x0 firmware\\bootloader.bin 0x8000 firmware\\partitions.bin 0x10000 firmware\\firmware.bin
+%PYEXE% -m esptool --chip auto --port "%PORT%" --baud {speed} --before default_reset --after hard_reset write_flash -z {boot_offset} firmware\\bootloader.bin 0x8000 firmware\\partitions.bin 0x10000 firmware\\firmware.bin
 if errorlevel 1 (
   echo.
   echo Yukleme basarisiz oldu.
@@ -1866,17 +1885,19 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo AHBU firmware yukleme tamamlandi. Surum: v{version}
+echo AHBU firmware yukleme tamamlandi. Surum: v{version} ({target})
 pause
 """
             readme = f"""AHBU cihaz USB guncelleme paketi
 
 Surum: v{version}
+Hedef Donanim: {target}
 PlatformIO env: {env}
+Bootloader offset: {boot_offset}
 
 Kullanim:
 1. ZIP dosyasini bir klasore cikarin.
-2. ESP32 C3 cihazi USB ile bilgisayara baglayin.
+2. {target} cihazini USB ile bilgisayara baglayin.
 3. flash_ahbu_usb.bat dosyasina cift tiklayin.
 4. Program COM portunu otomatik bulur ve firmware yukler.
 
@@ -2269,6 +2290,7 @@ class DeviceTesterWindow:
 
         fields = [
             "Cihaz UID",
+            "Hedef mimari",
             "Firmware surumu",
             "OTA durum",
             "WiFi kayitli",

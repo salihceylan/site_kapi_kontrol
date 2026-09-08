@@ -350,6 +350,10 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS public_ip TEXT
     `);
     await client.query(`
+      ALTER TABLE device_runtime_status
+      ADD COLUMN IF NOT EXISTS hardware_target TEXT
+    `);
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_device_runtime_status_last_seen
       ON device_runtime_status(last_seen_at DESC)
     `);

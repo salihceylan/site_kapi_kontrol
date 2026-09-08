@@ -1046,6 +1046,33 @@
         }
       },
       "manifest": "firmware_releases\\20260904_121700_v3_0_3\\manifest.json"
+    },
+    {
+      "id": "20260907_201256_v3_0_3",
+      "version": "3.0.3",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-07T17:12:56.560994+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260907_201256_v3_0_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260907_201256_v3_0_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260907_201256_v3_0_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "6d3cfe14becd0f9f0d5c2522c1e0fc3415c5383fb0dab1c52380fb59b9ee4afa",
+          "md5": "3bc98cc5922a2af18d4630c42d153aea"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260907_201256_v3_0_3\\manifest.json"
     }
   ]
 }

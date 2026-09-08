@@ -329,6 +329,7 @@ function mapDeviceRow(row) {
       ? null
       : Boolean(row.mqtt_connected),
     firmware_version: row.firmware_version ?? null,
+    hardware_target: row.hardware_target ?? null,
     ota_status: row.ota_status ?? null,
     ota_last_version: row.ota_last_version ?? null,
     wifi_rssi:

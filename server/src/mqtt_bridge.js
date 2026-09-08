@@ -50,6 +50,7 @@ function ensureStatus(deviceUid) {
     mqtt_connected: false,
     door_locked: null,
     firmware_version: null,
+    hardware_target: null,
     ota_status: null,
     ota_last_version: null,
     wifi_rssi: null,
@@ -84,6 +85,7 @@ async function persistRuntimeStatus(status) {
           mqtt_connected,
           door_locked,
           firmware_version,
+          hardware_target,
           ota_status,
           ota_last_version,
           wifi_rssi,
@@ -98,7 +100,7 @@ async function persistRuntimeStatus(status) {
           last_seen_at,
           updated_at
         )
-        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW()
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
         WHERE EXISTS (
           SELECT 1 FROM devices WHERE device_uid = $1
         )
@@ -106,6 +108,7 @@ async function persistRuntimeStatus(status) {
           mqtt_connected = EXCLUDED.mqtt_connected,
           door_locked = EXCLUDED.door_locked,
           firmware_version = COALESCE(EXCLUDED.firmware_version, device_runtime_status.firmware_version),
+          hardware_target = COALESCE(EXCLUDED.hardware_target, device_runtime_status.hardware_target),
           ota_status = COALESCE(EXCLUDED.ota_status, device_runtime_status.ota_status),
           ota_last_version = COALESCE(EXCLUDED.ota_last_version, device_runtime_status.ota_last_version),
           wifi_rssi = COALESCE(EXCLUDED.wifi_rssi, device_runtime_status.wifi_rssi),
@@ -125,6 +128,7 @@ async function persistRuntimeStatus(status) {
         status.mqtt_connected,
         status.door_locked,
         status.firmware_version,
+        status.hardware_target,
         status.ota_status,
         status.ota_last_version,
         status.wifi_rssi,
@@ -376,6 +380,9 @@ function applyStatusMessage(topic, payload) {
       status.firmware_version = decoded.firmware_version
         ? String(decoded.firmware_version)
         : status.firmware_version;
+      status.hardware_target = decoded.hardware_target || decoded.target
+        ? String(decoded.hardware_target || decoded.target)
+        : status.hardware_target;
       status.ota_status = decoded.ota_status ? String(decoded.ota_status) : status.ota_status;
     } catch (_error) {
       status.last_event = text || null;
@@ -416,6 +423,9 @@ function applyStatusMessage(topic, payload) {
       status.firmware_version = decoded.firmware_version
         ? String(decoded.firmware_version)
         : status.firmware_version;
+      status.hardware_target = decoded.hardware_target || decoded.target
+        ? String(decoded.hardware_target || decoded.target)
+        : status.hardware_target;
       status.ota_status = decoded.ota_status ? String(decoded.ota_status) : status.ota_status;
       status.ota_last_version = decoded.ota_last_version
         ? String(decoded.ota_last_version)
@@ -446,6 +456,7 @@ export async function loadInitialDeviceRuntimeStatuses() {
       existing.mqtt_connected = Boolean(row.mqtt_connected);
       existing.door_locked = row.door_locked;
       existing.firmware_version = row.firmware_version;
+      existing.hardware_target = row.hardware_target;
       existing.ota_status = row.ota_status;
       existing.ota_last_version = row.ota_last_version;
       existing.wifi_rssi = row.wifi_rssi;

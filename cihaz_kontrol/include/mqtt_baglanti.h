@@ -37,6 +37,8 @@ inline void mqttPublishState(bool locked) {
   JsonDocument doc;
   doc["locked"] = locked;
   doc["firmware_version"] = OTA_CURRENT_VERSION;
+  doc["hardware_target"] = OTA_TARGET;
+  doc["target"] = OTA_TARGET;
   doc["ota_status"] = otaLastStatus();
   doc["ota_last_version"] = otaLastVersion();
   doc["wifi_rssi"] = wifiSinyalDbm();
@@ -59,6 +61,8 @@ inline void mqttPublishEvent(const char* eventName, const char* detail = "") {
   }
   doc["ms"] = millis();
   doc["firmware_version"] = OTA_CURRENT_VERSION;
+  doc["hardware_target"] = OTA_TARGET;
+  doc["target"] = OTA_TARGET;
   doc["ota_status"] = otaLastStatus();
 
   String payload;

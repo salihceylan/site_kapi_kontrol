@@ -61,6 +61,8 @@ void seriDurumYazdir() {
   Serial.println("----- CIHAZ DURUMU -----");
   Serial.print("Cihaz UID: ");
   Serial.println(cihazUniqueId());
+  Serial.print("Hedef mimari: ");
+  Serial.println(OTA_TARGET);
   Serial.print("WiFi kayitli: ");
   Serial.println(wifiAktifSsid().isEmpty() ? "hayir" : "evet");
   Serial.print("WiFi SSID: ");

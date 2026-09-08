@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #if defined(BOARD_ESP32_WROOM_RELAY)
+// ESP32-WROOM-32E Relay Board (DC 7-60V / Micro USB 5V)
 constexpr int WIFI_STATUS_LED_PIN = 2;
 constexpr bool WIFI_STATUS_LED_ACTIVE_HIGH = true;
 constexpr int BLE_STATUS_LED_PIN = -1;
@@ -13,11 +14,12 @@ constexpr bool WIFI_RESET_BUTTON_ACTIVE_LOW = true;
 constexpr unsigned long WIFI_RESET_HOLD_MS = 3000;
 constexpr uint16_t YEREL_KAPI_KONTROL_PORT = 8765;
 
-// GM60 Barcode & QR Scanner UART2 Pins
-constexpr int GM60_RX_PIN = 16;
+// GM60 Barcode & QR Scanner UART2 Pins (Pin 18 RX, Pin 17 TX)
+constexpr int GM60_RX_PIN = 18;
 constexpr int GM60_TX_PIN = 17;
 constexpr uint32_t GM60_BAUD_RATE = 9600;
 #else
+// ESP32-C3 Super Mini Board
 constexpr int WIFI_STATUS_LED_PIN = 2;
 constexpr bool WIFI_STATUS_LED_ACTIVE_HIGH = true;
 constexpr int BLE_STATUS_LED_PIN = -1;
@@ -27,7 +29,7 @@ constexpr bool WIFI_RESET_BUTTON_ACTIVE_LOW = true;
 constexpr unsigned long WIFI_RESET_HOLD_MS = 3000;
 constexpr uint16_t YEREL_KAPI_KONTROL_PORT = 8765;
 
-// GM60 Pins on C3 (Optional)
+// GM60 Pins on C3 (UART1 RX: 20, TX: 21)
 constexpr int GM60_RX_PIN = 20;
 constexpr int GM60_TX_PIN = 21;
 constexpr uint32_t GM60_BAUD_RATE = 9600;
