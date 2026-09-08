@@ -1,4 +1,4 @@
-﻿# ÇALIŞMA VE KODLAMA KURALLARI (RULES)
+# ÇALIŞMA VE KODLAMA KURALLARI (RULES)
 
 Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygulanmalıdır:
 
@@ -21,3 +21,8 @@ Bu kurallar projede geliştirme yapılırken MUTLAKA ve İSTİSNASIZ olarak uygu
    - Yeni donanım (örneğin ESP32-WROOM-32E röle kartı) ve mevcut donanım (ESP32-C3 Süper Mini) birbirinden tamamen bağımsız iki donanım hedefidir.
    - Firmware derlemeleri, OTA manifest dosyaları (`/firmware/esp32-c3/manifest.json` ve `/firmware/esp32-wroom/manifest.json`) ve versiyon kontrolleri cihaz mimarisine (`hardware_target`) göre ayrı ayrı yürütülmeli ve asla birbirine karışmamalıdır.
    - Her cihaz yalnızca kendi mimarisine ait güncellemeleri çekmelidir.
+
+5. **Saha Kontrol Listesini Güncel Tut:**
+   - Kullanıcı yeni bir özellik talep ettiğinde ve bu özellik kodlanıp tamamlandığında, `SAHA_KONTROL_LISTESI.md` dosyasına ilgili özelliği test adımı (`- [ ]`) olarak ekle.
+   - Test adımında özelliğin nasıl test edileceğini ve beklenen sonucunu net olarak açıkla.
+
