@@ -38,7 +38,9 @@ Bu dosya; daha önce konuşulan, planlanan, geliştirme sürecinde bekleyen veya
 - [x] **Site Bazlı Giriş Yetkilendirme & Geçiş Politikaları (Süper Kullanıcı Kontrolü):**
   - Süper kullanıcı tarafından her siteye özel olarak "Sadece Mobil Uygulama", "Sadece QR Kod" veya "Hibrit (Uygulama + QR)" erişim kuralı belirleme.
   - Sadece QR seçili sitelerde resident kartında otomatik QR açılışı ve uzaktan butona basma engeli (sunucu + istemci seviyesinde 403 kontrolü).
-  - Dinamik QR rotasyon süresi ayarı (15s, 30s, 60s), Misafir geçiş kodu yetkilendirme açma/kapama ve GPS Geofencing (enlem, boylam, yarıçap) parametreleri entegre edildi.
+- [x] **Karanlık Mod (Dark Theme) Kontrast ve Arayüz Düzeltmeleri:**
+  - `ListTile background color or ink splashes may be invisible` framework uyarısı `yan_menu.dart` içerisinde `ListTile` bileşeni `Material` ile sarılarak çözüldü.
+  - Karanlık modda silik kalan metinler (`AppColors.textMutedLight` -> Slate-300 `#CBD5E1`), dialog arka planları, tersine dönmüş renk koşulları (`login_page`, `yan_menu`, `admin_door_status_card`, `hands_free_settings_dialog`, `site_security_policy_dialog`) düzeltilerek yüksek kontrast ve net okunabilirlik sağlandı.
 
 ### 2.2 Kullanıcı & Yönetici Uygulaması (`ahbu`)
 - [ ] **Daire Sakini (`apartment_owner`) Giriş ve Aktivasyon Akışı:**
