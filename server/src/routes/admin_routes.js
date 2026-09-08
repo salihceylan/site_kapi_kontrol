@@ -33,7 +33,7 @@ import {
   handleSiteMutationError,
   handleDeviceMutationError,
 } from '../utils/validators.js';
-import { createUser, updateUserByCode } from '../services/user_service.js';
+import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
 import {
   listSitesForAuthUser,
   getSiteByCode,
@@ -52,7 +52,6 @@ import {
 } from '../services/apartment_service.js';
 import { updateDoorDeviceAssignment } from '../services/door_service.js';
 import {
-  userExists,
   affectedSiteCodesForUser,
   deviceIdsForSite,
   rotateLocalControlTokensForDeviceIds,
@@ -1106,3 +1105,4 @@ adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, r
     return handleDeviceMutationError(error, res, 'Cihaz kaydedilemedi.');
   }
 });
+

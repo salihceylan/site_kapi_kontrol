@@ -635,3 +635,64 @@ export function buildBlockApartmentCounts({
   return result;
 }
 
+export function blockLabelFromIndex(index) {
+  let current = index + 1;
+  let label = '';
+  while (current > 0) {
+    current -= 1;
+    label = String.fromCharCode(65 + (current % 26)) + label;
+    current = Math.floor(current / 26);
+  }
+  return label;
+}
+
+export function blockNameFromIndex(index) {
+  return `${blockLabelFromIndex(index)} Blok`;
+}
+
+export function resolveStoredBlockApartmentCounts(siteRow) {
+  const normalized = normalizeBlockApartmentCounts(siteRow?.block_apartment_counts);
+  return buildBlockApartmentCounts({
+    blockCount: Number(siteRow?.block_count ?? 1),
+    apartmentCount: Number(siteRow?.apartment_count ?? 0),
+    blockApartmentCounts: normalized,
+  });
+}
+
+export function formatBlockNameSegment(raw) {
+  let text = String(raw || '').trim();
+  text = text
+    .replaceAll('ç', 'c').replaceAll('Ç', 'C')
+    .replaceAll('ğ', 'g').replaceAll('Ğ', 'G')
+    .replaceAll('ı', 'i').replaceAll('İ', 'I')
+    .replaceAll('ö', 'o').replaceAll('Ö', 'O')
+    .replaceAll('ş', 's').replaceAll('Ş', 'S')
+    .replaceAll('ü', 'u').replaceAll('Ü', 'U')
+    .replaceAll(' ', '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '');
+  return text || 'Blok';
+}
+
+export function apartmentResidentFullName({ blockName, unitLabel }) {
+  return `${blockName} ${unitLabel}`.trim();
+}
+
+export function apartmentBaseLoginName({ siteCode, blockName, sortOrder }) {
+  const blockSegment = formatBlockNameSegment(blockName);
+  return `${siteCode}_${blockSegment}_Daire${sortOrder}`;
+}
+
+export function generateApartmentPin() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+export function generateInternalApartmentEmail({ loginName, apartmentId, siteCode }) {
+  return `${loginName}.${apartmentId}.${siteCode}@ahbu.local`;
+}
+
+export function getAuthUserCode(req) {
+  const raw = req?.authUser?.id ?? req?.authUser?.user_code;
+  const num = Number(raw);
+  return Number.isInteger(num) ? num : null;
+}
+

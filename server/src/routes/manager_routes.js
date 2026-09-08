@@ -658,3 +658,4 @@ managerRouter.delete('/manager/devices/:id', authRequired, requireSiteManager, a
     return handleDeviceMutationError(error, res, 'Cihaz silinemedi.');
   }
 });
+
