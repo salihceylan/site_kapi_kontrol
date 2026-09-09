@@ -109,7 +109,7 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 ## 6. 📊 Kapı Geçiş & Erişim Logları Akordeonu
 *Admin panelinde kapı kullanım geçmişi.*
 
-- [ ] **6.1. Sayfalanmış Kapı Logları:**
+- [x] **6.1. Sayfalanmış Kapı Logları:**
   - **Nasıl Test Edilir:** Kapı kontrol ekranında "Geçiş Logları" akordeonunu açın.
   - **Beklenen Sonuç:** Kapıdan kimin, ne zaman, hangi yöntemle (QR, Uzaktan, Bluetooth) geçtiği listelenmeli.
 - [ ] **6.2. Çevrimdışı (LittleFS) Log Senkronizasyonu:**
