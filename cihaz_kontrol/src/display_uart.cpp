@@ -6,6 +6,8 @@
 
 // Forward declarations
 void roleTetikle();
+void offlineLogKaydet(const char* triggerType, const char* userName, const char* apartmentLabel);
+void offlineLogSenkronizeEt();
 
 // HardwareSerial(1) for communication with ESP32-C3 display controller on WROOM
 static HardwareSerial displaySerial(1);
@@ -50,6 +52,8 @@ static void handleDisplayCommand(const String &rawCmd) {
   if (cmd == CMD_BTN_OPEN || cmd == CMD_DOOR_OPEN) {
     Serial.println("[DISPLAY] Kapi acma butonu alindi -> Role tetikleniyor");
     roleTetikle();
+    offlineLogKaydet("display_btn", "Ekran Butonu", "");
+    offlineLogSenkronizeEt();
   } else if (cmd == CMD_BTN_SETTINGS) {
     Serial.println("[DISPLAY] Ayarlar butonu alindi");
     displayUartSend(CMD_SHOW_SETTINGS);

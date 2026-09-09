@@ -136,6 +136,8 @@ class SiteRecord {
     );
   }
 
+  int get siteCode => id;
+
   factory SiteRecord.fromJson(Map<String, dynamic> json) {
     final rawCounts = json['block_apartment_counts'];
     List<int> counts = [];
@@ -143,10 +145,11 @@ class SiteRecord {
       counts = rawCounts.map((e) => (e as num).toInt()).toList();
     }
 
+    final rawId = json['id'] ?? json['site_code'];
     return SiteRecord(
-      id: (json['id'] is num
-          ? (json['id'] as num).toInt()
-          : int.tryParse(json['id']?.toString() ?? '') ?? 0),
+      id: (rawId is num
+          ? rawId.toInt()
+          : int.tryParse(rawId?.toString() ?? '') ?? 0),
       name: json['name'] as String? ?? '',
       address: json['address'] as String?,
       city: json['city'] as String?,

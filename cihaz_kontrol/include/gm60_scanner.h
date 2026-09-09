@@ -7,6 +7,7 @@
 #include "qr_dogrulama.h"
 #include "display_uart.h"
 #include "display_protocol.h"
+#include "offline_log.h"
 
 #if defined(BOARD_ESP32_WROOM_RELAY)
 static HardwareSerial GM60Serial(2);
@@ -66,6 +67,8 @@ inline void gm60Loop() {
           displayUartSend(String(CMD_QR_OK_PREFIX) + qrData);
           displayUartSend(CMD_DOOR_OPENED);
           roleTetikle();
+          offlineLogKaydet("qr_scanner", "GM60 QR Okuyucu", "");
+          offlineLogSenkronizeEt();
         } else {
           Serial.print("GM60 QR Reddedildi: ");
           Serial.println(reason);

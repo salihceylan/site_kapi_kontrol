@@ -63,7 +63,7 @@ doorLogRouter.get('/admin/door-logs', authRequired, requireSuperUser, async (req
       `
         SELECT COUNT(*) AS total
         FROM door_access_logs l
-        JOIN sites s ON s.site_code = l.site_code
+        LEFT JOIN sites s ON s.site_code = l.site_code
         ${whereClause}
       `,
       params,
@@ -77,7 +77,7 @@ doorLogRouter.get('/admin/door-logs', authRequired, requireSuperUser, async (req
           l.*,
           s.name AS site_name
         FROM door_access_logs l
-        JOIN sites s ON s.site_code = l.site_code
+        LEFT JOIN sites s ON s.site_code = l.site_code
         ${whereClause}
         ORDER BY l.opened_at DESC
         LIMIT $${listParams.length - 1} OFFSET $${listParams.length}
@@ -126,7 +126,7 @@ doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async 
     const managedSiteCodes = Array.from(managedSiteSet);
     const conditions = [];
     const params = [managedSiteCodes];
-    conditions.push(`l.site_code = ANY($1)`);
+    conditions.push(`l.site_code = ANY($1::bigint[])`);
 
     if (siteCode && Number.isInteger(siteCode)) {
       if (!managedSiteSet.has(siteCode)) {
@@ -158,7 +158,7 @@ doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async 
       `
         SELECT COUNT(*) AS total
         FROM door_access_logs l
-        JOIN sites s ON s.site_code = l.site_code
+        LEFT JOIN sites s ON s.site_code = l.site_code
         ${whereClause}
       `,
       params,
@@ -172,7 +172,7 @@ doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async 
           l.*,
           s.name AS site_name
         FROM door_access_logs l
-        JOIN sites s ON s.site_code = l.site_code
+        LEFT JOIN sites s ON s.site_code = l.site_code
         ${whereClause}
         ORDER BY l.opened_at DESC
         LIMIT $${listParams.length - 1} OFFSET $${listParams.length}

@@ -55,6 +55,12 @@ class DoorAccessLogRecord {
         return 'Misafir Linki';
       case 'offline_sync':
         return 'Çevrimdışı (ESP32)';
+      case 'qr_scanner':
+        return 'GM60 QR Okuyucu';
+      case 'display_btn':
+        return 'Ekran Butonu';
+      case 'physical_btn':
+        return 'Fiziksel Buton';
       case 'cloud_app':
       default:
         return 'Mobil Bulut';

@@ -13,12 +13,14 @@ class DoorLogsAccordion extends StatefulWidget {
     required this.selectedDoor,
     required this.authService,
     this.onDownloadPdf,
+    this.isOpeningDoor = false,
   });
 
   final SiteRecord? selectedSite;
   final DoorRecord? selectedDoor;
   final AuthService? authService;
   final VoidCallback? onDownloadPdf;
+  final bool isOpeningDoor;
 
   @override
   State<DoorLogsAccordion> createState() => _DoorLogsAccordionState();
@@ -38,6 +40,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     super.didUpdateWidget(oldWidget);
     final doorChanged = oldWidget.selectedDoor?.id != widget.selectedDoor?.id;
     final siteChanged = oldWidget.selectedSite?.id != widget.selectedSite?.id;
+    final doorOpened = oldWidget.isOpeningDoor && !widget.isOpeningDoor;
 
     if (doorChanged || siteChanged) {
       setState(() {
@@ -47,6 +50,12 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
       });
       if (_isExpanded) {
         _loadLogs(page: 1);
+      }
+    } else if (doorOpened) {
+      if (_isExpanded) {
+        _loadLogs(page: 1);
+      } else {
+        _logPage = null;
       }
     }
   }
@@ -69,14 +78,9 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     });
 
     try {
-      final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
       final (result, error) = await service.listDoorAccessLogs(
         siteCode: widget.selectedSite?.id,
         doorId: widget.selectedDoor?.id,
-        startDate: sevenDaysAgo,
-        endDate: now,
         page: targetPage,
         pageSize: _pageSize,
       );
@@ -109,7 +113,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     setState(() {
       _isExpanded = !_isExpanded;
     });
-    if (_isExpanded && _logPage == null && !_isLoading) {
+    if (_isExpanded) {
       _loadLogs(page: 1);
     }
   }
@@ -237,8 +241,8 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         const SizedBox(width: 6),
         Text(
           _logPage != null
-              ? 'Toplam $total geçiş (Son 7 Gün)'
-              : 'Haftalık Geçiş Geçmişi',
+              ? 'Toplam $total geçiş kaydı'
+              : 'Geçiş Geçmişi',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -350,7 +354,7 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Son 7 güne ait kapı geçiş kaydı bulunamadı.',
+                'Kayıtlı kapı geçiş kaydı bulunamadı.',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? AppColors.textMutedLight : AppColors.textMuted,

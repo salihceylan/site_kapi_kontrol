@@ -12,6 +12,8 @@
 #include "display_uart.h"
 #include "display_protocol.h"
 
+#include "offline_log.h"
+
 WiFiClientSecure espClientSecure;
 PubSubClient client(espClientSecure);
 
@@ -28,7 +30,7 @@ void pinBulmaTesti() {
     Serial.print("TEST GPIO ");
     Serial.print(pin);
     Serial.println(" -> HIGH");
-    delay(1200);
+    delay(300);
     digitalWrite(pin, LOW);
     Serial.print("TEST GPIO ");
     Serial.print(pin);
@@ -46,6 +48,8 @@ void seriKomutKontrol() {
     if (komut == 'r' || komut == 'R') {
       Serial.println("Seri komut: role pulse");
       roleTetikle();
+      offlineLogKaydet("serial_btn", "Seri Port", "");
+      offlineLogSenkronizeEt();
     } else if (komut == 'h' || komut == 'H') {
       Serial.println("Seri komut: role pini HIGH");
       roleManuelSeviye(HIGH);
@@ -79,33 +83,16 @@ void displayDurumSenkronizasyonLoop() {
 }
 
 void seriDurumYazdir() {
-  Serial.println("----- CIHAZ DURUMU -----");
-  Serial.print("Cihaz UID: ");
+  Serial.println("--- ESP32 SISTEM BILGISI ---");
+  Serial.print("Cihaz Unique ID: ");
   Serial.println(cihazUniqueId());
-  Serial.print("Hedef mimari: ");
-  Serial.println(OTA_TARGET);
-  Serial.print("WiFi kayitli: ");
-  Serial.println(wifiAktifSsid().isEmpty() ? "hayir" : "evet");
-  Serial.print("WiFi SSID: ");
-  Serial.println(wifiAktifSsid().isEmpty() ? "-" : wifiAktifSsid());
-  Serial.print("WiFi bagli: ");
-  Serial.println(wifiHazirMi() ? "evet" : "hayir");
-  Serial.print("WiFi IP: ");
-  Serial.println(wifiIpAdresi().isEmpty() ? "-" : wifiIpAdresi());
-  Serial.print("WiFi gucu: ");
+  Serial.print("Firmware Versiyon: ");
+  Serial.println(FIRMWARE_VERSION);
+  Serial.print("Hardware Target: ");
+  Serial.println(HARDWARE_TARGET);
+  Serial.print("Wi-Fi Durumu: ");
+  Serial.println(wifiHazirMi() ? "Bagli" : "Bagli Degil");
   if (wifiHazirMi()) {
-    Serial.print("%");
-    Serial.print(wifiSinyalYuzde());
-    Serial.print(" (");
-    Serial.print(wifiSinyalDbm());
-    Serial.println(" dBm)");
-  } else {
-    Serial.println("-");
-  }
-  Serial.print("Bluetooth provisioning: ");
-  Serial.println(wifiProvisioningAktifMi() ? "acik" : "kapali");
-  Serial.print("Bluetooth adi: ");
-  Serial.println(wifiProvisioningAktifMi() ? wifiBleDeviceName() : "-");
   Serial.print("WiFi LED GPIO: ");
   Serial.println(WIFI_STATUS_LED_PIN);
   Serial.print("Bluetooth LED GPIO: ");
@@ -141,6 +128,7 @@ void setup() {
   Serial.begin(115200);
   delay(300);
 
+  offlineLogInit();
   roleSetup();
   gm60Setup();
   displayUartSetup();
@@ -158,6 +146,8 @@ void loop() {
   yerelKapiKontrolLoop();
   mqttLoopHandler();
   otaCheckAndUpdate();
+  offlineLogSenkronizeEt();
+  offlineLogHaftalikTemizle();
   if (roleLoop()) {
     mqttNotifyPulseCompleted();
     displayUartSend(CMD_DOOR_CLOSED);

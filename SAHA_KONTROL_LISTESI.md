@@ -115,6 +115,9 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **6.2. Çevrimdışı (LittleFS) Log Senkronizasyonu:**
   - **Nasıl Test Edilir:** İnternet yokken yerel ağdan kapıyı açın, internet geldiğinde logların sunucuya aktarıldığını doğrulayın.
   - **Beklenen Sonuç:** `door_access_logs` tablosunda ve log ekranında `local_wifi` / `mqtt_sync` kayıtları görünmeli.
+- [ ] **6.3. GM60 QR ve Ekran Butonu Geçiş Logları:**
+  - **Nasıl Test Edilir:** GM60 okuyucudan QR okutarak veya ekran üzerindeki kapı açma butonuyla kapıyı açın. Yönetim panelindeki "Geçiş Logları" akordeonunu açıp yenileyin.
+  - **Beklenen Sonuç:** Log listesinde tetikleyici olarak `GM60 QR Okuyucu` veya `Ekran Butonu` olarak anında görünmeli, LittleFS veya MQTT üzerinden sunucuya iletilmelidir.
 
 ---
 

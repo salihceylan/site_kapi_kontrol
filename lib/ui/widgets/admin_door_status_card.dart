@@ -628,6 +628,7 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
             selectedDoor: widget.selectedDoor,
             authService: widget.authService,
             onDownloadPdf: widget.onDownloadLogsPdf,
+            isOpeningDoor: widget.isOpeningDoor,
           ),
         ],
       ],

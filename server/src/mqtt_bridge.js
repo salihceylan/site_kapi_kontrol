@@ -322,6 +322,10 @@ async function recordDeviceOfflineLogs(deviceUid, logs) {
     if (devRes.rowCount === 0) return;
     const dev = devRes.rows[0];
     const siteCode = dev.site_code ? Number(dev.site_code) : null;
+    if (!siteCode) {
+      console.warn(`[MQTT Logs] Cihaz ${deviceUid} herhangi bir siteye bagli degil, log kaydedilemedi.`);
+      return;
+    }
     const doorId = dev.assigned_door_id ? Number(dev.assigned_door_id) : null;
     const doorName = dev.assigned_door_name || dev.gate_name || 'Site Kapısı';
 

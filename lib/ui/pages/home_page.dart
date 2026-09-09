@@ -2539,77 +2539,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         siteCode: site.id,
 
         doorId: door.id,
-
         startDate: sevenDaysAgo,
-
-        endDate: now,
-
         pageSize: 200,
-
       );
-
-
 
       if (logsPage == null || logsPage.logs.isEmpty) {
-
         _showMessage(
-
           error ??
-
               '${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',
-
         );
-
         return;
-
       }
 
-
-
       await PdfLogsService.printOrShareLogsPdf(
-
         logs: logsPage.logs,
-
         siteName: site.name,
-
         doorNameFilter: door.doorName,
-
         startDate: sevenDaysAgo,
-
         endDate: now,
-
       );
-
     } catch (e) {
-
       _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
-
     }
-
   }
 
-
-
   Future<void> _exportSiteLogsPdf(SiteRecord site) async {
-
     try {
-
       _showMessage('${site.name} haftalık geçiş log raporu hazırlanıyor...');
-
       final now = DateTime.now();
-
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
       final (logsPage, error) = await widget.authService.listDoorAccessLogs(
-
         siteCode: site.id,
-
         startDate: sevenDaysAgo,
-
-        endDate: now,
-
         pageSize: 200,
-
       );
 
 

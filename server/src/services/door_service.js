@@ -48,6 +48,10 @@ export async function recordDoorAccessLog({
   ipAddress = null,
 }) {
   try {
+    if (!siteCode) {
+      console.warn('[Door Log] siteCode eksik oldugu icin log kaydedilemedi.');
+      return;
+    }
     await pool.query(
       `
         INSERT INTO door_access_logs (
@@ -65,15 +69,15 @@ export async function recordDoorAccessLog({
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
-        siteCode,
-        doorId,
-        doorName,
-        userCode,
-        userName,
-        userRole,
+        Number(siteCode),
+        doorId ? Number(doorId) : null,
+        doorName || 'Site Kapısı',
+        userCode ? Number(userCode) : null,
+        userName || 'Yetkili Kullanıcı',
+        userRole || 'apartment_owner',
         apartmentLabel,
-        triggerType,
-        openedAt,
+        triggerType || 'cloud_app',
+        openedAt || new Date(),
         ipAddress,
       ],
     );
