@@ -30,6 +30,9 @@ class PendingSiteApprovalsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -37,11 +40,11 @@ class PendingSiteApprovalsView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: AppDecorations.glassCard(context),
-          child: const Text(
+          child: Text(
             'Site Onay Talepleri',
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
+              color: cardTitleColor,
             ),
           ),
         ),
@@ -60,9 +63,9 @@ class PendingSiteApprovalsView extends StatelessWidget {
                       pageData == null
                           ? 'Bekleyen Siteler'
                           : 'Bekleyen Siteler (${pageData!.total})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                        color: cardTitleColor,
                       ),
                     ),
                   ),

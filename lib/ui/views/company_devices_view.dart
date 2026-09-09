@@ -40,6 +40,9 @@ class CompanyDevicesView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -50,12 +53,12 @@ class CompanyDevicesView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Şirket Hesabına Kayıtlı Cihazlar',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
+                  color: cardTitleColor,
                 ),
               ),
               const SizedBox(height: 14),

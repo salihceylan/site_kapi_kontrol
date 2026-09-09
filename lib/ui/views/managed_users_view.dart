@@ -62,6 +62,8 @@ class ManagedUsersView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 680;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,9 +78,10 @@ class ManagedUsersView extends StatelessWidget {
                   children: [
                     Text(
                       _rolePlural(role),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                        fontSize: 16,
+                        color: cardTitleColor,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -97,9 +100,10 @@ class ManagedUsersView extends StatelessWidget {
                     Expanded(
                       child: Text(
                         _rolePlural(role),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
+                          fontSize: 16,
+                          color: cardTitleColor,
                         ),
                       ),
                     ),
@@ -127,9 +131,10 @@ class ManagedUsersView extends StatelessWidget {
                       pageData == null
                           ? _rolePlural(role)
                           : '${_rolePlural(role)} (${pageData!.total})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
+                        fontSize: 16,
+                        color: cardTitleColor,
                       ),
                     ),
                   ),

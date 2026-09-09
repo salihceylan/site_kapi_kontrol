@@ -76,6 +76,8 @@ class SitesView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 680;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
     final structure = selectedStructure;
 
     return Column(
@@ -93,7 +95,8 @@ class SitesView extends StatelessWidget {
                       apartmentMode ? 'Site Daireleri' : 'Siteler',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.text(context),
+                        fontSize: 16,
+                        color: cardTitleColor,
                       ),
                     ),
                     if (canManageSites) ...[
@@ -116,7 +119,8 @@ class SitesView extends StatelessWidget {
                         apartmentMode ? 'Site Daireleri' : 'Siteler',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.text(context),
+                          fontSize: 16,
+                          color: cardTitleColor,
                         ),
                       ),
                     ),
@@ -148,7 +152,8 @@ class SitesView extends StatelessWidget {
                           : 'Site Listesi (${pageData!.total})',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.text(context),
+                        fontSize: 16,
+                        color: cardTitleColor,
                       ),
                     ),
                   ),
@@ -237,8 +242,8 @@ class SitesView extends StatelessWidget {
                 Text(
                   structure.site.name,
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text(context),
+                    fontWeight: FontWeight.w800,
+                    color: cardTitleColor,
                     fontSize: 20,
                   ),
                 ),
@@ -282,8 +287,8 @@ class SitesView extends StatelessWidget {
                         onPressed: () =>
                             onDownloadCredentialsPdf!(structure.site),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF1E3A8A),
-                          side: const BorderSide(color: Color(0xFF93C5FD)),
+                          foregroundColor: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E3A8A),
+                          side: BorderSide(color: isDark ? const Color(0xFF3B82F6) : const Color(0xFF93C5FD)),
                         ),
                         icon: const Icon(Icons.picture_as_pdf_outlined),
                         label: const Text('Şifreleri İndir (PDF)'),
@@ -305,7 +310,8 @@ class SitesView extends StatelessWidget {
                   'Daireler',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.text(context),
+                    fontSize: 16,
+                    color: cardTitleColor,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -340,7 +346,8 @@ class SitesView extends StatelessWidget {
                   'Kapılar',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.text(context),
+                    fontSize: 16,
+                    color: cardTitleColor,
                   ),
                 ),
                 const SizedBox(height: 10),

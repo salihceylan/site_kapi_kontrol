@@ -15,6 +15,9 @@ class DeviceAddView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -22,12 +25,12 @@ class DeviceAddView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(22),
           decoration: AppDecorations.glassCard(context),
-          child: const Text(
+          child: Text(
             'Şirket Veritabanına Cihaz Kaydet',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
+              color: cardTitleColor,
             ),
           ),
         ),

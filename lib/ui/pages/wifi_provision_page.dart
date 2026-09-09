@@ -344,16 +344,19 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
   }
 
   Widget _buildInstructions() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const <Widget>[
+        children: <Widget>[
           Text(
             'Kurulum Sırası',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
+              color: titleColor,
             ),
           ),
           SizedBox(height: 8),

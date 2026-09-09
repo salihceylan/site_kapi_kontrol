@@ -27,6 +27,9 @@ class ProfileView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -36,11 +39,11 @@ class ProfileView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Kendi Bilgilerini Düzenle',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
+                color: cardTitleColor,
               ),
             ),
             const SizedBox(height: 10),

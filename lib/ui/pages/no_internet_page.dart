@@ -14,6 +14,9 @@ class NoInternetPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Baglanti Gerekli')),
       body: Center(
@@ -28,19 +31,19 @@ class NoInternetPage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.wifi_off_rounded,
                     size: 48,
-                    color: AppColors.textDark,
+                    color: primaryTextColor,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Internet baglantisi bulunamadi',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
+                      color: primaryTextColor,
                     ),
                   ),
                   const SizedBox(height: 8),
