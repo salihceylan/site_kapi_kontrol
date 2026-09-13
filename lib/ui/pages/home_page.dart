@@ -1257,8 +1257,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     String? search,
     bool force = false,
   }) async {
+    final sanitizedRole = role == UserRole.superUser ? null : role;
     if (_isLoadingAllUsers && !force) return;
-    _allUsersRoleFilter = role;
+    _allUsersRoleFilter = sanitizedRole;
     _allUsersCurrentPage = page;
     _allUsersPageSize = pageSize;
     _allUsersSearchQuery = search;
@@ -1266,7 +1267,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _isLoadingAllUsers = true);
     try {
       final data = await widget.authService.listManagedUsers(
-        role: role,
+        role: sanitizedRole,
         excludeRole: UserRole.superUser,
         page: page,
         pageSize: pageSize,

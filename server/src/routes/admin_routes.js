@@ -103,15 +103,17 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
     const whereClauses = [];
     const countParams = [];
 
+    if (excludeRole) {
+      countParams.push(excludeRole);
+      whereClauses.push(`role <> $${countParams.length}`);
+    }
+
     if (role) {
       countParams.push(role);
       whereClauses.push(`role = $${countParams.length}`);
       if (role === 'site_manager') {
         whereClauses.push(`approval_status <> 'pending'`);
       }
-    } else if (excludeRole) {
-      countParams.push(excludeRole);
-      whereClauses.push(`role <> $${countParams.length}`);
     }
 
     if (emailVerifiedFilter !== null) {

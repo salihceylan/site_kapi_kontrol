@@ -56,6 +56,18 @@ class _AllUsersViewState extends State<AllUsersView> {
   int _currentPage = 1;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.pageData == null && !widget.isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _fetchData();
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _debounceTimer?.cancel();
     _searchController.dispose();
@@ -779,7 +791,10 @@ class _AllUsersViewState extends State<AllUsersView> {
                 // ARAMA ALANI (FİLTRE)
                 TextField(
                   controller: _searchController,
-                  onChanged: _onSearchChanged,
+                  onChanged: (val) {
+                    setState(() {});
+                    _onSearchChanged(val);
+                  },
                   decoration: InputDecoration(
                     hintText: 'Kişi adı, e-posta, kullanıcı kodu veya kullanıcı adı...',
                     prefixIcon: const Icon(Icons.search_rounded),
@@ -1011,7 +1026,7 @@ class _AllUsersViewState extends State<AllUsersView> {
             }),
 
           // 3. SAYFALAMA KONTROLLERİ (PAGINATION)
-          if (widget.users.isNotEmpty)
+          if (displayUsers.isNotEmpty)
             Container(
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(14),

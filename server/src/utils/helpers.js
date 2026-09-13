@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-export const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner']);
+export const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner', 'individual']);
 export const validApprovalStatuses = new Set(['pending', 'approved', 'rejected']);
 
 export function auditLog(eventName, details) {
@@ -200,8 +200,36 @@ export function mapSiteRow(row) {
     block_apartment_counts: Array.isArray(row.block_apartment_counts)
       ? row.block_apartment_counts.map(Number)
       : [],
+    deletion_status: row.deletion_status ?? 'none',
+    deletion_requested_by_user_code:
+      row.deletion_requested_by_user_code === null || row.deletion_requested_by_user_code === undefined
+        ? null
+        : Number(row.deletion_requested_by_user_code),
+    deletion_requested_by_name: row.deletion_requested_by_name ?? null,
+    deletion_requested_by_role: row.deletion_requested_by_role ?? null,
+    deletion_requested_at: row.deletion_requested_at ?? null,
     created_at: row.created_at,
   };
+}
+
+export function normalizeOtaStatus(otaStatus, firmwareVersion, otaLastVersion, lastSeenAt) {
+  if (!otaStatus) return null;
+  const s = String(otaStatus).trim().toLowerCase();
+  if (s === 'guncel' || s === 'up_to_date' || s === 'guncelleme tamam') {
+    return 'guncel';
+  }
+  if (s === 'guncelleme indiriliyor' || s === 'indiriliyor') {
+    if (firmwareVersion && otaLastVersion && String(firmwareVersion).trim() === String(otaLastVersion).trim()) {
+      return 'guncel';
+    }
+    if (lastSeenAt && firmwareVersion) {
+      const diffMs = Date.now() - new Date(lastSeenAt).getTime();
+      if (diffMs > 120000) {
+        return 'guncel';
+      }
+    }
+  }
+  return otaStatus;
 }
 
 export function mapDeviceRow(row) {
@@ -231,7 +259,7 @@ export function mapDeviceRow(row) {
       : Boolean(row.mqtt_connected),
     firmware_version: row.firmware_version ?? null,
     hardware_target: row.hardware_target ?? null,
-    ota_status: row.ota_status ?? null,
+    ota_status: normalizeOtaStatus(row.ota_status, row.firmware_version, row.ota_last_version, row.last_seen_at),
     ota_last_version: row.ota_last_version ?? null,
     wifi_rssi:
       row.wifi_rssi === null || row.wifi_rssi === undefined
@@ -245,6 +273,7 @@ export function mapDeviceRow(row) {
     public_ip: row.public_ip ?? null,
     last_seen_at: row.last_seen_at ?? null,
     last_event: row.last_event ?? null,
+    qr_reader_enabled: Boolean(row.qr_reader_enabled),
     created_at: row.created_at,
   };
 }
@@ -338,6 +367,7 @@ export function mapDoorRow(row) {
         ? Number(row.assigned_device_wifi_signal_percent)
         : null,
     assigned_device_last_seen_at: row.assigned_device_last_seen_at ?? row.last_seen_at ?? null,
+    assigned_device_qr_reader_enabled: Boolean(row.assigned_device_qr_reader_enabled ?? row.qr_reader_enabled),
     mqtt_site_id:
       row.mqtt_site_id === null || row.mqtt_site_id === undefined
         ? null
@@ -353,6 +383,9 @@ export function mapDoorRow(row) {
     geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
     qr_totp_secret: row.qr_totp_secret ?? null,
     qr_rotation_seconds: Number(row.qr_rotation_seconds ?? 30),
+    access_scope: row.access_scope || 'SITE_COMMON',
+    block_id: row.block_id ? Number(row.block_id) : null,
+    block_name: row.block_name || null,
     created_at: row.created_at,
   };
 }
