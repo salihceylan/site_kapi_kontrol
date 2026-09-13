@@ -340,9 +340,10 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     return res.status(400).json({ error: 'Kendi hesabinizi silemezsiniz.' });
   }
 
+  const client = await pool.connect();
   try {
     const affectedSiteCodes = await affectedSiteCodesForUser(targetCode);
-    const directDeviceResult = await pool.query(
+    const directDeviceResult = await client.query(
       `
         SELECT id
         FROM devices
@@ -351,28 +352,84 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
       [targetCode],
     );
 
-    await pool.query('UPDATE apartments SET resident_user_code = NULL WHERE resident_user_code = $1', [targetCode]);
-    await pool.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [targetCode]);
-    await pool.query('DELETE FROM site_memberships WHERE user_code = $1', [targetCode]);
-    await pool.query('DELETE FROM site_join_requests WHERE user_code = $1', [targetCode]);
-    await pool.query('DELETE FROM qr_access_tokens WHERE user_code = $1', [targetCode]);
-    await pool.query('UPDATE devices SET assigned_user_code = NULL WHERE assigned_user_code = $1', [targetCode]);
+    await client.query('BEGIN');
 
-    const result = await pool.query(
+    // 1. Cihaz iliskilendirmeleri
+    await client.query('UPDATE devices SET assigned_user_code = NULL WHERE assigned_user_code = $1', [targetCode]);
+    await client.query('UPDATE devices SET owner_user_id = NULL WHERE owner_user_id = (SELECT id FROM users WHERE user_code = $1)', [targetCode]);
+
+    // 2. Daire resident temizligi
+    await client.query('UPDATE apartments SET resident_user_code = NULL WHERE resident_user_code = $1', [targetCode]);
+
+    // 3. Site yoneticisi iliskileri
+    await client.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [targetCode]);
+
+    // 4. Uyelikler (Site ve Daire)
+    await client.query('DELETE FROM site_memberships WHERE user_code = $1', [targetCode]);
+    try {
+      await client.query('DELETE FROM apartment_memberships WHERE user_code = $1', [targetCode]);
+    } catch (_) {}
+
+    // 5. Katilma talepleri ve davet tokenlari
+    try {
+      await client.query('DELETE FROM join_requests WHERE user_code = $1', [targetCode]);
+      await client.query('UPDATE join_requests SET reviewed_by_user_code = NULL WHERE reviewed_by_user_code = $1', [targetCode]);
+    } catch (_) {}
+    try {
+      await client.query('DELETE FROM site_join_tokens WHERE created_by_user_code = $1', [targetCode]);
+    } catch (_) {}
+
+    // 6. QR gecis tokenlari ve misafir gecisleri
+    try {
+      await client.query('DELETE FROM qr_access_tokens WHERE user_code = $1', [targetCode]);
+    } catch (_) {}
+    try {
+      await client.query('DELETE FROM guest_passes WHERE created_by_user_code = $1', [targetCode]);
+    } catch (_) {}
+
+    // 7. Ozel kapi izinleri ve gecis loglari
+    try {
+      await client.query('DELETE FROM door_access_overrides WHERE user_code = $1', [targetCode]);
+      await client.query('UPDATE door_access_overrides SET granted_by_user_code = NULL WHERE granted_by_user_code = $1', [targetCode]);
+    } catch (_) {}
+    try {
+      await client.query('UPDATE door_access_logs SET user_code = NULL WHERE user_code = $1', [targetCode]);
+    } catch (_) {}
+
+    // 8. OTA guncelleme isleri
+    try {
+      await client.query('UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
+    } catch (_) {}
+
+    // 9. Kullanici kaydini sil
+    const result = await client.query(
       `DELETE FROM users WHERE user_code = $1`,
       [targetCode],
     );
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
-    const deviceIds = directDeviceResult.rows.map((row) => Number(row.id));
-    for (const siteCode of affectedSiteCodes) {
-      deviceIds.push(...await deviceIdsForSite(siteCode));
+
+    await client.query('COMMIT');
+
+    try {
+      const deviceIds = directDeviceResult.rows.map((row) => Number(row.id));
+      for (const siteCode of affectedSiteCodes) {
+        deviceIds.push(...await deviceIdsForSite(siteCode));
+      }
+      await rotateLocalControlTokensForDeviceIds(deviceIds, 'user_deleted');
+    } catch (tokenErr) {
+      console.warn('Local control token rotasyonu atlandi:', tokenErr.message);
     }
-    await rotateLocalControlTokensForDeviceIds(deviceIds, 'user_deleted');
+
     return res.status(204).send();
-  } catch (_error) {
-    return res.status(500).json({ error: 'Kullanici silinemedi.' });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Kullanici silinirken hata:', error);
+    return res.status(500).json({ error: error.message || 'Kullanici silinemedi.' });
+  } finally {
+    client.release();
   }
 });
 
