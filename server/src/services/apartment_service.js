@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { sendApartmentCredentialsEmail } from '../mailer.js';
 import { createUser } from './user_service.js';
@@ -105,44 +105,10 @@ export async function createApartmentResidentAccount({
   );
 }
 
-export async function ensureSiteApartmentResidents(siteCode, db = pool) {
-  const apartmentsResult = await db.query(
-    `
-      SELECT
-        a.id,
-        a.site_code,
-        a.unit_label,
-        a.sort_order,
-        a.resident_user_code,
-        u.user_code AS existing_resident_user_code,
-        b.block_name
-      FROM apartments a
-      INNER JOIN site_blocks b ON b.id = a.block_id
-      LEFT JOIN users u
-        ON u.user_code = a.resident_user_code
-       AND u.role = 'apartment_owner'
-      WHERE a.site_code = $1
-      ORDER BY b.sort_order ASC, a.sort_order ASC
-    `,
-    [siteCode],
-  );
-
-  for (const apartment of apartmentsResult.rows) {
-    if (
-      apartment.resident_user_code != null &&
-      apartment.existing_resident_user_code != null
-    ) {
-      continue;
-    }
-    await createApartmentResidentAccount({
-      apartmentId: Number(apartment.id),
-      siteCode: Number(apartment.site_code),
-      blockName: apartment.block_name,
-      unitLabel: apartment.unit_label,
-      sortOrder: Number(apartment.sort_order),
-      db,
-    });
-  }
+export async function ensureSiteApartmentResidents(_siteCode, _db = pool) {
+  // ARTIK KUKLA/SAHTE KULLANICI OLUŞTURULMAZ.
+  // Daireler boş olarak açılır; kullanıcılar üyelik sistemiyle eklenir veya atanır.
+  return;
 }
 
 export async function provisionApartmentResident({
@@ -316,10 +282,16 @@ export async function resetApartmentResident(apartmentId, db = pool) {
     const apt = aptResult.rows[0];
 
     if (apt.resident_user_code) {
-      await client.query(
-        `DELETE FROM users WHERE user_code = $1 AND role = 'apartment_owner'`,
+      const userRes = await client.query(
+        `SELECT email FROM users WHERE user_code = $1`,
         [apt.resident_user_code],
       );
+      if (userRes.rowCount > 0 && userRes.rows[0].email?.endsWith('@ahbu.local')) {
+        await client.query(
+          `DELETE FROM users WHERE user_code = $1`,
+          [apt.resident_user_code],
+        );
+      }
     }
 
     const updated = await client.query(

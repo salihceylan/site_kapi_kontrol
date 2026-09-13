@@ -22,6 +22,8 @@ class AllUsersView extends StatefulWidget {
     required this.onUpdateUser,
     required this.onToggleActivation,
     required this.onDeleteUser,
+    this.onGetDatabaseHealth,
+    this.onRunDatabaseCleanup,
   });
 
   final UserSession session;
@@ -39,6 +41,8 @@ class AllUsersView extends StatefulWidget {
   final Future<void> Function(ManagedUserAccount user, ManagedUserFormResult result) onUpdateUser;
   final Future<void> Function(ManagedUserAccount user, bool isActive) onToggleActivation;
   final Future<void> Function(ManagedUserAccount user) onDeleteUser;
+  final Future<Map<String, dynamic>> Function()? onGetDatabaseHealth;
+  final Future<Map<String, dynamic>> Function()? onRunDatabaseCleanup;
 
   @override
   State<AllUsersView> createState() => _AllUsersViewState();
@@ -157,6 +161,263 @@ class _AllUsersViewState extends State<AllUsersView> {
     }
   }
 
+  Future<void> _showDbMaintenanceDialog() async {
+    if (widget.onGetDatabaseHealth == null || widget.onRunDatabaseCleanup == null) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isCleaning = false;
+        Map<String, dynamic>? healthData;
+        bool isLoadingHealth = true;
+        String? errorMessage;
+        String? cleanSuccessMessage;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void loadHealth() async {
+              try {
+                final data = await widget.onGetDatabaseHealth!();
+                if (ctx.mounted) {
+                  setDialogState(() {
+                    healthData = data;
+                    isLoadingHealth = false;
+                  });
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  setDialogState(() {
+                    errorMessage = e.toString();
+                    isLoadingHealth = false;
+                  });
+                }
+              }
+            }
+
+            if (isLoadingHealth && healthData == null && errorMessage == null) {
+              loadHealth();
+            }
+
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final usersMap = healthData?['users'] as Map<String, dynamic>?;
+            final structureMap = healthData?['structure'] as Map<String, dynamic>?;
+            final devicesMap = healthData?['devices'] as Map<String, dynamic>?;
+            final isClean = healthData?['isClean'] == true;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              actionsPadding: const EdgeInsets.all(16),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (isClean ? Colors.green : Colors.orange).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isClean ? Icons.verified_rounded : Icons.cleaning_services_rounded,
+                      color: isClean ? Colors.green : Colors.orange,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Veritabanı Sağlığı & Bakım',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: isLoadingHealth
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : errorMessage != null
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: Text(
+                              'Hata: $errorMessage',
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Durum Rozeti
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: (isClean ? Colors.green : Colors.orange).withValues(alpha: isDark ? 0.2 : 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: (isClean ? Colors.green : Colors.orange).withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isClean ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                                        color: isClean ? Colors.green : Colors.orange,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          isClean
+                                              ? 'Veritabanı temiz ve optimize durumda.'
+                                              : 'Veritabanında atık kayıtlar veya temizlenecek öğeler var.',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: isClean
+                                                ? (isDark ? Colors.green.shade300 : Colors.green.shade800)
+                                                : (isDark ? Colors.orange.shade300 : Colors.orange.shade800),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                // İstatistik Kartları
+                                if (usersMap != null) ...[
+                                  _buildStatRow('Gerçek Kayıtlı Kullanıcı', '${usersMap['real'] ?? 0}', Colors.blue),
+                                  _buildStatRow('Kukla / Sahte Kullanıcı', '${usersMap['dummy'] ?? 0}', usersMap['dummy'] == 0 ? Colors.green : Colors.red),
+                                  _buildStatRow('Süper Kullanıcılar', '${usersMap['superUsers'] ?? 0}', Colors.purple),
+                                  _buildStatRow('Site Yöneticileri', '${usersMap['siteManagers'] ?? 0}', Colors.teal),
+                                ],
+                                const Divider(height: 16),
+                                if (structureMap != null) ...[
+                                  _buildStatRow('Kayıtlı Siteler', '${structureMap['sites'] ?? 0}', Colors.indigo),
+                                  _buildStatRow('Daireler & Kapılar', '${structureMap['apartments'] ?? 0} daire, ${structureMap['doors'] ?? 0} kapı', Colors.indigo),
+                                ],
+                                if (devicesMap != null) ...[
+                                  _buildStatRow('ESP32 Donanımları', '${devicesMap['online'] ?? 0} çevrimiçi / ${devicesMap['total'] ?? 0} kayıtlı', Colors.amber),
+                                ],
+
+                                if (cleanSuccessMessage != null) ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      cleanSuccessMessage!,
+                                      style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isCleaning ? null : () => Navigator.pop(ctx),
+                  child: const Text('Kapat'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: isCleaning || isLoadingHealth
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isCleaning = true;
+                            cleanSuccessMessage = null;
+                          });
+                          try {
+                            final res = await widget.onRunDatabaseCleanup!();
+                            final totalCleaned = res['totalCleaned'] ?? 0;
+                            final newHealth = await widget.onGetDatabaseHealth!();
+                            if (ctx.mounted) {
+                              setDialogState(() {
+                                isCleaning = false;
+                                healthData = newHealth;
+                                cleanSuccessMessage = 'Temizlik tamamlandı: Toplam $totalCleaned adet gereksiz/süresi dolmuş kayıt temizlendi.';
+                              });
+                            }
+                            widget.onRefresh();
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setDialogState(() {
+                                isCleaning = false;
+                                cleanSuccessMessage = 'Hata: $e';
+                              });
+                            }
+                          }
+                        },
+                  icon: isCleaning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.auto_delete_rounded, size: 18),
+                  label: Text(isCleaning ? 'Temizleniyor...' : 'Çöp Temizliği Yap'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatRow(String title, String value, Color accentColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: accentColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   Color _getRoleColor(UserRole role, bool isDark) {
     switch (role) {
       case UserRole.superUser:
@@ -224,6 +485,14 @@ class _AllUsersViewState extends State<AllUsersView> {
                         ],
                       ),
                     ),
+                    if (widget.onGetDatabaseHealth != null) ...[
+                      IconButton.filledTonal(
+                        onPressed: _showDbMaintenanceDialog,
+                        icon: const Icon(Icons.cleaning_services_rounded, size: 20),
+                        tooltip: 'Veritabanı Sağlığı & Çöp Temizliği',
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     IconButton.filledTonal(
                       onPressed: widget.isLoading ? null : () => _fetchData(),
                       icon: widget.isLoading

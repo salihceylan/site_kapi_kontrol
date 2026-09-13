@@ -768,6 +768,24 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Nasıl Test Edilir:** Bir kullanıcı kartındaki kırmızı "Sil" butonuna dokunun; onay modalını onaylayın. Süper kullanıcının kendi kartını kontrol edin.
   - **Beklenen Sonuç:** Silinen kullanıcıya ait tüm yetkiler, cihaz ilişkileri ve kayıtlar güvenle temizlenerek kullanıcı veritabanından kalıcı olarak silinmeli; liste kapatıp açılmadan canlı yenilenmeli; Süper kullanıcının kendi kartında "Sil" butonu gizlenmeli ve kendini silmesi engellenmelidir.
 
+---
+
+## 40. 🧹 Veritabanı Temizliği, Otomatik Yaşam Döngüsü & Çöp Engelleme Sistemi
+
+- [ ] **40.1. Sahte (@ahbu.local) Kullanıcı Temizliği & Otomatik Üretimin Engellenmesi:**
+  - **Nasıl Test Edilir:** Yeni bir site ve daireler oluşturun. Veritabanını (`users` tablosu) veya Kullanıcı Yönetimi ekranını kontrol edin.
+  - **Beklenen Sonuç:** Daireler oluşturulduğunda arka planda hiçbir sahte/kukla kullanıcı (`@ahbu.local`) üretilmemeli; daireler boş açılmalı; sadece gerçek kullanıcılar kayıt veya üyelik yoluyla atanmalıdır.
+- [ ] **40.2. Daire Sıfırlama ve Site Silmede Gerçek Kullanıcıların Korunması:**
+  - **Nasıl Test Edilir:** Bir daireye kullanıcı atayın ve ardından daireyi sıfırlayın veya siteyi silin.
+  - **Beklenen Sonuç:** Dairenin kullanıcı ile ilişiği kesilmeli (`resident_user_code = null`) ancak gerçek kullanıcının kendisi veritabanından ASLA silinmemelidir.
+- [ ] **40.3. Otomatik 24 Saatlik Arka Plan Bakım ve Çöp Toplayıcı (Maintenance Service):**
+  - **Nasıl Test Edilir:** Sunucu başlangıç loglarını (`pm2 logs kapi-api`) inceleyin.
+  - **Beklenen Sonuç:** API başladığında ve her 24 saatte bir `runDatabaseCleanup` otomatik tetiklenmeli; süresi geçmiş QR tokenler, 2 günden eski e-posta doğrulama kodları, 30 günden eski cihaz ve kapı logları ile yetim ilişkiler otomatik temizlenmeli ve loglanmalıdır.
+- [ ] **40.4. Süper Kullanıcı Canlı Veritabanı Sağlığı ve Manuel Temizlik Butonu:**
+  - **Nasıl Test Edilir:** Süper Kullanıcı olarak "Kullanıcı Yönetimi" sayfasına girin ve üst bardaki temizlik fırçası (`Icons.cleaning_services_rounded`) simgesine dokunun.
+  - **Beklenen Sonuç:** Veritabanı sağlık modalı açılmalı; gerçek kullanıcı sayısı (4), çöp kullanıcı sayısı (0), aktif siteler, çevrimiçi cihazlar ve log durumları canlı gösterilmeli; "Çöp Temizliği Yap" butonuna basıldığında temizlik tetiklenip kaç kaydın temizlendiği bildirilmelidir.
+
+
 
 
 

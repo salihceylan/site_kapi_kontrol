@@ -3726,6 +3726,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onUpdateUser: _updateDirectoryUser,
           onToggleActivation: _toggleDirectoryUserActivation,
           onDeleteUser: _deleteDirectoryUser,
+          onGetDatabaseHealth: widget.authService.getDatabaseHealth,
+          onRunDatabaseCleanup: widget.authService.runDatabaseCleanup,
         );
 
 

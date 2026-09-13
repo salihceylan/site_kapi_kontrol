@@ -254,6 +254,32 @@ class AuthApi {
     _ensureStatus(response, 204, allowEmptyBody: true);
   }
 
+  Future<Map<String, dynamic>> getDatabaseHealth({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/admin/maintenance/health',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> runDatabaseCleanup({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/maintenance/cleanup',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
   Future<SitePage> listSites({
     required String token,
     required UserRole role,

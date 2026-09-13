@@ -55,6 +55,7 @@ import {
   sendApartmentCredentials,
 } from '../services/apartment_service.js';
 import { updateDoorDeviceAssignment } from '../services/door_service.js';
+import { runDatabaseCleanup, getDatabaseHealth } from '../services/maintenance_service.js';
 import {
   affectedSiteCodesForUser,
   deviceIdsForSite,
@@ -1254,6 +1255,29 @@ adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, r
       });
     }
     return handleDeviceMutationError(error, res, 'Cihaz kaydedilemedi.');
+  }
+});
+
+// GET /admin/maintenance/health
+adminRouter.get('/admin/maintenance/health', authRequired, requireSuperUser, async (_req, res) => {
+  try {
+    const health = await getDatabaseHealth();
+    return res.status(200).json(health);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Veritabani saglik bilgisi alinamadi.' });
+  }
+});
+
+// POST /admin/maintenance/cleanup
+adminRouter.post('/admin/maintenance/cleanup', authRequired, requireSuperUser, async (req, res) => {
+  try {
+    auditLog('database_maintenance_cleanup_requested', {
+      user_code: getAuthUserCode(req),
+    });
+    const result = await runDatabaseCleanup();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Veritabani temizligi sirasinda hata olustu.' });
   }
 });
 

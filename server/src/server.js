@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { ensureDbSchema } from './db.js';
 import { startMqttBridge } from './mqtt_bridge.js';
+import { runDatabaseCleanup } from './services/maintenance_service.js';
 import { cleanupOldDoorLogs } from './services/door_service.js';
 
 import { firmwareRouter } from './routes/firmware_routes.js';
@@ -15,6 +16,7 @@ import { managerRouter } from './routes/manager_routes.js';
 import { appDoorsRouter } from './routes/app_doors_routes.js';
 import { guestPassesRouter } from './routes/guest_passes_routes.js';
 import { doorLogRouter } from './routes/door_log_routes.js';
+import { membershipRouter } from './routes/membership_routes.js';
 
 dotenv.config();
 
@@ -49,6 +51,7 @@ app.use(managerRouter);
 app.use(appDoorsRouter);
 app.use(guestPassesRouter);
 app.use(doorLogRouter);
+app.use(membershipRouter);
 
 // 404 Handler
 app.use((_req, res) => {
@@ -59,8 +62,8 @@ async function startServer() {
   try {
     await ensureDbSchema();
     startMqttBridge();
-    void cleanupOldDoorLogs();
-    setInterval(cleanupOldDoorLogs, 24 * 60 * 60 * 1000);
+    void runDatabaseCleanup();
+    setInterval(runDatabaseCleanup, 24 * 60 * 60 * 1000);
 
     app.listen(port, () => {
       // eslint-disable-next-line no-console

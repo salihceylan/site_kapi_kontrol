@@ -533,6 +533,28 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> getDatabaseHealth() async {
+    final active = _requireSuperUserSession();
+    try {
+      return await api.getDatabaseHealth(token: active.token);
+    } catch (e) {
+      _handleSessionError(e);
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> runDatabaseCleanup() async {
+    final active = _requireSuperUserSession();
+    try {
+      final res = await api.runDatabaseCleanup(token: active.token);
+      _notifySafely();
+      return res;
+    } catch (e) {
+      _handleSessionError(e);
+      rethrow;
+    }
+  }
+
   Future<(SiteRecord?, String?)> createSite({
     required String name,
     String? address,
