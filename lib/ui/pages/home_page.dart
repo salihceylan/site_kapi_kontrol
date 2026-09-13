@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 
 import 'package:site_kapi_kontrol/models/site_page.dart';
 
+import 'package:site_kapi_kontrol/models/site_block_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
@@ -53,12 +54,17 @@ import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/device_dialog.dart';
-
+import 'package:site_kapi_kontrol/ui/widgets/claim_device_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/door_device_dialog.dart';
-
+import 'package:site_kapi_kontrol/ui/dialogs/door_edit_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/replace_device_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/site_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/door_permissions_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/site_join_qr_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/site_residents_accordion_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/manage_join_requests_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
@@ -73,7 +79,9 @@ import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/device_add_view.dart';
 
 import 'package:site_kapi_kontrol/ui/views/managed_users_view.dart';
+import 'package:site_kapi_kontrol/ui/views/all_users_view.dart';
 
+import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
 import 'package:site_kapi_kontrol/ui/views/pending_site_approvals_view.dart';
 
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
@@ -202,6 +210,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   final Set<int> _busyActivationUsers = <int>{};
 
+  // Tüm Kullanıcılar Yönetimi (Directory)
+  ManagedUserPage? _allUsersPage;
+  bool _isLoadingAllUsers = false;
+  UserRole? _allUsersRoleFilter;
+  int _allUsersCurrentPage = 1;
+  int _allUsersPageSize = 15;
+  String? _allUsersSearchQuery;
+
 
 
   // Cihaz Yönetimi
@@ -227,6 +243,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   SitePage? _pendingSiteApprovalsPage;
 
   bool _isLoadingPendingSiteApprovals = false;
+
+  bool _isResidentMode = false;
+
+  bool get _canToggleDualMode {
+    final session = widget.authService.session;
+    if (session == null) return false;
+    if (session.role == UserRole.superUser || session.role == UserRole.siteManager) return true;
+    return (_doorControlSitesPage?.sites.isNotEmpty ?? false);
+  }
 
 
 
@@ -377,11 +402,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             item == SirketMenuItem.bluetoothWifiKur;
 
       case UserRole.apartmentOwner:
-
+      case UserRole.individual:
+        if (_canToggleDualMode && !_isResidentMode) {
+          return item == SirketMenuItem.dashboard ||
+              item == SirketMenuItem.profilim ||
+              item == SirketMenuItem.siteler ||
+              item == SirketMenuItem.kayitliCihazlar ||
+              item == SirketMenuItem.bluetoothWifiKur;
+        }
         return item == SirketMenuItem.dashboard ||
-
             item == SirketMenuItem.ellerSerbest;
-
     }
 
   }
@@ -411,6 +441,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.siteOnayTalepleri:
 
         return 'Site Onay Talepleri';
+
+      case SirketMenuItem.kullaniciYonetimi:
+
+        return 'Kullanıcı Yönetimi';
 
       case SirketMenuItem.superUserYonetimi:
 
@@ -496,33 +530,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         break;
 
+      case SirketMenuItem.kullaniciYonetimi:
+        _loadAllUsers(force: true);
+        break;
+
       case SirketMenuItem.superUserYonetimi:
 
-        _loadManagedUsers(UserRole.superUser);
+        _loadManagedUsers(UserRole.superUser, force: true);
 
         break;
 
       case SirketMenuItem.siteYoneticileriYonetimi:
 
-        _loadManagedUsers(UserRole.siteManager);
+        _loadManagedUsers(UserRole.siteManager, force: true);
 
         break;
 
       case SirketMenuItem.kayitliCihazlar:
 
-        _loadCompanyDevices();
+        _loadCompanyDevices(force: true);
 
         break;
 
       case SirketMenuItem.abonelikTalepleri:
 
-        _loadSubscriptionRequests();
+        _loadSubscriptionRequests(force: true);
 
         break;
 
       case SirketMenuItem.siteOnayTalepleri:
 
-        _loadPendingSiteApprovals();
+        _loadPendingSiteApprovals(force: true);
 
         break;
 
@@ -1212,7 +1250,114 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   }
 
+  Future<void> _loadAllUsers({
+    UserRole? role,
+    int page = 1,
+    int pageSize = 15,
+    String? search,
+    bool force = false,
+  }) async {
+    if (_isLoadingAllUsers && !force) return;
+    _allUsersRoleFilter = role;
+    _allUsersCurrentPage = page;
+    _allUsersPageSize = pageSize;
+    _allUsersSearchQuery = search;
 
+    setState(() => _isLoadingAllUsers = true);
+    try {
+      final data = await widget.authService.listManagedUsers(
+        role: role,
+        page: page,
+        pageSize: pageSize,
+        search: search,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAllUsers = false;
+        _allUsersPage = data;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingAllUsers = false);
+      _showMessage(e.toString());
+    }
+  }
+
+  Future<void> _updateDirectoryUser(
+    ManagedUserAccount user,
+    ManagedUserFormResult result,
+  ) async {
+    final error = await widget.authService.updateManagedUser(
+      userCode: user.id,
+      fullName: result.fullName,
+      email: result.email,
+      phoneNumber: result.phoneNumber.isEmpty ? null : result.phoneNumber,
+      password: result.password.isEmpty ? null : result.password,
+      isActive: result.isActive,
+      role: result.role,
+    );
+    if (!mounted) return;
+    if (error != null) {
+      _showMessage(error);
+    } else {
+      _showMessage('Kullanıcı bilgileri güncellendi.');
+      await _loadAllUsers(
+        role: _allUsersRoleFilter,
+        page: _allUsersCurrentPage,
+        pageSize: _allUsersPageSize,
+        search: _allUsersSearchQuery,
+        force: true,
+      );
+      if (result.role != null) {
+        _loadManagedUsers(result.role!, force: true);
+      }
+      _loadManagedUsers(user.role, force: true);
+    }
+  }
+
+  Future<void> _toggleDirectoryUserActivation(
+    ManagedUserAccount user,
+    bool isActive,
+  ) async {
+    setState(() => _busyActivationUsers.add(user.id));
+    final error = await widget.authService.setManagedUserActivation(
+      userCode: user.id,
+      isActive: isActive,
+    );
+    if (!mounted) return;
+    setState(() => _busyActivationUsers.remove(user.id));
+    if (error != null) {
+      _showMessage(error);
+    } else {
+      _showMessage(isActive ? 'Kullanıcı aktif edildi.' : 'Kullanıcı pasif yapıldı.');
+      await _loadAllUsers(
+        role: _allUsersRoleFilter,
+        page: _allUsersCurrentPage,
+        pageSize: _allUsersPageSize,
+        search: _allUsersSearchQuery,
+        force: true,
+      );
+      _loadManagedUsers(user.role, force: true);
+    }
+  }
+
+  Future<void> _deleteDirectoryUser(ManagedUserAccount user) async {
+    final error = await widget.authService.deleteManagedUser(userCode: user.id);
+    if (!mounted) return;
+    if (error != null) {
+      _showMessage(error);
+    } else {
+      _showMessage('Kullanıcı kalıcı olarak silindi.');
+      await _loadAllUsers(
+        role: _allUsersRoleFilter,
+        page: _allUsersCurrentPage,
+        pageSize: _allUsersPageSize,
+        search: _allUsersSearchQuery,
+        force: true,
+      );
+      _loadManagedUsers(user.role, force: true);
+    }
+  }
 
   Future<void> _loadCompanyDevices({int page = 1, bool force = false}) async {
 
@@ -1461,117 +1606,524 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   Future<void> _deleteSite(SiteRecord site) async {
+    final session = widget.authService.session;
+    final isSuperUser = session?.role == UserRole.superUser;
+    final hasManager = site.managerName != null && site.managerName!.trim().isNotEmpty;
+
+    if (isSuperUser) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('${site.name} Sitesini Sil'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Bu siteyi silmek için bir yöntem seçiniz:',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => Navigator.pop(ctx, 'email'),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.mark_email_read_rounded, color: Color(0xFFDC2626), size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'E-Posta Kodu İle Doğrudan Sil',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF991B1B),
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Kayıtlı e-postanıza 6 haneli kod gelir ve site anında silinir.',
+                              style: TextStyle(color: Color(0xFF7F1D1D), fontSize: 11.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (hasManager) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => Navigator.pop(ctx, 'manager_approval'),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.forward_to_inbox_rounded, color: Color(0xFFD97706), size: 28),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Site Yöneticisinin Onayına Gönder',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF92400E),
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Site yöneticisine onay bildirimi iletilir; yönetici onaylayınca silinir.',
+                                style: TextStyle(color: Color(0xFFB45309), fontSize: 11.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('İptal'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+      if (choice == 'email') {
+        return _deleteSiteWithEmailVerification(site);
+      }
+      if (choice != 'manager_approval') {
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    final String promptText;
+    if (isSuperUser && hasManager) {
+      promptText =
+          '${site.name} sitesini silmek için site yöneticisinin onayı gerekecektir. Silme talebi oluşturulsun mu?';
+    } else if (!isSuperUser) {
+      promptText =
+          '${site.name} sitesini silmek için Süper Kullanıcının onayı gerekecektir. Silme talebi oluşturulsun mu?';
+    } else {
+      promptText =
+          '${site.name} sitesini ve bağlı tüm kapı/daire kayıtlarını kalıcı olarak silmek istediğinize emin misiniz?';
+    }
 
     final confirm = await showDialog<bool>(
-
       context: context,
-
       builder: (ctx) => AlertDialog(
-
-        title: const Text('Siteyi Sil'),
-
-        content: Text(
-
-          '${site.name} sitesini ve bağlı tüm kapı/daire kayıtlarını silmek istediğinize emin misiniz?',
-
-        ),
-
+        title: Text(isSuperUser && !hasManager ? 'Siteyi Kalıcı Olarak Sil' : 'Site Silme Talebi'),
+        content: Text(promptText),
         actions: [
-
           TextButton(
-
             onPressed: () => Navigator.pop(ctx, false),
-
             child: const Text('İptal'),
-
           ),
-
           ElevatedButton(
-
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-
             onPressed: () => Navigator.pop(ctx, true),
-
-            child: const Text('Sil'),
-
+            child: Text(isSuperUser && !hasManager ? 'Sil' : 'Talebi İlet'),
           ),
-
         ],
-
       ),
-
     );
 
     if (confirm != true) return;
 
-
-
     setState(() => _busyDeleteSites.add(site.id));
-
-    final error = await widget.authService.deleteSite(siteCode: site.id);
-
+    final result = await widget.authService.deleteSite(siteCode: site.id);
     if (!mounted) return;
 
     setState(() {
-
       _busyDeleteSites.remove(site.id);
-
-      if (_selectedSite?.id == site.id) {
-
-        _selectedSite = null;
-
-        _selectedSiteStructure = null;
-
+      if (result.deleted) {
+        if (_selectedSite?.id == site.id) {
+          _selectedSite = null;
+          _selectedSiteStructure = null;
+        }
+        if (_doorControlSite?.id == site.id) {
+          _doorControlSite = null;
+          _doorControlStructure = null;
+          _doorControlDoor = null;
+          _doorRuntimeStatus = null;
+        }
       }
-
-      if (_doorControlSite?.id == site.id) {
-
-        _doorControlSite = null;
-
-        _doorControlStructure = null;
-
-        _doorControlDoor = null;
-
-        _doorRuntimeStatus = null;
-
-      }
-
     });
 
-
-
-    if (error != null) {
-
-      _showMessage(error);
-
+    if (result.error != null) {
+      _showMessage(result.error!);
     } else {
-
-      _showMessage('Site silindi.');
-
+      _showMessage(
+        result.message ??
+            (result.deleted ? 'Site silindi.' : 'Silme talebi iletildi.'),
+      );
       await _loadSites(force: true);
-
-      await _loadDoorControlSites();
-
-      final session = widget.authService.session;
-
-      if (session != null) {
-
-        if (session.role == UserRole.superUser) {
-
-          _loadManagedUsers(UserRole.apartmentOwner, force: true);
-
-          _loadManagedUsers(UserRole.siteManager, force: true);
-
-        } else if (session.role == UserRole.siteManager) {
-
-          _loadManagedUsers(UserRole.apartmentOwner, force: true);
-
+      if (result.deleted) {
+        await _loadDoorControlSites();
+        if (session != null) {
+          if (session.role == UserRole.superUser) {
+            _loadManagedUsers(UserRole.apartmentOwner, force: true);
+            _loadManagedUsers(UserRole.siteManager, force: true);
+          } else if (session.role == UserRole.siteManager) {
+            _loadManagedUsers(UserRole.apartmentOwner, force: true);
+          }
         }
-
       }
+    }
+  }
 
+  Future<void> _deleteSiteWithEmailVerification(SiteRecord site) async {
+    setState(() => _busyDeleteSites.add(site.id));
+    final reqRes = await widget.authService.requestSiteDeletionEmailCode(siteCode: site.id);
+    if (!mounted) return;
+    setState(() => _busyDeleteSites.remove(site.id));
+
+    if (reqRes.error != null) {
+      _showMessage(reqRes.error!);
+      return;
     }
 
+    final codeController = TextEditingController();
+    String? localError;
+    bool isResending = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'E-Posta Kodu İle Sil',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'DİKKAT: "${site.name}" sitesi ve bağlı TÜM DAİRE KULLANICILARI, kapılar, cihazlar ve yetkiler kalıcı olarak silinecektir.',
+                          style: const TextStyle(
+                            color: Color(0xFF991B1B),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'E-posta adresinize (${reqRes.maskedEmail ?? "Süper Kullanıcı e-postası"}) 6 haneli silme güvenlik kodu gönderildi. Eminseniz kodu aşağıya giriniz:',
+                          style: const TextStyle(
+                            color: Color(0xFF7F1D1D),
+                            fontSize: 12.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 8,
+                      color: Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '000000',
+                      hintStyle: TextStyle(
+                        letterSpacing: 8,
+                        color: Colors.grey.shade400,
+                      ),
+                      counterText: '',
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.red),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.red, width: 2),
+                      ),
+                    ),
+                  ),
+                  if (localError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      localError!,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: isResending
+                          ? null
+                          : () async {
+                              setModalState(() => isResending = true);
+                              final resend = await widget.authService.requestSiteDeletionEmailCode(
+                                siteCode: site.id,
+                              );
+                              if (context.mounted) {
+                                setModalState(() {
+                                  isResending = false;
+                                  if (resend.error != null) {
+                                    localError = resend.error;
+                                  } else {
+                                    localError = 'Yeni kod e-posta adresinize gönderildi.';
+                                  }
+                                });
+                              }
+                            },
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: Text(isResending ? 'Gönderiliyor...' : 'Kodu Tekrar Gönder'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Vazgeç'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: () {
+                  final code = codeController.text.trim();
+                  if (code.length != 6) {
+                    setModalState(() => localError = 'Lütfen 6 haneli kodu eksiksiz giriniz.');
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text(
+                  'Onayla ve Kalıcı Olarak Sil',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final code = codeController.text.trim();
+    setState(() => _busyDeleteSites.add(site.id));
+    final confirmRes = await widget.authService.confirmSiteDeletionWithEmailCode(
+      siteCode: site.id,
+      code: code,
+    );
+    if (!mounted) return;
+    setState(() => _busyDeleteSites.remove(site.id));
+
+    if (confirmRes.error != null) {
+      _showMessage(confirmRes.error!);
+    } else {
+      _showMessage(confirmRes.message ?? 'Site ve bağlı tüm kayıtlar silindi.');
+      if (_selectedSite?.id == site.id) {
+        setState(() {
+          _selectedSite = null;
+          _selectedSiteStructure = null;
+        });
+      }
+      if (_doorControlSite?.id == site.id) {
+        setState(() {
+          _doorControlSite = null;
+          _doorControlStructure = null;
+          _doorControlDoor = null;
+          _doorRuntimeStatus = null;
+        });
+      }
+      await _loadSites(force: true);
+      await _loadDoorControlSites();
+      final session = widget.authService.session;
+      if (session != null) {
+        if (session.role == UserRole.superUser) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+          _loadManagedUsers(UserRole.siteManager, force: true);
+        } else if (session.role == UserRole.siteManager) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+        }
+      }
+    }
+  }
+
+  Future<void> _approveDeleteSite(SiteRecord site) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Siteyi Kalıcı Olarak Sil'),
+        content: Text(
+          '${site.name} sitesi ve bağlı tüm kapı, cihaz ve daire kayıtları KALICI OLARAK silinecektir. Bu işlem geri alınamaz.\n\nSilme talebini onaylıyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Onayla ve Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _busyDeleteSites.add(site.id));
+    final result = await widget.authService.approveSiteDeletion(siteCode: site.id);
+    if (!mounted) return;
+
+    setState(() {
+      _busyDeleteSites.remove(site.id);
+      if (_selectedSite?.id == site.id) {
+        _selectedSite = null;
+        _selectedSiteStructure = null;
+      }
+      if (_doorControlSite?.id == site.id) {
+        _doorControlSite = null;
+        _doorControlStructure = null;
+        _doorControlDoor = null;
+        _doorRuntimeStatus = null;
+      }
+    });
+
+    if (result.error != null) {
+      _showMessage(result.error!);
+    } else {
+      _showMessage(result.message ?? 'Site silindi.');
+      await _loadSites(force: true);
+      await _loadDoorControlSites();
+      final session = widget.authService.session;
+      if (session != null) {
+        if (session.role == UserRole.superUser) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+          _loadManagedUsers(UserRole.siteManager, force: true);
+        } else if (session.role == UserRole.siteManager) {
+          _loadManagedUsers(UserRole.apartmentOwner, force: true);
+        }
+      }
+    }
+  }
+
+  Future<void> _rejectDeleteSite(SiteRecord site) async {
+    final session = widget.authService.session;
+    final isSuperUser = session?.role == UserRole.superUser;
+    final isCaller = (isSuperUser && site.isPendingSiteManagerApproval) ||
+        (!isSuperUser && site.isPendingSuperUserApproval);
+
+    final actionTitle =
+        isCaller ? 'Silme Talebini İptal Et' : 'Silme Talebini Reddet';
+    final actionMessage = isCaller
+        ? '${site.name} sitesi için oluşturduğunuz silme talebini iptal etmek istediğinize emin misiniz?'
+        : '${site.name} sitesi için iletilen silme talebini reddetmek istediğinize emin misiniz?';
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(actionTitle),
+        content: Text(actionMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(isCaller ? 'Talebi İptal Et' : 'Talebi Reddet'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _busyDeleteSites.add(site.id));
+    final result = await widget.authService.rejectSiteDeletion(siteCode: site.id);
+    if (!mounted) return;
+
+    setState(() => _busyDeleteSites.remove(site.id));
+
+    if (result.error != null) {
+      _showMessage(result.error!);
+    } else {
+      _showMessage(result.message ?? 'Silme talebi kaldırıldı.');
+      await _loadSites(force: true);
+    }
   }
 
 
@@ -1825,52 +2377,162 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   Future<void> _assignDoorDevice(DoorRecord door) async {
-
     final result = await DoorDeviceDialog.show(
-
       context,
-
       door: door,
-
       initialDeviceUid: door.assignedDeviceUid ?? '',
-
+      authService: widget.authService,
     );
-
     if (result == null) return;
 
-
-
-    final (_, error) = await widget.authService.assignDoorDevice(
-
-      doorId: door.id,
-
-      deviceUid: result.deviceUid,
-
-    );
-
-
-
-    if (error != null) {
-
-      _showMessage(error);
-
-    } else {
-
-      _showMessage('Cihaz kapıya atandı.');
-
-      if (_selectedSite != null) {
-
-        _selectSite(_selectedSite!);
-
+    if (result.unassign) {
+      try {
+        await widget.authService.unassignDoorDevice(doorId: door.id);
+        _showMessage('Cihaz kapıdan çıkarıldı (serbest bırakıldı).');
+        if (_selectedSite != null) {
+          _selectSite(_selectedSite!);
+        }
+        _loadDoorControlSites();
+        _loadCompanyDevices(force: true);
+      } catch (e) {
+        _showMessage('Cihaz kapıdan çıkarılamadı: $e');
       }
-
-      _loadDoorControlSites();
-
+      return;
     }
 
+    if (result.deviceUid != null && result.deviceUid!.isNotEmpty) {
+      final (_, error) = await widget.authService.assignDoorDevice(
+        doorId: door.id,
+        deviceUid: result.deviceUid!,
+      );
+
+      if (error != null) {
+        _showMessage(error);
+      } else {
+        _showMessage('Cihaz kapıya atandı.');
+        if (_selectedSite != null) {
+          _selectSite(_selectedSite!);
+        }
+        _loadDoorControlSites();
+        _loadCompanyDevices(force: true);
+      }
+    }
   }
 
+  Future<void> _openDoorDialog({DoorRecord? door}) async {
+    final site = _selectedSite;
+    if (site == null) return;
+    final structure = _selectedSiteStructure;
+    final blocks = structure?.blocks ?? const <SiteBlockRecord>[];
 
+    final availableDevices = await widget.authService.getAssignableDevices(siteCode: site.id);
+
+    if (!mounted) return;
+    final result = await DoorEditDialog.show(
+      context,
+      authService: widget.authService,
+      siteCode: site.id,
+      door: door,
+      blocks: blocks,
+      availableDevices: availableDevices,
+    );
+
+    if (result == true) {
+      _showMessage(door == null ? 'Yeni kapı oluşturuldu.' : 'Kapı güncellendi.');
+      _selectSite(site);
+      _loadDoorControlSites();
+    }
+  }
+
+  Future<void> _deleteDoor(DoorRecord door) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kapıyı Sil'),
+        content: Text(
+          '${door.doorName} kapısını silmek istediğinize emin misiniz?\nVarsa atanmış cihaz serbest kalacaktır.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await widget.authService.deleteDoor(doorId: door.id);
+      _showMessage('Kapı silindi.');
+      if (_selectedSite != null) {
+        _selectSite(_selectedSite!);
+      }
+      _loadDoorControlSites();
+    } catch (e) {
+      _showMessage('Kapı silinemedi: $e');
+    }
+  }
+
+  Future<void> _openClaimDeviceFlow() async {
+    final success = await ClaimDeviceDialog.show(context, widget.authService);
+    if (success == true) {
+      await _loadCompanyDevices(force: true);
+      await _loadDoorControlSites();
+    }
+  }
+
+  Future<void> _openReplaceDeviceDialog(DoorRecord door) async {
+    final success = await ReplaceDeviceDialog.show(
+      context,
+      door: door,
+      authService: widget.authService,
+    );
+    if (success == true) {
+      if (_selectedSite != null) {
+        _selectSite(_selectedSite!);
+      }
+      await _loadDoorControlSites();
+      await _loadCompanyDevices(force: true);
+    }
+  }
+
+  Future<void> _openDoorPermissionsDialog(DoorRecord door) async {
+    await DoorPermissionsDialog.show(
+      context,
+      door: door,
+      authService: widget.authService,
+    );
+  }
+
+  Future<void> _openSiteJoinQrDialog(SiteRecord site) async {
+    await SiteJoinQrDialog.show(
+      context,
+      site: site,
+      authService: widget.authService,
+    );
+  }
+
+  Future<void> _openManageJoinRequestsDialog(SiteRecord site) async {
+    await ManageJoinRequestsDialog.show(
+      context,
+      site: site,
+      authService: widget.authService,
+    );
+  }
+
+  Future<void> _openSiteResidentsAccordionDialog(SiteRecord site) async {
+    await SiteResidentsAccordionDialog.show(
+      context,
+      site: site,
+      authService: widget.authService,
+    );
+  }
 
   Future<void> _openDeviceRegistrationFlow() async {
 
@@ -1919,61 +2581,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _showMessage(error);
 
     } else if (device != null) {
-
       _showMessage('Cihaz başarıyla kaydedildi.');
-
       _loadCompanyDevices(force: true);
-
+      _loadSites(force: true);
+      _loadDoorControlSites();
     }
-
   }
 
-
-
   Future<void> _editCompanyDevice(DeviceRecord device) async {
-
     final isSuperUser = widget.authService.session?.role == UserRole.superUser;
-
     final result = await DeviceEditDialog.show(
-
       context,
-
       device: device,
-
       isSuperUser: isSuperUser,
-
     );
-
     if (result == null) return;
 
-
-
     final (_, error) = await widget.authService.updateDevice(
-
       deviceId: device.id,
-
       assignedUserCode: result.assignedUserCode,
-
       siteCode: result.siteCode,
-
       gateName: result.gateName,
-
     );
 
-
-
     if (error != null) {
-
       _showMessage(error);
-
     } else {
-
       _showMessage('Cihaz güncellendi.');
-
       _loadCompanyDevices(force: true);
-
+      _loadSites(force: true);
+      _loadDoorControlSites();
     }
-
   }
 
 
@@ -2263,7 +2901,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       UserRole.siteManager => 'Site Yöneticisi',
 
       UserRole.apartmentOwner => 'Daire Sakini',
-
+      UserRole.individual => 'Bireysel Kullanıcı',
     };
 
 
@@ -2409,7 +3047,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       UserRole.siteManager => 'Site Yöneticisi',
 
       UserRole.apartmentOwner => 'Daire Sakini',
-
+      UserRole.individual => 'Bireysel Kullanıcı',
     };
 
 
@@ -2615,192 +3253,218 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+  Future<void> _handleGlobalRefresh() async {
+    final session = widget.authService.session;
+    if (session == null) return;
+
+    switch (_selectedMenu) {
+      case SirketMenuItem.dashboard:
+      case SirketMenuItem.ellerSerbest:
+        await _loadDoorControlSites();
+        if (_doorControlDoor != null) {
+          await _loadDoorRuntimeStatus(_doorControlDoor!.id);
+        }
+        break;
+      case SirketMenuItem.siteler:
+      case SirketMenuItem.daireKullanicilariYonetimi:
+        await _loadSites(force: true);
+        if (_selectedSite != null) {
+          await _selectSite(_selectedSite!);
+        }
+        break;
+      case SirketMenuItem.kullaniciYonetimi:
+        await _loadAllUsers(
+          role: _allUsersRoleFilter,
+          page: _allUsersCurrentPage,
+          pageSize: _allUsersPageSize,
+          search: _allUsersSearchQuery,
+          force: true,
+        );
+        break;
+      case SirketMenuItem.superUserYonetimi:
+        await _loadManagedUsers(UserRole.superUser, force: true);
+        break;
+      case SirketMenuItem.siteYoneticileriYonetimi:
+        await _loadManagedUsers(UserRole.siteManager, force: true);
+        break;
+      case SirketMenuItem.kayitliCihazlar:
+        await _loadCompanyDevices(force: true);
+        break;
+      case SirketMenuItem.abonelikTalepleri:
+        await _loadSubscriptionRequests(force: true);
+        break;
+      case SirketMenuItem.siteOnayTalepleri:
+        await _loadPendingSiteApprovals(force: true);
+        break;
+      case SirketMenuItem.cihazEkle:
+      case SirketMenuItem.bluetoothWifiKur:
+      case SirketMenuItem.profilim:
+        break;
+    }
+  }
+
   @override
-
   Widget build(BuildContext context) {
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final session = widget.authService.session!;
 
-
-
     return Scaffold(
-
       backgroundColor: Colors.transparent,
-
       appBar: AppBar(
-
         title: Column(
-
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
-
             Text(
-
               _titleForMenu(_selectedMenu),
-
               style: TextStyle(
-
                 fontSize: 18,
-
                 fontWeight: FontWeight.w800,
-
                 color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-
                 letterSpacing: -0.3,
-
               ),
-
             ),
-
             Text(
-
-              '${session.fullName} • ${session.role.label}',
-
+              '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
               style: TextStyle(
-
                 fontSize: 11.5,
-
                 fontWeight: FontWeight.w600,
-
                 color: isDark ? session.role.lightAccentColor : session.role.accentColor,
-
               ),
-
             ),
-
           ],
-
         ),
-
         elevation: 0,
-
         backgroundColor: isDark
-
             ? const Color(0xFF0F172A).withValues(alpha: 0.8)
-
             : Colors.white.withValues(alpha: 0.88),
-
         iconTheme: IconThemeData(
-
           color: isDark ? Colors.white : AppColors.textDark,
-
         ),
-
         shape: const RoundedRectangleBorder(
-
           borderRadius: BorderRadius.only(
-
             bottomLeft: Radius.circular(20),
-
             bottomRight: Radius.circular(20),
-
           ),
-
         ),
-
         actions: [
-
-          if (session.role != UserRole.superUser)
-
-            IconButton(
-
-              tooltip: 'Masaüstüne Widget Ekle',
-
-              icon: Icon(
-
-                Icons.widgets_outlined,
-
-                color: isDark ? const Color(0xFF6EE7B7) : AppColors.emerald,
-
-                size: 22,
-
-              ),
-
-              onPressed: () async {
-
-                await DoorWidgetService.instance.requestPinWidget();
-
-                _showMessage('Masaüstü widget ekleme isteği gönderildi.');
-
-              },
-
-            ),
-
-          IconButton(
-
-            tooltip: 'Çıkış Yap',
-
-            icon: const Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
-
-            onPressed: () => widget.authService.logout(),
-
-          ),
-
-          const SizedBox(width: 4),
-
-        ],
-
-      ),
-
-      drawer: YanMenu(
-
-        fullName: session.fullName,
-
-        userEmail: session.email,
-
-        role: session.role,
-
-        selectedItem: _selectedMenu,
-
-        onSelect: _selectMenu,
-
-        onLogout: () {
-
-          Navigator.pop(context);
-
-          widget.authService.logout();
-
-        },
-
-      ),
-
-      body: SafeArea(
-
-        child: LayoutBuilder(
-
-          builder: (context, constraints) {
-
-            final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
-
-            return SingleChildScrollView(
-
-              padding: EdgeInsets.all(horizontalPadding),
-
-              child: Align(
-
-                alignment: Alignment.topCenter,
-
-                child: ConstrainedBox(
-
-                  constraints: const BoxConstraints(maxWidth: 1100),
-
-                  child: _buildContent(session),
-
+          if (_canToggleDualMode)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _isResidentMode = !_isResidentMode;
+                    if (!_isResidentMode) {
+                      _selectedMenu = SirketMenuItem.dashboard;
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _isResidentMode
+                        ? const Color(0xFF2563EB).withValues(alpha: isDark ? 0.25 : 0.12)
+                        : const Color(0xFF10B981).withValues(alpha: isDark ? 0.25 : 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
+                        size: 15,
+                        color: _isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: _isResidentMode
+                              ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8))
+                              : (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-
               ),
-
-            );
-
-          },
-
-        ),
-
+            ),
+          if (session.role != UserRole.superUser)
+            IconButton(
+              tooltip: 'Masaüstüne Widget Ekle',
+              icon: Icon(
+                Icons.widgets_outlined,
+                color: isDark ? const Color(0xFF6EE7B7) : AppColors.emerald,
+                size: 22,
+              ),
+              onPressed: () async {
+                await DoorWidgetService.instance.requestPinWidget();
+                _showMessage('Masaüstü widget ekleme isteği gönderildi.');
+              },
+            ),
+          IconButton(
+            tooltip: 'Yenile',
+            icon: const Icon(Icons.refresh_rounded, size: 22),
+            onPressed: _handleGlobalRefresh,
+          ),
+          IconButton(
+            tooltip: 'Çıkış Yap',
+            icon: const Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
+            onPressed: () => widget.authService.logout(),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
-
+      drawer: YanMenu(
+        fullName: session.fullName,
+        userEmail: session.email,
+        role: session.role,
+        selectedItem: _selectedMenu,
+        isResidentMode: _isResidentMode,
+        canToggleMode: _canToggleDualMode,
+        onToggleMode: () {
+          Navigator.pop(context);
+          setState(() {
+            _isResidentMode = !_isResidentMode;
+            if (!_isResidentMode) {
+              _selectedMenu = SirketMenuItem.dashboard;
+            }
+          });
+        },
+        onSelect: _selectMenu,
+        onLogout: () {
+          Navigator.pop(context);
+          widget.authService.logout();
+        },
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
+            return RefreshIndicator(
+              onRefresh: _handleGlobalRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(horizontalPadding),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: _buildContent(session),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
 
   }
@@ -2818,11 +3482,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
     switch (_selectedMenu) {
-
       case SirketMenuItem.dashboard:
-
       case SirketMenuItem.ellerSerbest:
-
+        if (_isResidentMode ||
+            ((session.role == UserRole.individual && (_doorControlSitesPage?.sites.isEmpty ?? true)) ||
+            (session.role == UserRole.siteManager &&
+                (_doorControlSitesPage?.sites.isEmpty ?? true) &&
+                (_doorControlStructure?.doors.isEmpty ?? true)))) {
+          return IndividualHomeView(
+            session: session,
+            authService: widget.authService,
+            onRefreshAll: _loadInitialData,
+          );
+        }
         return DashboardView(
 
           session: session,
@@ -2943,7 +3615,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         return SitesView(
 
-          canManageSites: session.role == UserRole.superUser,
+          canManageSites:
+              session.role == UserRole.superUser ||
+              session.role == UserRole.siteManager,
 
           canManageApartmentUsers:
 
@@ -3004,7 +3678,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onSendApartmentMail: _sendApartmentCredentials,
 
           onAssignDoorDevice: _assignDoorDevice,
-
+          onOpenAddDoor: () => _openDoorDialog(),
+          onEditDoor: (door) => _openDoorDialog(door: door),
+          onDeleteDoor: _deleteDoor,
+          onReplaceDevice: _openReplaceDeviceDialog,
+          onManageDoorPermissions: _openDoorPermissionsDialog,
           onDeleteApartmentResident: _deleteApartmentResident,
 
           onConfigurePolicy: _openSiteSecurityPolicyDialog,
@@ -3013,6 +3691,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           onDownloadLogsPdf: _exportSiteLogsPdf,
 
+          onShowSiteJoinQr: _openSiteJoinQrDialog,
+          onManageJoinRequests: _openManageJoinRequestsDialog,
+          onShowResidentsAccordion: _openSiteResidentsAccordionDialog,
+          isSuperUser: widget.authService.session?.role == UserRole.superUser,
+          onApproveDeleteSite: _approveDeleteSite,
+          onRejectDeleteSite: _rejectDeleteSite,
+          onDeleteSiteWithEmail: _deleteSiteWithEmailVerification,
+        );
+
+
+
+      case SirketMenuItem.kullaniciYonetimi:
+        return AllUsersView(
+          session: session,
+          pageData: _allUsersPage,
+          users: _allUsersPage?.users ?? const <ManagedUserAccount>[],
+          isLoading: _isLoadingAllUsers,
+          busyActivationUsers: _busyActivationUsers,
+          onLoadPage: ({role, page = 1, pageSize = 15, search}) => _loadAllUsers(
+            role: role,
+            page: page,
+            pageSize: pageSize,
+            search: search,
+            force: true,
+          ),
+          onRefresh: () => _loadAllUsers(
+            role: _allUsersRoleFilter,
+            page: _allUsersCurrentPage,
+            pageSize: _allUsersPageSize,
+            search: _allUsersSearchQuery,
+            force: true,
+          ),
+          onUpdateUser: _updateDirectoryUser,
+          onToggleActivation: _toggleDirectoryUserActivation,
+          onDeleteUser: _deleteDirectoryUser,
         );
 
 
@@ -3160,9 +3873,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onAssignDeviceToDoor: _assignCompanyDeviceToDoor,
 
           onDeleteDevice: _deleteCompanyDevice,
-
           onDownloadFirmwareReportPdf: _exportFirmwareReportPdf,
-
+          onRegisterNewDevice: _openClaimDeviceFlow,
         );
 
 

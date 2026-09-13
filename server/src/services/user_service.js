@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 
 export async function createUser({
@@ -69,6 +69,8 @@ export async function updateUserByCode({
   phoneNumber,
   password,
   isActive,
+  role,
+  emailVerified,
   db = pool,
 }) {
   const sets = [];
@@ -97,6 +99,14 @@ export async function updateUserByCode({
   if (isActive !== undefined) {
     values.push(isActive);
     sets.push(`is_active = $${values.length}`);
+  }
+  if (role !== undefined) {
+    values.push(role);
+    sets.push(`role = $${values.length}`);
+  }
+  if (emailVerified !== undefined) {
+    values.push(emailVerified);
+    sets.push(`email_verified = $${values.length}`);
   }
 
   if (sets.length === 0) {

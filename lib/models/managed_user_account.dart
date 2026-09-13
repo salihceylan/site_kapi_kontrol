@@ -10,6 +10,8 @@ class ManagedUserAccount {
     required this.isActive,
     required this.phoneNumber,
     required this.createdAt,
+    this.emailVerified = false,
+    this.approvalStatus,
   });
 
   final int id;
@@ -20,6 +22,8 @@ class ManagedUserAccount {
   final bool isActive;
   final String? phoneNumber;
   final DateTime? createdAt;
+  final bool emailVerified;
+  final String? approvalStatus;
 
   ManagedUserAccount copyWith({
     int? id,
@@ -30,6 +34,8 @@ class ManagedUserAccount {
     bool? isActive,
     String? phoneNumber,
     DateTime? createdAt,
+    bool? emailVerified,
+    String? approvalStatus,
   }) {
     return ManagedUserAccount(
       id: id ?? this.id,
@@ -40,6 +46,8 @@ class ManagedUserAccount {
       isActive: isActive ?? this.isActive,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       createdAt: createdAt ?? this.createdAt,
+      emailVerified: emailVerified ?? this.emailVerified,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
     );
   }
 
@@ -55,6 +63,8 @@ class ManagedUserAccount {
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'] as String),
+      emailVerified: json['email_verified'] as bool? ?? false,
+      approvalStatus: json['approval_status'] as String?,
     );
   }
 }

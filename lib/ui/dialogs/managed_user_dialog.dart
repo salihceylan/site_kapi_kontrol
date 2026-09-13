@@ -11,6 +11,8 @@ class ManagedUserFormResult {
     required this.phoneNumber,
     required this.password,
     required this.isActive,
+    this.role,
+    this.emailVerified,
   });
 
   final String fullName;
@@ -18,6 +20,8 @@ class ManagedUserFormResult {
   final String phoneNumber;
   final String password;
   final bool isActive;
+  final UserRole? role;
+  final bool? emailVerified;
 }
 
 class ManagedUserDialog extends StatefulWidget {
@@ -27,12 +31,14 @@ class ManagedUserDialog extends StatefulWidget {
     required this.roleTitle,
     required this.user,
     required this.isSelf,
+    this.allowRoleSelection = false,
   });
 
   final UserRole role;
   final String roleTitle;
   final ManagedUserAccount? user;
   final bool isSelf;
+  final bool allowRoleSelection;
 
   static Future<ManagedUserFormResult?> show(
     BuildContext context, {
@@ -40,6 +46,7 @@ class ManagedUserDialog extends StatefulWidget {
     required String roleTitle,
     ManagedUserAccount? user,
     required bool isSelf,
+    bool allowRoleSelection = false,
   }) {
     return showDialog<ManagedUserFormResult>(
       context: context,
@@ -48,6 +55,7 @@ class ManagedUserDialog extends StatefulWidget {
         roleTitle: roleTitle,
         user: user,
         isSelf: isSelf,
+        allowRoleSelection: allowRoleSelection,
       ),
     );
   }
@@ -63,6 +71,8 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
   late final TextEditingController _phoneController;
   late final TextEditingController _passwordController;
   late bool _isActive;
+  late bool _emailVerified;
+  late UserRole _selectedRole;
 
   bool get _isEditing => widget.user != null;
 
@@ -78,6 +88,8 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
     );
     _passwordController = TextEditingController();
     _isActive = widget.user?.isActive ?? (widget.role == UserRole.superUser);
+    _emailVerified = widget.user?.emailVerified ?? true;
+    _selectedRole = widget.user?.role ?? widget.role;
   }
 
   @override
@@ -100,6 +112,8 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
         phoneNumber: _phoneController.text.trim(),
         password: _passwordController.text.trim(),
         isActive: _isActive,
+        role: widget.allowRoleSelection ? _selectedRole : null,
+        emailVerified: _emailVerified,
       ),
     );
   }
@@ -155,6 +169,24 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                         : 'Geçerli bir telefon numarası girin.';
                   },
                 ),
+                if (widget.allowRoleSelection) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<UserRole>(
+                    initialValue: _selectedRole,
+                    decoration: const InputDecoration(labelText: 'Kullanıcı Rolü'),
+                    items: UserRole.values.map((r) {
+                      return DropdownMenuItem(
+                        value: r,
+                        child: Text(r.label),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedRole = val);
+                      }
+                    },
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _passwordController,
@@ -177,7 +209,7 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                 SwitchListTile.adaptive(
                   value: _isActive,
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Aktif'),
+                  title: const Text('Hesap Aktif'),
                   subtitle: Text(
                     _isActive
                         ? 'Kullanıcı giriş yapabilir.'
@@ -198,6 +230,18 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                       ),
                     ),
                   ),
+                const SizedBox(height: 8),
+                SwitchListTile.adaptive(
+                  value: _emailVerified,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('E-Posta Doğrulandı'),
+                  subtitle: Text(
+                    _emailVerified
+                        ? 'E-posta doğrulama şartı sağlanmış.'
+                        : 'E-posta henüz doğrulanmamış.',
+                  ),
+                  onChanged: (value) => setState(() => _emailVerified = value),
+                ),
               ],
             ),
           ),

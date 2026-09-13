@@ -43,7 +43,11 @@ import {
   updateSiteByCode,
   upsertSiteManagerLink,
   getSiteStructure,
-  siteExists,
+  requestSiteDeletion,
+  approveSiteDeletion,
+  rejectOrCancelSiteDeletion,
+  requestSiteDeletionEmailCode,
+  confirmSiteDeletionWithEmailCode,
 } from '../services/site_service.js';
 import {
   provisionApartmentResident,
@@ -74,39 +78,65 @@ export const adminRouter = express.Router();
 
 // GET /admin/users
 adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
-  const role = parseRole(String(req.query.role || '').trim());
-  const page = Math.max(1, Number(req.query.page || 1));
-  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
-  const search = String(req.query.search || '').trim();
-
-  if (!role) {
-    return res.status(400).json({ error: 'Gecersiz rol.' });
+  const rawRole = String(req.query.role || '').trim();
+  let role = null;
+  if (rawRole && rawRole !== 'all') {
+    role = parseRole(rawRole);
+    if (!role) {
+      return res.status(400).json({ error: 'Gecersiz rol.' });
+    }
   }
 
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 15)));
+  const search = String(req.query.search || '').trim();
+  const emailVerifiedFilter = req.query.email_verified !== undefined ? normalizeOptionalBool(req.query.email_verified) : null;
+
   try {
-    const extraFilter = role === 'site_manager' ? ` AND approval_status <> 'pending'` : '';
-    const searchFilter = search
-      ? ` AND (
-          full_name ILIKE $2
-          OR email ILIKE $2
-          OR login_name ILIKE $2
-          OR user_code::TEXT = $3
-        )`
-      : '';
-    const countParams = search
-      ? [role, `%${search}%`, search]
-      : [role];
+    const whereClauses = [];
+    const countParams = [];
+
+    if (role) {
+      countParams.push(role);
+      whereClauses.push(`role = $${countParams.length}`);
+      if (role === 'site_manager') {
+        whereClauses.push(`approval_status <> 'pending'`);
+      }
+    }
+
+    if (emailVerifiedFilter !== null) {
+      countParams.push(emailVerifiedFilter);
+      whereClauses.push(`email_verified = $${countParams.length}`);
+    }
+
+    if (search) {
+      countParams.push(`%${search}%`);
+      const searchWildcardIdx = countParams.length;
+      countParams.push(search);
+      const searchExactIdx = countParams.length;
+      whereClauses.push(`(
+        full_name ILIKE $${searchWildcardIdx}
+        OR email ILIKE $${searchWildcardIdx}
+        OR login_name ILIKE $${searchWildcardIdx}
+        OR user_code::TEXT = $${searchExactIdx}
+      )`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
     const countResult = await pool.query(
-      `SELECT COUNT(*)::INTEGER AS total FROM users WHERE role = $1${extraFilter}${searchFilter}`,
+      `SELECT COUNT(*)::INTEGER AS total FROM users ${whereSql}`,
       countParams,
     );
     const total = countResult.rows[0]?.total ?? 0;
     const offset = (page - 1) * pageSize;
-    const listParams = search
-      ? [role, `%${search}%`, search, pageSize, offset]
-      : [role, pageSize, offset];
-    const limitParam = search ? 4 : 2;
-    const offsetParam = search ? 5 : 3;
+
+    const listParams = [...countParams];
+    listParams.push(pageSize);
+    const limitParam = listParams.length;
+    listParams.push(offset);
+    const offsetParam = listParams.length;
+
     const usersResult = await pool.query(
       `
       SELECT
@@ -121,7 +151,7 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
         phone_number,
         created_at
       FROM users
-      WHERE role = $1${extraFilter}${searchFilter}
+      ${whereSql}
       ORDER BY created_at DESC
       LIMIT $${limitParam} OFFSET $${offsetParam}
       `,
@@ -193,6 +223,8 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       ? undefined
       : normalizePhone(req.body.phone_number);
   const isActive = normalizeOptionalBool(req.body.is_active);
+  const role = req.body.role !== undefined && req.body.role !== null ? parseRole(String(req.body.role).trim()) : undefined;
+  const emailVerified = normalizeOptionalBool(req.body.email_verified);
 
   const validationError = validateUpdateInput({
     fullName,
@@ -210,7 +242,9 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
     email === undefined &&
     password === undefined &&
     phoneNumber === undefined &&
-    isActive === undefined
+    isActive === undefined &&
+    role === undefined &&
+    emailVerified === undefined
   ) {
     return res.status(400).json({ error: 'Guncellenecek alan gonderilmedi.' });
   }
@@ -227,6 +261,8 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       phoneNumber,
       password,
       isActive,
+      role,
+      emailVerified,
     });
     if (!updated) {
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
@@ -296,6 +332,14 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
       `,
       [targetCode],
     );
+
+    await pool.query('UPDATE apartments SET resident_user_code = NULL WHERE resident_user_code = $1', [targetCode]);
+    await pool.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [targetCode]);
+    await pool.query('DELETE FROM site_memberships WHERE user_code = $1', [targetCode]);
+    await pool.query('DELETE FROM site_join_requests WHERE user_code = $1', [targetCode]);
+    await pool.query('DELETE FROM qr_access_tokens WHERE user_code = $1', [targetCode]);
+    await pool.query('UPDATE devices SET assigned_user_code = NULL WHERE assigned_user_code = $1', [targetCode]);
+
     const result = await pool.query(
       `DELETE FROM users WHERE user_code = $1`,
       [targetCode],
@@ -776,7 +820,7 @@ adminRouter.get('/admin/sites/:id/structure', authRequired, requireSuperUser, as
   }
 });
 
-// DELETE /admin/sites/:id
+// DELETE /admin/sites/:id (Akıllı Silme / Çift Taraflı Teyit Başlatma/Onaylama)
 adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) => {
   const siteCode = Number(req.params.id);
   if (!Number.isInteger(siteCode)) {
@@ -784,16 +828,80 @@ adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (re
   }
 
   try {
-    const result = await pool.query(
-      `DELETE FROM sites WHERE site_code = $1`,
-      [siteCode],
-    );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Site bulunamadi.' });
-    }
-    return res.status(204).send();
-  } catch (_error) {
-    return res.status(500).json({ error: 'Site silinemedi.' });
+    const result = await requestSiteDeletion({ siteCode, authUser: req.authUser });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ error: error.message || 'Site silme işlemi başlatılamadı.' });
+  }
+});
+
+// POST /admin/sites/:id/approve-deletion
+adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  try {
+    const result = await approveSiteDeletion({ siteCode, authUser: req.authUser });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ error: error.message || 'Site silme talebi onaylanamadı.' });
+  }
+});
+
+// POST /admin/sites/:id/reject-deletion
+adminRouter.post('/admin/sites/:id/reject-deletion', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  try {
+    const result = await rejectOrCancelSiteDeletion({ siteCode, authUser: req.authUser });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ error: error.message || 'Site silme talebi reddedilemedi.' });
+  }
+});
+
+// POST /admin/sites/:id/request-email-deletion-code
+adminRouter.post('/admin/sites/:id/request-email-deletion-code', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  try {
+    const result = await requestSiteDeletionEmailCode({ siteCode, authUser: req.authUser });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ error: error.message || 'Silme kodu gönderilemedi.' });
+  }
+});
+
+// POST /admin/sites/:id/confirm-email-deletion
+adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUser, async (req, res) => {
+  const siteCode = Number(req.params.id);
+  if (!Number.isInteger(siteCode)) {
+    return res.status(400).json({ error: 'Gecersiz site kodu.' });
+  }
+
+  const code = String(req.body.code || '').trim();
+  if (!code) {
+    return res.status(400).json({ error: 'Lütfen 6 haneli silme doğrulama kodunu giriniz.' });
+  }
+
+  try {
+    const result = await confirmSiteDeletionWithEmailCode({ siteCode, code, authUser: req.authUser });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ error: error.message || 'Site silinemedi.' });
   }
 });
 
@@ -1057,11 +1165,19 @@ adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (r
       return res.status(404).json({ error: 'Site ID bulunamadi.' });
     }
 
+    const qrReaderEnabled =
+      typeof req.body.qr_reader_enabled === 'boolean'
+        ? req.body.qr_reader_enabled
+        : (req.body.qr_reader_enabled === 'true'
+            ? true
+            : (req.body.qr_reader_enabled === 'false' ? false : undefined));
+
     const device = await updateDeviceDetails({
       deviceId,
       assignedUserCode: assignedUserCode ?? null,
       siteCode: siteCode ?? null,
       gateName,
+      qrReaderEnabled,
     });
     if (!device) {
       return res.status(404).json({ error: 'Cihaz bulunamadi.' });

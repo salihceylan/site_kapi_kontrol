@@ -10,6 +10,7 @@ enum SirketMenuItem {
   ellerSerbest,
   abonelikTalepleri,
   siteOnayTalepleri,
+  kullaniciYonetimi,
   superUserYonetimi,
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
@@ -28,6 +29,9 @@ class YanMenu extends StatelessWidget {
     required this.selectedItem,
     required this.onSelect,
     required this.onLogout,
+    this.isResidentMode = false,
+    this.onToggleMode,
+    this.canToggleMode = false,
   });
 
   final String fullName;
@@ -36,12 +40,19 @@ class YanMenu extends StatelessWidget {
   final SirketMenuItem selectedItem;
   final ValueChanged<SirketMenuItem> onSelect;
   final VoidCallback onLogout;
+  final bool isResidentMode;
+  final VoidCallback? onToggleMode;
+  final bool canToggleMode;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final roleColor = role.accentColor;
-    final items = _itemsForRole(role);
+    final items = _itemsForRole(
+      role,
+      isResidentMode: isResidentMode,
+      canToggleMode: canToggleMode,
+    );
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -170,6 +181,22 @@ class YanMenu extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
               children: [
+                if (canToggleMode && onToggleMode != null) ...[
+                  _MenuTile(
+                    icon: isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
+                    title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
+                    selected: false,
+                    color: isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
+                    onTap: onToggleMode!,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                    child: Divider(
+                      color: isDark ? const Color(0x1AFFFFFF) : const Color(0x150F172A),
+                      height: 1,
+                    ),
+                  ),
+                ],
                 for (final item in items) ...[
                   _MenuTile(
                     icon: _iconForItem(item),
@@ -219,12 +246,26 @@ class YanMenu extends StatelessWidget {
   }
 }
 
-List<SirketMenuItem> _itemsForRole(UserRole role) {
+List<SirketMenuItem> _itemsForRole(
+  UserRole role, {
+  bool isResidentMode = false,
+  bool canToggleMode = false,
+}) {
+  if (canToggleMode && !isResidentMode && (role == UserRole.individual || role == UserRole.apartmentOwner)) {
+    return const [
+      SirketMenuItem.dashboard,
+      SirketMenuItem.profilim,
+      SirketMenuItem.siteler,
+      SirketMenuItem.kayitliCihazlar,
+      SirketMenuItem.bluetoothWifiKur,
+    ];
+  }
   switch (role) {
     case UserRole.superUser:
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
+        SirketMenuItem.kullaniciYonetimi,
         SirketMenuItem.superUserYonetimi,
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
@@ -234,6 +275,13 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
         SirketMenuItem.bluetoothWifiKur,
       ];
     case UserRole.siteManager:
+      if (isResidentMode) {
+        return const [
+          SirketMenuItem.dashboard,
+          SirketMenuItem.profilim,
+          SirketMenuItem.ellerSerbest,
+        ];
+      }
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
@@ -245,6 +293,10 @@ List<SirketMenuItem> _itemsForRole(UserRole role) {
       return const [
         SirketMenuItem.dashboard,
         SirketMenuItem.ellerSerbest,
+      ];
+    case UserRole.individual:
+      return const [
+        SirketMenuItem.dashboard,
       ];
   }
 }
@@ -261,6 +313,8 @@ String _titleForItem(SirketMenuItem item) {
       return 'Yeni Abonelik Talepleri';
     case SirketMenuItem.siteOnayTalepleri:
       return 'Site Onay Talepleri';
+    case SirketMenuItem.kullaniciYonetimi:
+      return 'Kullanıcı Yönetimi';
     case SirketMenuItem.superUserYonetimi:
       return 'Süper Kullanıcı Yönetimi';
     case SirketMenuItem.siteYoneticileriYonetimi:
@@ -290,6 +344,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.mark_email_unread_rounded;
     case SirketMenuItem.siteOnayTalepleri:
       return Icons.verified_user_rounded;
+    case SirketMenuItem.kullaniciYonetimi:
+      return Icons.manage_accounts_rounded;
     case SirketMenuItem.superUserYonetimi:
       return Icons.admin_panel_settings_rounded;
     case SirketMenuItem.siteYoneticileriYonetimi:

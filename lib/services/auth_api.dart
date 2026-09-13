@@ -14,6 +14,10 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
+import 'package:site_kapi_kontrol/models/join_request_record.dart';
+import 'package:site_kapi_kontrol/models/site_join_info.dart';
+import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
@@ -49,6 +53,58 @@ class AuthApi {
     return role == UserRole.superUser ? '/admin' : '/manager';
   }
 
+  Future<Map<String, dynamic>> registerIndividual({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/register-individual');
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: {
+        'first_name': firstName,
+        'last_name': lastName,
+        'email': email,
+        'password': password,
+      },
+    );
+    _ensureStatus(response, 201);
+    return _decodePayload(response);
+  }
+
+  Future<UserSession> verifyIndividualCode({
+    required String email,
+    required String code,
+  }) async {
+    return _authRequest(
+      path: '/auth/verify-code',
+      body: {
+        'email': email,
+        'code': code,
+      },
+      expectedCode: 200,
+    );
+  }
+
+  Future<Map<String, dynamic>> resendIndividualCode({
+    required String email,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/resend-code');
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: {
+        'email': email,
+      },
+    );
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
   Future<UserSession> register({
     required String fullName,
     required String email,
@@ -71,14 +127,14 @@ class AuthApi {
 
   Future<ManagedUserPage> listManagedUsers({
     required String token,
-    required UserRole role,
+    UserRole? role,
     required int page,
     required int pageSize,
     String? search,
   }) async {
     final uri = Uri.parse('$baseUrl/admin/users').replace(
       queryParameters: {
-        'role': role.apiValue,
+        if (role != null) 'role': role.apiValue,
         'page': '$page',
         'page_size': '$pageSize',
         if (search != null && search.trim().isNotEmpty)
@@ -149,6 +205,7 @@ class AuthApi {
     String? password,
     String? phoneNumber,
     bool? isActive,
+    UserRole? role,
   }) async {
     final body = <String, dynamic>{
       'full_name': fullName,
@@ -156,6 +213,7 @@ class AuthApi {
       'password': password,
       'phone_number': phoneNumber,
       'is_active': isActive,
+      if (role != null) 'role': role.apiValue,
     }..removeWhere((_, value) => value == null);
 
     final response = await _authorizedRequest(
@@ -611,17 +669,82 @@ class AuthApi {
     );
   }
 
-  Future<void> deleteSite({
+  Future<Map<String, dynamic>> deleteSite({
     required String token,
+    required UserRole role,
     required int siteCode,
   }) async {
     final response = await _authorizedRequest(
       method: 'DELETE',
-      path: '/admin/sites/$siteCode',
+      path: '${_managementPrefix(role)}/sites/$siteCode',
       token: token,
     );
 
-    _ensureStatus(response, 204, allowEmptyBody: true);
+    if (response.statusCode == 204 || response.body.isEmpty) {
+      return {'ok': true, 'deleted': true};
+    }
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> approveSiteDeletion({
+    required String token,
+    required UserRole role,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '${_managementPrefix(role)}/sites/$siteCode/approve-deletion',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> rejectSiteDeletion({
+    required String token,
+    required UserRole role,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '${_managementPrefix(role)}/sites/$siteCode/reject-deletion',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> requestSiteDeletionEmailCode({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/sites/$siteCode/request-email-deletion-code',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> confirmSiteDeletionWithEmailCode({
+    required String token,
+    required int siteCode,
+    required String code,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/sites/$siteCode/confirm-email-deletion',
+      token: token,
+      body: {'code': code},
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
   }
 
   Future<DeviceRecord> createDevice({
@@ -838,6 +961,51 @@ class AuthApi {
     );
     _ensureStatus(response, 200);
   }
+
+  Future<Map<String, dynamic>> requestDoorQrToken({
+    required String token,
+    required int doorId,
+    Map<String, dynamic>? location,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/doors/$doorId/qr-token',
+      token: token,
+      body: location != null ? {'location': location} : null,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> revokeMyDoorQr({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/doors/$doorId/revoke-my-qr',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> getDoorQrStatus({
+    required String token,
+    required String qrToken,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/doors/qr-status?token=${Uri.encodeComponent(qrToken)}',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
 
   Future<List<DoorRecord>> listMyDoors({required String token}) async {
     final response = await _authorizedRequest(
@@ -1218,6 +1386,473 @@ class AuthApi {
     );
 
     _ensureStatus(response, 200);
+  }
+
+  Future<Map<String, dynamic>> claimDevice({
+    required String token,
+    required String deviceInput,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/claim-device',
+      token: token,
+      body: {
+        'deviceInput': deviceInput,
+      },
+    );
+
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getMyClaimedDevices({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/my-devices',
+      token: token,
+    );
+
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = data['devices'] as List<dynamic>? ?? [];
+    return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> setupSite({
+    required String token,
+    required String name,
+    String? city,
+    String? district,
+    String? address,
+    required List<Map<String, dynamic>> blocks,
+    int doorCount = 1,
+    String? deviceUid,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/setup-site',
+      token: token,
+      body: {
+        'name': name,
+        if (city != null && city.isNotEmpty) 'city': city,
+        if (district != null && district.isNotEmpty) 'district': district,
+        if (address != null && address.isNotEmpty) 'address': address,
+        'blocks': blocks,
+        'doorCount': doorCount,
+        if (deviceUid != null && deviceUid.isNotEmpty) 'deviceUid': deviceUid,
+      },
+    );
+
+    _ensureStatus(response, 201);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createDoor({
+    required String token,
+    required int siteCode,
+    required String doorName,
+    String accessScope = 'SITE_COMMON',
+    int? blockId,
+    String? deviceUid,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/sites/$siteCode/doors',
+      token: token,
+      body: {
+        'door_name': doorName,
+        'access_scope': accessScope,
+        'block_id': ?blockId,
+        if (deviceUid != null && deviceUid.isNotEmpty) 'device_uid': deviceUid,
+      },
+    );
+    _ensureStatus(response, 201);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateDoor({
+    required String token,
+    required int doorId,
+    String? doorName,
+    String? accessScope,
+    int? blockId,
+    bool? isActive,
+  }) async {
+    final body = <String, dynamic>{};
+    if (doorName != null) body['door_name'] = doorName;
+    if (accessScope != null) body['access_scope'] = accessScope;
+    if (blockId != null) body['block_id'] = blockId;
+    if (isActive != null) body['is_active'] = isActive;
+
+    final response = await _authorizedRequest(
+      method: 'PUT',
+      path: '/manager/doors/$doorId',
+      token: token,
+      body: body,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteDoor({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/manager/doors/$doorId',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+  }
+
+  Future<Map<String, dynamic>> unassignDoorDevice({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/doors/$doorId/unassign-device',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> replaceDoorDevice({
+    required String token,
+    required int doorId,
+    String? deviceInput,
+    int? deviceId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/doors/$doorId/replace-device',
+      token: token,
+      body: {
+        if (deviceInput != null && deviceInput.trim().isNotEmpty)
+          'device_input': deviceInput.trim(),
+        'device_id': ?deviceId,
+      },
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getAssignableDevices({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/assignable-devices',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = data['devices'] as List<dynamic>? ?? [];
+    return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<SiteJoinTokenRecord> getSiteJoinToken({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/join-token',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return SiteJoinTokenRecord.fromJson(data['token'] as Map<String, dynamic>);
+  }
+
+  Future<SiteJoinTokenRecord> rotateSiteJoinToken({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/sites/$siteCode/join-token/rotate',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return SiteJoinTokenRecord.fromJson(data['token'] as Map<String, dynamic>);
+  }
+
+  Future<Map<String, dynamic>> getSiteJoinInfo({
+    required String token,
+    required String joinToken,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/join-info/$joinToken',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<SiteJoinInfo> fetchSiteJoinInfo({
+    required String token,
+    required String joinToken,
+  }) async {
+    final cleanToken = joinToken.replaceFirst('SITE_JOIN:', '').trim();
+    final data = await getSiteJoinInfo(token: token, joinToken: cleanToken);
+    return SiteJoinInfo.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> submitJoinRequest({
+    required String token,
+    required String joinToken,
+    int? blockId,
+    required int apartmentId,
+    String? notes,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/join-request',
+      token: token,
+      body: {
+        'token': joinToken,
+        // ignore: use_null_aware_elements
+        if (blockId != null) 'blockId': blockId,
+        'apartmentId': apartmentId,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    _ensureStatus(response, 201);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<List<JoinRequestRecord>> getMyJoinRequests({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/my-join-requests',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = data['requests'] as List<dynamic>? ?? [];
+    return list.map((item) => JoinRequestRecord.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<JoinRequestRecord>> getSiteJoinRequests({
+    required String token,
+    required int siteCode,
+    String? status,
+  }) async {
+    final query = status != null ? '?status=$status' : '';
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/join-requests$query',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = data['requests'] as List<dynamic>? ?? [];
+    return list.map((item) => JoinRequestRecord.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
+  Future<Map<String, dynamic>> approveJoinRequest({
+    required String token,
+    required int requestId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/join-requests/$requestId/approve',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> rejectJoinRequest({
+    required String token,
+    required int requestId,
+    String? reason,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/join-requests/$requestId/reject',
+      token: token,
+      body: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<List<MyApartmentRecord>> getMyApartments({
+    required String token,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/my-apartments',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = data['apartments'] as List<dynamic>? ?? [];
+    return list.map((item) => MyApartmentRecord.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
+  Future<Map<String, dynamic>> removeApartmentMember({
+    required String token,
+    required int apartmentId,
+    required int targetUserCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/apartments/$apartmentId/members/$targetUserCode/remove',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getDoorPermissions({
+    required String token,
+    required int doorId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/doors/$doorId/permissions',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> setDoorAccessOverride({
+    required String token,
+    required int doorId,
+    required int userCode,
+    bool? isAllowed,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'userCode': userCode,
+      'isAllowed': isAllowed,
+    };
+    if (notes != null) {
+      body['notes'] = notes;
+    }
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/doors/$doorId/permissions',
+      token: token,
+      body: body,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> setBulkDoorAccessOverride({
+    required String token,
+    required int doorId,
+    int? blockId,
+    int? apartmentId,
+    List<int>? userCodes,
+    bool? isAllowed,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'isAllowed': isAllowed,
+    };
+    if (blockId != null) body['blockId'] = blockId;
+    if (apartmentId != null) body['apartmentId'] = apartmentId;
+    if (userCodes != null) body['userCodes'] = userCodes;
+    if (notes != null) body['notes'] = notes;
+
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/doors/$doorId/permissions/bulk',
+      token: token,
+      body: body,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getSiteResidentsTree({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/sites/$siteCode/residents-tree',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> toggleApartmentMemberStatus({
+    required String token,
+    required int apartmentId,
+    required int targetUserCode,
+    required bool isActive,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/membership/apartments/$apartmentId/members/$targetUserCode/status',
+      token: token,
+      body: {'is_active': isActive},
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> deleteApartmentMember({
+    required String token,
+    required int apartmentId,
+    required int targetUserCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/membership/apartments/$apartmentId/members/$targetUserCode',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> changeApartmentMemberPassword({
+    required String token,
+    required int apartmentId,
+    required int targetUserCode,
+    required String newPassword,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/apartments/$apartmentId/members/$targetUserCode/change-password',
+      token: token,
+      body: {'new_password': newPassword},
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> setApartmentPrimaryAdmin({
+    required String token,
+    required int apartmentId,
+    required int targetUserCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/apartments/$apartmentId/members/$targetUserCode/set-primary-admin',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   UserSession _toUserSession({
