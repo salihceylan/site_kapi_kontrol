@@ -370,6 +370,7 @@ class AuthService extends ChangeNotifier {
 
   Future<ManagedUserPage> listManagedUsers({
     UserRole? role,
+    UserRole? excludeRole,
     required int page,
     int pageSize = 10,
     String? search,
@@ -379,6 +380,7 @@ class AuthService extends ChangeNotifier {
       return await api.listManagedUsers(
         token: active.token,
         role: role,
+        excludeRole: excludeRole,
         page: page,
         pageSize: pageSize,
         search: search,

@@ -1267,6 +1267,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     try {
       final data = await widget.authService.listManagedUsers(
         role: role,
+        excludeRole: UserRole.superUser,
         page: page,
         pageSize: pageSize,
         search: search,

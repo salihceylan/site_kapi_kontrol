@@ -703,7 +703,8 @@ class _AllUsersViewState extends State<AllUsersView> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final totalUsers = widget.pageData?.total ?? widget.users.length;
+    final displayUsers = widget.users.where((u) => u.role != UserRole.superUser).toList();
+    final totalUsers = widget.pageData?.total ?? displayUsers.length;
     final totalPages = widget.pageData?.totalPages ?? 1;
 
     return Column(
@@ -820,13 +821,6 @@ class _AllUsersViewState extends State<AllUsersView> {
                       ),
                       const SizedBox(width: 8),
                       FilterChip(
-                        label: const Text('Süper Kullanıcılar'),
-                        selected: _selectedRoleFilter == UserRole.superUser,
-                        onSelected: (_) => _onRoleFilterSelected(UserRole.superUser),
-                        selectedColor: _getRoleColor(UserRole.superUser, isDark).withValues(alpha: 0.2),
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
                         label: const Text('Site Yöneticileri'),
                         selected: _selectedRoleFilter == UserRole.siteManager,
                         onSelected: (_) => _onRoleFilterSelected(UserRole.siteManager),
@@ -855,12 +849,12 @@ class _AllUsersViewState extends State<AllUsersView> {
           const SizedBox(height: 16),
 
           // 2. KULLANICI LİSTESİ ALANI
-          if (widget.isLoading && widget.users.isEmpty)
+          if (widget.isLoading && displayUsers.isEmpty)
             const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (widget.users.isEmpty)
+          else if (displayUsers.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
@@ -907,7 +901,7 @@ class _AllUsersViewState extends State<AllUsersView> {
               ),
             )
           else
-            ...widget.users.map((user) {
+            ...displayUsers.map((user) {
               final isSelf = user.id == widget.session.id;
               final roleColor = _getRoleColor(user.role, isDark);
 

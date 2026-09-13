@@ -128,6 +128,7 @@ class AuthApi {
   Future<ManagedUserPage> listManagedUsers({
     required String token,
     UserRole? role,
+    UserRole? excludeRole,
     required int page,
     required int pageSize,
     String? search,
@@ -135,6 +136,7 @@ class AuthApi {
     final uri = Uri.parse('$baseUrl/admin/users').replace(
       queryParameters: {
         if (role != null) 'role': role.apiValue,
+        if (excludeRole != null) 'exclude_role': excludeRole.apiValue,
         'page': '$page',
         'page_size': '$pageSize',
         if (search != null && search.trim().isNotEmpty)

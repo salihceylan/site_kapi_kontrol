@@ -88,6 +88,12 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
     }
   }
 
+  const rawExcludeRole = String(req.query.exclude_role || '').trim();
+  let excludeRole = null;
+  if (rawExcludeRole) {
+    excludeRole = parseRole(rawExcludeRole);
+  }
+
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 15)));
   const search = String(req.query.search || '').trim();
@@ -103,6 +109,9 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
       if (role === 'site_manager') {
         whereClauses.push(`approval_status <> 'pending'`);
       }
+    } else if (excludeRole) {
+      countParams.push(excludeRole);
+      whereClauses.push(`role <> $${countParams.length}`);
     }
 
     if (emailVerifiedFilter !== null) {
