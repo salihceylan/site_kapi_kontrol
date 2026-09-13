@@ -1455,6 +1455,7 @@ class AuthApi {
     String? district,
     String? address,
     required List<Map<String, dynamic>> blocks,
+    List<Map<String, dynamic>>? doors,
     int doorCount = 1,
     String? deviceUid,
   }) async {
@@ -1468,7 +1469,8 @@ class AuthApi {
         if (district != null && district.isNotEmpty) 'district': district,
         if (address != null && address.isNotEmpty) 'address': address,
         'blocks': blocks,
-        'doorCount': doorCount,
+        if (doors != null && doors.isNotEmpty) 'doors': doors,
+        'doorCount': doors != null && doors.isNotEmpty ? doors.length : doorCount,
         if (deviceUid != null && deviceUid.isNotEmpty) 'deviceUid': deviceUid,
       },
     );

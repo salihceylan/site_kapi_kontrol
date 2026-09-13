@@ -634,6 +634,8 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
       apartmentCount: apartmentCount ?? 0,
       blockApartmentCounts,
       doorCount: doorCount ?? 1,
+      doors: req.body.doors,
+      doorNames: req.body.door_names || req.body.doorNames,
       managerUserCode: managerUserCode ?? null,
       managerUser: managerUserInput?.value ?? null,
     });

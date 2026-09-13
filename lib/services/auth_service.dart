@@ -198,6 +198,7 @@ class AuthService extends ChangeNotifier {
     String? district,
     String? address,
     required List<Map<String, dynamic>> blocks,
+    List<Map<String, dynamic>>? doors,
     int doorCount = 1,
     String? deviceUid,
   }) async {
@@ -212,6 +213,7 @@ class AuthService extends ChangeNotifier {
       district: district,
       address: address,
       blocks: blocks,
+      doors: doors,
       doorCount: doorCount,
       deviceUid: deviceUid,
     );

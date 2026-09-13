@@ -704,6 +704,8 @@ export async function createSiteWithStructure({
   apartmentCount,
   blockApartmentCounts,
   doorCount,
+  doors,
+  doorNames,
   managerUserCode,
   managerUser,
   approvalStatus = 'approved',
@@ -863,13 +865,23 @@ export async function createSiteWithStructure({
       }
     }
 
-    for (let doorIndex = 1; doorIndex <= doorCount; doorIndex += 1) {
+    let resolvedDoorNames = [];
+    if (Array.isArray(doorNames) && doorNames.length > 0) {
+      resolvedDoorNames = doorNames.map((n) => String(n || '').trim());
+    } else if (Array.isArray(doors) && doors.length > 0) {
+      resolvedDoorNames = doors.map((d) => typeof d === 'object' ? String(d.name || '').trim() : String(d || '').trim());
+    }
+
+    const actualDoorCount = Math.max(doorCount || 1, resolvedDoorNames.length);
+
+    for (let doorIndex = 1; doorIndex <= actualDoorCount; doorIndex += 1) {
+      const dName = resolvedDoorNames[doorIndex - 1] || `Kapi ${doorIndex}`;
       await client.query(
         `
           INSERT INTO site_doors (site_code, door_name, door_index)
           VALUES ($1, $2, $3)
         `,
-        [siteCode, `Kapi ${doorIndex}`, doorIndex],
+        [siteCode, dName, doorIndex],
       );
     }
 
