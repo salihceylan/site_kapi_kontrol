@@ -755,18 +755,21 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **39.3. Canlı Arama ve Kişi Filtreleme:**
   - **Nasıl Test Edilir:** Sayfanın üstündeki arama kutusuna kullanıcı adı, e-posta adresi (`gmail.com`), kullanıcı kodu (`55906`) veya daire sakini kullanıcı adı yazın.
   - **Beklenen Sonuç:** Arama metnine uygun olan kullanıcılar debounced olarak anında listelenmeli; eşleşen kayıt sayısı güncellenmeli; 'X' temizleme butonu ile arama sıfırlanabilmelidir.
-- [ ] **39.4. Rol Filtreleme Çipleri İle Anında Süzme:**
-  - **Nasıl Test Edilir:** Arama çubuğunun altındaki "Tüm Roller", "Süper Kullanıcılar", "Site Yöneticileri", "Daire Sakinleri" ve "Bireysel Kullanıcılar" çiplerine dokunun.
-  - **Beklenen Sonuç:** Yalnızca seçilen role sahip kullanıcılar sayfalanarak ekrana gelmeli; aktif filtre rengiyle belirginleşmelidir.
-- [ ] **39.5. Kullanıcı Bilgilerini Düzenleme (Ad, E-Posta, Telefon, Rol, Şifre, Aktiflik, E-Posta Onayı):**
-  - **Nasıl Test Edilir:** Herhangi bir kullanıcının kartındaki "Düzenle" butonuna dokunun; bilgileri değiştirip "Kaydet"e basın.
+- [ ] **39.4. Rol Filtreleme Çipleri İle Anında Süzme & Süper Kullanıcı İzolasyonu:**
+  - **Nasıl Test Edilir:** Arama çubuğunun altındaki "Tüm Roller", "Site Yöneticileri", "Daire Sakinleri" ve "Bireysel Kullanıcılar" çiplerini inceleyin.
+  - **Beklenen Sonuç:** Süper kullanıcılar bu genel listede ve filtre çiplerinde kesinlikle yer almamalıdır (onlar için ayrı "Süper Kullanıcı Yönetimi" ekranı mevcuttur); yalnızca seçilen role sahip kullanıcılar listelenmeli ve sayfa sayfa gezilebilmelidir.
+- [ ] **39.5. Sadeleştirilmiş Liste Kartları ve Detay Sayfası (Modal Bottom Sheet):**
+  - **Nasıl Test Edilir:** Kullanıcı Yönetimi ekranındaki liste kartlarını inceleyin ve herhangi bir kullanıcının kartına dokunun.
+  - **Beklenen Sonuç:** Ana listede yalnızca kullanıcının Adı Soyadı ve E-postası görüntülenmeli, taşma (overflow) yaşanmamalıdır; karta tıklandığında alttan açılan detay sayfasında rol, ID (#), e-posta doğrulama rozeti, telefon, kayıt tarihi, aktif/pasif anahtarı ve Düzenle/Sil butonları açılmalıdır.
+- [ ] **39.6. Kullanıcı Bilgilerini Düzenleme (Ad, E-Posta, Telefon, Rol, Şifre, Aktiflik, E-Posta Onayı):**
+  - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki "Düzenle" butonuna dokunun; bilgileri değiştirip "Kaydet"e basın.
   - **Beklenen Sonuç:** Ad Soyad, e-posta, telefon, kullanıcı rolü, şifre sıfırlama, aktiflik ve e-posta doğrulama durumu başarıyla güncellenmeli; uygulama kapatıp açılmadan liste canlı olarak güncellenmelidir.
-- [ ] **39.6. Hızlı Aktif/Pasif Geçişi ve Kendini Pasife Alma Koruması:**
-  - **Nasıl Test Edilir:** Kart üzerindeki switch'e dokunarak kullanıcıyı pasife veya aktife çekin. Süper kullanıcının kendi kartındaki switch'i deneyin.
-  - **Beklenen Sonuç:** Diğer kullanıcıların durumu anında güncellenmeli; Süper kullanıcının kendi kartındaki switch kilitli olmalı ve "Kendi süper kullanıcı hesabınızı pasif yapamazsınız" uyarısı verilmelidir.
-- [ ] **39.7. Kullanıcı Silme ve Kendini Silme Koruması:**
-  - **Nasıl Test Edilir:** Bir kullanıcı kartındaki kırmızı "Sil" butonuna dokunun; onay modalını onaylayın. Süper kullanıcının kendi kartını kontrol edin.
-  - **Beklenen Sonuç:** Silinen kullanıcıya ait tüm yetkiler, cihaz ilişkileri ve kayıtlar güvenle temizlenerek kullanıcı veritabanından kalıcı olarak silinmeli; liste kapatıp açılmadan canlı yenilenmeli; Süper kullanıcının kendi kartında "Sil" butonu gizlenmeli ve kendini silmesi engellenmelidir.
+- [ ] **39.7. Hızlı Aktif/Pasif Geçişi:**
+  - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki switch'e dokunarak kullanıcıyı pasife veya aktife çekin.
+  - **Beklenen Sonuç:** Kullanıcının durumu canlı olarak sunucuda güncellenmeli ve anında yansımalıdır.
+- [ ] **39.8. Kullanıcı Silme:**
+  - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki kırmızı "Sil" butonuna dokunun; onay modalını onaylayın.
+  - **Beklenen Sonuç:** Silinen kullanıcıya ait tüm yetkiler, cihaz ilişkileri ve kayıtlar güvenle temizlenerek kullanıcı veritabanından kalıcı olarak silinmeli; liste kapatıp açılmadan canlı yenilenmelidir.
 
 ---
 
