@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import { pool } from '../db.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import { rotateLocalControlTokensForSite } from './device_service.js';
 import { createUser } from './user_service.js';
+import { sendSuperUserSiteDeletionEmail } from '../mailer.js';
 import {
   auditLog,
   blockNameFromIndex,
@@ -251,9 +253,11 @@ export async function hasSiteManagementAccess(authUser, siteCode) {
   if (authUser?.role === 'super_user') {
     return true;
   }
-  if (authUser?.role !== 'site_manager') {
+  const userCode = Number(authUser?.userCode || authUser?.user_code || authUser?.id);
+  if (!Number.isInteger(userCode)) {
     return false;
   }
+  // 1. site_manager_sites kontrolü
   const result = await pool.query(
     `
       SELECT 1
@@ -261,16 +265,31 @@ export async function hasSiteManagementAccess(authUser, siteCode) {
       WHERE site_code = $1 AND manager_user_code = $2
       LIMIT 1
     `,
-    [siteCode, Number(authUser.id)],
+    [Number(siteCode), userCode],
   );
-  return result.rowCount > 0;
+  if (result.rowCount > 0) {
+    return true;
+  }
+
+  // 2. site_memberships (SITE_OWNER / SITE_ADMIN) kontrolü
+  const memberResult = await pool.query(
+    `
+      SELECT 1
+      FROM site_memberships
+      WHERE site_code = $1 AND user_code = $2 AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
+      LIMIT 1
+    `,
+    [Number(siteCode), userCode],
+  );
+  return memberResult.rowCount > 0;
 }
 
 export async function getManagedSiteCodes(authUser) {
   if (authUser?.role === 'super_user') {
     return null;
   }
-  if (authUser?.role !== 'site_manager') {
+  const userCode = Number(authUser?.userCode || authUser?.user_code || authUser?.id);
+  if (!Number.isInteger(userCode)) {
     return new Set();
   }
 
@@ -279,8 +298,12 @@ export async function getManagedSiteCodes(authUser) {
       SELECT site_code
       FROM site_manager_sites
       WHERE manager_user_code = $1
+      UNION
+      SELECT site_code
+      FROM site_memberships
+      WHERE user_code = $1 AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
     `,
-    [Number(authUser.id)],
+    [userCode],
   );
   return new Set(result.rows.map((row) => Number(row.site_code)));
 }
@@ -439,6 +462,11 @@ export async function listSitesForAuthUser({
           s.geofence_longitude,
           s.geofence_radius_meters,
           s.qr_totp_secret,
+          s.deletion_status,
+          s.deletion_requested_by_user_code,
+          s.deletion_requested_by_name,
+          s.deletion_requested_by_role,
+          s.deletion_requested_at,
           sm.manager_user_code,
           manager.full_name AS manager_name,
           s.created_at
@@ -462,17 +490,29 @@ export async function listSitesForAuthUser({
     return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
   }
 
+  const userCode = Number(authUser?.userCode || authUser?.user_code || authUser?.id);
   const countResult = await pool.query(
     `
       SELECT COUNT(*)::INTEGER AS total
       FROM sites s
-      INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
-      WHERE sms.manager_user_code = $1
-        ${parsedApprovalStatus == null ? '' : 'AND s.approval_status = $2'}
+      WHERE (
+        EXISTS (
+          SELECT 1 FROM site_manager_sites sms
+          WHERE sms.site_code = s.site_code AND sms.manager_user_code = $1
+        )
+        OR EXISTS (
+          SELECT 1 FROM site_memberships sm
+          WHERE sm.site_code = s.site_code
+            AND sm.user_code = $1
+            AND sm.role IN ('SITE_OWNER', 'SITE_ADMIN')
+            AND sm.is_active = TRUE
+        )
+      )
+      ${parsedApprovalStatus == null ? '' : 'AND s.approval_status = $2'}
     `,
     parsedApprovalStatus == null
-      ? [Number(authUser.id)]
-      : [Number(authUser.id), parsedApprovalStatus],
+      ? [userCode]
+      : [userCode, parsedApprovalStatus],
   );
   const rows = await pool.query(
     `
@@ -498,20 +538,40 @@ export async function listSitesForAuthUser({
         s.geofence_longitude,
         s.geofence_radius_meters,
         s.qr_totp_secret,
-        sms.manager_user_code,
-        manager.full_name AS manager_name,
+        s.deletion_status,
+        s.deletion_requested_by_user_code,
+        s.deletion_requested_by_name,
+        s.deletion_requested_by_role,
+        s.deletion_requested_at,
+        COALESCE(sms.manager_user_code, sm.user_code) AS manager_user_code,
+        COALESCE(manager.full_name, sm_user.full_name, 'Site Yöneticisi') AS manager_name,
         s.created_at
       FROM sites s
-      INNER JOIN site_manager_sites sms ON sms.site_code = s.site_code
-      INNER JOIN users manager ON manager.user_code = sms.manager_user_code
-      WHERE sms.manager_user_code = $1
+      LEFT JOIN LATERAL (
+        SELECT manager_user_code
+        FROM site_manager_sites
+        WHERE site_code = s.site_code AND manager_user_code = $1
+        LIMIT 1
+      ) sms ON TRUE
+      LEFT JOIN users manager ON manager.user_code = sms.manager_user_code
+      LEFT JOIN LATERAL (
+        SELECT user_code
+        FROM site_memberships
+        WHERE site_code = s.site_code
+          AND user_code = $1
+          AND role IN ('SITE_OWNER', 'SITE_ADMIN')
+          AND is_active = TRUE
+        LIMIT 1
+      ) sm ON TRUE
+      LEFT JOIN users sm_user ON sm_user.user_code = sm.user_code
+      WHERE (sms.manager_user_code IS NOT NULL OR sm.user_code IS NOT NULL)
         ${parsedApprovalStatus == null ? '' : 'AND s.approval_status = $4'}
       ORDER BY s.created_at DESC
       LIMIT $2 OFFSET $3
     `,
     parsedApprovalStatus == null
-      ? [Number(authUser.id), pageSize, offset]
-      : [Number(authUser.id), pageSize, offset, parsedApprovalStatus],
+      ? [userCode, pageSize, offset]
+      : [userCode, pageSize, offset, parsedApprovalStatus],
   );
   return { total: countResult.rows[0]?.total ?? 0, rows: rows.rows };
 }
@@ -588,6 +648,9 @@ export async function listSiteDoors(siteCode, db = pool) {
         d.door_name,
         d.door_index,
         d.is_active,
+        d.access_scope,
+        d.block_id,
+        sb.block_name,
         d.assigned_device_id,
         devices.device_uid AS assigned_device_uid,
         rs.hardware_target AS assigned_device_hardware_target,
@@ -603,6 +666,7 @@ export async function listSiteDoors(siteCode, db = pool) {
         d.created_at
       FROM site_doors d
       INNER JOIN sites ON sites.site_code = d.site_code
+      LEFT JOIN site_blocks sb ON sb.id = d.block_id
       LEFT JOIN devices ON devices.id = d.assigned_device_id
       LEFT JOIN device_runtime_status rs ON rs.device_uid = devices.device_uid
       WHERE d.site_code = $1
@@ -617,9 +681,6 @@ export async function getSiteStructure(siteCode) {
   const site = await getSiteByCode(siteCode);
   if (!site) {
     return null;
-  }
-  if (site.approval_status === 'approved') {
-    await ensureSiteApartmentResidents(siteCode);
   }
   const [blocks, apartments, doors] = await Promise.all([
     listSiteBlocks(siteCode),
@@ -812,8 +873,6 @@ export async function createSiteWithStructure({
       );
     }
 
-    await ensureSiteApartmentResidents(siteCode, client);
-
     await client.query('COMMIT');
     return getSiteByCode(siteCode);
   } catch (error) {
@@ -897,11 +956,8 @@ export async function syncSiteStructureCounts({
           if (apartment.resident_user_code != null) {
             shouldRotateLocalTokens = true;
             await client.query(
-              `
-                DELETE FROM users
-                WHERE user_code = $1 AND role = 'apartment_owner'
-              `,
-              [Number(apartment.resident_user_code)],
+              `UPDATE apartments SET resident_user_code = NULL WHERE id = $1`,
+              [Number(apartment.id)],
             );
           }
           await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
@@ -969,8 +1025,6 @@ export async function syncSiteStructureCounts({
       ],
     );
 
-    await ensureSiteApartmentResidents(siteCode, client);
-
     await client.query('COMMIT');
     if (shouldRotateLocalTokens) {
       try {
@@ -1004,3 +1058,586 @@ export async function upsertSiteManagerLink({ siteCode, managerUserCode }) {
   }
   await rotateLocalControlTokensForSite(siteCode, 'site_manager_changed');
 }
+
+export function generateSiteJoinToken() {
+  const hex = crypto.randomBytes(16).toString('hex').toUpperCase();
+  return `SJT-${hex}`;
+}
+
+/**
+ * Site için aktif Site Katılım QR Tokenini getirir veya yoksa otomatik üretir.
+ */
+export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {
+  const code = Number(siteCode);
+  const userCode = authUser?.user_code ? Number(authUser.user_code) : (authUser?.id ? Number(authUser.id) : null);
+
+  // 1. Sitenin var olduğunu kontrol et
+  const siteRes = await pool.query(
+    `SELECT site_code, name, address, city, district FROM sites WHERE site_code = $1 LIMIT 1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    throw new Error('SITE_NOT_FOUND');
+  }
+  const site = siteRes.rows[0];
+
+  // 2. Aktif token var mı bak
+  const existingRes = await pool.query(
+    `SELECT id, site_code, token, is_active, created_at
+     FROM site_join_tokens
+     WHERE site_code = $1 AND is_active = TRUE
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [code],
+  );
+
+  if (existingRes.rowCount > 0) {
+    const row = existingRes.rows[0];
+    return {
+      id: row.id,
+      site_code: Number(row.site_code),
+      site_name: site.name,
+      token: row.token,
+      qr_payload: `SITE_JOIN:${row.token}`,
+      is_active: row.is_active,
+      created_at: row.created_at,
+    };
+  }
+
+  // 3. Yoksa yeni üret
+  const newToken = generateSiteJoinToken();
+  const insertRes = await pool.query(
+    `INSERT INTO site_join_tokens (site_code, token, created_by_user_code, is_active, created_at)
+     VALUES ($1, $2, $3, TRUE, NOW())
+     RETURNING id, site_code, token, is_active, created_at`,
+    [code, newToken, userCode],
+  );
+
+  const inserted = insertRes.rows[0];
+  return {
+    id: inserted.id,
+    site_code: Number(inserted.site_code),
+    site_name: site.name,
+    token: inserted.token,
+    qr_payload: `SITE_JOIN:${inserted.token}`,
+    is_active: inserted.is_active,
+    created_at: inserted.created_at,
+  };
+}
+
+/**
+ * Site Katılım QR Tokenini yeniler (Rotate / Eski QR'ı iptal et).
+ */
+export async function rotateSiteJoinToken({ siteCode, authUser = null }) {
+  const code = Number(siteCode);
+  const userCode = authUser?.user_code ? Number(authUser.user_code) : (authUser?.id ? Number(authUser.id) : null);
+
+  const siteRes = await pool.query(
+    `SELECT site_code, name FROM sites WHERE site_code = $1 LIMIT 1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    throw new Error('SITE_NOT_FOUND');
+  }
+  const site = siteRes.rows[0];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Eski aktif tokenleri iptal et
+    await client.query(
+      `UPDATE site_join_tokens
+       SET is_active = FALSE, revoked_at = NOW()
+       WHERE site_code = $1 AND is_active = TRUE`,
+      [code],
+    );
+
+    // Yeni token üret ve kaydet
+    const newToken = generateSiteJoinToken();
+    const insertRes = await client.query(
+      `INSERT INTO site_join_tokens (site_code, token, created_by_user_code, is_active, created_at)
+       VALUES ($1, $2, $3, TRUE, NOW())
+       RETURNING id, site_code, token, is_active, created_at`,
+      [code, newToken, userCode],
+    );
+
+    await client.query('COMMIT');
+
+    const inserted = insertRes.rows[0];
+    return {
+      id: inserted.id,
+      site_code: Number(inserted.site_code),
+      site_name: site.name,
+      token: inserted.token,
+      qr_payload: `SITE_JOIN:${inserted.token}`,
+      is_active: inserted.is_active,
+      created_at: inserted.created_at,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Katılım tokeni ile site bilgilerini getirir (Sakin QR okuttuğunda kullanılır).
+ */
+export async function getSiteByJoinToken({ token }) {
+  const clean = String(token || '').replace(/^SITE_JOIN:/i, '').trim().toUpperCase();
+  if (!clean) {
+    throw new Error('INVALID_TOKEN');
+  }
+
+  const tokenRes = await pool.query(
+    `SELECT t.id, t.site_code, t.token, t.is_active,
+            s.name AS site_name, s.city, s.district, s.address, s.block_count, s.apartment_count
+     FROM site_join_tokens t
+     JOIN sites s ON s.site_code = t.site_code
+     WHERE UPPER(t.token) = $1 AND t.is_active = TRUE
+     LIMIT 1`,
+    [clean],
+  );
+
+  if (tokenRes.rowCount === 0) {
+    throw new Error('TOKEN_NOT_FOUND_OR_INACTIVE');
+  }
+
+  const row = tokenRes.rows[0];
+
+  // Sitenin bloklarını getir
+  const blocksRes = await pool.query(
+    `SELECT id, block_name, sort_order
+     FROM site_blocks
+     WHERE site_code = $1
+     ORDER BY sort_order ASC, id ASC`,
+    [row.site_code],
+  );
+
+  // Sitenin dairelerini getir (Blok seçilince eşleştirmek için)
+  const aptsRes = await pool.query(
+    `SELECT id, block_id, unit_label, sort_order
+     FROM apartments
+     WHERE site_code = $1 AND is_active = TRUE
+     ORDER BY sort_order ASC, id ASC`,
+    [row.site_code],
+  );
+
+  return {
+    site_code: Number(row.site_code),
+    site_name: row.site_name,
+    city: row.city,
+    district: row.district,
+    address: row.address,
+    token: row.token,
+    blocks: blocksRes.rows.map((b) => ({
+      id: Number(b.id),
+      block_name: b.block_name,
+      sort_order: b.sort_order,
+      block_index: b.sort_order,
+    })),
+    apartments: aptsRes.rows.map((a) => ({
+      id: Number(a.id),
+      block_id: a.block_id != null ? Number(a.block_id) : null,
+      unit_label: a.unit_label,
+      sort_order: a.sort_order,
+    })),
+  };
+}
+
+/**
+ * Siteyi veritabanından kalıcı olarak siler.
+ */
+export async function deleteSitePermanently(siteCode, authUser) {
+  const code = Number(siteCode);
+  const siteRes = await pool.query(
+    `SELECT name FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  const siteName = siteRes.rows[0]?.name || `Site #${code}`;
+
+  // Daire kullanıcıları (users) silinmez; yalnızca daireler ve site kayıtları silinir.
+  await pool.query(
+    `UPDATE apartments SET resident_user_code = NULL WHERE site_code = $1`,
+    [code],
+  );
+
+  const result = await pool.query(
+    `DELETE FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  if (result.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  auditLog('site_deleted', {
+    site_code: code,
+    site_name: siteName,
+    actor_user_code: authUser?.userCode || authUser?.user_code || authUser?.id || null,
+    actor_role: authUser?.role || null,
+  });
+
+  return { ok: true, deleted: true, message: 'Site ve bağlı tüm kayıtlar başarıyla silindi.' };
+}
+
+/**
+ * Site Silme Talebi Başlat veya Karşı Taraf Zaten Talep Ettiyse Onayla (Çift Taraflı Teyit)
+ */
+export async function requestSiteDeletion({ siteCode, authUser }) {
+  const code = Number(siteCode);
+  if (!Number.isInteger(code)) {
+    const err = new Error('Geçersiz site kodu.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // 1. Yetki kontrolü: süper kullanıcı veya site yöneticisi olmalı
+  const hasAccess = await hasSiteManagementAccess(authUser, code);
+  if (!hasAccess) {
+    const err = new Error('Bu siteyi silme yetkiniz bulunmamaktadır.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const siteRes = await pool.query(
+    `SELECT site_code, name, deletion_status, deletion_requested_by_role, deletion_requested_by_user_code
+     FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const site = siteRes.rows[0];
+
+  const isSuperUser = authUser?.role === 'super_user';
+  const callerUserCode = Number(authUser?.userCode || authUser?.user_code || authUser?.id);
+  const callerName = authUser?.fullName || authUser?.full_name || (isSuperUser ? 'Süper Kullanıcı' : 'Site Yöneticisi');
+
+  // Sitede atanmış yönetici var mı kontrol et
+  const managersRes = await pool.query(
+    `SELECT manager_user_code FROM site_manager_sites WHERE site_code = $1
+     UNION
+     SELECT user_code FROM site_memberships WHERE site_code = $1 AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE`,
+    [code],
+  );
+  const hasSiteManager = managersRes.rowCount > 0;
+
+  // DURUM 1: Süper kullanıcı silme talebinde bulunuyor
+  if (isSuperUser) {
+    // Eğer sitede hiçbir site yöneticisi atanmamışsa doğrudan silinir
+    if (!hasSiteManager) {
+      return await deleteSitePermanently(code, authUser);
+    }
+
+    // Eğer zaten site yöneticisi daha önce silme talebi göndermişse -> Süper kullanıcı şimdi onaylamış olur -> SİL!
+    if (site.deletion_status === 'pending_super_user_approval') {
+      return await deleteSitePermanently(code, authUser);
+    }
+
+    // Zaten süper kullanıcı talep etmiş ve yönetici onayı bekliyorsa
+    if (site.deletion_status === 'pending_site_manager_approval') {
+      return {
+        ok: true,
+        deleted: false,
+        pending: true,
+        status: 'pending_site_manager_approval',
+        message: 'Site silme talebi zaten oluşturulmuş; Site Yöneticisinin onayı bekleniyor.',
+      };
+    }
+
+    // İlk kez süper kullanıcı talep ediyor -> Site Yöneticisi onayı için beklet
+    await pool.query(
+      `UPDATE sites
+       SET deletion_status = 'pending_site_manager_approval',
+           deletion_requested_by_user_code = $1,
+           deletion_requested_by_name = $2,
+           deletion_requested_by_role = 'super_user',
+           deletion_requested_at = NOW()
+       WHERE site_code = $3`,
+      [callerUserCode, callerName, code],
+    );
+
+    return {
+      ok: true,
+      deleted: false,
+      pending: true,
+      status: 'pending_site_manager_approval',
+      message: 'Site silme talebi oluşturuldu. Site yöneticisinin onayı gerekmektedir.',
+    };
+  }
+
+  // DURUM 2: Site Yöneticisi silme talebinde bulunuyor
+  // Eğer zaten süper kullanıcı daha önce silme talebi göndermişse -> Site yöneticisi şimdi onaylamış olur -> SİL!
+  if (site.deletion_status === 'pending_site_manager_approval') {
+    return await deleteSitePermanently(code, authUser);
+  }
+
+  // Zaten site yöneticisi talep etmiş ve süper kullanıcı onayı bekliyorsa
+  if (site.deletion_status === 'pending_super_user_approval') {
+    return {
+      ok: true,
+      deleted: false,
+      pending: true,
+      status: 'pending_super_user_approval',
+      message: 'Site silme talebi zaten oluşturulmuş; Süper Kullanıcının onayı bekleniyor.',
+    };
+  }
+
+  // İlk kez site yöneticisi talep ediyor -> Süper Kullanıcı onayı için beklet
+  await pool.query(
+    `UPDATE sites
+     SET deletion_status = 'pending_super_user_approval',
+         deletion_requested_by_user_code = $1,
+         deletion_requested_by_name = $2,
+         deletion_requested_by_role = 'site_manager',
+         deletion_requested_at = NOW()
+     WHERE site_code = $3`,
+    [callerUserCode, callerName, code],
+  );
+
+  return {
+    ok: true,
+    deleted: false,
+    pending: true,
+    status: 'pending_super_user_approval',
+    message: 'Site silme talebi oluşturuldu. Süper kullanıcının onayı gerekmektedir.',
+  };
+}
+
+/**
+ * Bekleyen Site Silme Talebini Onayla (ve kalıcı olarak sil)
+ */
+export async function approveSiteDeletion({ siteCode, authUser }) {
+  const code = Number(siteCode);
+  if (!Number.isInteger(code)) {
+    const err = new Error('Geçersiz site kodu.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const siteRes = await pool.query(
+    `SELECT site_code, name, deletion_status, deletion_requested_by_role
+     FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const site = siteRes.rows[0];
+
+  if (site.deletion_status === 'pending_super_user_approval') {
+    if (authUser?.role !== 'super_user') {
+      const err = new Error('Bu silme talebini yalnızca Süper Kullanıcı onaylayabilir.');
+      err.statusCode = 403;
+      throw err;
+    }
+    return await deleteSitePermanently(code, authUser);
+  }
+
+  if (site.deletion_status === 'pending_site_manager_approval') {
+    const hasAccess = await hasSiteManagementAccess(authUser, code);
+    if (!hasAccess || authUser?.role === 'super_user') {
+      const err = new Error('Bu silme talebini yalnızca ilgili sitenin yöneticisi onaylayabilir.');
+      err.statusCode = 403;
+      throw err;
+    }
+    return await deleteSitePermanently(code, authUser);
+  }
+
+  const err = new Error('Bu site için bekleyen bir silme onayı bulunmamaktadır.');
+  err.statusCode = 400;
+  throw err;
+}
+
+/**
+ * Bekleyen Site Silme Talebini Reddet veya İptal Et
+ */
+export async function rejectOrCancelSiteDeletion({ siteCode, authUser }) {
+  const code = Number(siteCode);
+  if (!Number.isInteger(code)) {
+    const err = new Error('Geçersiz site kodu.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hasAccess = await hasSiteManagementAccess(authUser, code);
+  if (!hasAccess) {
+    const err = new Error('Bu işlem için yetkiniz bulunmamaktadır.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const siteRes = await pool.query(
+    `SELECT site_code, deletion_status FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const site = siteRes.rows[0];
+
+  if (site.deletion_status === 'none' || !site.deletion_status) {
+    const err = new Error('Bu site için bekleyen bir silme talebi bulunmuyor.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await pool.query(
+    `UPDATE sites
+     SET deletion_status = 'none',
+         deletion_requested_by_user_code = NULL,
+         deletion_requested_by_name = NULL,
+         deletion_requested_by_role = NULL,
+         deletion_requested_at = NULL
+     WHERE site_code = $1`,
+    [code],
+  );
+
+  return {
+    ok: true,
+    message: 'Site silme talebi başarıyla iptal edildi / reddedildi.',
+  };
+}
+
+/**
+ * Süper Kullanıcı için E-Posta ile Site Silme Kodu Gönder
+ */
+export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {
+  if (authUser?.role !== 'super_user') {
+    const err = new Error('Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const code = Number(siteCode);
+  if (!Number.isInteger(code)) {
+    const err = new Error('Geçersiz site kodu.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const siteRes = await pool.query(
+    `SELECT site_code, name FROM sites WHERE site_code = $1`,
+    [code],
+  );
+  if (siteRes.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const site = siteRes.rows[0];
+
+  // Süper kullanıcının e-postasını çek
+  const userRes = await pool.query(
+    `SELECT user_code, full_name, email FROM users WHERE user_code = $1`,
+    [authUser.user_code],
+  );
+  if (userRes.rowCount === 0 || !userRes.rows[0].email) {
+    const err = new Error('Süper kullanıcı hesabına kayıtlı bir e-posta adresi bulunamadı.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const user = userRes.rows[0];
+
+  // 6 haneli rastgele kod üret
+  const deletionCode = crypto.randomInt(100000, 999999).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 dakika
+
+  await pool.query(
+    `UPDATE sites
+     SET deletion_email_code = $1,
+         deletion_email_code_expires_at = $2
+     WHERE site_code = $3`,
+    [deletionCode, expiresAt, code],
+  );
+
+  await sendSuperUserSiteDeletionEmail({
+    to: user.email,
+    fullName: user.full_name || 'Süper Kullanıcı',
+    siteName: site.name,
+    code: deletionCode,
+  });
+
+  // E-postayı maskele (ör: s***@***.com)
+  const parts = user.email.split('@');
+  const maskedLocal = parts[0].length > 2
+    ? `${parts[0][0]}***${parts[0][parts[0].length - 1]}`
+    : `${parts[0][0]}***`;
+  const maskedEmail = `${maskedLocal}@${parts[1] || ''}`;
+
+  return {
+    ok: true,
+    message: `Silme doğrulama kodu e-posta adresinize (${maskedEmail}) gönderildi.`,
+    maskedEmail,
+  };
+}
+
+/**
+ * Süper Kullanıcı E-Posta Koduyla Doğrudan Siteyi Kalıcı Olarak Sil
+ */
+export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUser }) {
+  if (authUser?.role !== 'super_user') {
+    const err = new Error('Bu işlem yalnızca Süper Kullanıcı yetkisiyle gerçekleştirilebilir.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const numericSiteCode = Number(siteCode);
+  if (!Number.isInteger(numericSiteCode)) {
+    const err = new Error('Geçersiz site kodu.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const cleanCode = String(code || '').trim();
+  if (!cleanCode || cleanCode.length !== 6) {
+    const err = new Error('Lütfen 6 haneli doğrulama kodunu eksiksiz giriniz.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const siteRes = await pool.query(
+    `SELECT site_code, name, deletion_email_code, deletion_email_code_expires_at
+     FROM sites WHERE site_code = $1`,
+    [numericSiteCode],
+  );
+  if (siteRes.rowCount === 0) {
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+  const site = siteRes.rows[0];
+
+  if (!site.deletion_email_code) {
+    const err = new Error('Bu site için talep edilmiş aktif bir silme doğrulama kodu bulunmuyor.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (site.deletion_email_code_expires_at && new Date() > new Date(site.deletion_email_code_expires_at)) {
+    const err = new Error('Silme doğrulama kodunun 10 dakikalık süresi dolmuş. Lütfen yeni bir kod isteyiniz.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (site.deletion_email_code !== cleanCode) {
+    const err = new Error('Girdiğiniz silme doğrulama kodu hatalı.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Kod doğru ve süresi geçerli -> Siteyi kalıcı olarak sil!
+  return await deleteSitePermanently(numericSiteCode, authUser);
+}
+
+
