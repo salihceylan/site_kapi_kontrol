@@ -161,6 +161,275 @@ class _AllUsersViewState extends State<AllUsersView> {
     }
   }
 
+  void _showUserDetailSheet(ManagedUserAccount user) {
+    final isSelf = user.id == widget.session.id;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final roleColor = _getRoleColor(user.role, isDark);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final isActivationBusy = widget.busyActivationUsers.contains(user.id);
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Tutamaç (Drag Handle)
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+
+                    // Kullanıcı Başlık (Avatar, Ad Soyad, E-Posta)
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: roleColor.withValues(alpha: isDark ? 0.25 : 0.15),
+                          child: Text(
+                            user.fullName.trim().isEmpty ? '?' : user.fullName.trim()[0].toUpperCase(),
+                            style: TextStyle(
+                              color: roleColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      user.fullName,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 17,
+                                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
+                                      ),
+                                    ),
+                                  ),
+                                  if (isSelf) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Siz',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                user.email,
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const Divider(height: 1),
+                    const SizedBox(height: 14),
+
+                    // Detay Satırları
+                    _buildDetailRow('Kullanıcı ID', '#${user.id}', Icons.tag_rounded, isDark),
+                    _buildDetailRow('Rolü', user.role.label, Icons.shield_outlined, isDark, badgeColor: roleColor),
+                    _buildDetailRow(
+                      'E-posta Onayı',
+                      user.emailVerified ? 'Doğrulandı' : 'Doğrulanmadı',
+                      user.emailVerified ? Icons.verified_rounded : Icons.pending_outlined,
+                      isDark,
+                      badgeColor: user.emailVerified ? AppColors.emerald : Colors.amber,
+                    ),
+                    if ((user.phoneNumber ?? '').isNotEmpty)
+                      _buildDetailRow('Telefon', user.phoneNumber!, Icons.phone_rounded, isDark),
+                    if (user.loginName != null && user.loginName!.isNotEmpty && user.loginName != user.email)
+                      _buildDetailRow('Kullanıcı Adı', user.loginName!, Icons.account_box_outlined, isDark),
+                    _buildDetailRow('Kayıt Tarihi', formatDateTime(user.createdAt), Icons.calendar_today_outlined, isDark),
+
+                    // Aktif / Pasif Switch Satırı
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.power_settings_new_rounded, size: 18, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Hesap Durumu',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          isActivationBusy
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Switch.adaptive(
+                                  value: user.isActive,
+                                  activeThumbColor: AppColors.primary,
+                                  onChanged: isSelf
+                                      ? null
+                                      : (val) async {
+                                          Navigator.pop(ctx);
+                                          await widget.onToggleActivation(user, val);
+                                        },
+                                ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Aksiyon Butonları (Düzenle & Sil)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _openEditDialog(user);
+                            },
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            label: const Text('Düzenle'),
+                          ),
+                        ),
+                        if (!isSelf) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _confirmDeleteUser(user);
+                              },
+                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                              label: const Text('Sil'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String title, String value, IconData icon, bool isDark, {Color? badgeColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: badgeColor != null
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: badgeColor,
+                      ),
+                    ),
+                  )
+                : Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showDbMaintenanceDialog() async {
     if (widget.onGetDatabaseHealth == null || widget.onRunDatabaseCleanup == null) {
       return;
@@ -640,215 +909,109 @@ class _AllUsersViewState extends State<AllUsersView> {
           else
             ...widget.users.map((user) {
               final isSelf = user.id == widget.session.id;
-              final isActivationBusy = widget.busyActivationUsers.contains(user.id);
               final roleColor = _getRoleColor(user.role, isDark);
 
               return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.9) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: user.isActive
-                        ? (isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE))
-                        : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
-                    width: 1.2,
+                    color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
+                    width: 1.0,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
+                      color: isDark ? const Color(0x20000000) : const Color(0x060F172A),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Kullanıcı Başlık Satırı
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: roleColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                          child: Text(
-                            user.fullName.trim().isEmpty ? '?' : user.fullName.trim()[0].toUpperCase(),
-                            style: TextStyle(
-                              color: roleColor,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => _showUserDetailSheet(user),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: roleColor.withValues(alpha: isDark ? 0.25 : 0.15),
+                            child: Text(
+                              user.fullName.trim().isEmpty ? '?' : user.fullName.trim()[0].toUpperCase(),
+                              style: TextStyle(
+                                color: roleColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      user.fullName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 15.5,
-                                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isSelf) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'Siz',
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        user.fullName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          fontSize: 11,
                                           fontWeight: FontWeight.w700,
-                                          color: AppColors.primary,
+                                          fontSize: 14.5,
+                                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
                                         ),
                                       ),
                                     ),
+                                    if (isSelf) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Text(
+                                          'Siz',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                user.email,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Aktif/Pasif Butonu
-                        isActivationBusy
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Switch.adaptive(
-                                value: user.isActive,
-                                activeThumbColor: AppColors.primary,
-                                onChanged: isSelf
-                                    ? null
-                                    : (val) => widget.onToggleActivation(user, val),
-                              ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ROZETLER (WRAP)
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        // ID Rozeti
-                        _buildBadge(
-                          context,
-                          label: '#${user.id}',
-                          icon: Icons.tag_rounded,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
-                          bgColor: isDark ? const Color(0xFF334155) : Colors.grey.shade100,
-                        ),
-                        // Rol Rozeti
-                        _buildBadge(
-                          context,
-                          label: user.role.label,
-                          icon: Icons.shield_outlined,
-                          color: roleColor,
-                          bgColor: roleColor.withValues(alpha: 0.12),
-                        ),
-                        // E-posta Onay Rozeti
-                        _buildBadge(
-                          context,
-                          label: user.emailVerified ? 'E-posta Doğrulandı' : 'Doğrulanmadı',
-                          icon: user.emailVerified ? Icons.verified_rounded : Icons.pending_outlined,
-                          color: user.emailVerified
-                              ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669))
-                              : (isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706)),
-                          bgColor: (user.emailVerified ? AppColors.emerald : Colors.amber).withValues(alpha: 0.12),
-                        ),
-                        // Telefon Rozeti (Varsa)
-                        if ((user.phoneNumber ?? '').isNotEmpty)
-                          _buildBadge(
-                            context,
-                            label: user.phoneNumber!,
-                            icon: Icons.phone_rounded,
-                            color: isDark ? Colors.blue.shade300 : Colors.blue.shade700,
-                            bgColor: Colors.blue.withValues(alpha: 0.1),
-                          ),
-                        // Login Name (Eğer e-postadan farklıysa)
-                        if (user.loginName != null && user.loginName!.isNotEmpty && user.loginName != user.email)
-                          _buildBadge(
-                            context,
-                            label: 'Kullanıcı: ${user.loginName}',
-                            icon: Icons.account_box_outlined,
-                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
-                            bgColor: isDark ? const Color(0xFF334155) : Colors.grey.shade100,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ALT AKSİYON SATIRI
-                    Row(
-                      children: [
-                        Text(
-                          'Kayıt: ${formatDateTime(user.createdAt)}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                          ),
-                        ),
-                        const Spacer(),
-                        // Düzenle Butonu
-                        FilledButton.tonalIcon(
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          onPressed: () => _openEditDialog(user),
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: const Text('Düzenle'),
-                        ),
-                        if (!isSelf) ...[
-                          const SizedBox(width: 8),
-                          // Sil Butonu
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
-                              side: BorderSide(
-                                color: (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626)).withValues(alpha: 0.5),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              visualDensity: VisualDensity.compact,
+                                const SizedBox(height: 2),
+                                Text(
+                                  user.email,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
-                            onPressed: () => _confirmDeleteUser(user),
-                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                            label: const Text('Sil'),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+                            size: 22,
                           ),
                         ],
-                      ],
+                      ),
                     ),
-                  ],
+                  ),
                 ),
               );
             }),
@@ -955,41 +1118,6 @@ class _AllUsersViewState extends State<AllUsersView> {
               ),
             ),
         ],
-    );
-  }
-
-  Widget _buildBadge(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
