@@ -23,6 +23,7 @@ import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/door_permission_record.dart';
 import 'package:site_kapi_kontrol/models/site_residents_tree_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
+import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -2107,6 +2108,95 @@ class AuthService extends ChangeNotifier {
       return (false, e.message);
     } catch (_) {
       return (false, 'Aile reisi atanırken bir hata oluştu.');
+    }
+  }
+
+  Future<SiteManagersData?> getSiteManagers(int siteCode) async {
+    final active = session;
+    if (active == null) {
+      return null;
+    }
+    try {
+      return await api.getSiteManagers(
+        token: active.token,
+        siteCode: siteCode,
+      );
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<(bool, String?)> inviteSiteManager(
+    int siteCode, {
+    required String email,
+    String? fullName,
+  }) async {
+    final active = session;
+    if (active == null) {
+      return (false, 'Oturum bulunamadı.');
+    }
+    try {
+      final res = await api.inviteSiteManager(
+        token: active.token,
+        siteCode: siteCode,
+        email: email,
+        fullName: fullName,
+      );
+      return (true, res['message'] as String? ?? 'Yönetici daveti başarıyla iletildi.');
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (false, e.message);
+    } catch (_) {
+      return (false, 'Yönetici davet edilirken bir hata oluştu.');
+    }
+  }
+
+  Future<(bool, String?)> removeSiteManager(
+    int siteCode,
+    String userCode,
+  ) async {
+    final active = session;
+    if (active == null) {
+      return (false, 'Oturum bulunamadı.');
+    }
+    try {
+      final res = await api.removeSiteManager(
+        token: active.token,
+        siteCode: siteCode,
+        userCode: userCode,
+      );
+      return (true, res['message'] as String? ?? 'Yönetici yetkisi başarıyla kaldırıldı.');
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (false, e.message);
+    } catch (_) {
+      return (false, 'Yönetici yetkisi kaldırılırken bir hata oluştu.');
+    }
+  }
+
+  Future<(bool, String?)> revokeSiteManagerInvitation(
+    int siteCode,
+    int invitationId,
+  ) async {
+    final active = session;
+    if (active == null) {
+      return (false, 'Oturum bulunamadı.');
+    }
+    try {
+      final res = await api.revokeSiteManagerInvitation(
+        token: active.token,
+        siteCode: siteCode,
+        invitationId: invitationId,
+      );
+      return (true, res['message'] as String? ?? 'Davet başarıyla iptal edildi.');
+    } on ApiException catch (e) {
+      _handleSessionError(e);
+      return (false, e.message);
+    } catch (_) {
+      return (false, 'Davet iptal edilirken bir hata oluştu.');
     }
   }
 

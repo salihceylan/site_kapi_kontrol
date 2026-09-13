@@ -3,7 +3,7 @@ import { pool } from '../db.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import { rotateLocalControlTokensForSite } from './device_service.js';
 import { createUser } from './user_service.js';
-import { sendSuperUserSiteDeletionEmail } from '../mailer.js';
+import { sendSuperUserSiteDeletionEmail, sendSiteManagerInvitationEmail } from '../mailer.js';
 import {
   auditLog,
   blockNameFromIndex,
@@ -12,6 +12,7 @@ import {
   mapBlockRow,
   mapDoorRow,
   mapSiteRow,
+  normalizeEmail,
   validApprovalStatuses,
 } from '../utils/helpers.js';
 
@@ -1058,12 +1059,21 @@ export async function syncSiteStructureCounts({
 }
 
 export async function upsertSiteManagerLink({ siteCode, managerUserCode }) {
-  await pool.query(`DELETE FROM site_manager_sites WHERE site_code = $1`, [siteCode]);
   if (managerUserCode != null) {
     await pool.query(
       `
         INSERT INTO site_manager_sites (site_code, manager_user_code)
         VALUES ($1, $2)
+        ON CONFLICT (site_code, manager_user_code) DO NOTHING
+      `,
+      [siteCode, managerUserCode],
+    );
+    await pool.query(
+      `
+        INSERT INTO site_memberships (site_code, user_code, role, is_active)
+        VALUES ($1, $2, 'SITE_ADMIN', TRUE)
+        ON CONFLICT (site_code, user_code)
+        DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
       `,
       [siteCode, managerUserCode],
     );
@@ -1651,5 +1661,320 @@ export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUse
   // Kod doğru ve süresi geçerli -> Siteyi kalıcı olarak sil!
   return await deleteSitePermanently(numericSiteCode, authUser);
 }
+
+/**
+ * Sitenin tüm aktif yöneticilerini ve bekleyen yönetici davetlerini getirir.
+ */
+export async function getSiteManagers(siteCode) {
+  const code = Number(siteCode);
+  const managersRes = await pool.query(
+    `
+      SELECT
+        u.user_code,
+        u.full_name,
+        u.email,
+        u.phone_number,
+        u.role AS user_role,
+        COALESCE(sm.role, 'SITE_ADMIN') AS site_role,
+        (CASE WHEN sm.role = 'SITE_OWNER' THEN TRUE ELSE FALSE END) AS is_owner,
+        sms.created_at
+      FROM site_manager_sites sms
+      JOIN users u ON u.user_code = sms.manager_user_code
+      LEFT JOIN site_memberships sm ON sm.site_code = sms.site_code AND sm.user_code = sms.manager_user_code
+      WHERE sms.site_code = $1
+      ORDER BY (CASE WHEN sm.role = 'SITE_OWNER' THEN 1 ELSE 2 END) ASC, sms.created_at ASC
+    `,
+    [code],
+  );
+
+  const invitationsRes = await pool.query(
+    `
+      SELECT
+        smi.id,
+        smi.site_code,
+        smi.email,
+        smi.full_name,
+        smi.invited_by_user_code,
+        inviter.full_name AS inviter_name,
+        smi.status,
+        smi.created_at,
+        smi.expires_at
+      FROM site_manager_invitations smi
+      LEFT JOIN users inviter ON inviter.user_code = smi.invited_by_user_code
+      WHERE smi.site_code = $1 AND smi.status = 'PENDING' AND smi.expires_at > NOW()
+      ORDER BY smi.created_at DESC
+    `,
+    [code],
+  );
+
+  return {
+    managers: managersRes.rows.map((r) => ({
+      user_code: Number(r.user_code),
+      full_name: r.full_name,
+      email: r.email,
+      phone_number: r.phone_number,
+      user_role: r.user_role,
+      site_role: r.site_role,
+      is_owner: Boolean(r.is_owner),
+      created_at: r.created_at,
+    })),
+    invitations: invitationsRes.rows.map((r) => ({
+      id: Number(r.id),
+      site_code: Number(r.site_code),
+      email: r.email,
+      full_name: r.full_name,
+      invited_by_user_code: Number(r.invited_by_user_code),
+      inviter_name: r.inviter_name || 'Site Yönetimi',
+      status: r.status,
+      created_at: r.created_at,
+      expires_at: r.expires_at,
+    })),
+  };
+}
+
+/**
+ * Siteye yeni yönetici davet eder veya mevcut kullanıcıyı site yöneticisi yapar.
+ */
+export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {
+  const code = Number(siteCode);
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) {
+    throw new Error('Geçerli bir e-posta adresi gereklidir.');
+  }
+
+  const site = await getSiteByCode(code);
+  if (!site) {
+    throw new Error('Site bulunamadı.');
+  }
+
+  const inviterUserCode = Number(inviterUser?.userCode || inviterUser?.user_code || inviterUser?.id);
+  const inviterName = inviterUser?.fullName || inviterUser?.full_name || 'Site Yöneticisi';
+
+  // Kullanıcı sistemde kayıtlı mı?
+  const existingUserRes = await pool.query(
+    `SELECT user_code, full_name, email, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    [cleanEmail],
+  );
+
+  if (existingUserRes.rowCount > 0) {
+    const targetUser = existingUserRes.rows[0];
+
+    // Zaten bu sitenin yöneticisi mi?
+    const alreadyManagerRes = await pool.query(
+      `SELECT 1 FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2 LIMIT 1`,
+      [code, targetUser.user_code],
+    );
+    if (alreadyManagerRes.rowCount > 0) {
+      const err = new Error('Bu kullanıcı zaten bu sitenin yöneticisidir.');
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // site_manager_sites'a ekle
+    await pool.query(
+      `
+        INSERT INTO site_manager_sites (site_code, manager_user_code)
+        VALUES ($1, $2)
+        ON CONFLICT (site_code, manager_user_code) DO NOTHING
+      `,
+      [code, targetUser.user_code],
+    );
+
+    // site_memberships'e ekle
+    await pool.query(
+      `
+        INSERT INTO site_memberships (site_code, user_code, role, is_active)
+        VALUES ($1, $2, 'SITE_ADMIN', TRUE)
+        ON CONFLICT (site_code, user_code)
+        DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
+      `,
+      [code, targetUser.user_code],
+    );
+
+    // Eğer global rolü individual veya apartment_owner ise, site_manager yap
+    if (targetUser.role !== 'super_user' && targetUser.role !== 'site_manager') {
+      await pool.query(
+        `UPDATE users SET role = 'site_manager', updated_at = NOW() WHERE user_code = $1`,
+        [targetUser.user_code],
+      );
+    }
+
+    // Bilgilendirme e-postası gönder
+    try {
+      await sendSiteManagerInvitationEmail({
+        to: cleanEmail,
+        fullName: targetUser.full_name,
+        siteName: site.name,
+        inviterName,
+        isExistingUser: true,
+      });
+    } catch (mailErr) {
+      console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', mailErr?.message);
+    }
+
+    await rotateLocalControlTokensForSite(code, 'site_manager_added');
+
+    return {
+      ok: true,
+      is_existing_user: true,
+      message: `${targetUser.full_name} başarıyla site yöneticisi olarak eklendi ve bilgilendirme e-postası gönderildi.`,
+      manager: {
+        user_code: Number(targetUser.user_code),
+        full_name: targetUser.full_name,
+        email: targetUser.email,
+        site_role: 'SITE_ADMIN',
+        is_owner: false,
+      },
+    };
+  }
+
+  // Kullanıcı sistemde henüz kayıtlı değil -> site_manager_invitations oluştur
+  const token = `SMI-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
+  const cleanFullName = fullName ? String(fullName).trim() : null;
+
+  const invRes = await pool.query(
+    `
+      INSERT INTO site_manager_invitations (
+        site_code,
+        email,
+        full_name,
+        invited_by_user_code,
+        token,
+        status,
+        expires_at
+      )
+      VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW() + INTERVAL '7 days')
+      ON CONFLICT (site_code, email)
+      DO UPDATE SET
+        token = $5,
+        status = 'PENDING',
+        full_name = COALESCE($3, site_manager_invitations.full_name),
+        invited_by_user_code = $4,
+        expires_at = NOW() + INTERVAL '7 days',
+        created_at = NOW()
+      RETURNING id, site_code, email, full_name, status, created_at, expires_at
+    `,
+    [code, cleanEmail, cleanFullName, inviterUserCode, token],
+  );
+
+  try {
+    await sendSiteManagerInvitationEmail({
+      to: cleanEmail,
+      fullName: cleanFullName,
+      siteName: site.name,
+      inviterName,
+      isExistingUser: false,
+    });
+  } catch (mailErr) {
+    console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', mailErr?.message);
+  }
+
+  return {
+    ok: true,
+    is_existing_user: false,
+    message: `Yönetici daveti ${cleanEmail} adresine iletildi. Kullanıcı sisteme kaydolduğunda otomatik olarak site yöneticisi olacaktır.`,
+    invitation: {
+      id: Number(invRes.rows[0].id),
+      site_code: code,
+      email: cleanEmail,
+      full_name: cleanFullName,
+      status: 'PENDING',
+      expires_at: invRes.rows[0].expires_at,
+    },
+  };
+}
+
+/**
+ * Siteden yardımcı yöneticiyi çıkarır.
+ */
+export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {
+  const code = Number(siteCode);
+  const targetCode = Number(targetUserCode);
+  const callerCode = Number(callerUser?.userCode || callerUser?.user_code || callerUser?.id);
+  const isSuperUser = callerUser?.role === 'super_user';
+
+  // Sitede kaç yönetici var kontrol et
+  const countRes = await pool.query(
+    `SELECT COUNT(*)::INTEGER AS total FROM site_manager_sites WHERE site_code = $1`,
+    [code],
+  );
+  const totalManagers = countRes.rows[0]?.total ?? 0;
+  if (totalManagers <= 1) {
+    const err = new Error('Sitenin en az 1 aktif yöneticisi bulunmalıdır. Son yönetici çıkarılamaz.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Kurucu (SITE_OWNER) kontrolü
+  const membershipRes = await pool.query(
+    `SELECT role FROM site_memberships WHERE site_code = $1 AND user_code = $2 LIMIT 1`,
+    [code, targetCode],
+  );
+  const isOwner = membershipRes.rows[0]?.role === 'SITE_OWNER';
+  if (isOwner && !isSuperUser && callerCode !== targetCode) {
+    const err = new Error('Sitenin kurucu yöneticisi (Site Sahibi) yalnızca Süper Kullanıcı tarafından çıkarılabilir.');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  await pool.query(
+    `DELETE FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`,
+    [code, targetCode],
+  );
+
+  await pool.query(
+    `DELETE FROM site_memberships WHERE site_code = $1 AND user_code = $2 AND role IN ('SITE_OWNER', 'SITE_ADMIN')`,
+    [code, targetCode],
+  );
+
+  // Kullanıcının başka bir sitede yöneticiliği kaldı mı? Yoksa rolünü individual'a çek
+  const otherSitesRes = await pool.query(
+    `SELECT 1 FROM site_manager_sites WHERE manager_user_code = $1 LIMIT 1`,
+    [targetCode],
+  );
+  if (otherSitesRes.rowCount === 0) {
+    const userRow = await pool.query(`SELECT role FROM users WHERE user_code = $1 LIMIT 1`, [targetCode]);
+    if (userRow.rows[0]?.role === 'site_manager') {
+      await pool.query(`UPDATE users SET role = 'individual', updated_at = NOW() WHERE user_code = $1`, [targetCode]);
+    }
+  }
+
+  await rotateLocalControlTokensForSite(code, 'site_manager_removed');
+
+  return {
+    ok: true,
+    message: 'Kullanıcı site yöneticiliğinden çıkarıldı.',
+  };
+}
+
+/**
+ * Bekleyen yönetici davetini iptal eder.
+ */
+export async function revokeSiteManagerInvitation({ siteCode, invitationId }) {
+  const code = Number(siteCode);
+  const id = Number(invitationId);
+
+  const res = await pool.query(
+    `
+      UPDATE site_manager_invitations
+      SET status = 'REVOKED'
+      WHERE id = $1 AND site_code = $2 AND status = 'PENDING'
+      RETURNING id
+    `,
+    [id, code],
+  );
+
+  if (res.rowCount === 0) {
+    const err = new Error('İptal edilecek bekleyen davet bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return {
+    ok: true,
+    message: 'Yönetici daveti iptal edildi.',
+  };
+}
+
 
 

@@ -788,21 +788,28 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Nasıl Test Edilir:** Süper Kullanıcı olarak "Kullanıcı Yönetimi" sayfasına girin ve üst bardaki temizlik fırçası (`Icons.cleaning_services_rounded`) simgesine dokunun.
   - **Beklenen Sonuç:** Veritabanı sağlık modalı açılmalı; gerçek kullanıcı sayısı (4), çöp kullanıcı sayısı (0), aktif siteler, çevrimiçi cihazlar ve log durumları canlı gösterilmeli; "Çöp Temizliği Yap" butonuna basıldığında temizlik tetiklenip kaç kaydın temizlendiği bildirilmelidir.
 
+---
 
+## 41. 👥 Çoklu Site Yöneticisi, Yönetici Davet Sistemi & Çoklu Site Yönetimi
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- [ ] **41.1. Bir Siteye Birden Fazla Site Yöneticisi Atanabilmesi:**
+  - **Nasıl Test Edilir:** Bir site seçin. "Site Yöneticileri" kartındaki listeyi inceleyin.
+  - **Beklenen Sonuç:** Sitede hem kurucu yönetici (`Kurucu Yönetici` rozeti) hem de eklenen ortak yöneticiler (`Site Yöneticisi` rozeti) aynı anda aktif olarak listelenebilmeli; hepsi siteyi yönetebilmelidir.
+- [ ] **41.2. E-Posta ile Yönetici Davet Etme (Kayıtlı Kullanıcı):**
+  - **Nasıl Test Edilir:** Site Yöneticileri kartındaki "Yönetici Davet Et" butonuna dokunun. Sistemde zaten kayıtlı olan bireysel veya sakin bir kullanıcının e-postasını girip davet gönderin.
+  - **Beklenen Sonuç:** Kullanıcı anında bu sitenin yöneticileri arasına eklenmeli, rolü `site_manager`'a yükseltilmeli, kullanıcıya bilgilendirme e-postası gönderilmeli ve sayfa kapatıp açılmadan anında listede belirmelidir.
+- [ ] **41.3. E-Posta ile Yönetici Davet Etme (Kayıtlı Olmayan Kullanıcı):**
+  - **Nasıl Test Edilir:** Henüz sisteme kaydı olmayan bir e-posta adresi ile "Yönetici Davet Et" diyaloğundan davet gönderin.
+  - **Beklenen Sonuç:** E-posta adresine site yöneticiliği davet linki ve bilgilendirme e-postası iletilmeli; Site Yöneticileri kartında "Bekleyen Davetler" başlığı altında davet edilen e-posta görüntülenmelidir.
+- [ ] **41.4. Davet Edilen Kullanıcının Kaydolarak Otomatik Yönetici Olması:**
+  - **Nasıl Test Edilir:** Davet edilen yeni kullanıcı e-postası ile mobil uygulamadan kayıt olun ve e-posta doğrulama kodunu girin.
+  - **Beklenen Sonuç:** E-posta doğrulandığı anda sistem bekleyen daveti otomatik olarak kabul edilmiş (`ACCEPTED`) duruma getirmeli, kullanıcının rolünü `site_manager` yapmalı ve kullanıcı doğrudan sitenin yöneticisi olarak ana sayfaya giriş yapmalıdır.
+- [ ] **41.5. Bekleyen Yönetici Davetini İptal Etme:**
+  - **Nasıl Test Edilir:** "Bekleyen Davetler" listesinde yer alan bir davetin yanındaki "İptal Et" butonuna dokunun ve onaylayın.
+  - **Beklenen Sonuç:** Davet sunucuda anında iptal edilmeli (`REVOKED`) ve listeden canlı olarak kaldırılmalıdır.
+- [ ] **41.6. Ortak Yöneticilik Yetkisini Kaldırma (Kurucu Yönetici Koruması):**
+  - **Nasıl Test Edilir:** Kurucu olmayan bir site yöneticisinin yanındaki kırmızı kullanıcı çıkarma simgesine dokunun ve onaylayın.
+  - **Beklenen Sonuç:** Yöneticinin o sitedeki yöneticilik yetkisi kaldırılmalı; kurucu yöneticinin yanında ise kaldırma butonu gösterilmemeli ve sistemde en az 1 yönetici kalma kuralı korunmalıdır.
+- [ ] **41.7. Bir Kullanıcının Birden Fazla Siteyi Yönetebilmesi (Çoklu Site Yönetimi):**
+  - **Nasıl Test Edilir:** Site Yöneticisi rolündeki bir hesapla giriş yapın. Siteler menüsünde "Yeni Site" butonuna dokunarak ikinci bir site kurun veya başka bir siteye yönetici olarak davet edin.
+  - **Beklenen Sonuç:** Site yöneticisi birden fazla siteyi listeleyebilmeli, siteler arasında serbestçe geçiş yapabilmeli ve her bir sitenin kapılarını, dairelerini ve telemetrisini bağımsız olarak yönetebilmelidir.

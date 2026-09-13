@@ -19,6 +19,7 @@ import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_info.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
+import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -1879,6 +1880,68 @@ class AuthApi {
     final response = await _authorizedRequest(
       method: 'POST',
       path: '/membership/apartments/$apartmentId/members/$targetUserCode/set-primary-admin',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<SiteManagersData> getSiteManagers({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/managers',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return SiteManagersData.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> inviteSiteManager({
+    required String token,
+    required int siteCode,
+    required String email,
+    String? fullName,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/sites/$siteCode/managers/invite',
+      token: token,
+      body: {
+        'email': email,
+        if (fullName != null && fullName.trim().isNotEmpty)
+          'full_name': fullName.trim(),
+      },
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> removeSiteManager({
+    required String token,
+    required int siteCode,
+    required String userCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/manager/sites/$siteCode/managers/$userCode',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> revokeSiteManagerInvitation({
+    required String token,
+    required int siteCode,
+    required int invitationId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/manager/sites/$siteCode/invitations/$invitationId',
       token: token,
     );
     _ensureStatus(response, 200);

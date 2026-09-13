@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/models/site_page.dart';
 
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 
@@ -61,6 +62,8 @@ import 'package:site_kapi_kontrol/ui/dialogs/replace_device_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/site_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/invite_site_manager_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/door_permissions_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_join_qr_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_residents_accordion_dialog.dart';
@@ -165,6 +168,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   SiteStructureRecord? _selectedSiteStructure;
 
   bool _isLoadingSiteStructure = false;
+
+  SiteManagersData? _selectedSiteManagersData;
+
+  bool _isLoadingSiteManagers = false;
 
   final Set<int> _busyDeleteSites = <int>{};
 
@@ -613,21 +620,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             _selectSite(target ?? data.sites.first);
 
           } else if (_selectedSite == null ||
-
               !data.sites.any((s) => s.id == _selectedSite!.id)) {
-
             _selectSite(data.sites.first);
-
+          } else {
+            _loadSiteManagers(_selectedSite!.id);
           }
-
         } else {
-
           _selectedSite = null;
-
           _selectedSiteStructure = null;
-
+          _selectedSiteManagersData = null;
         }
-
       });
 
     } catch (e) {
@@ -648,38 +650,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+  Future<void> _loadSiteManagers(int siteCode) async {
+    setState(() => _isLoadingSiteManagers = true);
+    try {
+      final managersData = await widget.authService.getSiteManagers(siteCode);
+      if (!mounted) return;
+      setState(() {
+        _selectedSiteManagersData = managersData;
+        _isLoadingSiteManagers = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingSiteManagers = false);
+    }
+  }
+
   Future<void> _selectSite(SiteRecord site) async {
-
     setState(() {
-
       _selectedSite = site;
-
       _selectedSiteStructure = null;
-
+      _selectedSiteManagersData = null;
       _isLoadingSiteStructure = true;
-
+      _isLoadingSiteManagers = true;
     });
 
-
+    _loadSiteManagers(site.id);
 
     final (structure, error) = await widget.authService.getSiteStructure(
-
       siteCode: site.id,
-
     );
 
     if (!mounted) return;
 
     setState(() {
-
       _isLoadingSiteStructure = false;
-
       _selectedSiteStructure = structure;
-
     });
 
     if (error != null && structure == null) _showMessage(error);
-
   }
 
 
@@ -1488,6 +1496,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // --- Eylemler & Diyalog Tetikleyicileri ---
 
   Future<void> _openSiteDialog({SiteRecord? site}) async {
+    if (site == null && widget.authService.session?.role == UserRole.siteManager) {
+      final created = await SetupSiteDialog.show(
+        context,
+        authService: widget.authService,
+      );
+      if (created == true) {
+        await _loadSites(force: true);
+      }
+      return;
+    }
 
     final result = await SiteDialog.show(
 
@@ -1577,6 +1595,113 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     }
 
+  }
+
+  Future<void> _openInviteSiteManagerDialog() async {
+    final site = _selectedSite;
+    if (site == null) return;
+    final invited = await InviteSiteManagerDialog.show(
+      context,
+      authService: widget.authService,
+      siteCode: site.id,
+      siteName: site.name,
+    );
+    if (invited == true) {
+      await _loadSiteManagers(site.id);
+    }
+  }
+
+  Future<void> _removeSiteManager(SiteManagerRecord mgr) async {
+    final site = _selectedSite;
+    if (site == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yönetici Yetkisini Kaldır'),
+        content: Text(
+          '${mgr.fullName} (${mgr.email}) kullanıcısının bu sitedeki yöneticilik yetkisini kaldırmak istediğinize emin misiniz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Yetkiyi Kaldır'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final (success, message) = await widget.authService.removeSiteManager(
+      site.id,
+      mgr.userCode.toString(),
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      _showMessage(message ?? 'Yönetici yetkisi kaldırıldı.');
+      await _loadSiteManagers(site.id);
+    } else {
+      _showMessage(message ?? 'Yetki kaldırılırken bir hata oluştu.');
+    }
+  }
+
+  Future<void> _revokeSiteManagerInvitation(
+    SiteManagerInvitationRecord inv,
+  ) async {
+    final site = _selectedSite;
+    if (site == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Daveti İptal Et'),
+        content: Text(
+          '${inv.email} adresine gönderilen yönetici davetini iptal etmek istiyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Daveti İptal Et'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final (success, message) =
+        await widget.authService.revokeSiteManagerInvitation(
+      site.id,
+      inv.id,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      _showMessage(message ?? 'Davet iptal edildi.');
+      await _loadSiteManagers(site.id);
+    } else {
+      _showMessage(message ?? 'Davet iptal edilirken bir hata oluştu.');
+    }
   }
 
 
@@ -3696,6 +3821,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onShowSiteJoinQr: _openSiteJoinQrDialog,
           onManageJoinRequests: _openManageJoinRequestsDialog,
           onShowResidentsAccordion: _openSiteResidentsAccordionDialog,
+          siteManagersData: _selectedSiteManagersData,
+          isLoadingManagers: _isLoadingSiteManagers,
+          onInviteSiteManager: _openInviteSiteManagerDialog,
+          onRemoveSiteManager: _removeSiteManager,
+          onRevokeSiteManagerInvitation: _revokeSiteManagerInvitation,
           isSuperUser: widget.authService.session?.role == UserRole.superUser,
           onApproveDeleteSite: _approveDeleteSite,
           onRejectDeleteSite: _rejectDeleteSite,

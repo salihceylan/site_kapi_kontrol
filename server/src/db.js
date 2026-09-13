@@ -13,10 +13,7 @@ export const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-});
-
-pool.on('connect', (client) => {
-  client.query("SET timezone = 'Europe/Istanbul';").catch(() => {});
+  options: "-c timezone=Europe/Istanbul",
 });
 
 export async function checkDbConnection() {
@@ -74,6 +71,10 @@ export async function ensureDbSchema() {
           CHECK (approval_status IN ('pending', 'approved', 'rejected'));
         END IF;
       END $$;
+    `);
+    await client.query(`
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('super_user', 'site_manager', 'apartment_owner', 'individual'));
     `);
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique
@@ -217,6 +218,34 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS qr_rotation_seconds INTEGER NOT NULL DEFAULT 30
     `);
     await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_status TEXT NOT NULL DEFAULT 'none'
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_requested_by_user_code BIGINT
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_requested_by_name TEXT
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_requested_by_role TEXT
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_email_code VARCHAR(10)
+    `);
+    await client.query(`
+      ALTER TABLE sites
+      ADD COLUMN IF NOT EXISTS deletion_email_code_expires_at TIMESTAMPTZ
+    `);
+    await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -288,6 +317,10 @@ export async function ensureDbSchema() {
     `);
     await client.query(`
       ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS qr_reader_enabled BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE devices
       ADD COLUMN IF NOT EXISTS gate_name TEXT
     `);
     await client.query(`
@@ -301,6 +334,18 @@ export async function ensureDbSchema() {
     await client.query(`
       ALTER TABLE devices
       ADD COLUMN IF NOT EXISTS local_control_token TEXT
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS owner_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_devices_owner_user_id
+      ON devices(owner_user_id)
     `);
     await client.query(`
       UPDATE devices
@@ -530,6 +575,34 @@ export async function ensureDbSchema() {
       ON guest_passes(door_id)
     `);
 
+    // QR ve GM60 ile Kapı Açma Tokenleri Tablosu
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS qr_access_tokens (
+        id BIGSERIAL PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        door_id BIGINT NOT NULL REFERENCES site_doors(id) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        user_role TEXT NOT NULL,
+        user_name TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        revoked_at TIMESTAMPTZ
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_token
+      ON qr_access_tokens(token)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_door_active
+      ON qr_access_tokens(door_id, is_active)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_user
+      ON qr_access_tokens(user_code)
+    `);
+
     const apartmentResetMaintenanceKey =
       'reset_apartment_residents_after_site_approval_flow_v1';
     const maintenanceCheck = await client.query(
@@ -606,6 +679,189 @@ export async function ensureDbSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_device_connectivity_logs_uid_created
       ON device_connectivity_logs(device_uid, created_at DESC);
+    `);
+
+    // 011: QR ve GM60 ile Kapı Açma Tabloları ve Bayrakları
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS qr_reader_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+      CREATE TABLE IF NOT EXISTS qr_access_tokens (
+        id BIGSERIAL PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        door_id BIGINT NOT NULL REFERENCES site_doors(id) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        user_role TEXT NOT NULL,
+        user_name TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ
+      );
+
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+      UPDATE qr_access_tokens
+      SET expires_at = created_at + INTERVAL '10 years'
+      WHERE expires_at IS NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_token
+      ON qr_access_tokens(token);
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_door_active
+      ON qr_access_tokens(door_id, is_active);
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_user
+      ON qr_access_tokens(user_code);
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_expires
+      ON qr_access_tokens(expires_at);
+
+      -- Test WROOM cihazı için QR okuyucu yetkisini varsayılan aktif et
+      UPDATE devices SET qr_reader_enabled = TRUE WHERE device_uid = '00861A0D5020';
+
+      -- 020: QR Güvenliği, Token İptali, Geofence ve Sahte Konum Koruması
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ;
+
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS request_latitude DOUBLE PRECISION;
+
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS request_longitude DOUBLE PRECISION;
+
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS request_accuracy DOUBLE PRECISION;
+
+      ALTER TABLE qr_access_tokens
+      ADD COLUMN IF NOT EXISTS is_mocked BOOLEAN NOT NULL DEFAULT FALSE;
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_user_door_active
+      ON qr_access_tokens(user_code, door_id, is_active);
+
+      CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_superseded
+      ON qr_access_tokens(superseded_at)
+      WHERE superseded_at IS NOT NULL;
+
+      -- 016: ÜYELİK YÖNETİM SİSTEMİ V2 (MEMBERSHIP & ACCESS SCHEMA)
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        code_hash TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+        verified_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(LOWER(email));
+      CREATE INDEX IF NOT EXISTS idx_email_verifications_created ON email_verifications(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS site_memberships (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'RESIDENT',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_site_membership_role CHECK (role IN ('SITE_OWNER', 'SITE_ADMIN', 'RESIDENT')),
+        UNIQUE (site_code, user_code)
+      );
+      CREATE INDEX IF NOT EXISTS idx_site_memberships_user ON site_memberships(user_code);
+      CREATE INDEX IF NOT EXISTS idx_site_memberships_site ON site_memberships(site_code);
+
+      CREATE TABLE IF NOT EXISTS apartment_memberships (
+        id BIGSERIAL PRIMARY KEY,
+        apartment_id BIGINT NOT NULL REFERENCES apartments(id) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'FAMILY_MEMBER',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_apt_membership_role CHECK (role IN ('APARTMENT_ADMIN', 'FAMILY_MEMBER')),
+        UNIQUE (apartment_id, user_code)
+      );
+      CREATE INDEX IF NOT EXISTS idx_apt_memberships_apt ON apartment_memberships(apartment_id);
+      CREATE INDEX IF NOT EXISTS idx_apt_memberships_user ON apartment_memberships(user_code);
+
+      CREATE TABLE IF NOT EXISTS site_join_tokens (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        created_by_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        revoked_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_site_join_tokens_token ON site_join_tokens(token);
+      CREATE INDEX IF NOT EXISTS idx_site_join_tokens_site_active ON site_join_tokens(site_code, is_active);
+
+      CREATE TABLE IF NOT EXISTS join_requests (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        block_id BIGINT NOT NULL REFERENCES site_blocks(id) ON DELETE CASCADE,
+        apartment_id BIGINT NOT NULL REFERENCES apartments(id) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        reviewed_by_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        rejection_reason TEXT,
+        reviewed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_join_request_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_join_requests_site_status ON join_requests(site_code, status);
+      CREATE INDEX IF NOT EXISTS idx_join_requests_user ON join_requests(user_code);
+      CREATE INDEX IF NOT EXISTS idx_join_requests_apartment ON join_requests(apartment_id);
+
+      ALTER TABLE site_doors
+      ADD COLUMN IF NOT EXISTS access_scope TEXT NOT NULL DEFAULT 'SITE_COMMON';
+
+      ALTER TABLE site_doors
+      ADD COLUMN IF NOT EXISTS block_id BIGINT REFERENCES site_blocks(id) ON DELETE SET NULL;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'chk_site_doors_access_scope'
+        ) THEN
+          ALTER TABLE site_doors
+          ADD CONSTRAINT chk_site_doors_access_scope
+          CHECK (access_scope IN ('SITE_COMMON', 'BLOCK', 'CUSTOM'));
+        END IF;
+      END $$;
+
+      CREATE TABLE IF NOT EXISTS door_access_overrides (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        door_id BIGINT NOT NULL REFERENCES site_doors(id) ON DELETE CASCADE,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        is_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+        granted_by_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (door_id, user_code)
+      );
+      CREATE INDEX IF NOT EXISTS idx_door_overrides_door ON door_access_overrides(door_id);
+      CREATE INDEX IF NOT EXISTS idx_door_overrides_user ON door_access_overrides(user_code);
+
+      CREATE TABLE IF NOT EXISTS site_manager_invitations (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        email VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255),
+        invited_by_user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        token VARCHAR(64) NOT NULL UNIQUE,
+        status VARCHAR(32) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+        UNIQUE (site_code, email)
+      );
+      CREATE INDEX IF NOT EXISTS idx_site_mgr_inv_email ON site_manager_invitations(LOWER(email));
+      CREATE INDEX IF NOT EXISTS idx_site_mgr_inv_site ON site_manager_invitations(site_code);
     `);
   } finally {
     client.release();

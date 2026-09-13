@@ -206,6 +206,39 @@ export async function verifyIndividualEmailCode({ email, code }) {
   }
 
   const user = userRes.rows[0];
+
+  // Bekleyen site yöneticisi davetleri var mı kontrol et
+  const pendingMgrInvRes = await pool.query(
+    `SELECT id, site_code FROM site_manager_invitations WHERE LOWER(email) = LOWER($1) AND status = 'PENDING' AND expires_at > NOW()`,
+    [cleanEmail],
+  );
+
+  if (pendingMgrInvRes.rowCount > 0) {
+    for (const inv of pendingMgrInvRes.rows) {
+      await pool.query(
+        `INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [Number(inv.site_code), user.user_code],
+      );
+      await pool.query(
+        `INSERT INTO site_memberships (site_code, user_code, role, is_active) VALUES ($1, $2, 'SITE_ADMIN', TRUE)
+         ON CONFLICT (site_code, user_code) DO UPDATE SET role = 'SITE_ADMIN', is_active = TRUE, updated_at = NOW()`,
+        [Number(inv.site_code), user.user_code],
+      );
+      await pool.query(
+        `UPDATE site_manager_invitations SET status = 'ACCEPTED' WHERE id = $1`,
+        [Number(inv.id)],
+      );
+    }
+    // Kullanıcının rolünü site_manager yap
+    if (user.role !== 'super_user') {
+      await pool.query(
+        `UPDATE users SET role = 'site_manager', updated_at = NOW() WHERE user_code = $1`,
+        [user.user_code],
+      );
+      user.role = 'site_manager';
+    }
+  }
+
   const token = signAccessToken(user);
 
   return {
