@@ -264,10 +264,16 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
   }
 
   try {
+    if (email !== undefined) {
+      const existingUser = await pool.query('SELECT email FROM users WHERE user_code = $1', [userCode]);
+      if (existingUser.rows.length > 0 && existingUser.rows[0].email && existingUser.rows[0].email.toLowerCase() !== email.toLowerCase()) {
+        return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' });
+      }
+    }
+
     const updated = await updateUserByCode({
       userCode,
       fullName,
-      email,
       phoneNumber,
       password,
       isActive,

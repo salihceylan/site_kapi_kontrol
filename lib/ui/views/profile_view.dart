@@ -57,13 +57,17 @@ class ProfileView extends StatelessWidget {
             const SizedBox(height: 10),
             TextFormField(
               controller: emailController,
-              decoration: const InputDecoration(labelText: 'E-posta'),
-              validator: (value) {
-                final text = (value ?? '').trim();
-                return text.isEmpty || !text.contains('@')
-                    ? 'Geçerli bir e-posta girin.'
-                    : null;
-              },
+              enabled: false,
+              style: TextStyle(
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+              decoration: InputDecoration(
+                labelText: 'E-posta (Değiştirilemez)',
+                filled: true,
+                fillColor: isDark ? const Color(0x1AFFFFFF) : const Color(0x0F000000),
+                suffixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                helperText: 'E-posta adresi güvenlik nedeniyle değiştirilemez',
+              ),
             ),
             const SizedBox(height: 10),
             TextFormField(

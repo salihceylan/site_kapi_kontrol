@@ -120,6 +120,8 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       title: Text(
@@ -146,8 +148,19 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'E-posta'),
+                  enabled: !_isEditing,
+                  style: TextStyle(
+                    color: _isEditing ? (isDark ? Colors.white60 : Colors.black54) : null,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: _isEditing ? 'E-posta (Değiştirilemez)' : 'E-posta',
+                    filled: _isEditing,
+                    fillColor: _isEditing ? (isDark ? const Color(0x1AFFFFFF) : const Color(0x0F000000)) : null,
+                    suffixIcon: _isEditing ? const Icon(Icons.lock_outline_rounded, size: 18) : null,
+                    helperText: _isEditing ? 'E-posta adresi güvenlik nedeniyle değiştirilemez' : null,
+                  ),
                   validator: (value) {
+                    if (_isEditing) return null;
                     final text = (value ?? '').trim();
                     return text.isEmpty || !text.contains('@')
                         ? 'Geçerli bir e-posta girin.'

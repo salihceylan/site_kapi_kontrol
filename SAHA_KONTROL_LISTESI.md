@@ -761,9 +761,9 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **39.5. Sadeleştirilmiş Liste Kartları ve Detay Sayfası (Modal Bottom Sheet):**
   - **Nasıl Test Edilir:** Kullanıcı Yönetimi ekranındaki liste kartlarını inceleyin ve herhangi bir kullanıcının kartına dokunun.
   - **Beklenen Sonuç:** Ana listede yalnızca kullanıcının Adı Soyadı ve E-postası görüntülenmeli, taşma (overflow) yaşanmamalıdır; karta tıklandığında alttan açılan detay sayfasında rol, ID (#), e-posta doğrulama rozeti, telefon, kayıt tarihi, aktif/pasif anahtarı ve Düzenle/Sil butonları açılmalıdır.
-- [ ] **39.6. Kullanıcı Bilgilerini Düzenleme (Ad, E-Posta, Telefon, Rol, Şifre, Aktiflik, E-Posta Onayı):**
-  - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki "Düzenle" butonuna dokunun; bilgileri değiştirip "Kaydet"e basın.
-  - **Beklenen Sonuç:** Ad Soyad, e-posta, telefon, kullanıcı rolü, şifre sıfırlama, aktiflik ve e-posta doğrulama durumu başarıyla güncellenmeli; uygulama kapatıp açılmadan liste canlı olarak güncellenmelidir.
+- [ ] **39.6. Kullanıcı Bilgilerini Düzenleme & E-Posta Değiştirilemez (Deaktif Textbox) Koruması:**
+  - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki "Düzenle" butonuna dokunarak açılan formu inceleyin; e-posta kutusunu değiştirmeyi deneyin.
+  - **Beklenen Sonuç:** E-posta kutusu deaktif (disabled/salt okunur) görünmeli, kilit simgesi ve "E-posta adresi güvenlik nedeniyle değiştirilemez" uyarısı yer almalı; Süper kullanıcı dahil hiç kimse e-posta adresini düzenleme ekranından değiştirememelidir. Ad Soyad, telefon, rol, şifre ve aktiflik güncellenebilmelidir.
 - [ ] **39.7. Hızlı Aktif/Pasif Geçişi:**
   - **Nasıl Test Edilir:** Kullanıcı detay sayfasındaki switch'e dokunarak kullanıcıyı pasife veya aktife çekin.
   - **Beklenen Sonuç:** Kullanıcının durumu canlı olarak sunucuda güncellenmeli ve anında yansımalıdır.

@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { signAccessToken } from '../jwt.js';
@@ -27,7 +27,54 @@ import {
   validateUpdateInput,
 } from '../utils/validators.js';
 
+import {
+  registerIndividualUser,
+  verifyIndividualEmailCode,
+  resendIndividualVerificationCode,
+} from '../services/membership_service.js';
+
 export const authRouter = express.Router();
+
+// POST /auth/register-individual (Üyelik Sistemi V2: Bireysel Self-Service Kayıt)
+authRouter.post('/auth/register-individual', async (req, res) => {
+  try {
+    const { first_name, last_name, email, password } = req.body || {};
+    const result = await registerIndividualUser({
+      firstName: first_name,
+      lastName: last_name,
+      email,
+      password,
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 400;
+    return res.status(statusCode).json({ error: error.message || 'Kayıt işlemi başarısız.' });
+  }
+});
+
+// POST /auth/verify-code (4 Haneli Kod ile E-posta Doğrulama)
+authRouter.post('/auth/verify-code', async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    const result = await verifyIndividualEmailCode({ email, code });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 400;
+    return res.status(statusCode).json({ error: error.message || 'Doğrulama işlemi başarısız.' });
+  }
+});
+
+// POST /auth/resend-code (4 Haneli Kodu Tekrar Gönderme)
+authRouter.post('/auth/resend-code', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const result = await resendIndividualVerificationCode({ email });
+    return res.status(200).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 400;
+    return res.status(statusCode).json({ error: error.message || 'Kod tekrar gönderilemedi.' });
+  }
+});
 
 // POST /auth/register
 authRouter.post('/auth/register', async (req, res) => {
@@ -303,10 +350,13 @@ authRouter.patch('/me', authRequired, async (req, res) => {
   }
 
   try {
+    if (email !== undefined && req.authUser?.email && req.authUser.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({ error: 'E-posta adresi güvenlik nedeniyle değiştirilemez.' });
+    }
+
     const updated = await updateUserByCode({
       userCode,
       fullName,
-      email,
       phoneNumber,
       password,
       isActive,
