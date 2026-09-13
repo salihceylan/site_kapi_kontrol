@@ -437,11 +437,9 @@ class _AllUsersViewState extends State<AllUsersView> {
     final totalUsers = widget.pageData?.total ?? widget.users.length;
     final totalPages = widget.pageData?.totalPages ?? 1;
 
-    return RefreshIndicator(
-      onRefresh: () async => _fetchData(),
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 40),
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           // 1. ÜST BAŞLIK KARTI
           Container(
             width: double.infinity,
@@ -957,7 +955,6 @@ class _AllUsersViewState extends State<AllUsersView> {
               ),
             ),
         ],
-      ),
     );
   }
 
