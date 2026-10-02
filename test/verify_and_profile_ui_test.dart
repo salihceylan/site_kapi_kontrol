@@ -116,6 +116,9 @@ void main() {
       await tester.pump(const Duration(seconds: 30));
       expect(find.text('Kodu Tekrar Gönder'), findsOneWidget);
 
+      // Sayfa kaydırılabilir (gecikme açıklaması içeriği uzatır): düğmeyi görünür kılıp dokun.
+      await tester.ensureVisible(find.text('Kodu Tekrar Gönder'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kodu Tekrar Gönder'));
       await tester.pumpAndSettle();
 
@@ -123,7 +126,7 @@ void main() {
       // Kullanıcı varlığını ele vermeyen, teslimatı kesinmiş gibi yazmayan, her durumda aynı metin.
       expect(
         find.text(
-          'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni 6 haneli kod birkaç dakika içinde e-postanıza ulaşır. Ulaşmazsa spam klasörünü kontrol edin.',
+          'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni 6 haneli kod birkaç dakika içinde e-postanıza ulaşır; önceki kodlar geçersiz olur. Ulaşmazsa spam klasörünü kontrol edin.',
         ),
         findsOneWidget,
       );
@@ -152,6 +155,8 @@ void main() {
       expect(find.text('Kodu Tekrar Gönder'), findsOneWidget);
       expect(resendButton().onPressed, isNotNull);
 
+      await tester.ensureVisible(find.text('Kodu Tekrar Gönder'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kodu Tekrar Gönder'));
       await tester.pumpAndSettle();
       expect(auth.resendCalls, 1);

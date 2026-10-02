@@ -55,6 +55,7 @@ import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -3670,6 +3671,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final textScaler = MediaQuery.textScalerOf(context);
     final bottomHeight = 16 + 1.2 * (textScaler.scale(18) + textScaler.scale(12));
     final showWidgetAction = session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest;
+    // Tema geçiş düğmesi yalnız ThemeScope varsa çizilir (uygulama kökü); yoksa (tek başına kurulum) yer ayrılmaz.
+    final hasThemeToggle = ThemeScope.maybeOf(context) != null;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -3694,7 +3697,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         actions: [
           if (_canToggleDualMode)
-            _buildModeToggle(context, otherActions: showWidgetAction ? 3 : 2),
+            _buildModeToggle(
+              context,
+              // Hapın genişlik payı: yanındaki 44-48 dp'lik düğmeler (yenile, çıkış, [widget], [tema]).
+              otherActions: (showWidgetAction ? 3 : 2) + (hasThemeToggle ? 1 : 0),
+            ),
           // Widget iğneleme yalnızca mobilde çalışır; masaüstünde "gönderildi" mesajı yanıltıcı olurdu.
           if (showWidgetAction)
             _appBarAction(
@@ -3709,6 +3716,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 _showMessage('Masaüstü widget ekleme isteği gönderildi.');
               },
             ),
+          // Aydınlık / karanlık tema geçişi (44 dp, diğer eylem düğmeleriyle aynı boyut ve yoğunluk).
+          const ThemeToggleButton(iconSize: 20),
           _appBarAction(
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh_rounded, size: 20),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
 
@@ -95,6 +96,7 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
         title: const Text('Yeni Hesap Oluştur'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: const [ThemeToggleButton(), SizedBox(width: AppSpace.sm)],
       ),
       body: SafeArea(
         child: Center(

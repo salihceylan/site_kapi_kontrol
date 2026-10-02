@@ -28,9 +28,11 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/theme_service.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/design/door_open_button.dart';
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
@@ -208,26 +210,29 @@ Future<void> _pumpShell(
   bool dark = false,
   bool reduce = false,
   bool plainTheme = false,
+  bool themeToggle = false,
 }) async {
   tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  await tester.pumpWidget(
-    MaterialApp(
-      // plainTheme: AppTheme'in `standard` yoğunluk/48 dp hedef ayarları OLMADAN (masaüstü varsayılanı).
-      theme: plainTheme ? ThemeData(useMaterial3: true) : AppTheme.light(),
-      darkTheme: plainTheme ? null : AppTheme.dark(),
-      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-      builder: (c, child) => MediaQuery(
-        data: MediaQuery.of(c).copyWith(
-          textScaler: TextScaler.linear(scale),
-          disableAnimations: reduce,
-        ),
-        child: child!,
+  final app = MaterialApp(
+    // plainTheme: AppTheme'in `standard` yoğunluk/48 dp hedef ayarları OLMADAN (masaüstü varsayılanı).
+    theme: plainTheme ? ThemeData(useMaterial3: true) : AppTheme.light(),
+    darkTheme: plainTheme ? null : AppTheme.dark(),
+    themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+    builder: (c, child) => MediaQuery(
+      data: MediaQuery.of(c).copyWith(
+        textScaler: TextScaler.linear(scale),
+        disableAnimations: reduce,
       ),
-      home: HomePage(authService: auth),
+      child: child!,
     ),
+    home: HomePage(authService: auth),
+  );
+  // themeToggle: uygulama kökündeki gibi ThemeScope var -> AppBar'da aydınlık/karanlık geçiş düğmesi çizilir.
+  await tester.pumpWidget(
+    themeToggle ? ThemeScope(service: ThemeService(), child: app) : app,
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
@@ -270,6 +275,8 @@ void _expectAppBarFits(
   required bool dual,
   bool resident = false,
   String title = 'AHBU Panel',
+  bool themeToggle = false,
+  bool dark = false,
 }) {
   expect(tester.takeException(), isNull, reason: 'RenderFlex taşması yok');
 
@@ -307,6 +314,8 @@ void _expectAppBarFits(
     Icons.refresh_rounded,
     Icons.logout_rounded,
     if (widgetAction) Icons.widgets_outlined,
+    // Tema düğmesi, geçilecek temayı gösterir: aydınlıkta ay, karanlıkta güneş.
+    if (themeToggle) dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
   ];
   for (final icon in icons) {
     final button = _inAppBar(find.widgetWithIcon(IconButton, icon));
@@ -411,6 +420,62 @@ void main() {
           );
         }
       }
+    },
+  );
+
+  group(
+    'AppBar + tema düğmesi (ThemeScope var): hap + widget + tema + yenile + çıkış taşmaz, hedefler >= 44 dp',
+    () {
+      const cells = <({double width, double height, double scale})>[
+        (width: 320, height: 640, scale: 2.0), // en kötü: en dar + en büyük yazı
+        (width: 360, height: 640, scale: 1.5),
+        (width: 412, height: 915, scale: 1.0), // etiketli hap
+        (width: 820, height: 1180, scale: 1.0), // tablet
+      ];
+      for (final c in cells) {
+        for (final dark in const <bool>[false, true]) {
+          testWidgets(
+            '${c.width.toInt()}x${c.height.toInt()} x${c.scale} ${dark ? 'koyu' : 'açık'}',
+            (tester) async {
+              final auth = _ShellAuth();
+              await _pumpShell(
+                tester,
+                auth,
+                width: c.width,
+                height: c.height,
+                scale: c.scale,
+                dark: dark,
+                themeToggle: true,
+              );
+              expect(find.byType(AdminDoorStatusCard), findsOneWidget);
+              _expectAppBarFits(
+                tester,
+                width: c.width,
+                scale: c.scale,
+                widgetAction: true,
+                dual: true,
+                themeToggle: true,
+                dark: dark,
+              );
+              await _disposeShell(tester);
+            },
+          );
+        }
+      }
+
+      testWidgets('süper kullanıcı (widget düğmesi yok) 320x640 x2,0 tema düğmesiyle taşmaz', (tester) async {
+        final auth = _ShellAuth(role: UserRole.superUser);
+        await _pumpShell(tester, auth, width: 320, scale: 2.0, themeToggle: true);
+        _expectAppBarFits(
+          tester,
+          width: 320,
+          scale: 2.0,
+          widgetAction: false,
+          dual: true,
+          themeToggle: true,
+        );
+        await _disposeShell(tester);
+      });
     },
   );
 

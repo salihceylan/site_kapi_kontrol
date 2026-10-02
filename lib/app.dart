@@ -11,10 +11,12 @@ import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 import 'package:site_kapi_kontrol/services/network_service.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
+import 'package:site_kapi_kontrol/services/theme_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
@@ -23,9 +25,13 @@ import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.networkCheckEnabled = true});
+  const MyApp({super.key, this.networkCheckEnabled = true, this.themeService});
 
   final bool networkCheckEnabled;
+
+  /// Önceden yüklenmiş tema servisi (lib/main.dart): ilk kare doğru temayla açılır, yanıp sönme olmaz.
+  /// Verilmezse uygulama kendisi oluşturur ve kayıtlı tercihi arka planda yükler (testler).
+  final ThemeService? themeService;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -38,6 +44,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final VoiceDoorService _voiceDoorService;
   late final QuickActionsService _quickActionsService;
   late final DeepLinkService _deepLinkService;
+  late final ThemeService _themeService;
+  late final bool _ownsThemeService;
 
   /// Tek örnek: AuthService'in kullandığı örnekle aynıdır; yaşam döngüsü
   /// (pause/resume) bu asıl örneğe uygulanır.
@@ -51,6 +59,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _ownsThemeService = widget.themeService == null;
+    _themeService = widget.themeService ?? ThemeService();
+    if (_ownsThemeService) {
+      unawaited(_themeService.load());
+    }
     _authService = AuthService(api: AuthApi(baseUrl: apiBaseUrl));
     _networkService = NetworkService(enabled: widget.networkCheckEnabled);
     _voiceDoorService = VoiceDoorService(authService: _authService);
@@ -292,18 +305,33 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _networkService.dispose();
     _voiceDoorService.dispose();
     _deepLinkService.dispose();
+    if (_ownsThemeService) {
+      _themeService.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // ThemeScope MaterialApp'ın ÜSTÜNDE: itilen sayfalar ve diyaloglar da tema düğmesine erişir. Tema modu
+    // değişince yalnız MaterialApp yeniden kurulur (varsayılan: sistem teması, eski davranış).
+    return ThemeScope(
+      service: _themeService,
+      child: AnimatedBuilder(
+        animation: _themeService,
+        builder: (context, _) => _buildMaterialApp(),
+      ),
+    );
+  }
+
+  Widget _buildMaterialApp() {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'Site Kapi Kontrol',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: _themeService.mode,
       builder: (context, child) {
         // Metin ölçeği en çok 2,0 (taşma testleri bu sınırda biter). Zemin gradyanının üstüne tek,
         // statik ışıma binilir: dinamik içeriği yok, kararlı durumda yeniden boyanmaz.

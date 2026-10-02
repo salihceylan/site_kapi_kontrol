@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 
@@ -252,6 +253,12 @@ class _LoginPageState extends State<LoginPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Tema geçişi (aydınlık/karanlık): kartın sağ üst köşesi. ThemeScope yoksa yüksekliği sıfırdır.
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: ThemeToggleButton(),
+                      ),
+
                       // Logo + başlık
                       const LoginHero(
                         title: 'AHBU Giriş',

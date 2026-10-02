@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class VerifyEmailCodePage extends StatefulWidget {
@@ -161,6 +162,7 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
         title: const Text('E-Posta Doğrulama'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: const [ThemeToggleButton(), SizedBox(width: AppSpace.sm)],
       ),
       body: SafeArea(
         child: Center(

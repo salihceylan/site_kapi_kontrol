@@ -14,8 +14,11 @@ Future<void> _pumpApp(
   WidgetTester t, {
   required double textScale,
   Brightness brightness = Brightness.light,
+  String? savedTheme,
 }) async {
-  SharedPreferences.setMockInitialValues(<String, Object>{});
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'app_theme_mode': ?savedTheme,
+  });
   FlutterSecureStorage.setMockInitialValues(<String, String>{});
   t.view.physicalSize = const Size(900, 2400);
   t.view.devicePixelRatio = 1.0;
@@ -76,6 +79,44 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+  });
+
+  group('MyApp: kullanıcı tema tercihi (aydınlık / karanlık geçiş düğmesi)', () {
+    testWidgets('kayıtlı "dark" tercihi sistem AÇIK olsa da koyu temayla açılır', (t) async {
+      await _pumpApp(
+        t,
+        textScale: 1.0,
+        brightness: Brightness.light,
+        savedTheme: 'dark',
+      );
+      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
+    });
+
+    testWidgets('kayıtlı tercih yoksa sistem teması izlenir (varsayılan davranış)', (t) async {
+      await _pumpApp(t, textScale: 1.0, brightness: Brightness.dark);
+      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      await _pumpApp(t, textScale: 1.0, brightness: Brightness.light);
+      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.light);
+    });
+
+    testWidgets('giriş ekranındaki düğme temayı değiştirir, zemin güncellenir ve tercih saklanır', (t) async {
+      await _pumpApp(t, textScale: 1.0, brightness: Brightness.light);
+      expect(_glow(AppGradients.pageGlowLight), findsOneWidget);
+
+      await t.tap(find.byTooltip('Koyu temaya geç'));
+      await t.pumpAndSettle();
+
+      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
+      expect(_glow(AppGradients.pageGlowLight), findsNothing);
+      expect(find.byTooltip('Aydınlık temaya geç'), findsOneWidget);
+      expect(
+        (await SharedPreferences.getInstance()).getString('app_theme_mode'),
+        'dark',
+      );
+      expect(t.takeException(), isNull);
+    });
   });
 
   group('MyApp builder: sayfa zemini ve statik ışıma', () {

@@ -1140,3 +1140,23 @@ Ayrıntı ve işletim notları: `docs/EPOSTA_DOGRULAMA.md`.
 - [ ] **54.5. Bekleyen Kayıt Temizliği:**
   - **Nasıl Test Edilir:** Kayıt olup kodu hiç girmeyin; 2 gün sonra bakım çalıştıktan sonra `pending_registrations` tablosuna bakın.
   - **Beklenen Sonuç:** 2 günden eski bekleyen kayıt silinmeli; `users` sayısı değişmemelidir (bakım hesap silmez).
+
+---
+
+## 55. 🌗 Aydınlık / Karanlık Tema Geçiş Düğmesi (2026-10-02)
+
+- [ ] **55.1. Giriş Ekranında Tema Geçişi:**
+  - **Nasıl Test Edilir:** Giriş ekranında kartın sağ üst köşesindeki ay (🌙) simgesine dokunun.
+  - **Beklenen Sonuç:** Uygulama anında karanlık temaya geçmeli, simge güneşe dönmeli (ipucu: "Aydınlık temaya geç"). Güneşe dokununca aydınlık temaya dönmeli. Taşma olmamalı.
+- [ ] **55.2. Seçimin Kalıcılığı:**
+  - **Nasıl Test Edilir:** Karanlık temayı seçip uygulamayı tamamen kapatıp yeniden açın.
+  - **Beklenen Sonuç:** Uygulama seçilen temayla (ilk karede, aydınlık yanıp sönmeden) açılmalı. Hiç seçim yapılmamışsa cihazın tema ayarı izlenmeli (eski davranış).
+- [ ] **55.3. Ana Panelde Tema Geçişi:**
+  - **Nasıl Test Edilir:** Giriş yapın; üst çubukta yenile düğmesinin solundaki ay/güneş simgesine dokunun. Küçük ekranda ve büyük yazı boyutunda da deneyin.
+  - **Beklenen Sonuç:** Tema anında değişmeli; üst çubuktaki düğmeler (mod hapı, widget, tema, yenile, çıkış) taşmadan ve en az 44 dp dokunma alanıyla sığmalı. Çıkış yapıp tekrar girince seçim korunmalı.
+- [ ] **55.4. Kayıt ve Doğrulama Ekranları:**
+  - **Nasıl Test Edilir:** "Yeni Hesap Oluştur" ve e-posta doğrulama ekranlarının sağ üstündeki tema düğmesine dokunun.
+  - **Beklenen Sonuç:** Tema her ekranda aynı şekilde değişmeli; ekranlar arası geçişte seçim korunmalı.
+- [ ] **55.5. Erişilebilirlik:**
+  - **Nasıl Test Edilir:** TalkBack/VoiceOver açıkken düğmeye odaklanın.
+  - **Beklenen Sonuç:** "Koyu temaya geç" / "Aydınlık temaya geç" okunmalı.
