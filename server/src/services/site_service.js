@@ -1,7 +1,11 @@
 import crypto from 'crypto';
 import { pool } from '../db.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
-import { rotateLocalControlTokensForSite } from './device_service.js';
+import {
+  deviceIdsForSite,
+  rotateLocalControlTokensForDeviceIds,
+  rotateLocalControlTokensForSite,
+} from './device_service.js';
 import { createUser } from './user_service.js';
 import { sendSuperUserSiteDeletionEmail, sendSiteManagerInvitationEmail } from '../mailer.js';
 import {
@@ -15,6 +19,14 @@ import {
   normalizeEmail,
   validApprovalStatuses,
 } from '../utils/helpers.js';
+import {
+  createAttemptTracker,
+  decideRoleAfterManagerRemoval,
+  evaluateManagerRemoval,
+  isValidEmail,
+  safeEqualStrings,
+  sanitizeDisplayText,
+} from '../utils/site_rules.js';
 
 export async function createSite({
   name,
@@ -191,6 +203,17 @@ export async function updateSiteByCode({
     return null;
   }
 
+  // Yerel ağ (UDP/HTTP) ile açma KAPATILIYORSA önceki durumu oku: yalnızca açık -> kapalı geçişinde
+  // cihazlardaki mevcut yerel token'lar döndürülür (aynı değeri tekrar kaydetmek cihaz trafiği üretmez).
+  let localUdpWasEnabled = false;
+  if (featureLocalUdpEnabled === false) {
+    const previous = await pool.query(
+      `SELECT feature_local_udp_enabled FROM sites WHERE site_code = $1 LIMIT 1`,
+      [siteCode],
+    );
+    localUdpWasEnabled = previous.rows?.[0]?.feature_local_udp_enabled !== false;
+  }
+
   values.push(siteCode);
   const result = await pool.query(
     `
@@ -218,13 +241,30 @@ export async function updateSiteByCode({
         geofence_latitude,
         geofence_longitude,
         geofence_radius_meters,
+        block_apartment_counts,
         qr_totp_secret,
         qr_rotation_seconds,
         created_at
     `,
     values,
   );
-  return result.rows[0] || null;
+  const updatedSite = result.rows[0] || null;
+
+  // door-open#7: politika "yerel ağ kapalı" olunca cihazdaki mevcut token geçerli kalmasın.
+  // Yeni token kimseye verilmez (localDoorControlForStatus allowLocal=false); bayrak yeniden açılınca
+  // /status yeni token'ı dağıtır. Politika zaten kaydedildi: döndürme hatası yanıtı bozmaz, yalnız loglanır.
+  if (updatedSite && localUdpWasEnabled) {
+    try {
+      await rotateLocalControlTokensForSite(Number(siteCode), 'local_udp_disabled');
+    } catch (error) {
+      auditLog('local_control_token_rotation_failed', {
+        site_code: Number(siteCode),
+        reason: 'local_udp_disabled',
+        error: error?.message || String(error),
+      });
+    }
+  }
+  return updatedSite;
 }
 
 export async function siteExists(siteCode) {
@@ -309,34 +349,107 @@ export async function getManagedSiteCodes(authUser) {
   return new Set(result.rows.map((row) => Number(row.site_code)));
 }
 
-export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode) {
+/**
+ * Oturum kullanıcısının users.id (BIGSERIAL) değeri. `authUser.id` oturumda users.user_code'dur
+ * (5 haneli rastgele kimlik) — devices.owner_user_id ise users.id'ye bağlıdır; ikisi KARIŞTIRILMAZ.
+ * db_id yoksa (eski/sentetik nesne) null döner: owner_user_id karşılaştırması yapılmaz,
+ * sahiplik assigned_user_code (= user_code) üzerinden doğrulanır.
+ */
+export function authUserDbId(authUser) {
+  const raw = authUser?.db_id ?? authUser?.userId;
+  if (raw === null || raw === undefined || raw === '') {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** Oturum kullanıcısının users.user_code değeri (yoksa null). */
+export function authUserCodeValue(authUser) {
+  const parsed = Number(authUser?.user_code ?? authUser?.userCode ?? authUser?.id);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Cihazın sahibi bu kullanıcı mı?
+ * - owner_user_id (users.id) ↔ authUser.db_id
+ * - assigned_user_code (users.user_code) ↔ authUser.user_code
+ */
+export function isDeviceOwnedByAuthUser(device, authUser) {
+  if (!device || !authUser) {
+    return false;
+  }
+  const dbId = authUserDbId(authUser);
+  const userCode = authUserCodeValue(authUser);
+  const byOwnerId =
+    device.owner_user_id != null && dbId !== null && Number(device.owner_user_id) === dbId;
+  const byAssignedCode =
+    device.assigned_user_code != null && userCode !== null && Number(device.assigned_user_code) === userCode;
+  return byOwnerId || byAssignedCode;
+}
+
+export function isDeviceAssignableToManagedSite(device, managedSiteCodes, targetSiteCode, authUser = null) {
+  if (device?.is_defective) {
+    return false;
+  }
+
+  // Super user her geçerli cihazı atayabilir
   if (managedSiteCodes === null) {
     return true;
   }
+
+  // Hedef site yöneticinin yönettiği siteler arasında olmalı
   if (!managedSiteCodes.has(Number(targetSiteCode))) {
     return false;
   }
 
-  const deviceSiteCode =
-    device.site_code === null || device.site_code === undefined
-      ? null
-      : Number(device.site_code);
   const assignedDoorSiteCode =
     device.assigned_door_site_code === null ||
     device.assigned_door_site_code === undefined
       ? null
       : Number(device.assigned_door_site_code);
+  const deviceSiteCode =
+    device.site_code === null || device.site_code === undefined
+      ? null
+      : Number(device.site_code);
 
-  if (assignedDoorSiteCode !== null) {
-    return managedSiteCodes.has(assignedDoorSiteCode);
+  // Cihaz başka bir yönetilmeyen siteye/kapıya atanmışsa kesinlikle atanamaz
+  if (assignedDoorSiteCode !== null && !managedSiteCodes.has(assignedDoorSiteCode)) {
+    return false;
   }
-  if (deviceSiteCode !== null) {
-    return managedSiteCodes.has(deviceSiteCode);
+  if (deviceSiteCode !== null && !managedSiteCodes.has(deviceSiteCode)) {
+    return false;
   }
+
+  // Cihazın sahibi kontrolü
+  const hasOwner = device.owner_user_id != null || device.assigned_user_code != null;
+  if (hasOwner) {
+    if (authUser) {
+      // owner_user_id = users.id (authUser.db_id); assigned_user_code = users.user_code (authUser.user_code)
+      if (!isDeviceOwnedByAuthUser(device, authUser)) {
+        // Cihaz başka bir kullanıcıya ait, atanamaz!
+        return false;
+      }
+    }
+    // Kullanıcının kendi eklediği cihaz, hedef siteye atanabilir
+    return true;
+  }
+
+  // Cihaz daha önce yöneticinin yönettiği bir siteye atanmışsa (ve sahibi yoksa) yeniden atanabilir
+  if (deviceSiteCode !== null && managedSiteCodes.has(deviceSiteCode)) {
+    return true;
+  }
+  if (assignedDoorSiteCode !== null && managedSiteCodes.has(assignedDoorSiteCode)) {
+    return true;
+  }
+
+  // Kural: Site yöneticisi kendi eklemediği (sahiplenmediği) serbest şirket envanteri cihazını doğrudan kapıya atayamaz!
+  // Önce kutu QR / seri no ile cihazı sahiplenmesi gerekir.
   return false;
 }
 
-export function isDeviceVisibleToManagedSites(device, managedSiteCodes) {
+export function isDeviceVisibleToManagedSites(device, managedSiteCodes, authUser = null) {
+  // Super user tüm şirket envanterini görebilir
   if (managedSiteCodes === null) {
     return true;
   }
@@ -351,12 +464,20 @@ export function isDeviceVisibleToManagedSites(device, managedSiteCodes) {
       ? null
       : Number(device.assigned_door_site_code);
 
-  if (assignedDoorSiteCode !== null) {
-    return managedSiteCodes.has(assignedDoorSiteCode);
+  // Cihaz yöneticinin yönettiği bir siteye/kapıya atanmışsa görünür
+  if (assignedDoorSiteCode !== null && managedSiteCodes.has(assignedDoorSiteCode)) {
+    return true;
   }
-  if (deviceSiteCode !== null) {
-    return managedSiteCodes.has(deviceSiteCode);
+  if (deviceSiteCode !== null && managedSiteCodes.has(deviceSiteCode)) {
+    return true;
   }
+
+  // Cihazı bu yönetici bizzat kendisi eklemişse (claim etmişse) görünür
+  if (authUser && isDeviceOwnedByAuthUser(device, authUser)) {
+    return true;
+  }
+
+  // Kural: Site yöneticisi kendi eklemediği serbest şirket envanteri cihazını veya başkasına ait cihazı kesinlikle göremez!
   return false;
 }
 
@@ -402,6 +523,7 @@ export async function getSiteByCode(siteCode) {
         s.geofence_longitude,
         s.geofence_radius_meters,
         s.qr_totp_secret,
+        s.qr_rotation_seconds,
         sm.manager_user_code,
         manager.full_name AS manager_name,
         s.created_at
@@ -462,6 +584,8 @@ export async function listSitesForAuthUser({
           s.geofence_latitude,
           s.geofence_longitude,
           s.geofence_radius_meters,
+          s.block_apartment_counts,
+          s.qr_rotation_seconds,
           s.qr_totp_secret,
           s.deletion_status,
           s.deletion_requested_by_user_code,
@@ -538,6 +662,8 @@ export async function listSitesForAuthUser({
         s.geofence_latitude,
         s.geofence_longitude,
         s.geofence_radius_meters,
+        s.block_apartment_counts,
+        s.qr_rotation_seconds,
         s.qr_totp_secret,
         s.deletion_status,
         s.deletion_requested_by_user_code,
@@ -663,7 +789,20 @@ export async function listSiteDoors(siteCode, db = pool) {
         rs.wifi_rssi AS assigned_device_wifi_rssi,
         rs.wifi_signal_percent AS assigned_device_wifi_signal_percent,
         COALESCE(rs.last_seen_at, devices.last_online_at) AS assigned_device_last_seen_at,
+        devices.qr_reader_enabled AS assigned_device_qr_reader_enabled,
+        devices.local_control_token,
         sites.mqtt_site_id,
+        sites.feature_qr_enabled,
+        sites.feature_remote_open_enabled,
+        sites.feature_local_udp_enabled,
+        sites.feature_guest_pass_enabled,
+        sites.qr_entry_active,
+        sites.require_geofence,
+        sites.geofence_latitude,
+        sites.geofence_longitude,
+        sites.geofence_radius_meters,
+        sites.qr_totp_secret,
+        sites.qr_rotation_seconds,
         d.created_at
       FROM site_doors d
       INNER JOIN sites ON sites.site_code = d.site_code
@@ -718,7 +857,8 @@ export async function createSiteWithStructure({
   requireGeofence = false,
   geofenceLatitude = null,
   geofenceLongitude = null,
-  geofenceRadiusMeters = 75,
+  // Tek varsayılan sabit: 100 m (istemci + geofence_service.GEOFENCE_DEFAULT_RADIUS_METERS ile aynı).
+  geofenceRadiusMeters = 100,
 }) {
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
@@ -1088,63 +1228,77 @@ export function generateSiteJoinToken() {
 
 /**
  * Site için aktif Site Katılım QR Tokenini getirir veya yoksa otomatik üretir.
+ * Site satırı kilitlenerek (FOR NO KEY UPDATE) eşzamanlı iki isteğin aynı site için iki
+ * aktif token üretmesi (check-then-insert yarışı) engellenir.
  */
 export async function getOrCreateSiteJoinToken({ siteCode, authUser = null }) {
   const code = Number(siteCode);
   const userCode = authUser?.user_code ? Number(authUser.user_code) : (authUser?.id ? Number(authUser.id) : null);
 
-  // 1. Sitenin var olduğunu kontrol et
-  const siteRes = await pool.query(
-    `SELECT site_code, name, address, city, district FROM sites WHERE site_code = $1 LIMIT 1`,
-    [code],
-  );
-  if (siteRes.rowCount === 0) {
-    throw new Error('SITE_NOT_FOUND');
-  }
-  const site = siteRes.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  // 2. Aktif token var mı bak
-  const existingRes = await pool.query(
-    `SELECT id, site_code, token, is_active, created_at
-     FROM site_join_tokens
-     WHERE site_code = $1 AND is_active = TRUE
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [code],
-  );
+    // 1. Sitenin var olduğunu kontrol et ve siteyi kilitle
+    const siteRes = await client.query(
+      `SELECT site_code, name FROM sites WHERE site_code = $1 FOR NO KEY UPDATE`,
+      [code],
+    );
+    if (siteRes.rowCount === 0) {
+      throw new Error('SITE_NOT_FOUND');
+    }
+    const site = siteRes.rows[0];
 
-  if (existingRes.rowCount > 0) {
-    const row = existingRes.rows[0];
+    // 2. Aktif token var mı bak
+    const existingRes = await client.query(
+      `SELECT id, site_code, token, is_active, created_at
+       FROM site_join_tokens
+       WHERE site_code = $1 AND is_active = TRUE
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [code],
+    );
+
+    if (existingRes.rowCount > 0) {
+      const row = existingRes.rows[0];
+      await client.query('COMMIT');
+      return {
+        id: row.id,
+        site_code: Number(row.site_code),
+        site_name: site.name,
+        token: row.token,
+        qr_payload: `SITE_JOIN:${row.token}`,
+        is_active: row.is_active,
+        created_at: row.created_at,
+      };
+    }
+
+    // 3. Yoksa yeni üret
+    const newToken = generateSiteJoinToken();
+    const insertRes = await client.query(
+      `INSERT INTO site_join_tokens (site_code, token, created_by_user_code, is_active, created_at)
+       VALUES ($1, $2, $3, TRUE, NOW())
+       RETURNING id, site_code, token, is_active, created_at`,
+      [code, newToken, userCode],
+    );
+    await client.query('COMMIT');
+
+    const inserted = insertRes.rows[0];
     return {
-      id: row.id,
-      site_code: Number(row.site_code),
+      id: inserted.id,
+      site_code: Number(inserted.site_code),
       site_name: site.name,
-      token: row.token,
-      qr_payload: `SITE_JOIN:${row.token}`,
-      is_active: row.is_active,
-      created_at: row.created_at,
+      token: inserted.token,
+      qr_payload: `SITE_JOIN:${inserted.token}`,
+      is_active: inserted.is_active,
+      created_at: inserted.created_at,
     };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-
-  // 3. Yoksa yeni üret
-  const newToken = generateSiteJoinToken();
-  const insertRes = await pool.query(
-    `INSERT INTO site_join_tokens (site_code, token, created_by_user_code, is_active, created_at)
-     VALUES ($1, $2, $3, TRUE, NOW())
-     RETURNING id, site_code, token, is_active, created_at`,
-    [code, newToken, userCode],
-  );
-
-  const inserted = insertRes.rows[0];
-  return {
-    id: inserted.id,
-    site_code: Number(inserted.site_code),
-    site_name: site.name,
-    token: inserted.token,
-    qr_payload: `SITE_JOIN:${inserted.token}`,
-    is_active: inserted.is_active,
-    created_at: inserted.created_at,
-  };
 }
 
 /**
@@ -1154,18 +1308,18 @@ export async function rotateSiteJoinToken({ siteCode, authUser = null }) {
   const code = Number(siteCode);
   const userCode = authUser?.user_code ? Number(authUser.user_code) : (authUser?.id ? Number(authUser.id) : null);
 
-  const siteRes = await pool.query(
-    `SELECT site_code, name FROM sites WHERE site_code = $1 LIMIT 1`,
-    [code],
-  );
-  if (siteRes.rowCount === 0) {
-    throw new Error('SITE_NOT_FOUND');
-  }
-  const site = siteRes.rows[0];
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const siteRes = await client.query(
+      `SELECT site_code, name FROM sites WHERE site_code = $1 FOR NO KEY UPDATE`,
+      [code],
+    );
+    if (siteRes.rowCount === 0) {
+      throw new Error('SITE_NOT_FOUND');
+    }
+    const site = siteRes.rows[0];
 
     // Eski aktif tokenleri iptal et
     await client.query(
@@ -1197,7 +1351,7 @@ export async function rotateSiteJoinToken({ siteCode, authUser = null }) {
       created_at: inserted.created_at,
     };
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();
@@ -1270,30 +1424,58 @@ export async function getSiteByJoinToken({ token }) {
 }
 
 /**
- * Siteyi veritabanından kalıcı olarak siler.
+ * Siteyi veritabanından kalıcı olarak siler (tek transaction).
  */
 export async function deleteSitePermanently(siteCode, authUser) {
   const code = Number(siteCode);
-  const siteRes = await pool.query(
-    `SELECT name FROM sites WHERE site_code = $1`,
-    [code],
-  );
-  const siteName = siteRes.rows[0]?.name || `Site #${code}`;
 
-  // Daire kullanıcıları (users) silinmez; yalnızca daireler ve site kayıtları silinir.
-  await pool.query(
-    `UPDATE apartments SET resident_user_code = NULL WHERE site_code = $1`,
-    [code],
-  );
+  // Silinmeden ÖNCE site cihazlarını belirle: site silinince devices.site_code NULL olur ve
+  // sakinlerin elindeki yerel kontrol token'ı geçerli kalırdı.
+  let affectedDeviceIds = [];
+  try {
+    affectedDeviceIds = await deviceIdsForSite(code);
+  } catch (error) {
+    auditLog('site_delete_device_lookup_failed', { site_code: code, error: error.message });
+  }
 
-  const result = await pool.query(
-    `DELETE FROM sites WHERE site_code = $1`,
-    [code],
-  );
-  if (result.rowCount === 0) {
-    const err = new Error('Site bulunamadı.');
-    err.statusCode = 404;
-    throw err;
+  let siteName = `Site #${code}`;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const siteRes = await client.query(
+      `SELECT name FROM sites WHERE site_code = $1 FOR UPDATE`,
+      [code],
+    );
+    if (siteRes.rowCount === 0) {
+      const err = new Error('Site bulunamadı.');
+      err.statusCode = 404;
+      throw err;
+    }
+    siteName = siteRes.rows[0]?.name || siteName;
+
+    // Daire kullanıcıları (users) silinmez; yalnızca daireler ve site kayıtları silinir.
+    await client.query(
+      `UPDATE apartments SET resident_user_code = NULL WHERE site_code = $1`,
+      [code],
+    );
+
+    const result = await client.query(
+      `DELETE FROM sites WHERE site_code = $1`,
+      [code],
+    );
+    if (result.rowCount === 0) {
+      const err = new Error('Site bulunamadı.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
 
   auditLog('site_deleted', {
@@ -1302,6 +1484,18 @@ export async function deleteSitePermanently(siteCode, authUser) {
     actor_user_code: authUser?.userCode || authUser?.user_code || authUser?.id || null,
     actor_role: authUser?.role || null,
   });
+
+  if (affectedDeviceIds.length > 0) {
+    try {
+      await rotateLocalControlTokensForDeviceIds(affectedDeviceIds, 'site_deleted');
+    } catch (error) {
+      auditLog('local_control_token_rotation_failed', {
+        site_code: code,
+        reason: 'site_deleted',
+        error: error.message,
+      });
+    }
+  }
 
   return { ok: true, deleted: true, message: 'Site ve bağlı tüm kayıtlar başarıyla silindi.' };
 }
@@ -1604,6 +1798,15 @@ export async function requestSiteDeletionEmailCode({ siteCode, authUser }) {
   };
 }
 
+// E-posta ile silme kodu: site + kullanıcı başına ardışık hatalı deneme sınırı (brute-force koruması).
+// 5 hatada 15 dk kilitlenir ve geçerli kod da iptal edilir (çok süreçli çalışmada sayaç süreç başınadır;
+// kodun DB'de iptali sınırı süreçlerden bağımsız tutar).
+const deletionCodeAttempts = createAttemptTracker({
+  maxFailures: 5,
+  windowMs: 10 * 60 * 1000,
+  lockMs: 15 * 60 * 1000,
+});
+
 /**
  * Süper Kullanıcı E-Posta Koduyla Doğrudan Siteyi Kalıcı Olarak Sil
  */
@@ -1615,14 +1818,26 @@ export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUse
   }
 
   const numericSiteCode = Number(siteCode);
-  if (!Number.isInteger(numericSiteCode)) {
+  if (!Number.isSafeInteger(numericSiteCode) || numericSiteCode <= 0) {
     const err = new Error('Geçersiz site kodu.');
     err.statusCode = 400;
     throw err;
   }
 
+  const actorCode = Number(authUser?.userCode || authUser?.user_code || authUser?.id) || 0;
+  const attemptKey = `${numericSiteCode}:${actorCode}`;
+  const lockState = deletionCodeAttempts.check(attemptKey);
+  if (lockState.locked) {
+    const err = new Error(
+      `Çok fazla hatalı doğrulama denemesi yapıldı. Lütfen ${Math.ceil(lockState.retryAfterSeconds / 60)} dakika sonra yeni bir kod isteyerek tekrar deneyiniz.`,
+    );
+    err.statusCode = 429;
+    err.retryAfterSeconds = lockState.retryAfterSeconds;
+    throw err;
+  }
+
   const cleanCode = String(code || '').trim();
-  if (!cleanCode || cleanCode.length !== 6) {
+  if (!/^\d{6}$/.test(cleanCode)) {
     const err = new Error('Lütfen 6 haneli doğrulama kodunu eksiksiz giriniz.');
     err.statusCode = 400;
     throw err;
@@ -1652,11 +1867,45 @@ export async function confirmSiteDeletionWithEmailCode({ siteCode, code, authUse
     throw err;
   }
 
-  if (site.deletion_email_code !== cleanCode) {
+  // Sabit zamanlı karşılaştırma
+  if (!safeEqualStrings(site.deletion_email_code, cleanCode)) {
+    const failure = deletionCodeAttempts.recordFailure(attemptKey);
+    if (failure.locked) {
+      await pool.query(
+        `UPDATE sites
+         SET deletion_email_code = NULL,
+             deletion_email_code_expires_at = NULL
+         WHERE site_code = $1`,
+        [numericSiteCode],
+      );
+      auditLog('site_deletion_code_locked', {
+        site_code: numericSiteCode,
+        actor_user_code: actorCode || null,
+      });
+      const err = new Error('Çok fazla hatalı doğrulama denemesi yapıldı. Kod iptal edildi; lütfen daha sonra yeni bir kod isteyiniz.');
+      err.statusCode = 429;
+      throw err;
+    }
     const err = new Error('Girdiğiniz silme doğrulama kodu hatalı.');
     err.statusCode = 400;
     throw err;
   }
+
+  // Kod tek kullanımlıktır: tüketimi atomik yap (eşzamanlı ikinci istek aynı kodla silemesin).
+  const consumed = await pool.query(
+    `UPDATE sites
+     SET deletion_email_code = NULL,
+         deletion_email_code_expires_at = NULL
+     WHERE site_code = $1 AND deletion_email_code = $2
+     RETURNING site_code`,
+    [numericSiteCode, cleanCode],
+  );
+  if (consumed.rowCount === 0) {
+    const err = new Error('Bu silme doğrulama kodu artık geçerli değil. Lütfen yeni bir kod isteyiniz.');
+    err.statusCode = 400;
+    throw err;
+  }
+  deletionCodeAttempts.reset(attemptKey);
 
   // Kod doğru ve süresi geçerli -> Siteyi kalıcı olarak sil!
   return await deleteSitePermanently(numericSiteCode, authUser);
@@ -1734,21 +1983,38 @@ export async function getSiteManagers(siteCode) {
 
 /**
  * Siteye yeni yönetici davet eder veya mevcut kullanıcıyı site yöneticisi yapar.
+ *
+ * Yanıt, e-postanın sistemde kayıtlı olup olmadığına göre DEĞİŞMEZ (kullanıcı numaralandırma /
+ * enumeration kapatıldı): her iki durumda da aynı şekil ve aynı mesaj döner. Kayıtlı kullanıcıya
+ * yetki hemen tanımlanır; kayıtsız e-posta için bekleyen davet oluşturulur ve kullanıcı
+ * e-postasını doğruladığında (membership_service) otomatik uygulanır.
  */
 export async function inviteSiteManager({ siteCode, email, fullName, inviterUser }) {
   const code = Number(siteCode);
   const cleanEmail = normalizeEmail(email);
-  if (!cleanEmail) {
-    throw new Error('Geçerli bir e-posta adresi gereklidir.');
+  if (!isValidEmail(cleanEmail)) {
+    const err = new Error('Geçerli bir e-posta adresi gereklidir.');
+    err.statusCode = 400;
+    throw err;
   }
 
   const site = await getSiteByCode(code);
   if (!site) {
-    throw new Error('Site bulunamadı.');
+    const err = new Error('Site bulunamadı.');
+    err.statusCode = 404;
+    throw err;
   }
 
   const inviterUserCode = Number(inviterUser?.userCode || inviterUser?.user_code || inviterUser?.id);
-  const inviterName = inviterUser?.fullName || inviterUser?.full_name || 'Site Yöneticisi';
+  const inviterName = sanitizeDisplayText(
+    inviterUser?.fullName || inviterUser?.full_name || 'Site Yöneticisi',
+    100,
+  ) || 'Site Yöneticisi';
+  const cleanFullName = fullName ? (sanitizeDisplayText(fullName, 100) || null) : null;
+
+  const inviteMessage =
+    `Yönetici daveti ${cleanEmail} adresi için işleme alındı. Kullanıcı e-posta ile bilgilendirilir; ` +
+    'yönetici yetkisi hesap bu e-posta ile eşleştiğinde otomatik olarak tanımlanır.';
 
   // Kullanıcı sistemde kayıtlı mı?
   const existingUserRes = await pool.query(
@@ -1759,44 +2025,57 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
   if (existingUserRes.rowCount > 0) {
     const targetUser = existingUserRes.rows[0];
 
-    // Zaten bu sitenin yöneticisi mi?
-    const alreadyManagerRes = await pool.query(
-      `SELECT 1 FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2 LIMIT 1`,
-      [code, targetUser.user_code],
-    );
-    if (alreadyManagerRes.rowCount > 0) {
-      const err = new Error('Bu kullanıcı zaten bu sitenin yöneticisidir.');
-      err.statusCode = 409;
-      throw err;
-    }
+    // Yetki tanımlama tek transaction: kısmi yetki (ör. yalnızca site_manager_sites) kalmasın.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // site_manager_sites'a ekle
-    await pool.query(
-      `
-        INSERT INTO site_manager_sites (site_code, manager_user_code)
-        VALUES ($1, $2)
-        ON CONFLICT (site_code, manager_user_code) DO NOTHING
-      `,
-      [code, targetUser.user_code],
-    );
-
-    // site_memberships'e ekle
-    await pool.query(
-      `
-        INSERT INTO site_memberships (site_code, user_code, role, is_active)
-        VALUES ($1, $2, 'SITE_ADMIN', TRUE)
-        ON CONFLICT (site_code, user_code)
-        DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
-      `,
-      [code, targetUser.user_code],
-    );
-
-    // Eğer global rolü individual veya apartment_owner ise, site_manager yap
-    if (targetUser.role !== 'super_user' && targetUser.role !== 'site_manager') {
-      await pool.query(
-        `UPDATE users SET role = 'site_manager', updated_at = NOW() WHERE user_code = $1`,
-        [targetUser.user_code],
+      // Zaten bu sitenin yöneticisi mi?
+      const alreadyManagerRes = await client.query(
+        `SELECT 1 FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2 LIMIT 1`,
+        [code, targetUser.user_code],
       );
+      if (alreadyManagerRes.rowCount > 0) {
+        const err = new Error('Bu kullanıcı zaten bu sitenin yöneticisidir.');
+        err.statusCode = 409;
+        throw err;
+      }
+
+      // site_manager_sites'a ekle
+      await client.query(
+        `
+          INSERT INTO site_manager_sites (site_code, manager_user_code)
+          VALUES ($1, $2)
+          ON CONFLICT (site_code, manager_user_code) DO NOTHING
+        `,
+        [code, targetUser.user_code],
+      );
+
+      // site_memberships'e ekle
+      await client.query(
+        `
+          INSERT INTO site_memberships (site_code, user_code, role, is_active)
+          VALUES ($1, $2, 'SITE_ADMIN', TRUE)
+          ON CONFLICT (site_code, user_code)
+          DO UPDATE SET role = CASE WHEN site_memberships.role = 'SITE_OWNER' THEN 'SITE_OWNER' ELSE 'SITE_ADMIN' END, is_active = TRUE, updated_at = NOW()
+        `,
+        [code, targetUser.user_code],
+      );
+
+      // Eğer global rolü individual veya apartment_owner ise, site_manager yap
+      if (targetUser.role !== 'super_user' && targetUser.role !== 'site_manager') {
+        await client.query(
+          `UPDATE users SET role = 'site_manager', updated_at = NOW() WHERE user_code = $1`,
+          [targetUser.user_code],
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
     }
 
     // Bilgilendirme e-postası gönder
@@ -1812,27 +2091,29 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
       console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', mailErr?.message);
     }
 
-    await rotateLocalControlTokensForSite(code, 'site_manager_added');
+    try {
+      await rotateLocalControlTokensForSite(code, 'site_manager_added');
+    } catch (rotationError) {
+      auditLog('local_control_token_rotation_failed', {
+        site_code: code,
+        reason: 'site_manager_added',
+        error: rotationError.message,
+      });
+    }
 
-    return {
-      ok: true,
-      is_existing_user: true,
-      message: `${targetUser.full_name} başarıyla site yöneticisi olarak eklendi ve bilgilendirme e-postası gönderildi.`,
-      manager: {
-        user_code: Number(targetUser.user_code),
-        full_name: targetUser.full_name,
-        email: targetUser.email,
-        site_role: 'SITE_ADMIN',
-        is_owner: false,
-      },
-    };
+    auditLog('site_manager_added', {
+      site_code: code,
+      target_user_code: Number(targetUser.user_code),
+      actor_user_code: Number.isInteger(inviterUserCode) ? inviterUserCode : null,
+    });
+
+    return { ok: true, message: inviteMessage, email: cleanEmail };
   }
 
   // Kullanıcı sistemde henüz kayıtlı değil -> site_manager_invitations oluştur
   const token = `SMI-${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
-  const cleanFullName = fullName ? String(fullName).trim() : null;
 
-  const invRes = await pool.query(
+  await pool.query(
     `
       INSERT INTO site_manager_invitations (
         site_code,
@@ -1852,7 +2133,6 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
         invited_by_user_code = $4,
         expires_at = NOW() + INTERVAL '7 days',
         created_at = NOW()
-      RETURNING id, site_code, email, full_name, status, created_at, expires_at
     `,
     [code, cleanEmail, cleanFullName, inviterUserCode, token],
   );
@@ -1869,23 +2149,19 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
     console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', mailErr?.message);
   }
 
-  return {
-    ok: true,
-    is_existing_user: false,
-    message: `Yönetici daveti ${cleanEmail} adresine iletildi. Kullanıcı sisteme kaydolduğunda otomatik olarak site yöneticisi olacaktır.`,
-    invitation: {
-      id: Number(invRes.rows[0].id),
-      site_code: code,
-      email: cleanEmail,
-      full_name: cleanFullName,
-      status: 'PENDING',
-      expires_at: invRes.rows[0].expires_at,
-    },
-  };
+  auditLog('site_manager_invited', {
+    site_code: code,
+    actor_user_code: Number.isInteger(inviterUserCode) ? inviterUserCode : null,
+  });
+
+  return { ok: true, message: inviteMessage, email: cleanEmail };
 }
 
 /**
  * Siteden yardımcı yöneticiyi çıkarır.
+ * Tek transaction + FOR UPDATE: eşzamanlı iki çıkarma isteği sitenin son yöneticisini silemez.
+ * Global rol yalnızca kullanıcının başka yönettiği site kalmadıysa geri alınır; önceki rol tahmini:
+ * dairede aktif üyeliği varsa apartment_owner, yoksa individual.
  */
 export async function removeSiteManager({ siteCode, targetUserCode, callerUser }) {
   const code = Number(siteCode);
@@ -1893,57 +2169,124 @@ export async function removeSiteManager({ siteCode, targetUserCode, callerUser }
   const callerCode = Number(callerUser?.userCode || callerUser?.user_code || callerUser?.id);
   const isSuperUser = callerUser?.role === 'super_user';
 
-  // Sitede kaç yönetici var kontrol et
-  const countRes = await pool.query(
-    `SELECT COUNT(*)::INTEGER AS total FROM site_manager_sites WHERE site_code = $1`,
-    [code],
-  );
-  const totalManagers = countRes.rows[0]?.total ?? 0;
-  if (totalManagers <= 1) {
-    const err = new Error('Sitenin en az 1 aktif yöneticisi bulunmalıdır. Son yönetici çıkarılamaz.');
+  if (!Number.isSafeInteger(code) || code <= 0 || !Number.isSafeInteger(targetCode) || targetCode <= 0) {
+    const err = new Error('Geçersiz parametreler.');
     err.statusCode = 400;
     throw err;
   }
 
-  // Kurucu (SITE_OWNER) kontrolü
-  const membershipRes = await pool.query(
-    `SELECT role FROM site_memberships WHERE site_code = $1 AND user_code = $2 LIMIT 1`,
-    [code, targetCode],
-  );
-  const isOwner = membershipRes.rows[0]?.role === 'SITE_OWNER';
-  if (isOwner && !isSuperUser && callerCode !== targetCode) {
-    const err = new Error('Sitenin kurucu yöneticisi (Site Sahibi) yalnızca Süper Kullanıcı tarafından çıkarılabilir.');
-    err.statusCode = 403;
-    throw err;
-  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  await pool.query(
-    `DELETE FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`,
-    [code, targetCode],
-  );
+    // Sitenin yönetici satırlarını kilitle (aynı siteye eşzamanlı çıkarmalar sıraya girer).
+    const linkRes = await client.query(
+      `SELECT manager_user_code FROM site_manager_sites WHERE site_code = $1 FOR UPDATE`,
+      [code],
+    );
+    const memberRes = await client.query(
+      `
+        SELECT user_code, role
+        FROM site_memberships
+        WHERE site_code = $1 AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
+        FOR UPDATE
+      `,
+      [code],
+    );
 
-  await pool.query(
-    `DELETE FROM site_memberships WHERE site_code = $1 AND user_code = $2 AND role IN ('SITE_OWNER', 'SITE_ADMIN')`,
-    [code, targetCode],
-  );
+    const managerCodes = new Set([
+      ...linkRes.rows.map((row) => Number(row.manager_user_code)),
+      ...memberRes.rows.map((row) => Number(row.user_code)),
+    ]);
+    const targetMembership = memberRes.rows.find((row) => Number(row.user_code) === targetCode);
 
-  // Kullanıcının başka bir sitede yöneticiliği kaldı mı? Yoksa rolünü individual'a çek
-  const otherSitesRes = await pool.query(
-    `SELECT 1 FROM site_manager_sites WHERE manager_user_code = $1 LIMIT 1`,
-    [targetCode],
-  );
-  if (otherSitesRes.rowCount === 0) {
-    const userRow = await pool.query(`SELECT role FROM users WHERE user_code = $1 LIMIT 1`, [targetCode]);
-    if (userRow.rows[0]?.role === 'site_manager') {
-      await pool.query(`UPDATE users SET role = 'individual', updated_at = NOW() WHERE user_code = $1`, [targetCode]);
+    const verdict = evaluateManagerRemoval({
+      managerCodes: [...managerCodes],
+      targetCode,
+      callerCode,
+      isSuperUser,
+      targetIsOwner: targetMembership?.role === 'SITE_OWNER',
+    });
+    if (!verdict.ok) {
+      const err = new Error(verdict.message);
+      err.statusCode = verdict.statusCode;
+      throw err;
     }
+
+    await client.query(
+      `DELETE FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`,
+      [code, targetCode],
+    );
+
+    await client.query(
+      `DELETE FROM site_memberships WHERE site_code = $1 AND user_code = $2 AND role IN ('SITE_OWNER', 'SITE_ADMIN')`,
+      [code, targetCode],
+    );
+
+    // Kullanıcının başka bir sitede yöneticiliği / dairede üyeliği kaldı mı?
+    const stateRes = await client.query(
+      `
+        SELECT
+          (
+            EXISTS (SELECT 1 FROM site_manager_sites WHERE manager_user_code = $1)
+            OR EXISTS (
+              SELECT 1 FROM site_memberships
+              WHERE user_code = $1 AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
+            )
+          ) AS has_other_managed_sites,
+          (
+            EXISTS (SELECT 1 FROM apartment_memberships WHERE user_code = $1 AND is_active = TRUE)
+            OR EXISTS (SELECT 1 FROM apartments WHERE resident_user_code = $1)
+          ) AS has_apartment_membership
+      `,
+      [targetCode],
+    );
+    const userRes = await client.query(
+      `SELECT role FROM users WHERE user_code = $1 FOR UPDATE`,
+      [targetCode],
+    );
+    const nextRole = decideRoleAfterManagerRemoval({
+      currentRole: userRes.rows[0]?.role,
+      hasOtherManagedSites: Boolean(stateRes.rows[0]?.has_other_managed_sites),
+      hasApartmentMembership: Boolean(stateRes.rows[0]?.has_apartment_membership),
+    });
+    if (nextRole) {
+      await client.query(
+        `UPDATE users SET role = $2, updated_at = NOW() WHERE user_code = $1 AND role = 'site_manager'`,
+        [targetCode, nextRole],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
 
-  await rotateLocalControlTokensForSite(code, 'site_manager_removed');
+  let tokenRotationFailed = false;
+  try {
+    await rotateLocalControlTokensForSite(code, 'site_manager_removed');
+  } catch (rotationError) {
+    tokenRotationFailed = true;
+    auditLog('local_control_token_rotation_failed', {
+      site_code: code,
+      reason: 'site_manager_removed',
+      error: rotationError.message,
+    });
+  }
+
+  auditLog('site_manager_removed', {
+    site_code: code,
+    target_user_code: targetCode,
+    actor_user_code: Number.isInteger(callerCode) ? callerCode : null,
+  });
 
   return {
     ok: true,
     message: 'Kullanıcı site yöneticiliğinden çıkarıldı.',
+    ...(tokenRotationFailed ? { local_token_rotation_ok: false } : {}),
   };
 }
 

@@ -2,10 +2,17 @@ process.env.TZ = 'Europe/Istanbul';
 
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { generateLocalControlToken } from './utils/helpers.js';
 
 dotenv.config();
 
 const { Pool } = pg;
+
+// Dayanıklılık (donma/kilitlenme önleme): havuz sınırlı, bağlantı/sorgu zaman aşımlı; açık kalmış
+// transaction sunucu tarafında kapatılır; boştaki bağlantı hatası süreci düşürmez.
+const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) || 12);
+const DB_STATEMENT_TIMEOUT_MS = Math.max(1000, Number(process.env.DB_STATEMENT_TIMEOUT_MS) || 30000);
+const DB_CONNECT_TIMEOUT_MS = Math.max(1000, Number(process.env.DB_CONNECT_TIMEOUT_MS) || 5000);
 
 export const pool = new Pool({
   host: process.env.DB_HOST,
@@ -13,7 +20,19 @@ export const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  options: "-c timezone=Europe/Istanbul",
+  options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',
+  max: DB_POOL_MAX,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,
+  statement_timeout: DB_STATEMENT_TIMEOUT_MS,
+  query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,
+  keepAlive: true,
+  application_name: 'kapi-api',
+});
+
+pool.on('error', (error) => {
+  // eslint-disable-next-line no-console
+  console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code || error?.message);
 });
 
 export async function checkDbConnection() {
@@ -28,6 +47,13 @@ export async function checkDbConnection() {
 export async function ensureDbSchema() {
   const client = await pool.connect();
   try {
+    // Temel tablolar migration'larla gelir; bos veritabaninda ALTER TABLE users yerine anlasilir bir hata ver.
+    const baseTables = await client.query(`SELECT to_regclass('public.users') AS users_table`);
+    if (!baseTables.rows[0]?.users_table) {
+      throw new Error(
+        'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scripts/migrate.js --apply` calistirin.',
+      );
+    }
     await client.query(`
       CREATE TABLE IF NOT EXISTS app_maintenance_runs (
         maintenance_key TEXT PRIMARY KEY,
@@ -59,6 +85,16 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMPTZ
     `);
     await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT,
+      ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_password_reset_token
+      ON users (password_reset_token_hash)
+      WHERE password_reset_token_hash IS NOT NULL
+    `);
+    await client.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -72,9 +108,41 @@ export async function ensureDbSchema() {
         END IF;
       END $$;
     `);
+    // users_role_check: tanım zaten 4 rolü de içeriyorsa DOKUNULMAZ (her açılışta DROP/ADD yapılmaz);
+    // yalnızca kısıt yoksa eklenir veya eski (individual içermeyen) tanımsa yenilenir.
     await client.query(`
-      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-      ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('super_user', 'site_manager', 'apartment_owner', 'individual'));
+      DO $$
+      DECLARE
+        current_def TEXT;
+      BEGIN
+        SELECT pg_get_constraintdef(c.oid) INTO current_def
+        FROM pg_constraint c
+        WHERE c.conname = 'users_role_check' AND c.conrelid = 'users'::regclass;
+
+        IF current_def IS NULL THEN
+          ALTER TABLE users ADD CONSTRAINT users_role_check
+            CHECK (role IN ('super_user', 'site_manager', 'apartment_owner', 'individual'));
+        ELSIF current_def NOT LIKE '%super_user%'
+           OR current_def NOT LIKE '%site_manager%'
+           OR current_def NOT LIKE '%apartment_owner%'
+           OR current_def NOT LIKE '%individual%' THEN
+          ALTER TABLE users DROP CONSTRAINT users_role_check;
+          ALTER TABLE users ADD CONSTRAINT users_role_check
+            CHECK (role IN ('super_user', 'site_manager', 'apartment_owner', 'individual'));
+        END IF;
+      END $$;
+    `);
+    // users.updated_at: membership/site servisleri bu kolonu güncelliyor; hiçbir migration eklemediği için
+    // (eski kurulumlarda eksik olabilir) idempotent olarak garanti edilir.
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    `);
+    // LOWER(email) ile yapılan aramalar (giriş, kayıt, doğrulama) için fonksiyonel indeks (benzersiz DEĞİL:
+    // eski verideki büyük/küçük harf çakışmaları başlatmayı engellemesin).
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email_lower
+      ON users (LOWER(email))
     `);
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique
@@ -207,7 +275,13 @@ export async function ensureDbSchema() {
     `);
     await client.query(`
       ALTER TABLE sites
-      ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER NOT NULL DEFAULT 75
+      ADD COLUMN IF NOT EXISTS geofence_radius_meters INTEGER NOT NULL DEFAULT 100
+    `);
+    // Tek varsayılan yarıçap 100 m (istemci + geofence_service ile aynı). Eski kurulumlarda sütun varsayılanı 75'ti:
+    // yalnızca SÜTUN VARSAYILANI idempotent olarak 100'e çekilir; mevcut site satırlarının değerlerine DOKUNULMAZ.
+    await client.query(`
+      ALTER TABLE sites
+      ALTER COLUMN geofence_radius_meters SET DEFAULT 100
     `);
     await client.query(`
       ALTER TABLE sites
@@ -344,14 +418,44 @@ export async function ensureDbSchema() {
       ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ
     `);
     await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS is_defective BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS defective_reason TEXT
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS defective_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE devices
+      ADD COLUMN IF NOT EXISTS inventory_notes TEXT
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_devices_is_defective
+      ON devices(is_defective)
+    `);
+    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_devices_owner_user_id
       ON devices(owner_user_id)
     `);
-    await client.query(`
-      UPDATE devices
-      SET local_control_token = md5(random()::text || clock_timestamp()::text || device_uid || id::text)
+    // Yerel kontrol token'ı olmayan cihazlara CSPRNG ile token üret (eski kod md5(random()) kullanıyordu).
+    const missingTokenDevices = await client.query(`
+      SELECT id FROM devices
       WHERE local_control_token IS NULL OR TRIM(local_control_token) = ''
     `);
+    for (const row of missingTokenDevices.rows) {
+      await client.query(
+        `
+          UPDATE devices
+          SET local_control_token = $1
+          WHERE id = $2 AND (local_control_token IS NULL OR TRIM(local_control_token) = '')
+        `,
+        [generateLocalControlToken(), row.id],
+      );
+    }
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique
       ON devices(mqtt_username)
@@ -603,39 +707,10 @@ export async function ensureDbSchema() {
       ON qr_access_tokens(user_code)
     `);
 
-    const apartmentResetMaintenanceKey =
-      'reset_apartment_residents_after_site_approval_flow_v1';
-    const maintenanceCheck = await client.query(
-      `
-        SELECT 1
-        FROM app_maintenance_runs
-        WHERE maintenance_key = $1
-        LIMIT 1
-      `,
-      [apartmentResetMaintenanceKey],
-    );
-
-    if (maintenanceCheck.rowCount === 0) {
-      await client.query(`
-        UPDATE apartments
-        SET
-          resident_user_code = NULL,
-          resident_pin_code = NULL
-        WHERE resident_user_code IS NOT NULL
-           OR resident_pin_code IS NOT NULL
-      `);
-      await client.query(`
-        DELETE FROM users
-        WHERE role = 'apartment_owner'
-      `);
-      await client.query(
-        `
-          INSERT INTO app_maintenance_runs (maintenance_key)
-          VALUES ($1)
-        `,
-        [apartmentResetMaintenanceKey],
-      );
-    }
+    // NOT: Eskiden burada tek seferlik "apartment_owner kullanıcılarını sil / daire sakinlerini sıfırla"
+    // bloğu vardı (reset_apartment_residents_after_site_approval_flow_v1). Üretimde uygulanmıştı;
+    // yedekten dönüş/yeni kurulumda kullanıcı verisini silme riski taşıdığı için KALDIRILDI.
+    // ensureDbSchema yalnızca additive ve IF NOT EXISTS DDL içerir.
 
     // Kapı Geçiş & Erişim Logları Tablosu
     await client.query(`
@@ -660,6 +735,11 @@ export async function ensureDbSchema() {
       ON door_access_logs(site_code, opened_at DESC);
       CREATE INDEX IF NOT EXISTS idx_door_access_logs_door
       ON door_access_logs(door_id, opened_at DESC);
+      -- 026: cihaz offline loglarının idempotent teslimi (door_log_service / MQTT logs_ack)
+      ALTER TABLE door_access_logs ADD COLUMN IF NOT EXISTS device_uid TEXT;
+      ALTER TABLE door_access_logs ADD COLUMN IF NOT EXISTS client_log_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log
+      ON door_access_logs(device_uid, client_log_id) WHERE client_log_id IS NOT NULL;
     `);
 
     // Cihaz Çevrimiçi Kalma Süreleri ve Wi-Fi Kopma / Offline Logları Tablosu
@@ -719,9 +799,6 @@ export async function ensureDbSchema() {
       CREATE INDEX IF NOT EXISTS idx_qr_access_tokens_expires
       ON qr_access_tokens(expires_at);
 
-      -- Test WROOM cihazı için QR okuyucu yetkisini varsayılan aktif et
-      UPDATE devices SET qr_reader_enabled = TRUE WHERE device_uid = '00861A0D5020';
-
       -- 020: QR Güvenliği, Token İptali, Geofence ve Sahte Konum Koruması
       ALTER TABLE qr_access_tokens
       ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ;
@@ -757,6 +834,7 @@ export async function ensureDbSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(LOWER(email));
       CREATE INDEX IF NOT EXISTS idx_email_verifications_created ON email_verifications(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_email_verifications_email_created ON email_verifications(LOWER(email), created_at DESC);
 
       CREATE TABLE IF NOT EXISTS site_memberships (
         id BIGSERIAL PRIMARY KEY,
@@ -815,6 +893,7 @@ export async function ensureDbSchema() {
       CREATE INDEX IF NOT EXISTS idx_join_requests_site_status ON join_requests(site_code, status);
       CREATE INDEX IF NOT EXISTS idx_join_requests_user ON join_requests(user_code);
       CREATE INDEX IF NOT EXISTS idx_join_requests_apartment ON join_requests(apartment_id);
+      ALTER TABLE join_requests ADD COLUMN IF NOT EXISTS notes TEXT;
 
       ALTER TABLE site_doors
       ADD COLUMN IF NOT EXISTS access_scope TEXT NOT NULL DEFAULT 'SITE_COMMON';

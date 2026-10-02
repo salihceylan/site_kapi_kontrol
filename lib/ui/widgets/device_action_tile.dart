@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class DeviceActionTile extends StatelessWidget {
   const DeviceActionTile({
@@ -20,55 +20,39 @@ class DeviceActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
+    final p = context.palette;
+    final textTheme = Theme.of(context).textTheme;
+    const tone = AppTone.primary;
+    // Kart satırın/sütunun tüm genişliğini kaplar (eski Container(width: double.infinity) gibi).
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: AppDecorations.glassCard(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-              shape: BoxShape.circle,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpace.md),
+              decoration: BoxDecoration(
+                color: tone.tint(p),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: tone.ink(p), size: 28),
             ),
-            child: Icon(
-              icon,
-              color: isDark ? AppColors.accentLight : AppColors.primary,
-              size: 28,
+            const SizedBox(height: AppSpace.md),
+            Text(title, style: textTheme.titleLarge),
+            const SizedBox(height: AppSpace.xs),
+            Text(description, style: textTheme.bodyMedium),
+            const SizedBox(height: AppSpace.lg),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onPressed,
+                icon: Icon(icon, size: 18),
+                label: Text(buttonLabel),
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
-              color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 13.5,
-              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon, size: 18),
-              label: Text(buttonLabel),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

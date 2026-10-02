@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../ev_otomasyon"
+		}
+	],
+	"settings": {
+		"platformio-ide.autoRebuildAutocompleteIndex": true,
+		"git.autorefresh": false
+	}
+}

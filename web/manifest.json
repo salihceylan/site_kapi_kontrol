@@ -1,11 +1,11 @@
 {
-    "name": "site_kapi_kontrol",
-    "short_name": "site_kapi_kontrol",
+    "name": "AHBU - Akıllı Kapı ve Site Yönetimi",
+    "short_name": "AHBU",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F172A",
+    "theme_color": "#0F172A",
+    "description": "AHBU - Akıllı Kapı ve Site Yönetim Sistemi",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

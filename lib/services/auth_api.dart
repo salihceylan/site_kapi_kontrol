@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
@@ -25,14 +26,48 @@ import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/background_work.dart';
 
 class AuthApi {
-  AuthApi({required this.baseUrl});
-
-  static const Duration _requestTimeout = Duration(seconds: 45);
-  static const Duration _retryDelay = Duration(milliseconds: 350);
+  AuthApi({
+    required this.baseUrl,
+    http.Client? client,
+    Duration? requestTimeout,
+    Duration? readTimeout,
+    Duration? doorOpenTimeout,
+    Duration? retryDelay,
+  })  : _client = client ?? http.Client(),
+        _requestTimeout = requestTimeout ?? const Duration(seconds: 45),
+        _readTimeout = readTimeout ?? _defaultReadTimeout(requestTimeout),
+        _doorOpenTimeout = doorOpenTimeout ?? const Duration(seconds: 10),
+        _retryDelay = retryDelay ?? const Duration(milliseconds: 350);
 
   final String baseUrl;
+  final http.Client _client;
+
+  /// Okuma (GET) isteklerinin varsayılan zaman aşımı üst sınırı.
+  static const Duration _maxDefaultReadTimeout = Duration(seconds: 20);
+
+  /// Okuma zaman aşımı: açıkça verilmediyse 20 sn; genel [requestTimeout] daha kısaysa o.
+  static Duration _defaultReadTimeout(Duration? requestTimeout) {
+    if (requestTimeout != null && requestTimeout < _maxDefaultReadTimeout) {
+      return requestTimeout;
+    }
+    return _maxDefaultReadTimeout;
+  }
+
+  /// Genel (yazma: POST/PATCH/PUT/DELETE) istek zaman aşımı. Yazmalar tekrar edilmez ve
+  /// sunucu tarafında uzun sürebilir (site oluşturma vb.); bu yüzden okumadan uzundur.
+  final Duration _requestTimeout;
+
+  /// Okuma (GET) zaman aşımı: kullanıcı beklerken arayüz kilitli hissettirmesin (20 sn).
+  final Duration _readTimeout;
+
+  /// Kapı açma komutları (bulut + QR) için kısa zaman aşımı: kullanıcı kapıda bekler.
+  final Duration _doorOpenTimeout;
+
+  /// Yalnızca GET isteklerinde yeniden deneme öncesi bekleme.
+  final Duration _retryDelay;
 
   Future<UserSession> login({
     required String email,
@@ -72,7 +107,7 @@ class AuthApi {
         'password': password,
       },
     );
-    _ensureStatus(response, 201);
+    _ensureStatus(response, 201, unauthorizedIsSession: false);
     return _decodePayload(response);
   }
 
@@ -102,7 +137,23 @@ class AuthApi {
         'email': email,
       },
     );
-    _ensureStatus(response, 200);
+    _ensureStatus(response, 200, unauthorizedIsSession: false);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> forgotPassword({
+    required String email,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/forgot-password');
+    final response = await _sendRequest(
+      method: 'POST',
+      uri: uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: {
+        'email': email,
+      },
+    );
+    _ensureStatus(response, 200, unauthorizedIsSession: false);
     return _decodePayload(response);
   }
 
@@ -209,6 +260,7 @@ class AuthApi {
     String? phoneNumber,
     bool? isActive,
     UserRole? role,
+    bool? emailVerified,
   }) async {
     final body = <String, dynamic>{
       'full_name': fullName,
@@ -217,6 +269,8 @@ class AuthApi {
       'phone_number': phoneNumber,
       'is_active': isActive,
       if (role != null) 'role': role.apiValue,
+      // Süper kullanıcı e-posta doğrulama durumunu elle değiştirebilir (null = değiştirme).
+      'email_verified': emailVerified,
     }..removeWhere((_, value) => value == null);
 
     final response = await _authorizedRequest(
@@ -597,8 +651,9 @@ class AuthApi {
       if (siteCode != null) 'site_code': siteCode.toString(),
       if (doorId != null) 'door_id': doorId.toString(),
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
-      if (startDate != null) 'start_date': startDate.toIso8601String(),
-      if (endDate != null) 'end_date': endDate.toIso8601String(),
+      // Saat dilimi belirsizliğini önlemek için tarihler UTC olarak gönderilir.
+      if (startDate != null) 'start_date': startDate.toUtc().toIso8601String(),
+      if (endDate != null) 'end_date': endDate.toUtc().toIso8601String(),
     };
 
     final uri = Uri.parse('$baseUrl${_managementPrefix(role)}/door-logs')
@@ -632,7 +687,7 @@ class AuthApi {
       'page_size': pageSize.toString(),
     };
 
-    final uri = Uri.parse('$baseUrl/admin/devices/$deviceUid/connectivity-logs')
+    final uri = Uri.parse('$baseUrl/admin/devices/${Uri.encodeComponent(deviceUid)}/connectivity-logs')
         .replace(queryParameters: query);
 
     final response = await _sendRequest(
@@ -709,7 +764,11 @@ class AuthApi {
       token: token,
     );
 
-    if (response.statusCode == 204 || response.body.isEmpty) {
+    // Boş gövde yalnızca BAŞARILI (2xx) yanıtta silme sayılır; boş gövdeli 4xx/5xx hata olarak
+    // _ensureStatus'a düşer (geri dönüşsüz işlemde yanlış başarı gösterilmez).
+    final status = response.statusCode;
+    if (status == 204 ||
+        (status >= 200 && status < 300 && response.body.trim().isEmpty)) {
       return {'ok': true, 'deleted': true};
     }
     _ensureStatus(response, 200);
@@ -959,11 +1018,17 @@ class AuthApi {
   Future<DoorRuntimeStatus> openDoor({
     required String token,
     required int doorId,
+    Map<String, dynamic>? location,
   }) async {
+    // Konum alanları (C3): latitude, longitude, accuracy, timestamp (ISO UTC), is_mocked.
     final response = await _authorizedRequest(
       method: 'POST',
       path: '/app/doors/$doorId/open',
       token: token,
+      body: location,
+      timeout: _doorOpenTimeout,
+      timeoutMessage:
+          'Kapı komutuna zamanında yanıt alınamadı. Kapı açılmış olabilir; durumu kontrol edip gerekirse tekrar deneyin.',
     );
 
     _ensureStatus(response, 202);
@@ -972,6 +1037,30 @@ class AuthApi {
       'Kapi komutu',
       () => DoorRuntimeStatus.fromJson(payload),
     );
+  }
+
+  Future<Map<String, dynamic>> openDoorWithScannedQr({
+    required String token,
+    required String qrPayload,
+    Map<String, dynamic>? location,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/doors/scan-qr-open',
+      token: token,
+      body: {
+        'qr_payload': qrPayload.trim(),
+        // Konum alanları (C3) gövdede üst düzey gönderilir.
+        ...?location,
+      },
+      timeout: _doorOpenTimeout,
+      timeoutMessage:
+          'Karekod doğrulamasına zamanında yanıt alınamadı. Kapı açılmış olabilir; durumu kontrol edip gerekirse tekrar deneyin.',
+    );
+
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return payload;
   }
 
   Future<void> notifyLocalDoorOpened({
@@ -1113,12 +1202,15 @@ class AuthApi {
     String? fullName,
     String? email,
     String? password,
+    String? currentPassword,
     String? phoneNumber,
   }) async {
     final body = <String, dynamic>{
       'full_name': fullName,
       'email': email,
       'password': password,
+      // C8: şifre değişiyorsa mevcut şifre sunucuya zorunlu olarak iletilir.
+      if (password != null) 'current_password': currentPassword,
       'phone_number': phoneNumber,
     }..removeWhere((_, value) => value == null);
 
@@ -1129,6 +1221,36 @@ class AuthApi {
       body: body,
     );
 
+    // Yanlış mevcut şifre sunucuda 400 CURRENT_PASSWORD_INVALID döner (oturumu kapatmaz). Bu uçta
+    // 401 yalnızca gerçek oturum sorunudur (token iptal/süre dolumu/silinmiş kullanıcı) ve
+    // SessionExpiredException olarak oturumu sonlandırır.
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Profil bilgisi', () {
+      final user = payload['user'] as Map<String, dynamic>;
+      // Şifre değişiminde sunucu yeni bir token döndürürse (parola sürümü claim'i) onu kullan.
+      final newToken = payload['token'];
+      return _toUserSession(
+        user: user,
+        token: newToken is String && newToken.isNotEmpty ? newToken : token,
+        fallbackId: id,
+        fallbackRole: role,
+        fallbackIsActive: isActive,
+      );
+    });
+  }
+
+  /// GET /me: sunucudaki güncel kullanıcı kaydı (rol/aktiflik için tek doğruluk kaynağı, C11).
+  /// 401 -> [SessionExpiredException]; 403 (pasif/onaysız hesap) -> [ApiException] (statusCode 403).
+  Future<UserSession> fetchMe({
+    required String token,
+    required UserSession current,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/me',
+      token: token,
+    );
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return _parsePayload('Profil bilgisi', () {
@@ -1136,9 +1258,9 @@ class AuthApi {
       return _toUserSession(
         user: user,
         token: token,
-        fallbackId: id,
-        fallbackRole: role,
-        fallbackIsActive: isActive,
+        fallbackId: current.id,
+        fallbackRole: current.role,
+        fallbackIsActive: current.isActive,
       );
     });
   }
@@ -1156,7 +1278,7 @@ class AuthApi {
       body: body,
     );
 
-    _ensureStatus(response, expectedCode);
+    _ensureStatus(response, expectedCode, unauthorizedIsSession: false);
     final payload = _decodePayload(response);
     return _parsePayload('Oturum bilgisi', () {
       final user = payload['user'] as Map<String, dynamic>;
@@ -1175,6 +1297,8 @@ class AuthApi {
     required String path,
     required String token,
     Map<String, dynamic>? body,
+    Duration? timeout,
+    String? timeoutMessage,
   }) async {
     final uri = Uri.parse('$baseUrl$path');
     final headers = {
@@ -1184,49 +1308,61 @@ class AuthApi {
 
     switch (method) {
       case 'GET':
-        return _sendRequest(method: 'GET', uri: uri, headers: headers);
       case 'DELETE':
-        return _sendRequest(method: 'DELETE', uri: uri, headers: headers);
-      case 'PATCH':
         return _sendRequest(
-          method: 'PATCH',
+          method: method,
           uri: uri,
           headers: headers,
-          body: body,
+          timeout: timeout,
+          timeoutMessage: timeoutMessage,
         );
+      case 'PATCH':
+      case 'PUT':
       case 'POST':
         return _sendRequest(
-          method: 'POST',
+          method: method,
           uri: uri,
           headers: headers,
           body: body,
+          timeout: timeout,
+          timeoutMessage: timeoutMessage,
         );
       default:
         throw ArgumentError('Desteklenmeyen method: $method');
     }
   }
 
+  /// Ağ isteği gönderir. Otomatik yeniden deneme YALNIZCA GET isteklerinde yapılır;
+  /// mutasyonlar (POST/PATCH/PUT/DELETE) çift işlem riskine karşı asla tekrar edilmez.
   Future<http.Response> _sendRequest({
     required String method,
     required Uri uri,
     required Map<String, String> headers,
     Map<String, dynamic>? body,
+    Duration? timeout,
+    String? timeoutMessage,
     bool retryOnTransportError = true,
   }) async {
     Future<http.Response> execute() {
       switch (method) {
         case 'GET':
-          return http.get(uri, headers: headers);
+          return _client.get(uri, headers: headers);
         case 'DELETE':
-          return http.delete(uri, headers: headers);
+          return _client.delete(uri, headers: headers);
         case 'PATCH':
-          return http.patch(
+          return _client.patch(
+            uri,
+            headers: headers,
+            body: jsonEncode(body ?? <String, dynamic>{}),
+          );
+        case 'PUT':
+          return _client.put(
             uri,
             headers: headers,
             body: jsonEncode(body ?? <String, dynamic>{}),
           );
         case 'POST':
-          return http.post(
+          return _client.post(
             uri,
             headers: headers,
             body: jsonEncode(body ?? <String, dynamic>{}),
@@ -1236,70 +1372,370 @@ class AuthApi {
       }
     }
 
+    final isIdempotentRead = method == 'GET';
+    final canRetry = retryOnTransportError && isIdempotentRead;
+
+    final http.Response response;
     try {
-      return await execute().timeout(_requestTimeout);
+      response = await execute().timeout(
+        timeout ?? (isIdempotentRead ? _readTimeout : _requestTimeout),
+      );
     } on TimeoutException {
-      if (retryOnTransportError) {
-        await Future<void>.delayed(_retryDelay);
-        return _sendRequest(
-          method: method,
-          uri: uri,
-          headers: headers,
-          body: body,
-          retryOnTransportError: false,
-        );
-      }
-      throw ApiException('Sunucu zaman asimina ugradi. Tekrar deneyin.');
+      // Okuma zaman aşımında yeniden DENENMEZ: ikinci bekleme kullanıcının bekleme süresini
+      // iki katına çıkarırdı (20 sn -> 40 sn); mesaj zaten elle yeniden denemeyi önerir.
+      // Hızlı aktarım hataları (ClientException) için tek yeniden deneme aşağıda korunur.
+      throw ApiException(
+        timeoutMessage ??
+            (isIdempotentRead
+                ? 'Sunucu yanıt vermedi, tekrar deneyin.'
+                : 'Sunucu zaman aşımına uğradı. İşlem tamamlanmış olabilir; durumu kontrol edip tekrar deneyin.'),
+      );
     } on http.ClientException catch (error) {
-      if (retryOnTransportError) {
+      if (canRetry) {
         await Future<void>.delayed(_retryDelay);
         return _sendRequest(
           method: method,
           uri: uri,
           headers: headers,
           body: body,
+          timeout: timeout,
+          timeoutMessage: timeoutMessage,
           retryOnTransportError: false,
         );
       }
       throw ApiException(_mapClientError(error));
     }
+
+    await _decodeLargeBodyInBackground(response);
+    return response;
   }
 
+  /// [_decodePayload] için gövdesi büyük (>= [BackgroundWork.jsonIsolateThresholdBytes]) yanıtların
+  /// JSON'u arka plan izolesinde çözülür: yüzlerce KB'lık yanıtta (site yapısı, sakin ağacı, günlük
+  /// sayfaları) ana izolede `jsonDecode` kare bütçesini aşabilir. Küçük gövdeler ana izolede kalır.
+  /// Çözülen harita yanıt nesnesine bağlanır ([_decodePayload] eşzamanlı çağrılarının imzası ve
+  /// hata eşlemesi değişmez); çözülemezse bağlanmaz ve eski eşzamanlı yol aynı hatayı üretir.
+  final Expando<Map<String, dynamic>> _offloadedPayloads =
+      Expando<Map<String, dynamic>>('AuthApi.offloadedPayloads');
+
+  Future<void> _decodeLargeBodyInBackground(http.Response response) async {
+    if (response.bodyBytes.length < BackgroundWork.jsonIsolateThresholdBytes) {
+      return;
+    }
+    try {
+      // Sunucu UTF-8 JSON döndürür: baytlar doğrudan arka plana gider (bayt -> metin çevrimi de
+      // orada yapılır). Başka bir karakter kodlaması bildirilirse http paketinin çözümlemesi
+      // (response.body) korunur ve metin gönderilir.
+      final Object? raw = _isUtf8Json(response)
+          ? await BackgroundWork.run<Uint8List, Object?>(
+              decodeJsonUtf8Bytes,
+              response.bodyBytes,
+              debugLabel: 'authApi.jsonDecode',
+            )
+          : await BackgroundWork.run<String, Object?>(
+              decodeJsonText,
+              response.body,
+              debugLabel: 'authApi.jsonDecode',
+            );
+      _offloadedPayloads[response] =
+          raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+    } catch (_) {
+      // Geçersiz JSON / gönderilemeyen hata: _decodePayload eşzamanlı çözümleyip eski hata
+      // eşlemesini (ApiException) uygular.
+    }
+  }
+
+  static final RegExp _charsetPattern = RegExp(r'charset\s*=\s*"?([^";\s]+)');
+
+  /// Yanıt UTF-8 JSON mu? (`charset=utf-8` ya da charset'siz `application/json` — http paketinin
+  /// [http.Response.body] için kullandığı kodlama kuralıyla aynı.)
+  static bool _isUtf8Json(http.Response response) {
+    final type = (response.headers['content-type'] ?? '').toLowerCase();
+    final charset = _charsetPattern.firstMatch(type)?.group(1);
+    if (charset != null) {
+      return charset == 'utf-8' || charset == 'utf8';
+    }
+    return type.startsWith('application/json');
+  }
+
+  /// Beklenen durum kodu dışındaki yanıtları [ApiException]'a çevirir.
+  /// 401 tespiti hata metnine değil durum koduna dayanır: [unauthorizedIsSession] true iken
+  /// (yetkili istekler) [SessionExpiredException] fırlatılır; giriş/profil gibi kimlik
+  /// bilgisi doğrulayan uçlarda false verilir ve sunucu mesajı gösterilir.
   void _ensureStatus(
     http.Response response,
     int expectedCode, {
     bool allowEmptyBody = false,
+    bool unauthorizedIsSession = true,
   }) {
-    if (response.statusCode == expectedCode) {
+    final status = response.statusCode;
+    if (status == expectedCode) {
       return;
     }
 
-    if (allowEmptyBody && response.body.trim().isEmpty) {
+    // Boş gövde yalnızca başarılı (2xx) yanıtlarda kabul edilir; hata durumları yutulmaz.
+    if (allowEmptyBody &&
+        status >= 200 &&
+        status < 300 &&
+        response.body.trim().isEmpty) {
       return;
+    }
+
+    // Sunucu 401/403'ü her zaman JSON hata zarfıyla döndürür; JSON olmayan (HTML/düz metin) gövde
+    // araya giren bir katmandır (proxy/WAF/captive portal): oturum sonu DEĞİL, geçici ağ hatasıdır.
+    final intermediary = _intermediaryAuthError(response);
+    if (intermediary != null) {
+      throw intermediary;
+    }
+
+    if (status == 401 && unauthorizedIsSession) {
+      final code = _readErrorCode(response);
+      if (code == 'TOKEN_REVOKED') {
+        // Parola değişince eski token'lar iptal edilir (pv claim'i).
+        throw SessionExpiredException(
+          'Şifreniz değiştirildiği için oturumunuz sonlandırıldı. Lütfen yeniden giriş yapın.',
+          code,
+        );
+      }
+      throw SessionExpiredException(
+        'Oturum süreniz doldu. Lütfen tekrar giriş yapın.',
+        code,
+      );
     }
 
     final payload = _decodePayload(response);
-    final errorMsg = payload['error'] as String?;
+    final rawError = payload['error'];
+    final errorMsg = rawError is String && rawError.trim().isNotEmpty
+        ? rawError.trim()
+        : null;
+    final rawCode = payload['code'];
+    final code = rawCode is String && rawCode.trim().isNotEmpty
+        ? rawCode.trim()
+        : null;
+    final retryAfter = _retryAfterSeconds(response, payload);
 
-    if (response.statusCode == 401) {
-      final lower = (errorMsg ?? '').toLowerCase();
-      if (lower.contains('token') ||
-          lower.contains('yetkisiz') ||
-          lower.contains('oturum') ||
-          lower.contains('unauthorized') ||
-          lower.contains('expired')) {
-        throw SessionExpiredException('Oturum süreniz doldu. Lütfen tekrar giriş yapın.');
-      }
-      throw ApiException(errorMsg ?? 'Yetkisiz erişim (401)', statusCode: 401);
+    if (status == 401) {
+      // Buraya yalnızca kimlik bilgisi doğrulayan uçlar düşer (hatalı şifre vb.): oturum bozulmaz.
+      throw ApiException(
+        messageForErrorCode(code, retryAfterSeconds: retryAfter, payload: payload) ??
+            errorMsg ??
+            'Yetkisiz erişim (401)',
+        statusCode: 401,
+        code: code,
+        retryAfterSeconds: retryAfter,
+        invalidatesSession: false,
+      );
     }
 
+    final mappedMessage =
+        messageForErrorCode(code, retryAfterSeconds: retryAfter, payload: payload);
+    var message = mappedMessage ?? errorMsg ?? 'İşlem başarısız ($status)';
+
+    if (status == 429 && mappedMessage == null) {
+      // Genel hız sınırı: bekleme süresini kullanıcıya göster (kapı açma dahil).
+      message = _withRetryHint(message, retryAfter);
+    }
+
+    if (status >= 500) {
+      // Sunucu 5xx yanıtlarında destek için hata kodunu (errorId) göster.
+      final errorId = payload['errorId'] ?? payload['error_id'];
+      if (errorId is String && errorId.isNotEmpty) {
+        message = '$message (Hata kodu: $errorId)';
+      }
+    }
     throw ApiException(
-      errorMsg ?? 'İşlem başarısız (${response.statusCode})',
-      statusCode: response.statusCode,
+      message,
+      statusCode: status,
+      code: code,
+      retryAfterSeconds: retryAfter,
     );
   }
 
+  /// 401/403 yanıtının gövdesi sunucunun JSON hata zarfı değilse (boş olmayan HTML/düz metin) geçici
+  /// ağ/proxy hatası döndürür ([ApiException.fromIntermediary]: oturumu SONLANDIRMAZ ve "hesap pasif"
+  /// doğrulamasını tetiklemez). Boş gövde bu sınıfa girmez (mevcut davranış: sunucu yanıtı sayılır).
+  ApiException? _intermediaryAuthError(http.Response response) {
+    final status = response.statusCode;
+    if (status != 401 && status != 403) {
+      return null;
+    }
+    final body = response.body.trim();
+    if (body.isEmpty) {
+      return null;
+    }
+    try {
+      if (jsonDecode(body) is Map<String, dynamic>) {
+        return null;
+      }
+    } on FormatException {
+      // JSON değil: aşağıda ara katman hatası olarak döner.
+    }
+    return ApiException(
+      'Sunucuya ulaşılamadı. Ağ bağlantınızı (güvenlik duvarı/proxy) kontrol edip tekrar deneyin.',
+      statusCode: status,
+      fromIntermediary: true,
+    );
+  }
+
+  /// Hata gövdesindeki `code` alanını (varsa) sessizce okur; gövde JSON değilse null.
+  String? _readErrorCode(http.Response response) {
+    if (response.body.trim().isEmpty) return null;
+    try {
+      final raw = jsonDecode(response.body);
+      if (raw is Map<String, dynamic>) {
+        final code = raw['code'];
+        if (code is String && code.trim().isNotEmpty) return code.trim();
+      }
+    } on FormatException {
+      // JSON olmayan gövde: kod yok.
+    }
+    return null;
+  }
+
+  /// Bekleme süresi: önce gövdedeki `retry_after_seconds`, yoksa `Retry-After` başlığı (saniye).
+  int? _retryAfterSeconds(http.Response response, Map<String, dynamic> payload) {
+    final body = payload['retry_after_seconds'] ?? payload['retryAfterSeconds'];
+    if (body is num && body.isFinite && body > 0) {
+      return body.ceil();
+    }
+    if (body is String) {
+      final parsed = int.tryParse(body.trim());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    final header = response.headers['retry-after'];
+    if (header != null) {
+      final parsed = int.tryParse(header.trim());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return null;
+  }
+
+  /// Saniyeyi "45 saniye" / "5 dakika" / "2 saat" biçiminde yazar (yukarı yuvarlar).
+  static String formatWait(int seconds) {
+    if (seconds < 60) return '$seconds saniye';
+    final minutes = (seconds / 60).ceil();
+    if (minutes < 60) return '$minutes dakika';
+    final hours = (minutes / 60).ceil();
+    return '$hours saat';
+  }
+
+  String _withRetryHint(String base, int? retryAfter) {
+    if (retryAfter == null) return base;
+    if (base.toLowerCase().contains('sonra')) return base;
+    final trimmed = base.endsWith('.') ? base : '$base.';
+    return '$trimmed Lütfen ${formatWait(retryAfter)} sonra tekrar deneyin.';
+  }
+
+  /// Bilinen sunucu hata kodları için anlaşılır (kısa, taşmayan) Türkçe metin;
+  /// bilinmiyorsa null döner ve sunucunun `error` metni kullanılır.
+  /// [payload]: GEOFENCE_OUT_OF_RANGE için `distance_meters` / `allowed_radius_meters`.
+  static String? messageForErrorCode(
+    String? code, {
+    int? retryAfterSeconds,
+    Map<String, dynamic>? payload,
+  }) {
+    if (code == null) return null;
+    final wait = retryAfterSeconds != null
+        ? ' ${formatWait(retryAfterSeconds)} sonra tekrar deneyin.'
+        : ' Lütfen daha sonra tekrar deneyin.';
+
+    int? meters(Object? value) {
+      if (value is num && value.isFinite && value >= 0) return value.round();
+      if (value is String) {
+        final parsed = double.tryParse(value.trim());
+        if (parsed != null && parsed.isFinite && parsed >= 0) return parsed.round();
+      }
+      return null;
+    }
+
+    switch (code) {
+      // --- Hesap / kimlik doğrulama
+      case 'CURRENT_PASSWORD_REQUIRED':
+        return 'Şifrenizi değiştirmek için mevcut şifrenizi girmelisiniz.';
+      case 'CURRENT_PASSWORD_INVALID':
+        return 'Mevcut şifreniz hatalı. Lütfen kontrol edip tekrar deneyin.';
+      case 'CURRENT_PASSWORD_LOCKED':
+        return 'Mevcut şifre için çok fazla hatalı deneme yapıldı.$wait';
+      case 'LOGIN_LOCKED':
+        return 'Çok fazla hatalı deneme yapıldı.$wait';
+      case 'USE_PROFILE_PASSWORD_CHANGE':
+        // PATCH /admin/users/:id kendi hesabında parola gelirse 400 döner (mevcut şifre doğrulaması yok).
+        return 'Kendi şifrenizi Profilim ekranından değiştirin.';
+
+      // --- Konum doğrulaması (C3)
+      case 'GEOFENCE_LOCATION_REQUIRED':
+        return 'Bu kapı için konum doğrulaması zorunludur. Konum servisini açıp tekrar deneyin.';
+      case 'GEOFENCE_LOCATION_INVALID':
+        return 'Konum bilgisi geçersiz. GPS\'i kontrol edip tekrar deneyin.';
+      case 'GEOFENCE_MOCK_LOCATION':
+        return 'Sahte konum (Mock Location) tespit edildi. Güvenlik nedeniyle işlem yapılamaz.';
+      case 'GEOFENCE_LOCATION_STALE':
+        return 'Konum bilginiz güncel değil. GPS sinyalinin yenilenmesini bekleyip tekrar deneyin.';
+      case 'GEOFENCE_LOCATION_INACCURATE':
+        return 'GPS doğruluğu yetersiz. Açık alana çıkıp tekrar deneyin.';
+      case 'GEOFENCE_OUT_OF_RANGE':
+        final distance = meters(payload?['distance_meters']);
+        final allowed = meters(payload?['allowed_radius_meters']);
+        if (distance != null && allowed != null) {
+          return '$distance m uzaktasınız, izin verilen mesafe $allowed m. Lütfen kapıya yaklaşın.';
+        }
+        return 'Kapı konumunda değilsiniz. Lütfen kapıya yaklaşın.';
+      case 'GEOFENCE_SITE_MISCONFIGURED':
+        return 'Bu sitenin konum çemberi hatalı tanımlanmış. Lütfen site yöneticinize başvurun.';
+
+      // --- Kapı açma politikası (C2)
+      case 'REMOTE_OPEN_DISABLED':
+        return 'Bu sitede uygulamadan uzaktan kapı açma kapalı.';
+      case 'QR_DISABLED':
+        return 'Bu sitede QR ile giriş kapalı.';
+      case 'QR_ENTRY_INACTIVE':
+        return 'Bu kapıda QR ile giriş şu an devre dışı.';
+      case 'GUEST_DISABLED':
+        return 'Bu sitede misafir geçişi kapalı.';
+      case 'LOCAL_DISABLED':
+        return 'Bu sitede yerel ağdan kapı açma kapalı.';
+
+      // --- Karekod
+      case 'DYNAMIC_QR_REQUIRED':
+        return 'Bu kapıda dinamik karekod geçerlidir. Lütfen kapı ekranındaki güncel karekodu okutun.';
+      case 'SCREEN_QR_ALREADY_USED':
+        return 'Bu karekod daha önce kullanıldı. Ekranda yenilenen güncel karekodu okutun.';
+      case 'SCREEN_QR_EXPIRED':
+        return 'Karekodun süresi doldu. Ekranda yenilenen güncel karekodu okutun.';
+      case 'EKRAN_QR_BEKLENIYOR':
+        return 'Kapı ekranındaki karekod henüz alınamadı. Birkaç saniye sonra tekrar deneyin.';
+      case 'INVALID_QR_PAYLOAD':
+        return 'Okutulan karekod geçersiz.';
+
+      // --- Kapı / cihaz
+      case 'INVALID_DOOR_ID':
+        return 'Geçersiz kapı bilgisi.';
+      case 'DOOR_NOT_FOUND':
+        return 'Kapı bulunamadı.';
+      case 'DOOR_ACCESS_DENIED':
+        return 'Bu kapıyı açma yetkiniz yok.';
+      case 'MQTT_BRIDGE_NOT_CONNECTED':
+        return 'Sunucunun cihaz bağlantısı şu an hazır değil. Lütfen biraz sonra tekrar deneyin.';
+      case 'DEVICE_OFFLINE':
+        return 'Cihaz şu an çevrimdışı. Cihazın internet bağlantısını kontrol edin.';
+      case 'DEVICE_NOT_ASSIGNABLE':
+        return 'Bu cihaz bu kapıya atanamaz.';
+      case 'DEVICE_OWNED_BY_ANOTHER':
+        return 'Bu cihaz başka bir hesaba ait.';
+      case 'DEVICE_DEFECTIVE':
+        return 'Bu cihaz arızalı olarak işaretlenmiş.';
+      case 'DEVICE_NOT_FOUND':
+        return 'Cihaz bulunamadı.';
+      default:
+        return null;
+    }
+  }
+
   Map<String, dynamic> _decodePayload(http.Response response) {
+    final offloaded = _offloadedPayloads[response];
+    if (offloaded != null) {
+      return offloaded;
+    }
     if (response.body.trim().isEmpty) {
       return <String, dynamic>{};
     }
@@ -1308,6 +1744,27 @@ class AuthApi {
       final raw = jsonDecode(response.body);
       return raw is Map<String, dynamic> ? raw : <String, dynamic>{};
     } on FormatException {
+      final status = response.statusCode;
+      // 5xx (502/503/504 dahil) "modem" sezgisinden ÖNCE sınıflandırılır: gateway/proxy
+      // sayfaları 'gateway' gibi kelimeler içerir ama sorun kullanıcının internetinde değildir.
+      if (status >= 500) {
+        throw ApiException(_serverUnavailableMessage(status), statusCode: status);
+      }
+      // Proxy (nginx) tarafından üretilen JSON olmayan 413/429 yanıtları da sınıflandırılır.
+      if (status == 413) {
+        throw ApiException(
+          'Gönderilen veri çok büyük (413). Lütfen daha küçük bir veri ile tekrar deneyin.',
+          statusCode: status,
+        );
+      }
+      if (status == 429) {
+        final retryAfter = _retryAfterSeconds(response, const <String, dynamic>{});
+        throw ApiException(
+          _withRetryHint('Çok fazla istek gönderildi.', retryAfter),
+          statusCode: status,
+          retryAfterSeconds: retryAfter,
+        );
+      }
       final bodyLower = response.body.toLowerCase();
       if (bodyLower.contains('<html') ||
           bodyLower.contains('<!doctype') ||
@@ -1316,14 +1773,23 @@ class AuthApi {
           bodyLower.contains('gateway')) {
         throw ApiException(
           'İnternet bağlantısı yok (Modem internete bağlı değil).',
-          statusCode: response.statusCode,
+          statusCode: status,
+          fromIntermediary: true,
         );
       }
       throw ApiException(
         'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.',
-        statusCode: response.statusCode,
+        statusCode: status,
+        fromIntermediary: true,
       );
     }
+  }
+
+  String _serverUnavailableMessage(int status) {
+    if (status == 502 || status == 503 || status == 504) {
+      return 'Sunucu geçici olarak yanıt vermiyor ($status). Lütfen biraz sonra tekrar deneyin.';
+    }
+    return 'Sunucuda beklenmeyen bir hata oluştu ($status). Lütfen biraz sonra tekrar deneyin.';
   }
 
   String _mapClientError(http.ClientException error) {
@@ -1431,7 +1897,7 @@ class AuthApi {
     );
 
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<List<Map<String, dynamic>>> getMyClaimedDevices({
@@ -1444,7 +1910,7 @@ class AuthApi {
     );
 
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     final list = data['devices'] as List<dynamic>? ?? [];
     return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
   }
@@ -1477,7 +1943,7 @@ class AuthApi {
     );
 
     _ensureStatus(response, 201);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> createDoor({
@@ -1500,7 +1966,7 @@ class AuthApi {
       },
     );
     _ensureStatus(response, 201);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> updateDoor({
@@ -1524,7 +1990,7 @@ class AuthApi {
       body: body,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<void> deleteDoor({
@@ -1549,7 +2015,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> replaceDoorDevice({
@@ -1569,7 +2035,7 @@ class AuthApi {
       },
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<List<Map<String, dynamic>>> getAssignableDevices({
@@ -1582,7 +2048,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     final list = data['devices'] as List<dynamic>? ?? [];
     return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
   }
@@ -1597,7 +2063,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     return SiteJoinTokenRecord.fromJson(data['token'] as Map<String, dynamic>);
   }
 
@@ -1611,7 +2077,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     return SiteJoinTokenRecord.fromJson(data['token'] as Map<String, dynamic>);
   }
 
@@ -1621,11 +2087,11 @@ class AuthApi {
   }) async {
     final response = await _authorizedRequest(
       method: 'GET',
-      path: '/membership/join-info/$joinToken',
+      path: '/membership/join-info/${Uri.encodeComponent(joinToken)}',
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<SiteJoinInfo> fetchSiteJoinInfo({
@@ -1657,7 +2123,7 @@ class AuthApi {
       },
     );
     _ensureStatus(response, 201);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<List<JoinRequestRecord>> getMyJoinRequests({
@@ -1669,7 +2135,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     final list = data['requests'] as List<dynamic>? ?? [];
     return list.map((item) => JoinRequestRecord.fromJson(item as Map<String, dynamic>)).toList();
   }
@@ -1679,14 +2145,16 @@ class AuthApi {
     required int siteCode,
     String? status,
   }) async {
-    final query = status != null ? '?status=$status' : '';
+    final query = status != null && status.isNotEmpty
+        ? '?status=${Uri.encodeQueryComponent(status)}'
+        : '';
     final response = await _authorizedRequest(
       method: 'GET',
       path: '/manager/sites/$siteCode/join-requests$query',
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     final list = data['requests'] as List<dynamic>? ?? [];
     return list.map((item) => JoinRequestRecord.fromJson(item as Map<String, dynamic>)).toList();
   }
@@ -1701,7 +2169,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> rejectJoinRequest({
@@ -1718,7 +2186,7 @@ class AuthApi {
       },
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<List<MyApartmentRecord>> getMyApartments({
@@ -1730,7 +2198,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     final list = data['apartments'] as List<dynamic>? ?? [];
     return list.map((item) => MyApartmentRecord.fromJson(item as Map<String, dynamic>)).toList();
   }
@@ -1746,7 +2214,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> getDoorPermissions({
@@ -1759,7 +2227,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> setDoorAccessOverride({
@@ -1783,7 +2251,7 @@ class AuthApi {
       body: body,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> setBulkDoorAccessOverride({
@@ -1810,7 +2278,7 @@ class AuthApi {
       body: body,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> getSiteResidentsTree({
@@ -1823,7 +2291,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> toggleApartmentMemberStatus({
@@ -1839,7 +2307,7 @@ class AuthApi {
       body: {'is_active': isActive},
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> deleteApartmentMember({
@@ -1853,23 +2321,29 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
+  /// Sunucu yalnızca kullanıcının KENDİ parolasına izin verir ve `current_password` ister.
+  /// Yanıttaki yeni `token` (parola sürümü claim'i) çağıran tarafından oturuma yazılmalıdır.
   Future<Map<String, dynamic>> changeApartmentMemberPassword({
     required String token,
     required int apartmentId,
     required int targetUserCode,
     required String newPassword,
+    required String currentPassword,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
       path: '/membership/apartments/$apartmentId/members/$targetUserCode/change-password',
       token: token,
-      body: {'new_password': newPassword},
+      body: {
+        'new_password': newPassword,
+        'current_password': currentPassword,
+      },
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> setApartmentPrimaryAdmin({
@@ -1883,7 +2357,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<SiteManagersData> getSiteManagers({
@@ -1896,7 +2370,7 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = _decodePayload(response);
     return SiteManagersData.fromJson(data);
   }
 
@@ -1917,7 +2391,7 @@ class AuthApi {
       },
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> removeSiteManager({
@@ -1927,11 +2401,11 @@ class AuthApi {
   }) async {
     final response = await _authorizedRequest(
       method: 'DELETE',
-      path: '/manager/sites/$siteCode/managers/$userCode',
+      path: '/manager/sites/$siteCode/managers/${Uri.encodeComponent(userCode)}',
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
   }
 
   Future<Map<String, dynamic>> revokeSiteManagerInvitation({
@@ -1945,7 +2419,45 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> setDeviceDefectStatus({
+    required String token,
+    required int deviceId,
+    required bool isDefective,
+    String? defectiveReason,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: '/admin/devices/$deviceId/defect',
+      token: token,
+      body: {
+        'is_defective': isDefective,
+        if (defectiveReason != null && defectiveReason.trim().isNotEmpty)
+          'defective_reason': defectiveReason.trim(),
+      },
+    );
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
+  }
+
+  Future<Map<String, dynamic>> releaseDeviceOwnership({
+    required String token,
+    required int deviceId,
+    String? reason,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/devices/$deviceId/release-ownership',
+      token: token,
+      body: {
+        if (reason != null && reason.trim().isNotEmpty)
+          'reason': reason.trim(),
+      },
+    );
+    _ensureStatus(response, 200);
+    return _decodePayload(response);
   }
 
   UserSession _toUserSession({

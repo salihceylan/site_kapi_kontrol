@@ -2,7 +2,12 @@ import { pool } from '../db.js';
 
 /**
  * Veritabanı Otomatik Yaşam Döngüsü ve Çöp Temizliği Servisi
- * Veritabanının şişmesini, yetim kayıtların birikmesini ve sahte kullanıcıların oluşmasını engeller.
+ * Veritabanının şişmesini engeller.
+ *
+ * KAPSAM (kasıtlı olarak dar): yalnızca SÜRESİ DOLMUŞ token/kod kayıtları ve ESKİ log kayıtları silinir
+ * (log saklama süresi 30 gündür). Kullanıcı hesapları (users), üyelikler, tablolar (DROP) veya
+ * yetim-kayıt tahmini yapan toplu silmeler BU SERVİSTE YAPILMAZ. Dışa açık fonksiyon imzaları ve
+ * dönüş şekli (admin_routes tarafından kullanılır) sabittir.
  */
 
 export async function runDatabaseCleanup(db = pool) {
@@ -17,11 +22,8 @@ export async function runDatabaseCleanup(db = pool) {
   };
 
   try {
-    // 1. Sahte (@ahbu.local) kullanıcıları temizle
-    const delDummy = await db.query(
-      `DELETE FROM users WHERE email LIKE '%@ahbu.local'`
-    );
-    stats.dummyUsersCleaned = delDummy.rowCount || 0;
+    // 1. (Kaldırıldı) Sahte kullanıcı silme: hesaplar bu servis tarafından ASLA silinmez.
+    //    dummyUsersCleaned alanı geriye dönük uyum için 0 olarak döner.
 
     // 2. Süresi geçmiş veya supersede edilmiş QR tokenleri temizle (1 günden eski)
     const delQr = await db.query(`
@@ -52,45 +54,10 @@ export async function runDatabaseCleanup(db = pool) {
     `);
     stats.oldDoorLogsCleaned = delDoors.rowCount || 0;
 
-    // 6. Yetim (orphaned) ilişkisel kayıtları temizle
-    const delSiteMemberships = await db.query(`
-      DELETE FROM site_memberships
-      WHERE site_code NOT IN (SELECT site_code FROM sites)
-         OR user_code NOT IN (SELECT user_code FROM users)
-    `);
-
-    const delAptMemberships = await db.query(`
-      DELETE FROM apartment_memberships
-      WHERE apartment_id NOT IN (SELECT id FROM apartments)
-         OR user_code NOT IN (SELECT user_code FROM users)
-    `);
-
-    const delJoinRequests = await db.query(`
-      DELETE FROM join_requests
-      WHERE site_code NOT IN (SELECT site_code FROM sites)
-         OR user_code NOT IN (SELECT user_code FROM users)
-    `);
-
-    const delJoinTokens = await db.query(`
-      DELETE FROM site_join_tokens
-      WHERE site_code NOT IN (SELECT site_code FROM sites)
-    `);
-
-    const delGuestPasses = await db.query(`
-      DELETE FROM guest_passes
-      WHERE site_code NOT IN (SELECT site_code FROM sites)
-    `);
-
-    stats.orphanedMembershipsCleaned =
-      (delSiteMemberships.rowCount || 0) +
-      (delAptMemberships.rowCount || 0) +
-      (delJoinRequests.rowCount || 0) +
-      (delJoinTokens.rowCount || 0) +
-      (delGuestPasses.rowCount || 0);
-
-    // 7. Varsa eski geçici yedek tablolarını temizle
-    await db.query(`DROP TABLE IF EXISTS users_backup_apartment_owner_20260826165328 CASCADE`);
-    await db.query(`DROP TABLE IF EXISTS users_backup_reset_20260813202903 CASCADE`);
+    // 6-7. (Kaldırıldı) Yetim kayıt silme ve yedek tablo DROP işlemleri:
+    //    İlgili tabloların tümü ON DELETE CASCADE yabancı anahtarlıdır (yetim kayıt oluşamaz) ve
+    //    NOT IN tabanlı toplu silmeler/DROP TABLE bakım servisinin yetkisi değildir.
+    //    orphanedMembershipsCleaned alanı geriye dönük uyum için 0 olarak döner.
 
     // 8. Son bakım kaydını app_maintenance_runs tablosuna işle
     await db.query(`
@@ -111,8 +78,9 @@ export async function runDatabaseCleanup(db = pool) {
     console.log(`[Maintenance Cleanup]: Rutin temizlik tamamlandı. Toplam ${totalCleaned} gereksiz/süresi dolmuş kayıt temizlendi.`);
     return { success: true, stats, totalCleaned };
   } catch (error) {
+    // Ayrıntı yalnızca sunucu günlüğüne; dönen değerde veritabanı hata metni yer almaz.
     console.error('[Maintenance Cleanup] Hata:', error);
-    return { success: false, error: error.message, stats };
+    return { success: false, error: 'Veritabanı temizliği başarısız oldu.', stats };
   }
 }
 
@@ -121,12 +89,20 @@ export async function runDatabaseCleanup(db = pool) {
  */
 export async function getDatabaseHealth(db = pool) {
   try {
-    // Kullanıcı sayıları
+    // Kullanıcı sayıları. "Kukla" = hiçbir daireye/üyeliğe bağlı OLMAYAN @ahbu.local hesabı (yetim). Daire sakini için
+    // üretilen (apartments.resident_user_code / üyelik ile bağlı) @ahbu.local hesapları gerçek kullanıcıdır ve
+    // temizlik tarafından silinmediği için kukla sayılmaz.
     const userStats = await db.query(`
       SELECT
         COUNT(*)::int AS total_users,
-        COUNT(*) FILTER (WHERE email LIKE '%@ahbu.local')::int AS dummy_users,
-        COUNT(*) FILTER (WHERE email NOT LIKE '%@ahbu.local')::int AS real_users,
+        (
+          SELECT COUNT(*)::int
+          FROM users du
+          WHERE du.email LIKE '%@ahbu.local'
+            AND NOT EXISTS (SELECT 1 FROM apartments a WHERE a.resident_user_code = du.user_code)
+            AND NOT EXISTS (SELECT 1 FROM apartment_memberships am WHERE am.user_code = du.user_code)
+            AND NOT EXISTS (SELECT 1 FROM site_memberships sm WHERE sm.user_code = du.user_code)
+        ) AS dummy_users,
         COUNT(*) FILTER (WHERE role = 'super_user')::int AS super_users,
         COUNT(*) FILTER (WHERE role = 'site_manager')::int AS site_managers,
         COUNT(*) FILTER (WHERE role = 'individual')::int AS individuals,
@@ -148,6 +124,21 @@ export async function getDatabaseHealth(db = pool) {
         (SELECT COUNT(*)::int FROM qr_access_tokens) AS qr_tokens_count
     `);
 
+    // Temizlik düğmesinin silebileceği kayıtlar (runDatabaseCleanup ile AYNI koşullar). isClean yalnızca buna bağlıdır:
+    // temizlik hesap silmediği için kukla/yetim hesap sayısı "temizlenecek" durumunu sonsuza dek turuncu tutmasın.
+    const pendingStats = await db.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM qr_access_tokens
+          WHERE (expires_at IS NOT NULL AND expires_at < NOW() - INTERVAL '1 day')
+             OR (superseded_at IS NOT NULL AND superseded_at < NOW() - INTERVAL '1 day')) AS expired_qr_tokens,
+        (SELECT COUNT(*)::int FROM email_verifications
+          WHERE created_at < NOW() - INTERVAL '2 days') AS expired_email_verifications,
+        (SELECT COUNT(*)::int FROM device_connectivity_logs
+          WHERE created_at < NOW() - INTERVAL '30 days') AS old_connectivity_logs,
+        (SELECT COUNT(*)::int FROM door_access_logs
+          WHERE opened_at < NOW() - INTERVAL '30 days') AS old_door_logs
+    `);
+
     // Son temizlik tarihi
     const lastRun = await db.query(`
       SELECT executed_at 
@@ -158,13 +149,21 @@ export async function getDatabaseHealth(db = pool) {
 
     const u = userStats.rows[0];
     const s = structureStats.rows[0];
+    const p = pendingStats.rows[0] || {};
     const lastCleanedAt = lastRun.rows[0]?.executed_at || null;
+    const pendingCleanup = {
+      expiredQrTokens: Number(p.expired_qr_tokens || 0),
+      expiredEmailVerifications: Number(p.expired_email_verifications || 0),
+      oldConnectivityLogs: Number(p.old_connectivity_logs || 0),
+      oldDoorLogs: Number(p.old_door_logs || 0),
+    };
+    const pendingTotal = Object.values(pendingCleanup).reduce((sum, value) => sum + value, 0);
 
     return {
       success: true,
       users: {
         total: u.total_users,
-        real: u.real_users,
+        real: u.total_users - u.dummy_users,
         dummy: u.dummy_users,
         superUsers: u.super_users,
         siteManagers: u.site_managers,
@@ -187,10 +186,12 @@ export async function getDatabaseHealth(db = pool) {
         qrTokens: s.qr_tokens_count,
       },
       lastCleanedAt,
-      isClean: u.dummy_users === 0,
+      pendingCleanup,
+      isClean: pendingTotal === 0,
     };
   } catch (error) {
     console.error('[Database Health] Hata:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: 'Veritabanı sağlık bilgisi alınamadı.' };
   }
 }
+

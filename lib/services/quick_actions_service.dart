@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:quick_actions/quick_actions.dart';
 
@@ -13,10 +15,20 @@ class QuickActionsService {
     }
     onActionSelected = onAction;
     try {
-      _quickActions.initialize((String type) {
-        onActionSelected?.call(type);
-      });
-    } catch (_) {}
+      // initialize() bir Future döndürür: eklenti yoksa (ör. Windows/Linux masaüstü)
+      // MissingPluginException asenkron fırlar; yakalanmazsa "yakalanmamış istisna" olur.
+      unawaited(
+        _quickActions
+            .initialize((String type) {
+              onActionSelected?.call(type);
+            })
+            .catchError((Object e) {
+              debugPrint('[QuickActions] initialize yok sayıldı: $e');
+            }),
+      );
+    } catch (e) {
+      debugPrint('[QuickActions] initialize yok sayıldı: $e');
+    }
   }
 
   Future<void> updateDoorShortcuts(List<DoorRecord> doors) async {

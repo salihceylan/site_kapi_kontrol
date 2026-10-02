@@ -3,6 +3,7 @@ import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
 class DeviceConnectivityLogsAccordion extends StatefulWidget {
@@ -97,6 +98,7 @@ class _DeviceConnectivityLogsAccordionState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
     final isOnline = widget.device.mqttConnected == true;
 
     return Container(
@@ -123,7 +125,7 @@ class _DeviceConnectivityLogsAccordionState
                   Icon(
                     Icons.history_toggle_off_rounded,
                     size: 20,
-                    color: isOnline ? AppColors.emeraldLight : AppColors.amberLight,
+                    color: isOnline ? AppTone.success.ink(p) : AppTone.warning.ink(p),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -142,30 +144,35 @@ class _DeviceConnectivityLogsAccordionState
                           const SizedBox(height: 2),
                           Text(
                             'Aktif Uptime: ${_report!.currentOnlineDurationText}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.emeraldLight,
+                              color: AppTone.success.ink(p),
                             ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0x15FFFFFF)
-                          : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _isExpanded ? 'Gizle' : 'Logları Gör',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.textMutedLight : AppColors.textDarkSecondary,
+                  // Flexible: büyük yazıda rozet kalan genişliği aşmaz (üç nokta ile kısalır).
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0x15FFFFFF)
+                            : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _isExpanded ? 'Gizle' : 'Logları Gör',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppColors.textMutedLight : AppColors.textDarkSecondary,
+                        ),
                       ),
                     ),
                   ),
@@ -215,17 +222,20 @@ class _DeviceConnectivityLogsAccordionState
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: AppColors.roseLight, size: 20),
+                          Icon(Icons.error_outline_rounded, color: AppTone.danger.ink(p), size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: AppColors.roseLight, fontSize: 12),
+                              style: TextStyle(color: AppTone.danger.ink(p), fontSize: 12),
                             ),
                           ),
-                          TextButton(
-                            onPressed: () => _loadLogs(page: 1),
-                            child: const Text('Tekrar Dene', style: TextStyle(fontSize: 12)),
+                          // Flexible: dar ekran/büyük yazıda düğme etiketi sarar, satırı taşırmaz.
+                          Flexible(
+                            child: TextButton(
+                              onPressed: () => _loadLogs(page: 1),
+                              child: const Text('Tekrar Dene', style: TextStyle(fontSize: 12)),
+                            ),
                           ),
                         ],
                       ),
@@ -238,15 +248,17 @@ class _DeviceConnectivityLogsAccordionState
                     // Log Başlığı ve Yenile Butonu
                     Row(
                       children: [
-                        Text(
-                          'Kopma / Çevrimdışı Logları',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? AppColors.textMutedLight : AppColors.textDarkSecondary,
+                        // Expanded: başlık büyük yazıda sarar; yenile düğmesi sağda kalır.
+                        Expanded(
+                          child: Text(
+                            'Kopma / Çevrimdışı Logları',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? AppColors.textMutedLight : AppColors.textDarkSecondary,
+                            ),
                           ),
                         ),
-                        const Spacer(),
                         IconButton(
                           iconSize: 18,
                           padding: EdgeInsets.zero,
@@ -282,7 +294,7 @@ class _DeviceConnectivityLogsAccordionState
                             Icon(
                               Icons.verified_rounded,
                               size: 28,
-                              color: isDark ? AppColors.emeraldLight : AppColors.emerald,
+                              color: AppTone.success.ink(p),
                             ),
                             const SizedBox(height: 6),
                             Text(
@@ -317,11 +329,13 @@ class _DeviceConnectivityLogsAccordionState
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Sayfa ${_report!.page} / ${_report!.totalPages} (Toplam ${_report!.total})',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
+                          Flexible(
+                            child: Text(
+                              'Sayfa ${_report!.page} / ${_report!.totalPages} (Toplam ${_report!.total})',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
+                              ),
                             ),
                           ),
                           Row(
@@ -362,6 +376,7 @@ class _DeviceConnectivityLogsAccordionState
 
   Widget _buildUptimeBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
     final isOnline = _report?.isOnline ?? (widget.device.mqttConnected == true);
 
     if (isOnline) {
@@ -389,7 +404,7 @@ class _DeviceConnectivityLogsAccordionState
                 color: AppColors.emerald.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.wifi_rounded, color: AppColors.emeraldLight, size: 18),
+              child: Icon(Icons.wifi_rounded, color: AppTone.success.ink(p), size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -442,7 +457,7 @@ class _DeviceConnectivityLogsAccordionState
                 color: AppColors.rose.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.wifi_off_rounded, color: AppColors.roseLight, size: 18),
+              child: Icon(Icons.wifi_off_rounded, color: AppTone.danger.ink(p), size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -476,7 +491,8 @@ class _DeviceConnectivityLogsAccordionState
 
   Widget _buildLogItem(BuildContext context, DeviceConnectivityLogRecord log) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final offlineTimeText = formatDateTime(log.offlineAt ?? log.createdAt);
+    final p = context.palette;
+    final offlineTimeText = formatDateTimeOrUnknown(log.offlineAt ?? log.createdAt);
     final signalText = log.wifiSignalPercent != null
         ? '%${log.wifiSignalPercent}${log.wifiRssi != null ? " (${log.wifiRssi} dBm)" : ""}'
         : '-';
@@ -503,10 +519,10 @@ class _DeviceConnectivityLogsAccordionState
                   color: AppColors.rose.withValues(alpha: isDark ? 0.2 : 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.cloud_off_rounded,
                   size: 16,
-                  color: AppColors.roseLight,
+                  color: AppTone.danger.ink(p),
                 ),
               ),
               const SizedBox(width: 10),
@@ -532,18 +548,23 @@ class _DeviceConnectivityLogsAccordionState
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  log.durationText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.accentLight : AppColors.primary,
+              // Flexible: süre rozeti büyük yazıda kalan genişliği aşmaz (üç nokta ile kısalır).
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    log.durationText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? AppColors.accentLight : AppColors.primary,
+                    ),
                   ),
                 ),
               ),

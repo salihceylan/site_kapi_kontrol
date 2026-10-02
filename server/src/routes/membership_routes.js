@@ -1,5 +1,12 @@
 import express from 'express';
 import { authRequired, getAuthUserCode } from '../middlewares/auth_middleware.js';
+import { respondWithServiceError } from '../middlewares/error_handler.js';
+import {
+  authUserKeyOf,
+  claimDeviceLimiter,
+  clientIp,
+  createRuleLimiter,
+} from '../middlewares/rate_limiters.js';
 import {
   claimDevice,
   getMyClaimedDevices,
@@ -18,48 +25,76 @@ import {
   getSiteResidentsTree,
 } from '../services/membership_service.js';
 import { getSiteByJoinToken } from '../services/site_service.js';
+import { parsePositiveId } from '../utils/validators.js';
 
 export const membershipRouter = express.Router();
+
+// POST /membership/setup-site: kullanıcı bazlı hız sınırı (authRequired'dan sonra); her istek yüzlerce blok/daire/kapı
+// satırı üretebildiği için sınırsız çağrı veri şişirmesine yol açar. IP kuralı NAT arkasındakileri toplu kilitlemez.
+export const setupSiteLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: 10 * 60 * 1000, max: 10, key: (req) => `u:${authUserKeyOf(req) ?? clientIp(req)}` },
+    { windowMs: 10 * 60 * 1000, max: 60, key: (req) => `ip:${clientIp(req)}` },
+  ],
+  message: 'Cok fazla site kurulum denemesi. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+/**
+ * Hata yanıtı: servis katmanının bilerek fırlattığı 4xx (statusCode) hataların mesajı istemciye döner
+ * (iş mantığı/doğrulama hataları). Beklenmeyen (DB/sistem) hatalarda ayrıntı SIZDIRILMAZ: genel mesaj +
+ * errorId döner, ayrıntı sunucu günlüğüne yazılır (S1'in merkezi respondWithServiceError yardımcısı).
+ */
+function respondError(res, context, error, fallbackMessage) {
+  // Hız/deneme sınırı hataları (429 + retryAfterSeconds, ör. CURRENT_PASSWORD_LOCKED): Retry-After başlığı ve
+  // retry_after_seconds gövde alanı PATCH /me / giriş kilidiyle aynı biçimde döner.
+  const retryAfter = Math.ceil(Number(error?.retryAfterSeconds));
+  if (Number(error?.statusCode) === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+    res.setHeader('Retry-After', String(retryAfter));
+    const body = { error: String(error.message || fallbackMessage), retry_after_seconds: retryAfter };
+    if (typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)) {
+      body.code = error.code;
+    }
+    return res.status(429).json(body);
+  }
+  return respondWithServiceError(res, error, { fallbackMessage, logLabel: `membership:${context}` });
+}
+
+function sessionUserCode(req) {
+  return getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
+}
 
 /**
  * POST /membership/claim-device
  * Kutu QR kodu veya Seri No / UID ile cihaz sahiplenme
+ * (claimDeviceLimiter: kullanıcı/IP bazlı hız sınırı — UID tahmini ile toplu sahiplenme denemelerini yavaşlatır)
  */
-membershipRouter.post('/membership/claim-device', authRequired, async (req, res) => {
+membershipRouter.post('/membership/claim-device', authRequired, claimDeviceLimiter, async (req, res) => {
   try {
-    const { deviceInput, deviceUid } = req.body;
+    const { deviceInput, deviceUid } = req.body || {};
     const input = deviceInput || deviceUid;
 
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-
     const result = await claimDevice({
-      userCode,
+      userCode: sessionUserCode(req),
       deviceInput: input,
     });
 
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Cihaz sahiplenme işlemi başarısız oldu.',
-    });
+    return respondError(res, 'claim_device', error, 'Cihaz sahiplenme işlemi başarısız oldu.');
   }
 });
 
 /**
  * GET /membership/my-devices
- * Kullanıcının sahiplendiği cihazları listele
+ * Kullanıcının sahiplendiği cihazları listele (salt-okunur; rol yükseltme yapmaz)
  */
 membershipRouter.get('/membership/my-devices', authRequired, async (req, res) => {
   try {
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-    const result = await getMyClaimedDevices(userCode);
+    const result = await getMyClaimedDevices(sessionUserCode(req));
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Sahiplenilen cihazlar listelenemedi.',
-    });
+    return respondError(res, 'my_devices', error, 'Sahiplenilen cihazlar listelenemedi.');
   }
 });
 
@@ -67,13 +102,12 @@ membershipRouter.get('/membership/my-devices', authRequired, async (req, res) =>
  * POST /membership/setup-site
  * Üyelik Sistemi Aşama 4: Dinamik Site, Blok ve Daire Kurulumu
  */
-membershipRouter.post('/membership/setup-site', authRequired, async (req, res) => {
+membershipRouter.post('/membership/setup-site', authRequired, setupSiteLimiter, async (req, res) => {
   try {
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-    const { name, city, district, address, blocks, doors, doorCount, deviceUid } = req.body;
+    const { name, city, district, address, blocks, doors, doorCount, deviceUid } = req.body || {};
 
     const result = await setupSiteWithClaimedDevice({
-      userCode,
+      userCode: sessionUserCode(req),
       name,
       city,
       district,
@@ -86,10 +120,7 @@ membershipRouter.post('/membership/setup-site', authRequired, async (req, res) =
 
     return res.status(201).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Site kurulum işlemi başarısız oldu.',
-    });
+    return respondError(res, 'setup_site', error, 'Site kurulum işlemi başarısız oldu.');
   }
 });
 
@@ -106,7 +137,10 @@ membershipRouter.get('/membership/join-info/:token', authRequired, async (req, r
     if (error?.message === 'TOKEN_NOT_FOUND_OR_INACTIVE') {
       return res.status(404).json({ error: 'Bu site katılım QR kodu geçersiz veya iptal edilmiş.' });
     }
-    return res.status(400).json({ error: error.message || 'Site bilgileri alınamadı.' });
+    if (error?.message === 'INVALID_TOKEN') {
+      return res.status(400).json({ error: 'Geçersiz site katılım kodu.' });
+    }
+    return respondError(res, 'join_info', error, 'Site bilgileri alınamadı.');
   }
 });
 
@@ -116,11 +150,10 @@ membershipRouter.get('/membership/join-info/:token', authRequired, async (req, r
  */
 membershipRouter.post('/membership/join-request', authRequired, async (req, res) => {
   try {
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-    const { token, blockId, apartmentId, notes } = req.body;
+    const { token, blockId, apartmentId, notes } = req.body || {};
 
     const result = await createJoinRequest({
-      userCode,
+      userCode: sessionUserCode(req),
       token,
       blockId,
       apartmentId,
@@ -129,10 +162,7 @@ membershipRouter.post('/membership/join-request', authRequired, async (req, res)
 
     return res.status(201).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Katılım başvurusu oluşturulamadı.',
-    });
+    return respondError(res, 'join_request', error, 'Katılım başvurusu oluşturulamadı.');
   }
 });
 
@@ -142,14 +172,10 @@ membershipRouter.post('/membership/join-request', authRequired, async (req, res)
  */
 membershipRouter.get('/membership/my-join-requests', authRequired, async (req, res) => {
   try {
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-    const result = await getMyJoinRequests(userCode);
+    const result = await getMyJoinRequests(sessionUserCode(req));
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Katılım başvuruları listelenemedi.',
-    });
+    return respondError(res, 'my_join_requests', error, 'Katılım başvuruları listelenemedi.');
   }
 });
 
@@ -159,14 +185,10 @@ membershipRouter.get('/membership/my-join-requests', authRequired, async (req, r
  */
 membershipRouter.get('/membership/my-apartments', authRequired, async (req, res) => {
   try {
-    const userCode = getAuthUserCode(req) || req.authUser?.userCode || req.authUser?.user_code || req.authUser?.id;
-    const result = await getMyApartments(userCode);
+    const result = await getMyApartments(sessionUserCode(req));
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Daire bilgileri listelenemedi.',
-    });
+    return respondError(res, 'my_apartments', error, 'Daire bilgileri listelenemedi.');
   }
 });
 
@@ -187,10 +209,7 @@ membershipRouter.post(
       });
       return res.status(200).json(result);
     } catch (error) {
-      const statusCode = error.statusCode || 400;
-      return res.status(statusCode).json({
-        error: error.message || 'Üye daireden çıkarılamadı.',
-      });
+      return respondError(res, 'remove_member', error, 'Üye daireden çıkarılamadı.');
     }
   },
 );
@@ -205,7 +224,7 @@ membershipRouter.patch(
   async (req, res) => {
     try {
       const { apartmentId, targetUserCode } = req.params;
-      const { is_active } = req.body;
+      const { is_active } = req.body || {};
       const result = await toggleApartmentMemberStatus({
         apartmentId,
         targetUserCode,
@@ -214,17 +233,14 @@ membershipRouter.patch(
       });
       return res.status(200).json(result);
     } catch (error) {
-      const statusCode = error.statusCode || 400;
-      return res.status(statusCode).json({
-        error: error.message || 'Daire sakini durumu güncellenemedi.',
-      });
+      return respondError(res, 'toggle_member', error, 'Daire sakini durumu güncellenemedi.');
     }
   },
 );
 
 /**
  * DELETE /membership/apartments/:apartmentId/members/:targetUserCode
- * Daire Sakinini Daireden Tamamen Sil
+ * Daire Sakinini Daireden Tamamen Sil (süper kullanıcı / site yöneticisi)
  */
 membershipRouter.delete(
   '/membership/apartments/:apartmentId/members/:targetUserCode',
@@ -239,17 +255,14 @@ membershipRouter.delete(
       });
       return res.status(200).json(result);
     } catch (error) {
-      const statusCode = error.statusCode || 400;
-      return res.status(statusCode).json({
-        error: error.message || 'Daire sakini silinemedi.',
-      });
+      return respondError(res, 'delete_member', error, 'Daire sakini silinemedi.');
     }
   },
 );
 
 /**
  * POST /membership/apartments/:apartmentId/members/:targetUserCode/change-password
- * Daire Sakininin Şifresini Değiştir
+ * Daire Sakininin Şifresini Değiştir (yalnızca kullanıcının kendi şifresi; current_password zorunlu)
  */
 membershipRouter.post(
   '/membership/apartments/:apartmentId/members/:targetUserCode/change-password',
@@ -257,19 +270,17 @@ membershipRouter.post(
   async (req, res) => {
     try {
       const { apartmentId, targetUserCode } = req.params;
-      const { new_password } = req.body;
+      const { new_password, current_password } = req.body || {};
       const result = await changeApartmentMemberPassword({
         apartmentId,
         targetUserCode,
         newPassword: new_password,
+        currentPassword: current_password,
         authUser: req.authUser,
       });
       return res.status(200).json(result);
     } catch (error) {
-      const statusCode = error.statusCode || 400;
-      return res.status(statusCode).json({
-        error: error.message || 'Daire sakini şifresi değiştirilemedi.',
-      });
+      return respondError(res, 'change_member_password', error, 'Daire sakini şifresi değiştirilemedi.');
     }
   },
 );
@@ -291,10 +302,7 @@ membershipRouter.post(
       });
       return res.status(200).json(result);
     } catch (error) {
-      const statusCode = error.statusCode || 400;
-      return res.status(statusCode).json({
-        error: error.message || 'Aile reisi değiştirilemedi.',
-      });
+      return respondError(res, 'set_primary_admin', error, 'Aile reisi değiştirilemedi.');
     }
   },
 );
@@ -305,8 +313,8 @@ membershipRouter.post(
  */
 membershipRouter.get('/membership/doors/:id/permissions', authRequired, async (req, res) => {
   try {
-    const doorId = Number(req.params.id);
-    if (!Number.isInteger(doorId)) {
+    const doorId = parsePositiveId(req.params.id);
+    if (doorId === null) {
       return res.status(400).json({ error: 'Geçersiz kapı ID.' });
     }
     const result = await getDoorPermissions({
@@ -315,10 +323,7 @@ membershipRouter.get('/membership/doors/:id/permissions', authRequired, async (r
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Kapı yetkileri alınamadı.',
-    });
+    return respondError(res, 'door_permissions', error, 'Kapı yetkileri alınamadı.');
   }
 });
 
@@ -328,11 +333,11 @@ membershipRouter.get('/membership/doors/:id/permissions', authRequired, async (r
  */
 membershipRouter.post('/membership/doors/:id/permissions', authRequired, async (req, res) => {
   try {
-    const doorId = Number(req.params.id);
-    if (!Number.isInteger(doorId)) {
+    const doorId = parsePositiveId(req.params.id);
+    if (doorId === null) {
       return res.status(400).json({ error: 'Geçersiz kapı ID.' });
     }
-    const { userCode, isAllowed, notes } = req.body;
+    const { userCode, isAllowed, notes } = req.body || {};
     if (userCode === undefined || userCode === null) {
       return res.status(400).json({ error: 'Kullanıcı kodu (userCode) zorunludur.' });
     }
@@ -346,10 +351,7 @@ membershipRouter.post('/membership/doors/:id/permissions', authRequired, async (
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Yetki işlemi başarısız oldu.',
-    });
+    return respondError(res, 'door_permission_set', error, 'Yetki işlemi başarısız oldu.');
   }
 });
 
@@ -359,11 +361,11 @@ membershipRouter.post('/membership/doors/:id/permissions', authRequired, async (
  */
 membershipRouter.post('/membership/doors/:id/permissions/bulk', authRequired, async (req, res) => {
   try {
-    const doorId = Number(req.params.id);
-    if (!Number.isInteger(doorId)) {
+    const doorId = parsePositiveId(req.params.id);
+    if (doorId === null) {
       return res.status(400).json({ error: 'Geçersiz kapı ID.' });
     }
-    const { blockId, apartmentId, userCodes, isAllowed, notes } = req.body;
+    const { blockId, apartmentId, userCodes, isAllowed, notes } = req.body || {};
 
     const result = await setBulkDoorAccessOverride({
       doorId,
@@ -376,10 +378,7 @@ membershipRouter.post('/membership/doors/:id/permissions/bulk', authRequired, as
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Toplu yetkilendirme başarısız oldu.',
-    });
+    return respondError(res, 'door_permission_bulk', error, 'Toplu yetkilendirme başarısız oldu.');
   }
 });
 
@@ -389,8 +388,8 @@ membershipRouter.post('/membership/doors/:id/permissions/bulk', authRequired, as
  */
 membershipRouter.get('/membership/sites/:id/residents-tree', authRequired, async (req, res) => {
   try {
-    const siteCode = Number(req.params.id);
-    if (!Number.isInteger(siteCode)) {
+    const siteCode = parsePositiveId(req.params.id);
+    if (siteCode === null) {
       return res.status(400).json({ error: 'Geçersiz site ID.' });
     }
 
@@ -400,14 +399,6 @@ membershipRouter.get('/membership/sites/:id/residents-tree', authRequired, async
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Sakin listesi alınamadı.',
-    });
+    return respondError(res, 'residents_tree', error, 'Sakin listesi alınamadı.');
   }
 });
-
-
-
-
-

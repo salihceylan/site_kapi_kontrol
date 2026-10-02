@@ -4,7 +4,6 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
@@ -14,11 +13,23 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
 
+    <!--
+        Güvenlik notları (M1):
+        - allowBackup=false + dataExtractionRules/fullBackupContent: oturum anahtarı,
+          yerel kontrol token'ları ve widget prefs'i buluta/cihaz aktarımına çıkmaz
+          (flutter_secure_storage anahtarları Keystore'da kalır, yedekten dönünce çözülemez).
+        - usesCleartextTraffic=false: bulut API (https), MQTT (TLS) ve yerel kapı kontrolü
+          (ham UDP; bu politika kapsamında değildir) düz HTTP gerektirmez. Debug derlemesi
+          yerel geliştirme sunucusu için src/debug/AndroidManifest.xml ile cleartext'e izin verir.
+    -->
     <application
         android:label="Site Kapı Kontrol"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -60,9 +71,13 @@
                 android:resource="@xml/door_widget_info" />
         </receiver>
 
+        <!-- Widget düğmeleri HomeWidgetBackgroundIntent.getBroadcast ile AÇIK (explicit) bir
+             PendingIntent oluşturur; PendingIntent uygulamanın kendi kimliğiyle çalıştığı için
+             receiver exported=false iken de tetiklenir. Böylece başka uygulamalar bu receiver'a
+             sahte widget eylemi gönderemez. -->
         <receiver
             android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
             </intent-filter>
@@ -70,7 +85,7 @@
         <service
             android:name="es.antonborri.home_widget.HomeWidgetBackgroundService"
             android:permission="android.permission.BIND_JOB_SERVICE"
-            android:exported="true" />
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

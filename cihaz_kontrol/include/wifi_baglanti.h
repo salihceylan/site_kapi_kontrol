@@ -7,6 +7,9 @@
 #include <Preferences.h>
 #include <WiFi.h>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -19,6 +22,8 @@ inline constexpr char WIFI_PREF_MQTT_HOST[] = "mqtt_host";
 inline constexpr char WIFI_PREF_MQTT_PORT[] = "mqtt_port";
 inline constexpr char WIFI_PREF_MQTT_USER[] = "mqtt_user";
 inline constexpr char WIFI_PREF_MQTT_PASSWORD[] = "mqtt_pass";
+// C4: yerel kontrol anahtari sunucudan (MQTT local_control_config) gelir; MQTT parolasindan AYRI saklanir.
+inline constexpr char WIFI_PREF_LOCAL_TOKEN[] = "lc_token";
 
 inline constexpr char BLE_WIFI_SERVICE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f001";
 inline constexpr char BLE_WIFI_STATE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f002";
@@ -26,7 +31,19 @@ inline constexpr char BLE_WIFI_COMMAND_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b
 inline constexpr char BLE_WIFI_NETWORKS_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f004";
 inline constexpr char BLE_WIFI_RESULT_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f005";
 
+// BLE ile verilen MQTT sunucusu yalniz bu alan adi ekine izin verir (sahte broker yonlendirmesini onler).
+// Ozel/test ortami icin derleme bayragi: -D AHBU_MQTT_HOST_SUFFIX=".ornek.com"
+#ifndef AHBU_MQTT_HOST_SUFFIX
+#define AHBU_MQTT_HOST_SUFFIX ".gudeteknoloji.com.tr"
+#endif
+inline constexpr size_t BLE_COMMAND_MAX_BYTES = 640;
+
 inline constexpr unsigned long WIFI_RETRY_INTERVAL_MS = 15000;
+// Yedek yeniden baglanma (cekirdegin setAutoReconnect'ine ek): bekleme 6 -> 12 -> 24 -> 48 -> 60 sn katlanir, baglaninca 6 sn'ye doner.
+inline constexpr unsigned long WIFI_RETRY_MIN_MS = 6000;
+inline constexpr unsigned long WIFI_RETRY_MAX_MS = 60000;
+// WL_IDLE_STATUS (AP'ye baglandi, DHCP/IP bekleniyor) deneme en fazla bu kadar kesilmez
+inline constexpr unsigned long WIFI_IP_BEKLEME_MAX_MS = 30000;
 inline constexpr unsigned long WIFI_CONFIGURED_BLINK_INTERVAL_MS = 700;
 inline constexpr unsigned long WIFI_UNCONFIGURED_BLINK_INTERVAL_MS = 150;
 inline constexpr size_t WIFI_SCAN_RESULT_LIMIT = 8;
@@ -38,11 +55,14 @@ inline String gSavedMqttHost;
 inline uint16_t gSavedMqttPort = 0;
 inline String gSavedMqttUser;
 inline String gSavedMqttPassword;
+inline String gSavedLocalToken;
 inline bool gWifiConfigured = false;
 inline bool gWifiConnected = false;
 inline bool gProvisioningMode = false;
-inline bool gPendingWifiScan = false;
-inline bool gPendingWifiProvision = false;
+// BLE geri cagrisi (BTC gorevi) ile loop gorevi arasinda paylasilir: volatile + tek yonlu devir.
+// Geri cagri yalniz bayrak false iken veriyi yazar ve en son bayragi true yapar; loop veriyi okuyup bayragi en son temizler.
+inline volatile bool gPendingWifiScan = false;
+inline volatile bool gPendingWifiProvision = false;
 inline String gPendingProvisionSsid;
 inline String gPendingProvisionPassword;
 inline String gPendingMqttHost;
@@ -52,6 +72,7 @@ inline String gPendingMqttPassword;
 inline String gBleNetworksPayload = R"({"networks":[]})";
 inline String gBleResultPayload = R"({"status":"idle","message":""})";
 inline unsigned long gLastWifiAttemptAt = 0;
+inline unsigned long gWifiRetryBeklemeMs = WIFI_RETRY_MIN_MS;  // sonraki yedek yeniden deneme beklemesi (ussel)
 inline unsigned long gLastLedToggleAt = 0;
 inline unsigned long gResetPressedAt = 0;
 inline unsigned long gResetLastProgressAt = 0;
@@ -63,7 +84,8 @@ inline BLEAdvertising* gBleAdvertising = nullptr;
 inline BLECharacteristic* gBleStateCharacteristic = nullptr;
 inline BLECharacteristic* gBleNetworksCharacteristic = nullptr;
 inline BLECharacteristic* gBleResultCharacteristic = nullptr;
-inline bool gBleStarted = false;
+inline volatile bool gBleStarted = false;
+inline SemaphoreHandle_t gBleResultMutex = nullptr;
 
 inline void wifiSetStatusLed(bool on) {
   if (WIFI_STATUS_LED_PIN < 0) {
@@ -97,6 +119,7 @@ inline void wifiLoadStoredCredentials() {
   gSavedMqttPort = static_cast<uint16_t>(gWifiPrefs.getUInt(WIFI_PREF_MQTT_PORT, 0));
   gSavedMqttUser = gWifiPrefs.getString(WIFI_PREF_MQTT_USER, "");
   gSavedMqttPassword = gWifiPrefs.getString(WIFI_PREF_MQTT_PASSWORD, "");
+  gSavedLocalToken = gWifiPrefs.getString(WIFI_PREF_LOCAL_TOKEN, "");
   gWifiConfigured = !gSavedWifiSsid.isEmpty();
 }
 
@@ -156,12 +179,41 @@ inline String wifiMqttPassword(const char* fallback) {
   return gSavedMqttPassword.isEmpty() ? String(fallback) : gSavedMqttPassword;
 }
 
+// C4: yerel kontrol yalniz sunucunun gonderdigi token ile yetkilendirilir. Token yoksa yerel kontrol KAPALI (fail-closed).
+// Bu fonksiyon ASLA MQTT parolasini dondurmez.
 inline String wifiLocalControlToken() {
-  return gSavedMqttPassword;
+  return gSavedLocalToken;
 }
 
 inline bool wifiHasLocalControlToken() {
-  return !gSavedMqttPassword.isEmpty();
+  return !gSavedLocalToken.isEmpty();
+}
+
+inline bool wifiLocalTokenGecerliMi(const String& token) {
+  if (token.length() < 16 || token.length() > 64) {
+    return false;
+  }
+  for (size_t i = 0; i < token.length(); i += 1) {
+    const char c = token[i];
+    const bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-' || c == '_';
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 0: gecersiz, 1: degismedi, 2: guncellendi (NVS'e yalnizca degisince yazilir - flash asinmasi)
+inline int wifiPersistLocalToken(const String& token) {
+  if (!wifiLocalTokenGecerliMi(token)) {
+    return 0;
+  }
+  if (sabitZamanliEsit(token, gSavedLocalToken)) {
+    return 1;
+  }
+  gWifiPrefs.putString(WIFI_PREF_LOCAL_TOKEN, token);
+  gSavedLocalToken = token;
+  return 2;
 }
 
 inline String wifiBuildStatePayload() {
@@ -189,16 +241,21 @@ inline void wifiNotifyBleState() {
 }
 
 inline void wifiNotifyBleResult(const String& status, const String& message = "") {
+  // Hem loop hem BLE geri cagrisi (BTC gorevi) cagirir: ortak String'i muteksle koru.
+  const bool kilitli = gBleResultMutex != nullptr && xSemaphoreTake(gBleResultMutex, pdMS_TO_TICKS(100)) == pdTRUE;
+
   JsonDocument doc;
   doc["status"] = status;
   doc["message"] = message;
   serializeJson(doc, gBleResultPayload);
 
-  if (gBleResultCharacteristic == nullptr) {
-    return;
+  if (gBleResultCharacteristic != nullptr) {
+    gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
   }
 
-  gBleResultCharacteristic->setValue(gBleResultPayload.c_str());
+  if (kilitli) {
+    xSemaphoreGive(gBleResultMutex);
+  }
 }
 
 inline void wifiUpdateLed() {
@@ -319,13 +376,21 @@ inline void wifiStopProvisioningMode();
 inline void wifiStartProvisioningMode();
 
 inline void wifiApplyProvisioningRequest() {
-  gPendingWifiProvision = false;
+  // Bayrak true iken BLE geri cagrisi yeni veri yazmaz; once kopyala, EN SON bayragi temizle.
   const String ssid = gPendingProvisionSsid;
   const String password = gPendingProvisionPassword;
   const String mqttHost = gPendingMqttHost;
   const uint16_t mqttPort = gPendingMqttPort;
   const String mqttUser = gPendingMqttUser;
   const String mqttPassword = gPendingMqttPassword;
+  gPendingProvisionSsid = "";
+  gPendingProvisionPassword = "";
+  gPendingMqttHost = "";
+  gPendingMqttPort = 0;
+  gPendingMqttUser = "";
+  gPendingMqttPassword = "";
+  __sync_synchronize();
+  gPendingWifiProvision = false;
 
   if (ssid.isEmpty()) {
     wifiNotifyBleResult("error", "SSID zorunlu.");
@@ -340,11 +405,43 @@ inline void wifiApplyProvisioningRequest() {
   ESP.restart();
 }
 
+// MQTT sunucu adi guvenligi: yalniz varsayilan host veya izin verilen alan adi eki.
+inline bool wifiMqttHostIzinliMi(const String& host) {
+  if (host.isEmpty() || host.length() > 80) {
+    return false;
+  }
+  for (size_t i = 0; i < host.length(); i += 1) {
+    const char c = host[i];
+    const bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-' || c == '.';
+    if (!ok) {
+      return false;
+    }
+  }
+  String h = host;
+  h.toLowerCase();
+  String ek = String(AHBU_MQTT_HOST_SUFFIX);
+  ek.toLowerCase();
+  if (h.length() <= ek.length()) {
+    return false;
+  }
+  return h.endsWith(ek);
+}
+
 class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
  public:
   void onWrite(BLECharacteristic* characteristic) override {
+    // Yalniz provisioning penceresi acikken komut kabul edilir (pencere disinda sessizce yok sayilir).
+    if (!gProvisioningMode || !gBleStarted) {
+      return;
+    }
+
     const std::string value = characteristic->getValue();
-    if (value.empty()) {
+    if (value.empty() || value.size() > BLE_COMMAND_MAX_BYTES) {
+      return;
+    }
+
+    // Bir onceki talep loop tarafindan henuz islenmediyse yeni talep alma (paylasilan degiskenleri koru).
+    if (gPendingWifiProvision || gPendingWifiScan) {
       return;
     }
 
@@ -369,30 +466,38 @@ class WifiProvisionCommandCallbacks : public BLECharacteristicCallbacks {
     const String ssid = String(doc["ssid"] | "");
     const String password = String(doc["password"] | "");
     const String mqttHost = String(doc["mqtt_host"] | "");
-    const uint16_t mqttPort = static_cast<uint16_t>(doc["mqtt_port"] | 0);
+    const uint32_t mqttPortRaw = static_cast<uint32_t>(doc["mqtt_port"] | 0);
     const String mqttUser = String(doc["mqtt_username"] | "");
     const String mqttPassword = String(doc["mqtt_password"] | "");
-    if (ssid.isEmpty()) {
-      wifiNotifyBleResult("error", "SSID bilgisi eksik.");
+    if (ssid.isEmpty() || ssid.length() > 32 || password.length() > 63) {
+      wifiNotifyBleResult("error", "SSID bilgisi eksik veya gecersiz.");
       return;
     }
     if (
       mqttHost.isEmpty() ||
-      mqttPort == 0 ||
+      mqttPortRaw == 0 ||
+      mqttPortRaw > 65535 ||
       mqttUser.isEmpty() ||
-      mqttPassword.isEmpty()
+      mqttPassword.isEmpty() ||
+      mqttUser.length() > 64 ||
+      mqttPassword.length() > 128
     ) {
       wifiNotifyBleResult("error", "MQTT cihaz kimligi eksik. Once cihazi sirket hesabina kaydedin.");
+      return;
+    }
+    if (!wifiMqttHostIzinliMi(mqttHost)) {
+      wifiNotifyBleResult("error", "MQTT sunucu adresi izinli degil.");
       return;
     }
 
     gPendingProvisionSsid = ssid;
     gPendingProvisionPassword = password;
     gPendingMqttHost = mqttHost;
-    gPendingMqttPort = mqttPort;
+    gPendingMqttPort = static_cast<uint16_t>(mqttPortRaw);
     gPendingMqttUser = mqttUser;
     gPendingMqttPassword = mqttPassword;
-    gPendingWifiProvision = true;
+    __sync_synchronize();
+    gPendingWifiProvision = true;  // en son: loop artik tutarli veriyi okuyabilir
   }
 };
 
@@ -402,6 +507,10 @@ inline void wifiStartProvisioningMode() {
   if (gBleStarted) {
     wifiNotifyBleState();
     return;
+  }
+
+  if (gBleResultMutex == nullptr) {
+    gBleResultMutex = xSemaphoreCreateMutex();
   }
 
   const String bleName = wifiBleDeviceName();
@@ -524,6 +633,11 @@ inline void wifiBaglan() {
   gWifiConnected = false;
   gLastWifiAttemptAt = millis();
 
+  // Yazilimsal reset / OTA sonrasi RF register kilitlenmesini onlemek icin temiz sifirlama
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+
   if (!gWifiConfigured) {
     Serial.println("Kayitli WiFi yok, BLE provisioning baslatiliyor.");
     WiFi.mode(WIFI_OFF);
@@ -537,6 +651,15 @@ inline void wifiBaglan() {
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
+  // WiFi baglanti olaylarini dinle ve logla
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+      Serial.printf("WiFi baglanti koptu / basarisiz (Hata kodu: %d)\n", info.wifi_sta_disconnected.reason);
+    } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+      Serial.printf("WiFi IP alindi: %s\n", WiFi.localIP().toString().c_str());
+    }
+  });
+
   Serial.printf("Kayitli WiFi bulundu: %s, baglaniliyor...\n", gSavedWifiSsid.c_str());
   WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
 }
@@ -544,6 +667,15 @@ inline void wifiBaglan() {
 inline void wifiLoop() {
   wifiHandleResetButton();
   gWifiConnected = (WiFi.status() == WL_CONNECTED);
+
+  // Baglanti AZ ONCE koptu: cekirdegin otomatik yeniden baglanmasina (setAutoReconnect) once sure tani; yedek deneme kopmadan
+  // itibaren olculur. (Eskiden bayat damga yuzunden kopma aninda hemen disconnect+begin yapilip devam eden otomatik deneme kesiliyordu.)
+  static bool sOncekiBagli = false;
+  if (sOncekiBagli && !gWifiConnected) {
+    gLastWifiAttemptAt = millis();
+    gWifiRetryBeklemeMs = WIFI_RETRY_MIN_MS;
+  }
+  sOncekiBagli = gWifiConnected;
 
   if (gPendingWifiScan) {
     gPendingWifiScan = false;
@@ -556,6 +688,7 @@ inline void wifiLoop() {
 
   static bool sNtpConfigured = false;
   if (gWifiConnected) {
+    gWifiRetryBeklemeMs = WIFI_RETRY_MIN_MS;  // baglandi: geri cekilme basa doner
     if (!sNtpConfigured) {
       configTime(3 * 3600, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
       sNtpConfigured = true;
@@ -570,11 +703,21 @@ inline void wifiLoop() {
     }
   } else {
     sNtpConfigured = false;
-    // Kayıtlı Wi-Fi var ama bağlı değil -> Her 4 saniyede bir otomatik bağlanmayı dene (cihazı kapatıp açmaya gerek kalmaz)
-    if (millis() - gLastWifiAttemptAt >= 4000) {
-      gLastWifiAttemptAt = millis();
-      Serial.printf("WiFi baglantisi kontrol/yeniden deneniyor (%s)...\n", gSavedWifiSsid.c_str());
-      WiFi.reconnect();
+    // Kayitli Wi-Fi var ama bagli degil: yedek yeniden deneme. Bekleme 6->12->24->48->60 sn katlanir (kalabalik aglarda baglanma
+    // yarida kesilmesin, AP kapaliyken her 6 sn'de tam tarama olmasin); baglaninca 6 sn'ye doner.
+    const unsigned long gecen = millis() - gLastWifiAttemptAt;
+    if (gecen >= gWifiRetryBeklemeMs) {
+      if (WiFi.status() == WL_IDLE_STATUS && gecen < WIFI_IP_BEKLEME_MAX_MS) {
+        // AP'ye baglandi, IP (DHCP) bekleniyor: devam eden baglanmayi kesme
+      } else {
+        gLastWifiAttemptAt = millis();
+        const unsigned long sonraki = gWifiRetryBeklemeMs * 2;
+        gWifiRetryBeklemeMs = sonraki > WIFI_RETRY_MAX_MS ? WIFI_RETRY_MAX_MS : sonraki;
+        Serial.printf("WiFi baglantisi yeniden deneniyor (%s)...\n", gSavedWifiSsid.c_str());
+        WiFi.disconnect(false, false);
+        delay(50);
+        WiFi.begin(gSavedWifiSsid.c_str(), gSavedWifiPassword.c_str());
+      }
     }
   }
 

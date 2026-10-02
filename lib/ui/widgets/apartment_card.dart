@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
+/// Daire satırı. "Daireler" kartının (tek yüzey) içinde düz satır olarak durur; satırlar arasındaki
+/// `Divider`'ı üst öğe koyar (kart-içinde-kart kalktı). Dokununca açılır/kapanır.
 class ApartmentCard extends StatefulWidget {
   const ApartmentCard({
     super.key,
@@ -27,7 +31,8 @@ class _ApartmentCardState extends State<ApartmentCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final apartment = widget.apartment;
     final hasResident = apartment.residentFullName != null &&
         apartment.residentFullName!.trim().isNotEmpty;
@@ -35,218 +40,147 @@ class _ApartmentCardState extends State<ApartmentCard> {
         apartment.residentIsActive ?? (hasResident && apartment.isActive);
 
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         onTap: () => setState(() => _expanded = !_expanded),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: isDark
-                ? const Color(0xFF1E293B).withValues(alpha: 0.85)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: hasResident
-                  ? (isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE))
-                  : (isDark ? const Color(0x33F59E0B) : const Color(0xFFFED7AA)),
-              width: 1.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: hasResident
-                          ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1)
-                          : AppColors.amber.withValues(alpha: isDark ? 0.2 : 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.home_rounded,
-                      color: hasResident
-                          ? (isDark ? AppColors.accentLight : AppColors.primary)
-                          : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
-                      size: 20,
-                    ),
+                  IconTile(
+                    icon: Icons.home_rounded,
+                    tone: hasResident ? AppTone.primary : AppTone.warning,
+                    gap: AppSpace.md,
                   ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          apartment.label,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                          ),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: AppSpace.sm,
+                          runSpacing: AppSpace.xs,
+                          children: [
+                            Text(apartment.label, style: th.titleMedium),
+                            StatusChip(
+                              label: active ? 'Aktif' : 'Pasif',
+                              tone: active ? AppTone.success : AppTone.danger,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: AppSpace.xs),
                         Text(
                           hasResident
                               ? 'Sakin: ${apartment.residentFullName}'
                               : 'Daire Boş / Sakin Yok',
-                          style: TextStyle(
-                            color: hasResident
-                                ? (isDark ? AppColors.textMutedLight : AppColors.textMuted)
-                                : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
-                            fontSize: 12,
-                            fontWeight: hasResident
-                                ? FontWeight.normal
-                                : FontWeight.w600,
-                          ),
+                          style: hasResident
+                              ? th.bodyMedium
+                              : th.bodyMedium?.copyWith(
+                                  color: AppTone.warning.ink(p),
+                                  fontWeight: FontWeight.w600,
+                                ),
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active
-                          ? AppColors.emerald.withValues(alpha: 0.15)
-                          : AppColors.rose.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: active
-                            ? AppColors.emerald.withValues(alpha: 0.4)
-                            : AppColors.rose.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Text(
-                      active ? 'Aktif' : 'Pasif',
-                      style: TextStyle(
-                        color: active
-                            ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
-                            : (isDark ? AppColors.roseLight : AppColors.rose),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                    size: 20,
-                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  ExpandChevron(expanded: _expanded),
                 ],
               ),
-              if (_expanded) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(
-                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
-                    height: 1,
-                  ),
-                ),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: [
-                    if ((apartment.residentLoginName ?? '').isNotEmpty)
-                      Text(
-                        'Kullanıcı Adı: ${apartment.residentLoginName}',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    if ((apartment.residentPinCode ?? '').isNotEmpty)
-                      Text(
-                        'Şifre (PIN): ${apartment.residentPinCode}',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    if (apartment.residentUserCode != null)
-                      Text(
-                        'Kullanıcı ID: ${apartment.residentUserCode}',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                        ),
-                      ),
-                  ],
-                ),
-                if ((apartment.residentEmail ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'E-posta: ${apartment.residentEmail}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                    ),
-                  ),
-                ],
-                if ((apartment.residentPhoneNumber ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Telefon: ${apartment.residentPhoneNumber}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if ((apartment.residentEmail ?? '').isNotEmpty)
-                      OutlinedButton.icon(
-                        onPressed: widget.sendingMail ? null : widget.onSendMail,
-                        icon: widget.sendingMail
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.email_outlined, size: 16),
-                        label: const Text('Bilgileri Gönder'),
-                      ),
-                    ElevatedButton.icon(
-                      onPressed: widget.onEdit,
-                      icon: const Icon(Icons.edit_outlined, size: 16),
-                      label: const Text('Düzenle'),
-                    ),
-                    if (hasResident && widget.onDelete != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onDelete,
-                        icon: const Icon(Icons.person_remove_outlined, size: 16, color: AppColors.roseLight),
-                        label: const Text('Sakini Sil', style: TextStyle(color: AppColors.roseLight)),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
+              ExpandableSection(
+                expanded: _expanded,
+                child: _buildDetails(context, hasResident),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDetails(BuildContext context, bool hasResident) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final apartment = widget.apartment;
+    final strong = th.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: p.text,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpace.md),
+        const Divider(),
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.lg,
+          runSpacing: AppSpace.xs,
+          children: [
+            if ((apartment.residentLoginName ?? '').isNotEmpty)
+              Text(
+                'Kullanıcı Adı: ${apartment.residentLoginName}',
+                style: strong,
+              ),
+            if ((apartment.residentPinCode ?? '').isNotEmpty)
+              Text('Şifre (PIN): ${apartment.residentPinCode}', style: strong),
+            if (apartment.residentUserCode != null)
+              Text(
+                'Kullanıcı ID: ${apartment.residentUserCode}',
+                style: th.bodyMedium,
+              ),
+          ],
+        ),
+        if ((apartment.residentEmail ?? '').isNotEmpty) ...[
+          const SizedBox(height: AppSpace.xs),
+          Text('E-posta: ${apartment.residentEmail}', style: th.bodyMedium),
+        ],
+        if ((apartment.residentPhoneNumber ?? '').isNotEmpty) ...[
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Telefon: ${apartment.residentPhoneNumber}',
+            style: th.bodyMedium,
+          ),
+        ],
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            if ((apartment.residentEmail ?? '').isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: widget.sendingMail ? null : widget.onSendMail,
+                style: tonalActionStyle(context),
+                icon: widget.sendingMail
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.email_outlined, size: 16),
+                label: const Text('Bilgileri Gönder'),
+              ),
+            ElevatedButton.icon(
+              onPressed: widget.onEdit,
+              style: tonalActionStyle(context),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Düzenle'),
+            ),
+            if (hasResident && widget.onDelete != null)
+              OutlinedButton.icon(
+                onPressed: widget.onDelete,
+                style: dangerOutlineStyle(context),
+                icon: const Icon(Icons.person_remove_outlined, size: 16),
+                label: const Text('Sakini Sil'),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

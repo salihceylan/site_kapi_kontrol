@@ -114,10 +114,15 @@ Map<String, dynamic> _decodeJsonMap(String payload) {
 }
 
 class BleWifiProvisionService {
-  BleWifiProvisionService({FlutterReactiveBle? ble})
-    : _ble = ble ?? FlutterReactiveBle();
+  BleWifiProvisionService({FlutterReactiveBle? ble}) : _bleOverride = ble;
 
-  final FlutterReactiveBle _ble;
+  final FlutterReactiveBle? _bleOverride;
+
+  /// FlutterReactiveBle yalnızca ilk kullanımda (desteklenen platformda: Android/iOS) oluşturulur.
+  /// Kurucu, platform uygulaması olmayan masaüstünde (Windows/Linux) asenkron
+  /// `UnimplementedError: initialize() has not been implemented` fırlatıp yakalanmamış istisna olur;
+  /// bu yüzden sayfa açılırken (kurucuda) değil, `ensureReady()` desteği doğruladıktan sonra yaratılır.
+  late final FlutterReactiveBle _ble = _bleOverride ?? FlutterReactiveBle();
   final Uuid _serviceUuid = Uuid.parse(bleWifiServiceUuid);
   final Uuid _stateUuid = Uuid.parse(bleWifiStateUuid);
   final Uuid _commandUuid = Uuid.parse(bleWifiCommandUuid);

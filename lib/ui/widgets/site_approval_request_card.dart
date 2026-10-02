@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class SiteApprovalRequestCard extends StatelessWidget {
   const SiteApprovalRequestCard({
@@ -20,145 +22,84 @@ class SiteApprovalRequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF1E293B).withValues(alpha: 0.85)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return AppCard(
+      padding: listCardPadding(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.apartment_rounded,
-                  color: isDark ? AppColors.accentLight : AppColors.primary,
-                  size: 20,
-                ),
+              const IconTile(
+                icon: Icons.apartment_rounded,
+                size: 40,
+                gap: AppSpace.md,
               ),
-              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  site.name,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF0F172A).withValues(alpha: 0.6)
-                      : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE2E8F0),
-                  ),
-                ),
-                child: Text(
-                  'ID: ${site.id}',
-                  style: TextStyle(
-                    color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.xs,
+                  children: [
+                    Text(site.name, style: th.titleMedium),
+                    InfoChip('ID: ${site.id}'),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpace.md),
           Text(
             '${site.blockCount} blok, ${site.apartmentCount} daire, ${site.doorCount} kapı',
-            style: TextStyle(
-              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
-              fontSize: 13,
+            style: th.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
+              color: p.text,
             ),
           ),
           if ((site.managerName ?? '').isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpace.xs),
             Text(
               'Yönetici: ${site.managerName} (${site.managerUserCode ?? '-'})',
-              style: TextStyle(
-                color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                fontSize: 12.5,
-              ),
+              style: th.bodyMedium,
             ),
           ],
           if ((site.address ?? '').isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              site.address!,
-              style: TextStyle(
-                color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                fontSize: 12.5,
-              ),
-            ),
+            const SizedBox(height: AppSpace.xs),
+            Text(site.address!, style: th.bodyMedium),
           ],
           if ((site.city ?? '').isNotEmpty || (site.district ?? '').isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: AppSpace.xs),
               child: Text(
                 '${site.city ?? '-'} / ${site.district ?? '-'}',
-                style: TextStyle(
-                  color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                  fontSize: 12,
-                ),
+                style: th.bodySmall,
               ),
             ),
-          const SizedBox(height: 4),
-          Text(
-            'Oluşturma: $formattedCreatedAt',
-            style: TextStyle(
-              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpace.xs),
+          Text('Oluşturma: $formattedCreatedAt', style: th.bodySmall),
+          const SizedBox(height: AppSpace.lg),
           busy
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(
+                  // Koyu temada varsayılan birincil mavi kart yüzeyinde ~2,7:1 kalıyordu: ink tonu.
+                  child: CircularProgressIndicator(
+                    color: AppTone.primary.ink(p),
+                  ),
+                )
               : Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
                   children: [
                     FilledButton.icon(
                       onPressed: onApprove,
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.emerald),
+                      style: filledToneStyle(context, tone: AppTone.success),
                       icon: const Icon(Icons.check_circle_outline, size: 18),
                       label: const Text('Onayla'),
                     ),
                     OutlinedButton.icon(
                       onPressed: onReject,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.roseLight,
-                        side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
-                      ),
+                      style: dangerOutlineStyle(context),
                       icon: const Icon(Icons.block_outlined, size: 18),
                       label: const Text('Reddet'),
                     ),

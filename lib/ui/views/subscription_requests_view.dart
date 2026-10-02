@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/subscription_request.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/subscription_request_card.dart';
 
 class SubscriptionRequestsView extends StatelessWidget {
@@ -30,99 +32,58 @@ class SubscriptionRequestsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+    final page = pageData;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: Text(
-            'Yeni Abonelik Talepleri',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-              color: cardTitleColor,
-            ),
+        const PageHeaderCard(title: 'Yeni Abonelik Talepleri'),
+        const SizedBox(height: AppSpace.lg),
+        // Liste bölümü: başlık sayfa zemininde, her talep kendi AppCard'ı (kart-içinde-kart yok).
+        SectionHeader(
+          title: page == null
+              ? 'Bekleyen Talepler'
+              : 'Bekleyen Talepler (${page.total})',
+          trailing: IconButton(
+            onPressed: isLoading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      pageData == null
-                          ? 'Bekleyen Talepler'
-                          : 'Bekleyen Talepler (${pageData!.total})',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: cardTitleColor,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: isLoading ? null : onRefresh,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (isLoading && pageData == null)
-                const Center(child: CircularProgressIndicator())
-              else if (requests.isEmpty)
-                const Text('Doğrulanmış yeni abonelik talebi yok.')
-              else ...[
-                for (final request in requests)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: SubscriptionRequestCard(
-                      request: request,
-                      busy: busyRequests.contains(request.id),
-                      formattedCreatedAt: formatDateTime(request.createdAt),
-                      onApprove: () => onApprove(request.id),
-                      onReject: () => onReject(request.id),
-                    ),
-                  ),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Sayfa ${pageData?.page ?? 1} / ${pageData?.totalPages ?? 1} | Toplam ${pageData?.total ?? 0}',
-                    ),
-                    OutlinedButton(
-                      onPressed: (pageData?.page ?? 1) > 1
-                          ? () => onLoadPage((pageData?.page ?? 1) - 1)
-                          : null,
-                      child: const Icon(Icons.chevron_left),
-                    ),
-                    OutlinedButton(
-                      onPressed: (pageData?.page ?? 1) <
-                              (pageData?.totalPages ?? 1)
-                          ? () => onLoadPage((pageData?.page ?? 1) + 1)
-                          : null,
-                      child: const Icon(Icons.chevron_right),
-                    ),
-                  ],
+        const SizedBox(height: AppSpace.md),
+        if (isLoading && page == null)
+          const ListSkeleton()
+        else if (requests.isEmpty)
+          const EmptyCard(
+            icon: Icons.mark_email_read_outlined,
+            title: 'Doğrulanmış yeni abonelik talebi yok.',
+          )
+        else ...[
+          for (var i = 0; i < requests.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.md),
+              child: StaggeredEntry(
+                index: i,
+                child: SubscriptionRequestCard(
+                  request: requests[i],
+                  busy: busyRequests.contains(requests[i].id),
+                  formattedCreatedAt: formatDateTime(requests[i].createdAt),
+                  onApprove: () => onApprove(requests[i].id),
+                  onReject: () => onReject(requests[i].id),
                 ),
-              ],
-            ],
+              ),
+            ),
+          PaginationBar(
+            label:
+                'Sayfa ${page?.page ?? 1} / ${page?.totalPages ?? 1} | Toplam ${page?.total ?? 0}',
+            onPrevious: (page?.page ?? 1) > 1
+                ? () => onLoadPage((page?.page ?? 1) - 1)
+                : null,
+            onNext: (page?.page ?? 1) < (page?.totalPages ?? 1)
+                ? () => onLoadPage((page?.page ?? 1) + 1)
+                : null,
           ),
-        ),
+        ],
       ],
     );
   }
 }
-

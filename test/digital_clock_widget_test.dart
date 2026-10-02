@@ -81,4 +81,27 @@ void main() {
     expect(find.byType(DigitalClockWidget), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('DigitalClockWidget pauses timer on background and resumes on foreground', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DigitalClockWidget(session: testSession),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.byType(DigitalClockWidget), findsOneWidget);
+
+    // Simulate app going to background
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 2));
+
+    // Simulate app returning to foreground
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+  });
 }

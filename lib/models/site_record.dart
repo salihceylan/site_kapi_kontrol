@@ -22,9 +22,13 @@ class SiteRecord {
     this.requireGeofence = false,
     this.geofenceLatitude,
     this.geofenceLongitude,
-    this.geofenceRadiusMeters = 75,
-    this.qrTotpSecret,
+    this.geofenceRadiusMeters = 100,
     this.qrRotationSeconds = 30,
+    this.deletionStatus = 'none',
+    this.deletionRequestedByUserCode,
+    this.deletionRequestedByName,
+    this.deletionRequestedByRole,
+    this.deletionRequestedAt,
     required this.createdAt,
   });
 
@@ -51,11 +55,25 @@ class SiteRecord {
   final double? geofenceLatitude;
   final double? geofenceLongitude;
   final int geofenceRadiusMeters;
-  final String? qrTotpSecret;
   final int qrRotationSeconds;
+  final String deletionStatus;
+  final int? deletionRequestedByUserCode;
+  final String? deletionRequestedByName;
+  final String? deletionRequestedByRole;
+  final DateTime? deletionRequestedAt;
   final DateTime? createdAt;
 
   bool get isApproved => approvalStatus == 'approved';
+
+  bool get isDeletionPending =>
+      deletionStatus == 'pending_super_user_approval' ||
+      deletionStatus == 'pending_site_manager_approval';
+
+  bool get isPendingSuperUserApproval =>
+      deletionStatus == 'pending_super_user_approval';
+
+  bool get isPendingSiteManagerApproval =>
+      deletionStatus == 'pending_site_manager_approval';
 
   bool get isAppOnly => featureRemoteOpenEnabled && !featureQrEnabled;
   bool get isQrOnly => !featureRemoteOpenEnabled && featureQrEnabled;
@@ -102,8 +120,12 @@ class SiteRecord {
     double? geofenceLatitude,
     double? geofenceLongitude,
     int? geofenceRadiusMeters,
-    String? qrTotpSecret,
     int? qrRotationSeconds,
+    String? deletionStatus,
+    int? deletionRequestedByUserCode,
+    String? deletionRequestedByName,
+    String? deletionRequestedByRole,
+    DateTime? deletionRequestedAt,
     DateTime? createdAt,
   }) {
     return SiteRecord(
@@ -130,8 +152,12 @@ class SiteRecord {
       geofenceLatitude: geofenceLatitude ?? this.geofenceLatitude,
       geofenceLongitude: geofenceLongitude ?? this.geofenceLongitude,
       geofenceRadiusMeters: geofenceRadiusMeters ?? this.geofenceRadiusMeters,
-      qrTotpSecret: qrTotpSecret ?? this.qrTotpSecret,
       qrRotationSeconds: qrRotationSeconds ?? this.qrRotationSeconds,
+      deletionStatus: deletionStatus ?? this.deletionStatus,
+      deletionRequestedByUserCode: deletionRequestedByUserCode ?? this.deletionRequestedByUserCode,
+      deletionRequestedByName: deletionRequestedByName ?? this.deletionRequestedByName,
+      deletionRequestedByRole: deletionRequestedByRole ?? this.deletionRequestedByRole,
+      deletionRequestedAt: deletionRequestedAt ?? this.deletionRequestedAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -175,9 +201,15 @@ class SiteRecord {
       requireGeofence: json['require_geofence'] as bool? ?? false,
       geofenceLatitude: (json['geofence_latitude'] as num?)?.toDouble(),
       geofenceLongitude: (json['geofence_longitude'] as num?)?.toDouble(),
-      geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 75,
-      qrTotpSecret: json['qr_totp_secret'] as String?,
+      geofenceRadiusMeters: (json['geofence_radius_meters'] as num?)?.toInt() ?? 100,
       qrRotationSeconds: (json['qr_rotation_seconds'] as num?)?.toInt() ?? 30,
+      deletionStatus: json['deletion_status'] as String? ?? 'none',
+      deletionRequestedByUserCode: (json['deletion_requested_by_user_code'] as num?)?.toInt(),
+      deletionRequestedByName: json['deletion_requested_by_name'] as String?,
+      deletionRequestedByRole: json['deletion_requested_by_role'] as String?,
+      deletionRequestedAt: json['deletion_requested_at'] == null
+          ? null
+          : DateTime.tryParse(json['deletion_requested_at'].toString()),
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString()),

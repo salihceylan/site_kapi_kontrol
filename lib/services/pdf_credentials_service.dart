@@ -5,6 +5,8 @@ import 'package:printing/printing.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
+import 'package:site_kapi_kontrol/services/background_work.dart';
+import 'package:site_kapi_kontrol/services/pdf_font_set.dart';
 
 class PdfCredentialsService {
   static const PdfColor _primaryColor = PdfColor.fromInt(0xFF1E3A8A); // Deep Blue
@@ -15,11 +17,32 @@ class PdfCredentialsService {
   static const PdfColor _rowAltBg = PdfColor.fromInt(0xFFF1F5F9);
   static const PdfColor _border = PdfColor.fromInt(0xFFCBD5E1);
 
-  /// Tek bir sitenin tüm kullanıcı ve daire giriş bilgilerini içeren PDF üretir
+  /// Tek bir sitenin tüm kullanıcı ve daire giriş bilgilerini içeren PDF üretir.
+  ///
+  /// Sayfa dizgisi ve PDF kodlaması arka plan izolesinde yapılır (UI iş parçacığı bloklanmaz);
+  /// yazı tipleri UI izolesinde yüklenir ([fonts] verilmezse Roboto; testler ağsız
+  /// [PdfFontSet.helvetica] geçebilir).
   static Future<Uint8List> generateSiteCredentialsPdf({
     required SiteStructureRecord structure,
     String? companyName,
+    PdfFontSet? fonts,
   }) async {
+    final fontSet = fonts ?? await PdfFontSet.loadRoboto();
+    return BackgroundWork.run<_CredentialsPdfJob, Uint8List>(
+      _buildSiteCredentialsPdf,
+      _CredentialsPdfJob(
+        fonts: fontSet,
+        structures: <SiteStructureRecord>[structure],
+        companyName: companyName,
+      ),
+      debugLabel: 'pdf.credentials',
+    );
+  }
+
+  /// Arka plan izolesi girişi (statik: isolate'a gönderilebilir). Eski gövde aynen korunmuştur.
+  static Future<Uint8List> _buildSiteCredentialsPdf(_CredentialsPdfJob job) async {
+    final structure = job.structures.first;
+    final companyName = job.companyName;
     final pdf = pw.Document(
       title: '${structure.site.name} - Kullanıcı Giriş Bilgileri',
       author: companyName ?? 'AHBU Akıllı Kapı Sistemleri',
@@ -27,9 +50,10 @@ class PdfCredentialsService {
 
     final site = structure.site;
     final apartments = structure.apartments;
-    final font = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fonts = job.fonts.resolve();
+    final font = fonts.regular;
+    final fontBold = fonts.bold;
+    final fontMedium = fonts.medium;
 
     pdf.addPage(
       pw.MultiPage(
@@ -59,19 +83,37 @@ class PdfCredentialsService {
     return pdf.save();
   }
 
-  /// Birden fazla sitenin giriş bilgilerini içeren toplu PDF üretir
+  /// Birden fazla sitenin giriş bilgilerini içeren toplu PDF üretir (arka plan izolesinde).
   static Future<Uint8List> generateMultiSiteCredentialsPdf({
     required List<SiteStructureRecord> structures,
     String? companyName,
+    PdfFontSet? fonts,
   }) async {
+    final fontSet = fonts ?? await PdfFontSet.loadRoboto();
+    return BackgroundWork.run<_CredentialsPdfJob, Uint8List>(
+      _buildMultiSiteCredentialsPdf,
+      _CredentialsPdfJob(
+        fonts: fontSet,
+        structures: structures,
+        companyName: companyName,
+      ),
+      debugLabel: 'pdf.credentialsMulti',
+    );
+  }
+
+  /// Arka plan izolesi girişi (statik: isolate'a gönderilebilir). Eski gövde aynen korunmuştur.
+  static Future<Uint8List> _buildMultiSiteCredentialsPdf(_CredentialsPdfJob job) async {
+    final structures = job.structures;
+    final companyName = job.companyName;
     final pdf = pw.Document(
       title: 'Toplu Site Kullanıcı Giriş Bilgileri Raporu',
       author: companyName ?? 'AHBU Akıllı Kapı Sistemleri',
     );
 
-    final font = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fonts = job.fonts.resolve();
+    final font = fonts.regular;
+    final fontBold = fonts.bold;
+    final fontMedium = fonts.medium;
 
     for (final structure in structures) {
       final site = structure.site;
@@ -437,3 +479,15 @@ class PdfCredentialsService {
   }
 }
 
+/// [PdfCredentialsService] arka plan işleri için isolate iletisi.
+class _CredentialsPdfJob {
+  const _CredentialsPdfJob({
+    required this.fonts,
+    required this.structures,
+    required this.companyName,
+  });
+
+  final PdfFontSet fonts;
+  final List<SiteStructureRecord> structures;
+  final String? companyName;
+}

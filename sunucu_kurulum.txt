@@ -61,17 +61,27 @@ Bu dokuman, projeyi sifirdan VPS uzerinde calisir hale getirmek icin basariyla u
 - server/.env olusturuldu ve duzenlendi:
   cd /var/www/site_kapi_kontrol/server
   cp .env.example .env
-- .env icine en az su alanlar tanimlandi:
+- .env icine en az su alanlar tanimlandi (TUM alanlar ve aciklamalari server/.env.example icindedir;
+  sirlari bu belgeye/depoya YAZMAYIN):
   PORT=8080
-  JWT_SECRET=<guclu_bir_secret>
-  JWT_EXPIRES_IN=12h
+  NODE_ENV=production
+  JWT_SECRET=<en_az_32_karakter_rastgele_secret>   # bos/yer tutucu ise sunucu BASLAMAZ; 32 karakterden kisaysa yalniz uyari
+  JWT_EXPIRES_IN=30d                                # bos birakilirsa varsayilan 30d
   DB_HOST=127.0.0.1
   DB_PORT=5432
   DB_NAME=site_kapi_kontrol
   DB_USER=<db_user>
   DB_PASSWORD=<db_password>
+  SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / SMTP_FROM   # dogrulama kodu, sifre sifirlama, yonetici daveti e-postalari
+  PUBLIC_BASE_URL=https://api.gudeteknoloji.com.tr  # API'nin disaridan gorunen adresi (OTA/QR/davet baglantilari bundan uretilir)
+  CORS_ORIGINS=<web istemci origin listesi>         # yalniz tarayici (web) istemcileri icin; mobil uygulama CORS kullanmaz
+  COMPANY_API_KEY=<en_az_24_karakter_rastgele>      # company_qr_tool X-Company-Key basligi; tanimsizsa yalniz super_user JWT
+  MQTT_HOST / MQTT_PORT / MQTT_USER / MQTT_PASSWORD  # API <-> broker (mqtts, TLS dogrulamasi acik)
+  Istege bagli: DB_POOL_MAX (varsayilan 12), DB_STATEMENT_TIMEOUT_MS (30000), DB_CONNECT_TIMEOUT_MS (5000)
+- Bagimliliklar (package.json degistiyse): cd server && npm ci --omit=dev
 - PM2 env guncelleyerek restart:
   pm2 restart kapi-api --update-env
+  pm2 logs kapi-api --lines 20 --nostream
 
 8) HEALTH CHECK (LOKAL)
 - API + DB baglantisi dogrulandi:
@@ -116,3 +126,31 @@ Notlar:
 - API health endpoint: /health
 - Uretimde DB portunu disariya acik birakmamak gerekir.
 - SSH ayar degisikliklerinde oturum kapanmadan ikinci terminalden baglanti testi yapilmalidir.
+
+
+GUVENLIK NOTLARI (yalnizca ek; yukaridaki adimlar degismedi)
+- PostgreSQL: docker-compose.yml artik portu yalnizca 127.0.0.1:5432'e baglar ve POSTGRES_PASSWORD'u
+  zorunlu tutar (depo kokundeki .env veya ortam degiskeni; varsayilan parola yoktur):
+    cd /var/www/site_kapi_kontrol
+    echo 'POSTGRES_PASSWORD=<guclu-parola>' >> .env && chmod 600 .env
+    docker compose up -d postgres
+  NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde uygulanir. Mevcut veritabanida parolayi
+  ALTER USER ile degistirin ve server/.env DB_PASSWORD'u guncelleyin.
+- Guvenlik duvari: 5432 (PostgreSQL) ve 8080 (Node) disariya ACIK olmamali; yalnizca 80/443 ve
+  SSH portu aciktir. API 8080'de tum arayuzleri dinler; disaridan yalnizca nginx uzerinden erisilmeli
+  (sudo ufw status).
+- server/.env dosyasi: chmod 600, sahibi API kullanicisi; git'e girmez. JWT_SECRET en az 32 karakter
+  rastgele olmali (bos/yer tutucu deger sunucuyu baslatmaz); COMPANY_API_KEY tanimlayin.
+- Surec yonetimi: server/ecosystem.config.cjs (kapi-api). Ilk gecis:
+    cd /var/www/site_kapi_kontrol/server
+    pm2 delete kapi-api && pm2 start ecosystem.config.cjs && pm2 save
+- Veritabani semasi: server/scripts/migrate.js (hicbir sey kendiliginden calismaz).
+  Canli veritabani zaten migration'larla dolu oldugundan ilk kez (once semanin gercekten 001-024
+  ile uyumlu oldugunu dogrulayin; baseline SQL calistirmaz, yalnizca "uygulandi" diye kaydeder):
+    node scripts/migrate.js --status
+    node scripts/migrate.js --baseline 24
+    node scripts/migrate.js --apply --dry-run      (bekleyen: 025_password_reset)
+    node scripts/migrate.js --apply
+  --apply, schema_migrations bossa ve users tablosu varsa REDDEDER (once --baseline gerekir).
+- API sureci root olarak calistirilmaz. MQTT senkron wrapper'i (sudoers) icin MQTT_kurulum.txt 15.
+  maddesine bakin.

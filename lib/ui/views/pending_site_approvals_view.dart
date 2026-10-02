@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_approval_request_card.dart';
 
 class PendingSiteApprovalsView extends StatelessWidget {
@@ -30,97 +32,58 @@ class PendingSiteApprovalsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+    final page = pageData;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: Text(
-            'Site Onay Talepleri',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: cardTitleColor,
-            ),
+        const PageHeaderCard(title: 'Site Onay Talepleri'),
+        const SizedBox(height: AppSpace.lg),
+        // Liste bölümü: başlık sayfa zemininde, her talep kendi AppCard'ı (kart-içinde-kart yok).
+        SectionHeader(
+          title: page == null
+              ? 'Bekleyen Siteler'
+              : 'Bekleyen Siteler (${page.total})',
+          trailing: IconButton(
+            onPressed: isLoading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      pageData == null
-                          ? 'Bekleyen Siteler'
-                          : 'Bekleyen Siteler (${pageData!.total})',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: cardTitleColor,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: isLoading ? null : onRefresh,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (isLoading && pageData == null)
-                const Center(child: CircularProgressIndicator())
-              else if (sites.isEmpty)
-                const Text('Bekleyen site onay talebi yok.')
-              else ...[
-                for (final site in sites)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: SiteApprovalRequestCard(
-                      site: site,
-                      busy: busySiteApprovals.contains(site.id),
-                      formattedCreatedAt: formatDateTime(site.createdAt),
-                      onApprove: () => onApprove(site.id),
-                      onReject: () => onReject(site.id),
-                    ),
-                  ),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Sayfa ${pageData?.page ?? 1} / ${pageData?.totalPages ?? 1} | Toplam ${pageData?.total ?? 0}',
-                    ),
-                    OutlinedButton(
-                      onPressed: (pageData?.page ?? 1) > 1
-                          ? () => onLoadPage((pageData?.page ?? 1) - 1)
-                          : null,
-                      child: const Icon(Icons.chevron_left),
-                    ),
-                    OutlinedButton(
-                      onPressed: (pageData?.page ?? 1) <
-                              (pageData?.totalPages ?? 1)
-                          ? () => onLoadPage((pageData?.page ?? 1) + 1)
-                          : null,
-                      child: const Icon(Icons.chevron_right),
-                    ),
-                  ],
+        const SizedBox(height: AppSpace.md),
+        if (isLoading && page == null)
+          const ListSkeleton()
+        else if (sites.isEmpty)
+          const EmptyCard(
+            icon: Icons.fact_check_outlined,
+            title: 'Bekleyen site onay talebi yok.',
+          )
+        else ...[
+          for (var i = 0; i < sites.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.md),
+              child: StaggeredEntry(
+                index: i,
+                child: SiteApprovalRequestCard(
+                  site: sites[i],
+                  busy: busySiteApprovals.contains(sites[i].id),
+                  formattedCreatedAt: formatDateTime(sites[i].createdAt),
+                  onApprove: () => onApprove(sites[i].id),
+                  onReject: () => onReject(sites[i].id),
                 ),
-              ],
-            ],
+              ),
+            ),
+          PaginationBar(
+            label:
+                'Sayfa ${page?.page ?? 1} / ${page?.totalPages ?? 1} | Toplam ${page?.total ?? 0}',
+            onPrevious: (page?.page ?? 1) > 1
+                ? () => onLoadPage((page?.page ?? 1) - 1)
+                : null,
+            onNext: (page?.page ?? 1) < (page?.totalPages ?? 1)
+                ? () => onLoadPage((page?.page ?? 1) + 1)
+                : null,
           ),
-        ),
+        ],
       ],
     );
   }
 }
-

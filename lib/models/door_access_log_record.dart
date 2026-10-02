@@ -9,7 +9,9 @@ class DoorAccessLogRecord {
   final String? userRole;
   final String? apartmentLabel;
   final String triggerType;
-  final DateTime openedAt;
+
+  /// Sunucudan gelen geçiş zamanı; ayrıştırılamazsa null (uydurma 'şimdi' değeri KULLANILMAZ).
+  final DateTime? openedAt;
   final String? ipAddress;
 
   const DoorAccessLogRecord({
@@ -23,7 +25,7 @@ class DoorAccessLogRecord {
     this.userRole,
     this.apartmentLabel,
     required this.triggerType,
-    required this.openedAt,
+    this.openedAt,
     this.ipAddress,
   });
 
@@ -39,31 +41,75 @@ class DoorAccessLogRecord {
       userRole: json['user_role'] as String?,
       apartmentLabel: json['apartment_label'] as String?,
       triggerType: json['trigger_type'] as String? ?? 'cloud_app',
-      openedAt: DateTime.tryParse(json['opened_at'] as String? ?? '')?.toLocal() ??
-          DateTime.now(),
+      openedAt: DateTime.tryParse(json['opened_at']?.toString() ?? '')?.toLocal(),
       ipAddress: json['ip_address'] as String?,
     );
   }
 
+  /// Sunucunun kabul ettiği tüm tetikleyiciler (door_log_service ALLOWED_TRIGGER_TYPES) Türkçe
+  /// etiketlenir; bilinmeyen bir değer "Mobil Bulut" gibi uydurulmaz, ham değer gösterilir.
   String get triggerTypeDisplay {
     switch (triggerType) {
       case 'voice':
         return 'Sesli Komut';
       case 'local_wifi':
         return 'Yerel Wi-Fi';
+      case 'local_udp':
+        return 'Yerel Wi-Fi (UDP)';
+      case 'local_http':
+        return 'Yerel Wi-Fi (HTTP)';
+      case 'local_ble':
+      case 'ble':
+        return 'Bluetooth';
       case 'guest_pass':
         return 'Misafir Linki';
       case 'offline_sync':
         return 'Çevrimdışı (ESP32)';
       case 'qr_scanner':
         return 'GM60 QR Okuyucu';
+      case 'screen_qr':
+        return 'Ekran QR Tarama';
       case 'display_btn':
         return 'Ekran Butonu';
+      case 'admin_display_btn':
+        return 'Ekran Yönetici PIN';
       case 'physical_btn':
         return 'Fiziksel Buton';
+      case 'serial_btn':
+        return 'Seri Port';
+      case 'mqtt':
+      case 'mqtt_pulse':
+      case 'remote':
       case 'cloud_app':
-      default:
+      case '':
         return 'Mobil Bulut';
+      default:
+        return triggerType;
+    }
+  }
+
+  /// Özet sayaçları (PDF) için tetikleyici grubu: cloud | local | guest | voice | offline | other.
+  /// Gruplar birbirini dışlar; böylece kutuların toplamı toplam geçişle tutar.
+  String get triggerGroup {
+    switch (triggerType) {
+      case 'cloud_app':
+      case 'mqtt':
+      case 'mqtt_pulse':
+      case 'remote':
+      case '':
+        return 'cloud';
+      case 'local_wifi':
+      case 'local_udp':
+      case 'local_http':
+        return 'local';
+      case 'guest_pass':
+        return 'guest';
+      case 'voice':
+        return 'voice';
+      case 'offline_sync':
+        return 'offline';
+      default:
+        return 'other';
     }
   }
 

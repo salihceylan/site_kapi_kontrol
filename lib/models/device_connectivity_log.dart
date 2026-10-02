@@ -11,7 +11,7 @@
     this.wifiRssi,
     this.wifiSignalPercent,
     this.localIp,
-    required this.createdAt,
+    this.createdAt,
   });
 
   final int id;
@@ -25,7 +25,9 @@
   final int? wifiRssi;
   final int? wifiSignalPercent;
   final String? localIp;
-  final DateTime createdAt;
+
+  /// Ayrıştırılamazsa null (uydurma 'şimdi' değeri KULLANILMAZ).
+  final DateTime? createdAt;
 
   factory DeviceConnectivityLogRecord.fromJson(Map<String, dynamic> json) {
     return DeviceConnectivityLogRecord(
@@ -41,8 +43,8 @@
       wifiSignalPercent: json['wifi_signal_percent'] as int?,
       localIp: json['local_ip'] as String?,
       createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
-          : DateTime.now(),
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
     );
   }
 }

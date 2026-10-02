@@ -1,9 +1,12 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
+import 'package:site_kapi_kontrol/services/background_work.dart';
+import 'package:site_kapi_kontrol/services/pdf_font_set.dart';
 
 class PdfDeviceFirmwareService {
   static final DateFormat _dateFormat = DateFormat('dd.MM.yyyy HH:mm');
@@ -28,17 +31,105 @@ class PdfDeviceFirmwareService {
     );
   }
 
+  /// Donanım hedefi anahtarı ('esp32-c3' | 'esp32-wroom'); bilinmiyorsa 'bilinmiyor'.
+  static String _targetKey(DeviceRecord d) => d.hardwareTarget ?? 'bilinmiyor';
+
+  static final RegExp _versionPattern = RegExp(r'^[vV]?\d+(\.\d+)*');
+
+  static String _normalizeVersion(String raw) =>
+      raw.trim().toLowerCase().replaceFirst(RegExp(r'^v'), '');
+
+  static bool _isSameVersion(String? a, String? b) {
+    if (a == null || b == null) return false;
+    final left = _normalizeVersion(a);
+    return left.isNotEmpty && left == _normalizeVersion(b);
+  }
+
+  /// "1.10.0" > "1.9.0" (sayısal karşılaştırma); eksik parçalar 0 sayılır.
+  @visibleForTesting
+  static int compareFirmwareVersions(String a, String b) {
+    List<int> parts(String raw) => _normalizeVersion(raw)
+        .split(RegExp(r'[.\-+]'))
+        .map((p) => int.tryParse(p) ?? 0)
+        .toList();
+    final pa = parts(a);
+    final pb = parts(b);
+    final length = pa.length > pb.length ? pa.length : pb.length;
+    for (var i = 0; i < length; i++) {
+      final x = i < pa.length ? pa[i] : 0;
+      final y = i < pb.length ? pb[i] : 0;
+      if (x != y) return x.compareTo(y);
+    }
+    return 0;
+  }
+
+  /// Her donanım hedefi için listede bildirilen en yüksek sürüm (C3 ve WROOM ayrı sürüm hatları
+  /// izler; tek sabit sürümle ölçülemez). Sürüm biçiminde olmayan değerler ('Bilinmiyor') yok sayılır.
+  @visibleForTesting
+  static Map<String, String> latestVersionsByTarget(List<DeviceRecord> devices) {
+    final latest = <String, String>{};
+    for (final dev in devices) {
+      final version = (dev.firmwareVersion ?? '').trim();
+      if (version.isEmpty || !_versionPattern.hasMatch(version)) continue;
+      final key = _targetKey(dev);
+      final current = latest[key];
+      if (current == null || compareFirmwareVersions(version, current) > 0) {
+        latest[key] = _normalizeVersion(version);
+      }
+    }
+    return latest;
+  }
+
+  static String _shortTargetName(String key) {
+    if (key.contains('wroom')) return 'WROOM';
+    if (key.contains('c3')) return 'C3';
+    return key.toUpperCase();
+  }
+
+  /// KPI kartındaki hedef sürüm etiketi: tek sürüm "v4.2.0", hedef başına "C3 v4.2.0 · WROOM v5.1.0".
+  static String _targetSummary(String? fixedVersion, Map<String, String> byTarget) {
+    if (fixedVersion != null) return 'v${_normalizeVersion(fixedVersion)}';
+    if (byTarget.isEmpty) return '-';
+    final entries = byTarget.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    if (entries.length == 1) return 'v${entries.first.value}';
+    return entries.map((e) => '${_shortTargetName(e.key)} v${e.value}').join(' · ');
+  }
+
   /// PDF dökümanını Uint8List bayt dizisi olarak oluşturur.
+  ///
+  /// Sayfa dizgisi ve PDF kodlaması arka plan izolesinde yapılır (UI iş parçacığı bloklanmaz);
+  /// yazı tipleri UI izolesinde yüklenir ([fonts] verilmezse Roboto; testler ağsız
+  /// [PdfFontSet.helvetica] geçebilir).
   static Future<Uint8List> generateFirmwareReportPdf({
     required List<DeviceRecord> devices,
     String? userEmail,
     String? latestTargetVersion,
+    PdfFontSet? fonts,
   }) async {
+    final fontSet = fonts ?? await PdfFontSet.loadRoboto();
+    return BackgroundWork.run<_FirmwarePdfJob, Uint8List>(
+      _buildFirmwareReportPdf,
+      _FirmwarePdfJob(
+        fonts: fontSet,
+        devices: devices,
+        userEmail: userEmail,
+        latestTargetVersion: latestTargetVersion,
+      ),
+      debugLabel: 'pdf.firmware',
+    );
+  }
+
+  /// Arka plan izolesi girişi (statik: isolate'a gönderilebilir). Eski gövde aynen korunmuştur.
+  static Future<Uint8List> _buildFirmwareReportPdf(_FirmwarePdfJob job) async {
+    final devices = job.devices;
+    final userEmail = job.userEmail;
+    final latestTargetVersion = job.latestTargetVersion;
     final doc = pw.Document();
 
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fonts = job.fonts.resolve();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
+    final fontMedium = fonts.medium;
 
     final primaryColor = PdfColor.fromHex('#1A237E'); // Deep Indigo
     final secondaryBg = PdfColor.fromHex('#F5F7FA');
@@ -49,9 +140,19 @@ class PdfDeviceFirmwareService {
     final totalDevices = devices.length;
     final onlineDevices = devices.where((d) => d.mqttConnected == true).length;
 
-    // Hedef sürüm belirlenmemişse listedeki en yüksek/yaygın sürümü tespit et
-    final targetVer = latestTargetVersion ?? '2.0.0';
-    final upToDateCount = devices.where((d) => d.firmwareVersion == targetVer).length;
+    // Hedef sürüm: açıkça verildiyse hepsi için o; verilmediyse her donanım hedefi için (esp32-c3 /
+    // esp32-wroom ayrı sürüm hatları izler) listedeki en yüksek sürüm "güncel" sayılır.
+    final latestByTarget = latestTargetVersion != null
+        ? const <String, String>{}
+        : latestVersionsByTarget(devices);
+    String? latestFor(DeviceRecord d) =>
+        latestTargetVersion ?? latestByTarget[_targetKey(d)];
+    bool isUpToDate(DeviceRecord d) => _isSameVersion(d.firmwareVersion, latestFor(d));
+    final targetVersions = latestTargetVersion != null
+        ? <String>{latestTargetVersion}
+        : latestByTarget.values.toSet();
+    final targetLabel = _targetSummary(latestTargetVersion, latestByTarget);
+    final upToDateCount = devices.where(isUpToDate).length;
     final outdatedCount = totalDevices - upToDateCount;
 
     // Sürüm gruplaması
@@ -89,7 +190,7 @@ class PdfDeviceFirmwareService {
             onlineDevices: onlineDevices,
             upToDateCount: upToDateCount,
             outdatedCount: outdatedCount,
-            targetVersion: targetVer,
+            targetLabel: targetLabel,
             primaryColor: primaryColor,
             secondaryBg: secondaryBg,
             borderGray: borderGray,
@@ -102,7 +203,7 @@ class PdfDeviceFirmwareService {
           _buildVersionDistributionTable(
             versionCounts: versionCounts,
             totalDevices: totalDevices,
-            targetVersion: targetVer,
+            targetVersions: targetVersions,
             fontBold: fontBold,
             fontRegular: fontRegular,
             primaryColor: primaryColor,
@@ -126,7 +227,7 @@ class PdfDeviceFirmwareService {
           // 4. Detaylı Cihaz Tablosu
           _buildDeviceTable(
             devices: devices,
-            targetVersion: targetVer,
+            isUpToDate: isUpToDate,
             fontBold: fontBold,
             fontMedium: fontMedium,
             fontRegular: fontRegular,
@@ -209,7 +310,7 @@ class PdfDeviceFirmwareService {
     required int onlineDevices,
     required int upToDateCount,
     required int outdatedCount,
-    required String targetVersion,
+    required String targetLabel,
     required PdfColor primaryColor,
     required PdfColor secondaryBg,
     required PdfColor borderGray,
@@ -248,7 +349,7 @@ class PdfDeviceFirmwareService {
           _buildKpiItem(
             title: 'Güncel Cihazlar',
             value: '$upToDateCount ($upToDatePercent%)',
-            sub: 'v$targetVersion Sürümünde',
+            sub: '$targetLabel Sürümünde',
             fontBold: fontBold,
             fontRegular: fontRegular,
             color: PdfColor.fromHex('#1565C0'),
@@ -288,7 +389,7 @@ class PdfDeviceFirmwareService {
   static pw.Widget _buildVersionDistributionTable({
     required Map<String, int> versionCounts,
     required int totalDevices,
-    required String targetVersion,
+    required Set<String> targetVersions,
     required pw.Font fontBold,
     required pw.Font fontRegular,
     required PdfColor primaryColor,
@@ -323,7 +424,7 @@ class PdfDeviceFirmwareService {
             ],
           ),
           ...sortedVersions.map((entry) {
-            final isTarget = entry.key == targetVersion || entry.key == 'v$targetVersion';
+            final isTarget = targetVersions.any((v) => _isSameVersion(entry.key, v));
             final percent = totalDevices > 0 ? ((entry.value / totalDevices) * 100).toStringAsFixed(1) : '0';
 
             return pw.TableRow(
@@ -349,7 +450,7 @@ class PdfDeviceFirmwareService {
 
   static pw.Widget _buildDeviceTable({
     required List<DeviceRecord> devices,
-    required String targetVersion,
+    required bool Function(DeviceRecord) isUpToDate,
     required pw.Font fontBold,
     required pw.Font fontMedium,
     required pw.Font fontRegular,
@@ -389,7 +490,7 @@ class PdfDeviceFirmwareService {
           final index = entry.key + 1;
           final dev = entry.value;
           final isEven = index % 2 == 0;
-          final isUpToDate = dev.firmwareVersion == targetVersion || dev.firmwareVersion == 'v$targetVersion';
+          final devUpToDate = isUpToDate(dev);
           final isOnline = dev.mqttConnected == true;
 
           final siteText = [
@@ -417,7 +518,7 @@ class PdfDeviceFirmwareService {
               _buildTd(
                 dev.firmwareVersion ?? '-',
                 fontBold,
-                isUpToDate ? PdfColor.fromHex('#2E7D32') : PdfColor.fromHex('#C62828'),
+                devUpToDate ? PdfColor.fromHex('#2E7D32') : PdfColor.fromHex('#C62828'),
               ),
               _buildTd(
                 dev.otaStatus ?? 'beklemede',
@@ -497,4 +598,19 @@ class PdfDeviceFirmwareService {
       ),
     );
   }
+}
+
+/// [PdfDeviceFirmwareService._buildFirmwareReportPdf] için isolate iletisi.
+class _FirmwarePdfJob {
+  const _FirmwarePdfJob({
+    required this.fonts,
+    required this.devices,
+    required this.userEmail,
+    required this.latestTargetVersion,
+  });
+
+  final PdfFontSet fonts;
+  final List<DeviceRecord> devices;
+  final String? userEmail;
+  final String? latestTargetVersion;
 }

@@ -17,6 +17,12 @@ String blockLabelFromIndex(int index) {
   return label;
 }
 
+/// Tarih sunucudan gelmediyse/ayrıştırılamadıysa uydurma bir zaman göstermek yerine
+/// açıkça "Bilinmiyor" yazar.
+String formatDateTimeOrUnknown(DateTime? dateTime) {
+  return dateTime == null ? 'Bilinmiyor' : formatDateTime(dateTime);
+}
+
 String formatDateTime(DateTime? dateTime) {
   if (dateTime == null) {
     return '-';

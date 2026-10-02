@@ -7,6 +7,7 @@ import '../../models/user_session.dart';
 import '../../services/auth_service.dart';
 import '../../services/voice_door_service.dart';
 import '../../styles/role_theme.dart';
+import '../design/tokens.dart';
 import '../widgets/admin_door_status_card.dart';
 import '../widgets/digital_clock_widget.dart';
 import '../widgets/resident_door_remote_card.dart';
@@ -35,6 +36,7 @@ class DashboardView extends StatelessWidget {
     this.onDownloadLogsPdf,
     this.voiceDoorService,
     this.authService,
+    this.successTick = 0,
   });
 
   final UserSession session;
@@ -59,6 +61,10 @@ class DashboardView extends StatelessWidget {
   final VoiceDoorService? voiceDoorService;
   final AuthService? authService;
 
+  /// Kapı açma başarı sayacı: kapı kartlarındaki "kapıyı aç" düğmesine iletilir; her ARTIŞTA düğme
+  /// başarı tikini gösterir (varsayılan 0 = bağlı değil).
+  final int successTick;
+
   @override
   Widget build(BuildContext context) {
     // SADECE Daire Sakini için Modern Karanlık Akıllı Kumanda Modülü
@@ -67,7 +73,7 @@ class DashboardView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DigitalClockWidget(session: session),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpace.lg),
           ResidentDoorRemoteCard(
             selectedSite: selectedSite,
             selectedDoor: selectedDoor,
@@ -81,7 +87,9 @@ class DashboardView extends StatelessWidget {
             onOpenDoor: onOpenDoor,
             onCreateGuestPass: onCreateGuestPass,
             voiceDoorService: voiceDoorService,
+            authService: authService,
             roleColor: session.role.accentColor,
+            successTick: successTick,
           ),
         ],
       );
@@ -92,7 +100,7 @@ class DashboardView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DigitalClockWidget(session: session),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpace.lg),
         AdminDoorStatusCard(
           session: session,
           sites: sites,
@@ -115,6 +123,7 @@ class DashboardView extends StatelessWidget {
           onDownloadLogsPdf: onDownloadLogsPdf,
           voiceDoorService: voiceDoorService,
           authService: authService,
+          successTick: successTick,
         ),
       ],
     );

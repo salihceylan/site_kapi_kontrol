@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class CreateGuestPassDialog extends StatefulWidget {
   const CreateGuestPassDialog({
@@ -36,66 +38,78 @@ class CreateGuestPassDialog extends StatefulWidget {
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('🎉 Gecis Linki Hazir!'),
-        content: SizedBox(
-          width: dialogWidthForScreen(context),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Kurye veya misafiriniz bu linke tiklayarak ${door.doorName} kapisini acabilir.',
-                  style: const TextStyle(fontSize: 13.5),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: SelectableText(
-                    pass.webUrl,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
+      builder: (ctx) {
+        final p = ctx.palette;
+        final th = Theme.of(ctx).textTheme;
+        return AppDialog(
+          title: '🎉 Geçiş Linki Hazır!',
+          icon: Icons.link_rounded,
+          tone: AppTone.success,
+          actions: [
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: pass.webUrl));
+                Navigator.pop(ctx);
+                showMessage('Geçiş linki panoya kopyalandı!');
+              },
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Linki Kopyala'),
             ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final shareText =
+                    '${door.doorName} kapı açma bağlantınız: ${pass.webUrl}';
+                try {
+                  // Sistem paylaşım sayfasını (WhatsApp, SMS ...) açar.
+                  await SharePlus.instance.share(
+                    ShareParams(
+                      text: shareText,
+                      subject: '${door.doorName} geçiş linki',
+                    ),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } catch (_) {
+                  // Paylaşım sayfası açılamadıysa mesaj panoya kopyalanır.
+                  await Clipboard.setData(ClipboardData(text: shareText));
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  showMessage(
+                    'Geçiş mesajı kopyalandı! WhatsApp veya SMS ile paylaşabilirsiniz.',
+                  );
+                }
+              },
+              icon: const Icon(Icons.share, size: 18),
+              label: const Text('Paylaş'),
+            ),
+          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kurye veya misafiriniz bu linke tıklayarak ${door.doorName} kapısını açabilir.',
+                style: th.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: p.surfaceMuted,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: p.border),
+                ),
+                child: SelectableText(
+                  pass.webUrl,
+                  style: th.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppTone.primary.ink(p),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: pass.webUrl));
-              Navigator.pop(ctx);
-              showMessage('Gecis linki panoya kopyalandi!');
-            },
-            icon: const Icon(Icons.copy, size: 18),
-            label: const Text('Linki Kopyala'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              final shareText =
-                  '${door.doorName} kapi acma baglantiniz: ${pass.webUrl}';
-              Clipboard.setData(ClipboardData(text: shareText));
-              Navigator.pop(ctx);
-              showMessage(
-                'Gecis mesaji kopyalandi! WhatsApp veya SMS ile paylasabilirsiniz.',
-              );
-            },
-            icon: const Icon(Icons.share, size: 18),
-            label: const Text('Paylas'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -157,81 +171,16 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final th = Theme.of(context).textTheme;
 
-    return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: Text('${widget.door.doorName} - Gecis Linki'),
-      content: SizedBox(
-        width: dialogWidthForScreen(context),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Kurye veya misafirlerinizin uygulamayi yuklemesine gerek kalmadan tek tikla kapiyi acabilmesi icin gecici baglanti uretin.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Gecis Basligi / Aciklama',
-                    hintText: 'Orn: Trendyol Kuryesi, Misafir vb.',
-                  ),
-                  validator: (value) => (value ?? '').trim().isEmpty
-                      ? 'Baslik alani bos birakilamaz.'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Gecis Suresi ve Turu',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildPresetOption(
-                  key: 'single_30',
-                  title: 'Tek Kullanımlık (30 Dakika)',
-                  subtitle: 'Kurye ve tek seferlik teslimatlar için',
-                ),
-                const SizedBox(height: 6),
-                _buildPresetOption(
-                  key: 'timed_120',
-                  title: 'Süreli Misafir (2 Saat - 5 Kullanım)',
-                  subtitle: 'Misafir ve akrabalar için',
-                ),
-                const SizedBox(height: 6),
-                _buildPresetOption(
-                  key: 'timed_720',
-                  title: 'Günlük Geçiş (12 Saat - 10 Kullanım)',
-                  subtitle: 'Usta, nakliye ve servisler için',
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12.5),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AppDialog(
+      title: '${widget.door.doorName} - Geçiş Linki',
+      icon: Icons.link_rounded,
+      tone: AppTone.success,
       actions: [
         TextButton(
           onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-          child: const Text('Iptal'),
+          child: const Text('İptal'),
         ),
         ElevatedButton.icon(
           onPressed: _isCreating ? null : _submit,
@@ -245,9 +194,57 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
                   ),
                 )
               : const Icon(Icons.link, size: 18),
-          label: Text(_isCreating ? 'Uretiliyor...' : 'Linki Olustur'),
+          label: Text(_isCreating ? 'Üretiliyor...' : 'Linki Oluştur'),
         ),
       ],
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Kurye veya misafirlerinizin uygulamayı yüklemesine gerek kalmadan tek tıkla kapıyı açabilmesi için geçici bağlantı üretin.',
+              style: th.bodyMedium,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Geçiş Başlığı / Açıklama',
+                hintText: 'Örn: Trendyol Kuryesi, Misafir vb.',
+              ),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Başlık alanı boş bırakılamaz.'
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Text('Geçiş Süresi ve Türü', style: th.titleMedium),
+            const SizedBox(height: 8),
+            _buildPresetOption(
+              key: 'single_30',
+              title: 'Tek Kullanımlık (30 Dakika)',
+              subtitle: 'Kurye ve tek seferlik teslimatlar için',
+            ),
+            const SizedBox(height: 6),
+            _buildPresetOption(
+              key: 'timed_120',
+              title: 'Süreli Misafir (2 Saat - 5 Kullanım)',
+              subtitle: 'Misafir ve akrabalar için',
+            ),
+            const SizedBox(height: 6),
+            _buildPresetOption(
+              key: 'timed_720',
+              title: 'Günlük Geçiş (12 Saat - 10 Kullanım)',
+              subtitle: 'Usta, nakliye ve servisler için',
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              InlineNotice(message: _error!),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -256,7 +253,9 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
     required String title,
     required String subtitle,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final accent = AppTone.primary.ink(p);
     final selected = _selectedPreset == key;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -264,14 +263,10 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
-              : (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : Colors.grey.shade50),
+          color: selected ? AppTone.primary.tint(p) : p.surfaceMuted,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected
-                ? AppColors.primary
-                : (isDark ? const Color(0x22FFFFFF) : Colors.grey.shade300),
+            color: selected ? accent : p.border,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -281,9 +276,7 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
               selected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              color: selected
-                  ? AppColors.primary
-                  : (isDark ? const Color(0xFF64748B) : Colors.grey.shade500),
+              color: selected ? accent : p.textSecondary,
               size: 20,
             ),
             const SizedBox(width: 10),
@@ -293,21 +286,15 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: th.bodyMedium?.copyWith(
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                      fontSize: 13,
-                      color: selected
-                          ? (isDark ? const Color(0xFF93C5FD) : AppColors.primary)
-                          : (isDark ? Colors.white : AppColors.textDark),
+                      color: selected ? accent : p.text,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
-                    ),
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                 ],
               ),

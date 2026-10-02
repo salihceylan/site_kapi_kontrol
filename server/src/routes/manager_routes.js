@@ -1,6 +1,8 @@
 import express from 'express';
+import crypto from 'crypto';
 import { pool } from '../db.js';
-import { authRequired, requireSiteManager } from '../middlewares/auth_middleware.js';
+import { authRequired, requireSiteManager, requireSuperUser } from '../middlewares/auth_middleware.js';
+import { inviteLimiter } from '../middlewares/rate_limiters.js';
 import {
   mapSiteRow,
   mapApartmentRow,
@@ -26,6 +28,14 @@ import {
   handleUserMutationError,
   handleDeviceMutationError,
 } from '../utils/validators.js';
+import { INT32_MAX, parseId, parseOptionalId } from '../utils/ids.js';
+import {
+  isClientSafeError,
+  mapDoorServiceError,
+  parseSecurityPolicyBody,
+  resolveSecurityPolicyUpdate,
+  sanitizeDisplayText,
+} from '../utils/site_rules.js';
 import {
   hasSiteManagementAccess,
   getSiteByCode,
@@ -80,72 +90,182 @@ import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
 
 export const managerRouter = express.Router();
 
-// PATCH /manager/sites/:id/security-policy
-managerRouter.patch('/manager/sites/:id/security-policy', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+const DOOR_NAME_MAX_LENGTH = 100;
+
+// ---------------------------------------------------------------------------
+// Yardimcilar
+// ---------------------------------------------------------------------------
+
+// Hata ayrintisi istemciye gitmez; yalnizca sunucu logunda (errorId ile) tutulur.
+function respondServerError(res, context, error, publicMessage) {
+  const errorId = crypto.randomUUID().slice(0, 8);
+  console.error(`[manager] ${context} (errorId=${errorId})`, error);
+  return res.status(500).json({ error: publicMessage, error_id: errorId });
+}
+
+// Servislerin kullaniciya gosterilmek icin firlattigi is mantigi hatalarini (statusCode'lu veya
+// duz Error) oldugu gibi, DB/sistem hatalarini ise genel mesajla doner.
+function respondServiceError(res, context, error, fallbackMessage, defaultStatus = 400) {
+  if (isClientSafeError(error)) {
+    const explicit = Number(error.statusCode);
+    const status = Number.isInteger(explicit) && explicit >= 400 && explicit < 500 ? explicit : defaultStatus;
+    return res.status(status).json({ error: error.message });
+  }
+  return respondServerError(res, context, error, fallbackMessage);
+}
+
+function respondSiteMutationError(res, context, error, fallbackMessage) {
+  if (
+    error?.code === '23505' ||
+    error?.message === 'APARTMENT_LOGIN_GENERATION_FAILED' ||
+    isClientSafeError(error)
+  ) {
+    return handleSiteMutationError(error, res, fallbackMessage);
+  }
+  return respondServerError(res, context, error, fallbackMessage);
+}
+
+function respondDoorServiceError(res, context, error, fallbackMessage) {
+  const mapped = mapDoorServiceError(error);
+  if (mapped) {
+    return res.status(mapped.status).json({ error: mapped.message });
+  }
+  return respondServerError(res, context, error, fallbackMessage);
+}
+
+// Genel amacli tamsayi sorgu parametresi (NaN/negatif/ondalik -> varsayilan).
+function readPositiveIntQuery(raw, fallback, max = Number.MAX_SAFE_INTEGER) {
+  const value = Math.floor(Number(raw));
+  if (!Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+  return Math.min(value, max);
+}
+
+async function getDoorSiteCode(doorId) {
+  const result = await pool.query(
+    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
+    [doorId],
+  );
+  return result.rowCount === 0 ? null : Number(result.rows[0].site_code);
+}
+
+async function getApartmentSiteCode(apartmentId) {
+  const result = await pool.query(
+    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
+    [apartmentId],
+  );
+  return result.rowCount === 0 ? null : Number(result.rows[0].site_code);
+}
+
+async function blockBelongsToSite(blockId, siteCode) {
+  const result = await pool.query(
+    `SELECT 1 FROM site_blocks WHERE id = $1 AND site_code = $2 LIMIT 1`,
+    [blockId, siteCode],
+  );
+  return result.rowCount > 0;
+}
+
+// Kapi gövdesindeki block_id: undefined => degisiklik yok, null => blok yok/temizle,
+// sayi => gecerli id, { invalid: true } => gecersiz.
+function readBlockIdInput(body) {
+  if (!body || !Object.prototype.hasOwnProperty.call(body, 'block_id')) {
+    return { value: undefined };
+  }
+  const raw = body.block_id;
+  if (raw === null || raw === '' || raw === 0 || raw === '0') {
+    return { value: null };
+  }
+  const parsed = parseId(raw);
+  return parsed === null ? { invalid: true } : { value: parsed };
+}
+
+function readIsActiveInput(raw) {
+  if (raw === undefined || raw === null) {
+    return { value: undefined };
+  }
+  if (typeof raw === 'boolean') {
+    return { value: raw };
+  }
+  if (raw === 'true' || raw === 1 || raw === '1') {
+    return { value: true };
+  }
+  if (raw === 'false' || raw === 0 || raw === '0') {
+    return { value: false };
+  }
+  return { invalid: true };
+}
+
+// MQTT senkron sonucunun istemciye giden guvenli ozeti (stdout/stderr/hata metni disari cikmaz).
+function publicMqttSyncSummary(result) {
+  return {
+    configured: Boolean(result?.configured),
+    ok: Boolean(result?.ok),
+    skipped: Boolean(result?.skipped),
+    reason: typeof result?.reason === 'string' ? result.reason : undefined,
+    message: result?.ok
+      ? 'MQTT ACL senkronu tamamlandi.'
+      : (result?.skipped ? 'MQTT ACL senkronu yapilandirilmamis.' : 'MQTT ACL senkronu tamamlanamadi.'),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Site guvenlik politikasi
+// ---------------------------------------------------------------------------
+
+// Tek isleyici, iki yol: /manager/... (site yoneticisi + super user) ve /admin/... (yalniz super user).
+// Istemci super user icin /admin onekini kullanir (auth_api._managementPrefix); mantik AYNIDIR.
+async function handleSecurityPolicyPatch(req, res) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
-  }
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
-  }
-
-  const isSuperUser = req.authUser?.role === 'super_user';
-  const rawRemoteOpen = normalizeOptionalBool(req.body.feature_remote_open_enabled);
-  const rawQrEnabled = normalizeOptionalBool(req.body.feature_qr_enabled);
-  const rawLocalUdp = normalizeOptionalBool(req.body.feature_local_udp_enabled);
-  const rawGuestPass = normalizeOptionalBool(req.body.feature_guest_pass_enabled);
-  const qrEntryActive = normalizeOptionalBool(req.body.qr_entry_active);
-  const requireGeofence = normalizeOptionalBool(req.body.require_geofence);
-  const geofenceLatitude = req.body.geofence_latitude === null ? null : (req.body.geofence_latitude !== undefined ? Number(req.body.geofence_latitude) : undefined);
-  const geofenceLongitude = req.body.geofence_longitude === null ? null : (req.body.geofence_longitude !== undefined ? Number(req.body.geofence_longitude) : undefined);
-  const geofenceRadiusMeters = req.body.geofence_radius_meters !== undefined ? Math.max(10, Math.min(1000, Number(req.body.geofence_radius_meters) || 75)) : undefined;
-  const qrRotationSeconds = req.body.qr_rotation_seconds !== undefined
-    ? Math.max(10, Math.min(300, Number(req.body.qr_rotation_seconds) || 30))
-    : undefined;
-
-  if (!isSuperUser && (rawRemoteOpen !== null || rawQrEnabled !== null || rawLocalUdp !== null || rawGuestPass !== null)) {
-    return res.status(403).json({ error: 'Giris yontemi yetkilendirmesi (Uygulama/QR) yalnizca super user tarafindan yapilabilir.' });
   }
 
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+    }
+
+    const parsed = parseSecurityPolicyBody(req.body);
+    if (!parsed.ok) {
+      return res.status(400).json({ error: parsed.error });
+    }
+
     const existing = await getSiteByCode(siteCode);
     if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
 
-    const effRemote = isSuperUser && rawRemoteOpen !== null ? rawRemoteOpen : existing.feature_remote_open_enabled;
-    const effQr = isSuperUser && rawQrEnabled !== null ? rawQrEnabled : existing.feature_qr_enabled;
-    if (!effRemote && !effQr) {
-      return res.status(400).json({ error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.' });
+    const resolved = resolveSecurityPolicyUpdate({
+      patch: parsed.patch,
+      existing,
+      isSuperUser: req.authUser?.role === 'super_user',
+    });
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ error: resolved.error });
     }
 
-    // Eger super user QR ozelligini tamamen kapattiysa veya sitede kapaliysa qrEntryActive de false yapilir
-    const resolvedQrEntryActive = effQr ? (qrEntryActive === null ? undefined : qrEntryActive) : false;
-
-    const updated = await updateSiteByCode({
-      siteCode,
-      featureRemoteOpenEnabled: isSuperUser && rawRemoteOpen !== null ? rawRemoteOpen : undefined,
-      featureQrEnabled: isSuperUser && rawQrEnabled !== null ? rawQrEnabled : undefined,
-      featureLocalUdpEnabled: isSuperUser && rawLocalUdp !== null ? rawLocalUdp : undefined,
-      featureGuestPassEnabled: isSuperUser && rawGuestPass !== null ? rawGuestPass : undefined,
-      qrEntryActive: resolvedQrEntryActive,
-      requireGeofence: requireGeofence === null ? undefined : requireGeofence,
-      geofenceLatitude: Number.isNaN(geofenceLatitude) ? undefined : geofenceLatitude,
-      geofenceLongitude: Number.isNaN(geofenceLongitude) ? undefined : geofenceLongitude,
-      geofenceRadiusMeters: Number.isNaN(geofenceRadiusMeters) ? undefined : geofenceRadiusMeters,
-      qrRotationSeconds: Number.isNaN(qrRotationSeconds) ? undefined : qrRotationSeconds,
-    });
+    const updated = await updateSiteByCode({ siteCode, ...resolved.update });
     return res.status(200).json({ site: mapSiteRow(updated || existing) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Guvenlik politikasi guncellenemedi.');
+    return respondSiteMutationError(res, 'security_policy', error, 'Guvenlik politikasi guncellenemedi.');
   }
-});
+}
+
+// PATCH /manager/sites/:id/security-policy
+managerRouter.patch('/manager/sites/:id/security-policy', authRequired, requireSiteManager, handleSecurityPolicyPatch);
+
+// PATCH /admin/sites/:id/security-policy (yalnizca super user; ayni isleyici)
+managerRouter.patch('/admin/sites/:id/security-policy', authRequired, requireSuperUser, handleSecurityPolicyPatch);
+
+// ---------------------------------------------------------------------------
+// Siteler
+// ---------------------------------------------------------------------------
 
 // GET /manager/sites
 managerRouter.get('/manager/sites', authRequired, requireSiteManager, async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
-  const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 100)));
+  const page = readPositiveIntQuery(req.query.page, 1);
+  const pageSize = readPositiveIntQuery(req.query.page_size, 100, 100);
 
   try {
     const result = await listSitesForAuthUser({
@@ -159,8 +279,8 @@ managerRouter.get('/manager/sites', authRequired, requireSiteManager, async (req
       page,
       page_size: pageSize,
     });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Siteler yuklenemedi.' });
+  } catch (error) {
+    return respondServerError(res, 'list_sites', error, 'Siteler yuklenemedi.');
   }
 });
 
@@ -221,7 +341,7 @@ managerRouter.post('/manager/sites', authRequired, requireSiteManager, async (re
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site olusturulamadi.');
+    return respondSiteMutationError(res, 'create_site', error, 'Site olusturulamadi.');
   }
 });
 
@@ -231,13 +351,9 @@ managerRouter.patch('/manager/sites/:id', authRequired, requireSiteManager, asyn
     return res.status(403).json({ error: 'Site kaydini yalnizca super user guncelleyebilir.' });
   }
 
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
-  }
-
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
   }
 
   const name = normalizeOptionalText(req.body.name);
@@ -274,6 +390,10 @@ managerRouter.patch('/manager/sites/:id', authRequired, requireSiteManager, asyn
   }
 
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+    }
+
     const existing = await getSiteByCode(siteCode);
     if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
@@ -345,14 +465,14 @@ managerRouter.patch('/manager/sites/:id', authRequired, requireSiteManager, asyn
     const updated = await getSiteByCode(siteCode);
     return res.status(200).json({ site: mapSiteRow(updated) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+    return respondSiteMutationError(res, 'update_site', error, 'Site guncellenemedi.');
   }
 });
 
 // DELETE /manager/sites/:id (Site Yöneticisi Silme Talebi / Onayı)
 managerRouter.delete('/manager/sites/:id', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -360,15 +480,14 @@ managerRouter.delete('/manager/sites/:id', authRequired, requireSiteManager, asy
     const result = await requestSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme işlemi başlatılamadı.' });
+    return respondServiceError(res, 'request_site_deletion', error, 'Site silme işlemi başlatılamadı.');
   }
 });
 
 // POST /manager/sites/:id/approve-deletion
 managerRouter.post('/manager/sites/:id/approve-deletion', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -376,15 +495,14 @@ managerRouter.post('/manager/sites/:id/approve-deletion', authRequired, requireS
     const result = await approveSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme talebi onaylanamadı.' });
+    return respondServiceError(res, 'approve_site_deletion', error, 'Site silme talebi onaylanamadı.');
   }
 });
 
 // POST /manager/sites/:id/reject-deletion
 managerRouter.post('/manager/sites/:id/reject-deletion', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -392,45 +510,44 @@ managerRouter.post('/manager/sites/:id/reject-deletion', authRequired, requireSi
     const result = await rejectOrCancelSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme talebi reddedilemedi.' });
+    return respondServiceError(res, 'reject_site_deletion', error, 'Site silme talebi reddedilemedi.');
   }
 });
 
 // GET /manager/sites/:id/structure
 managerRouter.get('/manager/sites/:id/structure', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+    }
+
     const structure = await getSiteStructure(siteCode);
     if (!structure) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
     return res.status(200).json(structure);
-  } catch (_error) {
-    return res.status(500).json({ error: 'Site yapisi alinamadi.' });
+  } catch (error) {
+    return respondServerError(res, 'site_structure', error, 'Site yapisi alinamadi.');
   }
 });
 
 // GET /manager/sites/:id/join-token
 managerRouter.get('/manager/sites/:id/join-token', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+    }
+
     const tokenData = await getOrCreateSiteJoinToken({
       siteCode,
       authUser: req.authUser,
@@ -440,22 +557,22 @@ managerRouter.get('/manager/sites/:id/join-token', authRequired, requireSiteMana
     if (error?.message === 'SITE_NOT_FOUND') {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
-    return res.status(500).json({ error: error.message || 'Site katilim QR kodu alinamadi.' });
+    return respondServerError(res, 'join_token', error, 'Site katilim QR kodu alinamadi.');
   }
 });
 
 // POST /manager/sites/:id/join-token/rotate
 managerRouter.post('/manager/sites/:id/join-token/rotate', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteyi yonetme yetkiniz yok.' });
+    }
+
     const tokenData = await rotateSiteJoinToken({
       siteCode,
       authUser: req.authUser,
@@ -469,9 +586,13 @@ managerRouter.post('/manager/sites/:id/join-token/rotate', authRequired, require
     if (error?.message === 'SITE_NOT_FOUND') {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
-    return res.status(500).json({ error: error.message || 'Site katilim QR kodu yenilenemedi.' });
+    return respondServerError(res, 'join_token_rotate', error, 'Site katilim QR kodu yenilenemedi.');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Cihazlar
+// ---------------------------------------------------------------------------
 
 // GET /manager/devices/lookup
 managerRouter.get('/manager/devices/lookup', authRequired, requireSiteManager, async (req, res) => {
@@ -486,12 +607,12 @@ managerRouter.get('/manager/devices/lookup', authRequired, requireSiteManager, a
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
     const managedSiteCodes = await getManagedSiteCodes(req.authUser);
-    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes)) {
+    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes, req.authUser)) {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
     return res.status(200).json({ device: mapDeviceRow(device) });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Cihaz bilgisi okunamadi.' });
+  } catch (error) {
+    return respondServerError(res, 'device_lookup', error, 'Cihaz bilgisi okunamadi.');
   }
 });
 
@@ -502,8 +623,8 @@ managerRouter.get('/manager/devices', authRequired, requireSiteManager, async (r
     return res.status(200).json({
       devices: devices.map((row) => mapDeviceRow(row)),
     });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  } catch (error) {
+    return respondServerError(res, 'list_devices', error, 'Cihazlar yuklenemedi.');
   }
 });
 
@@ -521,7 +642,7 @@ managerRouter.post('/manager/devices/mqtt-credentials', authRequired, requireSit
     }
 
     const managedSiteCodes = await getManagedSiteCodes(req.authUser);
-    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes)) {
+    if (!isDeviceVisibleToManagedSites(device, managedSiteCodes, req.authUser)) {
       return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
     }
 
@@ -533,37 +654,29 @@ managerRouter.post('/manager/devices/mqtt-credentials', authRequired, requireSit
 
     return res.status(200).json({
       mqtt: mapDeviceMqttCredentialsRow(credentials),
-      mqtt_sync: mqttSync,
+      mqtt_sync: publicMqttSyncSummary(mqttSync),
     });
   } catch (error) {
     if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      console.error('[manager] mqtt_acl_sync_failed', error.syncResult?.message);
       return res.status(503).json({
         error: 'MQTT broker senkronu basarisiz.',
-        mqtt_sync: error.syncResult,
+        mqtt_sync: publicMqttSyncSummary(error.syncResult),
       });
     }
-    return res.status(500).json({ error: 'MQTT cihaz kimligi uretilemedi.' });
+    return respondServerError(res, 'mqtt_credentials', error, 'MQTT cihaz kimligi uretilemedi.');
   }
 });
 
+// ---------------------------------------------------------------------------
+// Daire sakinleri
+// ---------------------------------------------------------------------------
+
 // PATCH /manager/apartments/:id/resident
 managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
-  }
-
-  const apartmentSiteResult = await pool.query(
-    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
-    [apartmentId],
-  );
-  if (apartmentSiteResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Daire bulunamadi.' });
-  }
-
-  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
   }
 
   const fullName = String(req.body.full_name || '').trim();
@@ -573,19 +686,27 @@ managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSit
   const phoneNumber = normalizePhone(req.body.phone_number);
   const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
 
-  const validationError = validateApartmentResidentInput({
-    fullName,
-    loginName,
-    password,
-    email,
-    phoneNumber,
-    isActive,
-  });
-  if (validationError) {
-    return res.status(400).json({ error: validationError });
-  }
-
   try {
+    const siteCode = await getApartmentSiteCode(apartmentId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+    }
+
+    const validationError = validateApartmentResidentInput({
+      fullName,
+      loginName,
+      password,
+      email,
+      phoneNumber,
+      isActive,
+    });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     const apartment = await provisionApartmentResident({
       apartmentId,
       fullName,
@@ -604,31 +725,29 @@ managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSit
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });
     }
-    return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+    if (error?.code === '23505' || error?.code === 'APARTMENT_PASSWORD_REQUIRED') {
+      return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+    }
+    return respondServerError(res, 'provision_resident', error, 'Daire kullanicisi kaydedilemedi.');
   }
 });
 
 // DELETE /manager/apartments/:id/resident
 managerRouter.delete('/manager/apartments/:id/resident', authRequired, requireSiteManager, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
   }
 
-  const apartmentSiteResult = await pool.query(
-    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
-    [apartmentId],
-  );
-  if (apartmentSiteResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Daire bulunamadi.' });
-  }
-
-  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    const siteCode = await getApartmentSiteCode(apartmentId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+    }
+
     const apartment = await resetApartmentResident(apartmentId);
     await rotateLocalControlTokensForSite(
       Number(apartment.site_code),
@@ -639,31 +758,26 @@ managerRouter.delete('/manager/apartments/:id/resident', authRequired, requireSi
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });
     }
-    return res.status(500).json({ error: 'Daire sakini sifirlanamadi.' });
+    return respondServerError(res, 'reset_resident', error, 'Daire sakini sifirlanamadi.');
   }
 });
 
 // POST /manager/apartments/:id/send-credentials
 managerRouter.post('/manager/apartments/:id/send-credentials', authRequired, requireSiteManager, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
   }
 
-  const apartmentSiteResult = await pool.query(
-    `SELECT site_code FROM apartments WHERE id = $1 LIMIT 1`,
-    [apartmentId],
-  );
-  if (apartmentSiteResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Daire bulunamadi.' });
-  }
-
-  const siteCode = Number(apartmentSiteResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    const siteCode = await getApartmentSiteCode(apartmentId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
+    }
+
     await sendApartmentCredentials(apartmentId);
     return res.status(200).json({ ok: true });
   } catch (error) {
@@ -673,40 +787,40 @@ managerRouter.post('/manager/apartments/:id/send-credentials', authRequired, req
     if (error?.message === 'APARTMENT_CREDENTIALS_NOT_READY') {
       return res.status(400).json({ error: 'Kullanici adi veya PIN hazir degil.' });
     }
-    return res.status(500).json({ error: 'Daire bilgileri e-posta ile gonderilemedi.' });
+    return respondServerError(res, 'send_credentials', error, 'Daire bilgileri e-posta ile gonderilemedi.');
   }
 });
 
+// ---------------------------------------------------------------------------
+// Kapilar
+// ---------------------------------------------------------------------------
+
 // PATCH /manager/doors/:id/device
 managerRouter.patch('/manager/doors/:id/device', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
-  }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
-  }
-  if (!(await siteHasApprovedStatus(siteCode))) {
-    return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz.' });
-  }
-
   const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
-  const validationError = validateDoorAssignmentInput({ deviceUid });
-  if (validationError) {
-    return res.status(400).json({ error: validationError });
-  }
 
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+    }
+    if (!(await siteHasApprovedStatus(siteCode))) {
+      return res.status(403).json({ error: 'Site sirket tarafindan onaylanmadan cihaza kapi atayamazsiniz.' });
+    }
+
+    const validationError = validateDoorAssignmentInput({ deviceUid });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
     const door = await updateDoorDeviceAssignment({
       doorId,
       deviceUid,
@@ -714,78 +828,76 @@ managerRouter.patch('/manager/doors/:id/device', authRequired, requireSiteManage
     });
     return res.status(200).json({ door: mapDoorRow(door) });
   } catch (error) {
-    if (error?.message === 'DOOR_NOT_FOUND') {
-      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    const mapped = mapDoorServiceError(error);
+    if (mapped) {
+      return res.status(mapped.status).json({ error: mapped.message });
     }
-    if (error?.message === 'DEVICE_NOT_FOUND') {
-      return res.status(404).json({ error: 'Cihaz sirket hesabinda kayitli degil.' });
+    if (error?.code === '23505') {
+      return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
     }
-    if (error?.message === 'DEVICE_NOT_ASSIGNABLE') {
-      return res.status(403).json({ error: 'Bu cihaz yonettiginiz siteye atanamaz.' });
-    }
-    return handleDeviceMutationError(error, res, 'Kapiya cihaz atanamadi.');
+    return respondServerError(res, 'assign_door_device', error, 'Kapiya cihaz atanamadi.');
   }
 });
 
 // POST /manager/doors/:id/unassign-device
 managerRouter.post('/manager/doors/:id/unassign-device', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
-  }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+    }
+
     const door = await unassignDoorDevice({
       doorId,
       authUser: req.authUser,
     });
     return res.status(200).json({ ok: true, door: mapDoorRow(door) });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Cihaz kapidan cikarilamadi.' });
+    return respondDoorServiceError(res, 'unassign_door_device', error, 'Cihaz kapidan cikarilamadi.');
   }
 });
 
 // POST /manager/doors/:id/replace-device
+// Not: yeni cihaz yetki/sahiplik kontrolleri door_service.replaceDoorDevice icindedir; servis
+// DEVICE_NOT_ASSIGNABLE / DEVICE_OWNED_BY_ANOTHER / DEVICE_DEFECTIVE kodlariyla reddederse
+// asagida ilgili HTTP durumuna cevrilir. Rota imzasi/yanit sekli degismez.
 managerRouter.post('/manager/doors/:id/replace-device', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
+  const rawDeviceInput = req.body.device_input ?? req.body.deviceInput;
+  const newDeviceInput = rawDeviceInput === undefined || rawDeviceInput === null
+    ? undefined
+    : String(rawDeviceInput).trim().slice(0, 200);
+  const rawDeviceId = req.body.device_id ?? req.body.deviceId;
+  const newDeviceId = parseOptionalId(rawDeviceId);
+
+  if (newDeviceId === null) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
   }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
-  }
-
-  const newDeviceInput = req.body.device_input || req.body.deviceInput;
-  const newDeviceId = req.body.device_id || req.body.deviceId;
-
-  if (!newDeviceInput && !newDeviceId) {
+  if (!newDeviceInput && newDeviceId === undefined) {
     return res.status(400).json({ error: 'Lutfen yeni cihazin QR kodunu, seri numarasini veya cihaz ID\'sini belirtin.' });
   }
 
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+    }
+
     const result = await replaceDoorDevice({
       doorId,
       newDeviceInput,
@@ -800,140 +912,141 @@ managerRouter.post('/manager/doors/:id/replace-device', authRequired, requireSit
       message: 'Cihaz basariyla degistirildi. Kapi yetkileri ve ayarlari aynen korundu.',
     });
   } catch (error) {
-    if (error?.message === 'DOOR_NOT_FOUND') {
-      return res.status(404).json({ error: 'Kapi bulunamadi.' });
-    }
     if (error?.message === 'DEVICE_NOT_FOUND') {
       return res.status(404).json({ error: 'Secilen yeni cihaz bulunamadi.' });
     }
-    if (error?.message === 'DEVICE_OWNED_BY_ANOTHER') {
-      return res.status(409).json({ error: 'Bu cihaz baska bir kullanici hesabi tarafindan sahiplenilmis.' });
-    }
-    return res.status(500).json({ error: error.message || 'Cihaz degistirilemedi.' });
+    return respondDoorServiceError(res, 'replace_door_device', error, 'Cihaz degistirilemedi.');
   }
 });
 
 // POST /manager/sites/:siteCode/doors
 managerRouter.post('/manager/sites/:siteCode/doors', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.siteCode);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.siteCode);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu siteye kapi ekleme yetkiniz yok.' });
-  }
-
-  const { door_name, access_scope, block_id, device_uid } = req.body;
-  if (!door_name || !String(door_name).trim()) {
+  const { door_name, access_scope, device_uid } = req.body;
+  const doorName = sanitizeDisplayText(door_name, DOOR_NAME_MAX_LENGTH);
+  if (!doorName) {
     return res.status(400).json({ error: 'Kapi adi zorunludur.' });
+  }
+  const blockInput = readBlockIdInput(req.body);
+  if (blockInput.invalid) {
+    return res.status(400).json({ error: 'Gecersiz blok ID.' });
   }
 
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu siteye kapi ekleme yetkiniz yok.' });
+    }
+    if (blockInput.value && !(await blockBelongsToSite(blockInput.value, siteCode))) {
+      return res.status(400).json({ error: 'Secilen blok bu siteye ait degil.' });
+    }
+
     const door = await createDoor({
       siteCode,
-      doorName: String(door_name).trim(),
+      doorName,
       accessScope: access_scope,
-      blockId: block_id,
+      blockId: blockInput.value ?? null,
       deviceUid: device_uid,
       authUser: req.authUser,
     });
     return res.status(201).json({ ok: true, door: mapDoorRow(door) });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Kapi olusturulamadi.' });
+    return respondDoorServiceError(res, 'create_door', error, 'Kapi olusturulamadi.');
   }
 });
 
 // PUT /manager/doors/:id
 managerRouter.put('/manager/doors/:id', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
+  const { door_name, access_scope, is_active } = req.body;
+  const doorName = door_name === undefined
+    ? undefined
+    : sanitizeDisplayText(door_name, DOOR_NAME_MAX_LENGTH);
+  const blockInput = readBlockIdInput(req.body);
+  if (blockInput.invalid) {
+    return res.status(400).json({ error: 'Gecersiz blok ID.' });
   }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+  const activeInput = readIsActiveInput(is_active);
+  if (activeInput.invalid) {
+    return res.status(400).json({ error: 'is_active alani true/false olmali.' });
   }
-
-  const { door_name, access_scope, block_id, is_active } = req.body;
 
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+    }
+    if (blockInput.value && !(await blockBelongsToSite(blockInput.value, siteCode))) {
+      return res.status(400).json({ error: 'Secilen blok bu siteye ait degil.' });
+    }
+
     const updated = await updateDoor({
       doorId,
-      doorName: door_name,
+      doorName,
       accessScope: access_scope,
-      blockId: block_id,
-      isActive: is_active,
+      blockId: blockInput.value,
+      isActive: activeInput.value,
       authUser: req.authUser,
     });
     return res.status(200).json({ ok: true, door: mapDoorRow(updated) });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Kapi guncellenemedi.' });
+    return respondDoorServiceError(res, 'update_door', error, 'Kapi guncellenemedi.');
   }
 });
 
 // DELETE /manager/doors/:id
 managerRouter.delete('/manager/doors/:id', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
-  }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi silme yetkiniz yok.' });
-  }
-
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi silme yetkiniz yok.' });
+    }
+
     const result = await deleteDoor({
       doorId,
       authUser: req.authUser,
     });
     return res.status(200).json(result);
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Kapi silinemedi.' });
+    return respondDoorServiceError(res, 'delete_door', error, 'Kapi silinemedi.');
   }
 });
 
 // POST /manager/doors/:id/revoke-active-qrs
 // Aşama 7: Yöneticinin bir kapıdaki tüm aktif QR kodlarını toplu iptal etmesi
 managerRouter.post('/manager/doors/:id/revoke-active-qrs', authRequired, requireSiteManager, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
-  const doorResult = await pool.query(
-    `SELECT site_code FROM site_doors WHERE id = $1 LIMIT 1`,
-    [doorId],
-  );
-  if (doorResult.rowCount === 0) {
-    return res.status(404).json({ error: 'Kapi bulunamadi.' });
-  }
-
-  const siteCode = Number(doorResult.rows[0].site_code);
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
-  }
-
   try {
+    const siteCode = await getDoorSiteCode(doorId);
+    if (siteCode === null) {
+      return res.status(404).json({ error: 'Kapi bulunamadi.' });
+    }
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu kapiyi yonetme yetkiniz yok.' });
+    }
+
     const { revokeActiveQrTokensForDoor } = await import('../services/qr_access_service.js');
     const result = await revokeActiveQrTokensForDoor({
       doorId,
@@ -946,7 +1059,7 @@ managerRouter.post('/manager/doors/:id/revoke-active-qrs', authRequired, require
       message: `${result.revoked_count} aktif karekod basariyla iptal edildi.`,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Karekodlar iptal edilemedi.' });
+    return respondServerError(res, 'revoke_active_qrs', error, 'Karekodlar iptal edilemedi.');
   }
 });
 
@@ -956,23 +1069,23 @@ managerRouter.get(
   authRequired,
   requireSiteManager,
   async (req, res) => {
-    const siteCode = Number(req.params.siteCode);
-    if (!Number.isInteger(siteCode)) {
+    const siteCode = parseId(req.params.siteCode);
+    if (siteCode === null) {
       return res.status(400).json({ error: 'Gecersiz site kodu.' });
     }
 
-    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-      return res.status(403).json({ error: 'Bu sitenin cihazlarini gorme yetkiniz yok.' });
-    }
-
     try {
+      if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+        return res.status(403).json({ error: 'Bu sitenin cihazlarini gorme yetkiniz yok.' });
+      }
+
       const devices = await listAssignableDevicesForUser({
         siteCode,
         authUser: req.authUser,
       });
       return res.status(200).json({ ok: true, devices });
     } catch (error) {
-      return res.status(500).json({ error: error.message || 'Atanabilir cihazlar listelenemedi.' });
+      return respondServerError(res, 'assignable_devices', error, 'Atanabilir cihazlar listelenemedi.');
     }
   },
 );
@@ -983,13 +1096,15 @@ managerRouter.patch(
   authRequired,
   requireSiteManager,
   async (req, res) => {
-    const deviceId = Number(req.params.id);
-    const siteCode = normalizeOptionalInteger(req.body.site_code);
-    const gateName = String(req.body.gate_name || '').trim();
-
-    if (!Number.isInteger(deviceId)) {
+    const deviceId = parseId(req.params.id);
+    if (deviceId === null) {
       return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
     }
+
+    // Gecersiz site_code NaN olarak validator'a iletilir ("Site ID sayisal olmali.").
+    const parsedSiteCode = parseOptionalId(req.body.site_code);
+    const siteCode = parsedSiteCode === null ? Number.NaN : parsedSiteCode;
+    const gateName = sanitizeDisplayText(req.body.gate_name, DOOR_NAME_MAX_LENGTH);
 
     const validationError = validateDeviceAssignmentInput({
       siteCode,
@@ -1022,7 +1137,8 @@ managerRouter.patch(
       const device = await updateDeviceAssignment({
         deviceId,
         siteCode,
-        gateName,
+        // Etiket opsiyonel: bos metin NULL olarak saklanir (super user ucuyla ayni davranis).
+        gateName: gateName || null,
       });
 
       if (!device) {
@@ -1031,7 +1147,10 @@ managerRouter.patch(
 
       return res.status(200).json({ device: mapDeviceRow(device) });
     } catch (error) {
-      return handleDeviceMutationError(error, res, 'Cihaz site kapisina atanamadi.');
+      if (error?.code === '23505') {
+        return handleDeviceMutationError(error, res, 'Cihaz site kapisina atanamadi.');
+      }
+      return respondServerError(res, 'device_assignment', error, 'Cihaz site kapisina atanamadi.');
     }
   },
 );
@@ -1042,8 +1161,8 @@ managerRouter.delete('/manager/devices/:id', authRequired, requireSiteManager, a
     return res.status(403).json({ error: 'Cihaz silme islemini yalnizca super user yapabilir.' });
   }
 
-  const deviceId = Number(req.params.id);
-  if (!Number.isInteger(deviceId)) {
+  const deviceId = parseId(req.params.id);
+  if (deviceId === null) {
     return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
   }
 
@@ -1054,19 +1173,35 @@ managerRouter.delete('/manager/devices/:id', authRequired, requireSiteManager, a
     }
 
     await deleteDeviceById(deviceId);
+    // Silinen cihazin broker kimligi/ACL'i bir sonraki senkrona kadar gecerli kalmasin (admin silme yoluyla ayni).
+    await syncMqttAclOrThrow({ reason: 'device_deleted' });
     return res.status(204).send();
   } catch (error) {
-    return handleDeviceMutationError(error, res, 'Cihaz silinemedi.');
+    if (error?.code === 'MQTT_ACL_SYNC_FAILED') {
+      console.error('[manager] mqtt_acl_sync_failed', error.syncResult?.message);
+      return res.status(503).json({
+        error: 'Cihaz silindi ama MQTT broker senkronu basarisiz.',
+        mqtt_sync: publicMqttSyncSummary(error.syncResult),
+      });
+    }
+    if (error?.code === '23505') {
+      return handleDeviceMutationError(error, res, 'Cihaz silinemedi.');
+    }
+    return respondServerError(res, 'delete_device', error, 'Cihaz silinemedi.');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Katilim basvurulari
+// ---------------------------------------------------------------------------
 
 /**
  * GET /manager/sites/:id/join-requests
  * Sitedeki katılım başvurularını listele
  */
 managerRouter.get('/manager/sites/:id/join-requests', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Geçersiz site ID.' });
   }
 
@@ -1078,10 +1213,7 @@ managerRouter.get('/manager/sites/:id/join-requests', authRequired, requireSiteM
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Katılım başvuruları listelenemedi.',
-    });
+    return respondServiceError(res, 'list_join_requests', error, 'Katılım başvuruları listelenemedi.', 500);
   }
 });
 
@@ -1090,8 +1222,8 @@ managerRouter.get('/manager/sites/:id/join-requests', authRequired, requireSiteM
  * Katılım başvurusunu onayla (Daire Admini veya Aile Üyesi rolüyle)
  */
 managerRouter.post('/manager/join-requests/:requestId/approve', authRequired, requireSiteManager, async (req, res) => {
-  const requestId = Number(req.params.requestId);
-  if (!Number.isInteger(requestId)) {
+  const requestId = parseId(req.params.requestId);
+  if (requestId === null) {
     return res.status(400).json({ error: 'Geçersiz talep ID.' });
   }
 
@@ -1102,10 +1234,7 @@ managerRouter.post('/manager/join-requests/:requestId/approve', authRequired, re
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Başvuru onaylanamadı.',
-    });
+    return respondServiceError(res, 'approve_join_request', error, 'Başvuru onaylanamadı.');
   }
 });
 
@@ -1114,8 +1243,8 @@ managerRouter.post('/manager/join-requests/:requestId/approve', authRequired, re
  * Katılım başvurusunu reddet
  */
 managerRouter.post('/manager/join-requests/:requestId/reject', authRequired, requireSiteManager, async (req, res) => {
-  const requestId = Number(req.params.requestId);
-  if (!Number.isInteger(requestId)) {
+  const requestId = parseId(req.params.requestId);
+  if (requestId === null) {
     return res.status(400).json({ error: 'Geçersiz talep ID.' });
   }
 
@@ -1128,56 +1257,55 @@ managerRouter.post('/manager/join-requests/:requestId/reject', authRequired, req
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Başvuru reddedilemedi.',
-    });
+    return respondServiceError(res, 'reject_join_request', error, 'Başvuru reddedilemedi.');
   }
 });
+
+// ---------------------------------------------------------------------------
+// Site yoneticileri
+// ---------------------------------------------------------------------------
 
 /**
  * GET /manager/sites/:siteCode/managers
  * Sitenin tüm aktif yöneticilerini ve bekleyen davetlerini listele
  */
 managerRouter.get('/manager/sites/:siteCode/managers', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.siteCode);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.siteCode);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Geçersiz site kodu.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
+    }
+
     const data = await getSiteManagers(siteCode);
     return res.status(200).json({ ok: true, ...data });
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({
-      error: error.message || 'Site yöneticileri listelenemedi.',
-    });
+    return respondServiceError(res, 'list_site_managers', error, 'Site yöneticileri listelenemedi.', 500);
   }
 });
 
 /**
  * POST /manager/sites/:siteCode/managers/invite
  * Siteye yeni bir yönetici davet et veya mevcut kullanıcıyı yönetici yap
+ * (inviteLimiter: kullanıcı/IP + e-posta bazlı hız sınırı, C1)
  */
-managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.siteCode);
-  if (!Number.isInteger(siteCode)) {
+managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, requireSiteManager, inviteLimiter, async (req, res) => {
+  const siteCode = parseId(req.params.siteCode);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Geçersiz site kodu.' });
-  }
-
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
   }
 
   const { email, fullName, full_name } = req.body || {};
   const name = fullName || full_name;
 
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
+    }
+
     const result = await inviteSiteManager({
       siteCode,
       email,
@@ -1186,10 +1314,7 @@ managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, req
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Yönetici daveti gönderilemedi.',
-    });
+    return respondServiceError(res, 'invite_site_manager', error, 'Yönetici daveti gönderilemedi.');
   }
 });
 
@@ -1198,17 +1323,17 @@ managerRouter.post('/manager/sites/:siteCode/managers/invite', authRequired, req
  * Siteden bir yöneticiyi çıkar
  */
 managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.siteCode);
-  const userCode = Number(req.params.userCode);
-  if (!Number.isInteger(siteCode) || !Number.isInteger(userCode)) {
+  const siteCode = parseId(req.params.siteCode);
+  const userCode = parseId(req.params.userCode, { max: INT32_MAX });
+  if (siteCode === null || userCode === null) {
     return res.status(400).json({ error: 'Geçersiz parametreler.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
+    }
+
     const result = await removeSiteManager({
       siteCode,
       targetUserCode: userCode,
@@ -1216,10 +1341,7 @@ managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Yönetici siteden çıkarılamadı.',
-    });
+    return respondServiceError(res, 'remove_site_manager', error, 'Yönetici siteden çıkarılamadı.');
   }
 });
 
@@ -1228,29 +1350,23 @@ managerRouter.delete('/manager/sites/:siteCode/managers/:userCode', authRequired
  * Bekleyen bir yönetici davetini iptal et
  */
 managerRouter.delete('/manager/sites/:siteCode/invitations/:invitationId', authRequired, requireSiteManager, async (req, res) => {
-  const siteCode = Number(req.params.siteCode);
-  const invitationId = Number(req.params.invitationId);
-  if (!Number.isInteger(siteCode) || !Number.isInteger(invitationId)) {
+  const siteCode = parseId(req.params.siteCode);
+  const invitationId = parseId(req.params.invitationId);
+  if (siteCode === null || invitationId === null) {
     return res.status(400).json({ error: 'Geçersiz parametreler.' });
   }
 
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
-  }
-
   try {
+    if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
+      return res.status(403).json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.' });
+    }
+
     const result = await revokeSiteManagerInvitation({
       siteCode,
       invitationId,
     });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 400;
-    return res.status(statusCode).json({
-      error: error.message || 'Davet iptal edilemedi.',
-    });
+    return respondServiceError(res, 'revoke_site_manager_invitation', error, 'Davet iptal edilemedi.');
   }
 });
-
-
-

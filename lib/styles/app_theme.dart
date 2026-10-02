@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class AppTheme {
   static ThemeData light() {
+    const p = AppPalette.light;
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
@@ -16,32 +19,40 @@ class AppTheme {
       brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: Colors.transparent,
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(
-          color: AppColors.textDark,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
-        ),
-        titleLarge: TextStyle(
-          color: AppColors.textDark,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
-        titleMedium: TextStyle(
-          color: AppColors.textDark,
+      extensions: const <ThemeExtension<dynamic>>[AppPalette.light],
+      // Masaüstünde de 48 dp isabet alanı ve standart yoğunluk (compact isabeti küçültür).
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      // InkSparkle shader maliyeti yok.
+      splashFactory: InkRipple.splashFactory,
+      pageTransitionsTheme: appPageTransitions,
+      textTheme: appTextTheme(p),
+      listTileTheme: ListTileThemeData(
+        textColor: p.text,
+        iconColor: p.text,
+        titleTextStyle: TextStyle(
+          color: p.text,
           fontWeight: FontWeight.w600,
+          fontSize: 14,
         ),
-        bodyLarge: TextStyle(
-          color: AppColors.textDark,
-          fontSize: 15,
-        ),
-        bodyMedium: TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 13.5,
+        subtitleTextStyle: TextStyle(
+          color: p.textSecondary,
+          fontSize: 12.5,
         ),
       ),
+      // Seçili çipin onay işareti çağrı yerinde belirlenir: seçili dolgu (saturasyonlu mavi ya da
+      // %20 tint) bilinmeden genel bir işaret rengi iki durumdan birinde görünmez kalır.
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        side: BorderSide(color: p.border),
+      ),
+      dividerTheme: DividerThemeData(color: p.border, thickness: 1, space: 1),
       appBarTheme: const AppBarTheme(
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         foregroundColor: AppColors.textDark,
         backgroundColor: Colors.transparent,
@@ -56,7 +67,10 @@ class AppTheme {
         filled: true,
         fillColor: Colors.white,
         labelStyle: const TextStyle(color: AppColors.textMuted),
-        hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        // İpucu metni de metindir (>= 4,5:1): eski #94A3B8 beyaz üstünde ~2,6:1 idi.
+        hintStyle: TextStyle(color: p.textMuted),
+        helperStyle: TextStyle(color: p.textMuted),
+        errorStyle: TextStyle(color: AppTone.danger.ink(p)),
         prefixIconColor: AppColors.primary,
         suffixIconColor: AppColors.textMuted,
         contentPadding: const EdgeInsets.symmetric(
@@ -71,6 +85,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: p.border),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
@@ -78,6 +96,10 @@ class AppTheme {
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.rose, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.rose, width: 1.8),
         ),
       ),
       cardTheme: CardThemeData(
@@ -95,7 +117,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 12,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
         ),
         titleTextStyle: const TextStyle(
           fontSize: 18,
@@ -175,6 +197,7 @@ class AppTheme {
   }
 
   static ThemeData dark() {
+    const p = AppPalette.dark;
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
@@ -190,34 +213,22 @@ class AppTheme {
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: Colors.transparent,
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(
-          color: AppColors.textLight,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
+      extensions: const <ThemeExtension<dynamic>>[AppPalette.dark],
+      // Masaüstünde de 48 dp isabet alanı ve standart yoğunluk (compact isabeti küçültür).
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      // InkSparkle shader maliyeti yok.
+      splashFactory: InkRipple.splashFactory,
+      pageTransitionsTheme: appPageTransitions,
+      textTheme: appTextTheme(p),
+      // Seçili çipin onay işareti çağrı yerinde belirlenir (bkz. açık tema notu).
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        titleLarge: TextStyle(
-          color: AppColors.textLight,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
-        titleMedium: TextStyle(
-          color: AppColors.textLight,
-          fontWeight: FontWeight.w600,
-        ),
-        bodyLarge: TextStyle(
-          color: AppColors.textLight,
-          fontSize: 15,
-        ),
-        bodyMedium: TextStyle(
-          color: AppColors.textMutedLight,
-          fontSize: 13.5,
-        ),
-        bodySmall: TextStyle(
-          color: AppColors.textMutedLight,
-          fontSize: 12,
-        ),
+        side: BorderSide(color: p.border),
       ),
+      dividerTheme: DividerThemeData(color: p.border, thickness: 1, space: 1),
       listTileTheme: const ListTileThemeData(
         textColor: AppColors.textLight,
         iconColor: AppColors.textLight,
@@ -233,6 +244,8 @@ class AppTheme {
       ),
       appBarTheme: const AppBarTheme(
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         foregroundColor: Colors.white,
         backgroundColor: Colors.transparent,
@@ -248,6 +261,8 @@ class AppTheme {
         fillColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
         labelStyle: const TextStyle(color: AppColors.textMutedLight),
         hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        helperStyle: TextStyle(color: p.textMuted),
+        errorStyle: TextStyle(color: AppTone.danger.ink(p)),
         prefixIconColor: AppColors.primarySoft,
         suffixIconColor: AppColors.textMutedLight,
         contentPadding: const EdgeInsets.symmetric(
@@ -262,6 +277,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0x33FFFFFF)),
         ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: p.border),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primaryLight, width: 1.8),
@@ -269,6 +288,10 @@ class AppTheme {
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.rose, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.rose, width: 1.8),
         ),
       ),
       cardTheme: CardThemeData(
@@ -286,7 +309,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 16,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
           side: const BorderSide(color: Color(0x22FFFFFF)),
         ),
         titleTextStyle: const TextStyle(

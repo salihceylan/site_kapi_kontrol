@@ -10,3 +10,8 @@ Proje için önerilen skill'ler:
 
 <!-- /auto-skills -->
 
+
+
+
+
+

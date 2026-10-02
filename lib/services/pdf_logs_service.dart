@@ -5,6 +5,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../models/door_access_log_record.dart';
+import 'background_work.dart';
+import 'pdf_font_set.dart';
 
 class PdfLogsService {
   static final DateFormat _dateFormat = DateFormat('dd.MM.yyyy HH:mm:ss');
@@ -35,27 +37,58 @@ class PdfLogsService {
   }
 
   /// PDF dökümanını Uint8List bayt dizisi olarak oluşturur.
+  ///
+  /// Sayfa dizgisi ve PDF kodlaması (binlerce satırda saniyeler sürebilir) arka plan izolesinde
+  /// yapılır; UI iş parçacığı bloklanmaz. Yazı tipleri UI izolesinde yüklenir ([fonts] verilmezse
+  /// Roboto indirilir/önbellekten gelir; testler ağsız [PdfFontSet.helvetica] geçebilir).
   static Future<Uint8List> generateLogsPdf({
     required List<DoorAccessLogRecord> logs,
     String? siteName,
     String? doorNameFilter,
     DateTime? startDate,
     DateTime? endDate,
+    PdfFontSet? fonts,
   }) async {
+    // Türkçe karakterleri destekleyen fontları yükle
+    final fontSet = fonts ?? await PdfFontSet.loadRoboto();
+    return BackgroundWork.run<_LogsPdfJob, Uint8List>(
+      _buildLogsPdf,
+      _LogsPdfJob(
+        fonts: fontSet,
+        logs: logs,
+        siteName: siteName,
+        doorNameFilter: doorNameFilter,
+        startDate: startDate,
+        endDate: endDate,
+      ),
+      debugLabel: 'pdf.logs',
+    );
+  }
+
+  /// Arka plan izolesi girişi (statik: isolate'a gönderilebilir). Eski gövde aynen korunmuştur.
+  static Future<Uint8List> _buildLogsPdf(_LogsPdfJob job) async {
+    final logs = job.logs;
+    final siteName = job.siteName;
+    final doorNameFilter = job.doorNameFilter;
+    final startDate = job.startDate;
+    final endDate = job.endDate;
     final doc = pw.Document();
 
-    // Türkçe karakterleri destekleyen fontları yükle
-    final fontRegular = await PdfGoogleFonts.robotoRegular();
-    final fontBold = await PdfGoogleFonts.robotoBold();
-    final fontMedium = await PdfGoogleFonts.robotoMedium();
+    final fonts = job.fonts.resolve();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
+    final fontMedium = fonts.medium;
 
     // İstatistikler
     final totalCount = logs.length;
-    final cloudCount = logs.where((l) => l.triggerType == 'cloud_app').length;
-    final localCount = logs.where((l) => l.triggerType == 'local_wifi').length;
-    final guestCount = logs.where((l) => l.triggerType == 'guest_pass').length;
-    final voiceCount = logs.where((l) => l.triggerType == 'voice').length;
-    final offlineCount = logs.where((l) => l.triggerType == 'offline_sync').length;
+    // Gruplar birbirini dışlar (triggerGroup): kutuların toplamı toplam geçişle tutar.
+    int countGroup(String group) => logs.where((l) => l.triggerGroup == group).length;
+    final cloudCount = countGroup('cloud');
+    final localCount = countGroup('local');
+    final guestCount = countGroup('guest');
+    final voiceCount = countGroup('voice');
+    final offlineCount = countGroup('offline');
+    final otherCount = countGroup('other');
 
     final primaryColor = PdfColor.fromHex('#1A237E'); // Deep Indigo
     final accentColor = PdfColor.fromHex('#0D47A1');
@@ -245,6 +278,10 @@ class PdfLogsService {
                     pw.SizedBox(width: 6),
                     _buildStatBox('Çevrimdışı (ESP)', offlineCount.toString(), PdfColor.fromHex('#6D4C41'), fontBold),
                   ],
+                  if (otherCount > 0) ...[
+                    pw.SizedBox(width: 6),
+                    _buildStatBox('Cihaz / Diğer', otherCount.toString(), PdfColor.fromHex('#546E7A'), fontBold),
+                  ],
                 ],
               ),
             ),
@@ -339,7 +376,7 @@ class PdfLogsService {
                     final log = logs[index];
                     return [
                       (index + 1).toString(),
-                      _dateFormat.format(log.openedAt),
+                      log.openedAt == null ? 'Bilinmiyor' : _dateFormat.format(log.openedAt!),
                       log.doorName,
                       log.userName,
                       log.apartmentLabel ?? '-',
@@ -402,7 +439,7 @@ class PdfLogsService {
     PdfColor primaryColor,
     DateFormat dateFormat,
   ) {
-    final userMap = <String, ({String name, String? apartment, String role, int count, DateTime lastSeen})>{};
+    final userMap = <String, ({String name, String? apartment, String role, int count, DateTime? lastSeen})>{};
     for (final log in logs) {
       final key = '${log.userName}_${log.apartmentLabel ?? ''}';
       if (!userMap.containsKey(key)) {
@@ -420,7 +457,10 @@ class PdfLogsService {
           apartment: prev.apartment,
           role: prev.role,
           count: prev.count + 1,
-          lastSeen: log.openedAt.isAfter(prev.lastSeen) ? log.openedAt : prev.lastSeen,
+          lastSeen: (log.openedAt != null &&
+                  (prev.lastSeen == null || log.openedAt!.isAfter(prev.lastSeen!)))
+              ? log.openedAt
+              : prev.lastSeen,
         );
       }
     }
@@ -471,10 +511,29 @@ class PdfLogsService {
             item.apartment ?? '-',
             item.role,
             '${item.count} kez',
-            dateFormat.format(item.lastSeen),
+            item.lastSeen == null ? 'Bilinmiyor' : dateFormat.format(item.lastSeen!),
           ];
         },
       ),
     );
   }
+}
+
+/// [PdfLogsService._buildLogsPdf] için isolate iletisi (yalnızca gönderilebilir veri içerir).
+class _LogsPdfJob {
+  const _LogsPdfJob({
+    required this.fonts,
+    required this.logs,
+    required this.siteName,
+    required this.doorNameFilter,
+    required this.startDate,
+    required this.endDate,
+  });
+
+  final PdfFontSet fonts;
+  final List<DoorAccessLogRecord> logs;
+  final String? siteName;
+  final String? doorNameFilter;
+  final DateTime? startDate;
+  final DateTime? endDate;
 }

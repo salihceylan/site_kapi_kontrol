@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { sendApartmentCredentialsEmail } from '../mailer.js';
 import { createUser } from './user_service.js';
@@ -173,6 +172,14 @@ export async function provisionApartmentResident({
       : email;
 
     if (userCode == null) {
+      // Yeni sakin olusturulurken 4 haneli sayisal sifre ZORUNLUDUR. (Mevcut sakin duzenlemede sifre bos
+      // gelebilir ve "degistirme" sayilir; dogrulayici bu ayrimi bilemedigi icin kurali burada uygular.)
+      if (!/^\d{4}$/.test(String(password ?? '').trim())) {
+        const passwordError = new Error('Sifre 4 haneli sayisal olmali.');
+        passwordError.statusCode = 400;
+        passwordError.code = 'APARTMENT_PASSWORD_REQUIRED';
+        throw passwordError;
+      }
       const createdUser = await createUser({
         fullName: fullName || apartmentResidentFullName({
           blockName: apartment.block_name,
@@ -200,31 +207,39 @@ export async function provisionApartmentResident({
         [userCode, residentEmail, password, isActive, apartmentId],
       );
     } else {
-      const passwordHash = await bcrypt.hash(password, 12);
-      await client.query(
-        `
-          UPDATE users
-          SET
-            full_name = $1,
-            email = $2,
-            login_name = $3,
-            phone_number = $4,
-            password_hash = $5,
-            is_active = $6
-          WHERE user_code = $7
-        `,
-        [fullName, internalEmail, finalLoginName, phoneNumber, passwordHash, isActive, userCode],
+      // Kimlik (ad/e-posta/kullanici adi/aktiflik) YALNIZCA dahili (@ahbu.local) daire hesabinda guncellenir.
+      // Uyelik sistemiyle gelen gercek kullanicinin (e-postayla kayitli) e-postasi/giris adi ezilmez;
+      // onun icin yalnizca apartments.is_active / resident_email guncellenir.
+      const existingUserRes = await client.query(
+        `SELECT email FROM users WHERE user_code = $1 LIMIT 1`,
+        [userCode],
       );
+      const existingEmail = String(existingUserRes.rows?.[0]?.email ?? '').toLowerCase();
+      const isInternalAccount = existingUserRes.rowCount > 0 && existingEmail.endsWith('@ahbu.local');
+      if (isInternalAccount) {
+        await client.query(
+          `
+            UPDATE users
+            SET
+              full_name = $1,
+              email = $2,
+              login_name = $3,
+              phone_number = $4,
+              is_active = $5
+            WHERE user_code = $6
+          `,
+          [fullName, internalEmail, finalLoginName, phoneNumber, isActive, userCode],
+        );
+      }
       await client.query(
         `
           UPDATE apartments
           SET
             resident_email = $1,
-            resident_pin_code = $2,
-            is_active = $3
-          WHERE id = $4
+            is_active = $2
+          WHERE id = $3
         `,
-        [residentEmail, password, isActive, apartmentId],
+        [residentEmail, isActive, apartmentId],
       );
     }
 

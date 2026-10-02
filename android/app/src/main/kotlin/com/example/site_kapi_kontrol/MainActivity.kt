@@ -62,8 +62,13 @@ class MainActivity : FlutterActivity() {
                 }
 
                 if (wifiLock == null) {
-                    @Suppress("DEPRECATION")
-                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "site_kapi_kontrol_wifilock")
+                    val lockMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                    }
+                    wifiLock = wm.createWifiLock(lockMode, "site_kapi_kontrol_wifilock")
                     wifiLock?.setReferenceCounted(false)
                 }
                 if (wifiLock?.isHeld == false) {
@@ -86,6 +91,16 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        acquireLocks()
+    }
+
+    override fun onPause() {
+        releaseLocks()
+        super.onPause()
     }
 
     private fun isWifiConnected(): Boolean {

@@ -101,3 +101,44 @@ ve `company_qr_tool/assets/ahbu_logo.png` dosyasına kopyalanır.
 - USB driver (CH340 / CP210x, karta göre)
 
 Çalışma arkadaşına verilen ZIP paketinde Python ve esptool paket içine eklenir; o bilgisayarda Python kurulu olmak zorunda değildir.
+
+## Guvenlik ve Ortam Ayarlari
+
+Sirlar kaynak koda yazilmaz; `.env` dosyasindan (git'e girmez) veya Windows
+kullanici ortam degiskenlerinden okunur. Ornek: `env.example`.
+
+### Sunucu yetkisi (COMPANY_API_KEY)
+
+- Sunucudaki sirket uclari (`/api/company/*`) `X-Company-Key` basligini ister.
+  Deger, sunucudaki `server/.env` icindeki `COMPANY_API_KEY` ile ayni olmalidir.
+- Bu bilgisayarda `company_qr_tool/.env` dosyasina `COMPANY_API_KEY=...` yazin
+  (veya `setx COMPANY_API_KEY "..."`), sonra uygulamayi yeniden acin.
+- Anahtar yoksa uygulama sunucuya istek gondermez; "COMPANY_API_KEY tanimli degil"
+  uyarisi gosterir (yerel kayit yine yapilir).
+- Anahtar yalnizca HTTPS (veya localhost) uzerinden gonderilir. Duz HTTP yedek uc
+  (`http://<IP>:3000`) artik varsayilan olarak KAPALIDIR (`AHBU_API_FALLBACK_URL`).
+
+### SFTP ile firmware gonderme: sunucu kimligi dogrulamasi
+
+Uygulama bilinmeyen sunuculara otomatik guvenmez (`RejectPolicy`); sunucunun
+anahtari `known_hosts` dosyasinda (varsayilan `~/.ssh/known_hosts`, veya
+`SSH_KNOWN_HOSTS`) kayitli olmalidir.
+
+Ilk kurulum (bir kez):
+
+1. Sunucuda parmak izini ogrenin: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`
+2. Bu bilgisayarda: `ssh-keyscan -p 22667 -H 178.210.161.55 >> %USERPROFILE%\.ssh\known_hosts`
+3. Eklenen anahtarin parmak izini 1. adimdaki ile karsilastirin
+   (`ssh-keygen -lf %USERPROFILE%\.ssh\known_hosts`); eslesmiyorsa satiri silin.
+
+Sunucu yeniden kurulursa anahtar degisir; uygulama "UYUSMUYOR" uyarisi verir.
+Once sunucudan parmak izini dogrulayin, sonra eski kaydi `ssh-keygen -R "[178.210.161.55]:22667"`
+ile silip adimlari tekrarlayin.
+
+Kimlik dogrulama: `SSH_KEY_FILE` (ve gerekirse `SSH_KEY_PASSPHRASE`) tanimliysa anahtar ile
+baglanilir (ONERILEN). Tanimli degilse `AHBU_VPS_PASSWORD` veya uygulamanin sordugu parola kullanilir.
+
+### Diger ayarlar (hepsi istege bagli; varsayilanlar korunur)
+
+`AHBU_API_URL`, `AHBU_VPS_HOST`, `AHBU_VPS_PORT`, `AHBU_VPS_USER`, `AHBU_VPS_FIRMWARE_DIR`,
+`AHBU_VPS_DATA_DIR`, `AHBU_VPS_QRCODES_DIR`.

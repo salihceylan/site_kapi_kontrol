@@ -3,8 +3,10 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 
 class ManagedUsersView extends StatelessWidget {
@@ -45,6 +47,8 @@ class ManagedUsersView extends StatelessWidget {
         return 'Site Yöneticisi';
       case UserRole.apartmentOwner:
         return 'Daire Sakini';
+      case UserRole.individual:
+        return 'Bireysel Kullanıcı';
     }
   }
 
@@ -56,144 +60,75 @@ class ManagedUsersView extends StatelessWidget {
         return 'Site Yöneticileri';
       case UserRole.apartmentOwner:
         return 'Daire Sakinleri';
+      case UserRole.individual:
+        return 'Bireysel Kullanıcılar';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 680;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+    final page = pageData;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _rolePlural(role),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: cardTitleColor,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: onOpenAddDialog,
-                        icon: const Icon(Icons.person_add_alt_1),
-                        label: Text('Yeni ${_roleTitle(role)}'),
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _rolePlural(role),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: cardTitleColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: onOpenAddDialog,
-                      icon: const Icon(Icons.person_add_alt_1),
-                      label: Text('Yeni ${_roleTitle(role)}'),
-                    ),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: AppDecorations.glassCard(context),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      pageData == null
-                          ? _rolePlural(role)
-                          : '${_rolePlural(role)} (${pageData!.total})',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: cardTitleColor,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: loading ? null : onRefresh,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (loading && pageData == null)
-                const Center(child: CircularProgressIndicator())
-              else if (users.isEmpty)
-                Text('Kayıtlı ${_rolePlural(role).toLowerCase()} bulunamadı.')
-              else ...[
-                for (final user in users)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: ManagedUserCard(
-                      user: user,
-                      isSelf: user.id == session.id,
-                      activationBusy: busyActivationUsers.contains(user.id),
-                      onActivationChanged: (value) =>
-                          onToggleActivation(user, value),
-                      onTap: () => onShowUserDetails(user),
-                      onDelete: onDeleteUser != null
-                          ? () => onDeleteUser!(user)
-                          : null,
-                    ),
-                  ),
-                if (pageData != null)
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        'Sayfa ${pageData!.page} / ${pageData!.totalPages} | Toplam ${pageData!.total}',
-                      ),
-                      OutlinedButton(
-                        onPressed: pageData!.page > 1
-                            ? () => onLoadPage(pageData!.page - 1)
-                            : null,
-                        child: const Icon(Icons.chevron_left),
-                      ),
-                      OutlinedButton(
-                        onPressed: pageData!.page < pageData!.totalPages
-                            ? () => onLoadPage(pageData!.page + 1)
-                            : null,
-                        child: const Icon(Icons.chevron_right),
-                      ),
-                    ],
-                  ),
-              ],
-            ],
+        PageHeaderCard(
+          title: _rolePlural(role),
+          action: ElevatedButton.icon(
+            onPressed: onOpenAddDialog,
+            icon: const Icon(Icons.person_add_alt_1),
+            label: Text('Yeni ${_roleTitle(role)}'),
           ),
         ),
+        const SizedBox(height: AppSpace.lg),
+        // Liste bölümü: başlık sayfa zemininde, her kullanıcı kendi AppCard'ı (kart-içinde-kart yok).
+        SectionHeader(
+          title: page == null
+              ? _rolePlural(role)
+              : '${_rolePlural(role)} (${page.total})',
+          trailing: IconButton(
+            onPressed: loading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ),
+        const SizedBox(height: AppSpace.md),
+        if (loading && page == null)
+          const ListSkeleton()
+        else if (users.isEmpty)
+          EmptyCard(
+            icon: Icons.group_outlined,
+            title: 'Kayıtlı ${_rolePlural(role).toLowerCase()} bulunamadı.',
+          )
+        else ...[
+          for (var i = 0; i < users.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.md),
+              child: StaggeredEntry(
+                index: i,
+                child: ManagedUserCard(
+                  user: users[i],
+                  isSelf: users[i].id == session.id,
+                  activationBusy: busyActivationUsers.contains(users[i].id),
+                  onActivationChanged: (value) =>
+                      onToggleActivation(users[i], value),
+                  onTap: () => onShowUserDetails(users[i]),
+                  onDelete: onDeleteUser != null
+                      ? () => onDeleteUser!(users[i])
+                      : null,
+                ),
+              ),
+            ),
+          if (page != null)
+            PaginationBar(
+              label:
+                  'Sayfa ${page.page} / ${page.totalPages} | Toplam ${page.total}',
+              onPrevious: page.page > 1 ? () => onLoadPage(page.page - 1) : null,
+              onNext: page.page < page.totalPages
+                  ? () => onLoadPage(page.page + 1)
+                  : null,
+            ),
+        ],
       ],
     );
   }
 }
-

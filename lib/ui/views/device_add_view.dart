@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_action_tile.dart';
 
 class DeviceAddView extends StatelessWidget {
@@ -8,29 +7,42 @@ class DeviceAddView extends StatelessWidget {
     super.key,
     required this.onOpenQrRegistration,
     required this.onOpenManualRegistration,
+    this.title,
+    this.qrTitle,
+    this.qrDescription,
+    this.qrButtonLabel,
+    this.manualTitle,
+    this.manualDescription,
+    this.manualButtonLabel,
   });
 
   final VoidCallback onOpenQrRegistration;
   final VoidCallback onOpenManualRegistration;
+  final String? title;
+  final String? qrTitle;
+  final String? qrDescription;
+  final String? qrButtonLabel;
+  final String? manualTitle;
+  final String? manualDescription;
+  final String? manualButtonLabel;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardTitleColor = isDark ? const Color(0xFFF8FAFC) : AppColors.textDark;
+    final th = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
+        SizedBox(
           width: double.infinity,
-          padding: const EdgeInsets.all(22),
-          decoration: AppDecorations.glassCard(context),
-          child: Text(
-            'Şirket Veritabanına Cihaz Kaydet',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: cardTitleColor,
+          child: AppCard(
+            padding: const EdgeInsets.all(22),
+            child: Semantics(
+              header: true,
+              child: Text(
+                title ?? 'Şirket Veritabanına Cihaz Kaydet',
+                style: th.titleLarge,
+              ),
             ),
           ),
         ),
@@ -41,18 +53,18 @@ class DeviceAddView extends StatelessWidget {
             final children = [
               DeviceActionTile(
                 icon: Icons.qr_code_scanner_outlined,
-                title: 'QR ile Şirket Veritabanına Kaydet',
-                description:
+                title: qrTitle ?? 'QR ile Şirket Veritabanına Kaydet',
+                description: qrDescription ??
                     'Cihaz üzerindeki QR kodu okutur, Unique ID alanını otomatik doldurur ve şirket kayıt formunu açar.',
-                buttonLabel: 'QR Oku',
+                buttonLabel: qrButtonLabel ?? 'QR Oku',
                 onPressed: onOpenQrRegistration,
               ),
               DeviceActionTile(
                 icon: Icons.edit_note_outlined,
-                title: 'Unique ID ile Şirket Veritabanına Kaydet',
-                description:
+                title: manualTitle ?? 'Unique ID ile Şirket Veritabanına Kaydet',
+                description: manualDescription ??
                     'QR okunamıyorsa veya masaüstü sürümde çalışıyorsanız cihaz Unique ID bilgisini elle girerek şirket hesabına kayıt yapar.',
-                buttonLabel: 'Unique ID Gir',
+                buttonLabel: manualButtonLabel ?? 'Unique ID Gir',
                 onPressed: onOpenManualRegistration,
               ),
             ];
@@ -81,4 +93,3 @@ class DeviceAddView extends StatelessWidget {
     );
   }
 }
-

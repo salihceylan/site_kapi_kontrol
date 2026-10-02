@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/geofence_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class SiteSecurityPolicyDialog extends StatefulWidget {
   const SiteSecurityPolicyDialog({
@@ -74,6 +77,79 @@ class SiteSecurityPolicyDialog extends StatefulWidget {
   State<SiteSecurityPolicyDialog> createState() => _SiteSecurityPolicyDialogState();
 }
 
+/// Konum çemberi (geofence) alanlarının doğrulama sonucu.
+class GeofenceFormValidation {
+  const GeofenceFormValidation({
+    this.latitude,
+    this.longitude,
+    this.latitudeError,
+    this.longitudeError,
+    this.radiusError,
+  });
+
+  final double? latitude;
+  final double? longitude;
+  final String? latitudeError;
+  final String? longitudeError;
+  final String? radiusError;
+
+  bool get isValid =>
+      latitudeError == null && longitudeError == null && radiusError == null;
+}
+
+/// Konum doğrulaması (geofence) açıkken geçerli enlem/boylam/yarıçap zorunludur.
+/// Ondalık ayırıcı olarak virgül de kabul edilir (Türkçe klavye).
+GeofenceFormValidation validateGeofenceForm({
+  required String latitudeText,
+  required String longitudeText,
+  required double radiusMeters,
+}) {
+  double? parse(String raw) {
+    final text = raw.trim().replaceAll(',', '.');
+    if (text.isEmpty) return null;
+    final value = double.tryParse(text);
+    if (value == null || !value.isFinite) return null;
+    return value;
+  }
+
+  final lat = parse(latitudeText);
+  final lng = parse(longitudeText);
+
+  String? latError;
+  String? lngError;
+  String? radiusError;
+
+  if (lat == null) {
+    latError = 'Geçerli bir enlem girin.';
+  } else if (lat < -90 || lat > 90) {
+    latError = 'Enlem -90 ile 90 arasında olmalı.';
+  }
+
+  if (lng == null) {
+    lngError = 'Geçerli bir boylam girin.';
+  } else if (lng < -180 || lng > 180) {
+    lngError = 'Boylam -180 ile 180 arasında olmalı.';
+  }
+
+  // (0, 0) noktası "tanımsız" kabul edilir: gerçek bir site konumu olamaz.
+  if (latError == null && lngError == null && lat == 0 && lng == 0) {
+    latError = 'Koordinatlar tanımsız görünüyor.';
+    lngError = 'Koordinatlar tanımsız görünüyor.';
+  }
+
+  if (radiusMeters.isNaN || radiusMeters < 10 || radiusMeters > 2000) {
+    radiusError = 'Mesafe 10 ile 2000 metre arasında olmalı.';
+  }
+
+  return GeofenceFormValidation(
+    latitude: latError == null ? lat : null,
+    longitude: lngError == null ? lng : null,
+    latitudeError: latError,
+    longitudeError: lngError,
+    radiusError: radiusError,
+  );
+}
+
 class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
   late String _accessMode; // 'hybrid', 'app_only', 'qr_only'
   late bool _featureGuestPassEnabled;
@@ -84,6 +160,9 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
   late double _radiusMeters;
   bool _isLocating = false;
   bool _isSaving = false;
+  String? _latError;
+  String? _lngError;
+  String? _radiusError;
 
   @override
   void initState() {
@@ -109,6 +188,8 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
           ? widget.site.geofenceLongitude!.toStringAsFixed(6)
           : '',
     );
+    // Kayıtlı yarıçap olduğu gibi tutulur (sunucu 10-2000 m kabul eder): kaydırıcıya yalnız
+    // GÖSTERİMDE sığdırılır; kullanıcı kaydırıcıyı oynatmadıkça kayıtlı değer sessizce değişmez.
     _radiusMeters = widget.site.geofenceRadiusMeters.toDouble();
   }
 
@@ -122,24 +203,26 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
   Future<void> _fetchCurrentLocation() async {
     setState(() => _isLocating = true);
     try {
-      final position = await GeofenceService.instance.getCurrentPosition();
+      // Merkez konumu da istemci doğrulama kurallarına tabidir: doğruluk, tazelik, sahte konum.
+      final fix = await GeofenceService.instance.acquireVerifiedPosition();
+      final position = fix.position;
       if (position != null && mounted) {
         setState(() {
           _latController.text = position.latitude.toStringAsFixed(6);
           _lngController.text = position.longitude.toStringAsFixed(6);
+          _latError = null;
+          _lngError = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mevcut GPS konumu basariyla alindi.'),
-            backgroundColor: AppColors.emerald,
-          ),
+        AppSnack.show(
+          context,
+          'Mevcut GPS konumu başarıyla alındı.',
+          kind: AppSnackKind.success,
         );
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Konum alinamadi. Lutfen GPS iznini kontrol edin.'),
-            backgroundColor: AppColors.rose,
-          ),
+        AppSnack.show(
+          context,
+          fix.errorMessage ?? 'Konum alınamadı. Lütfen GPS iznini kontrol edin.',
+          kind: AppSnackKind.error,
         );
       }
     } finally {
@@ -148,9 +231,34 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
   }
 
   Future<void> _handleSave() async {
+    double? lat = double.tryParse(_latController.text.trim().replaceAll(',', '.'));
+    double? lng = double.tryParse(_lngController.text.trim().replaceAll(',', '.'));
+
+    if (_requireGeofence) {
+      // Konum doğrulaması açıkken boş/hatalı koordinatla kaydetmeyi engelle.
+      final validation = validateGeofenceForm(
+        latitudeText: _latController.text,
+        longitudeText: _lngController.text,
+        radiusMeters: _radiusMeters,
+      );
+      setState(() {
+        _latError = validation.latitudeError;
+        _lngError = validation.longitudeError;
+        _radiusError = validation.radiusError;
+      });
+      if (!validation.isValid) {
+        AppSnack.show(
+          context,
+          'Konum doğrulaması açıkken geçerli enlem, boylam ve mesafe girilmelidir.',
+          kind: AppSnackKind.error,
+        );
+        return;
+      }
+      lat = validation.latitude;
+      lng = validation.longitude;
+    }
+
     setState(() => _isSaving = true);
-    final lat = double.tryParse(_latController.text.trim());
-    final lng = double.tryParse(_lngController.text.trim());
 
     final isQrActive = _accessMode != 'app_only';
     final isRemoteActive = _accessMode != 'qr_only';
@@ -172,11 +280,10 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Kaydedilemedi: $e'),
-            backgroundColor: AppColors.rose,
-          ),
+        AppSnack.show(
+          context,
+          'Kaydedilemedi: ${e.toString().replaceFirst('Exception: ', '')}',
+          kind: AppSnackKind.error,
         );
       }
     } finally {
@@ -186,345 +293,392 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final site = widget.site;
+    // Dar ekranlarda (ör. 320 px) kenar boşlukları küçültülür; içerik taşmaz.
+    final isNarrow = MediaQuery.sizeOf(context).width < 400;
+    final hintStyle = th.bodySmall?.copyWith(color: p.textSecondary);
+    final accent = AppTone.primary.ink(p);
+    // Büyük yazıda sabit başlık küçülür: alt başlık (site adı) kaydırılan içeriğin başına taşınır ve
+    // eylem düğmeleri sabit satır yerine kaydırılan içeriğin SONUNA alınır (içerik için yer kalsın).
+    final compactHeader = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final actionButtons = Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          child: const Text('İptal'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _handleSave,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Değişiklikleri Kaydet'),
+        ),
+      ],
+    );
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      insetPadding: EdgeInsets.symmetric(horizontal: isNarrow ? 12 : 40, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540, maxHeight: 720),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Başlık
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      color: AppColors.primary,
-                      size: 24,
-                    ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Başlık (+ sağ üstte kapatma; başlık düğmenin altına girmesin diye sağdan pay)
+            Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 32),
+                  child: AppDialogHeader(
+                    title: 'Giriş & Güvenlik Politikaları',
+                    subtitle: compactHeader ? null : site.name,
+                    icon: Icons.admin_panel_settings_rounded,
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Giriş & Güvenlik Politikaları',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : AppColors.textDark,
-                          ),
-                        ),
-                        Text(
-                          site.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
+                ),
+                PositionedDirectional(
+                  top: AppSpace.sm,
+                  end: AppSpace.sm,
+                  child: IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
+                ),
+              ],
+            ),
+            const Divider(height: 1),
 
-              // Kaydırılabilir İçerik
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // SÜPER KULLANICI GİRİŞ YÖNTEMİ SEÇİMİ
-                      Row(
-                        children: [
-                          const Icon(Icons.lock_person_outlined, size: 18, color: AppColors.primary),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Yetkili Giriş Yöntemi',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : AppColors.textDark,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (!widget.isSuperUser)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Text(
-                                'Sadece Süper User',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Site sakinlerinin kapıyı hangi yöntemlerle açabileceğini belirleyin.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                      ),
+            // Kaydırılabilir İçerik
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.md, AppSpace.xl, AppSpace.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (compactHeader) ...[
+                      Text(site.name, style: hintStyle),
                       const SizedBox(height: 12),
-
-                      _buildAccessModeCard(
-                        mode: 'hybrid',
-                        title: '🔄 Hibrit (Uygulama + QR Kod)',
-                        subtitle: 'Sakinler hem uygulama butonundan hem de kapıdaki QR okuyucudan geçebilir.',
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildAccessModeCard(
-                        mode: 'app_only',
-                        title: '📱 Sadece Mobil Uygulama Butonu',
-                        subtitle: 'QR okuyucu devre dışıdır. Kapı yalnızca uygulama üzerinden internet/yerel ağ ile açılır.',
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildAccessModeCard(
-                        mode: 'qr_only',
-                        title: '📷 Sadece QR Kod ile Giriş',
-                        subtitle: 'Uygulamadan uzaktan butona basarak açma kapalıdır. Sakin yalnızca kapı önünde QR ile açabilir.',
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 18),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-
-                      // MİSAFİR GEÇİŞ İZNİ
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          '📦 Misafir & Kurye Geçiş İzni',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          'Daire sakinlerinin tek kullanımlık veya süreli misafir linki üretmesine izin ver.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
-                          ),
-                        ),
-                        value: _featureGuestPassEnabled,
-                        onChanged: widget.isSuperUser
-                            ? (val) => setState(() => _featureGuestPassEnabled = val)
-                            : null,
-                      ),
-                      const SizedBox(height: 8),
-
-                      // DİNAMİK QR YENİLENME SÜRESİ (Eğer QR aktifse)
-                      if (_accessMode != 'app_only') ...[
-                        const SizedBox(height: 6),
+                    ],
+                    // SÜPER KULLANICI GİRİŞ YÖNTEMİ SEÇİMİ
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.timer_outlined, size: 18, color: AppColors.primary),
+                            Icon(Icons.lock_person_outlined, size: 18, color: accent),
                             const SizedBox(width: 8),
-                            const Expanded(
+                            Flexible(
                               child: Text(
-                                'Dinamik QR Yenilenme Süresi',
-                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                'Yetkili Giriş Yöntemi',
+                                style: th.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                            ),
-                            DropdownButton<int>(
-                              value: _qrRotationSeconds,
-                              dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                              underline: const SizedBox(),
-                              items: const [
-                                DropdownMenuItem(value: 15, child: Text('15 saniye')),
-                                DropdownMenuItem(value: 30, child: Text('30 saniye (Önerilen)')),
-                                DropdownMenuItem(value: 60, child: Text('60 saniye')),
-                              ],
-                              onChanged: widget.isSuperUser
-                                  ? (val) {
-                                      if (val != null) setState(() => _qrRotationSeconds = val);
-                                    }
-                                  : null,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-
-                      // GPS GEOFENCE TOGGLE
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          '📍 Konum Doğrulama (GPS Geofence)',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          'QR kodun yalnızca site kapısına yakınken üretilmesini zorunlu kıl (ekran görüntüsü paylaşımını engeller).',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
-                          ),
-                        ),
-                        value: _requireGeofence,
-                        onChanged: (val) => setState(() => _requireGeofence = val),
-                      ),
-
-                      if (_requireGeofence) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0F172A).withValues(alpha: 0.6)
-                                : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
+                        if (!widget.isSuperUser)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppTone.neutral.tint(p),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Sadece Süper User',
+                              style: th.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTone.neutral.ink(p),
+                              ),
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.location_on_outlined, size: 18, color: AppColors.primary),
-                                  const SizedBox(width: 8),
-                                  const Expanded(
-                                    child: Text(
-                                      'Kapı / Site GPS Koordinatları',
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                    ),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: _isLocating ? null : _fetchCurrentLocation,
-                                    icon: _isLocating
-                                        ? const SizedBox(
-                                            width: 14,
-                                            height: 14,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.my_location, size: 15),
-                                    label: const Text('Mevcut Konumu Al', style: TextStyle(fontSize: 12)),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _latController,
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      decoration: const InputDecoration(
-                                        labelText: 'Enlem (Latitude)',
-                                        hintText: '41.0082',
-                                        isDense: true,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _lngController,
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      decoration: const InputDecoration(
-                                        labelText: 'Boylam (Longitude)',
-                                        hintText: '28.9784',
-                                        isDense: true,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'İzin Verilen Azami Mesafe:',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                                  ),
-                                  Text(
-                                    '${_radiusMeters.round()} metre',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Slider(
-                                value: _radiusMeters,
-                                min: 25,
-                                max: 300,
-                                divisions: 11,
-                                label: '${_radiusMeters.round()} m',
-                                onChanged: (val) => setState(() => _radiusMeters = val),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Site sakinlerinin kapıyı hangi yöntemlerle açabileceğini belirleyin.',
+                      style: hintStyle,
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildAccessModeCard(
+                      mode: 'hybrid',
+                      title: '🔄 Hibrit (Uygulama + QR Kod)',
+                      subtitle: 'Sakinler hem uygulama butonundan hem de kapıdaki QR okuyucudan geçebilir.',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildAccessModeCard(
+                      mode: 'app_only',
+                      title: '📱 Sadece Mobil Uygulama Butonu',
+                      subtitle: 'QR okuyucu devre dışıdır. Kapı yalnızca uygulama üzerinden internet/yerel ağ ile açılır.',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildAccessModeCard(
+                      mode: 'qr_only',
+                      title: '📷 Sadece QR Kod ile Giriş',
+                      subtitle: 'Uygulamadan uzaktan butona basarak açma kapalıdır. Sakin yalnızca kapı önünde QR ile açabilir.',
+                    ),
+                    const SizedBox(height: 18),
+                    const Divider(height: 1),
+                    const SizedBox(height: 12),
+
+                    // MİSAFİR GEÇİŞ İZNİ
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('📦 Misafir & Kurye Geçiş İzni'),
+                      subtitle: Text(
+                        'Daire sakinlerinin tek kullanımlık veya süreli misafir linki üretmesine izin ver.',
+                        style: hintStyle,
+                      ),
+                      value: _featureGuestPassEnabled,
+                      onChanged: widget.isSuperUser
+                          ? (val) => setState(() => _featureGuestPassEnabled = val)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+
+                    // DİNAMİK QR YENİLENME SÜRESİ (Eğer QR aktifse)
+                    if (_accessMode != 'app_only') ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.timer_outlined, size: 18, color: accent),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Dinamik QR Yenilenme Süresi',
+                              style: th.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: p.text,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Seçici ayrı satırda ve tam genişlikte: dar ekranda yatay taşma olmaz.
+                      DropdownButton<int>(
+                        isExpanded: true,
+                        value: _qrRotationSeconds,
+                        dropdownColor: p.surface,
+                        underline: const SizedBox(),
+                        // Kayıtlı süre standart seçeneklerin dışındaysa (API 10-300 sn kabul eder)
+                        // kaybolmaz / seçiciyi çökertmez: ek seçenek olarak listelenir.
+                        items: [
+                          for (final seconds in ({15, 30, 60, _qrRotationSeconds}.toList()..sort()))
+                            DropdownMenuItem(
+                              value: seconds,
+                              child: Text(
+                                seconds == 30 ? '30 saniye (Önerilen)' : '$seconds saniye',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: widget.isSuperUser
+                            ? (val) {
+                                if (val != null) setState(() => _qrRotationSeconds = val);
+                              }
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
                     ],
-                  ),
+                    const Divider(height: 1),
+                    const SizedBox(height: 12),
+
+                    // GPS GEOFENCE TOGGLE
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('📍 Konum Doğrulama (GPS Geofence)'),
+                      subtitle: Text(
+                        'QR kodun yalnızca site kapısına yakınken üretilmesini zorunlu kıl (ekran görüntüsü paylaşımını engeller).',
+                        style: hintStyle,
+                      ),
+                      value: _requireGeofence,
+                      onChanged: (val) => setState(() => _requireGeofence = val),
+                    ),
+
+                    if (_requireGeofence) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: p.surfaceMuted,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: p.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.location_on_outlined, size: 18, color: accent),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Kapı / Site GPS Koordinatları',
+                                    style: th.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: p.text,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _isLocating ? null : _fetchCurrentLocation,
+                                icon: _isLocating
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.my_location, size: 15),
+                                label: const Text('Mevcut Konumu Al'),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                // Büyük yazı / dar kutuda enlem ve boylam alt alta dizilir (hata iletileri okunur).
+                                final stacked =
+                                    MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                                    constraints.maxWidth < 260;
+                                final latField = TextField(
+                                  controller: _latController,
+                                  keyboardType: const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                    signed: true,
+                                  ),
+                                  onChanged: (_) {
+                                    if (_latError != null) setState(() => _latError = null);
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'Enlem (Latitude)',
+                                    hintText: '41.0082',
+                                    isDense: true,
+                                    errorText: _latError,
+                                    errorMaxLines: 3,
+                                  ),
+                                );
+                                final lngField = TextField(
+                                  controller: _lngController,
+                                  keyboardType: const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                    signed: true,
+                                  ),
+                                  onChanged: (_) {
+                                    if (_lngError != null) setState(() => _lngError = null);
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'Boylam (Longitude)',
+                                    hintText: '28.9784',
+                                    isDense: true,
+                                    errorText: _lngError,
+                                    errorMaxLines: 3,
+                                  ),
+                                );
+                                if (stacked) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      latField,
+                                      const SizedBox(height: 12),
+                                      lngField,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: latField),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: lngField),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  'İzin Verilen Azami Mesafe:',
+                                  style: th.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                    color: p.textSecondary,
+                                  ),
+                                ),
+                                Text(
+                                  '${_radiusMeters.round()} metre',
+                                  maxLines: 1,
+                                  style: th.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: accent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              // Kaydırıcı aralığı dışındaki değerler (örn. API'den gelen 500 m) çökmesin.
+                              value: _radiusMeters.clamp(25.0, 300.0).toDouble(),
+                              min: 25,
+                              max: 300,
+                              divisions: 11,
+                              label: '${_radiusMeters.round()} m',
+                              onChanged: (val) => setState(() {
+                                _radiusMeters = val;
+                                _radiusError = null;
+                              }),
+                            ),
+                            if (_radiusError != null)
+                              Text(
+                                _radiusError!,
+                                style: th.bodySmall?.copyWith(
+                                  color: AppTone.danger.ink(p),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (compactHeader) ...[
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      actionButtons,
+                    ],
+                  ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 20),
+            // Butonlar (sabit satır; büyük yazıda kaydırılan içeriğin sonunda)
+            if (!compactHeader) ...[
               const Divider(height: 1),
-              const SizedBox(height: 14),
-
-              // Butonlar
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                    child: const Text('İptal'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isSaving ? null : _handleSave,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Değişiklikleri Kaydet'),
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpace.xl, 14, AppSpace.xl, AppSpace.lg),
+                child: actionButtons,
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -534,28 +688,20 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
     required String mode,
     required String title,
     required String subtitle,
-    required bool isDark,
   }) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final isSelected = _accessMode == mode;
     final isEnabled = widget.isSuperUser;
+    final accent = AppTone.primary.ink(p);
 
-    return InkWell(
+    return AppCard(
+      selected: isSelected,
       onTap: isEnabled ? () => setState(() => _accessMode = mode) : null,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.08)
-              : (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.4) : const Color(0xFFF8FAFC)),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected
-                ? AppColors.primary
-                : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
-            width: isSelected ? 1.8 : 1.0,
-          ),
-        ),
+      padding: const EdgeInsets.all(12),
+      // Devre dışı (süper kullanıcı değil): içerik soluk gösterilir.
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.6,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -564,9 +710,7 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
               child: Icon(
                 isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                 size: 20,
-                color: isSelected
-                    ? AppColors.primary
-                    : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                color: isSelected ? accent : p.textMuted,
               ),
             ),
             const SizedBox(width: 10),
@@ -576,21 +720,15 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: th.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                      color: isSelected
-                          ? (isDark ? const Color(0xFF93C5FD) : AppColors.primary)
-                          : (isDark ? Colors.white : AppColors.textDark),
+                      color: isSelected ? accent : p.text,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
-                    ),
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                 ],
               ),

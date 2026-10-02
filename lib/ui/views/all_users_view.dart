@@ -4,10 +4,15 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/app_decorations.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class AllUsersView extends StatefulWidget {
   const AllUsersView({
@@ -137,34 +142,31 @@ class _AllUsersViewState extends State<AllUsersView> {
 
   Future<void> _confirmDeleteUser(ManagedUserAccount user) async {
     if (user.id == widget.session.id) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kendi süper kullanıcı hesabınızı silemezsiniz.')),
-      );
+      AppSnack.show(context, 'Kendi süper kullanıcı hesabınızı silemezsiniz.');
       return;
     }
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Kullanıcıyı Sil'),
-        content: Text(
-          '"${user.fullName}" (#${user.id}) adlı kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?\n\n'
-          'Kullanıcıya ait tüm yetkiler, kapı izinleri ve cihaz ilişkilendirmeleri temizlenecektir.',
-        ),
+      builder: (ctx) => AppDialog(
+        title: 'Kullanıcıyı Sil',
+        icon: Icons.delete_outline_rounded,
+        tone: AppTone.danger,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
+            style: filledToneStyle(ctx, tone: AppTone.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Evet, Sil'),
           ),
         ],
+        child: Text(
+          '"${user.fullName}" (#${user.id}) adlı kullanıcıyı kalıcı olarak silmek istediğinize emin misiniz?\n\n'
+          'Kullanıcıya ait tüm yetkiler, kapı izinleri ve cihaz ilişkilendirmeleri temizlenecektir.',
+        ),
       ),
     );
 
@@ -175,24 +177,60 @@ class _AllUsersViewState extends State<AllUsersView> {
 
   void _showUserDetailSheet(ManagedUserAccount user) {
     final isSelf = user.id == widget.session.id;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final roleColor = _getRoleColor(user.role, isDark);
+    final tone = user.role.tone;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      backgroundColor: context.palette.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
       ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final p = context.palette;
+            final th = Theme.of(context).textTheme;
             final isActivationBusy = widget.busyActivationUsers.contains(user.id);
+            // Dar ekran / büyük yazıda eylem düğmeleri alt alta (yan yana yarım genişlik harfleri böler).
+            final stackActions =
+                MediaQuery.sizeOf(context).width < 340 ||
+                MediaQuery.textScalerOf(context).scale(1) > 1.3;
+            final edit = FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTone.primary.a,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 48),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openEditDialog(user);
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Düzenle'),
+            );
+            final delete = OutlinedButton.icon(
+              style: dangerOutlineStyle(context).copyWith(
+                minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _confirmDeleteUser(user);
+              },
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Sil'),
+            );
 
             return SafeArea(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl,
+                  AppSpace.md,
+                  AppSpace.xl,
+                  AppSpace.xl,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,9 +240,9 @@ class _AllUsersViewState extends State<AllUsersView> {
                       child: Container(
                         width: 40,
                         height: 4,
-                        margin: const EdgeInsets.only(bottom: 16),
+                        margin: const EdgeInsets.only(bottom: AppSpace.lg),
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                          color: p.textMuted.withValues(alpha: 0.4),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -213,104 +251,72 @@ class _AllUsersViewState extends State<AllUsersView> {
                     // Kullanıcı Başlık (Avatar, Ad Soyad, E-Posta)
                     Row(
                       children: [
-                        CircleAvatar(
+                        InitialAvatar(
+                          name: user.fullName,
+                          tone: tone,
                           radius: 26,
-                          backgroundColor: roleColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                          child: Text(
-                            user.fullName.trim().isEmpty ? '?' : user.fullName.trim()[0].toUpperCase(),
-                            style: TextStyle(
-                              color: roleColor,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                            ),
-                          ),
+                          gap: AppSpace.md,
                         ),
-                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: AppSpace.sm,
+                                runSpacing: AppSpace.xs,
                                 children: [
-                                  Flexible(
-                                    child: Text(
-                                      user.fullName,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 17,
-                                        color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                                      ),
+                                  Text(user.fullName, style: th.titleLarge),
+                                  if (isSelf)
+                                    const StatusChip(
+                                      label: 'Siz',
+                                      tone: AppTone.primary,
                                     ),
-                                  ),
-                                  if (isSelf) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'Siz',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                user.email,
-                                style: TextStyle(
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                  fontSize: 13.5,
-                                ),
-                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              Text(user.email, style: th.bodyMedium),
                             ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    const Divider(height: 1),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppSpace.lg),
+                    const Divider(),
+                    const SizedBox(height: AppSpace.md),
 
                     // Detay Satırları
-                    _buildDetailRow('Kullanıcı ID', '#${user.id}', Icons.tag_rounded, isDark),
-                    _buildDetailRow('Rolü', user.role.label, Icons.shield_outlined, isDark, badgeColor: roleColor),
+                    _buildDetailRow(context, 'Kullanıcı ID', '#${user.id}', Icons.tag_rounded),
+                    _buildDetailRow(context, 'Rolü', user.role.label, Icons.shield_outlined, badgeTone: tone),
                     _buildDetailRow(
+                      context,
                       'E-posta Onayı',
                       user.emailVerified ? 'Doğrulandı' : 'Doğrulanmadı',
                       user.emailVerified ? Icons.verified_rounded : Icons.pending_outlined,
-                      isDark,
-                      badgeColor: user.emailVerified ? AppColors.emerald : Colors.amber,
+                      badgeTone: user.emailVerified ? AppTone.success : AppTone.warning,
                     ),
                     if ((user.phoneNumber ?? '').isNotEmpty)
-                      _buildDetailRow('Telefon', user.phoneNumber!, Icons.phone_rounded, isDark),
+                      _buildDetailRow(context, 'Telefon', user.phoneNumber!, Icons.phone_rounded),
                     if (user.loginName != null && user.loginName!.isNotEmpty && user.loginName != user.email)
-                      _buildDetailRow('Kullanıcı Adı', user.loginName!, Icons.account_box_outlined, isDark),
-                    _buildDetailRow('Kayıt Tarihi', formatDateTime(user.createdAt), Icons.calendar_today_outlined, isDark),
+                      _buildDetailRow(context, 'Kullanıcı Adı', user.loginName!, Icons.account_box_outlined),
+                    _buildDetailRow(context, 'Kayıt Tarihi', formatDateTime(user.createdAt), Icons.calendar_today_outlined),
 
                     // Aktif / Pasif Switch Satırı
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+                      child: _SpreadRow(
                         children: [
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.power_settings_new_rounded, size: 18, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Hesap Durumu',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-                                ),
+                              Icon(
+                                Icons.power_settings_new_rounded,
+                                size: 18,
+                                color: p.textSecondary,
+                              ),
+                              const SizedBox(width: AppSpace.sm),
+                              Flexible(
+                                child: Text('Hesap Durumu', style: th.bodyMedium),
                               ),
                             ],
                           ),
@@ -322,7 +328,7 @@ class _AllUsersViewState extends State<AllUsersView> {
                                 )
                               : Switch.adaptive(
                                   value: user.isActive,
-                                  activeThumbColor: AppColors.primary,
+                                  activeThumbColor: AppTone.primary.a,
                                   onChanged: isSelf
                                       ? null
                                       : (val) async {
@@ -334,48 +340,25 @@ class _AllUsersViewState extends State<AllUsersView> {
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppSpace.lg),
 
                     // Aksiyon Butonları (Düzenle & Sil)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              _openEditDialog(user);
-                            },
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            label: const Text('Düzenle'),
-                          ),
-                        ),
-                        if (!isSelf) ...[
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
-                                side: const BorderSide(color: Colors.red),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _confirmDeleteUser(user);
-                              },
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                              label: const Text('Sil'),
-                            ),
-                          ),
-                        ],
+                    if (stackActions) ...[
+                      edit,
+                      if (!isSelf) ...[
+                        const SizedBox(height: AppSpace.sm),
+                        delete,
                       ],
-                    ),
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(child: edit),
+                          if (!isSelf) ...[
+                            const SizedBox(width: AppSpace.md),
+                            Expanded(child: delete),
+                          ],
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -386,57 +369,38 @@ class _AllUsersViewState extends State<AllUsersView> {
     );
   }
 
-  Widget _buildDetailRow(String title, String value, IconData icon, bool isDark, {Color? badgeColor}) {
+  /// Detay satırı: soldaki ikon + başlık, sağdaki değer (ya da ton rozeti). Sığmazsa değer alta iner
+  /// (büyük yazıda taşma yok).
+  Widget _buildDetailRow(
+    BuildContext context,
+    String title,
+    String value,
+    IconData icon, {
+    AppTone? badgeTone,
+  }) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+      child: _SpreadRow(
         children: [
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
-                ),
-              ),
+              Icon(icon, size: 18, color: p.textSecondary),
+              const SizedBox(width: AppSpace.sm),
+              Flexible(child: Text(title, style: th.bodyMedium)),
             ],
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: badgeColor != null
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: badgeColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: badgeColor,
-                      ),
-                    ),
-                  )
-                : Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
+          badgeTone != null
+              ? StatusChip(label: value, tone: badgeTone)
+              : Text(
+                  value,
+                  style: th.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: p.text,
                   ),
-          ),
+                ),
         ],
       ),
     );
@@ -481,144 +445,82 @@ class _AllUsersViewState extends State<AllUsersView> {
               loadHealth();
             }
 
-            final isDark = Theme.of(context).brightness == Brightness.dark;
             final usersMap = healthData?['users'] as Map<String, dynamic>?;
             final structureMap = healthData?['structure'] as Map<String, dynamic>?;
             final devicesMap = healthData?['devices'] as Map<String, dynamic>?;
             final isClean = healthData?['isClean'] == true;
+            final statusTone = isClean ? AppTone.success : AppTone.warning;
+            final cleanNote = cleanSuccessMessage;
 
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              actionsPadding: const EdgeInsets.all(16),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: (isClean ? Colors.green : Colors.orange).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isClean ? Icons.verified_rounded : Icons.cleaning_services_rounded,
-                      color: isClean ? Colors.green : Colors.orange,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Veritabanı Sağlığı & Bakım',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 420,
-                child: isLoadingHealth
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    : errorMessage != null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Text(
-                              'Hata: $errorMessage',
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                          )
-                        : SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Durum Rozeti
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: (isClean ? Colors.green : Colors.orange).withValues(alpha: isDark ? 0.2 : 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: (isClean ? Colors.green : Colors.orange).withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isClean ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
-                                        color: isClean ? Colors.green : Colors.orange,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          isClean
-                                              ? 'Veritabanı temiz ve optimize durumda.'
-                                              : 'Veritabanında atık kayıtlar veya temizlenecek öğeler var.',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: isClean
-                                                ? (isDark ? Colors.green.shade300 : Colors.green.shade800)
-                                                : (isDark ? Colors.orange.shade300 : Colors.orange.shade800),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-
-                                // İstatistik Kartları
-                                if (usersMap != null) ...[
-                                  _buildStatRow('Gerçek Kayıtlı Kullanıcı', '${usersMap['real'] ?? 0}', Colors.blue),
-                                  _buildStatRow('Kukla / Sahte Kullanıcı', '${usersMap['dummy'] ?? 0}', usersMap['dummy'] == 0 ? Colors.green : Colors.red),
-                                  _buildStatRow('Süper Kullanıcılar', '${usersMap['superUsers'] ?? 0}', Colors.purple),
-                                  _buildStatRow('Site Yöneticileri', '${usersMap['siteManagers'] ?? 0}', Colors.teal),
-                                ],
-                                const Divider(height: 16),
-                                if (structureMap != null) ...[
-                                  _buildStatRow('Kayıtlı Siteler', '${structureMap['sites'] ?? 0}', Colors.indigo),
-                                  _buildStatRow('Daireler & Kapılar', '${structureMap['apartments'] ?? 0} daire, ${structureMap['doors'] ?? 0} kapı', Colors.indigo),
-                                ],
-                                if (devicesMap != null) ...[
-                                  _buildStatRow('ESP32 Donanımları', '${devicesMap['online'] ?? 0} çevrimiçi / ${devicesMap['total'] ?? 0} kayıtlı', Colors.amber),
-                                ],
-
-                                if (cleanSuccessMessage != null) ...[
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      cleanSuccessMessage!,
-                                      style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+            final Widget body = isLoadingHealth
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: AppSpace.xxl),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : errorMessage != null
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: AppSpace.md),
+                          child: InlineNotice(
+                            message: 'Hata: $errorMessage',
+                            tone: AppTone.danger,
                           ),
-              ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Durum Rozeti
+                            InlineNotice(
+                              message: isClean
+                                  ? 'Veritabanı temiz ve optimize durumda.'
+                                  : 'Veritabanında atık kayıtlar veya temizlenecek öğeler var.',
+                              tone: statusTone,
+                              icon: isClean
+                                  ? Icons.check_circle_rounded
+                                  : Icons.warning_amber_rounded,
+                            ),
+                            const SizedBox(height: AppSpace.md),
+
+                            // İstatistik Satırları
+                            if (usersMap != null) ...[
+                              _buildStatRow(context, 'Gerçek Kayıtlı Kullanıcı', '${usersMap['real'] ?? 0}', AppTone.primary),
+                              _buildStatRow(context, 'Kukla / Sahte Kullanıcı', '${usersMap['dummy'] ?? 0}', usersMap['dummy'] == 0 ? AppTone.success : AppTone.danger),
+                              _buildStatRow(context, 'Süper Kullanıcılar', '${usersMap['superUsers'] ?? 0}', AppTone.violet),
+                              _buildStatRow(context, 'Site Yöneticileri', '${usersMap['siteManagers'] ?? 0}', AppTone.success),
+                            ],
+                            const Divider(height: AppSpace.lg),
+                            if (structureMap != null) ...[
+                              _buildStatRow(context, 'Kayıtlı Siteler', '${structureMap['sites'] ?? 0}', AppTone.primary),
+                              _buildStatRow(context, 'Daireler & Kapılar', '${structureMap['apartments'] ?? 0} daire, ${structureMap['doors'] ?? 0} kapı', AppTone.primary),
+                            ],
+                            if (devicesMap != null) ...[
+                              _buildStatRow(context, 'ESP32 Donanımları', '${devicesMap['online'] ?? 0} çevrimiçi / ${devicesMap['total'] ?? 0} kayıtlı', AppTone.warning),
+                            ],
+
+                            if (cleanNote != null) ...[
+                              const SizedBox(height: AppSpace.md),
+                              InlineNotice(
+                                key: ValueKey<String>(cleanNote),
+                                message: cleanNote,
+                                tone: cleanNote.startsWith('Hata:')
+                                    ? AppTone.danger
+                                    : AppTone.success,
+                              ),
+                            ],
+                          ],
+                        );
+
+            return AppDialog(
+              title: 'Veritabanı Sağlığı & Bakım',
+              icon: isClean ? Icons.verified_rounded : Icons.cleaning_services_rounded,
+              tone: statusTone,
               actions: [
                 TextButton(
                   onPressed: isCleaning ? null : () => Navigator.pop(ctx),
                   child: const Text('Kapat'),
                 ),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
+                  style: filledToneStyle(context),
                   onPressed: isCleaning || isLoadingHealth
                       ? null
                       : () async {
@@ -651,12 +553,13 @@ class _AllUsersViewState extends State<AllUsersView> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.auto_delete_rounded, size: 18),
                   label: Text(isCleaning ? 'Temizleniyor...' : 'Çöp Temizliği Yap'),
                 ),
               ],
+              child: body,
             );
           },
         );
@@ -664,129 +567,107 @@ class _AllUsersViewState extends State<AllUsersView> {
     );
   }
 
-  Widget _buildStatRow(String title, String value, Color accentColor) {
+  /// İstatistik satırı: başlık + ton rozeti. Sığmazsa rozet alta iner (taşma yok).
+  Widget _buildStatRow(
+    BuildContext context,
+    String title,
+    String value,
+    AppTone tone,
+  ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: _SpreadRow(
         children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: accentColor,
-              ),
-            ),
-          ),
+          Text(title, style: Theme.of(context).textTheme.bodyMedium),
+          InfoChip(value, tone: tone),
         ],
       ),
     );
   }
 
-
-  Color _getRoleColor(UserRole role, bool isDark) {
-    switch (role) {
-      case UserRole.superUser:
-        return isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
-      case UserRole.siteManager:
-        return isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
-      case UserRole.apartmentOwner:
-        return isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
-      case UserRole.individual:
-        return isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
-    }
+  Widget _roleChip(BuildContext context, String label, UserRole? role, AppTone tone) {
+    final p = context.palette;
+    final selected = _selectedRoleFilter == role;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => _onRoleFilterSelected(role),
+      selectedColor: Color.alphaBlend(tone.tint(p), p.surface),
+      checkmarkColor: tone.ink(p),
+      labelStyle: TextStyle(
+        color: selected ? tone.ink(p) : p.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide(
+        color: selected ? tone.hue.withValues(alpha: 0.5) : p.border,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final displayUsers = widget.users.where((u) => u.role != UserRole.superUser).toList();
     final totalUsers = widget.pageData?.total ?? displayUsers.length;
     final totalPages = widget.pageData?.totalPages ?? 1;
+    final hasFilter = _searchController.text.isNotEmpty || _selectedRoleFilter != null;
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderSide: BorderSide(color: p.border),
+    );
+    const buttonSize = BoxConstraints(minWidth: 44, minHeight: 44);
+    final stackActions =
+        MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+        MediaQuery.sizeOf(context).width < 340;
+    final headerActions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.onGetDatabaseHealth != null) ...[
+          IconButton.filledTonal(
+            onPressed: _showDbMaintenanceDialog,
+            icon: const Icon(Icons.cleaning_services_rounded, size: 20),
+            tooltip: 'Veritabanı Sağlığı & Çöp Temizliği',
+          ),
+          const SizedBox(width: AppSpace.sm),
+        ],
+        IconButton.filledTonal(
+          onPressed: widget.isLoading ? null : () => _fetchData(),
+          icon: widget.isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+          tooltip: 'Listeyi Yenile',
+        ),
+      ],
+    );
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
           // 1. ÜST BAŞLIK KARTI
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: AppDecorations.glassCard(context),
+          AppCard(
+            padding: listCardPadding(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.manage_accounts_rounded, color: AppColors.primary, size: 26),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Kullanıcı Yönetimi',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                              color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Toplam $totalUsers kayıtlı kullanıcı',
-                            style: TextStyle(
-                              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (widget.onGetDatabaseHealth != null) ...[
-                      IconButton.filledTonal(
-                        onPressed: _showDbMaintenanceDialog,
-                        icon: const Icon(Icons.cleaning_services_rounded, size: 20),
-                        tooltip: 'Veritabanı Sağlığı & Çöp Temizliği',
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    IconButton.filledTonal(
-                      onPressed: widget.isLoading ? null : () => _fetchData(),
-                      icon: widget.isLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh_rounded),
-                      tooltip: 'Listeyi Yenile',
-                    ),
-                  ],
+                SectionHeader(
+                  icon: Icons.manage_accounts_rounded,
+                  title: 'Kullanıcı Yönetimi',
+                  trailing: stackActions ? null : headerActions,
                 ),
-                const SizedBox(height: 16),
+                // Büyük yazı / dar ekranda başlık ve eylemler yan yana sığmaz: eylemler başlığın altına
+                // iner (başlık sözcük ortasından bölünmez).
+                if (stackActions) ...[
+                  const SizedBox(height: AppSpace.sm),
+                  headerActions,
+                ],
+                const SizedBox(height: AppSpace.xs),
+                Text('Toplam $totalUsers kayıtlı kullanıcı', style: th.bodyMedium),
+                const SizedBox(height: AppSpace.lg),
 
                 // ARAMA ALANI (FİLTRE)
                 TextField(
@@ -805,328 +686,251 @@ class _AllUsersViewState extends State<AllUsersView> {
                           )
                         : null,
                     filled: true,
-                    fillColor: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.6) : Colors.grey.shade100,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: isDark ? const Color(0x1FFFFFFF) : Colors.grey.shade300,
-                      ),
+                    fillColor: p.surfaceMuted,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.lg,
+                      vertical: AppSpace.md,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: isDark ? const Color(0x1FFFFFFF) : Colors.grey.shade300,
-                      ),
-                    ),
+                    border: fieldBorder,
+                    enabledBorder: fieldBorder,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpace.md),
 
-                // ROL FİLTRE ÇİPLERİ
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChip(
-                        label: const Text('Tüm Roller'),
-                        selected: _selectedRoleFilter == null,
-                        onSelected: (_) => _onRoleFilterSelected(null),
-                        selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Site Yöneticileri'),
-                        selected: _selectedRoleFilter == UserRole.siteManager,
-                        onSelected: (_) => _onRoleFilterSelected(UserRole.siteManager),
-                        selectedColor: _getRoleColor(UserRole.siteManager, isDark).withValues(alpha: 0.2),
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Daire Sakinleri'),
-                        selected: _selectedRoleFilter == UserRole.apartmentOwner,
-                        onSelected: (_) => _onRoleFilterSelected(UserRole.apartmentOwner),
-                        selectedColor: _getRoleColor(UserRole.apartmentOwner, isDark).withValues(alpha: 0.2),
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Bireysel Kullanıcılar'),
-                        selected: _selectedRoleFilter == UserRole.individual,
-                        onSelected: (_) => _onRoleFilterSelected(UserRole.individual),
-                        selectedColor: _getRoleColor(UserRole.individual, isDark).withValues(alpha: 0.2),
-                      ),
-                    ],
-                  ),
+                // ROL FİLTRE ÇİPLERİ (yatay kaydırma yok: sığmayan çip alta iner)
+                Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
+                  children: [
+                    _roleChip(context, 'Tüm Roller', null, AppTone.primary),
+                    _roleChip(context, 'Site Yöneticileri', UserRole.siteManager, UserRole.siteManager.tone),
+                    _roleChip(context, 'Daire Sakinleri', UserRole.apartmentOwner, UserRole.apartmentOwner.tone),
+                    _roleChip(context, 'Bireysel Kullanıcılar', UserRole.individual, UserRole.individual.tone),
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpace.lg),
 
           // 2. KULLANICI LİSTESİ ALANI
           if (widget.isLoading && displayUsers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const ListSkeleton()
           else if (displayUsers.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-              decoration: AppDecorations.glassCard(context),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.person_search_rounded,
-                    size: 56,
-                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Kullanıcı Bulunamadı',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _searchController.text.isNotEmpty || _selectedRoleFilter != null
-                        ? 'Arama kriterlerinize veya filtreye uygun kullanıcı kaydı bulunamadı.'
-                        : 'Sistemde henüz kayıtlı kullanıcı bulunmuyor.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (_searchController.text.isNotEmpty || _selectedRoleFilter != null) ...[
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
+            EmptyCard(
+              icon: Icons.person_search_rounded,
+              title: 'Kullanıcı Bulunamadı',
+              message: hasFilter
+                  ? 'Arama kriterlerinize veya filtreye uygun kullanıcı kaydı bulunamadı.'
+                  : 'Sistemde henüz kayıtlı kullanıcı bulunmuyor.',
+              child: hasFilter
+                  ? OutlinedButton.icon(
                       onPressed: () {
                         _searchController.clear();
                         _onRoleFilterSelected(null);
                       },
                       icon: const Icon(Icons.clear_all_rounded),
                       label: const Text('Filtreleri Temizle'),
-                    ),
-                  ],
-                ],
-              ),
+                    )
+                  : null,
             )
           else
-            ...displayUsers.map((user) {
-              final isSelf = user.id == widget.session.id;
-              final roleColor = _getRoleColor(user.role, isDark);
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.9) : Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
-                    width: 1.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark ? const Color(0x20000000) : const Color(0x060F172A),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+            for (var i = 0; i < displayUsers.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                child: StaggeredEntry(
+                  index: i,
+                  child: _buildUserRow(context, displayUsers[i]),
                 ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () => _showUserDetailSheet(user),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: roleColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                            child: Text(
-                              user.fullName.trim().isEmpty ? '?' : user.fullName.trim()[0].toUpperCase(),
-                              style: TextStyle(
-                                color: roleColor,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        user.fullName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14.5,
-                                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isSelf) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: const Text(
-                                          'Siz',
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  user.email,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
-                            size: 22,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
+              ),
 
           // 3. SAYFALAMA KONTROLLERİ (PAGINATION)
           if (displayUsers.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.all(14),
-              decoration: AppDecorations.glassCard(context),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    children: [
-                      Text(
-                        'Sayfa $_currentPage / $totalPages (Toplam $totalUsers kişi)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      DropdownButton<int>(
-                        value: _pageSize,
-                        underline: const SizedBox.shrink(),
-                        icon: const Icon(Icons.arrow_drop_down, size: 18),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? AppColors.accentLight : AppColors.primary,
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 15, child: Text('15 / sf')),
-                          DropdownMenuItem(value: 25, child: Text('25 / sf')),
-                          DropdownMenuItem(value: 50, child: Text('50 / sf')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) _onPageSizeChanged(val);
-                        },
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // İlk sayfa
-                      IconButton.outlined(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _currentPage > 1 ? () => _changePage(1) : null,
-                        icon: const Icon(Icons.first_page_rounded, size: 20),
-                        tooltip: 'İlk Sayfa',
-                      ),
-                      const SizedBox(width: 4),
-                      // Önceki sayfa
-                      IconButton.outlined(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _currentPage > 1 ? () => _changePage(_currentPage - 1) : null,
-                        icon: const Icon(Icons.chevron_left_rounded, size: 20),
-                        tooltip: 'Önceki Sayfa',
-                      ),
-                      const SizedBox(width: 8),
-                      // Sayfa göstergesi
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '$_currentPage',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                            fontSize: 14,
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpace.sm),
+              child: AppCard(
+                padding: const EdgeInsets.all(AppSpace.md),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                  spacing: AppSpace.md,
+                  runSpacing: AppSpace.sm,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpace.sm,
+                      children: [
+                        Text(
+                          'Sayfa $_currentPage / $totalPages (Toplam $totalUsers kişi)',
+                          style: th.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: p.text,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Sonraki sayfa
-                      IconButton.outlined(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _currentPage < totalPages ? () => _changePage(_currentPage + 1) : null,
-                        icon: const Icon(Icons.chevron_right_rounded, size: 20),
-                        tooltip: 'Sonraki Sayfa',
-                      ),
-                      const SizedBox(width: 4),
-                      // Son sayfa
-                      IconButton.outlined(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _currentPage < totalPages ? () => _changePage(totalPages) : null,
-                        icon: const Icon(Icons.last_page_rounded, size: 20),
-                        tooltip: 'Son Sayfa',
-                      ),
-                    ],
-                  ),
-                ],
+                        DropdownButton<int>(
+                          value: _pageSize,
+                          underline: const SizedBox.shrink(),
+                          icon: const Icon(Icons.arrow_drop_down, size: 18),
+                          style: th.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppTone.primary.ink(p),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 15, child: Text('15 / sf')),
+                            DropdownMenuItem(value: 25, child: Text('25 / sf')),
+                            DropdownMenuItem(value: 50, child: Text('50 / sf')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) _onPageSizeChanged(val);
+                          },
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: AppSpace.xs,
+                      runSpacing: AppSpace.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        // İlk sayfa
+                        IconButton.outlined(
+                          constraints: buttonSize,
+                          onPressed: _currentPage > 1 ? () => _changePage(1) : null,
+                          icon: const Icon(Icons.first_page_rounded, size: 20),
+                          tooltip: 'İlk Sayfa',
+                        ),
+                        // Önceki sayfa
+                        IconButton.outlined(
+                          constraints: buttonSize,
+                          onPressed: _currentPage > 1 ? () => _changePage(_currentPage - 1) : null,
+                          icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                          tooltip: 'Önceki Sayfa',
+                        ),
+                        // Sayfa göstergesi
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: AppTone.primary.tint(p),
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpace.md,
+                                vertical: AppSpace.sm,
+                              ),
+                              child: Text(
+                                '$_currentPage',
+                                style: th.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTone.primary.ink(p),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Sonraki sayfa
+                        IconButton.outlined(
+                          constraints: buttonSize,
+                          onPressed: _currentPage < totalPages ? () => _changePage(_currentPage + 1) : null,
+                          icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                          tooltip: 'Sonraki Sayfa',
+                        ),
+                        // Son sayfa
+                        IconButton.outlined(
+                          constraints: buttonSize,
+                          onPressed: _currentPage < totalPages ? () => _changePage(totalPages) : null,
+                          icon: const Icon(Icons.last_page_rounded, size: 20),
+                          tooltip: 'Son Sayfa',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ),
               ),
             ),
         ],
+    );
+  }
+
+  /// Kullanıcı satırı: dokununca detay alt sayfası açılır. Avatar rengi rol tonu.
+  Widget _buildUserRow(BuildContext context, ManagedUserAccount user) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final isSelf = user.id == widget.session.id;
+    return AppCard(
+      onTap: () => _showUserDetailSheet(user),
+      padding: listCardPadding(context),
+      child: Row(
+        children: [
+          InitialAvatar(
+            name: user.fullName,
+            tone: user.role.tone,
+            gap: AppSpace.md,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.xs,
+                  children: [
+                    Text(
+                      user.fullName,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: th.titleMedium,
+                    ),
+                    if (isSelf)
+                      const StatusChip(label: 'Siz', tone: AppTone.primary),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  user.email,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: th.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          ExcludeSemantics(
+            child: Icon(
+              Icons.chevron_right_rounded,
+              color: p.textMuted,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Soldaki ve sağdaki öğeyi iki uca yaslayan satır; sığmazsa sağdaki öğe alta iner (büyük yazıda
+/// taşma yok). Tam genişlik kaplar (düz `Wrap` içeriğine sarılıp yaslamayı kaybederdi).
+class _SpreadRow extends StatelessWidget {
+  const _SpreadRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppSpace.sm,
+        runSpacing: AppSpace.xs,
+        children: children,
+      ),
     );
   }
 }

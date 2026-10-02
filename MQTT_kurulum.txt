@@ -17,6 +17,13 @@ Topic yapisi
 - Durum: device/<UID>/state
 - Olay: device/<UID>/event
 - Erisilebilirlik: device/<UID>/availability
+- Cevrimdisi kapi loglari: device/<UID>/logs  (cihaz -> sunucu, NDJSON toplu:
+  {"batch_id":N,"logs":[...]}; sunucu device/<UID>/cmd uzerinden {"action":"logs_ack",...} ile onaylar)
+- QR dogrulama istegi: device/<UID>/qr_verify  (cihaz -> sunucu, request_id ile)
+- QR dogrulama sonucu: device/<UID>/qr_result  (sunucu -> cihaz, request_id aynen geri yankilanir)
+- Ekran QR kodu: device/<UID>/screen_qr  (ekranli WROOM cihaz -> sunucu, retained DEGIL)
+- cmd uzerinden yalniz JSON action komutlari kabul edilir (pulse, ota_check, local_control_config,
+  admin_pin_config, logs_ack); duz metin "pulse"/"on" komutlari kaldirildi.
 
 1) DNS hazirligi
 - DNS panelinde asagidaki A kaydi olmalidir:
@@ -56,13 +63,21 @@ user api_bridge
 topic read device/+/state
 topic read device/+/event
 topic read device/+/availability
+topic read device/+/qr_verify
+topic read device/+/screen_qr
+topic read device/+/logs
 topic write device/+/cmd
+topic write device/+/qr_result
 
 user device_D4C771A172E0
 topic read device/D4C771A172E0/cmd
+topic read device/D4C771A172E0/qr_result
 topic write device/D4C771A172E0/state
 topic write device/D4C771A172E0/event
 topic write device/D4C771A172E0/availability
+topic write device/D4C771A172E0/qr_verify
+topic write device/D4C771A172E0/screen_qr
+topic write device/D4C771A172E0/logs
 EOF
 
 Not:
@@ -205,3 +220,55 @@ Not: RC:16 gorulurse "No matching subscribers" demektir; yetki hatasi degildir.
 - Yonetim icin systemd kullan:
   sudo systemctl restart mosquitto
   sudo systemctl status mosquitto --no-pager
+
+
+15) GUVENLIK NOTLARI (yalnizca ek; yukaridaki adimlar degismedi)
+
+a) Sudoers wrapper'i ROOT'a ait kopyadan calismali (6.1)
+- /usr/local/bin/kapi-mqtt-sync dosyasi root:root, mod 0755 olmali ve API kullanicisi
+  (salihceylan) tarafindan YAZILAMAMALI. Sudoers satiri yalnizca bu kopyayi gostermeli;
+  repo icindeki server/scripts/kapi-mqtt-sync.sh yolu sudoers'ta ASLA kullanilmamali
+  (repo dosyasini API kullanicisi degistirebilir -> root'a yukselme).
+- Betik her degistiginde kopya yeniden kurulmali:
+  sudo install -o root -g root -m 0755 /var/www/site_kapi_kontrol/server/scripts/kapi-mqtt-sync.sh /usr/local/bin/kapi-mqtt-sync
+- Kontrol:
+  ls -l /usr/local/bin/kapi-mqtt-sync        (sahip root:root, yazma yalniz root)
+  sudo -l -U salihceylan                     (yalnizca kapi-mqtt-sync NOPASSWD gorunmeli)
+- DIKKAT (bilinen risk): wrapper icinde `node scripts/sync_mqtt_acl.js` root olarak calisir. Bu dosya,
+  import ettigi src/db.js ve node_modules API kullanicisi tarafindan yazilabilir oldugundan, API
+  kullanicisinin ele gecirilmesi root'a yukselmeye donusebilir. Onerilen yon:
+  (1) Node kismi yalnizca passwd/ACL TASLAGINI API kullanicisi yetkisiyle bir hazirlik dizinine
+      (ornek: /var/lib/kapi-mqtt/staging, sahip salihceylan) uretsin;
+  (2) root wrapper'i yalnizca taslagi dogrulasin (kullanici adi/UID regex'i), mosquitto_passwd ile
+      kursun ve mosquitto'yu reload etsin;
+  (3) wrapper repo yolundan HICBIR betik/modul calistirmasin.
+
+b) Broker / ACL
+- Cihaz basina ayri MQTT kullanicisi + sifre; ACL'de yalnizca kendi UID topic'leri.
+- ACL satirlarina girecek UID/kullanici adi once dogrulanmali (12 haneli hex). Satir sonu veya
+  bosluk iceren bir deger ACL'yi bozar / baska kullaniciya yetki ekler.
+- Cevrimdisi log teslimi icin cihaz ACL'ine `topic write device/<UID>/logs`, api_bridge'e
+  `topic read device/+/logs` eklenmelidir; ayrica QR sonucu icin cihaza `topic read device/<UID>/qr_result`,
+  api_bridge'e `topic write device/+/qr_result`. Yukaridaki ornek ACL, API'nin urettigi ACL ile (server/src/mqtt_acl_sync.js)
+  aynidir; canli ACL'i elle degil sync_mqtt_acl.js ile uretin (cihaz eklenince/silinince API tetikler).
+- api_bridge sifresi hicbir betige/dosyaya yazilmaz; yalnizca server/.env (chmod 600).
+  Sifre bir yere acik yazildiysa veya git gecmisine girdiyse DONDURULMALI:
+  sudo mosquitto_passwd /etc/mosquitto/passwd api_bridge  ->  server/.env MQTT_PASSWORD  ->  pm2 restart kapi-api --update-env
+- Broker TLS'i en az tlsv1.2; API ve cihazlarda sertifika dogrulamasi ACIK olmali
+  (MQTT_ALLOW_INSECURE_TLS=false).
+
+c) PostgreSQL portu
+- docker-compose.yml artik PostgreSQL'i yalnizca 127.0.0.1:5432'e baglar. Portu disariya ACMAYIN;
+  `sudo ufw status | grep 5432` bos donmeli. Uzaktan erisim gerekirse SSH tuneli:
+  ssh -p 22667 -L 5432:127.0.0.1:5432 salihceylan@178.210.161.55
+- Parola depo kokundeki .env dosyasindan (POSTGRES_PASSWORD) okunur; varsayilan yoktur. Mevcut
+  veritabaninin parolasi veri dizininde kalir; degistirmek icin ALTER USER ... PASSWORD ... calistirip
+  server/.env icindeki DB_PASSWORD'u ayni degerle guncelleyin.
+
+d) SSH
+- Parola yerine anahtar kullanin: ssh-keygen -t ed25519 ; ssh-copy-id -p 22667 salihceylan@178.210.161.55
+  Anahtarla giris calistigini IKINCI bir terminalden dogruladiktan SONRA sshd_config'te
+  PasswordAuthentication no ve PermitRootLogin no yapin (oturumu kapatmadan test edin).
+- company_qr_tool firmware yuklerken sunucu kimligini known_hosts ile dogrular ve SSH_KEY_FILE ile
+  anahtar kullanabilir; ilk kurulum adimlari company_qr_tool/README.md icindedir.
+- Brute-force icin fail2ban (sshd jail, port 22667) onerilir.

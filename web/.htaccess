@@ -1,0 +1,52 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # HTTPS zorunlu kıl
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Var olan dosya veya dizin değilse index.html'e yönlendir (SPA Routing)
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# ==============================================================================
+# MIME TYPES (WASM, JAVASCRIPT, JSON, FONTS)
+# ==============================================================================
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/javascript .js .mjs
+  AddType application/json .json
+  AddType font/ttf .ttf
+  AddType font/otf .otf
+  AddType font/woff .woff
+  AddType font/woff2 .woff2
+  AddType image/svg+xml .svg
+</IfModule>
+
+# ==============================================================================
+# HEADERS & GÜVENLİK
+# ==============================================================================
+<IfModule mod_headers.c>
+  # Clickjacking ve Sniffing Koruması
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Flutter Web CDN & Kaynak İzinleri (CanvasKit, Google Fonts, API & WebSocket)
+  Header set Content-Security-Policy "default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://*.gstatic.com https://*.googleapis.com https:; script-src-elem 'self' 'unsafe-inline' blob: https://*.gstatic.com https://*.googleapis.com https:; connect-src * 'self' blob: data: https: wss:; font-src 'self' data: https://*.gstatic.com https://*.googleapis.com https:; img-src * 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://*.googleapis.com https:; frame-src 'self' https:; worker-src 'self' blob:;"
+
+  # Güncellemelerin anında görünmesi için HTML dosyalarına önbellek engeli
+  <FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+  </FilesMatch>
+
+  # Statik dosyalar için önbellekleme
+  <FilesMatch "\.(js|css|wasm|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

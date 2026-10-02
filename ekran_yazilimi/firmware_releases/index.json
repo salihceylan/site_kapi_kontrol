@@ -1,0 +1,58 @@
+{
+  "releases": [
+    {
+      "id": "20260917_115500_v1_0_2",
+      "version": "1.0.2",
+      "env": "esp32c3_display",
+      "target": "esp32c3-display",
+      "created_at": "2026-09-17T08:52:51.056205+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260917_115500_v1_0_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260917_115500_v1_0_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260917_115500_v1_0_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "964787d3655c4b14ac63bd7cf2876f01705fe0fc12d33ea9f89e8a47e8656a75",
+          "md5": "d75daa14d02bdd56baa4b23c8eec3ed3"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1",
+          "md5": "a039c66cd3488176037b616b7595fe72"
+        }
+      },
+      "manifest": "firmware_releases\\20260917_115500_v1_0_2\\manifest.json"
+    },
+    {
+      "id": "20260917_113027_v1_0_1",
+      "version": "1.0.1",
+      "env": "esp32c3_display",
+      "target": "esp32c3-display",
+      "created_at": "2026-09-17T08:30:27.376947+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260917_113027_v1_0_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260917_113027_v1_0_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260917_113027_v1_0_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "91b5902317afc1cdfc8e663a13c15f85f96bd3b843b165e68a9607ce61357f68",
+          "md5": "c42a90c0f21a779b648b633033939988"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "148b959cbff1c38aa8e1d5c0ba9d612c54997b945e56a63f41223eef650653a1",
+          "md5": "a039c66cd3488176037b616b7595fe72"
+        }
+      },
+      "manifest": "firmware_releases\\20260917_113027_v1_0_1\\manifest.json"
+    }
+  ]
+}

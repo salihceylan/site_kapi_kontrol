@@ -1,17 +1,33 @@
+# PostgreSQL (yerel/VPS). Parola ASLA dosyaya yazilmaz:
+#   - Depo kokundeki .env dosyasina (gitignore'da) veya ortam degiskenine koy:
+#       POSTGRES_PASSWORD=<guclu-rastgele-parola>
+#   - Tanimsizsa "docker compose up" hata verip durur (varsayilan parola yok).
+# NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde (ilk kurulum) uygulanir.
+#   Mevcut bir veritabaninda parolayi degistirmek icin:
+#   ALTER USER postgres PASSWORD '...'; ve server/.env icindeki DB_PASSWORD'u guncelle.
+# Port yalnizca loopback'e baglidir; disaridan erisim icin SSH tuneli kullan.
 services:
   postgres:
     image: postgres:16
     container_name: site_kapi_kontrol_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: site_kapi_kontrol
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-site_kapi_kontrol}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD zorunlu - depo kokundeki .env dosyasina veya ortama yazin}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./server/migrations:/docker-entrypoint-initdb.d
+      # Yalnizca BOS veri dizininde ilk kurulumda calisir; sonraki sema
+      # degisiklikleri icin server/scripts/migrate.js kullanilir.
+      - ./server/migrations:/docker-entrypoint-initdb.d:ro
 
 volumes:
   pg_data:

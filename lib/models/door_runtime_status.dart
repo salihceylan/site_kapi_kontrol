@@ -39,6 +39,48 @@ class DoorRuntimeStatus {
   final String? lastEvent;
   final DateTime? lastSeenAt;
 
+  /// Alan alan değer eşitliği (kapı kaydı dahil). `==` BİLEREK değiştirilmedi; yoklama sonucu
+  /// ekrandakiyle aynıysa arayüzü gereksiz yeniden kurmamak için kullanılır.
+  bool hasSameFieldsAs(DoorRuntimeStatus other) =>
+      identical(this, other) ||
+      (door.hasSameFieldsAs(other.door) && _fieldValues == other._fieldValues);
+
+  /// Kapı kaydı dışındaki tüm alanların kaydı (kayıtlar yapısal olarak karşılaştırılır).
+  Object get _fieldValues => (
+        deviceUid,
+        mqttBridgeConnected,
+        mqttConnected,
+        doorLocked,
+        firmwareVersion,
+        hardwareTarget,
+        otaStatus,
+        wifiRssi,
+        wifiSignalPercent,
+        localIp,
+        publicIp,
+        localControlPort,
+        localControlToken,
+        localControlAvailable,
+        lastEvent,
+        lastSeenAt,
+      );
+
+  String get displayOtaStatus {
+    if (otaStatus == null || otaStatus!.trim().isEmpty) return '-';
+    final s = otaStatus!.trim().toLowerCase();
+    if (s == 'guncel' || s == 'up_to_date' || s == 'guncelleme tamam') {
+      return 'Güncel';
+    }
+    if (s == 'guncelleme indiriliyor' || s == 'indiriliyor') {
+      return 'İndiriliyor';
+    }
+    if (s == 'beklemede') return 'Beklemede';
+    if (s.contains('hata') || s.contains('basarisiz') || s.contains('failed')) {
+      return 'Hata';
+    }
+    return otaStatus!;
+  }
+
   bool get commandEnabled =>
       (mqttBridgeConnected && mqttConnected) ||
       (localControlAvailable &&
@@ -74,6 +116,30 @@ class DoorRuntimeStatus {
       lastSeenAt: status['last_seen_at'] == null
           ? null
           : DateTime.tryParse(status['last_seen_at'] as String),
+    );
+  }
+
+  /// Cihaz offline olduğunda (sunucu hata dönünce) durumu offline'a işaretler.
+  /// Diğer alanlar korunur, sadece bağlantı durumu sıfırlanır.
+  DoorRuntimeStatus copyWithOffline() {
+    return DoorRuntimeStatus(
+      door: door,
+      deviceUid: deviceUid,
+      mqttBridgeConnected: false,
+      mqttConnected: false,
+      doorLocked: doorLocked,
+      firmwareVersion: firmwareVersion,
+      hardwareTarget: hardwareTarget,
+      otaStatus: otaStatus,
+      wifiRssi: wifiRssi,
+      wifiSignalPercent: wifiSignalPercent,
+      localIp: localIp,
+      publicIp: publicIp,
+      localControlPort: localControlPort,
+      localControlToken: localControlToken,
+      localControlAvailable: false,
+      lastEvent: lastEvent,
+      lastSeenAt: lastSeenAt,
     );
   }
 }

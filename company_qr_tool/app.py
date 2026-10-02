@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
@@ -41,14 +42,212 @@ PLATFORMIO_INI_PATH = DEVICE_PROJECT_DIR / "platformio.ini"
 BUILD_DIR = DEVICE_PROJECT_DIR / ".pio" / "build"
 RELEASES_DIR = DEVICE_PROJECT_DIR / "firmware_releases"
 RELEASE_INDEX = RELEASES_DIR / "index.json"
+
+DISPLAY_PROJECT_DIR = (BASE_DIR / ".." / "ekran_yazilimi").resolve()
+DISPLAY_PLATFORMIO_INI_PATH = DISPLAY_PROJECT_DIR / "platformio.ini"
+DISPLAY_ENV = "esp32c3_display"
+DISPLAY_TARGET = "esp32c3-display"
+DISPLAY_BUILD_DIR = DISPLAY_PROJECT_DIR / ".pio" / "build" / DISPLAY_ENV
+DISPLAY_RELEASES_DIR = DISPLAY_PROJECT_DIR / "firmware_releases"
+DISPLAY_RELEASE_INDEX = DISPLAY_RELEASES_DIR / "index.json"
+DISPLAY_CONFIG_H_PATH = DISPLAY_PROJECT_DIR / "include" / "config.h"
 LOCAL_SERVER_FIRMWARE_BASE_DIR = (BASE_DIR / ".." / "server" / "firmware").resolve()
-VPS_HOST = "178.210.161.55"
-VPS_PORT = "22667"
-VPS_USER = "salihceylan"
-VPS_FIRMWARE_BASE_DIR = "/var/www/site_kapi_kontrol/server/firmware"
-VPS_LABELED_DEVICES_DIR = "/var/www/site_kapi_kontrol/server/data"
-VPS_QRCODES_DIR = "/var/www/site_kapi_kontrol/server/public/qrcodes"
-PUBLIC_API_URL = "https://api.gudeteknoloji.com.tr"
+
+
+def _load_local_env_file() -> None:
+    """company_qr_tool/.env (git'e GIRMEZ) icindeki KEY=VALUE satirlarini ortama ekler.
+
+    Zaten tanimli ortam degiskenlerini EZMEZ. Sirlar (COMPANY_API_KEY, SSH parolasi vb.)
+    yalnizca burada veya kullanici ortam degiskenlerinde tutulur; kaynak koda yazilmaz.
+    Ornek icin env.example dosyasina bakin.
+    """
+    env_path = BASE_DIR / ".env"
+    try:
+        if not env_path.is_file():
+            return
+        for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            if key and key.replace("_", "").isalnum() and key not in os.environ:
+                os.environ[key] = value
+    except Exception:
+        pass
+
+
+def _env_str(name: str, default: str = "") -> str:
+    value = os.environ.get(name, "").strip()
+    return value or default
+
+
+_load_local_env_file()
+
+# Sunucu/VPS ayarlari: varsayilanlar korunur; ortam degiskenleriyle (veya .env ile) ezilebilir.
+# Bu degerlerin hicbiri sir DEGILDIR (sirlar: COMPANY_API_KEY, AHBU_VPS_PASSWORD, SSH_KEY_PASSPHRASE).
+VPS_HOST = _env_str("AHBU_VPS_HOST", "178.210.161.55")
+VPS_PORT = _env_str("AHBU_VPS_PORT", "22667")
+VPS_USER = _env_str("AHBU_VPS_USER", "salihceylan")
+VPS_FIRMWARE_BASE_DIR = _env_str("AHBU_VPS_FIRMWARE_DIR", "/var/www/site_kapi_kontrol/server/firmware")
+VPS_LABELED_DEVICES_DIR = _env_str("AHBU_VPS_DATA_DIR", "/var/www/site_kapi_kontrol/server/data")
+VPS_QRCODES_DIR = _env_str("AHBU_VPS_QRCODES_DIR", "/var/www/site_kapi_kontrol/server/public/qrcodes")
+PUBLIC_API_URL = _env_str("AHBU_API_URL", "https://api.gudeteknoloji.com.tr").rstrip("/")
+# Duz HTTP yedek uc (eski: http://<IP>:3000). Artik VARSAYILAN KAPALI: sirket anahtari ve
+# QR gorselleri sifresiz gitmesin. Gerekirse ornek: AHBU_API_FALLBACK_URL=http://127.0.0.1:3000
+API_FALLBACK_URL = _env_str("AHBU_API_FALLBACK_URL", "").rstrip("/")
+
+# C9: sirket uclari (/api/company/*) yetkisi = "X-Company-Key" basligi == sunucudaki COMPANY_API_KEY
+COMPANY_KEY_ENV = "COMPANY_API_KEY"
+COMPANY_KEY_MISSING_MESSAGE = (
+    "COMPANY_API_KEY tanimli degil.\n\n"
+    "Sunucudaki sirket uclari (cihaz kaydi / liste / silme) bu anahtar olmadan reddedilir (401).\n"
+    "Sunucudaki server/.env dosyasinda tanimli COMPANY_API_KEY degerini bu bilgisayarda tanimlayin:\n"
+    "  - company_qr_tool klasorune .env dosyasi olusturup  COMPANY_API_KEY=...  yazin "
+    "(ornek: env.example), veya\n"
+    "  - Windows'ta:  setx COMPANY_API_KEY \"...\"  komutuyla kullanici ortam degiskeni ekleyin.\n"
+    "Sonra uygulamayi kapatip yeniden acin."
+)
+
+
+def get_company_api_key() -> str:
+    return os.environ.get(COMPANY_KEY_ENV, "").strip()
+
+
+def _is_key_safe_url(url: str) -> bool:
+    """Anahtar yalnizca HTTPS (veya yerel makine) uzerinden gonderilir; duz HTTP ile ASLA."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme == "https":
+        return True
+    return parsed.scheme == "http" and (parsed.hostname or "") in ("localhost", "127.0.0.1", "::1")
+
+
+def company_request_headers(url: str, extra: dict | None = None) -> dict:
+    headers = {"User-Agent": "AHBU-Device-Tool/1.0"}
+    if extra:
+        headers.update(extra)
+    key = get_company_api_key()
+    if key and _is_key_safe_url(url):
+        headers["X-Company-Key"] = key
+    return headers
+
+
+def _http_error_body(error) -> bytes:
+    """HTTPError gövdesini güvenle (en fazla 4 KB) okur; okunamazsa boş döner."""
+    try:
+        return error.read()[:4096]
+    except Exception:
+        return b""
+
+
+def _company_http_error_text(code: int, body: bytes | None = None) -> str:
+    if code in (401, 403):
+        return (
+            f"Sunucu yetkilendirmeyi reddetti (HTTP {code}). "
+            f"{COMPANY_KEY_ENV} sunucudaki degerle ayni mi?"
+        )
+    detail = ""
+    if body:
+        # Sunucu hata gövdesi: {"error": "...", "errorId": "..."} — kullanıcıya gerçek nedeni göster.
+        try:
+            payload = json.loads(body.decode("utf-8", errors="replace"))
+            if isinstance(payload, dict):
+                message = str(payload.get("error") or "").strip()
+                error_id = str(payload.get("errorId") or payload.get("error_id") or "").strip()
+                if message:
+                    detail = f" - {message[:200]}"
+                if error_id:
+                    detail += f" (Hata kodu: {error_id[:40]})"
+        except Exception:
+            pass
+    return f"Sunucu hatasi: HTTP {code}{detail}"
+
+
+def chip_to_hardware_type(chip: str) -> str:
+    """Çip adından sunucunun beklediği donanım türünü çıkarır; belirsizse '' (sunucu tahmin ETMEZ)."""
+    value = (chip or "").upper()
+    if "C3" in value:
+        return "esp32_c3"
+    if "WROOM" in value or "WROVER" in value or "D0WD" in value:
+        return "esp32_wroom"
+    return ""
+
+
+# SFTP: sunucu kimligi known_hosts ile dogrulanir (otomatik "guven" YOK).
+def known_hosts_path() -> Path:
+    configured = os.environ.get("SSH_KNOWN_HOSTS", "").strip()
+    return Path(configured).expanduser() if configured else Path.home() / ".ssh" / "known_hosts"
+
+
+def known_hosts_setup_help() -> str:
+    return (
+        f"Sunucu kimligi dogrulanamadi: {VPS_HOST}:{VPS_PORT} known_hosts dosyasinda ({known_hosts_path()}) yok.\n\n"
+        "ILK KURULUM (bir kez):\n"
+        "  1) Sunucuda parmak izini ogrenin:  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub\n"
+        f"  2) Bu bilgisayarda:  ssh-keyscan -p {VPS_PORT} -H {VPS_HOST} >> \"{known_hosts_path()}\"\n"
+        "  3) Eklenen anahtarin parmak izini 1. adimdaki degerle KARSILASTIRIN "
+        "(ssh-keygen -lf <known_hosts>); eslesmiyorsa kaydi silin.\n"
+        "Alternatif: SSH_KNOWN_HOSTS ortam degiskeniyle baska bir known_hosts dosyasi gosterin."
+    )
+
+
+def open_verified_ssh_client(paramiko, password: str):
+    """known_hosts ile dogrulanan SSH baglantisi acar (RejectPolicy; AutoAddPolicy YOK).
+
+    Kimlik dogrulama: SSH_KEY_FILE (+ opsiyonel SSH_KEY_PASSPHRASE) varsa anahtar ile;
+    yoksa verilen parola ile.
+    """
+    known_hosts = known_hosts_path()
+    if not known_hosts.is_file():
+        raise RuntimeError(known_hosts_setup_help())
+
+    client = paramiko.SSHClient()
+    client.load_host_keys(str(known_hosts))
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+
+    connect_kwargs: dict = {
+        "port": int(VPS_PORT),
+        "username": VPS_USER,
+        "timeout": 12,
+    }
+    key_file = os.environ.get("SSH_KEY_FILE", "").strip()
+    if key_file:
+        key_path = Path(key_file).expanduser()
+        if not key_path.is_file():
+            raise RuntimeError(f"SSH_KEY_FILE bulunamadi: {key_path}")
+        connect_kwargs["key_filename"] = str(key_path)
+        passphrase = os.environ.get("SSH_KEY_PASSPHRASE", "")
+        if passphrase:
+            connect_kwargs["passphrase"] = passphrase
+        connect_kwargs["look_for_keys"] = False
+        connect_kwargs["allow_agent"] = False
+    else:
+        connect_kwargs["password"] = password
+
+    try:
+        client.connect(VPS_HOST, **connect_kwargs)
+    except paramiko.BadHostKeyException as exc:
+        raise RuntimeError(
+            f"UYARI: {VPS_HOST} sunucusunun anahtari known_hosts kaydiyla UYUSMUYOR "
+            "(sunucu yeniden kurulmus olabilir veya araya girilmis olabilir). "
+            "Parmak izini sunucudan dogrulamadan baglanmayin.\n\n"
+            f"Ayrinti: {exc}"
+        ) from exc
+    except paramiko.PasswordRequiredException as exc:
+        raise RuntimeError(
+            "SSH anahtari parola ile korunuyor: SSH_KEY_PASSPHRASE ortam degiskenini tanimlayin."
+        ) from exc
+    except paramiko.SSHException as exc:
+        if "known_hosts" in str(exc):
+            raise RuntimeError(known_hosts_setup_help()) from exc
+        raise
+    return client
 
 
 def target_for_env(env: str) -> str:
@@ -150,13 +349,31 @@ class SerialWorker:
                 pass
 
     def write(self, text: str) -> None:
+        if not text.endswith("\n"):
+            text += "\r\n"
         self._write_queue.put(text)
 
     def _run(self) -> None:
         try:
-            self._serial = serial.Serial(self.port, self.baud_rate, timeout=0.2)
-            time.sleep(0.2)
+            # DTR/RTS MUTLAKA open() oncesinde False yapilmali!
+            # Eger port=None ile olusturup sonra open() cagrilirsa,
+            # pyserial Windows CH340 surucusunun brief assertion yapmasini onler.
+            # Aksi takdirde Serial(port=...) direk acarken Windows driver
+            # kisaca DTR/RTS'i assert eder -> chip download mode'a girer.
+            self._serial = serial.Serial()
+            self._serial.port = self.port
+            self._serial.baudrate = self.baud_rate
+            self._serial.timeout = 0.2
+            self._serial.rtscts = False
+            self._serial.dsrdtr = False
+            self._serial.dtr = False
+            self._serial.rts = False
+            self._serial.open()
             self.on_line(f"[baglandi] {self.port} @ {self.baud_rate}")
+            try:
+                self._serial.write(b"\r\n?\r\n")
+            except Exception:
+                pass
             while not self._stop.is_set():
                 self._flush_writes()
                 raw = self._serial.readline()
@@ -316,18 +533,29 @@ def save_local_labeled_device(device_info: dict, qr_image: Image.Image | None = 
     return devices
 
 
-def fetch_server_labeled_devices() -> list[dict]:
+def fetch_server_labeled_devices_with_status() -> tuple[list[dict], str]:
+    """(cihaz listesi, hata metni). Basariliysa hata metni bos doner."""
+    if not get_company_api_key():
+        return [], f"{COMPANY_KEY_ENV} tanimli degil: sunucu listesi alinamadi, yalnizca yerel kayitlar kullaniliyor."
     url = f"{PUBLIC_API_URL}/api/company/labeled-devices"
-    req = urllib.request.Request(url, headers={"User-Agent": "AHBU-Device-Tool/1.0"})
+    req = urllib.request.Request(url, headers=company_request_headers(url))
     try:
         with urllib.request.urlopen(req, timeout=8) as response:
             if response.status == 200:
                 data = json.loads(response.read().decode("utf-8"))
                 if isinstance(data, dict) and isinstance(data.get("devices"), list):
-                    return data["devices"]
-    except Exception:
-        pass
-    return []
+                    return data["devices"], ""
+                return [], "Sunucu beklenmeyen bir yanit dondurdu."
+            return [], f"Sunucu yaniti: HTTP {response.status}"
+    except urllib.error.HTTPError as he:
+        return [], _company_http_error_text(he.code, _http_error_body(he))
+    except Exception as exc:
+        return [], f"Sunucuya ulasilamadi: {exc}"
+
+
+def fetch_server_labeled_devices() -> list[dict]:
+    devices, _error = fetch_server_labeled_devices_with_status()
+    return devices
 
 
 def delete_local_labeled_device(device_uid: str) -> list[dict]:
@@ -353,9 +581,10 @@ def delete_server_labeled_device(device_uid: str) -> tuple[bool, str]:
     uid = str(device_uid).strip().upper()
     if not uid:
         return False, "Gecersiz cihaz UID."
-    import urllib.parse
+    if not get_company_api_key():
+        return False, f"{COMPANY_KEY_ENV} tanimli degil; sunucudan silinemedi (yalnizca yerel kayit silindi)."
     url = f"{PUBLIC_API_URL}/api/company/labeled-devices/{urllib.parse.quote(uid)}"
-    req = urllib.request.Request(url, method="DELETE", headers={"User-Agent": "AHBU-Device-Tool/1.0"})
+    req = urllib.request.Request(url, method="DELETE", headers=company_request_headers(url))
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             if response.status == 200:
@@ -363,6 +592,8 @@ def delete_server_labeled_device(device_uid: str) -> tuple[bool, str]:
                 return True, data.get("message", f"{uid} basariyla silindi.")
             return False, f"Sunucu yaniti: HTTP {response.status}"
     except urllib.error.HTTPError as he:
+        if he.code in (401, 403):
+            return False, _company_http_error_text(he.code, _http_error_body(he))
         try:
             err_body = json.loads(he.read().decode("utf-8"))
             return False, err_body.get("error", f"Sunucu hatasi: HTTP {he.code}")
@@ -558,17 +789,82 @@ def find_esptool_python() -> str:
 
 
 def read_mac(port: str) -> tuple[str, str]:
+    # 1. Once calisan firmware'den seri port uzerinden dogrudan Unique ID oku (0.3 sn - reset/bootloader gerekmez)
+    try:
+        with serial.Serial(
+            port,
+            115200,
+            timeout=0.3,
+            write_timeout=0.5,
+            rtscts=False,
+            dsrdtr=False,
+        ) as s:
+            s.dtr = False
+            s.rts = False
+            time.sleep(0.05)
+            s.reset_input_buffer()
+            try:
+                s.write(b"\r\n?\r\n")
+            except Exception:
+                pass
+            time.sleep(0.1)
+            buf = ""
+            uid_found = ""
+            start = time.time()
+            while time.time() - start < 2.0:
+                waiting = s.in_waiting
+                chunk = s.read(waiting if waiting > 0 else 1)
+                if chunk:
+                    buf += chunk.decode("utf-8", errors="ignore")
+                    m_uid = re.search(r"Cihaz Unique ID:\s*([0-9A-Fa-f]{6,20})", buf)
+                    m_hw = re.search(r"Hardware Target:\s*([^\r\n]+)", buf)
+                    if m_uid:
+                        uid_found = m_uid.group(1).strip().upper()
+                        # UID satiri donanim hedefinden ONCE gelir: hedef satirini da bekle ki cip adi dogru olsun
+                        # (sunucu belirsiz "ESP32" cipinden donanim turu TAHMIN ETMEZ).
+                        if m_hw:
+                            target_str = m_hw.group(1).lower()
+                            chip = "ESP32-WROOM" if "wroom" in target_str else ("ESP32-C3" if "c3" in target_str else "ESP32")
+                            return chip, uid_found
+                else:
+                    time.sleep(0.05)
+            if uid_found:
+                # Eski firmware: Hardware Target satiri gelmedi; UID ile don (cip belirsiz kalir).
+                return "ESP32", uid_found
+    except Exception:
+        pass
+
+    # 2. Eger calisan firmware yanit vermediyse (bos flash veya ROM bootloader modunda):
+    # esptool ile MAC oku (115200 baud ile kilitlenmeyi onle)
     py_exe = find_esptool_python()
-    cmd = [py_exe, "-m", "esptool", "--port", port, "read_mac"]
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-    text = f"{out.stdout}\n{out.stderr}"
-    mm = MAC_RE.search(text)
-    cm = CHIP_RE.search(text)
-    if mm:
-        chip = cm.group(1).strip() if cm else "ESP32"
-        return chip, mac_to_firmware_uid(mm.group(1))
-    lines = [x.strip() for x in text.splitlines() if x.strip()]
-    raise RuntimeError(lines[-1] if lines else "Cihaz kimligi okunamadi.")
+    for cmd_try in [
+        [py_exe, "-m", "esptool", "--port", port, "--baud", "115200", "--connect-attempts", "4", "read-mac"],
+        [py_exe, "-m", "esptool", "--port", port, "--baud", "115200", "--connect-attempts", "4", "read_mac"],
+        [py_exe, "-m", "esptool", "--port", port, "read-mac"],
+        [py_exe, "-m", "esptool", "--port", port, "read_mac"],
+    ]:
+        try:
+            out = subprocess.run(cmd_try, capture_output=True, text=True, timeout=8, check=False)
+            text = f"{out.stdout}\n{out.stderr}"
+            mm = MAC_RE.search(text)
+            cm = CHIP_RE.search(text)
+            if mm:
+                chip = cm.group(1).strip() if cm else "ESP32"
+                return chip, mac_to_firmware_uid(mm.group(1))
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        "Cihaz Unique ID okunamadi!\n\n"
+        "Olası Nedenler ve Çözümler:\n"
+        "1. Port meşgul olabilir: 'Cihaz Dene' veya başka bir seri monitör açıksa kapatın.\n"
+        "2. Harici CH340 / USB-TTL dönüştürücü kullanıyorsanız:\n"
+        "   - ESP32 kartındaki BOOT (IO0) butonuna BASILI TUTUN.\n"
+        "   - EN (RST) butonuna bir kez basıp bırakın.\n"
+        "   - Ardından BOOT butonunu bırakın.\n"
+        "   - Şimdi 'Seçili cihaz UID oku' butonuna tekrar basın.\n"
+        "3. USB kablosunu çıkarıp tekrar takmayı deneyin."
+    )
 
 
 def parse_envs(path: Path) -> tuple[list[str], dict[str, int]]:
@@ -577,17 +873,29 @@ def parse_envs(path: Path) -> tuple[list[str], dict[str, int]]:
     envs: list[str] = []
     speeds: dict[str, int] = {}
     current: str | None = None
+    default_speed = 460800
     for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        trimmed = line.strip()
+        if trimmed == "[env]":
+            current = "__base__"
+            continue
         em = ENV_RE.match(line)
         if em:
             current = em.group(1).strip()
             envs.append(current)
+            speeds[current] = default_speed
             continue
         if current is None:
             continue
         um = UPL_RE.match(line)
         if um:
-            speeds[current] = int(um.group(1))
+            val = int(um.group(1))
+            if current == "__base__":
+                default_speed = val
+                for k in envs:
+                    speeds[k] = val
+            else:
+                speeds[current] = val
     return envs, speeds
 
 
@@ -652,6 +960,53 @@ def write_firmware_source_version(version: str, env: str | None = None) -> bool:
     except Exception:
         pass
     return False
+
+
+def load_display_releases() -> list[dict]:
+    if not DISPLAY_RELEASE_INDEX.exists():
+        return []
+    try:
+        raw = json.loads(DISPLAY_RELEASE_INDEX.read_text(encoding="utf-8"))
+        if isinstance(raw, dict) and isinstance(raw.get("releases"), list):
+            return list(raw["releases"])
+        if isinstance(raw, list):
+            return list(raw)
+    except Exception:
+        pass
+    return []
+
+
+def save_display_releases(releases: list[dict]) -> None:
+    DISPLAY_RELEASES_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {"releases": releases}
+    DISPLAY_RELEASE_INDEX.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def read_display_source_version() -> str:
+    if not DISPLAY_CONFIG_H_PATH.exists():
+        return "1.0.0"
+    try:
+        content = DISPLAY_CONFIG_H_PATH.read_text(encoding="utf-8")
+        m = re.search(r'#define\s+DISPLAY_FIRMWARE_VERSION\s+"(\d+\.\d+\.\d+)"', content)
+        return m.group(1) if m else "1.0.0"
+    except Exception:
+        return "1.0.0"
+
+
+def write_display_source_version(new_version: str) -> bool:
+    if not DISPLAY_CONFIG_H_PATH.exists():
+        return False
+    try:
+        content = DISPLAY_CONFIG_H_PATH.read_text(encoding="utf-8")
+        pat = re.compile(r'(#define\s+DISPLAY_FIRMWARE_VERSION\s+)"[^"]+"')
+        if pat.search(content):
+            updated = pat.sub(rf'\1"{new_version}"', content)
+        else:
+            updated = f'#define DISPLAY_FIRMWARE_VERSION "{new_version}"\n' + content
+        DISPLAY_CONFIG_H_PATH.write_text(updated, encoding="utf-8")
+        return True
+    except Exception:
+        return False
 
 
 def file_hash(path: Path, algorithm: str) -> str:
@@ -757,6 +1112,7 @@ class App:
         self.fw_release_ready = False
         self.fw_build_key: tuple[str, str] | None = None
         self.fw_release_key: tuple[str, str] | None = None
+        self.screen_window: ScreenFirmwareWindow | None = None
 
         self._style()
         self.brand_photo = self._load_brand(64)
@@ -962,6 +1318,13 @@ class App:
             style="Soft.TButton",
         )
         self.view_labeled_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.screen_fw_btn = ttk.Button(
+            row2,
+            text="🖥️ Ekran Yazılımı Güncelle",
+            command=self.open_screen_firmware_window,
+            style="Accent.TButton",
+        )
+        self.screen_fw_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 6))
         cols = ("port", "chip", "unique_id", "description")
@@ -1129,6 +1492,12 @@ class App:
 
     def _read_uid_worker(self, idx: int, dev: EspDevice) -> None:
         try:
+            if getattr(self, "device_tester", None) is not None:
+                try:
+                    self.device_tester.disconnect()
+                    time.sleep(0.3)
+                except Exception:
+                    pass
             chip, uid = read_mac(dev.port)
             updated = EspDevice(
                 port=dev.port,
@@ -1248,6 +1617,10 @@ class App:
             "description": d.description,
             "qr_image_base64": qr_b64,
         }
+        hardware_type = chip_to_hardware_type(d.chip)
+        if hardware_type:
+            # Sunucu hardware_type/hardware_target/chip alanlarindan donanim turunu okur (OTA hedef izolasyonu icin).
+            payload["hardware_type"] = hardware_type
 
         threading.Thread(target=self._server_device_save_worker, args=(d, payload), daemon=True).start()
 
@@ -1255,29 +1628,32 @@ class App:
         success = False
         error_msg = None
 
-        api_endpoints = [
-            f"{PUBLIC_API_URL}/api/company/labeled-devices",
-            f"http://{VPS_HOST}:3000/api/company/labeled-devices",
-        ]
+        api_endpoints = [f"{PUBLIC_API_URL}/api/company/labeled-devices"]
+        if API_FALLBACK_URL:
+            api_endpoints.append(f"{API_FALLBACK_URL}/api/company/labeled-devices")
 
-        data_bytes = json.dumps(payload).encode("utf-8")
+        if not get_company_api_key():
+            # Anahtar yokken sunucu 401 dondurecegi icin ag istegi hic yapilmaz.
+            error_msg = COMPANY_KEY_MISSING_MESSAGE
+        else:
+            data_bytes = json.dumps(payload).encode("utf-8")
 
-        for endpoint in api_endpoints:
-            try:
-                req = urllib.request.Request(
-                    endpoint,
-                    data=data_bytes,
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "AHBU-Device-Tool/1.0",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    if resp.status == 200:
-                        success = True
-                        break
-            except Exception as exc:
-                error_msg = str(exc)
+            for endpoint in api_endpoints:
+                try:
+                    req = urllib.request.Request(
+                        endpoint,
+                        data=data_bytes,
+                        headers=company_request_headers(endpoint, {"Content-Type": "application/json"}),
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        if resp.status == 200:
+                            success = True
+                            break
+                except urllib.error.HTTPError as he:
+                    error_msg = _company_http_error_text(he.code, _http_error_body(he))
+                except Exception as exc:
+                    error_msg = str(exc)
 
         if success:
             self.root.after(0, lambda: self.set_status(f"Cihaz sunucuya kaydedildi: {dev.unique_id}"))
@@ -1307,7 +1683,9 @@ class App:
         threading.Thread(target=self._pdf_report_worker, daemon=True).start()
 
     def _pdf_report_worker(self) -> None:
-        server_devices = fetch_server_labeled_devices()
+        server_devices, server_error = fetch_server_labeled_devices_with_status()
+        if server_error:
+            self.root.after(0, lambda msg=server_error: self.set_status(msg))
         local_devices = load_local_labeled_devices()
 
         device_map: dict[str, dict] = {}
@@ -1381,6 +1759,16 @@ class App:
 
     def open_labeled_devices_window(self) -> None:
         LabeledDevicesWindow(self.root, self.logo_path, self.download_pdf_report)
+
+    def open_screen_firmware_window(self) -> None:
+        if getattr(self, "screen_window", None) is not None:
+            try:
+                self.screen_window.window.lift()
+                self.screen_window.window.focus_force()
+                return
+            except Exception:
+                self.screen_window = None
+        self.screen_window = ScreenFirmwareWindow(self.root, self.logo_path)
 
     def refresh_latest_release(self) -> None:
         env = self.env_var.get().strip()
@@ -1653,7 +2041,7 @@ class App:
                 except Exception:
                     pass
 
-            speed = int(self.upload_speeds.get(rel["env"], 921600))
+            speed = int(self.upload_speeds.get(rel["env"], 460800))
             boot, part, firm, _manifest = self._release_file_paths(rel)
             for p in (boot, part, firm):
                 if not p.exists():
@@ -1661,6 +2049,14 @@ class App:
 
             py_exe = find_esptool_python()
             boot_offset = bootloader_offset_for_env(rel.get("env", "lolin_c3_mini"))
+            cmd_flash = "write_flash"
+            try:
+                ver_res = subprocess.run([py_exe, "-m", "esptool", "version"], capture_output=True, text=True, timeout=2, check=False)
+                if "v5." in (ver_res.stdout + ver_res.stderr):
+                    cmd_flash = "write-flash"
+            except Exception:
+                pass
+
             cmd = [
                 py_exe,
                 "-m",
@@ -1675,7 +2071,7 @@ class App:
                 "default-reset",
                 "--after",
                 "hard-reset",
-                "write_flash",
+                cmd_flash,
                 "-z",
                 boot_offset,
                 str(boot),
@@ -1698,7 +2094,8 @@ class App:
             rc, tail = self._run_stream(cmd, DEVICE_PROJECT_DIR, on_line=on_line)
             if rc != 0:
                 raw_err = "\n".join(tail[-8:]) if tail else "Yukleme hatasi."
-                if "PermissionError" in raw_err or "port is busy" in raw_err.lower() or "Erişim engellendi" in raw_err:
+                err_lower = raw_err.lower()
+                if "permissionerror" in err_lower or "port is busy" in err_lower or "erişim engellendi" in err_lower:
                     raise RuntimeError(
                         f"{dev.port} portu meşgul (Erişim engellendi).\n\n"
                         "Çözüm Adımları:\n"
@@ -1706,7 +2103,38 @@ class App:
                         "2. VS Code Seri Monitörü açıksa terminaldeki çöp kutusu simgesinden kapatın.\n"
                         "3. Cihazı USB'den çıkarıp tekrar takın."
                     )
-                raise RuntimeError(raw_err)
+                if "write timeout" in err_lower or "failed to connect" in err_lower or "timed out waiting" in err_lower or "no serial data" in err_lower:
+                    raise RuntimeError(
+                        f"{dev.port} portuna yükleme yapılamadı (Bağlantı / Yazma Zaman Aşımı).\n\n"
+                        "Önemli: Harici CH340 / USB dönüştürücü kullanıyorsanız kart otomatik indirme moduna geçemez.\n\n"
+                        "Lütfen şu adımları izleyin:\n"
+                        "1. ESP32 kartı üzerindeki BOOT (IO0) butonuna BASILI TUTUN.\n"
+                        "2. EN (RST) butonuna bir kez basıp bırakın.\n"
+                        "3. Ardından BOOT butonunu bırakın (Kart indirme moduna geçer).\n"
+                        "4. Şimdi 'Sürümü USB ile cihaza yükle' butonuna tekrar basın.\n\n"
+                        f"Detay:\n{raw_err}"
+                    )
+            # OTA bolumu kullanan kartlarda (app1'de kalan cihazlar) yeni surumun (app0) acilmasini garanti et
+            try:
+                cmd_erase_ota = [
+                    py_exe,
+                    "-m",
+                    "esptool",
+                    "--chip",
+                    "auto",
+                    "--port",
+                    dev.port,
+                    "--baud",
+                    str(speed),
+                    "--after",
+                    "hard-reset",
+                    "erase_region",
+                    "0xe000",
+                    "0x2000",
+                ]
+                self._run_stream(cmd_erase_ota, DEVICE_PROJECT_DIR)
+            except Exception:
+                pass
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
@@ -1729,16 +2157,23 @@ class App:
         if rel is None:
             messagebox.showwarning("Surum yok", "Sunucuya gonderilecek surum bulunamadi.")
             return
-        password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()
-        if not password:
-            password = simpledialog.askstring(
-                "VPS sifresi",
-                f"{VPS_USER}@{VPS_HOST} icin VPS sifresini girin:",
-                show="*",
-                parent=self.root,
-            ) or ""
-        if not password:
+        if not known_hosts_path().is_file():
+            messagebox.showerror("Sunucu kimligi dogrulanamiyor", known_hosts_setup_help())
             return
+        password = ""
+        if not os.environ.get("SSH_KEY_FILE", "").strip():
+            # Anahtar tanimli degilse parola: once AHBU_VPS_PASSWORD ortami, yoksa diyalog.
+            # (Daha guvenli yol: SSH_KEY_FILE ile anahtar kimlik dogrulamasi.)
+            password = os.environ.get("AHBU_VPS_PASSWORD", "").strip()
+            if not password:
+                password = simpledialog.askstring(
+                    "VPS sifresi",
+                    f"{VPS_USER}@{VPS_HOST} icin VPS sifresini girin:\n(Oneri: SSH_KEY_FILE ile anahtar kullanin)",
+                    show="*",
+                    parent=self.root,
+                ) or ""
+            if not password:
+                return
         self.fw_busy = True
         self._apply_fw_button_state()
         self.progress_var.set(0)
@@ -1766,15 +2201,7 @@ class App:
             self.root.after(0, lambda: self.progress_text_var.set("%20"))
 
             import paramiko
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                VPS_HOST,
-                port=int(VPS_PORT),
-                username=VPS_USER,
-                password=password,
-                timeout=12,
-            )
+            client = open_verified_ssh_client(paramiko, password)
 
             sftp = client.open_sftp()
             vps_target_dir = f"{VPS_FIRMWARE_BASE_DIR}/{target}"
@@ -2094,7 +2521,7 @@ class LabeledDevicesWindow:
         threading.Thread(target=self._fetch_worker, daemon=True).start()
 
     def _fetch_worker(self) -> None:
-        server_devices = fetch_server_labeled_devices()
+        server_devices, server_error = fetch_server_labeled_devices_with_status()
         local_devices = load_local_labeled_devices()
 
         device_map: dict[str, dict] = {}
@@ -2112,6 +2539,8 @@ class LabeledDevicesWindow:
         devices.sort(key=lambda d: str(d.get("created_at", "")), reverse=True)
         self.devices = devices
         self.window.after(0, self._apply_search_and_render)
+        if server_error:
+            self.window.after(50, lambda msg=server_error: self.status_var.set(msg))
 
     def _on_search_changed(self) -> None:
         self._apply_search_and_render()
@@ -2262,7 +2691,8 @@ class LabeledDevicesWindow:
 
 
 class DeviceTesterWindow:
-    STATUS_START = "----- CIHAZ DURUMU -----"
+    STATUS_START = "--- ESP32 SISTEM BILGISI ---"
+    STATUS_START_ALT = "----- CIHAZ DURUMU -----"
     STATUS_END = "------------------------"
 
     def __init__(self, parent: tk.Tk) -> None:
@@ -2345,6 +2775,7 @@ class DeviceTesterWindow:
             "MQTT kimligi",
             "MQTT sunucu",
             "Role GPIO",
+            "Kamera / QR Okuyucu",
             "Role pin okuma",
         ]
         for row, field_name in enumerate(fields, start=1):
@@ -2360,16 +2791,17 @@ class DeviceTesterWindow:
         ttk.Button(tools, text="Role Pin HIGH", command=lambda: self.send_command("h"), style="Accent.TButton").grid(row=1, column=0, sticky="ew", pady=4)
         ttk.Button(tools, text="Role Pin LOW", command=lambda: self.send_command("l"), style="Accent.TButton").grid(row=2, column=0, sticky="ew", pady=4)
         ttk.Button(tools, text="Role Pulse", command=lambda: self.send_command("r"), style="Accent.TButton").grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Button(tools, text="Pin Bulma Testi", command=lambda: self.send_command("p"), style="Soft.TButton").grid(row=4, column=0, sticky="ew", pady=4)
-        ttk.Separator(tools).grid(row=5, column=0, sticky="ew", pady=12)
-        ttk.Label(tools, text="Son Komut", style="Head.TLabel").grid(row=6, column=0, sticky="w")
-        ttk.Label(tools, textvariable=self.last_command_var, style="Value.TLabel").grid(row=7, column=0, sticky="w", pady=(4, 12))
+        ttk.Button(tools, text="Kamera Test (Isik/Bip)", command=lambda: self.send_command("k"), style="Accent.TButton").grid(row=4, column=0, sticky="ew", pady=4)
+        ttk.Button(tools, text="Pin Bulma Testi", command=lambda: self.send_command("p"), style="Soft.TButton").grid(row=5, column=0, sticky="ew", pady=4)
+        ttk.Separator(tools).grid(row=6, column=0, sticky="ew", pady=12)
+        ttk.Label(tools, text="Son Komut", style="Head.TLabel").grid(row=7, column=0, sticky="w")
+        ttk.Label(tools, textvariable=self.last_command_var, style="Value.TLabel").grid(row=8, column=0, sticky="w", pady=(4, 12))
         ttk.Label(
             tools,
-            text="Cihaz seri porttan durum bloğu yazdığında bilgiler otomatik güncellenir. Role test komutlari: h=HIGH, l=LOW, r=pulse, p=pin bulma.",
+            text="Cihaz seri porttan durum blogu yazdiginda bilgiler otomatik guncellenir. Komutlar: h=HIGH, l=LOW, r=pulse, k=kamera self-test, p=pin bulma.",
             style="Text.TLabel",
             wraplength=330,
-        ).grid(row=8, column=0, sticky="ew")
+        ).grid(row=9, column=0, sticky="ew")
 
         log_card = ttk.Frame(main, style="Card.TFrame", padding=14)
         log_card.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
@@ -2477,11 +2909,11 @@ class DeviceTesterWindow:
         if line.startswith("[hata]"):
             self.connection_var.set("Hata")
 
-        if line == self.STATUS_START:
+        if line.strip() in (self.STATUS_START, self.STATUS_START_ALT, "--- ESP32 SISTEM BILGISI ---", "----- CIHAZ DURUMU -----"):
             self._collecting_status = True
             self._status_lines = []
             return
-        if line == self.STATUS_END and self._collecting_status:
+        if line.strip().startswith("---") and self._collecting_status and len(self._status_lines) >= 3:
             self._collecting_status = False
             self._apply_status_block(self._status_lines)
             return
@@ -2505,6 +2937,17 @@ class DeviceTesterWindow:
                 continue
             key, value = line.split(": ", 1)
             values[key.strip()] = value.strip()
+        # Anahtar donusumleri (firmware cikisi ile UI uyumu)
+        key_map = {
+            "Cihaz Unique ID": "Cihaz UID",
+            "Hardware Target": "Hedef mimari",
+            "Firmware Versiyon": "Firmware surumu",
+            "Wi-Fi Durumu": "WiFi bagli",
+            "GM60 QR Okuyucu": "Kamera / QR Okuyucu",
+        }
+        for k_src, k_dst in key_map.items():
+            if k_src in values and k_dst not in values:
+                values[k_dst] = values[k_src]
         self.status.values = values
         for key, var in self.status_vars.items():
             if key in values:
@@ -2542,6 +2985,737 @@ class DeviceTesterWindow:
         self._stop_beacon = True
         if self.worker is not None:
             self.worker.stop()
+        self.window.destroy()
+
+
+class ScreenFirmwareWindow:
+    def __init__(self, parent: tk.Tk, logo_path: Path | None = None) -> None:
+        self.window = tk.Toplevel(parent)
+        self.window.title("AHBU Ekran Yazılımı Güncelleyici (2.4\" ST7789)")
+        self.window.configure(bg=CLR_APP_BG)
+        self.window.minsize(1060, 720)
+
+        self.logo_path = logo_path
+        self.worker: SerialWorker | None = None
+        self.line_queue: queue.Queue[str] = queue.Queue()
+        self.scanning = False
+        self.fw_busy = False
+        self.fw_build_ready = False
+        self.fw_release_ready = False
+
+        self.port_var = tk.StringVar()
+        self.ports: list[str] = []
+        self.detected_screen_var = tk.StringVar(value="Ekran taranıyor...")
+        self.version_var = tk.StringVar(value=read_display_source_version())
+        self.latest_release_var = tk.StringVar(value="Henüz sürüm yok.")
+        self.progress_var = tk.DoubleVar(value=0)
+        self.progress_text_var = tk.StringVar(value="%0")
+        self.status_var = tk.StringVar(value="Hazır.")
+        self.connected_var = tk.StringVar(value="Bağlı değil")
+
+        self._ui()
+        self.refresh_latest_release()
+        self.find_screen()
+        self.window.after(100, self._drain_lines)
+        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _ui(self) -> None:
+        main = ttk.Frame(self.window, style="App.TFrame", padding=14)
+        main.pack(fill=tk.BOTH, expand=True)
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(1, weight=1)
+
+        # 1. Header
+        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 12))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        header.columnconfigure(1, weight=1)
+
+        ttk.Label(header, text="🖥️ AHBU Ekran Yazılımı Güncelleyici", style="Title.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Label(
+            header,
+            text="2.4\" ST7789 Dokunmatik Ekran Modülü (ESP32-C3) — Otomatik Port Tespiti, Sürümleme ve USB Yükleme",
+            style="Sub.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+
+        # 2. Sol Kart: Port Tespiti & Sürüm & Yükleme
+        left = ttk.Frame(main, style="Card.TFrame", padding=14)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
+        left.columnconfigure(0, weight=1)
+
+        # Donanım Port Tespiti
+        ttk.Label(left, text="1. Ekran Donanımı Tespiti (Port)", style="Head.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 6)
+        )
+        port_frame = ttk.Frame(left, style="Card.TFrame")
+        port_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        port_frame.columnconfigure(0, weight=1)
+
+        self.port_combo = ttk.Combobox(port_frame, textvariable=self.port_var, state="readonly", width=18)
+        self.port_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.port_combo.bind("<<ComboboxSelected>>", self._on_port_changed)
+
+        self.find_btn = ttk.Button(
+            port_frame,
+            text="🔍 Ekranı Bul",
+            command=self.find_screen,
+            style="Accent.TButton",
+        )
+        self.find_btn.grid(row=0, column=1, padx=(0, 6))
+
+        self.connect_btn = ttk.Button(
+            port_frame,
+            text="🔌 Bağlan",
+            command=self.toggle_serial,
+            style="Soft.TButton",
+        )
+        self.connect_btn.grid(row=0, column=2)
+
+        ttk.Label(left, textvariable=self.detected_screen_var, style="Status.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(0, 10)
+        )
+
+        ttk.Separator(left, orient=tk.HORIZONTAL).grid(row=3, column=0, sticky="ew", pady=8)
+
+        # Sürüm Yönetimi
+        ttk.Label(left, text="2. Sürüm ve PlatformIO Derleme", style="Head.TLabel").grid(
+            row=4, column=0, sticky="w", pady=(0, 6)
+        )
+        target_info = ttk.Label(
+            left,
+            text=f"Hedef: {DISPLAY_TARGET} (Ortam: {DISPLAY_ENV})",
+            style="Text.TLabel",
+        )
+        target_info.grid(row=5, column=0, sticky="w", pady=(0, 6))
+
+        v_frame = ttk.Frame(left, style="Card.TFrame")
+        v_frame.grid(row=6, column=0, sticky="ew", pady=(0, 8))
+        v_frame.columnconfigure(1, weight=1)
+        ttk.Label(v_frame, text="Sürüm No:", style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.version_entry = ttk.Entry(v_frame, textvariable=self.version_var, width=15)
+        self.version_entry.grid(row=0, column=1, sticky="w")
+
+        btn_row = ttk.Frame(left, style="Card.TFrame")
+        btn_row.grid(row=7, column=0, sticky="ew", pady=(0, 8))
+        self.build_btn = ttk.Button(
+            btn_row,
+            text="🔨 Firmware Derle",
+            command=self.start_build,
+            style="Soft.TButton",
+        )
+        self.build_btn.pack(side=tk.LEFT)
+
+        self.release_btn = ttk.Button(
+            btn_row,
+            text="📦 Sürüm Oluştur (Release)",
+            command=self.start_release,
+            style="Accent.TButton",
+        )
+        self.release_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        ttk.Label(left, textvariable=self.latest_release_var, style="Text.TLabel", wraplength=460).grid(
+            row=8, column=0, sticky="w", pady=(0, 8)
+        )
+
+        ttk.Separator(left, orient=tk.HORIZONTAL).grid(row=9, column=0, sticky="ew", pady=8)
+
+        # USB Yükleme
+        ttk.Label(left, text="3. USB ile Ekrana Yükle (Flaşlama)", style="Head.TLabel").grid(
+            row=10, column=0, sticky="w", pady=(0, 6)
+        )
+        self.upload_btn = ttk.Button(
+            left,
+            text="⚡ Sürümü USB ile Ekrana Yükle",
+            command=self.start_upload,
+            style="Accent.TButton",
+        )
+        self.upload_btn.grid(row=11, column=0, sticky="ew", pady=(0, 8))
+
+        p_frame = ttk.Frame(left, style="Card.TFrame")
+        p_frame.grid(row=12, column=0, sticky="ew", pady=(0, 6))
+        p_frame.columnconfigure(0, weight=1)
+        self.pbar = ttk.Progressbar(
+            p_frame,
+            orient="horizontal",
+            mode="determinate",
+            maximum=100,
+            variable=self.progress_var,
+            style="Accent.Horizontal.TProgressbar",
+        )
+        self.pbar.grid(row=0, column=0, sticky="ew")
+        ttk.Label(p_frame, textvariable=self.progress_text_var, style="Text.TLabel").grid(
+            row=0, column=1, sticky="e", padx=(8, 0)
+        )
+
+        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(
+            row=13, column=0, sticky="w", pady=(4, 0)
+        )
+        ttk.Label(
+            left,
+            text="ESP32-C3 doğrudan USB CDC veya CH340 üzerinden 460800 baud hızında flash belleğe yazılır.",
+            style="Text.TLabel",
+            wraplength=460,
+        ).grid(row=14, column=0, sticky="w", pady=(6, 0))
+
+        # 3. Sağ Kart: Canlı Testler & Log Konsolu
+        right = ttk.Frame(main, style="Card.TFrame", padding=14)
+        right.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(2, weight=1)
+
+        ttk.Label(right, text="Ekran Canlı Test Komutları", style="Head.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        t_row = ttk.Frame(right, style="Card.TFrame")
+        t_row.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+        ttk.Button(t_row, text="📡 Ping", command=lambda: self.send_command("DISP_PING"), style="Soft.TButton").pack(
+            side=tk.LEFT
+        )
+        ttk.Button(
+            t_row,
+            text="📷 Test QR",
+            command=lambda: self.send_command("SHOW_QR|AHBU:DOOR:00861A0D5020"),
+            style="Soft.TButton",
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            t_row,
+            text="🚪 Kapı Açıldı",
+            command=lambda: self.send_command("DOOR_OPENED"),
+            style="Soft.TButton",
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            t_row,
+            text="⚙️ Ayarlar",
+            command=lambda: self.send_command("SHOW_SETTINGS"),
+            style="Soft.TButton",
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            t_row,
+            text="🏠 Ana Ekran",
+            command=lambda: self.send_command("SHOW_HOME"),
+            style="Soft.TButton",
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            t_row,
+            text="🔄 Reset",
+            command=self.reset_screen,
+            style="Danger.TButton",
+        ).pack(side=tk.LEFT, padx=4)
+
+        # Log Konsolu
+        log_header = ttk.Frame(right, style="Card.TFrame")
+        log_header.grid(row=2, column=0, sticky="ew", pady=(4, 6))
+        log_header.columnconfigure(0, weight=1)
+        ttk.Label(log_header, text="Ekran Seri Logu (115200 baud)", style="Head.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        ttk.Button(
+            log_header,
+            text="Temizle",
+            command=self.clear_log,
+            style="Soft.TButton",
+        ).grid(row=0, column=1, sticky="e")
+
+        log_box_frame = ttk.Frame(right, style="Card.TFrame")
+        log_box_frame.grid(row=3, column=0, sticky="nsew")
+        log_box_frame.columnconfigure(0, weight=1)
+        log_box_frame.rowconfigure(0, weight=1)
+
+        self.log_text = tk.Text(
+            log_box_frame,
+            height=20,
+            bg="#07111F",
+            fg="#D6E8FF",
+            insertbackground="#D6E8FF",
+            relief=tk.FLAT,
+            font=("Consolas", 9),
+        )
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        sc = ttk.Scrollbar(log_box_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        sc.grid(row=0, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=sc.set)
+
+    def refresh_latest_release(self) -> None:
+        releases = load_display_releases()
+        if not releases:
+            self.latest_release_var.set("Henüz sürüm yok. 'Sürüm Oluştur' ile ilk paketi derleyin.")
+            return
+        releases.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+        last = releases[0]
+        v = last.get("version", "?")
+        created = last.get("created_at", "")[:19].replace("T", " ")
+        self.latest_release_var.set(f"Son Sürüm: v{v} (Oluşturulma: {created})")
+
+    def find_screen(self) -> None:
+        if self.scanning:
+            return
+        self.scanning = True
+        self.find_btn.configure(state=tk.DISABLED)
+        self.detected_screen_var.set("🔍 Bağlı portlar taranıyor...")
+        self.status_var.set("Portlar taranıyor...")
+        threading.Thread(target=self._find_screen_worker, daemon=True).start()
+
+    def _find_screen_worker(self) -> None:
+        ports = list(list_ports.comports())
+        port_names = [p.device for p in ports]
+        detected_port = None
+        detected_info = ""
+
+        # 1. Önce doğrudan USB seri port üzerinden ping ile ekran yazılımı tespiti dene
+        for p in ports:
+            p_name = p.device
+            if self.worker is not None and self.worker.port == p_name:
+                detected_port = p_name
+                detected_info = f"✅ {p_name} (Şu anda bağlı ekran)"
+                break
+            try:
+                with serial.Serial(
+                    p_name,
+                    115200,
+                    timeout=0.3,
+                    write_timeout=0.5,
+                    rtscts=False,
+                    dsrdtr=False,
+                ) as s:
+                    s.dtr = False
+                    s.rts = False
+                    time.sleep(0.04)
+                    s.reset_input_buffer()
+                    s.write(b"\r\nDISP_PING\r\n")
+                    time.sleep(0.12)
+                    buf = s.read(s.in_waiting or 64).decode("utf-8", errors="ignore")
+                    if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:
+                        detected_port = p_name
+                        detected_info = f"✅ {p_name} (AHBU 2.4\" Ekran Aktif)"
+                        break
+            except Exception:
+                pass
+
+        # 2. Eğer ping yanıt vermediyse (henüz boş kart veya bootloader'da ise)
+        if not detected_port:
+            py_exe = find_esptool_python()
+            for p in ports:
+                p_name = p.device
+                p_desc = (p.description or "").lower()
+                # USB JTAG / CDC veya CP210/CH340 kontrolü
+                try:
+                    cmd = [py_exe, "-m", "esptool", "--port", p_name, "--baud", "115200", "--connect-attempts", "2", "chip_id"]
+                    out = subprocess.run(cmd, capture_output=True, text=True, timeout=3, check=False)
+                    text = (out.stdout + out.stderr).lower()
+                    if "esp32-c3" in text:
+                        detected_port = p_name
+                        detected_info = f"💡 {p_name} (ESP32-C3 Ekran Modülü Tespit Edildi)"
+                        break
+                except Exception:
+                    pass
+
+        self.window.after(0, lambda: self._finish_find_screen(port_names, detected_port, detected_info))
+
+    def _finish_find_screen(self, port_names: list[str], detected_port: str | None, detected_info: str) -> None:
+        self.scanning = False
+        self.find_btn.configure(state=tk.NORMAL)
+        self.ports = port_names
+        self.port_combo.configure(values=port_names)
+
+        if detected_port:
+            self.port_var.set(detected_port)
+            self.detected_screen_var.set(detected_info)
+            self.status_var.set(f"Ekran bulundu: {detected_port}")
+            self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] {detected_info}")
+        elif port_names:
+            if not self.port_var.get() or self.port_var.get() not in port_names:
+                self.port_var.set(port_names[0])
+            self.detected_screen_var.set(f"⚠️ Otomatik doğrulanamadı. Seçili port: {self.port_var.get()}")
+            self.status_var.set("Ekran otomatik doğrulanamadı, listeden seçebilirsiniz.")
+        else:
+            self.port_var.set("")
+            self.detected_screen_var.set("❌ Bağlı COM port bulunamadı.")
+            self.status_var.set("Bağlı COM port bulunamadı.")
+
+    def _on_port_changed(self, _event: object) -> None:
+        p = self.port_var.get().strip()
+        if p:
+            self.detected_screen_var.set(f"Seçili port: {p}")
+            self.status_var.set(f"Port seçildi: {p}")
+
+    def toggle_serial(self) -> None:
+        if self.worker is not None:
+            self.disconnect_serial()
+        else:
+            self.connect_serial()
+
+    def connect_serial(self) -> None:
+        port = self.port_var.get().strip()
+        if not port:
+            messagebox.showinfo("Port Gerekli", "Lütfen bağlanılacak COM portunu seçin.", parent=self.window)
+            return
+        try:
+            self.worker = SerialWorker(
+                port=port,
+                on_line=self.line_queue.put,
+                on_error=lambda err: self.line_queue.put(f"[HATA] {err}"),
+                baud_rate=115200,
+            )
+            self.worker.start()
+            self.connect_btn.configure(text="🔌 Bağlantıyı Kes")
+            self.connected_var.set(f"Bağlı: {port}")
+            self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] {port} portuna 115200 baud ile bağlanıldı.")
+            # Bağlanınca bir ping atalım
+            time.sleep(0.1)
+            self.send_command("DISP_PING")
+        except Exception as exc:
+            messagebox.showerror("Bağlantı Hatası", f"Port açılamadı:\n{exc}", parent=self.window)
+
+    def disconnect_serial(self) -> None:
+        if self.worker is not None:
+            try:
+                self.worker.stop()
+            except Exception:
+                pass
+            self.worker = None
+        self.connect_btn.configure(text="🔌 Bağlan")
+        self.connected_var.set("Bağlı değil")
+        self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] Seri port bağlantısı kapatıldı.")
+
+    def send_command(self, cmd: str) -> None:
+        if self.worker is None:
+            self.connect_serial()
+        if self.worker is not None:
+            self.worker.write(cmd)
+            self._append_log(f"> TX: {cmd}")
+
+    def reset_screen(self) -> None:
+        port = self.port_var.get().strip()
+        if not port:
+            return
+        self.disconnect_serial()
+        try:
+            with serial.Serial(port, 115200, timeout=0.5) as s:
+                s.dtr = False
+                s.rts = True
+                time.sleep(0.1)
+                s.rts = False
+                time.sleep(0.1)
+            self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] {port} donanımsal resetlendi (RTS/DTR).")
+            self.window.after(300, self.connect_serial)
+        except Exception as exc:
+            self._append_log(f"[RESET HATA] {exc}")
+
+    def clear_log(self) -> None:
+        self.log_text.delete("1.0", tk.END)
+
+    def _drain_lines(self) -> None:
+        while True:
+            try:
+                line = self.line_queue.get_nowait()
+                self._append_log(line)
+            except queue.Empty:
+                break
+        self.window.after(100, self._drain_lines)
+
+    def _append_log(self, text: str) -> None:
+        self.log_text.insert(tk.END, f"{text}\n")
+        self.log_text.see(tk.END)
+
+    def start_build(self) -> None:
+        if self.fw_busy:
+            return
+        version = self.version_var.get().strip()
+        if not SEMVER_RE.match(version):
+            messagebox.showerror("Sürüm Hatası", "Sürüm formatı 1.0.0 gibi semver olmalıdır.", parent=self.window)
+            return
+
+        write_display_source_version(version)
+        self.fw_busy = True
+        self.build_btn.configure(state=tk.DISABLED)
+        self.release_btn.configure(state=tk.DISABLED)
+        self.upload_btn.configure(state=tk.DISABLED)
+        self.status_var.set("Derleme başladı...")
+        self.progress_var.set(10)
+        self.progress_text_var.set("%10")
+        self._append_log(f"--- EKRAN FIRMWARE DERLEME BAŞLADI (v{version}) ---")
+
+        threading.Thread(target=self._build_worker, args=(version,), daemon=True).start()
+
+    def _build_worker(self, version: str) -> None:
+        try:
+            pio = find_platformio()
+            cmd = [pio, "run", "-d", str(DISPLAY_PROJECT_DIR), "-e", DISPLAY_ENV]
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(DISPLAY_PROJECT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            for line in proc.stdout or []:
+                clean = line.strip()
+                if clean:
+                    self.window.after(0, lambda t=clean: self._append_log(t))
+            proc.wait()
+            if proc.returncode != 0:
+                raise RuntimeError("PlatformIO derleme hatası oluştu.")
+
+            self.fw_build_ready = True
+            self.window.after(0, lambda: self.status_var.set(f"Derleme tamamlandı: v{version}"))
+            self.window.after(0, lambda: self.progress_var.set(100))
+            self.window.after(0, lambda: self.progress_text_var.set("%100"))
+            self.window.after(0, lambda: messagebox.showinfo("Başarılı", f"Ekran firmware v{version} derlendi.", parent=self.window))
+        except Exception as exc:
+            self.fw_build_ready = False
+            self.window.after(0, lambda: self.status_var.set("Derleme başarısız."))
+            self.window.after(0, lambda: messagebox.showerror("Derleme Hatası", str(exc), parent=self.window))
+        finally:
+            self.fw_busy = False
+            self.window.after(0, self._restore_buttons)
+
+    def start_release(self) -> None:
+        if self.fw_busy:
+            return
+        version = self.version_var.get().strip()
+        if not SEMVER_RE.match(version):
+            messagebox.showerror("Sürüm Hatası", "Sürüm formatı 1.0.0 gibi semver olmalıdır.", parent=self.window)
+            return
+
+        write_display_source_version(version)
+        self.fw_busy = True
+        self.build_btn.configure(state=tk.DISABLED)
+        self.release_btn.configure(state=tk.DISABLED)
+        self.upload_btn.configure(state=tk.DISABLED)
+        self.status_var.set("Sürüm için derleniyor ve paketleniyor...")
+        self.progress_var.set(20)
+        self.progress_text_var.set("%20")
+        self._append_log(f"--- EKRAN SÜRÜM OLUŞTURMA BAŞLADI (v{version}) ---")
+
+        threading.Thread(target=self._release_worker, args=(version,), daemon=True).start()
+
+    def _release_worker(self, version: str) -> None:
+        try:
+            pio = find_platformio()
+            cmd = [pio, "run", "-d", str(DISPLAY_PROJECT_DIR), "-e", DISPLAY_ENV]
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(DISPLAY_PROJECT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            for line in proc.stdout or []:
+                clean = line.strip()
+                if clean:
+                    self.window.after(0, lambda t=clean: self._append_log(t))
+            proc.wait()
+            if proc.returncode != 0:
+                raise RuntimeError("PlatformIO derleme hatası oluştu.")
+
+            files = {
+                "firmware_bin": DISPLAY_BUILD_DIR / "firmware.bin",
+                "bootloader_bin": DISPLAY_BUILD_DIR / "bootloader.bin",
+                "partitions_bin": DISPLAY_BUILD_DIR / "partitions.bin",
+            }
+            missing = [k for k, p in files.items() if not p.exists()]
+            if missing:
+                raise FileNotFoundError(f"Build çıktıları eksik: {', '.join(missing)}")
+
+            rid = datetime.now().strftime("%Y%m%d_%H%M%S")
+            folder = DISPLAY_RELEASES_DIR / f"{rid}_v{version.replace('.', '_')}"
+            folder.mkdir(parents=True, exist_ok=True)
+
+            out_files: dict[str, str] = {}
+            hashes: dict[str, dict[str, str]] = {}
+            for k, src in files.items():
+                dst = folder / src.name
+                shutil.copy2(src, dst)
+                out_files[k] = str(dst.relative_to(DISPLAY_PROJECT_DIR))
+                hashes[k] = {
+                    "sha256": file_hash(dst, "sha256"),
+                    "md5": file_hash(dst, "md5"),
+                }
+
+            manifest = {
+                "enabled": True,
+                "target": DISPLAY_TARGET,
+                "env": DISPLAY_ENV,
+                "version": version,
+                "filename": "firmware.bin",
+                "sha256": hashes["firmware_bin"]["sha256"],
+                "md5": hashes["firmware_bin"]["md5"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            (folder / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+            rel_entry = {
+                "id": f"{rid}_v{version.replace('.', '_')}",
+                "version": version,
+                "env": DISPLAY_ENV,
+                "target": DISPLAY_TARGET,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "files": out_files,
+                "hashes": hashes,
+                "manifest": str((folder / "manifest.json").relative_to(DISPLAY_PROJECT_DIR)),
+            }
+            existing = load_display_releases()
+            existing.append(rel_entry)
+            save_display_releases(existing)
+
+            self.fw_release_ready = True
+            self.window.after(0, self.refresh_latest_release)
+            self.window.after(0, lambda: self.status_var.set(f"Sürüm v{version} başarıyla oluşturuldu."))
+            self.window.after(0, lambda: self.progress_var.set(100))
+            self.window.after(0, lambda: self.progress_text_var.set("%100"))
+            self.window.after(0, lambda: messagebox.showinfo(
+                "Sürüm Hazır",
+                f"Ekran Yazılımı v{version} sürüm paketi oluşturuldu:\n\n{folder}",
+                parent=self.window,
+            ))
+        except Exception as exc:
+            self.fw_release_ready = False
+            self.window.after(0, lambda: self.status_var.set("Sürüm oluşturma başarısız."))
+            self.window.after(0, lambda: messagebox.showerror("Sürüm Hatası", str(exc), parent=self.window))
+        finally:
+            self.fw_busy = False
+            self.window.after(0, self._restore_buttons)
+
+    def start_upload(self) -> None:
+        if self.fw_busy:
+            return
+        port = self.port_var.get().strip()
+        if not port:
+            messagebox.showinfo("Port Gerekli", "Lütfen ekranın bağlı olduğu COM portunu seçin.", parent=self.window)
+            return
+
+        releases = load_display_releases()
+        if not releases:
+            messagebox.showwarning("Sürüm Gerekli", "Yüklenecek sürüm bulunamadı. Lütfen önce 'Sürüm Oluştur' butonuna basın.", parent=self.window)
+            return
+
+        releases.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+        latest_rel = releases[0]
+
+        # Port meşgulse seri monitorü kapat
+        self.disconnect_serial()
+
+        self.fw_busy = True
+        self.build_btn.configure(state=tk.DISABLED)
+        self.release_btn.configure(state=tk.DISABLED)
+        self.upload_btn.configure(state=tk.DISABLED)
+        self.progress_var.set(0)
+        self.progress_text_var.set("%0")
+        self.status_var.set(f"{port} portuna yükleniyor...")
+        self._append_log(f"--- EKRANA YÜKLEME BAŞLADI ({port} - v{latest_rel.get('version')}) ---")
+
+        threading.Thread(target=self._upload_worker, args=(port, latest_rel), daemon=True).start()
+
+    def _upload_worker(self, port: str, rel: dict) -> None:
+        try:
+            boot = (DISPLAY_PROJECT_DIR / rel["files"]["bootloader_bin"]).resolve()
+            part = (DISPLAY_PROJECT_DIR / rel["files"]["partitions_bin"]).resolve()
+            firm = (DISPLAY_PROJECT_DIR / rel["files"]["firmware_bin"]).resolve()
+
+            for p in (boot, part, firm):
+                if not p.exists():
+                    raise FileNotFoundError(f"Firmware dosyası bulunamadı: {p}")
+
+            py_exe = find_esptool_python()
+            cmd_flash = "write_flash"
+            try:
+                ver_res = subprocess.run([py_exe, "-m", "esptool", "version"], capture_output=True, text=True, timeout=2, check=False)
+                if "v5." in (ver_res.stdout + ver_res.stderr):
+                    cmd_flash = "write-flash"
+            except Exception:
+                pass
+
+            cmd = [
+                py_exe,
+                "-m",
+                "esptool",
+                "--chip",
+                "esp32c3",
+                "--port",
+                port,
+                "--baud",
+                "460800",
+                "--before",
+                "default-reset",
+                "--after",
+                "hard-reset",
+                cmd_flash,
+                "-z",
+                "0x0",
+                str(boot),
+                "0x8000",
+                str(part),
+                "0x10000",
+                str(firm),
+            ]
+
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(DISPLAY_PROJECT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+
+            for line in proc.stdout or []:
+                clean = line.strip()
+                if clean:
+                    self.window.after(0, lambda t=clean: self._append_log(t))
+                    m = PROG_RE.search(clean)
+                    if m:
+                        pct = max(0, min(100, int(m.group(1))))
+                        self.window.after(0, lambda v=pct: self.progress_var.set(v))
+                        self.window.after(0, lambda v=pct: self.progress_text_var.set(f"%{v}"))
+
+            proc.wait()
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"{port} portuna yükleme yapılamadı.\n\n"
+                    "Olası Nedenler ve Çözümler:\n"
+                    "1. Port meşgul olabilir (başka bir seri monitör açıksa kapatın).\n"
+                    "2. Kart otomatik indirme moduna geçemiyorsa:\n"
+                    "   - ESP32-C3 kartındaki BOOT butonuna BASILI TUTUN.\n"
+                    "   - RST butonuna bir kez basıp bırakın, ardından BOOT'u bırakın.\n"
+                    "   - Tekrar yüklemeyi deneyin."
+                )
+
+            self.window.after(0, lambda: self.progress_var.set(100))
+            self.window.after(0, lambda: self.progress_text_var.set("%100"))
+            self.window.after(0, lambda: self.status_var.set(f"✅ Yükleme Başarılı: v{rel.get('version')}"))
+            self.window.after(0, lambda: messagebox.showinfo(
+                "TMM - Yükleme Başarılı",
+                f"Ekran yazılımı v{rel.get('version')} {port} portuna başarıyla yüklendi!\n\nCihaz donanımsal olarak yeniden başlatıldı.",
+                parent=self.window,
+            ))
+            # Otomatik seri konsolu bağla
+            self.window.after(1000, self.connect_serial)
+        except Exception as exc:
+            self.window.after(0, lambda: self.status_var.set("Yükleme başarısız."))
+            self.window.after(0, lambda: messagebox.showerror("Yükleme Hatası", str(exc), parent=self.window))
+        finally:
+            self.fw_busy = False
+            self.window.after(0, self._restore_buttons)
+
+    def _restore_buttons(self) -> None:
+        self.build_btn.configure(state=tk.NORMAL)
+        self.release_btn.configure(state=tk.NORMAL)
+        self.upload_btn.configure(state=tk.NORMAL)
+
+    def _on_close(self) -> None:
+        if self.worker is not None:
+            try:
+                self.worker.stop()
+            except Exception:
+                pass
         self.window.destroy()
 
 

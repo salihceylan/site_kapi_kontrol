@@ -1,3 +1,4 @@
+import './_dev_guard.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

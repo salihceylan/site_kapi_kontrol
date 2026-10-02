@@ -8,6 +8,8 @@ import 'package:site_kapi_kontrol/models/device_page.dart';
 
 import 'package:site_kapi_kontrol/models/device_record.dart';
 
+import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
+
 import 'package:site_kapi_kontrol/models/door_record.dart';
 
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
@@ -32,6 +34,8 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 
 import 'package:site_kapi_kontrol/models/user_session.dart';
 
+import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
+
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 
 import 'package:site_kapi_kontrol/services/pdf_credentials_service.dart';
@@ -49,6 +53,10 @@ import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
+
+import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
+
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
 
@@ -68,6 +76,8 @@ import 'package:site_kapi_kontrol/ui/dialogs/door_permissions_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_join_qr_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_residents_accordion_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/manage_join_requests_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
+import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
 
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
@@ -137,7 +147,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
 
-  Timer? _statusAutoRefreshTimer;
+  // Kapı durumu yoklaması (3 sn): yalnız kapı paneli görünürken ve uygulama ön plandayken ağ
+  // isteği yapar; ardışık hatada üstel geri çekilir (tavan 30 sn), başarıda 3 sn'ye döner.
+  late final AdaptivePoller _statusPoller = AdaptivePoller(
+    interval: const Duration(seconds: 3),
+    isActive: _isStatusPollingActive,
+    poll: _pollDoorStatus,
+  );
+
+  // Yoklama sonuçları kapı panelini (DashboardView) tüm sayfayı yeniden kurmadan günceller:
+  // sayaç artınca yalnız gövdedeki ValueListenableBuilder yeniden kurulur.
+  final ValueNotifier<int> _doorPanelRevision = ValueNotifier<int>(0);
+
+  // Ekrana en son kurulan kapı panelinin değerleri: yoklama sonucu bununla aynıysa yeniden kurulmaz.
+  _DoorPanelSnapshot? _renderedDoorPanel;
+
+  // Durum yoklamalarında üst üste binmeyi önleyen sayaç (in-flight koruması).
+  int _statusRefreshesInFlight = 0;
+
+  // Çok-siteli yarışları önleyen istek jetonları: her yeni istek jetonu artırır,
+  // eski isteğin geç gelen yanıtı yeni seçimi ezmez.
+  int _sitesRequestToken = 0;
+  int _siteSelectionToken = 0;
+  int _siteManagersToken = 0;
+  int _doorControlSitesToken = 0;
+  int _doorControlResidentToken = 0;
+  int _doorControlSiteToken = 0;
 
 
 
@@ -152,6 +187,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final TextEditingController _profilePhoneController;
 
   late final TextEditingController _profilePasswordController;
+
+  late final TextEditingController _profileCurrentPasswordController;
 
   bool _isSavingProfile = false;
 
@@ -203,6 +240,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   bool _isOpeningDoor = false;
 
+  // Kapı açma komutu BAŞARIYLA gönderilince artar: kapı kartlarındaki DoorOpenButton'un başarı tikini
+  // (successTick) tetikler. Sıfırlama gerekmez; yalnız artış anlamlıdır.
+  int _doorOpenOkTick = 0;
+
   bool _isPhoneOnWifi = false;
 
   bool _isDeviceLocalReachable = false;
@@ -252,6 +293,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isLoadingPendingSiteApprovals = false;
 
   bool _isResidentMode = false;
+  final GlobalKey<IndividualHomeViewState> _individualHomeKey = GlobalKey<IndividualHomeViewState>();
 
   bool get _canToggleDualMode {
     final session = widget.authService.session;
@@ -288,6 +330,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _profilePasswordController = TextEditingController();
 
+    _profileCurrentPasswordController = TextEditingController();
+
 
 
     _loadInitialData();
@@ -304,7 +348,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.removeObserver(this);
 
-    _statusAutoRefreshTimer?.cancel();
+    _statusPoller.dispose();
+
+    _doorPanelRevision.dispose();
 
     _profileFullNameController.dispose();
 
@@ -314,6 +360,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _profilePasswordController.dispose();
 
+    _profileCurrentPasswordController.dispose();
+
     super.dispose();
 
   }
@@ -321,39 +369,71 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   @override
-
   void didChangeAppLifecycleState(AppLifecycleState state) {
-
     if (state == AppLifecycleState.resumed) {
-
+      // C11: hesap pasifleştirilmiş/rolü değişmiş olabilir; sunucudaki /me ile eşitle.
+      unawaited(widget.authService.refreshSession());
+      _startStatusAutoRefreshTimer();
       if (_doorControlDoor != null) {
-
         _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
-
       }
-
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _statusPoller.stop();
     }
-
   }
 
 
 
   void _startStatusAutoRefreshTimer() {
+    // Ön plana dönüş / ilk açılış: geri çekilme sıfırlanır, ilk tur 3 sn sonra (ön plana dönüşte
+    // anlık yenileme didChangeAppLifecycleState içinde ayrıca yapılır).
+    _statusPoller.resetBackoff();
+    _statusPoller.start();
+  }
 
-    _statusAutoRefreshTimer?.cancel();
+  /// Durum yoklaması şu an gerekli mi? Kapı paneli ekranda olmalı, uygulama ön planda, bu sayfa
+  /// opak bir sayfanın altında kalmamış (TickerMode kapalı değil) ve kapı açma sürmüyor olmalı.
+  bool _isStatusPollingActive() {
+    if (!mounted) return false;
+    if (_doorControlDoor == null || _isOpeningDoor) return false;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return false;
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    return _isDoorPanelVisible;
+  }
 
-    _statusAutoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+  /// Çok kullanıcılı/rol akışlarında "bireysel ana ekran" (IndividualHomeView) gösterilen durum.
+  /// [_buildContent] ile yoklama aynı koşulu paylaşır.
+  bool _showsIndividualHome(UserSession session) {
+    return _isResidentMode ||
+        ((session.role == UserRole.individual &&
+                (_doorControlSitesPage?.sites.isEmpty ?? true)) ||
+            (session.role == UserRole.siteManager &&
+                (_doorControlSitesPage?.sites.isEmpty ?? true) &&
+                (_doorControlStructure?.doors.isEmpty ?? true)));
+  }
 
-      if (!mounted) return;
+  /// Kapı paneli (DashboardView: durum, kapı aç) şu an ekranda mı?
+  bool get _isDoorPanelVisible {
+    final session = widget.authService.session;
+    if (session == null) return false;
+    final menu = _canAccessMenu(_selectedMenu, session.role)
+        ? _selectedMenu
+        : SirketMenuItem.dashboard;
+    if (menu != SirketMenuItem.dashboard && menu != SirketMenuItem.ellerSerbest) {
+      return false;
+    }
+    return !_showsIndividualHome(session);
+  }
 
-      if (_doorControlDoor != null && !_isOpeningDoor) {
-
-        _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
-
-      }
-
-    });
-
+  /// Yoklama turu: true başarılı, false hata (geri çekilme), null atlandı.
+  Future<bool?> _pollDoorStatus() async {
+    final door = _doorControlDoor;
+    if (!mounted || door == null || _isOpeningDoor) return null;
+    return _loadDoorRuntimeStatus(door.id, isBackgroundRefresh: true);
   }
 
 
@@ -376,7 +456,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _loadDoorControlSites();
 
-    _loadSites();
+    // /manager/sites yalnızca site yöneticisi / süper kullanıcı içindir: bireysel kullanıcı ve
+    // daire sakini her açılışta boşuna 403 (+ yetki sorgusu) almasın. "Siteler" menüsü açılınca
+    // liste zaten force ile yüklenir.
+    final role = widget.authService.session?.role;
+    if (role == UserRole.siteManager || role == UserRole.superUser) {
+      _loadSites();
+    }
 
   }
 
@@ -385,6 +471,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // --- Navigasyon & Menü ---
 
   bool _canAccessMenu(SirketMenuItem item, UserRole role) {
+    if (item == SirketMenuItem.katilimVeKurulum) {
+      return true;
+    }
 
     switch (role) {
 
@@ -418,6 +507,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               item == SirketMenuItem.bluetoothWifiKur;
         }
         return item == SirketMenuItem.dashboard ||
+            item == SirketMenuItem.cihazEkle ||
+            item == SirketMenuItem.profilim ||
             item == SirketMenuItem.ellerSerbest;
     }
 
@@ -469,12 +560,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         return 'Site Yönetimi';
 
-      case SirketMenuItem.cihazEkle:
+      case SirketMenuItem.katilimVeKurulum:
+        return 'Daireye Katıl & Cihaz Ekle';
 
+      case SirketMenuItem.cihazEkle:
+        final currentRole = widget.authService.session?.role;
+        if (currentRole == UserRole.superUser) return 'Şirket Cihazı Kaydet';
+        if (currentRole == UserRole.individual) return 'Yönetici Olarak Cihaz Ekle';
         return 'Cihaz Kaydet';
 
       case SirketMenuItem.kayitliCihazlar:
-
+        final currentRole = widget.authService.session?.role;
+        if (currentRole == UserRole.superUser) return 'Şirket Cihaz Envanteri';
         return 'Kayıtlı Cihazlar';
 
       case SirketMenuItem.bluetoothWifiKur:
@@ -582,90 +679,97 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
   // --- API Yükleyicileri ---
-
   Future<void> _loadSites({
-
     int page = 1,
-
     bool force = false,
-
     int? preferredSiteId,
-
   }) async {
-
+    if (!mounted) return;
     if (_isLoadingSites && !force) return;
 
+    final requestToken = ++_sitesRequestToken;
     setState(() => _isLoadingSites = true);
 
     try {
-
       final data = await widget.authService.listSites(page: page);
 
-      if (!mounted) return;
+      // Daha yeni bir yükleme başladıysa bu (eski) yanıt yok sayılır.
+      if (!mounted || requestToken != _sitesRequestToken) return;
+
+      SiteRecord? siteToSelect;
+      var refreshManagersOnly = false;
 
       setState(() {
-
         _isLoadingSites = false;
-
         _sitesPage = data;
 
-        if (data.sites.isNotEmpty) {
-
-          if (preferredSiteId != null) {
-
-            final target =
-
-                data.sites.where((s) => s.id == preferredSiteId).firstOrNull;
-
-            _selectSite(target ?? data.sites.first);
-
-          } else if (_selectedSite == null ||
-              !data.sites.any((s) => s.id == _selectedSite!.id)) {
-            _selectSite(data.sites.first);
-          } else {
-            _loadSiteManagers(_selectedSite!.id);
-          }
-        } else {
+        if (data.sites.isEmpty) {
           _selectedSite = null;
           _selectedSiteStructure = null;
           _selectedSiteManagersData = null;
+          return;
+        }
+
+        final current = _selectedSite;
+        final currentInList = current == null
+            ? null
+            : data.sites.where((s) => s.id == current.id).firstOrNull;
+
+        if (preferredSiteId != null) {
+          siteToSelect =
+              data.sites.where((s) => s.id == preferredSiteId).firstOrNull ??
+                  data.sites.first;
+        } else if (currentInList == null) {
+          siteToSelect = data.sites.first;
+        } else {
+          // Seçili nesneyi yeni listedeki kayıtla DEĞİŞTİR: güncelleme sonrası eski alanlar
+          // (politika, ad vb.) ekranda kalmasın.
+          _selectedSite = currentInList;
+          refreshManagersOnly = true;
         }
       });
 
+      if (siteToSelect != null) {
+        unawaited(_selectSite(siteToSelect!));
+      } else if (refreshManagersOnly && _selectedSite != null) {
+        unawaited(_loadSiteManagers(_selectedSite!.id));
+      }
     } catch (e) {
-
-      if (!mounted) return;
+      if (!mounted || requestToken != _sitesRequestToken) return;
 
       setState(() => _isLoadingSites = false);
 
       if (force) {
-
         _showMessage(e.toString());
-
       }
-
     }
-
   }
 
-
-
   Future<void> _loadSiteManagers(int siteCode) async {
+    if (!mounted) return;
+    final token = ++_siteManagersToken;
     setState(() => _isLoadingSiteManagers = true);
     try {
       final managersData = await widget.authService.getSiteManagers(siteCode);
-      if (!mounted) return;
+      if (!mounted || token != _siteManagersToken) return;
+      if (_selectedSite?.id != siteCode) {
+        // Bu arada başka bir site seçildi/silindi: eski sitenin yöneticileri gösterilmez.
+        setState(() => _isLoadingSiteManagers = false);
+        return;
+      }
       setState(() {
         _selectedSiteManagersData = managersData;
         _isLoadingSiteManagers = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || token != _siteManagersToken) return;
       setState(() => _isLoadingSiteManagers = false);
     }
   }
 
   Future<void> _selectSite(SiteRecord site) async {
+    if (!mounted) return;
+    final token = ++_siteSelectionToken;
     setState(() {
       _selectedSite = site;
       _selectedSiteStructure = null;
@@ -674,13 +778,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _isLoadingSiteManagers = true;
     });
 
-    _loadSiteManagers(site.id);
+    unawaited(_loadSiteManagers(site.id));
 
     final (structure, error) = await widget.authService.getSiteStructure(
       siteCode: site.id,
     );
 
-    if (!mounted) return;
+    if (!mounted || token != _siteSelectionToken) return;
+    if (_selectedSite?.id != site.id) {
+      setState(() => _isLoadingSiteStructure = false);
+      return;
+    }
 
     setState(() {
       _isLoadingSiteStructure = false;
@@ -690,367 +798,273 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (error != null && structure == null) _showMessage(error);
   }
 
-
-
   Future<void> _loadDoorControlSites({int? preferredSiteId}) async {
-
+    if (!mounted) return;
     final session = widget.authService.session;
 
     if (session == null) return;
 
+    final isResident = session.role == UserRole.apartmentOwner ||
+        _isResidentMode ||
+        (session.role == UserRole.individual && !_canToggleDualMode);
 
-
-    if (session.role == UserRole.apartmentOwner) {
-
+    if (isResident) {
+      final residentToken = ++_doorControlResidentToken;
       setState(() => _isLoadingDoorControlStructure = true);
-
+      // Masaüstü widget senkronu (ve boş listede temizlik) AuthService.listMyDoors içinde yapılır.
       final (doors, _) = await widget.authService.listMyDoors();
 
-      if (!mounted) return;
+      if (!mounted || residentToken != _doorControlResidentToken) return;
 
+      int? doorToSelect;
       setState(() {
-
         _isLoadingDoorControlStructure = false;
 
-        if (doors != null && doors.isNotEmpty) {
-
-          final firstSiteName = doors.first.siteName;
-
-          _doorControlStructure = SiteStructureRecord(
-
-            site: SiteRecord(
-
-              id: doors.first.siteCode,
-
-              name: (firstSiteName != null && firstSiteName.isNotEmpty)
-
-                  ? firstSiteName
-
-                  : 'Site Kapısı',
-
-              address: null,
-
-              city: null,
-
-              district: null,
-
-              managerUserCode: session.id,
-
-              managerName: session.fullName,
-
-              mqttSiteId: 0,
-
-              approvedAt: DateTime.now(),
-
-              blockCount: 1,
-
-              doorCount: doors.length,
-
-              apartmentCount: 1,
-
-              approvalStatus: 'approved',
-
-              createdAt: DateTime.now(),
-
-            ),
-
-            doors: doors,
-
-            blocks: const [],
-
-            apartments: const [],
-
-          );
-
-          _selectDoorControlDoor(doors.first.id);
-
+        if (doors == null) {
+          return; // Hata: mevcut görünümü koru.
         }
 
+        if (doors.isEmpty) {
+          // Hiç kapı kalmadıysa eski kapı/durum ekranda kalmasın.
+          _doorControlStructure = null;
+          _doorControlDoor = null;
+          _doorRuntimeStatus = null;
+          return;
+        }
+
+        final firstSiteName = doors.first.siteName;
+        _doorControlStructure = SiteStructureRecord(
+          site: SiteRecord(
+            id: doors.first.siteCode,
+            name: (firstSiteName != null && firstSiteName.isNotEmpty)
+                ? firstSiteName
+                : 'Site Kapısı',
+            address: null,
+            city: null,
+            district: null,
+            managerUserCode: session.id,
+            managerName: session.fullName,
+            mqttSiteId: 0,
+            approvedAt: DateTime.now(),
+            blockCount: 1,
+            doorCount: doors.length,
+            apartmentCount: 1,
+            approvalStatus: 'approved',
+            createdAt: DateTime.now(),
+          ),
+          doors: doors,
+          blocks: const [],
+          apartments: const [],
+        );
+
+        final current = _doorControlDoor;
+        doorToSelect = (current != null && doors.any((d) => d.id == current.id))
+            ? current.id
+            : doors.first.id;
       });
 
+      if (doorToSelect != null) {
+        _selectDoorControlDoor(doorToSelect!, keepStatus: true);
+      }
+
       if (doors != null) {
-
-        _checkAndStartVoiceAssistance(doors);
-
+        unawaited(_checkAndStartVoiceAssistance(doors));
       }
 
       return;
-
     }
 
-
-
+    final sitesToken = ++_doorControlSitesToken;
     setState(() => _isLoadingDoorControlSites = true);
 
     try {
-
       final data = await widget.authService.listSites(page: 1, pageSize: 100);
 
-      if (!mounted) return;
+      if (!mounted || sitesToken != _doorControlSitesToken) return;
 
+      int? siteToSelect;
       setState(() {
-
         _isLoadingDoorControlSites = false;
-
         _doorControlSitesPage = data;
 
         if (data.sites.isNotEmpty) {
-
-          final targetSiteId = preferredSiteId ??
-
+          siteToSelect = preferredSiteId ??
               (_doorControlSite != null &&
-
                       data.sites.any((s) => s.id == _doorControlSite!.id)
-
                   ? _doorControlSite!.id
-
                   : data.sites.first.id);
-
-          _selectDoorControlSite(targetSiteId);
-
         } else {
-
           _doorControlSite = null;
-
           _doorControlStructure = null;
-
           _doorControlDoor = null;
-
           _doorRuntimeStatus = null;
-
         }
-
       });
 
-    } catch (_) {
+      if (siteToSelect != null) {
+        unawaited(_selectDoorControlSite(siteToSelect!));
+      }
 
-      if (!mounted) return;
+      // Masaüstü widget için TEK kaynak: kullanıcının erişebildiği kapılar (listMyDoors).
+      // Çağrı widget'ı senkronlar; liste boşsa widget temizlenir.
+      unawaited(widget.authService.listMyDoors());
+    } catch (_) {
+      if (!mounted || sitesToken != _doorControlSitesToken) return;
 
       setState(() => _isLoadingDoorControlSites = false);
-
     }
-
   }
 
-
-
   Future<void> _selectDoorControlSite(int siteId) async {
+    if (!mounted) return;
+    final sites = _doorControlSitesPage?.sites;
+    if (sites == null || sites.isEmpty) return;
 
-    final site = _doorControlSitesPage?.sites.firstWhere(
-
+    final site = sites.firstWhere(
       (s) => s.id == siteId,
-
-      orElse: () => _doorControlSitesPage!.sites.first,
-
+      orElse: () => sites.first,
     );
 
+    final token = ++_doorControlSiteToken;
+
     setState(() {
-
       _doorControlSite = site;
-
       _doorControlStructure = null;
-
       _doorControlDoor = null;
-
       _doorRuntimeStatus = null;
-
       _isLoadingDoorControlStructure = true;
-
     });
 
-
-
     final (structure, _) = await widget.authService.getSiteStructure(
-
-      siteCode: siteId,
-
+      siteCode: site.id,
     );
 
-    if (!mounted) return;
+    if (!mounted || token != _doorControlSiteToken) return;
+    if (_doorControlSite?.id != site.id) {
+      // Bu arada site değişti ya da silindi: eski sitenin yapısı uygulanmaz.
+      setState(() => _isLoadingDoorControlStructure = false);
+      return;
+    }
 
+    int? doorToSelect;
     setState(() {
-
       _isLoadingDoorControlStructure = false;
-
       _doorControlStructure = structure;
 
       if (structure != null && structure.doors.isNotEmpty) {
-
-        _selectDoorControlDoor(structure.doors.first.id);
-
+        doorToSelect = structure.doors.first.id;
       }
-
     });
 
-    if (structure != null &&
-
-        structure.doors.isNotEmpty &&
-
-        widget.authService.session?.role == UserRole.apartmentOwner) {
-
-      _checkAndStartVoiceAssistance(structure.doors);
-
+    if (doorToSelect != null) {
+      _selectDoorControlDoor(doorToSelect!);
     }
 
+    if (structure != null &&
+        structure.doors.isNotEmpty &&
+        widget.authService.session?.role == UserRole.apartmentOwner) {
+      unawaited(_checkAndStartVoiceAssistance(structure.doors));
+    }
   }
 
-
-
   Future<void> _checkAndStartVoiceAssistance(List<DoorRecord> doors) async {
-
     final session = widget.authService.session;
 
     // YALNIZCA Daire Sakini (apartmentOwner) için ses motoru devrededir!
-
     if (session == null ||
-
         session.role != UserRole.apartmentOwner ||
-
         widget.voiceDoorService == null) {
-
       return;
-
     }
 
-
+    // Kullanıcı Eller Serbest ayarlarında otomatik dinlemeyi kapattıysa hiçbir şey yapma.
+    if (!widget.voiceDoorService!.handsFreeAutoListen) {
+      return;
+    }
 
     if (doors.isEmpty) {
-
       await widget.voiceDoorService!.speak('Tanımlı bir kapı bulunamadı.');
-
       return;
-
     }
 
-
-
     final hasActiveDevice = doors.any(
-
       (d) =>
-
           d.assignedDeviceUid != null && d.assignedDeviceUid!.trim().isNotEmpty,
-
     );
 
     if (!hasActiveDevice) {
-
       await widget.voiceDoorService!.speak(
-
         'Kapılara henüz bir cihaz atanmamış.',
-
       );
-
       return;
-
     }
-
-
 
     // Cihaz atanmış ve kapı hazır: otomatik dinlemeyi başlat
-
     if (!widget.voiceDoorService!.isListening) {
-
       await widget.voiceDoorService!.startListening(candidateDoors: doors);
-
     }
-
   }
 
+  /// [userInitiated]: kullanıcı arayüzden açıkça seçtiyse widget'ın aktif kapısı da buna çekilir.
+  /// [keepStatus]: aynı kapı yeniden seçiliyorsa (yenileme) mevcut durumu koruyup arka planda yeniler.
+  void _selectDoorControlDoor(
+    int doorId, {
+    bool userInitiated = false,
+    bool keepStatus = false,
+  }) {
+    final doors = _doorControlStructure?.doors;
+    if (doors == null || doors.isEmpty) return;
 
-
-  void _selectDoorControlDoor(int doorId) {
-
-    final door = _doorControlStructure?.doors.firstWhere(
-
+    final door = doors.firstWhere(
       (d) => d.id == doorId,
-
-      orElse: () => _doorControlStructure!.doors.first,
-
+      orElse: () => doors.first,
     );
+    final sameDoor = _doorControlDoor?.id == door.id;
+    final preserveStatus = keepStatus && sameDoor && _doorRuntimeStatus != null;
 
     setState(() {
-
       _doorControlDoor = door;
-
-      _doorRuntimeStatus = null;
-
+      if (!preserveStatus) {
+        _doorRuntimeStatus = null;
+      }
     });
 
-    if (door != null) {
+    unawaited(_loadDoorRuntimeStatus(door.id, isBackgroundRefresh: preserveStatus));
 
-      _loadDoorRuntimeStatus(door.id);
-
-      final token = widget.authService.session?.token;
-
-      final role = widget.authService.session?.role;
-
-      if (token != null && (role == UserRole.siteManager || role == UserRole.apartmentOwner)) {
-
-        final allDoors = _doorControlStructure?.doors ?? [door];
-
-        final isOnline = (_doorRuntimeStatus?.mqttConnected == true) || _isDeviceLocalReachable;
-
-        DoorWidgetService.instance.syncDoorsList(
-
-          doors: allDoors,
-
-          token: token,
-
-          apiBaseUrl: widget.authService.api.baseUrl,
-
-          selectedDoor: door,
-
-          isSelectedDoorOnline: isOnline,
-
-        );
-
-      }
-
+    if (userInitiated) {
+      widget.authService.selectWidgetDoor(door);
     }
-
   }
 
-
-
-  Future<void> _loadDoorRuntimeStatus(
-
+  /// Kapı durumunu yükler. Dönüş (yoklama zamanlayıcısı için): true = durum alındı ya da cihaza
+  /// yerel ağdan ulaşılabiliyor, false = bulut da yerel ağ da başarısız (geri çekilme),
+  /// null = tur atlandı/yok sayıldı (başka yoklama sürüyor, kapı değişti, sayfa kapandı).
+  Future<bool?> _loadDoorRuntimeStatus(
     int doorId, {
-
     bool isBackgroundRefresh = false,
-
   }) async {
+    if (!mounted) return null;
+    // Önceki yoklama bitmeden arka plan yoklaması başlatılmaz (yavaş ağda istek yığılmaz).
+    if (isBackgroundRefresh && _statusRefreshesInFlight > 0) return null;
+    _statusRefreshesInFlight++;
 
     if (!isBackgroundRefresh) {
-
       setState(() {
-
         _isLoadingDoorStatus = true;
-
         _doorStatusError = null;
-
       });
-
     }
 
-
-
     try {
-
       final (status, error) = await widget.authService.getDoorRuntimeStatus(
-
         doorId: doorId,
-
       );
 
-      if (!mounted || _doorControlDoor?.id != doorId) return;
-
-
+      if (!mounted || _doorControlDoor?.id != doorId) return null;
 
       final isWifi = await widget.authService.isPhoneConnectedToLocalWifi();
 
-      if (!mounted || _doorControlDoor?.id != doorId) return;
-
-
+      if (!mounted || _doorControlDoor?.id != doorId) return null;
 
       final assignedUid = _doorControlDoor?.assignedDeviceUid?.trim();
 
@@ -1059,110 +1073,78 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       bool localReachable = false;
 
       if (status?.mqttConnected != true && isWifi && hasUid) {
-
         localReachable = await widget.authService.isDeviceReachableOnLocalWifi(
-
           assignedUid,
-
         );
-
       }
 
+      if (!mounted || _doorControlDoor?.id != doorId) return null;
 
-
-      if (!mounted || _doorControlDoor?.id != doorId) return;
-
-      setState(() {
-
+      // Arka plan yoklamasında tüm sayfa yerine yalnız kapı paneli güncellenir ve görünür bir
+      // değişiklik yoksa hiçbir şey yeniden kurulmaz; kullanıcı eylemlerinde (yükleme) sayfa kurulur.
+      _updateDoorPanel(() {
         _isPhoneOnWifi = isWifi;
 
         _isDeviceLocalReachable = localReachable;
 
         if (status != null) {
-
           _doorRuntimeStatus = status;
-
+        } else if (isBackgroundRefresh && !localReachable) {
+          // Sunucu hata döndürdü VE yerel ağda da erişilemiyor → offline olarak işaretle
+          if (_doorRuntimeStatus != null) {
+            _doorRuntimeStatus = _doorRuntimeStatus!.copyWithOffline();
+          }
         }
 
-        final canLocal = _doorControlDoor != null && localReachable;
+        // Yerelden gerçekten açılabiliyorsa (cihaz yerelde görünüyor + kapı politikası + geçerli
+        // token) ve hata BULUT ERİŞİLEMEZLİĞİ ise (ağ/zaman aşımı/5xx/proxy; hata metnine değil
+        // hata türüne bağlı) durum hatası gizlenir. Sunucunun iş hataları (403/404 vb.) gösterilir.
+        final canLocal = _doorControlDoor != null &&
+            localReachable &&
+            widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
 
         if (canLocal &&
-
             error != null &&
-
-            (error.contains('Sunucuya') ||
-
-                error.contains('Internet') ||
-
-                error.contains('baglanilamadi'))) {
-
+            widget.authService.isDoorStatusCloudUnreachable(doorId)) {
           _doorStatusError = null;
-
         } else {
-
           if (!isBackgroundRefresh || error == null) {
-
             _doorStatusError = error;
-
           }
-
         }
-
-
-
-        final role = widget.authService.session?.role;
-
-        final token = widget.authService.session?.token;
-
-        if (token != null &&
-
-            (role == UserRole.siteManager || role == UserRole.apartmentOwner) &&
-
-            _doorControlDoor != null) {
-
-          final allDoors = _doorControlStructure?.doors ?? [_doorControlDoor!];
-
-          final isOnline = (status?.mqttConnected == true) || localReachable;
-
-          DoorWidgetService.instance.syncDoorsList(
-
-            doors: allDoors,
-
-            token: token,
-
-            apiBaseUrl: widget.authService.api.baseUrl,
-
-            selectedDoor: _doorControlDoor,
-
-            isSelectedDoorOnline: isOnline,
-
-          );
-
-        }
-
-      });
-
+      }, scoped: isBackgroundRefresh);
+      return status != null || localReachable;
     } catch (_) {
-
       // Background refresh hatalarında UI'ı bozma
-
+      return false;
     } finally {
-
-      if (mounted && !isBackgroundRefresh) {
-
+      _statusRefreshesInFlight--;
+      if (mounted && !isBackgroundRefresh && _doorControlDoor?.id == doorId) {
         setState(() {
-
           _isLoadingDoorStatus = false;
-
         });
-
       }
-
     }
-
   }
 
-
+  /// Kapı paneli alanlarını ([_doorRuntimeStatus], yükleme/hata/Wi-Fi bayrakları) günceller.
+  ///
+  /// [scoped] false ise klasik `setState` (tüm sayfa). [scoped] true (3 sn'lik arka plan yoklaması)
+  /// ise sayfa yeniden kurulmaz: alanlar değişir ve panel ekrandaysa YALNIZ gövdedeki
+  /// [_doorPanelRevision] dinleyicisi yeniden kurulur; sonuç öncekiyle aynıysa hiçbir şey kurulmaz.
+  /// Panel ekranda değilse alanlar bir sonraki `build`'de okunur.
+  void _updateDoorPanel(VoidCallback mutate, {required bool scoped}) {
+    if (!mounted) return;
+    if (!scoped) {
+      setState(mutate);
+      return;
+    }
+    mutate();
+    if (!_isDoorPanelVisible) return;
+    final shown = _renderedDoorPanel;
+    if (shown != null && _DoorPanelSnapshot.of(this).sameAs(shown)) return;
+    _doorPanelRevision.value++;
+  }
 
   Future<void> _openDoor() async {
 
@@ -1187,6 +1169,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
 
       _isOpeningDoor = false;
+
+      // Başarı sinyali: "açılıyor" -> "hazır" geçişiyle AYNI karede gelir (düğme tikini gösterir).
+      if (error == null) _doorOpenOkTick++;
 
       if (status != null) {
 
@@ -1305,6 +1290,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       password: result.password.isEmpty ? null : result.password,
       isActive: result.isActive,
       role: result.role,
+      // Yalnızca yönetici anahtarı değiştirdiyse gönderilir (değişmediyse sunucuya dokunulmaz).
+      emailVerified: result.emailVerified == user.emailVerified ? null : result.emailVerified,
     );
     if (!mounted) return;
     if (error != null) {
@@ -2607,10 +2594,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openClaimDeviceFlow() async {
-    final success = await ClaimDeviceDialog.show(context, widget.authService);
-    if (success == true) {
+    final claimedUid = await ClaimDeviceDialog.show(context, widget.authService);
+    if (claimedUid != null && claimedUid.isNotEmpty) {
       await _loadCompanyDevices(force: true);
       await _loadDoorControlSites();
+      if (!mounted) return;
+      final hasSites = _doorControlSitesPage?.sites.isNotEmpty ?? false;
+      if (!hasSites) {
+        final result = await SetupSiteDialog.show(
+          context,
+          authService: widget.authService,
+          deviceUid: claimedUid,
+        );
+        if (result == true) {
+          _loadInitialData();
+        }
+      }
+    }
+  }
+
+  Future<void> _openJoinRequestFlow() async {
+    final success = await SubmitJoinRequestDialog.show(
+      context,
+      authService: widget.authService,
+    );
+    if (success == true) {
+      _loadInitialData();
     }
   }
 
@@ -2859,6 +2868,96 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   }
 
+  Future<void> _toggleDeviceDefect(DeviceRecord device) async {
+    if (device.isDefective) {
+      final (ok, msg) = await widget.authService.setDeviceDefectStatus(
+        deviceId: device.id,
+        isDefective: false,
+      );
+      if (mounted) {
+        _showMessage(msg ?? (ok ? 'Arıza kaydı kaldırıldı.' : 'İşlem başarısız.'));
+        if (ok) _loadCompanyDevices(force: true);
+      }
+      return;
+    }
+
+    final reasonController = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cihazı Arızalı Olarak İşaretle'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${device.deviceUid} cihazı için arıza kaydı oluşturulsun mu?'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Arıza Nedeni (İsteğe bağlı)',
+                hintText: 'Örn: Röle çekmiyor, Wi-Fi kopuyor...',
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.amber),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Arızalı İşaretle', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final (ok, msg) = await widget.authService.setDeviceDefectStatus(
+        deviceId: device.id,
+        isDefective: true,
+        defectiveReason: reasonController.text.trim().isNotEmpty ? reasonController.text.trim() : null,
+      );
+      if (mounted) {
+        _showMessage(msg ?? (ok ? 'Cihaz arızalı olarak işaretlendi.' : 'İşlem başarısız.'));
+        if (ok) _loadCompanyDevices(force: true);
+      }
+    }
+  }
+
+  Future<void> _releaseDeviceOwnership(DeviceRecord device) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cihazı Depoya Al'),
+        content: Text(
+          '${device.deviceUid} cihazının kapı ve sahip atamaları kaldırılarak cihaz serbest depoya alınacaktır.\n\nEmin misiniz?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Depoya Al', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final (ok, msg) = await widget.authService.releaseDeviceOwnership(deviceId: device.id);
+      if (mounted) {
+        _showMessage(msg ?? (ok ? 'Cihaz sahipliği sıfırlandı ve depoya alındı.' : 'İşlem başarısız.'));
+        if (ok) {
+          _loadCompanyDevices(force: true);
+          _loadSites(force: true);
+          _loadDoorControlSites();
+        }
+      }
+    }
+  }
+
 
 
   Future<void> _broadcastOtaCheck() async {
@@ -2912,8 +3011,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         devices: devices,
 
         userEmail: widget.authService.session?.email,
-
-        latestTargetVersion: '2.0.0',
 
       );
 
@@ -2985,6 +3082,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           : _profilePasswordController.text.trim(),
 
+      currentPassword: _profileCurrentPasswordController.text.isEmpty
+
+          ? null
+
+          : _profileCurrentPasswordController.text,
+
     );
 
 
@@ -3002,6 +3105,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else {
 
       _profilePasswordController.clear();
+
+      _profileCurrentPasswordController.clear();
 
       setState(() {});
 
@@ -3096,6 +3201,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         password: result.password.isEmpty ? null : result.password,
 
         isActive: result.isActive,
+
+        emailVerified: result.emailVerified == user.emailVerified ? null : result.emailVerified,
 
       );
 
@@ -3289,35 +3396,75 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+  /// Haftalık rapor için logları SAYFA SAYFA çeker (sunucu sayfa başına en fazla 200 kayıt
+  /// döndürür). Güvenlik sınırı: en fazla [_logPdfMaxPages] sayfa.
+  static const int _logPdfPageSize = 200;
+  static const int _logPdfMaxPages = 25;
+
+  Future<({List<DoorAccessLogRecord> logs, String? error, bool truncated})>
+      _fetchLogsForPdf({
+    required int siteCode,
+    int? doorId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final all = <DoorAccessLogRecord>[];
+    String? error;
+    var truncated = false;
+
+    for (var page = 1; page <= _logPdfMaxPages; page++) {
+      final (logPage, err) = await widget.authService.listDoorAccessLogs(
+        siteCode: siteCode,
+        doorId: doorId,
+        startDate: startDate,
+        endDate: endDate,
+        page: page,
+        pageSize: _logPdfPageSize,
+      );
+      if (logPage == null) {
+        error = err;
+        break;
+      }
+      all.addAll(logPage.logs);
+      if (logPage.logs.isEmpty || page >= logPage.totalPages) {
+        break;
+      }
+      if (page == _logPdfMaxPages) {
+        truncated = true;
+      }
+    }
+    return (logs: all, error: error, truncated: truncated);
+  }
+
   Future<void> _exportDoorLogsPdf(SiteRecord site, DoorRecord door) async {
-
     try {
-
       _showMessage('${door.doorName} haftalık geçiş log raporu hazırlanıyor...');
 
       final now = DateTime.now();
-
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
-
+      final result = await _fetchLogsForPdf(
         siteCode: site.id,
-
         doorId: door.id,
         startDate: sevenDaysAgo,
-        pageSize: 200,
+        endDate: now,
       );
 
-      if (logsPage == null || logsPage.logs.isEmpty) {
+      if (result.logs.isEmpty) {
         _showMessage(
-          error ??
+          result.error ??
               '${door.doorName} için son 7 güne ait kapı geçiş kaydı bulunamadı.',
         );
         return;
       }
+      if (result.error != null) {
+        _showMessage('Bazı kayıtlar alınamadı; rapor eksik olabilir.');
+      } else if (result.truncated) {
+        _showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');
+      }
 
       await PdfLogsService.printOrShareLogsPdf(
-        logs: logsPage.logs,
+        logs: result.logs,
         siteName: site.name,
         doorNameFilter: door.doorName,
         startDate: sevenDaysAgo,
@@ -3331,54 +3478,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _exportSiteLogsPdf(SiteRecord site) async {
     try {
       _showMessage('${site.name} haftalık geçiş log raporu hazırlanıyor...');
+
       final now = DateTime.now();
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-      final (logsPage, error) = await widget.authService.listDoorAccessLogs(
+      final result = await _fetchLogsForPdf(
         siteCode: site.id,
         startDate: sevenDaysAgo,
-        pageSize: 200,
+        endDate: now,
       );
 
-
-
-      if (logsPage == null || logsPage.logs.isEmpty) {
-
+      if (result.logs.isEmpty) {
         _showMessage(
-
-          error ??
-
+          result.error ??
               '${site.name} için son 7 güne ait kapı geçiş kaydı bulunamadı.',
-
         );
-
         return;
-
+      }
+      if (result.error != null) {
+        _showMessage('Bazı kayıtlar alınamadı; rapor eksik olabilir.');
+      } else if (result.truncated) {
+        _showMessage('Çok sayıda kayıt var; rapor en yeni kayıtlarla sınırlandırıldı.');
       }
 
-
-
       await PdfLogsService.printOrShareLogsPdf(
-
-        logs: logsPage.logs,
-
+        logs: result.logs,
         siteName: site.name,
-
         startDate: sevenDaysAgo,
-
         endDate: now,
-
       );
-
     } catch (e) {
-
       _showMessage('Geçiş raporu PDF oluşturulurken hata: $e');
-
     }
-
   }
-
-
 
   Future<void> _handleGlobalRefresh() async {
     final session = widget.authService.session;
@@ -3391,6 +3523,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_doorControlDoor != null) {
           await _loadDoorRuntimeStatus(_doorControlDoor!.id);
         }
+        await _individualHomeKey.currentState?.loadAll();
         break;
       case SirketMenuItem.siteler:
       case SirketMenuItem.daireKullanicilariYonetimi:
@@ -3423,6 +3556,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.siteOnayTalepleri:
         await _loadPendingSiteApprovals(force: true);
         break;
+      case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
       case SirketMenuItem.profilim:
@@ -3430,37 +3564,122 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// AppBar eylem düğmesi: 44 dp dokunma hedefi. `visualDensity` açıkça standart: masaüstünde varsayılan
+  /// `compact` yoğunluğu hedefi 36 dp'ye indirirdi.
+  Widget _appBarAction({
+    required String tooltip,
+    required Widget icon,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      visualDensity: VisualDensity.standard,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      padding: EdgeInsets.zero,
+      tooltip: tooltip,
+      icon: icon,
+      onPressed: onPressed,
+    );
+  }
+
+  /// AppBar'daki "Sakin Modu / Yönetici Paneli" hapı (çift modlu roller): dokunma hedefi en az 44 dp.
+  /// Dar ekranda (< 400 dp) ya da büyük yazıda (> 1.3x) yalnız ikon gösterilir (etiket Tooltip + Semantics
+  /// ile korunur); etiketli hâl, kalan genişliği aşarsa üç nokta ile kısalır (taşma yok).
+  /// [otherActions]: hapın yanındaki 48 dp'lik düğme sayısı (genişlik payı hesabı için).
+  Widget _buildModeToggle(BuildContext context, {required int otherActions}) {
+    final p = context.palette;
+    final tone = _isResidentMode ? AppTone.primary : AppTone.success;
+    final ink = tone.ink(p);
+    final label = _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu';
+    final width = MediaQuery.sizeOf(context).width;
+    final iconOnly = width < 400 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    // Hapa ayrılabilecek en büyük genişlik: ekran - menü düğmesi (48) - öteki eylemler (48'er) - boşluklar.
+    final maxWidth = (width - 48 - otherActions * 48 - 6 - 16).clamp(44.0, double.infinity).toDouble();
+
+    Widget pill = Material(
+      color: tone.tint(p),
+      shape: StadiumBorder(side: BorderSide(color: tone.hue, width: 1.2)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: () {
+          setState(() {
+            _isResidentMode = !_isResidentMode;
+            if (!_isResidentMode) {
+              _selectedMenu = SirketMenuItem.dashboard;
+            }
+          });
+        },
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 44, minHeight: 44, maxWidth: maxWidth),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 0 : AppSpace.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
+                  size: iconOnly ? 20 : 16,
+                  color: ink,
+                ),
+                if (!iconOnly) ...[
+                  const SizedBox(width: AppSpace.xs),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // container: hap ekran okuyucuda AppBar düğümüne karışmasın, kendi düğümü (düğme + etiket) olsun.
+    pill = iconOnly
+        ? Tooltip(
+            message: label,
+            excludeFromSemantics: true,
+            child: Semantics(container: true, button: true, label: label, child: pill),
+          )
+        : Semantics(container: true, button: true, child: pill);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
+      child: pill,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final session = widget.authService.session!;
+    final palette = context.palette;
+    // Alt başlık bloğu (başlık 18 + alt satır 12 punto) yazı ölçeğiyle büyür; AppBar yüksekliği de aynı
+    // oranda artar (aksi hâlde araç çubuğu sıkışır ve 44 dp'lik eylem düğmeleri küçülür). Satır
+    // yüksekliği AÇIKÇA 1,2'dir (aşağıdaki iki Text): verilmezse Material'in varsayılan metin stilinden
+    // (temada bodyMedium.height = 1,4) miras kalır ve blok ölçek 1,0'da bile 50 dp'yi aşardı.
+    // Yükseklik = alt boşluk 12 + aralık 2 + yuvarlama payı 2 + 1,2 x (ölçekli 18 + ölçekli 12): metin
+    // motoru her satırın ascent/descent değerini tam sayıya yuvarlar (satır başına en çok ~1 dp sapma).
+    final textScaler = MediaQuery.textScalerOf(context);
+    final bottomHeight = 16 + 1.2 * (textScaler.scale(18) + textScaler.scale(12));
+    final showWidgetAction = session.role != UserRole.superUser && DoorWidgetService.supportsPinRequest;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _titleForMenu(_selectedMenu),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                letterSpacing: -0.3,
-              ),
-            ),
-            Text(
-              '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: isDark ? session.role.lightAccentColor : session.role.accentColor,
-              ),
-            ),
-          ],
-        ),
+        titleSpacing: 0,
+        leadingWidth: 48,
+        title: null,
         elevation: 0,
+        // Kaydırınca başlık bandı M3 yüzey tonuyla griye dönmesin (tema ile de aynı değer).
+        scrolledUnderElevation: 0,
         backgroundColor: isDark
             ? const Color(0xFF0F172A).withValues(alpha: 0.8)
             : Colors.white.withValues(alpha: 0.88),
@@ -3475,79 +3694,71 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         actions: [
           if (_canToggleDualMode)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _isResidentMode = !_isResidentMode;
-                    if (!_isResidentMode) {
-                      _selectedMenu = SirketMenuItem.dashboard;
-                    }
-                  });
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _isResidentMode
-                        ? const Color(0xFF2563EB).withValues(alpha: isDark ? 0.25 : 0.12)
-                        : const Color(0xFF10B981).withValues(alpha: isDark ? 0.25 : 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
-                        size: 15,
-                        color: _isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isResidentMode ? 'Yönetici Paneli' : 'Sakin Modu',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: _isResidentMode
-                              ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8))
-                              : (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          if (session.role != UserRole.superUser)
-            IconButton(
+            _buildModeToggle(context, otherActions: showWidgetAction ? 3 : 2),
+          // Widget iğneleme yalnızca mobilde çalışır; masaüstünde "gönderildi" mesajı yanıltıcı olurdu.
+          if (showWidgetAction)
+            _appBarAction(
               tooltip: 'Masaüstüne Widget Ekle',
               icon: Icon(
                 Icons.widgets_outlined,
-                color: isDark ? const Color(0xFF6EE7B7) : AppColors.emerald,
-                size: 22,
+                color: AppTone.success.ink(palette),
+                size: 20,
               ),
               onPressed: () async {
                 await DoorWidgetService.instance.requestPinWidget();
                 _showMessage('Masaüstü widget ekleme isteği gönderildi.');
               },
             ),
-          IconButton(
+          _appBarAction(
             tooltip: 'Yenile',
-            icon: const Icon(Icons.refresh_rounded, size: 22),
+            icon: const Icon(Icons.refresh_rounded, size: 20),
             onPressed: _handleGlobalRefresh,
           ),
-          IconButton(
+          _appBarAction(
             tooltip: 'Çıkış Yap',
-            icon: const Icon(Icons.logout_rounded, color: AppColors.roseLight, size: 22),
+            icon: Icon(Icons.logout_rounded, color: AppTone.danger.ink(palette), size: 20),
             onPressed: () => widget.authService.logout(),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
         ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(bottomHeight),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            alignment: Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _titleForMenu(_selectedMenu),
+                  style: TextStyle(
+                    fontSize: 18,
+                    height: 1.2,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
+                    letterSpacing: -0.3,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: session.role.tone.ink(palette),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       drawer: YanMenu(
         fullName: session.fullName,
@@ -3579,12 +3790,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onRefresh: _handleGlobalRefresh,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.all(horizontalPadding),
+                padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1100),
-                    child: _buildContent(session),
+                    // RepaintBoundary: SingleChildScrollView içeriği her kaydırma karesinde baştan boyanır;
+                    // yüzlerce daire/kullanıcı kartlı sayfalarda bu kare başına binlerce boyama demekti.
+                    // Sınır sayesinde içerik önbellekteki katman olarak kaydırılır.
+                    child: RepaintBoundary(
+                      // Kapı durumu yoklaması yalnız bu dinleyiciyi yeniden kurar (Scaffold/AppBar/Drawer değil).
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _doorPanelRevision,
+                        builder: (context, _, _) =>
+                            _buildContent(widget.authService.session ?? session),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -3598,7 +3819,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+  /// Sayfa gövdesi: menü (ya da Sakin/Yönetici modu) değişince YALNIZ yeni içerik kısa bir solma + hafif
+  /// kayma ile gelir ([PageEntry]); eski içerik hemen kalkar. `AnimatedSwitcher` bilerek KULLANILMAZ:
+  /// iki görünüm aynı anda ağaçta kalır (GlobalKey çakışması, testlerde çift sonuç). Anahtar, erişimsiz
+  /// menüyü panele çeviren [_buildContentView] çalıştıktan SONRA okunur. Yoklamayla yeniden kurulumda
+  /// anahtar aynı kalır: animasyon yeniden başlamaz.
   Widget _buildContent(UserSession session) {
+    final view = _buildContentView(session);
+    return PageEntry(
+      key: ValueKey<String>('${_selectedMenu.name}-$_isResidentMode'),
+      child: view,
+    );
+  }
+
+  Widget _buildContentView(UserSession session) {
 
     if (!_canAccessMenu(_selectedMenu, session.role)) {
 
@@ -3611,17 +3845,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     switch (_selectedMenu) {
       case SirketMenuItem.dashboard:
       case SirketMenuItem.ellerSerbest:
-        if (_isResidentMode ||
-            ((session.role == UserRole.individual && (_doorControlSitesPage?.sites.isEmpty ?? true)) ||
-            (session.role == UserRole.siteManager &&
-                (_doorControlSitesPage?.sites.isEmpty ?? true) &&
-                (_doorControlStructure?.doors.isEmpty ?? true)))) {
+        if (_showsIndividualHome(session)) {
           return IndividualHomeView(
+            key: _individualHomeKey,
             session: session,
             authService: widget.authService,
             onRefreshAll: _loadInitialData,
           );
         }
+        _renderedDoorPanel = _DoorPanelSnapshot.of(this);
         return DashboardView(
 
           session: session,
@@ -3644,17 +3876,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           isOpeningDoor: _isOpeningDoor,
 
+          successTick: _doorOpenOkTick,
+
           doorStatusError: _doorStatusError,
 
-          canTryLocalDoorOpen:
-
-              _doorControlDoor != null && _isDeviceLocalReachable,
+          // "Yerel Ağda Aktif" yalnızca cihaz yerelde görünüyorsa VE yerel açma gerçekten
+          // mümkünse (kapı politikası izin veriyor + sunucudan alınmış geçerli token var).
+          canTryLocalDoorOpen: _doorControlDoor != null &&
+              _isDeviceLocalReachable &&
+              widget.authService.canTryLocalDoorOpen(_doorControlDoor!),
 
           isPhoneOnWifi: _isPhoneOnWifi,
 
           onSelectSite: _selectDoorControlSite,
 
-          onSelectDoor: _selectDoorControlDoor,
+          onSelectDoor: (doorId) =>
+              _selectDoorControlDoor(doorId, userInitiated: true),
 
           onOpenDoor: _openDoor,
 
@@ -3710,7 +3947,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         if (session.role == UserRole.apartmentOwner) {
 
-          return const SizedBox.shrink();
+          // Sakin profilini güncelleyemez: boş sayfa yerine salt okunur hesap bilgileri.
+          return ResidentProfileView(session: session);
 
         }
 
@@ -3727,6 +3965,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           phoneController: _profilePhoneController,
 
           passwordController: _profilePasswordController,
+
+          currentPasswordController: _profileCurrentPasswordController,
 
           isSaving: _isSavingProfile,
 
@@ -3966,16 +4206,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         );
 
-
+      case SirketMenuItem.katilimVeKurulum:
+        return JoinAndSetupView(
+          authService: widget.authService,
+          session: session,
+          onOpenClaimDevice: _openClaimDeviceFlow,
+          onOpenJoinSite: _openJoinRequestFlow,
+          onRefreshAll: _loadInitialData,
+        );
 
       case SirketMenuItem.cihazEkle:
-
+        if (session.role == UserRole.individual) {
+          return DeviceAddView(
+            title: 'Yönetici Olarak Cihaz Ekle',
+            qrTitle: 'Kutu QR Kodunu Okut',
+            qrDescription:
+                'Cihaz ambalaj kutusundaki QR kodu kameraya göstererek cihazı hesabınıza bağlayın ve yeni site kurulumunu başlatın.',
+            qrButtonLabel: 'QR Kodunu Okut',
+            manualTitle: 'Seri No / UID ile Cihaz Ekle',
+            manualDescription:
+                'Kamera kullanamıyorsanız kutu üzerindeki Seri No veya UID kodunu elle girerek cihazı bağlayın.',
+            manualButtonLabel: 'Seri No Gir',
+            onOpenQrRegistration: _openClaimDeviceFlow,
+            onOpenManualRegistration: _openClaimDeviceFlow,
+          );
+        }
         return DeviceAddView(
-
           onOpenQrRegistration: _openDeviceRegistrationFlow,
-
           onOpenManualRegistration: _openManualDeviceRegistrationFlow,
-
         );
 
 
@@ -4009,6 +4267,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onDeleteDevice: _deleteCompanyDevice,
           onDownloadFirmwareReportPdf: _exportFirmwareReportPdf,
           onRegisterNewDevice: _openClaimDeviceFlow,
+          onToggleDefect: _toggleDeviceDefect,
+          onReleaseOwnership: _releaseDeviceOwnership,
         );
 
 
@@ -4083,3 +4343,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 }
 
+/// Ekrandaki kapı panelinin (DashboardView) yoklamayla değişebilen değerlerinin anlık görüntüsü.
+/// Arka plan yoklaması sonucu ekrandakiyle aynıysa panel yeniden kurulmaz.
+class _DoorPanelSnapshot {
+  _DoorPanelSnapshot.of(_HomePageState state)
+      : status = state._doorRuntimeStatus,
+        isLoadingStatus = state._isLoadingDoorStatus,
+        statusError = state._doorStatusError,
+        isOpeningDoor = state._isOpeningDoor,
+        isPhoneOnWifi = state._isPhoneOnWifi,
+        canTryLocalDoorOpen = state._doorControlDoor != null &&
+            state._isDeviceLocalReachable &&
+            state.widget.authService.canTryLocalDoorOpen(state._doorControlDoor!);
+
+  final DoorRuntimeStatus? status;
+  final bool isLoadingStatus;
+  final String? statusError;
+  final bool isOpeningDoor;
+  final bool isPhoneOnWifi;
+  final bool canTryLocalDoorOpen;
+
+  bool sameAs(_DoorPanelSnapshot other) {
+    final a = status;
+    final b = other.status;
+    final sameStatus = identical(a, b) || (a != null && b != null && a.hasSameFieldsAs(b));
+    return sameStatus &&
+        isLoadingStatus == other.isLoadingStatus &&
+        statusError == other.statusError &&
+        isOpeningDoor == other.isOpeningDoor &&
+        isPhoneOnWifi == other.isPhoneOnWifi &&
+        canTryLocalDoorOpen == other.canTryLocalDoorOpen;
+  }
+}

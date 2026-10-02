@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { pool } from '../src/db.js';
+import { buildMqttAclText, partitionAclDevices } from '../src/mqtt_acl_sync.js';
 
 const dryRun = process.argv.includes('--dry-run');
 const passwdFile = process.env.MQTT_PASSWD_FILE || '/etc/mosquitto/passwd';
@@ -13,28 +14,6 @@ const legacyUsers = String(process.env.MQTT_LEGACY_USERS || 'app_client,esp32_do
   .map((user) => user.trim())
   .filter(Boolean);
 
-function buildAcl(devices) {
-  const lines = [
-    'user api_bridge',
-    'topic read device/+/state',
-    'topic read device/+/event',
-    'topic read device/+/availability',
-    'topic write device/+/cmd',
-    '',
-  ];
-
-  for (const device of devices) {
-    lines.push(`user ${device.mqtt_username}`);
-    lines.push(`topic read device/${device.device_uid}/cmd`);
-    lines.push(`topic write device/${device.device_uid}/state`);
-    lines.push(`topic write device/${device.device_uid}/event`);
-    lines.push(`topic write device/${device.device_uid}/availability`);
-    lines.push('');
-  }
-
-  return `${lines.join('\n').trim()}\n`;
-}
-
 function runMosquittoPasswd(username, password) {
   const result = spawnSync(
     mosquittoPasswd,
@@ -43,8 +22,8 @@ function runMosquittoPasswd(username, password) {
   );
 
   if (result.status !== 0) {
-    const detail = result.stderr || result.stdout || 'bilinmeyen hata';
-    throw new Error(`mosquitto_passwd ${username} icin basarisiz: ${detail}`);
+    // Parola komut satirinda gecer; hata metni parolayi icermez ama yine de ham cikti yazdirilmaz.
+    throw new Error(`mosquitto_passwd ${username} icin basarisiz (kod: ${result.status}).`);
   }
 }
 
@@ -67,8 +46,7 @@ function deleteMosquittoUser(username) {
   );
 
   if (result.status !== 0) {
-    const detail = result.stderr || result.stdout || 'bilinmeyen hata';
-    throw new Error(`mosquitto_passwd ${username} silme basarisiz: ${detail}`);
+    throw new Error(`mosquitto_passwd ${username} silme basarisiz (kod: ${result.status}).`);
   }
 }
 
@@ -80,18 +58,23 @@ async function main() {
       AND mqtt_password IS NOT NULL
     ORDER BY device_uid ASC
   `);
-  const devices = result.rows;
-  const acl = buildAcl(devices);
+
+  // Gecersiz UID/kullanici adi/parola iceren kayitlar ACL ve passwd'ye alinmaz (satir enjeksiyonunu onler).
+  const { valid: devices, invalid } = partitionAclDevices(result.rows);
+  for (const item of invalid) {
+    console.error(`UYARI: cihaz atlandi (${item.reason}): ${JSON.stringify(item.device_uid)}`);
+  }
+  const acl = buildMqttAclText(devices);
 
   if (dryRun) {
     console.log(acl);
-    console.error(`${devices.length} cihaz ACL ciktisi uretildi.`);
+    console.error(`${devices.length} cihaz ACL ciktisi uretildi (${invalid.length} kayit atlandi).`);
     return;
   }
 
   mkdirSync(dirname(aclFile), { recursive: true });
   const tmpAclFile = `${aclFile}.tmp-${process.pid}`;
-  writeFileSync(tmpAclFile, acl, { encoding: 'utf8', mode: 0o640 });
+  writeFileSync(tmpAclFile, acl, { encoding: 'utf8', mode: 0o644 });
   renameSync(tmpAclFile, aclFile);
 
   for (const device of devices) {
@@ -108,8 +91,18 @@ async function main() {
     }
   }
 
-  console.log(`${devices.length} cihaz MQTT ACL/passwd senkronu tamamlandi.`);
-  console.log('Mosquitto icin: sudo systemctl reload mosquitto || sudo systemctl restart mosquitto');
+  // Hata ayiklama icin broker log kuyrugu yalnizca acikca istenirse yazdirilir
+  // (cikti API yanitina/loglara girebilir; istemci IP/kullanici adi icerir).
+  if (process.env.MQTT_SYNC_SHOW_LOG === '1') {
+    try {
+      const logData = readFileSync('/var/log/mosquitto/mosquitto.log', 'utf8');
+      const logLines = logData.trim().split('\n');
+      console.log('--- LAST 40 MOSQUITTO LOG LINES ---');
+      console.log(logLines.slice(-40).join('\n'));
+    } catch (e) {
+      console.log('Log read err:', e.code || 'hata');
+    }
+  }
 }
 
 main()

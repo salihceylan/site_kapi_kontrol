@@ -29,6 +29,43 @@ class VoiceDoorResult {
   });
 }
 
+/// Sesli komutun kapıyla eşleşme durumu.
+enum DoorMatchStatus {
+  /// Tek ve net bir kapı bulundu.
+  matched,
+
+  /// Komutta "aç" fiili yok (örn. yalnızca kapı adı / alakasız cümle).
+  noOpenIntent,
+
+  /// Ters niyet: "kapat", "kilitle", "açma" gibi.
+  reverseIntent,
+
+  /// Birden çok kapı eşit derecede uyuyor ya da hangi kapı olduğu söylenmedi.
+  ambiguous,
+
+  /// Söylenen şey kullanıcının kapıları arasında yok.
+  notFound,
+
+  /// Kullanıcının kapısı yok.
+  noDoors,
+}
+
+class DoorMatchResult {
+  const DoorMatchResult(
+    this.status, {
+    this.door,
+    this.candidates = const <DoorRecord>[],
+  });
+
+  final DoorMatchStatus status;
+  final DoorRecord? door;
+
+  /// `ambiguous` durumunda kullanıcıya sorulabilecek aday kapılar.
+  final List<DoorRecord> candidates;
+
+  bool get isMatch => status == DoorMatchStatus.matched && door != null;
+}
+
 class VoiceDoorService extends ChangeNotifier {
   static const String _prefHandsFreeKey = 'hands_free_auto_listen';
 
@@ -47,6 +84,10 @@ class VoiceDoorService extends ChangeNotifier {
   DateTime? _lastCommandProcessedAt;
   List<DoorRecord>? _lastCandidateDoors;
 
+  /// Oturum her kapandığında artar; eski oturumdan kalan asenkron işler sonucu yok sayar.
+  int _sessionEpoch = 0;
+  bool _disposed = false;
+
   VoiceDoorService({required AuthService authService})
       : _authService = authService {
     if (!kIsWeb) {
@@ -64,16 +105,46 @@ class VoiceDoorService extends ChangeNotifier {
   bool get ttsEnabled => _ttsEnabled;
   bool get handsFreeAutoListen => _handsFreeAutoListen;
 
+  @visibleForTesting
+  List<DoorRecord>? get debugLastCandidateDoors => _lastCandidateDoors;
+
   set ttsEnabled(bool value) {
     _ttsEnabled = value;
     notifyListeners();
+  }
+
+  /// Oturum kapanınca çağrılır: önceki kullanıcıya ait kapı listesini, eşleşmeyi
+  /// ve konuşma durumunu temizler (kullanıcı değişince eski kapılar kullanılmasın).
+  /// `handsFreeAutoListen` gibi cihaz tercihleri korunur.
+  void clearSession() {
+    _sessionEpoch++;
+    _lastCandidateDoors = null;
+    _lastCommandProcessedAt = null;
+    _matchedDoor = null;
+    _recognizedWords = '';
+    _feedbackText = '';
+    _isProcessingCommand = false;
+    _status = VoiceStatus.idle;
+    if (!kIsWeb) {
+      try {
+        unawaited(_speech.stop().catchError((_) {}));
+      } catch (_) {}
+      try {
+        unawaited(_tts.stop().catchError((_) {}));
+      } catch (_) {}
+    }
+    if (!_disposed) {
+      notifyListeners();
+    }
   }
 
   Future<void> loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _handsFreeAutoListen = prefs.getBool(_prefHandsFreeKey) ?? true;
-      notifyListeners();
+      if (!_disposed) {
+        notifyListeners();
+      }
     } catch (_) {}
   }
 
@@ -285,6 +356,7 @@ class VoiceDoorService extends ChangeNotifier {
     _isProcessingCommand = true;
     _lastCommandProcessedAt = now;
     _recognizedWords = '';
+    final epoch = _sessionEpoch;
 
     try {
       if (_speech.isListening) {
@@ -301,6 +373,14 @@ class VoiceDoorService extends ChangeNotifier {
           candidateDoors ?? _lastCandidateDoors ?? <DoorRecord>[];
       if (doors.isEmpty) {
         final (fetchedDoors, _) = await _authService.listMyDoors();
+        if (epoch != _sessionEpoch) {
+          // Oturum bu sırada kapandı: eski kullanıcının kapılarını saklama/kullanma.
+          return const VoiceDoorResult(
+            success: false,
+            recognizedText: '',
+            feedbackMessage: 'Oturum kapandı.',
+          );
+        }
         if (fetchedDoors != null) {
           doors = fetchedDoors;
           _lastCandidateDoors = doors;
@@ -320,10 +400,10 @@ class VoiceDoorService extends ChangeNotifier {
         );
       }
 
-      final matched = matchDoorFromCommand(command, doors);
-      if (matched == null) {
-        const message =
-            'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
+      final resolution = resolveDoorFromCommand(command, doors);
+      if (!resolution.isMatch) {
+        // Belirsiz / ters niyetli / anlaşılamayan komutta kapı ASLA açılmaz.
+        final message = _messageForUnmatched(resolution);
         _status = VoiceStatus.error;
         _feedbackText = message;
         notifyListeners();
@@ -334,6 +414,7 @@ class VoiceDoorService extends ChangeNotifier {
           feedbackMessage: message,
         );
       }
+      final matched = resolution.door!;
 
       if (matched.assignedDeviceUid == null ||
           matched.assignedDeviceUid!.trim().isEmpty) {
@@ -348,6 +429,14 @@ class VoiceDoorService extends ChangeNotifier {
           recognizedText: command,
           matchedDoor: matched,
           feedbackMessage: message,
+        );
+      }
+
+      if (epoch != _sessionEpoch) {
+        return const VoiceDoorResult(
+          success: false,
+          recognizedText: '',
+          feedbackMessage: 'Oturum kapandı.',
         );
       }
 
@@ -391,133 +480,363 @@ class VoiceDoorService extends ChangeNotifier {
     }
   }
 
-  /// Doğal Türkçe ses komutunu kapılarla akıllı eşleştirir
+  static String _messageForUnmatched(DoorMatchResult resolution) {
+    switch (resolution.status) {
+      case DoorMatchStatus.reverseIntent:
+        return 'Kapıyı kapatma veya kilitleme komutu desteklenmiyor. Açmak için "kapıyı aç" deyin.';
+      case DoorMatchStatus.ambiguous:
+        final names = resolution.candidates
+            .take(3)
+            .map((d) => d.doorName.trim())
+            .where((n) => n.isNotEmpty)
+            .toList();
+        final suffix = names.isEmpty ? '' : ' (${names.join(', ')})';
+        return 'Hangi kapıyı açmamı istersiniz?$suffix Örneğin "1. kapıyı aç" veya kapının adını söyleyin.';
+      case DoorMatchStatus.notFound:
+        return 'Bu isimde bir kapı bulunamadı. Lütfen kapının adını veya numarasını söyleyin.';
+      case DoorMatchStatus.noDoors:
+        return 'Tanımlı bir kapı bulunamadı.';
+      case DoorMatchStatus.noOpenIntent:
+      case DoorMatchStatus.matched:
+        return 'Anlaşılamadı. Lütfen örneğin "1. kapıyı aç" veya "otopark kapısını aç" deyin.';
+    }
+  }
+
+  /// Doğal Türkçe ses komutunu kapılarla eşleştirir; yalnızca TEK ve net eşleşmede
+  /// kapı döndürür (aksi halde null). Ayrıntı için [resolveDoorFromCommand].
   static DoorRecord? matchDoorFromCommand(
     String text,
     List<DoorRecord> availableDoors,
   ) {
+    final result = resolveDoorFromCommand(text, availableDoors);
+    return result.isMatch ? result.door : null;
+  }
+
+  // "aç" fiilinin (normalize edilmiş) kelime-sınırlı biçimleri. Alt dize eşleşmesi
+  // YOKTUR: "acil", "bacak", "arac" gibi kelimeler "ac" sayılmaz.
+  static const Set<String> _openVerbs = {
+    'ac',
+    'acin',
+    'acsana',
+    'acsan',
+    'acsaniz',
+    'acar',
+    'acarmisin',
+    'acarmisiniz',
+    'acabilir',
+    'acabilirmisin',
+    'acalim',
+  };
+
+  static const Set<String> _reverseWords = {
+    'kapa',
+    'dur',
+    'durdur',
+    'iptal',
+    'vazgec',
+    'vazgectim',
+    'hayir',
+    'degil',
+    'yapma',
+    'istemiyorum',
+    'istemem',
+  };
+
+  static const Set<String> _fillerWords = {
+    'lutfen',
+    'bana',
+    'hemen',
+    'simdi',
+    'hadi',
+    'haydi',
+    'ya',
+    'misin',
+    'misiniz',
+  };
+
+  static const Set<String> _stopWords = {
+    'kapi',
+    'kapisi',
+    'kapiyi',
+    'kapisini',
+    'kapiya',
+    'site',
+    'sitesi',
+    'sitenin',
+    'ac',
+    'aci',
+    'acma',
+    'lutfen',
+    've',
+    'ile',
+    'bana',
+    'biraz',
+  };
+
+  static const Map<String, int> _numberWords = {
+    'bir': 1,
+    'birinci': 1,
+    'iki': 2,
+    'ikinci': 2,
+    'uc': 3,
+    'ucuncu': 3,
+    'dort': 4,
+    'dorduncu': 4,
+    'bes': 5,
+    'besinci': 5,
+    'alti': 6,
+    'altinci': 6,
+    'yedi': 7,
+    'yedinci': 7,
+    'sekiz': 8,
+    'sekizinci': 8,
+    'dokuz': 9,
+    'dokuzuncu': 9,
+    'on': 10,
+    'onuncu': 10,
+  };
+
+  static final RegExp _whitespace = RegExp(r'\s+');
+
+  /// Sesli komutu ayrıntılı çözer. Güvenlik kuralları:
+  ///  * Komutta kelime-sınırlı bir "aç" fiili olmalı;
+  ///  * "kapat/kilitle/açma/kapatma" gibi ters niyetler REDDEDİLİR;
+  ///  * Eşleşme belirsiz ya da birden çok kapıya eşit uyuyorsa AÇILMAZ;
+  ///  * "İlk kapı" varsayımı yalnızca kullanıcının TEK kapısı varsa geçerlidir.
+  static DoorMatchResult resolveDoorFromCommand(
+    String text,
+    List<DoorRecord> availableDoors,
+  ) {
     if (availableDoors.isEmpty) {
-      return null;
+      return const DoorMatchResult(DoorMatchStatus.noDoors);
     }
 
     final normalized = _normalizeTurkish(text);
     if (normalized.isEmpty) {
-      return null;
+      return const DoorMatchResult(DoorMatchStatus.noOpenIntent);
     }
+    final tokens =
+        normalized.split(_whitespace).where((t) => t.isNotEmpty).toList();
 
-    // Tek kapı varsa ve kullanıcı "aç" / "kapı" diyorsa
-    if (availableDoors.length == 1) {
-      if (normalized.contains('ac') ||
-          normalized.contains('kapi') ||
-          normalized.contains('kapiyi') ||
-          normalized.contains('kapi')) {
-        return availableDoors.first;
+    // 1. Ters niyet / olumsuzlama
+    for (final token in tokens) {
+      if (token.startsWith('kapat') ||
+          token.startsWith('kilit') ||
+          token.startsWith('kapama') ||
+          token.startsWith('acma') || // açma, açmayın, açmasın, açmak...
+          _reverseWords.contains(token)) {
+        return const DoorMatchResult(DoorMatchStatus.reverseIntent);
       }
     }
 
-    final extractedNumber = _extractDoorNumber(normalized);
-    const stopWords = {
-      'kapi',
-      'kapisi',
-      'kapiyi',
-      'site',
-      'sitesi',
-      'ac',
-      'aci',
-      'acma',
-      'lutfen',
-      've',
-      'ile',
-      'bana',
-      'biraz'
-    };
+    // 2. "aç" fiili şart
+    if (!tokens.any(_openVerbs.contains)) {
+      return const DoorMatchResult(DoorMatchStatus.noOpenIntent);
+    }
 
-    DoorRecord? bestDoor;
-    int highestScore = 0;
+    // 3. Kapılara puan ver
+    final extractedNumber = _extractDoorNumber(tokens);
 
-    for (final door in availableDoors) {
+    final scores = List<int>.filled(availableDoors.length, 0);
+    for (int index = 0; index < availableDoors.length; index++) {
+      final door = availableDoors[index];
       int score = 0;
       final doorNorm = _normalizeTurkish(door.doorName);
+      final doorTokens =
+          doorNorm.split(_whitespace).where((t) => t.isNotEmpty).toList();
 
-      // 1. Kapı index / sayı eşleşmesi
+      // 3a. Kapı index / sayı eşleşmesi
       if (extractedNumber != null) {
         if (door.doorIndex == extractedNumber) {
           score += 20;
-        } else if (doorNorm.contains('$extractedNumber')) {
+        } else if (doorTokens.contains('$extractedNumber')) {
           score += 15;
         }
       }
 
-      // 2. Tam veya parça isim geçişi
-      if (doorNorm.isNotEmpty && normalized.contains(doorNorm)) {
+      // 3b. Tam kapı adı (kelime sınırlı; son kelime ek alabilir: "ön kapıyı")
+      if (doorTokens.isNotEmpty && _containsPhrase(tokens, doorTokens)) {
         score += 30;
       }
 
-      // 3. Özgül kelime eşleşmesi (stop words hariç)
-      final doorWords = doorNorm.split(RegExp(r'\s+'));
-      for (final word in doorWords) {
-        if (word.length >= 3 &&
-            !stopWords.contains(word) &&
-            normalized.contains(word)) {
+      // 3c. Özgül kelime eşleşmesi (stop words hariç)
+      for (final word in doorTokens) {
+        if (_isSpecificWord(word) && _commandHasWord(tokens, word)) {
           score += 10;
         }
       }
 
-      if (score > highestScore) {
-        highestScore = score;
-        bestDoor = door;
+      // 3d. Site adı (çok-siteli kullanıcıda aynı adlı kapıları ayırmak için)
+      final siteNorm = _normalizeTurkish(door.siteName ?? '');
+      for (final word in siteNorm.split(_whitespace)) {
+        if (_isSpecificWord(word) && _commandHasWord(tokens, word)) {
+          score += 5;
+        }
+      }
+
+      scores[index] = score;
+    }
+
+    int highest = 0;
+    for (final score in scores) {
+      if (score > highest) highest = score;
+    }
+
+    if (highest > 0) {
+      final top = <DoorRecord>[
+        for (int i = 0; i < availableDoors.length; i++)
+          if (scores[i] == highest) availableDoors[i],
+      ];
+      if (top.length == 1) {
+        return DoorMatchResult(DoorMatchStatus.matched, door: top.first);
+      }
+      // Eşit puan: hangisi olduğu belirsiz -> AÇMA, sor.
+      return DoorMatchResult(DoorMatchStatus.ambiguous, candidates: top);
+    }
+
+    // 4. Hiçbir kapı adı/numarası söylenmedi. Genel "kapıyı aç" ya da yalnız "aç".
+    final mentionsDoorNoun = tokens.any(_isDoorNoun);
+    final onlyVerb = tokens.every(
+      (t) => _openVerbs.contains(t) || _fillerWords.contains(t),
+    );
+
+    if (mentionsDoorNoun || onlyVerb) {
+      if (availableDoors.length == 1) {
+        // Son çare "ilk kapı" YALNIZCA tek kapı varsa.
+        return DoorMatchResult(
+          DoorMatchStatus.matched,
+          door: availableDoors.first,
+        );
+      }
+      return DoorMatchResult(
+        DoorMatchStatus.ambiguous,
+        candidates: List<DoorRecord>.of(availableDoors),
+      );
+    }
+
+    // Kapıyla ilgisiz bir şey açılmak isteniyor ("pencereyi aç").
+    return const DoorMatchResult(DoorMatchStatus.notFound);
+  }
+
+  static bool _isDoorNoun(String token) {
+    return token.startsWith('kapi') ||
+        token == 'bariyer' ||
+        token == 'bariyeri' ||
+        token == 'giris' ||
+        token == 'girisi' ||
+        token == 'cikis' ||
+        token == 'cikisi' ||
+        token == 'garaj' ||
+        token == 'garaji' ||
+        token == 'otopark' ||
+        token == 'otoparki';
+  }
+
+  /// [phrase] kelimeleri [tokens] içinde ardışık geçiyor mu? Son kelime (en çok
+  /// 5 harflik) ek alabilir: "garaj kapısı" ~ "garaj kapısını".
+  static bool _containsPhrase(List<String> tokens, List<String> phrase) {
+    if (phrase.isEmpty || tokens.length < phrase.length) return false;
+    for (int start = 0; start + phrase.length <= tokens.length; start++) {
+      var matches = true;
+      for (int i = 0; i < phrase.length; i++) {
+        final token = tokens[start + i];
+        final word = phrase[i];
+        final isLast = i == phrase.length - 1;
+        final ok = token == word ||
+            (isLast &&
+                int.tryParse(word) == null && // sayılar ek almaz ("1" != "10")
+                word.length >= 2 &&
+                token.startsWith(word) &&
+                token.length - word.length <= 5);
+        if (!ok) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return true;
+    }
+    return false;
+  }
+
+  static bool _isSpecificWord(String word) {
+    return word.length >= 3 && !_stopWords.contains(word);
+  }
+
+  /// Komut kelimelerinden biri [word] ya da onun ekli (en çok 5 harf) biçimi mi?
+  static bool _commandHasWord(List<String> tokens, String word) {
+    for (final token in tokens) {
+      if (token == word) return true;
+      if (token.startsWith(word) && token.length - word.length <= 5) {
+        return true;
       }
     }
-
-    if (bestDoor != null && highestScore > 0) {
-      return bestDoor;
-    }
-
-    // Son çare: Kullanıcı genel "kapıyı aç" diyor
-    if (normalized.contains('ac') || normalized.contains('kapi')) {
-      return availableDoors.first;
-    }
-
-    return null;
+    return false;
   }
 
   static String _normalizeTurkish(String text) {
     return text
+        .replaceAll('İ', 'i')
+        .replaceAll('I', 'ı')
         .toLowerCase()
+        .replaceAll('̇', '')
         .replaceAll('ç', 'c')
         .replaceAll('ğ', 'g')
         .replaceAll('ı', 'i')
         .replaceAll('ö', 'o')
         .replaceAll('ş', 's')
         .replaceAll('ü', 'u')
-        .replaceAll(RegExp(r"[^\w\s]"), ' ')
+        .replaceAll('â', 'a')
+        .replaceAll('î', 'i')
+        .replaceAll('û', 'u')
+        .replaceAll(RegExp(r'[^\w\s]'), ' ')
+        .replaceAll(_whitespace, ' ')
         .trim();
   }
 
-  static int? _extractDoorNumber(String text) {
-    final digitMatch = RegExp(r'\b(\d+)\b').firstMatch(text);
-    if (digitMatch != null) {
-      return int.tryParse(digitMatch.group(1)!);
+  /// Komuttaki kapı numarasını bulur. Rakamlar her zaman sayıdır; yazıyla
+  /// sayılar ("bir", "iki"...) yalnızca bağlamdan kapı numarası olduğu belliyse
+  /// (kapı kelimesinden sonra / "numaralı" öncesi / ek ayrılması) sayılır; böylece
+  /// "bir kapı aç" ya da "ön kapı" ("on kapi") yanlışlıkla 1/10 sayılmaz.
+  static int? _extractDoorNumber(List<String> tokens) {
+    const suffixSplits = {'i', 'e', 'a', 'u', 'yi', 'ye', 'ya', 'nin', 'in', 'un'};
+    final digitsOnly = RegExp(r'^\d{1,4}$');
+
+    for (int i = 0; i < tokens.length; i++) {
+      final token = tokens[i];
+      if (digitsOnly.hasMatch(token)) {
+        return int.tryParse(token);
+      }
+      final value = _numberWords[token];
+      if (value == null) continue;
+
+      if (token.endsWith('inci') ||
+          token.endsWith('ncu') ||
+          token == 'dorduncu' ||
+          token == 'ucuncu') {
+        return value; // sıra sayıları ("birinci", "ikinci") açıkça kapı numarasıdır
+      }
+
+      final prev = i > 0 ? tokens[i - 1] : '';
+      final next = i + 1 < tokens.length ? tokens[i + 1] : '';
+      final afterDoorNoun = prev.startsWith('kapi');
+      final beforeNumara = next.startsWith('numara') || next == 'no';
+      final beforeSuffix = suffixSplits.contains(next) && !_isDoorNoun(prev);
+      if (afterDoorNoun || beforeNumara || beforeSuffix) {
+        return value;
+      }
     }
-
-    if (RegExp(r'\b(bir|birinci|1|1\.)\b').hasMatch(text)) return 1;
-    if (RegExp(r'\b(iki|ikinci|2|2\.)\b').hasMatch(text)) return 2;
-    if (RegExp(r'\b(uc|ucuncu|3|3\.)\b').hasMatch(text)) return 3;
-    if (RegExp(r'\b(dort|dorduncu|4|4\.)\b').hasMatch(text)) return 4;
-    if (RegExp(r'\b(bes|besinci|5|5\.)\b').hasMatch(text)) return 5;
-    if (RegExp(r'\b(alti|altinci|6|6\.)\b').hasMatch(text)) return 6;
-    if (RegExp(r'\b(yedi|yedinci|7|7\.)\b').hasMatch(text)) return 7;
-    if (RegExp(r'\b(sekiz|sekizinci|8|8\.)\b').hasMatch(text)) return 8;
-    if (RegExp(r'\b(dokuz|dokuzuncu|9|9\.)\b').hasMatch(text)) return 9;
-    if (RegExp(r'\b(on|onuncu|10|10\.)\b').hasMatch(text)) return 10;
-
     return null;
   }
 
   @override
   void dispose() {
-    _speech.stop();
-    _tts.stop();
+    _disposed = true;
+    try {
+      unawaited(_speech.stop().catchError((_) {}));
+    } catch (_) {}
+    try {
+      unawaited(_tts.stop().catchError((_) {}));
+    } catch (_) {}
     super.dispose();
   }
 }

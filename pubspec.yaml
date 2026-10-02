@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   http: ^1.2.2
+  crypto: ^3.0.6
   mobile_scanner: ^7.2.0
   mqtt_client: ^10.7.0
   shared_preferences: ^2.5.3
@@ -27,9 +28,12 @@ dependencies:
   qr_flutter: ^4.1.0
   geolocator: ^13.0.2
   home_widget: ^0.9.4
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 

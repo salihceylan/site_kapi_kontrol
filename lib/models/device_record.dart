@@ -22,7 +22,16 @@ class DeviceRecord {
     this.localIp,
     this.publicIp,
     this.hardwareTarget,
+    this.hardwareType,
     required this.createdAt,
+    this.ownerUserCode,
+    this.ownerUserId,
+    this.ownerFullName,
+    this.ownerEmail,
+    this.isDefective = false,
+    this.defectiveReason,
+    this.defectiveAt,
+    this.inventoryNotes,
   });
 
   final int id;
@@ -38,7 +47,11 @@ class DeviceRecord {
   final bool mqttConfigured;
   final bool? mqttConnected;
   final String? firmwareVersion;
+  /// Donanım hedefi ('esp32-c3' | 'esp32-wroom'): sunucudaki `hardware_target` (cihazın bildirdiği),
+  /// yoksa `hardware_type` değerinden türetilir.
   final String? hardwareTarget;
+  /// Kayıtlı donanım türü (devices.hardware_type: 'esp32_c3' | 'esp32_wroom').
+  final String? hardwareType;
   final String? otaStatus;
   final String? otaLastVersion;
   final int? wifiRssi;
@@ -48,6 +61,53 @@ class DeviceRecord {
   final DateTime? lastSeenAt;
   final String? lastEvent;
   final DateTime? createdAt;
+  final int? ownerUserCode;
+  final int? ownerUserId;
+  final String? ownerFullName;
+  final String? ownerEmail;
+  final bool isDefective;
+  final String? defectiveReason;
+  final DateTime? defectiveAt;
+  final String? inventoryNotes;
+
+  /// Cihaz bir kullanıcı tarafından sahiplenilmiş mi (kapıya atanmış olmasa da).
+  bool get hasOwner =>
+      ownerUserCode != null ||
+      ownerUserId != null ||
+      (ownerFullName ?? '').isNotEmpty ||
+      (ownerEmail ?? '').isNotEmpty;
+
+  /// 'esp32_c3' -> 'esp32-c3' (cihazın bildirdiği / OTA hedef biçimi); boş ise null.
+  static String? normalizeHardwareTarget(Object? raw) {
+    final text = raw?.toString().trim().toLowerCase().replaceAll('_', '-') ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  /// Kayıtlı donanım türü, cihazın bildirdiği hedefle çelişiyor mu (OTA 403 teşhisi için).
+  bool get hasHardwareMismatch {
+    final typeTarget = normalizeHardwareTarget(hardwareType);
+    final target = normalizeHardwareTarget(hardwareTarget);
+    return typeTarget != null && target != null && typeTarget != target;
+  }
+
+  String get displayOtaStatus {
+    if (otaStatus == null || otaStatus!.trim().isEmpty) return '-';
+    final s = otaStatus!.trim().toLowerCase();
+    if (s == 'guncel' || s == 'up_to_date' || s == 'guncelleme tamam') {
+      return 'Güncel';
+    }
+    if (s == 'guncelleme indiriliyor' || s == 'indiriliyor') {
+      if (firmwareVersion != null && otaLastVersion != null && firmwareVersion == otaLastVersion) {
+        return 'Güncel';
+      }
+      return 'İndiriliyor';
+    }
+    if (s == 'beklemede') return 'Beklemede';
+    if (s.contains('hata') || s.contains('basarisiz') || s.contains('failed')) {
+      return 'Hata';
+    }
+    return otaStatus!;
+  }
 
   factory DeviceRecord.fromJson(Map<String, dynamic> json) {
     return DeviceRecord(
@@ -64,7 +124,10 @@ class DeviceRecord {
       mqttConfigured: json['mqtt_configured'] as bool? ?? false,
       mqttConnected: json['mqtt_connected'] as bool?,
       firmwareVersion: json['firmware_version'] as String?,
-      hardwareTarget: json['hardware_target'] as String?,
+      // Sunucu `hardware_target` (cihaz bildirimi) ve `hardware_type` (kayıtlı tür) gönderir.
+      hardwareTarget: normalizeHardwareTarget(json['hardware_target']) ??
+          normalizeHardwareTarget(json['hardware_type']),
+      hardwareType: json['hardware_type'] as String?,
       otaStatus: json['ota_status'] as String?,
       otaLastVersion: json['ota_last_version'] as String?,
       wifiRssi: int.tryParse(json['wifi_rssi']?.toString() ?? ''),
@@ -78,6 +141,17 @@ class DeviceRecord {
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString()),
+      ownerUserCode: int.tryParse(json['owner_user_code']?.toString() ?? ''),
+      // Eski sunucu yalnız users.id (owner_user_id) döndürür; sahiplik varlığı için yedek.
+      ownerUserId: int.tryParse(json['owner_user_id']?.toString() ?? ''),
+      ownerFullName: json['owner_full_name'] as String?,
+      ownerEmail: json['owner_email'] as String?,
+      isDefective: json['is_defective'] == true || json['is_defective'] == 1,
+      defectiveReason: json['defective_reason'] as String?,
+      defectiveAt: json['defective_at'] == null
+          ? null
+          : DateTime.tryParse(json['defective_at'].toString()),
+      inventoryNotes: json['inventory_notes'] as String?,
     );
   }
 }

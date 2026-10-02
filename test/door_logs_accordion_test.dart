@@ -59,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsOneWidget);
-    expect(find.text('Haftalık Geçiş Geçmişi'), findsOneWidget);
+    expect(find.text('Geçiş Geçmişi'), findsOneWidget);
   });
 }
 

@@ -1073,6 +1073,1801 @@
         }
       },
       "manifest": "firmware_releases\\20260907_201256_v3_0_3\\manifest.json"
+    },
+    {
+      "id": "20260909_200950_v1_0_0",
+      "version": "1.0.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T17:09:50.889267+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_200950_v1_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_200950_v1_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_200950_v1_0_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "b72862cf755134c4a394dc3f8b564c49d2e786e8861dcbfc4cf0bb1495b381fa",
+          "md5": "fe3530d7bb5b81e5a4f7382bc117ae37"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_200950_v1_0_0\\manifest.json"
+    },
+    {
+      "id": "20260909_201048_v1_0_0",
+      "version": "1.0.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T17:10:48.393305+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_201048_v1_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_201048_v1_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_201048_v1_0_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "db2cd9a1f16690964925c49fd46f31587afaef58b58a86dbb4e923c0abbc2a63",
+          "md5": "dcb9f3921b2a664a2e3d0e19742659c2"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_201048_v1_0_0\\manifest.json"
+    },
+    {
+      "id": "20260909_203033_v1_0_0",
+      "version": "1.0.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T17:30:33.801845+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_203033_v1_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_203033_v1_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_203033_v1_0_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "97381e8483ee61a9ffa16abb488a0707f4be315af46e02a5a7fdb7875b01d48b",
+          "md5": "96965fbf8479e8a2202d9dced9db9199"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_203033_v1_0_0\\manifest.json"
+    },
+    {
+      "id": "20260909_203255_v3_0_3",
+      "version": "3.0.3",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T17:32:55.747224+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_203255_v3_0_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_203255_v3_0_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_203255_v3_0_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "9fdcaeb9cf5a1bff9b947c6d888416d1bdf37914057bd1e8add26e790108d0b5",
+          "md5": "afa5f106b8a5dfe791fec4843d9e9f3c"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_203255_v3_0_3\\manifest.json"
+    },
+    {
+      "id": "20260909_205720_v1_0_0",
+      "version": "1.0.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T17:57:20.299146+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_205720_v1_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_205720_v1_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_205720_v1_0_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "b80fa1e014c0f8d28f5b8fcfce774509fe43904a34f9805a8e692d4ac05b44c3",
+          "md5": "b5383233b0afdd85bf300664439ae26d"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_205720_v1_0_0\\manifest.json"
+    },
+    {
+      "id": "20260909_210538_v3_0_3",
+      "version": "3.0.3",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T18:05:38.905580+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_210538_v3_0_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_210538_v3_0_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_210538_v3_0_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "d5fdcb028b1270c31f8e36867f8eb71249c1d5be95c4f033326b4770e184d84d",
+          "md5": "b151f365eec5233a34fb1cc84cf8b96a"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_210538_v3_0_3\\manifest.json"
+    },
+    {
+      "id": "20260909_211003_v3_0_4",
+      "version": "3.0.4",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T18:10:03.368213+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_211003_v3_0_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_211003_v3_0_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_211003_v3_0_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "96c019967da1178122c5a74ccfee6469f32232f1a5b9635728fe364ba704d23c",
+          "md5": "3baf67f98c189bedeb8bab9e9e45597f"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_211003_v3_0_4\\manifest.json"
+    },
+    {
+      "id": "20260909_213937_v3_0_4",
+      "version": "3.0.4",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T18:39:37.986384+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_213937_v3_0_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_213937_v3_0_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_213937_v3_0_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "96c019967da1178122c5a74ccfee6469f32232f1a5b9635728fe364ba704d23c",
+          "md5": "3baf67f98c189bedeb8bab9e9e45597f"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_213937_v3_0_4\\manifest.json"
+    },
+    {
+      "id": "20260909_191752_v3_0_5",
+      "version": "3.0.5",
+      "env": "esp32_relay_wroom",
+      "created_at": "2026-09-09T19:17:52.423903+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_191752_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_191752_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_191752_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "49b856b7ab97efec59e8716e37c74871a0487d4c0d0ecdd546a77b02b18c212d",
+          "md5": "348dd25f90787e6bc32812270e4f0716"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_222038_v3_0_5",
+      "version": "3.0.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:20:38.590432+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_222038_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_222038_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_222038_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "49b856b7ab97efec59e8716e37c74871a0487d4c0d0ecdd546a77b02b18c212d",
+          "md5": "348dd25f90787e6bc32812270e4f0716"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_222038_v3_0_5\\manifest.json"
+    },
+    {
+      "id": "20260909_222740_v3_0_5",
+      "version": "3.0.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:27:40.812766+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_222740_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_222740_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_222740_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "49b856b7ab97efec59e8716e37c74871a0487d4c0d0ecdd546a77b02b18c212d",
+          "md5": "348dd25f90787e6bc32812270e4f0716"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_222740_v3_0_5\\manifest.json"
+    },
+    {
+      "id": "20260909_222833_v3_0_5",
+      "version": "3.0.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:28:33.541237+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_222833_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_222833_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_222833_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "49b856b7ab97efec59e8716e37c74871a0487d4c0d0ecdd546a77b02b18c212d",
+          "md5": "348dd25f90787e6bc32812270e4f0716"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_222833_v3_0_5\\manifest.json"
+    },
+    {
+      "id": "20260909_222920_v3_0_6",
+      "version": "3.0.6",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:29:20.285897+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_222920_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_222920_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_222920_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "f47bc421c0d85b12ca3ffc4dccb3963a965eb3df854d43b2204c59a996a64746",
+          "md5": "b50c70a22efa09fe6568920193272bbe"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_222920_v3_0_6\\manifest.json"
+    },
+    {
+      "id": "20260909_193913_v3_0_6",
+      "version": "3.0.6",
+      "env": "esp32_relay_wroom",
+      "created_at": "2026-09-09T19:39:13.908602+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_193913_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_193913_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_193913_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4691cab4e599dea0039ec31e05c5ca7e971c108dd79b24ddb20677a9b8f7d592",
+          "md5": "9ee828c053bfc8713ee9e82a2d9044f2"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_224030_v3_0_6",
+      "version": "3.0.6",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:40:30.315290+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_224030_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_224030_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_224030_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4691cab4e599dea0039ec31e05c5ca7e971c108dd79b24ddb20677a9b8f7d592",
+          "md5": "9ee828c053bfc8713ee9e82a2d9044f2"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_224030_v3_0_6\\manifest.json"
+    },
+    {
+      "id": "20260909_224223_v3_0_6",
+      "version": "3.0.6",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:42:23.608340+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_224223_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_224223_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_224223_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4691cab4e599dea0039ec31e05c5ca7e971c108dd79b24ddb20677a9b8f7d592",
+          "md5": "9ee828c053bfc8713ee9e82a2d9044f2"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_224223_v3_0_6\\manifest.json"
+    },
+    {
+      "id": "20260909_224540_v3_0_7",
+      "version": "3.0.7",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:45:40.458597+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_224540_v3_0_7\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_224540_v3_0_7\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_224540_v3_0_7\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "a5afa1dac0956ef4306379fd3cd04c84db231f85605f989a676063f444ccd978",
+          "md5": "3af81cd39ac2969623ac881792d61681"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_224540_v3_0_7\\manifest.json"
+    },
+    {
+      "id": "20260909_224711_v3_0_7",
+      "version": "3.0.7",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:47:11.459772+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_224711_v3_0_7\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_224711_v3_0_7\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_224711_v3_0_7\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "a5afa1dac0956ef4306379fd3cd04c84db231f85605f989a676063f444ccd978",
+          "md5": "3af81cd39ac2969623ac881792d61681"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_224711_v3_0_7\\manifest.json"
+    },
+    {
+      "id": "20260909_195734_v3_0_8",
+      "version": "3.0.8",
+      "env": "esp32_relay_wroom",
+      "created_at": "2026-09-09T19:57:34.583298+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_195734_v3_0_8\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_195734_v3_0_8\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_195734_v3_0_8\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "314015b187b6b16d52cb8d9de9ab1be432b54e701bd5298fa3d2c25307379047",
+          "md5": "638cc7c588727a360c800374757eee34"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_225903_v3_0_9",
+      "version": "3.0.9",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T19:59:03.979693+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_225903_v3_0_9\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_225903_v3_0_9\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_225903_v3_0_9\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "e2762bde78e017b6f182b9cd91237f50d85f9c2915d927fed116b0b23ed48e9c",
+          "md5": "e25c1aa5d4aabb70699a87dd2422fade"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_225903_v3_0_9\\manifest.json"
+    },
+    {
+      "id": "20260909_200419_v3_0_9",
+      "version": "3.0.9",
+      "env": "esp32_relay_wroom",
+      "created_at": "2026-09-09T20:04:19.563177+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_200419_v3_0_9\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_200419_v3_0_9\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_200419_v3_0_9\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "6ae8b9d225d575c4f6c74062691daa7d97bae6d94a0071231f75beab09b0762c",
+          "md5": "55256f8d4c4e3389609d7f5ebd643f08"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_230527_v3_0_9",
+      "version": "3.0.9",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T20:05:27.103644+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_230527_v3_0_9\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_230527_v3_0_9\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_230527_v3_0_9\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "6ae8b9d225d575c4f6c74062691daa7d97bae6d94a0071231f75beab09b0762c",
+          "md5": "55256f8d4c4e3389609d7f5ebd643f08"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_230527_v3_0_9\\manifest.json"
+    },
+    {
+      "id": "20260909_230724_v3_1_0",
+      "version": "3.1.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T20:07:24.422229+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_230724_v3_1_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_230724_v3_1_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_230724_v3_1_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "9fb2c68e029751b868e6097748b833910efd31de6eb52fdbef5caa332bd9a3d0",
+          "md5": "149b234caff9295889a967688a41c109"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_230724_v3_1_0\\manifest.json"
+    },
+    {
+      "id": "20260909_201038_v3_0_4",
+      "version": "3.0.4",
+      "env": "lolin_c3_mini",
+      "created_at": "2026-09-09T20:10:38.935856+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_201038_v3_0_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_201038_v3_0_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_201038_v3_0_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "5980596fd4eb71df8a7a357e44972f0e37d6624e05566036585cba58a0255bb7",
+          "md5": "8d3735169eabe7718f07645154d2d9b1"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_231115_v3_0_4",
+      "version": "3.0.4",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T20:11:15.968605+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_231115_v3_0_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_231115_v3_0_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_231115_v3_0_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "5980596fd4eb71df8a7a357e44972f0e37d6624e05566036585cba58a0255bb7",
+          "md5": "8d3735169eabe7718f07645154d2d9b1"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_231115_v3_0_4\\manifest.json"
+    },
+    {
+      "id": "20260909_201343_v3_0_5",
+      "version": "3.0.5",
+      "env": "lolin_c3_mini",
+      "created_at": "2026-09-09T20:13:43.847194+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_201343_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_201343_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_201343_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "18db6cfd8bfb35540285cfc70311ffb9d806aa1f8086736ca84a470b77ae4ff1",
+          "md5": "e6b1b13726237cfb4a57f48859f318dd"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_231420_v3_0_5",
+      "version": "3.0.5",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T20:14:20.455970+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_231420_v3_0_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_231420_v3_0_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_231420_v3_0_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "18db6cfd8bfb35540285cfc70311ffb9d806aa1f8086736ca84a470b77ae4ff1",
+          "md5": "e6b1b13726237cfb4a57f48859f318dd"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_231420_v3_0_5\\manifest.json"
+    },
+    {
+      "id": "20260909_231518_v3_0_6",
+      "version": "3.0.6",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-09T20:15:18.346955+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_231518_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_231518_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_231518_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "c47ed03e6773470873a4c15b87dfbd5c1a0ba6d0f6869d9ac472edff3961da3a",
+          "md5": "ead5f821aff0dc43735bfffdbdccc7ee"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_231518_v3_0_6\\manifest.json"
+    },
+    {
+      "id": "20260909_231623_v3_0_6",
+      "version": "3.0.6",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T20:16:23.326153+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_231623_v3_0_6\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_231623_v3_0_6\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_231623_v3_0_6\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "288f4a8f1ebc1392c23c480640892a67307b4197c32ca335574a0396efbd5ee5",
+          "md5": "5fd93cad498743a06f255d0c7da34d22"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_231623_v3_0_6\\manifest.json"
+    },
+    {
+      "id": "20260909_231705_v3_0_7",
+      "version": "3.0.7",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T20:17:05.424064+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_231705_v3_0_7\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_231705_v3_0_7\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_231705_v3_0_7\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "203356db367ff167b40825516cf477df6473fba6df3fb243985c108108b06922",
+          "md5": "4b518da8494d8076b489fda319828450"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_231705_v3_0_7\\manifest.json"
+    },
+    {
+      "id": "20260909_202056_v3_0_8",
+      "version": "3.0.8",
+      "env": "lolin_c3_mini",
+      "created_at": "2026-09-09T20:20:56.669295+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_202056_v3_0_8\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_202056_v3_0_8\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_202056_v3_0_8\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "a09a5ab20dd873b5bd76b35d2b9a09d8cfb6c3ad436d5fda3f96176fac1745a9",
+          "md5": "c4cd7c200a5e6deba44c24569f955fc0"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      }
+    },
+    {
+      "id": "20260909_232209_v3_0_9",
+      "version": "3.0.9",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-09T20:22:09.667255+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260909_232209_v3_0_9\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260909_232209_v3_0_9\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260909_232209_v3_0_9\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "06eb9f55e302d5434b8f7a05bd5557bdb427bff15a6ddcaf101a226004480a33",
+          "md5": "4194fc7d48f8fb48c0e349d8337b95c6"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260909_232209_v3_0_9\\manifest.json"
+    },
+    {
+      "id": "20260910_212812_v3_1_1",
+      "version": "3.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T18:28:12.720644+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_212812_v3_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_212812_v3_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_212812_v3_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "2d56c077b0a865776646e47f432c184f979c6561a43bdc4ce83308f26d5cd57e",
+          "md5": "f884f58cdd6ebb9e58266b890ae1a64d"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_212812_v3_1_1\\manifest.json"
+    },
+    {
+      "id": "20260910_213259_v3_1_1",
+      "version": "3.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T18:32:59.796193+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_213259_v3_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_213259_v3_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_213259_v3_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "2d56c077b0a865776646e47f432c184f979c6561a43bdc4ce83308f26d5cd57e",
+          "md5": "f884f58cdd6ebb9e58266b890ae1a64d"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_213259_v3_1_1\\manifest.json"
+    },
+    {
+      "id": "20260910_214115_v3_1_1",
+      "version": "3.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T18:41:15.323909+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_214115_v3_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_214115_v3_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_214115_v3_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "2d56c077b0a865776646e47f432c184f979c6561a43bdc4ce83308f26d5cd57e",
+          "md5": "f884f58cdd6ebb9e58266b890ae1a64d"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_214115_v3_1_1\\manifest.json"
+    },
+    {
+      "id": "20260910_214253_v3_1_1",
+      "version": "3.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T18:42:53.781094+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_214253_v3_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_214253_v3_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_214253_v3_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "1717d2fb601e05707d68819d9d98376793cb69e4d7f3c4a471052c24f24090a5",
+          "md5": "f690dbbcb05004f8623f7ad2a056110b"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_214253_v3_1_1\\manifest.json"
+    },
+    {
+      "id": "20260910_215138_v3_1_1",
+      "version": "3.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T18:51:38.041682+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_215138_v3_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_215138_v3_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_215138_v3_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "8c0ad22ae49b56a29321b5865768a03380948c4c0b90373ac739cd532ec18064",
+          "md5": "1ef3255c26327f6148786c8edd2e67f2"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_215138_v3_1_1\\manifest.json"
+    },
+    {
+      "id": "20260910_220525_v3_1_2",
+      "version": "3.1.2",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T19:05:25.347881+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_220525_v3_1_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_220525_v3_1_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_220525_v3_1_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "93d1aec596c357d96c63023ca49984f35f04c904f05f13f55a40489fb95f78fe",
+          "md5": "20d87fe1deddf0bd9b16c1a28b852cae"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_220525_v3_1_2\\manifest.json"
+    },
+    {
+      "id": "20260910_220807_v3_1_2",
+      "version": "3.1.2",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T19:08:07.841967+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_220807_v3_1_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_220807_v3_1_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_220807_v3_1_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "93d1aec596c357d96c63023ca49984f35f04c904f05f13f55a40489fb95f78fe",
+          "md5": "20d87fe1deddf0bd9b16c1a28b852cae"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_220807_v3_1_2\\manifest.json"
+    },
+    {
+      "id": "20260910_223211_v3_1_3",
+      "version": "3.1.3",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T19:32:12.034307+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_223211_v3_1_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_223211_v3_1_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_223211_v3_1_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "6cd7e91a066b6e1c7d931472d5ea4c24c386ec8b2623be5fdacd031d738f5091",
+          "md5": "1fee3f96a29cdbc2a6f32b5904d3fb1a"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_223211_v3_1_3\\manifest.json"
+    },
+    {
+      "id": "20260910_230035_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:00:36.158029+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_230035_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_230035_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_230035_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "5035c4aba43008f0e8b45b2f7c4dc63dde3375bb78826965f4acff2241c8faee",
+          "md5": "5fe382c62c7ce93b2e618e1e0cb152ff"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_230035_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_230126_v3_1_5",
+      "version": "3.1.5",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-10T20:01:26.665681+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_230126_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_230126_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_230126_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "eb84d506242015e4dd2cae3ce55023197aa90bc154851f86f44096e15ea8946e",
+          "md5": "b5a1368504ea65e7a326784d862f14e7"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_230126_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_230256_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:02:56.792350+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_230256_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_230256_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_230256_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4eb86a56538e6e612fe433437a0e212acf7c5d5762cfc8413033d172e77b8dc0",
+          "md5": "99a6399f1964e1c3db6e5cb9795f08e3"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_230256_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_230456_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:04:56.885021+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_230456_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_230456_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_230456_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4eb86a56538e6e612fe433437a0e212acf7c5d5762cfc8413033d172e77b8dc0",
+          "md5": "99a6399f1964e1c3db6e5cb9795f08e3"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_230456_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_231454_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:14:54.708845+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_231454_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_231454_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_231454_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4eb86a56538e6e612fe433437a0e212acf7c5d5762cfc8413033d172e77b8dc0",
+          "md5": "99a6399f1964e1c3db6e5cb9795f08e3"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_231454_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_231620_v3_1_5",
+      "version": "3.1.5",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-10T20:16:20.916062+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_231620_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_231620_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_231620_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "eb84d506242015e4dd2cae3ce55023197aa90bc154851f86f44096e15ea8946e",
+          "md5": "b5a1368504ea65e7a326784d862f14e7"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_231620_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_231744_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:17:45.765834+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_231744_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_231744_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_231744_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4eb86a56538e6e612fe433437a0e212acf7c5d5762cfc8413033d172e77b8dc0",
+          "md5": "99a6399f1964e1c3db6e5cb9795f08e3"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_231744_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_232140_v3_1_5",
+      "version": "3.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:21:41.278971+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_232140_v3_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_232140_v3_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_232140_v3_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "4eb86a56538e6e612fe433437a0e212acf7c5d5762cfc8413033d172e77b8dc0",
+          "md5": "99a6399f1964e1c3db6e5cb9795f08e3"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_232140_v3_1_5\\manifest.json"
+    },
+    {
+      "id": "20260910_234222_v4_0_0",
+      "version": "4.0.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-10T20:42:22.049088+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_234222_v4_0_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_234222_v4_0_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_234222_v4_0_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "c9cbc3e9cd5d2deea7978c8b183f82682c00bb42f56d25f46cb3341f03c94735",
+          "md5": "b43cfefcb6f862b23580a16c8c903d08"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_234222_v4_0_0\\manifest.json"
+    },
+    {
+      "id": "20260910_234302_v3_5_0",
+      "version": "3.5.0",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-10T20:43:02.700474+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260910_234302_v3_5_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260910_234302_v3_5_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260910_234302_v3_5_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "fa925f36d012d9f254fe448095ab453106eead74ea459876dbccb300838e4ab6",
+          "md5": "23d222ac97766158d85dd5109ea1ac60"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260910_234302_v3_5_0\\manifest.json"
+    },
+    {
+      "id": "20260911_231045_v4_1_0",
+      "version": "4.1.0",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-11T20:10:45.175836+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_231045_v4_1_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_231045_v4_1_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_231045_v4_1_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "f2076de430457b7ed8555636997e8af9048e3239db90920a61ebc4aedc747efd",
+          "md5": "32655a50141ec79c35cc379f9a2bba8a"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_231045_v4_1_0\\manifest.json"
+    },
+    {
+      "id": "20260911_231139_v4_1_0",
+      "version": "4.1.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:11:39.628700+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_231139_v4_1_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_231139_v4_1_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_231139_v4_1_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "78fecfbc40b6443c3399181bc4ad661957fa8938f071b5d3260b9dff835ef42d",
+          "md5": "cfe0bb512fd6716e4542ea06e9f5ff1c"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_231139_v4_1_0\\manifest.json"
+    },
+    {
+      "id": "20260911_231236_v4_1_0",
+      "version": "4.1.0",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:12:36.929808+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_231236_v4_1_0\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_231236_v4_1_0\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_231236_v4_1_0\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "78fecfbc40b6443c3399181bc4ad661957fa8938f071b5d3260b9dff835ef42d",
+          "md5": "cfe0bb512fd6716e4542ea06e9f5ff1c"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_231236_v4_1_0\\manifest.json"
+    },
+    {
+      "id": "20260911_233037_v4_1_1",
+      "version": "4.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:30:37.869337+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_233037_v4_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_233037_v4_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_233037_v4_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "9a57375a8c63a83284722aa8d4de787f89e8f55b13ca5ee936257937ca9c8ac6",
+          "md5": "9777b24414263001710115c7dad1b0ce"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_233037_v4_1_1\\manifest.json"
+    },
+    {
+      "id": "20260911_233308_v4_1_1",
+      "version": "4.1.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:33:08.921249+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_233308_v4_1_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_233308_v4_1_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_233308_v4_1_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "9a57375a8c63a83284722aa8d4de787f89e8f55b13ca5ee936257937ca9c8ac6",
+          "md5": "9777b24414263001710115c7dad1b0ce"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_233308_v4_1_1\\manifest.json"
+    },
+    {
+      "id": "20260911_235201_v4_1_2",
+      "version": "4.1.2",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-11T20:52:01.560787+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_235201_v4_1_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_235201_v4_1_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_235201_v4_1_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "50212e9f0585d041793d1a292bac63cc72df450fed6b7a183d3267c2d1a2ba1e",
+          "md5": "c30835462f361d306a10f910c43942c0"
+        },
+        "bootloader_bin": {
+          "sha256": "30d47ab1f344cfa69f6b2f718ffa72fc7baea6db047eaabefea162db29e6821c",
+          "md5": "61d9b0780b16a25647aad77cdab6df21"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_235201_v4_1_2\\manifest.json"
+    },
+    {
+      "id": "20260911_235250_v4_1_2",
+      "version": "4.1.2",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:52:50.825211+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_235250_v4_1_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_235250_v4_1_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_235250_v4_1_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "c3e2680f79271b12a4c76e4dc60b3efc5b2229f4b409c8675e037d4b5f799f68",
+          "md5": "07cc98eebd9abef89f066ab198ca3dc8"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_235250_v4_1_2\\manifest.json"
+    },
+    {
+      "id": "20260911_235346_v4_1_2",
+      "version": "4.1.2",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T20:53:46.733892+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260911_235346_v4_1_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260911_235346_v4_1_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260911_235346_v4_1_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "c3e2680f79271b12a4c76e4dc60b3efc5b2229f4b409c8675e037d4b5f799f68",
+          "md5": "07cc98eebd9abef89f066ab198ca3dc8"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260911_235346_v4_1_2\\manifest.json"
+    },
+    {
+      "id": "20260912_000056_v4_1_3",
+      "version": "4.1.3",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T21:00:56.152368+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260912_000056_v4_1_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260912_000056_v4_1_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260912_000056_v4_1_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "496138314a29e02e0283539ea7527f212e87e071f1696b773fd8c59730e7d685",
+          "md5": "458b352e999ca38ee7ae5c9e70779dee"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260912_000056_v4_1_3\\manifest.json"
+    },
+    {
+      "id": "20260912_001048_v4_1_4",
+      "version": "4.1.4",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T21:10:48.699692+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260912_001048_v4_1_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260912_001048_v4_1_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260912_001048_v4_1_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "b8476b530a982675d831c5be99e23ee1751d7cd55c65f00ed3e56af4e43db7bf",
+          "md5": "8518b2e2a193d185f6a6d69a3d8d164e"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260912_001048_v4_1_4\\manifest.json"
+    },
+    {
+      "id": "20260912_002022_v4_1_5",
+      "version": "4.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T21:20:22.198304+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260912_002022_v4_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260912_002022_v4_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260912_002022_v4_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "dbc4f68afe51fbb59189d0f5d3cf0acedcd6d3afcda111f64973b833b9cb8158",
+          "md5": "ea1fc211feafd59095414c687002eb5e"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260912_002022_v4_1_5\\manifest.json"
+    },
+    {
+      "id": "20260912_002740_v4_1_5",
+      "version": "4.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T21:27:40.530053+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260912_002740_v4_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260912_002740_v4_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260912_002740_v4_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "dbc4f68afe51fbb59189d0f5d3cf0acedcd6d3afcda111f64973b833b9cb8158",
+          "md5": "ea1fc211feafd59095414c687002eb5e"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260912_002740_v4_1_5\\manifest.json"
+    },
+    {
+      "id": "20260912_002836_v4_1_5",
+      "version": "4.1.5",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-11T21:28:36.530548+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260912_002836_v4_1_5\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260912_002836_v4_1_5\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260912_002836_v4_1_5\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "dbc4f68afe51fbb59189d0f5d3cf0acedcd6d3afcda111f64973b833b9cb8158",
+          "md5": "ea1fc211feafd59095414c687002eb5e"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260912_002836_v4_1_5\\manifest.json"
+    },
+    {
+      "id": "20260917_105107_v5_0_1",
+      "version": "5.0.1",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-17T07:51:07.882207+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260917_105107_v5_0_1\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260917_105107_v5_0_1\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260917_105107_v5_0_1\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "ceb3b0c23dccd6b6835cf6349d25c8c2167ef7cc2f6417c10479576800726635",
+          "md5": "f5485a6d65630b5bdffbd9db47724f29"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260917_105107_v5_0_1\\manifest.json"
+    },
+    {
+      "id": "20260917_111624_v5_0_2",
+      "version": "5.0.2",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-17T08:16:24.230409+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260917_111624_v5_0_2\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260917_111624_v5_0_2\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260917_111624_v5_0_2\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "04dc4f4188b43ffa592c4dc8689c9f15442db60f15ccb386db5067ed7eab323a",
+          "md5": "f584b261a228600dec3f574ea3da54e5"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260917_111624_v5_0_2\\manifest.json"
+    },
+    {
+      "id": "20260917_113133_v5_0_3",
+      "version": "5.0.3",
+      "env": "esp32_relay_wroom",
+      "target": "esp32-wroom",
+      "created_at": "2026-09-17T08:31:34.035225+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260917_113133_v5_0_3\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260917_113133_v5_0_3\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260917_113133_v5_0_3\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "26fbf9ad76d215137e9a3acbf6bdbb2a4eb2b0efebd91751904d56eb9621fa6e",
+          "md5": "b52e38c583dfca88f2760584c2b4714f"
+        },
+        "bootloader_bin": {
+          "sha256": "3d234a7471f67b013686dabd4dee7c1fa915c9928463616a94bc9297acf1abf8",
+          "md5": "70c9a76fcbc41d62b871521885c08342"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260917_113133_v5_0_3\\manifest.json"
+    },
+    {
+      "id": "20260922_141514_v4_1_4",
+      "version": "4.1.4",
+      "env": "lolin_c3_mini",
+      "target": "esp32-c3",
+      "created_at": "2026-09-22T11:15:14.522050+00:00",
+      "files": {
+        "firmware_bin": "firmware_releases\\20260922_141514_v4_1_4\\firmware.bin",
+        "bootloader_bin": "firmware_releases\\20260922_141514_v4_1_4\\bootloader.bin",
+        "partitions_bin": "firmware_releases\\20260922_141514_v4_1_4\\partitions.bin"
+      },
+      "hashes": {
+        "firmware_bin": {
+          "sha256": "801ef50b5b1ad5d5cf395a98e73d702af81fcd4c1115b08a20245ca43ec0fa2d",
+          "md5": "effdd9e46d248904aea43b2e5b32e1a6"
+        },
+        "bootloader_bin": {
+          "sha256": "b800a76c85c19db0bf5e40331d11736feae2c783d70d36f4d2b6fd8bda0ec32e",
+          "md5": "7a15dc571f53efe9b125f3d334517243"
+        },
+        "partitions_bin": {
+          "sha256": "0a8b5720e7b77ff11f1462458c3a509dee79224e5279898f26d6a2e3ae0517b7",
+          "md5": "2ddc2d5f85b2c5288013adbe45d9cb7b"
+        }
+      },
+      "manifest": "firmware_releases\\20260922_141514_v4_1_4\\manifest.json"
     }
   ]
 }

@@ -13,13 +13,28 @@ class LocalDoorAccess {
   final int port;
   final DateTime updatedAt;
 
-  static const Duration cacheValidity = Duration(days: 90);
-  bool get isUsable {
-    if (deviceUid.trim().isEmpty) {
+  /// Yerel kontrol anahtarının (token) önbellekte güvenle tutulabileceği süre.
+  /// Sunucu üyelik/izin kalkınca token'ı döndürdüğü için eski kopya uzun süre tutulmaz.
+  static const Duration cacheValidity = Duration(hours: 24);
+
+  /// Yerel açma için token şarttır (C4): token boşsa yerel kontrol KAPALI sayılır.
+  bool get hasToken => token.trim().isNotEmpty;
+
+  /// Kayıt, [now] anında önbellekte tutulmaya/kullanılmaya uygun mu?
+  /// (cihaz kimliği + token dolu ve [cacheValidity] içinde güncellenmiş)
+  bool isUsableAt(DateTime now) {
+    if (deviceUid.trim().isEmpty || !hasToken) {
       return false;
     }
-    return true;
+    final age = now.difference(updatedAt);
+    // Gelecekteki bir damga (saat oynatma) güvenilmez sayılır.
+    if (age.isNegative && age.inMinutes < -5) {
+      return false;
+    }
+    return age <= cacheValidity;
   }
+
+  bool get isUsable => isUsableAt(DateTime.now());
 
   Map<String, dynamic> toJson() {
     return {

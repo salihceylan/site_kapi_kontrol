@@ -1,10 +1,73 @@
-﻿import {
+﻿import crypto from 'crypto';
+import { isClientSafeError } from './site_rules.js';
+import {
+  generateNumericCode,
   normalizeEmail,
   normalizeOptionalBool,
   normalizePhone,
   validApprovalStatuses,
   validRoles,
 } from './helpers.js';
+
+// Site yapısı üst sınırları (admin uçları ve kullanıcı self-servis kurulumu aynı sabitleri kullanır).
+export const SITE_LIMITS = Object.freeze({
+  maxBlocks: 100,
+  maxApartments: 5000,
+  maxDoors: 100,
+});
+
+// PostgreSQL INTEGER (int4) üst sınırı: user_code gibi kolonlara taşma ile 500 döndürmemek için.
+export const PG_INT4_MAX = 2147483647;
+
+/**
+ * Güvenli pozitif tamsayı kimliği ayrıştırıcı.
+ * Number (isSafeInteger) veya yalnızca rakamlardan oluşan metin kabul eder; aksi halde null döner.
+ * `max` ile kolon aralığı (örn. PG_INT4_MAX) sınırlanabilir.
+ */
+export function parsePositiveId(value, { max = Number.MAX_SAFE_INTEGER } = {}) {
+  let num;
+  if (typeof value === 'number') {
+    num = value;
+  } else if (typeof value === 'string') {
+    const text = value.trim();
+    if (!/^\d{1,16}$/.test(text)) {
+      return null;
+    }
+    num = Number(text);
+  } else {
+    return null;
+  }
+  if (!Number.isSafeInteger(num) || num <= 0 || num > max) {
+    return null;
+  }
+  return num;
+}
+
+/**
+ * Pragmatik e-posta biçimi doğrulayıcı (RFC'nin tamamı değil; bariz hatalı girişleri eler).
+ */
+export function isValidEmail(raw) {
+  const text = String(raw ?? '').trim();
+  if (text.length < 5 || text.length > 254) {
+    return false;
+  }
+  if (/\s/.test(text) || text.includes('..')) {
+    return false;
+  }
+  const atIndex = text.indexOf('@');
+  if (atIndex < 1 || atIndex !== text.lastIndexOf('@')) {
+    return false;
+  }
+  const local = text.slice(0, atIndex);
+  const domain = text.slice(atIndex + 1);
+  if (local.length > 64 || local.startsWith('.') || local.endsWith('.')) {
+    return false;
+  }
+  if (!/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(domain)) {
+    return false;
+  }
+  return !domain.split('.').some((label) => label.startsWith('-') || label.endsWith('-'));
+}
 
 export function validateCreateInput({
   fullName,
@@ -94,7 +157,7 @@ export function validateStructuredSiteInput({
   if (!Number.isInteger(doorCount) || doorCount <= 0) {
     return 'Otomatik kapi sayisi pozitif tamsayi olmali.';
   }
-  if (doorCount > 100) {
+  if (doorCount > SITE_LIMITS.maxDoors) {
     return 'Bu islem icin kapi sayisi fazla buyuk.';
   }
 
@@ -102,11 +165,11 @@ export function validateStructuredSiteInput({
     if (!Array.isArray(blockApartmentCounts) || blockApartmentCounts.length === 0) {
       return 'En az bir blok tanimlanmali.';
     }
-    if (blockApartmentCounts.length > 100) {
+    if (blockApartmentCounts.length > SITE_LIMITS.maxBlocks) {
       return 'Bu islem icin blok sayisi fazla buyuk.';
     }
     const totalApartments = blockApartmentCounts.reduce((sum, count) => sum + count, 0);
-    if (totalApartments > 5000) {
+    if (totalApartments > SITE_LIMITS.maxApartments) {
       return 'Bu islem icin daire sayisi fazla buyuk.';
     }
     if (blockApartmentCounts.some((count) => !Number.isInteger(count) || count < 0)) {
@@ -121,10 +184,10 @@ export function validateStructuredSiteInput({
   if (!Number.isInteger(apartmentCount) || apartmentCount < 0) {
     return 'Daire sayisi sifir veya pozitif tamsayi olmali.';
   }
-  if (apartmentCount > 5000) {
+  if (apartmentCount > SITE_LIMITS.maxApartments) {
     return 'Bu islem icin daire sayisi fazla buyuk.';
   }
-  if (blockCount > 100) {
+  if (blockCount > SITE_LIMITS.maxBlocks) {
     return 'Bu islem icin blok sayisi fazla buyuk.';
   }
   return null;
@@ -182,7 +245,9 @@ export function validateApartmentResidentInput({
   if (loginError) {
     return loginError;
   }
-  if (!password || !/^\d{4}$/.test(password)) {
+  // Sifre: bos birakilabilir (mevcut sakin duzenlemede "degistirme" sayilir); verilmisse 4 haneli sayisal olmali.
+  // Yeni sakin olusturulurken sifre zorunlulugu apartment_service.provisionApartmentResident'ta uygulanir.
+  if (password && !/^\d{4}$/.test(password)) {
     return 'Sifre 4 haneli sayisal olmali.';
   }
   if (email && !email.includes('@')) {
@@ -231,7 +296,8 @@ export function validateDeviceAssignmentInput({
   if (siteCode == null) {
     return 'Site ID zorunlu.';
   }
-  if (gateName.length < 2) {
+  // Kapi etiketi opsiyoneldir (istemci "Kapi Etiketi (opsiyonel)" der): bos kabul edilir, verilmisse en az 2 karakter.
+  if (gateName && gateName.length < 2) {
     return 'Kapi adi en az 2 karakter olmali.';
   }
   return null;
@@ -258,8 +324,9 @@ export function validateSiteManagerRegistrationInput({
   return null;
 }
 
+// E-posta doğrulama kodu: CSPRNG (crypto.randomInt) ile 6 haneli.
 export function generateVerificationCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  return generateNumericCode(6);
 }
 
 export function parseApprovalStatus(value) {
@@ -268,6 +335,17 @@ export function parseApprovalStatus(value) {
 
 export function parseRole(value) {
   return validRoles.has(value) ? value : null;
+}
+
+/**
+ * Beklenmeyen (DB/sistem) hata yanıtı: ayrıntı istemciye SIZMAZ; genel mesaj + error_id döner,
+ * ayrıntı (error_id ile) sunucu günlüğüne yazılır.
+ */
+function respondUnexpectedError(res, error, genericErrorMessage) {
+  const errorId = crypto.randomBytes(4).toString('hex');
+  // eslint-disable-next-line no-console
+  console.error(`[mutation-error] error_id=${errorId}`, error?.code || error?.name || 'error', error?.message);
+  return res.status(500).json({ error: genericErrorMessage, error_id: errorId });
 }
 
 export function handleUserMutationError(error, res, genericErrorMessage) {
@@ -282,7 +360,12 @@ export function handleUserMutationError(error, res, genericErrorMessage) {
       .status(409)
       .json({ error: 'Kullanici kodu olusturulurken cakisma oldu, tekrar deneyin.' });
   }
-  return res.status(500).json({ error: genericErrorMessage });
+  // Servisin bilerek firlattigi 4xx (statusCode'lu) is mantigi hatalari mesajiyla doner (500'e donusmez).
+  const explicitStatus = Number(error?.statusCode);
+  if (Number.isInteger(explicitStatus) && explicitStatus >= 400 && explicitStatus < 500 && isClientSafeError(error)) {
+    return res.status(explicitStatus).json({ error: error.message });
+  }
+  return respondUnexpectedError(res, error, genericErrorMessage);
 }
 
 export function handleSiteMutationError(error, res, genericErrorMessage) {
@@ -298,15 +381,19 @@ export function handleSiteMutationError(error, res, genericErrorMessage) {
   if (error?.message === 'APARTMENT_LOGIN_GENERATION_FAILED') {
     return res.status(500).json({ error: 'Daire kullanicisi hesabi uretilemedi.' });
   }
-  if (typeof error?.message === 'string' && error.message.trim().length > 0) {
-    return res.status(400).json({ error: error.message });
+  // Yalnızca iş mantığı hataları (kontrollü 4xx statusCode'lu veya kodsuz düz Error mesajları) istemciye
+  // mesajıyla geçer; DB / sistem / TypeError gibi beklenmeyen hatalar genel mesaj + error_id ile döner.
+  if (isClientSafeError(error)) {
+    const explicit = Number(error.statusCode);
+    const status = Number.isInteger(explicit) && explicit >= 400 && explicit < 500 ? explicit : 400;
+    return res.status(status).json({ error: error.message });
   }
-  return res.status(500).json({ error: genericErrorMessage });
+  return respondUnexpectedError(res, error, genericErrorMessage);
 }
 
 export function handleDeviceMutationError(error, res, genericErrorMessage) {
   if (error?.code === '23505' && error?.constraint === 'devices_device_uid_key') {
     return res.status(409).json({ error: 'Bu cihazin unique id kayitli.' });
   }
-  return res.status(500).json({ error: genericErrorMessage });
+  return respondUnexpectedError(res, error, genericErrorMessage);
 }

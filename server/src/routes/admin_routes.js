@@ -1,6 +1,8 @@
 import express from 'express';
 import { pool } from '../db.js';
 import { authRequired, requireSuperUser } from '../middlewares/auth_middleware.js';
+import { adminSensitiveLimiter } from '../middlewares/rate_limiters.js';
+import { isClientFacingError, newErrorId } from '../middlewares/error_handler.js';
 import {
   mapUserRow,
   mapSiteRow,
@@ -10,6 +12,7 @@ import {
   mapDeviceMqttCredentialsRow,
   parseRole,
   normalizeEmail,
+  normalizeOptionalEmail,
   normalizePhone,
   normalizeOptionalBool,
   normalizeOptionalText,
@@ -37,6 +40,7 @@ import { createUser, updateUserByCode, userExists } from '../services/user_servi
 import {
   listSitesForAuthUser,
   getSiteByCode,
+  siteExists,
   syncSiteStructureCounts,
   siteManagerExists,
   createSiteWithStructure,
@@ -69,13 +73,77 @@ import {
   finishOtaUpdateJob,
   updateDeviceDetails,
   deleteDeviceById,
-  createDevice,
   getDeviceConnectivityLogs,
+  setDeviceDefectStatus,
+  releaseDeviceOwnership,
+  registerCompanyDevice,
 } from '../services/device_service.js';
 import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
 import { publishOtaCheckToDevices } from '../mqtt_bridge.js';
 
 export const adminRouter = express.Router();
+
+const INT4_MAX = 2147483647;
+
+// URL parametresi icin guvenli pozitif tamsayi ayristirici. Gecersizse null doner.
+// (Number('') === 0, Number('1e3') === 1000 gibi tuzaklara dusmemek icin yalnizca rakam kabul edilir.)
+export function parseId(raw, max = Number.MAX_SAFE_INTEGER) {
+  const text = String(raw ?? '').trim();
+  if (!/^[0-9]{1,16}$/.test(text)) {
+    return null;
+  }
+  const value = Number(text);
+  return Number.isSafeInteger(value) && value > 0 && value <= max ? value : null;
+}
+
+// Servislerin bilerek firlattigi 4xx hatalarinin mesaji istemciye gider (isClientFacingError); beklenmeyen
+// (DB/kod) hatalarda ic mesaj SIZDIRILMAZ: genel mesaj + errorId doner, ayrinti yalnizca sunucu loguna yazilir.
+export function sendServiceError(res, error, fallbackMessage) {
+  if (isClientFacingError(error) && error?.message) {
+    const rawStatus = Number(error.statusCode ?? error.status);
+    const status = Number.isInteger(rawStatus) && rawStatus >= 400 && rawStatus < 500 ? rawStatus : 400;
+    // Hiz/deneme siniri (429) ve varsa bekleme suresi istemciye aynen iletilir.
+    const retryAfter = Math.ceil(Number(error.retryAfterSeconds));
+    if (status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(status).json({ error: error.message, retry_after_seconds: retryAfter });
+    }
+    return res.status(status).json({ error: error.message });
+  }
+  const errorId = newErrorId();
+  console.error(`[admin] ${errorId} ${fallbackMessage}`, error);
+  return res.status(500).json({ error: fallbackMessage, errorId });
+}
+
+// handleSiteMutationError servis dogrulama mesajlarini (400) oldugu gibi dondurur; beklenmeyen
+// TypeError/DB hatalari (ornek: "Cannot read properties...") ise genel 500 ile maskelenir.
+function sendSiteMutationError(error, res, fallbackMessage) {
+  const code = typeof error?.code === 'string' ? error.code : '';
+  const isUnexpected =
+    error instanceof TypeError ||
+    error instanceof ReferenceError ||
+    error instanceof RangeError ||
+    (/^[0-9A-Z]{5}$/.test(code) && code !== '23505');
+  if (isUnexpected) {
+    const errorId = newErrorId();
+    console.error(`[admin] ${errorId} ${fallbackMessage}`, error);
+    return res.status(500).json({ error: fallbackMessage, errorId });
+  }
+  return handleSiteMutationError(error, res, fallbackMessage);
+}
+
+// Istege bagli (tablo olmayabilir) temizleme adimini SAVEPOINT icinde calistirir; hata transaction'i bozmaz.
+async function runOptionalStep(client, sql, params) {
+  await client.query('SAVEPOINT optional_step');
+  try {
+    await client.query(sql, params);
+    await client.query('RELEASE SAVEPOINT optional_step');
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT optional_step');
+    await client.query('RELEASE SAVEPOINT optional_step');
+    console.warn('[admin] istege bagli temizleme adimi atlandi:', error?.code || 'hata');
+  }
+}
 
 // GET /admin/users
 adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
@@ -176,8 +244,8 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
       page,
       page_size: pageSize,
     });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Kullanici listesi alinamadi.' });
+  } catch (error) {
+    return sendServiceError(res, error, 'Kullanici listesi alinamadi.');
   }
 });
 
@@ -221,15 +289,16 @@ adminRouter.post('/admin/users', authRequired, requireSuperUser, async (req, res
 
 // PATCH /admin/users/:id
 adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req, res) => {
-  const userCode = Number(req.params.id);
-  if (!Number.isInteger(userCode)) {
+  const userCode = parseId(req.params.id, INT4_MAX);
+  if (userCode === null) {
     return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
   }
 
   const fullName = normalizeOptionalText(req.body.full_name);
   const email =
     req.body.email === undefined ? undefined : normalizeEmail(req.body.email);
-  const password = normalizeOptionalText(req.body.password);
+  // Bos parola alani "degistirme" anlamina gelir (null bcrypt'te 500 uretirdi).
+  const password = normalizeOptionalText(req.body.password) ?? undefined;
   const phoneNumber =
     req.body.phone_number === undefined
       ? undefined
@@ -237,6 +306,27 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
   const isActive = normalizeOptionalBool(req.body.is_active);
   const role = req.body.role !== undefined && req.body.role !== null ? parseRole(String(req.body.role).trim()) : undefined;
   const emailVerified = normalizeOptionalBool(req.body.email_verified);
+
+  // null = gonderildi ama gecersiz/bos: NOT NULL sutunlara null yazilip 500 donmesin.
+  if (fullName === null) {
+    return res.status(400).json({ error: 'full_name en az 3 karakter olmali.' });
+  }
+  if (role === null) {
+    return res.status(400).json({ error: 'Gecersiz rol.' });
+  }
+  if (emailVerified === null) {
+    return res.status(400).json({ error: 'email_verified alani true/false olmali.' });
+  }
+
+  // Kendi parolasi bu uctan (mevcut parola istenmeden, deneme sayaci olmadan) degistirilemez: PATCH /me
+  // (current_password zorunlu + hesap bazli kilit) yolu kullanilmali. Ayrica bu uc yeni token donmez;
+  // hash degisince oturum TOKEN_REVOKED ile dusurdu. Diger alanlarin kendi kendine duzenlenmesi calismaya devam eder.
+  if (password !== undefined && userCode === getAuthUserCode(req)) {
+    return res.status(400).json({
+      error: 'Kendi şifrenizi Profilim ekranından mevcut şifrenizle değiştirin.',
+      code: 'USE_PROFILE_PASSWORD_CHANGE',
+    });
+  }
 
   const validationError = validateUpdateInput({
     fullName,
@@ -273,6 +363,15 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       }
     }
 
+    if (password !== undefined && String(password).trim().length > 0 && userCode !== getAuthUserCode(req)) {
+      const targetUser = await pool.query('SELECT role FROM users WHERE user_code = $1', [userCode]);
+      if (targetUser.rows.length > 0 && (targetUser.rows[0].role === 'apartment_owner' || targetUser.rows[0].role === 'individual')) {
+        return res.status(403).json({
+          error: 'Güvenlik kuralı: Daire sakinlerinin şifresi yöneticiler tarafından değiştirilemez. Kullanıcılar kendi şifrelerini hesaplarına giriş yaparak profil bölümünden değiştirmelidir.',
+        });
+      }
+    }
+
     const updated = await updateUserByCode({
       userCode,
       fullName,
@@ -297,8 +396,8 @@ adminRouter.patch(
   authRequired,
   requireSuperUser,
   async (req, res) => {
-    const userCode = Number(req.params.id);
-    if (!Number.isInteger(userCode)) {
+    const userCode = parseId(req.params.id, INT4_MAX);
+    if (userCode === null) {
       return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
     }
 
@@ -327,8 +426,8 @@ adminRouter.patch(
 
 // DELETE /admin/users/:id
 adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (req, res) => {
-  const targetCode = Number(req.params.id);
-  if (!Number.isInteger(targetCode)) {
+  const targetCode = parseId(req.params.id, INT4_MAX);
+  if (targetCode === null) {
     return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
   }
 
@@ -340,8 +439,9 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     return res.status(400).json({ error: 'Kendi hesabinizi silemezsiniz.' });
   }
 
-  const client = await pool.connect();
+  let client = null;
   try {
+    client = await pool.connect();
     const affectedSiteCodes = await affectedSiteCodesForUser(targetCode);
     const directDeviceResult = await client.query(
       `
@@ -366,40 +466,24 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
     // 4. Uyelikler (Site ve Daire)
     await client.query('DELETE FROM site_memberships WHERE user_code = $1', [targetCode]);
-    try {
-      await client.query('DELETE FROM apartment_memberships WHERE user_code = $1', [targetCode]);
-    } catch (_) {}
+    await runOptionalStep(client, 'DELETE FROM apartment_memberships WHERE user_code = $1', [targetCode]);
 
     // 5. Katilma talepleri ve davet tokenlari
-    try {
-      await client.query('DELETE FROM join_requests WHERE user_code = $1', [targetCode]);
-      await client.query('UPDATE join_requests SET reviewed_by_user_code = NULL WHERE reviewed_by_user_code = $1', [targetCode]);
-    } catch (_) {}
-    try {
-      await client.query('DELETE FROM site_join_tokens WHERE created_by_user_code = $1', [targetCode]);
-    } catch (_) {}
+    await runOptionalStep(client, 'DELETE FROM join_requests WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'UPDATE join_requests SET reviewed_by_user_code = NULL WHERE reviewed_by_user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM site_join_tokens WHERE created_by_user_code = $1', [targetCode]);
 
     // 6. QR gecis tokenlari ve misafir gecisleri
-    try {
-      await client.query('DELETE FROM qr_access_tokens WHERE user_code = $1', [targetCode]);
-    } catch (_) {}
-    try {
-      await client.query('DELETE FROM guest_passes WHERE created_by_user_code = $1', [targetCode]);
-    } catch (_) {}
+    await runOptionalStep(client, 'DELETE FROM qr_access_tokens WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'DELETE FROM guest_passes WHERE created_by_user_code = $1', [targetCode]);
 
     // 7. Ozel kapi izinleri ve gecis loglari
-    try {
-      await client.query('DELETE FROM door_access_overrides WHERE user_code = $1', [targetCode]);
-      await client.query('UPDATE door_access_overrides SET granted_by_user_code = NULL WHERE granted_by_user_code = $1', [targetCode]);
-    } catch (_) {}
-    try {
-      await client.query('UPDATE door_access_logs SET user_code = NULL WHERE user_code = $1', [targetCode]);
-    } catch (_) {}
+    await runOptionalStep(client, 'DELETE FROM door_access_overrides WHERE user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'UPDATE door_access_overrides SET granted_by_user_code = NULL WHERE granted_by_user_code = $1', [targetCode]);
+    await runOptionalStep(client, 'UPDATE door_access_logs SET user_code = NULL WHERE user_code = $1', [targetCode]);
 
     // 8. OTA guncelleme isleri
-    try {
-      await client.query('UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
-    } catch (_) {}
+    await runOptionalStep(client, 'UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
 
     // 9. Kullanici kaydini sil
     const result = await client.query(
@@ -425,11 +509,16 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
     return res.status(204).send();
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('Kullanici silinirken hata:', error);
-    return res.status(500).json({ error: error.message || 'Kullanici silinemedi.' });
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    const errorId = newErrorId();
+    console.error(`Kullanici silinirken hata (${errorId}):`, error);
+    return res.status(500).json({ error: 'Kullanici silinemedi.', errorId });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 });
 
@@ -483,8 +572,8 @@ adminRouter.get(
         page,
         page_size: pageSize,
       });
-    } catch (_error) {
-      return res.status(500).json({ error: 'Abonelik talepleri alinamadi.' });
+    } catch (error) {
+      return sendServiceError(res, error, 'Abonelik talepleri alinamadi.');
     }
   },
 );
@@ -495,10 +584,10 @@ adminRouter.patch(
   authRequired,
   requireSuperUser,
   async (req, res) => {
-    const userCode = Number(req.params.id);
+    const userCode = parseId(req.params.id, INT4_MAX);
     const action = String(req.body.action || '').trim().toLowerCase();
 
-    if (!Number.isInteger(userCode)) {
+    if (userCode === null) {
       return res.status(400).json({ error: 'Gecersiz kullanici kodu.' });
     }
     if (action !== 'approve' && action !== 'reject') {
@@ -539,8 +628,8 @@ adminRouter.patch(
       }
 
       return res.status(200).json({ user: mapUserRow(result.rows[0]) });
-    } catch (_error) {
-      return res.status(500).json({ error: 'Abonelik talebi guncellenemedi.' });
+    } catch (error) {
+      return sendServiceError(res, error, 'Abonelik talebi guncellenemedi.');
     }
   },
 );
@@ -548,7 +637,8 @@ adminRouter.patch(
 // GET /admin/sites
 adminRouter.get('/admin/sites', authRequired, requireSuperUser, async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
-  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size || 10)));
+  // Ust sinir 200: istemci kapi kontrolu icin page_size=100 ister (50'ye kirpilinca siteler eksik listelenirdi).
+  const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size || 10)));
   const approvalStatus = req.query.approval_status == null
     ? undefined
     : parseApprovalStatus(String(req.query.approval_status).trim().toLowerCase());
@@ -571,8 +661,8 @@ adminRouter.get('/admin/sites', authRequired, requireSuperUser, async (req, res)
       page,
       page_size: pageSize,
     });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Site listesi alinamadi.' });
+  } catch (error) {
+    return sendServiceError(res, error, 'Site listesi alinamadi.');
   }
 });
 
@@ -641,16 +731,16 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site olusturulamadi.');
+    return sendSiteMutationError(error, res, 'Site olusturulamadi.');
   }
 });
 
 // PATCH /admin/sites/:id/approval
 adminRouter.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
+  const siteCode = parseId(req.params.id);
   const action = String(req.body.action || '').trim().toLowerCase();
 
-  if (!Number.isInteger(siteCode)) {
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
   if (action !== 'approve' && action !== 'reject') {
@@ -703,16 +793,20 @@ adminRouter.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, a
       ],
     );
 
+    if (result.rowCount === 0) {
+      return res.status(409).json({ error: 'Site talebi baska bir islemle zaten sonuclandirildi.' });
+    }
+
     return res.status(200).json({ site: mapSiteRow(result.rows[0]) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site onayi guncellenemedi.');
+    return sendSiteMutationError(error, res, 'Site onayi guncellenemedi.');
   }
 });
 
 // PATCH /admin/sites/:id
 adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -736,6 +830,9 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
     Number.isNaN(managerUserCode)
   ) {
     return res.status(400).json({ error: 'Sayisal alanlar gecersiz.' });
+  }
+  if (name === null) {
+    return res.status(400).json({ error: 'Site adi en az 2 karakter olmali.' });
   }
 
   if (
@@ -835,14 +932,14 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
     const updated = await getSiteByCode(siteCode);
     return res.status(200).json({ site: mapSiteRow(updated) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site guncellenemedi.');
+    return sendSiteMutationError(error, res, 'Site guncellenemedi.');
   }
 });
 
 // PATCH /admin/sites/:id/features
 adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
   const featureQrEnabled = normalizeOptionalBool(req.body.feature_qr_enabled);
@@ -853,36 +950,47 @@ adminRouter.patch('/admin/sites/:id/features', authRequired, requireSuperUser, a
     ? Math.max(10, Math.min(300, Number(req.body.qr_rotation_seconds) || 30))
     : undefined;
 
+  // normalizeOptionalBool: undefined = gonderilmedi, null = gecersiz deger.
+  if (
+    featureQrEnabled === null ||
+    featureRemoteOpenEnabled === null ||
+    featureLocalUdpEnabled === null ||
+    featureGuestPassEnabled === null
+  ) {
+    return res.status(400).json({ error: 'feature_* alanlari true/false olmali.' });
+  }
+
   try {
     const existing = await getSiteByCode(siteCode);
     if (!existing) {
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
-    const effRemote = featureRemoteOpenEnabled !== null ? featureRemoteOpenEnabled : existing.feature_remote_open_enabled;
-    const effQr = featureQrEnabled !== null ? featureQrEnabled : existing.feature_qr_enabled;
+    // Gonderilmeyen alan mevcut degeri korur (kismi guncellemede undefined "kapali" sayilmamali).
+    const effRemote = featureRemoteOpenEnabled ?? existing.feature_remote_open_enabled;
+    const effQr = featureQrEnabled ?? existing.feature_qr_enabled;
     if (!effRemote && !effQr) {
       return res.status(400).json({ error: 'En az bir giris yontemi (Mobil Uygulama veya QR Kod) acik olmalidir.' });
     }
 
     const updated = await updateSiteByCode({
       siteCode,
-      featureQrEnabled: featureQrEnabled === null ? undefined : featureQrEnabled,
-      featureRemoteOpenEnabled: featureRemoteOpenEnabled === null ? undefined : featureRemoteOpenEnabled,
-      featureLocalUdpEnabled: featureLocalUdpEnabled === null ? undefined : featureLocalUdpEnabled,
-      featureGuestPassEnabled: featureGuestPassEnabled === null ? undefined : featureGuestPassEnabled,
-      qrRotationSeconds: Number.isNaN(qrRotationSeconds) ? undefined : qrRotationSeconds,
+      featureQrEnabled,
+      featureRemoteOpenEnabled,
+      featureLocalUdpEnabled,
+      featureGuestPassEnabled,
+      qrRotationSeconds,
       ...(featureQrEnabled === false ? { qrEntryActive: false } : {}),
     });
     return res.status(200).json({ site: mapSiteRow(updated || existing) });
   } catch (error) {
-    return handleSiteMutationError(error, res, 'Site modulleri guncellenemedi.');
+    return sendSiteMutationError(error, res, 'Site modulleri guncellenemedi.');
   }
 });
 
 // GET /admin/sites/:id/structure
 adminRouter.get('/admin/sites/:id/structure', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -892,15 +1000,15 @@ adminRouter.get('/admin/sites/:id/structure', authRequired, requireSuperUser, as
       return res.status(404).json({ error: 'Site bulunamadi.' });
     }
     return res.status(200).json(structure);
-  } catch (_error) {
-    return res.status(500).json({ error: 'Site yapisi alinamadi.' });
+  } catch (error) {
+    return sendServiceError(res, error, 'Site yapisi alinamadi.');
   }
 });
 
 // DELETE /admin/sites/:id (Akıllı Silme / Çift Taraflı Teyit Başlatma/Onaylama)
 adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -908,15 +1016,14 @@ adminRouter.delete('/admin/sites/:id', authRequired, requireSuperUser, async (re
     const result = await requestSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme işlemi başlatılamadı.' });
+    return sendServiceError(res, error, 'Site silme işlemi başlatılamadı.');
   }
 });
 
 // POST /admin/sites/:id/approve-deletion
 adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -924,15 +1031,14 @@ adminRouter.post('/admin/sites/:id/approve-deletion', authRequired, requireSuper
     const result = await approveSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme talebi onaylanamadı.' });
+    return sendServiceError(res, error, 'Site silme talebi onaylanamadı.');
   }
 });
 
 // POST /admin/sites/:id/reject-deletion
 adminRouter.post('/admin/sites/:id/reject-deletion', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -940,15 +1046,14 @@ adminRouter.post('/admin/sites/:id/reject-deletion', authRequired, requireSuperU
     const result = await rejectOrCancelSiteDeletion({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silme talebi reddedilemedi.' });
+    return sendServiceError(res, error, 'Site silme talebi reddedilemedi.');
   }
 });
 
 // POST /admin/sites/:id/request-email-deletion-code
 adminRouter.post('/admin/sites/:id/request-email-deletion-code', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
@@ -956,20 +1061,19 @@ adminRouter.post('/admin/sites/:id/request-email-deletion-code', authRequired, r
     const result = await requestSiteDeletionEmailCode({ siteCode, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Silme kodu gönderilemedi.' });
+    return sendServiceError(res, error, 'Silme kodu gönderilemedi.');
   }
 });
 
 // POST /admin/sites/:id/confirm-email-deletion
-adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUser, async (req, res) => {
-  const siteCode = Number(req.params.id);
-  if (!Number.isInteger(siteCode)) {
+adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requireSuperUser, adminSensitiveLimiter, async (req, res) => {
+  const siteCode = parseId(req.params.id);
+  if (siteCode === null) {
     return res.status(400).json({ error: 'Gecersiz site kodu.' });
   }
 
   const code = String(req.body.code || '').trim();
-  if (!code) {
+  if (!code || code.length > 16) {
     return res.status(400).json({ error: 'Lütfen 6 haneli silme doğrulama kodunu giriniz.' });
   }
 
@@ -977,15 +1081,14 @@ adminRouter.post('/admin/sites/:id/confirm-email-deletion', authRequired, requir
     const result = await confirmSiteDeletionWithEmailCode({ siteCode, code, authUser: req.authUser });
     return res.status(200).json(result);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ error: error.message || 'Site silinemedi.' });
+    return sendServiceError(res, error, 'Site silinemedi.');
   }
 });
 
 // PATCH /admin/apartments/:id/resident
 adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUser, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
   }
 
@@ -994,7 +1097,11 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
   const password = String(req.body.password || '').trim();
   const email = normalizeOptionalEmail(req.body.email);
   const phoneNumber = normalizePhone(req.body.phone_number);
-  const isActive = normalizeOptionalBool(req.body.is_active) ?? true;
+  const rawIsActive = normalizeOptionalBool(req.body.is_active);
+  if (rawIsActive === null) {
+    return res.status(400).json({ error: 'is_active alani true/false olmali.' });
+  }
+  const isActive = rawIsActive ?? true;
 
   const validationError = validateApartmentResidentInput({
     fullName,
@@ -1033,8 +1140,8 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
 
 // DELETE /admin/apartments/:id/resident
 adminRouter.delete('/admin/apartments/:id/resident', authRequired, requireSuperUser, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
   }
 
@@ -1055,8 +1162,8 @@ adminRouter.delete('/admin/apartments/:id/resident', authRequired, requireSuperU
 
 // POST /admin/apartments/:id/send-credentials
 adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, requireSuperUser, async (req, res) => {
-  const apartmentId = Number(req.params.id);
-  if (!Number.isInteger(apartmentId)) {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
     return res.status(400).json({ error: 'Gecersiz daire ID.' });
   }
 
@@ -1079,8 +1186,8 @@ adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, require
 
 // PATCH /admin/doors/:id/device
 adminRouter.patch('/admin/doors/:id/device', authRequired, requireSuperUser, async (req, res) => {
-  const doorId = Number(req.params.id);
-  if (!Number.isInteger(doorId)) {
+  const doorId = parseId(req.params.id);
+  if (doorId === null) {
     return res.status(400).json({ error: 'Gecersiz kapi ID.' });
   }
 
@@ -1124,14 +1231,17 @@ adminRouter.get('/admin/devices', authRequired, requireSuperUser, async (req, re
       page,
       page_size: pageSize,
     });
-  } catch (_error) {
-    return res.status(500).json({ error: 'Cihazlar yuklenemedi.' });
+  } catch (error) {
+    return sendServiceError(res, error, 'Cihazlar yuklenemedi.');
   }
 });
 
 // GET /admin/devices/:deviceUid/connectivity-logs
 adminRouter.get('/admin/devices/:deviceUid/connectivity-logs', authRequired, requireSuperUser, async (req, res) => {
   const deviceUid = normalizeDeviceUid(req.params.deviceUid);
+  if (deviceUid.length < 6) {
+    return res.status(400).json({ error: 'Gecersiz cihaz unique id.' });
+  }
   const page = Math.max(1, Number(req.query.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size || 10)));
 
@@ -1148,7 +1258,7 @@ adminRouter.get('/admin/devices/:deviceUid/connectivity-logs', authRequired, req
 
     return res.status(200).json(report);
   } catch (error) {
-    return res.status(500).json({ error: 'Baglanti loglari yuklenemedi.' });
+    return sendServiceError(res, error, 'Baglanti loglari yuklenemedi.');
   }
 });
 
@@ -1225,14 +1335,41 @@ adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, asy
 
 // PATCH /admin/devices/:id
 adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) => {
-  const deviceId = Number(req.params.id);
-  if (!Number.isInteger(deviceId)) {
+  const deviceId = parseId(req.params.id);
+  if (deviceId === null) {
     return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
   }
 
   const assignedUserCode = normalizeOptionalInteger(req.body.assigned_user_code);
   const siteCode = normalizeOptionalInteger(req.body.site_code);
-  const gateName = String(req.body.gate_name || '').trim() || null;
+  const gateName = String(req.body.gate_name || '').trim().slice(0, 100) || null;
+
+  // Kismi guncelleme: yalnizca istekte GONDERILEN atama alanlari degisir (null = temizle, anahtar yok = koru).
+  // Aksi halde yalniz {hardware_type} gonderen bir duzeltme site/kullanici/kapi atamasini silerdi.
+  const hasField = (key) => Object.prototype.hasOwnProperty.call(req.body ?? {}, key);
+  const assignedUserCodeProvided = hasField('assigned_user_code');
+  const siteCodeProvided = hasField('site_code');
+  const gateNameProvided = hasField('gate_name');
+
+  if (Number.isNaN(assignedUserCode) || (assignedUserCode != null && assignedUserCode > INT4_MAX)) {
+    return res.status(400).json({ error: 'Kullanici ID sayisal olmali.' });
+  }
+  if (Number.isNaN(siteCode)) {
+    return res.status(400).json({ error: 'Site ID sayisal olmali.' });
+  }
+
+  // Istege bagli: donanim tipi (OTA hedef kontrolu icin). Gonderilmezse degismez.
+  let hardwareType;
+  if (req.body.hardware_type !== undefined && req.body.hardware_type !== null && req.body.hardware_type !== '') {
+    const rawHardware = String(req.body.hardware_type).trim().toLowerCase();
+    if (rawHardware.includes('c3')) {
+      hardwareType = 'esp32_c3';
+    } else if (rawHardware.includes('wroom')) {
+      hardwareType = 'esp32_wroom';
+    } else {
+      return res.status(400).json({ error: 'hardware_type esp32_c3 veya esp32_wroom olmali.' });
+    }
+  }
 
   try {
     if (!(await userExists(assignedUserCode ?? null))) {
@@ -1255,6 +1392,10 @@ adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (r
       siteCode: siteCode ?? null,
       gateName,
       qrReaderEnabled,
+      hardwareType,
+      assignedUserCodeProvided,
+      siteCodeProvided,
+      gateNameProvided,
     });
     if (!device) {
       return res.status(404).json({ error: 'Cihaz bulunamadi.' });
@@ -1267,8 +1408,8 @@ adminRouter.patch('/admin/devices/:id', authRequired, requireSuperUser, async (r
 
 // DELETE /admin/devices/:id
 adminRouter.delete('/admin/devices/:id', authRequired, requireSuperUser, async (req, res) => {
-  const deviceId = Number(req.params.id);
-  if (!Number.isInteger(deviceId)) {
+  const deviceId = parseId(req.params.id);
+  if (deviceId === null) {
     return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
   }
 
@@ -1290,11 +1431,13 @@ adminRouter.delete('/admin/devices/:id', authRequired, requireSuperUser, async (
   }
 });
 
-// POST /admin/devices
+// POST /admin/devices (Şirket Envanterine Cihaz Kaydet)
 adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, res) => {
   const deviceUid = String(req.body.device_uid || '').trim().toUpperCase();
   const assignedUserCode = normalizeOptionalInteger(req.body.assigned_user_code);
   const siteCode = normalizeOptionalInteger(req.body.site_code);
+  const hardwareType = String(req.body.hardware_type || 'esp32_wroom').trim().toLowerCase();
+  const inventoryNotes = req.body.inventory_notes ? String(req.body.inventory_notes).trim().slice(0, 500) : null;
 
   const validationError = validateDeviceInput({
     deviceUid,
@@ -1306,20 +1449,32 @@ adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, r
   }
 
   try {
-    if (!(await userExists(assignedUserCode ?? null))) {
+    if (assignedUserCode && !(await userExists(assignedUserCode))) {
       return res.status(404).json({ error: 'Kullanici ID bulunamadi.' });
     }
-    if (!(await siteExists(siteCode ?? null))) {
+    if (siteCode && !(await siteExists(siteCode))) {
       return res.status(404).json({ error: 'Site ID bulunamadi.' });
     }
 
-    const device = await createDevice({
+    const device = await registerCompanyDevice({
       deviceUid,
-      assignedUserCode: assignedUserCode ?? null,
-      siteCode: siteCode ?? null,
+      hardwareType: hardwareType.includes('c3') ? 'esp32_c3' : 'esp32_wroom',
+      inventoryNotes,
+      authUser: req.authUser,
     });
+
+    // Eğer site veya kullanıcı verilmişse ek güncelleme yap
+    if (assignedUserCode || siteCode) {
+      await pool.query(
+        `UPDATE devices SET assigned_user_code = $1, site_code = $2 WHERE id = $3`,
+        [assignedUserCode ?? null, siteCode ?? null, device.id],
+      );
+    }
+
     const mqttSync = await syncMqttAclOrThrow({ reason: 'device_created' });
     return res.status(201).json({
+      ok: true,
+      message: `Cihaz (${device.device_uid}) başarıyla şirket envanterine kaydedildi.`,
       device: mapDeviceRow(device),
       mqtt_sync: mqttSync,
     });
@@ -1330,7 +1485,65 @@ adminRouter.post('/admin/devices', authRequired, requireSuperUser, async (req, r
         mqtt_sync: error.syncResult,
       });
     }
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     return handleDeviceMutationError(error, res, 'Cihaz kaydedilemedi.');
+  }
+});
+
+// PATCH /admin/devices/:id/defect (Cihazı Arızalı İşaretle veya Arızayı Kaldır)
+adminRouter.patch('/admin/devices/:id/defect', authRequired, requireSuperUser, async (req, res) => {
+  const deviceId = parseId(req.params.id);
+  if (deviceId === null) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
+  }
+  const isDefective = normalizeOptionalBool(req.body.is_defective);
+  if (isDefective === undefined || isDefective === null) {
+    return res.status(400).json({ error: 'is_defective alani true/false olmali.' });
+  }
+  const defectiveReason = req.body.defective_reason
+    ? String(req.body.defective_reason).trim().slice(0, 300)
+    : null;
+
+  try {
+    const updated = await setDeviceDefectStatus({
+      deviceId,
+      isDefective,
+      defectiveReason,
+      authUser: req.authUser,
+    });
+    return res.status(200).json({
+      ok: true,
+      message: isDefective
+        ? `Cihaz (${updated.device_uid}) arızalı olarak işaretlendi.`
+        : `Cihazın (${updated.device_uid}) arıza durumu kaldırıldı.`,
+      device: updated,
+    });
+  } catch (error) {
+    return sendServiceError(res, error, 'Cihaz arıza durumu güncellenemedi.');
+  }
+});
+
+// POST /admin/devices/:id/release-ownership (Cihaz Sahipliğini Sıfırla / Şirket Stokuna Döndür)
+adminRouter.post('/admin/devices/:id/release-ownership', authRequired, requireSuperUser, async (req, res) => {
+  const deviceId = parseId(req.params.id);
+  if (deviceId === null) {
+    return res.status(400).json({ error: 'Gecersiz cihaz ID.' });
+  }
+
+  try {
+    const updated = await releaseDeviceOwnership({
+      deviceId,
+      authUser: req.authUser,
+    });
+    return res.status(200).json({
+      ok: true,
+      message: `Cihaz (${updated.device_uid}) sahipliği sıfırlandı ve şirket stokuna geri döndürüldü.`,
+      device: updated,
+    });
+  } catch (error) {
+    return sendServiceError(res, error, 'Cihaz sahipliği sıfırlanamadı.');
   }
 });
 
@@ -1340,7 +1553,9 @@ adminRouter.get('/admin/maintenance/health', authRequired, requireSuperUser, asy
     const health = await getDatabaseHealth();
     return res.status(200).json(health);
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Veritabani saglik bilgisi alinamadi.' });
+    const errorId = newErrorId();
+    console.error(`[admin] ${errorId} Veritabani saglik bilgisi alinamadi:`, error);
+    return res.status(500).json({ error: 'Veritabani saglik bilgisi alinamadi.', errorId });
   }
 });
 
@@ -1353,7 +1568,9 @@ adminRouter.post('/admin/maintenance/cleanup', authRequired, requireSuperUser, a
     const result = await runDatabaseCleanup();
     return res.status(200).json(result);
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'Veritabani temizligi sirasinda hata olustu.' });
+    const errorId = newErrorId();
+    console.error(`[admin] ${errorId} Veritabani temizligi hatasi:`, error);
+    return res.status(500).json({ error: 'Veritabani temizligi sirasinda hata olustu.', errorId });
   }
 });
 

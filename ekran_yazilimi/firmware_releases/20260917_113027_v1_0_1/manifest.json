@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "target": "esp32c3-display",
+  "env": "esp32c3_display",
+  "version": "1.0.1",
+  "filename": "firmware.bin",
+  "sha256": "91b5902317afc1cdfc8e663a13c15f85f96bd3b843b165e68a9607ce61357f68",
+  "md5": "c42a90c0f21a779b648b633033939988",
+  "created_at": "2026-09-17T08:30:27.375946+00:00"
+}

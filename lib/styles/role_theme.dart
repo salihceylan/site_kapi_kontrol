@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 extension UserRoleTheme on UserRole {
   Color get accentColor {
@@ -9,6 +10,7 @@ extension UserRoleTheme on UserRole {
       case UserRole.siteManager:
         return const Color(0xFF10B981); // Emerald Neon
       case UserRole.apartmentOwner:
+      case UserRole.individual:
         return const Color(0xFFA855F7); // Amethyst Purple
     }
   }
@@ -20,6 +22,7 @@ extension UserRoleTheme on UserRole {
       case UserRole.siteManager:
         return const Color(0xFF34D399);
       case UserRole.apartmentOwner:
+      case UserRole.individual:
         return const Color(0xFFC084FC);
     }
   }
@@ -31,6 +34,7 @@ extension UserRoleTheme on UserRole {
       case UserRole.siteManager:
         return const Color(0xFF064E3B); // Deep Emerald Slate
       case UserRole.apartmentOwner:
+      case UserRole.individual:
         return const Color(0xFF3B0764); // Deep Purple Slate
     }
   }
@@ -42,4 +46,9 @@ extension UserRoleTheme on UserRole {
       end: Alignment.bottomRight,
     );
   }
+
+  /// Rol rengini METİN/ikon olarak kullanırken: açıkta 700-800, koyuda 300 seviyesi (>= 4,5:1).
+  /// [accentColor] canlı ton olduğundan metin olarak açık zeminde yetersiz kalır (mor ~3,96:1,
+  /// zümrüt ~2,54:1); tint, kenar ve şerit için [accentColor] (== `tone.hue`) kullanılır.
+  Color inkColor(AppPalette palette) => tone.ink(palette);
 }

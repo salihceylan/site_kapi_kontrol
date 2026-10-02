@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class InviteSiteManagerDialog extends StatefulWidget {
   const InviteSiteManagerDialog({
@@ -75,11 +78,10 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
     });
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message ?? 'Yönetici daveti başarıyla iletildi.'),
-          backgroundColor: AppColors.success,
-        ),
+      AppSnack.show(
+        context,
+        message ?? 'Yönetici daveti başarıyla iletildi.',
+        kind: AppSnackKind.success,
       );
       Navigator.of(context).pop(true);
     } else {
@@ -91,158 +93,10 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.person_add_alt_1_rounded,
-              color: AppColors.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Yönetici Davet Et',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  widget.siteName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary(context),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.info_outline_rounded,
-                        color: Colors.blueAccent,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Davet edilen kişi kayıtlıysa anında bu siteye yönetici olarak atanır. '
-                          'Kayıtlı değilse e-posta adresine bir kayıt daveti gönderilir ve kaydolduğunda otomatik yönetici olur.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blueGrey.shade800,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  decoration: const InputDecoration(
-                    labelText: 'E-posta Adresi *',
-                    hintText: 'ornek@eposta.com',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Lütfen e-posta adresi girin.';
-                    }
-                    final email = value.trim();
-                    final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                    if (!regex.hasMatch(email)) {
-                      return 'Geçerli bir e-posta adresi girin.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _fullNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ad Soyad (İsteğe bağlı)',
-                    hintText: 'Ahmet Yılmaz',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: AppColors.error,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(
-                              color: AppColors.error,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AppDialog(
+      title: 'Yönetici Davet Et',
+      subtitle: widget.siteName,
+      icon: Icons.person_add_alt_1_rounded,
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
@@ -250,12 +104,6 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
           child: _isSubmitting
               ? const SizedBox(
                   width: 20,
@@ -268,6 +116,58 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
               : const Text('Davet Gönder'),
         ),
       ],
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const InlineNotice(
+              tone: AppTone.info,
+              message:
+                  'Davet edilen kişi kayıtlıysa anında bu siteye yönetici olarak atanır. '
+                  'Kayıtlı değilse e-posta adresine bir kayıt daveti gönderilir ve kaydolduğunda otomatik yönetici olur.',
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(
+                labelText: 'E-posta Adresi *',
+                hintText: 'ornek@eposta.com',
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Lütfen e-posta adresi girin.';
+                }
+                final email = value.trim();
+                final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                if (!regex.hasMatch(email)) {
+                  return 'Geçerli bir e-posta adresi girin.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _fullNameController,
+              decoration: const InputDecoration(
+                labelText: 'Ad Soyad (İsteğe bağlı)',
+                hintText: 'Ahmet Yılmaz',
+                prefixIcon: Icon(Icons.badge_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 14),
+              InlineNotice(message: _errorMessage!),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

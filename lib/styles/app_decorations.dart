@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class AppDecorations {
   // Arka Plan Gradientleri
@@ -34,80 +35,34 @@ class AppDecorations {
           ? pageBackgroundDark
           : pageBackgroundLight;
 
-  // Koyu Buzlu Cam Kart (Dark Frosted Glassmorphic Card)
-  static final BoxDecoration glassCardDark = BoxDecoration(
-    color: const Color(0xFF1E293B).withValues(alpha: 0.88),
-    borderRadius: BorderRadius.circular(24),
-    border: Border.all(
-      color: Colors.white.withValues(alpha: 0.12),
-      width: 1.2,
-    ),
-    boxShadow: const [
-      BoxShadow(
-        color: Color(0x60000000),
-        blurRadius: 24,
-        offset: Offset(0, 10),
-      ),
-      BoxShadow(
-        color: Color(0x1038BDF8),
-        blurRadius: 16,
-        offset: Offset(0, 2),
-      ),
-    ],
+  // Kart yüzeyi (tasarım sistemi): opak palet yüzeyi, AppRadius.lg, palet kenarı, tek katman
+  // seviye-1 gölge. Eski "cam" kartların alfalı yüzeyi/çift gölgesi kalktı (kompozit maliyeti
+  // düşer; BackdropFilter yok). Adlar ve imzalar eskisiyle aynı.
+  static BoxDecoration _surfaceCard(AppPalette p) => BoxDecoration(
+    color: p.surface,
+    borderRadius: BorderRadius.circular(AppRadius.lg),
+    border: Border.all(color: p.border),
+    boxShadow: p.shadow(1),
   );
 
-  // Açık Buzlu Cam Kart (Luminous Frosted Glassmorphic Card)
-  static final BoxDecoration glassCardLight = BoxDecoration(
-    color: Colors.white.withValues(alpha: 0.94),
-    borderRadius: BorderRadius.circular(24),
-    border: Border.all(
-      color: const Color(0xFFE2E8F0),
-      width: 1.2,
-    ),
-    boxShadow: const [
-      BoxShadow(
-        color: Color(0x0F0F172A),
-        blurRadius: 20,
-        offset: Offset(0, 8),
-      ),
-      BoxShadow(
-        color: Color(0x06000000),
-        blurRadius: 6,
-        offset: Offset(0, 2),
-      ),
-    ],
-  );
+  // Koyu Kart (eski adıyla Dark Frosted Glassmorphic Card)
+  static final BoxDecoration glassCardDark = _surfaceCard(AppPalette.dark);
 
-  // Tema Duyarlı Cam Kart
+  // Açık Kart (eski adıyla Luminous Frosted Glassmorphic Card)
+  static final BoxDecoration glassCardLight = _surfaceCard(AppPalette.light);
+
+  // Tema Duyarlı Kart
   static BoxDecoration glassCard(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? glassCardDark
-          : glassCardLight;
+      context.palette.isDark ? glassCardDark : glassCardLight;
 
   // Bilgi Paneli / Kart
-  static BoxDecoration infoCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return BoxDecoration(
-      color: isDark ? AppColors.surface : Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(
-        color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-        width: 1.0,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: isDark ? const Color(0x40000000) : const Color(0x0A000000),
-          blurRadius: 14,
-          offset: const Offset(0, 6),
-        ),
-      ],
-    );
-  }
+  static BoxDecoration infoCard(BuildContext context) =>
+      context.palette.isDark ? glassCardDark : glassCardLight;
 
   // Işıltılı Kapsül Rozet (Glowing Badge)
   static BoxDecoration glowingBadge(Color accentColor, {bool isDark = true}) => BoxDecoration(
     color: accentColor.withValues(alpha: isDark ? 0.16 : 0.12),
-    borderRadius: BorderRadius.circular(999),
+    borderRadius: BorderRadius.circular(AppRadius.pill),
     border: Border.all(
       color: accentColor.withValues(alpha: isDark ? 0.4 : 0.35),
       width: 1.2,

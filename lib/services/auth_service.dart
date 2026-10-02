@@ -30,36 +30,80 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
+import 'package:site_kapi_kontrol/services/geofence_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 
 class AuthService extends ChangeNotifier {
-  AuthService({required this.api});
+  AuthService({
+    required this.api,
+    Future<LocationFixResult> Function()? locationProvider,
+  }) : _locationProvider =
+            locationProvider ?? GeofenceService.instance.acquireVerifiedPosition;
 
   static const String _storageKey = 'auth_session';
   static const String _localDoorCacheKey = 'local_door_cache';
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
+  /// /me doğrulamasının (C11) art arda çağrılması arasındaki asgari süre.
+  static const Duration _sessionCheckMinInterval = Duration(seconds: 20);
+
+  /// Yerel erişim önbelleği değişmediyse en fazla bu sıklıkta yeniden yazılır.
+  static const Duration _localCacheRewriteInterval = Duration(hours: 1);
+
   final AuthApi api;
+  final Future<LocationFixResult> Function() _locationProvider;
   final LocalDoorService _localDoorService = LocalDoorService();
   UserSession? _session;
   final Map<String, LocalDoorAccess> _localDoorCache =
       <String, LocalDoorAccess>{};
+  List<DoorRecord>? _lastMyDoors;
   bool _isReady = false;
   bool _isDisposed = false;
+  Future<void>? _refreshInFlight;
+  DateTime? _lastSessionCheckAt;
+  String? _sessionNotice;
+
+  /// Süren parola değişimi sayısı (updateMyProfile / changeApartmentMemberPassword). Sunucu
+  /// parolayı yazar yazmaz eski token'ı iptal eder, yeni token ise ancak yanıtla gelir; bu aralıkta
+  /// eşzamanlı bir isteğin TOKEN_REVOKED 401'i oturumu yanlışlıkla kapatmasın diye sayılır.
+  int _credentialSwapDepth = 0;
 
   UserSession? get session => _session;
   bool get isLoggedIn => _session != null;
   bool get isReady => _isReady;
 
+  /// Oturum sunucu tarafında sonlandırıldıysa (süre dolumu, parola değişimi, hesap pasif)
+  /// giriş ekranında BİR KEZ gösterilecek açıklama. Okununca temizlenir.
+  String? takeSessionNotice() {
+    final notice = _sessionNotice;
+    _sessionNotice = null;
+    return notice;
+  }
+
+  /// Güvenli depodaki oturum metni; okunamazsa null (hata açılışı engellemez).
+  Future<String?> _readStoredSessionRaw() async {
+    try {
+      return await _secureStorage.read(key: _storageKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> initialize() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      String? raw;
-      try {
-        raw = await _secureStorage.read(key: _storageKey);
-      } catch (_) {}
+      // Soğuk açılış: birbirinden bağımsız üç okuma (güvenli depodaki oturum, eski SharedPreferences
+      // kopyası, yerel erişim önbelleği) EŞZAMANLI başlar; ekran seçimi bunların toplamını değil en
+      // yavaşını bekler. Sonuçlar aşağıda eskisiyle aynı sırayla işlenir (oturum yüklendi -> hazır).
+      final rawFuture = _readStoredSessionRaw();
+      final legacyFuture = _takeLegacySession();
+      final Future<void> cacheFuture =
+          kIsWeb ? Future<void>.value() : _loadLocalDoorCache().catchError((_) {});
 
-      final legacyRaw = prefs.getString(_storageKey);
+      String? raw = await rawFuture;
+
+      // Oturum yalnızca flutter_secure_storage'da tutulur. Eski sürümlerin bıraktığı
+      // SharedPreferences kopyası (düz metin token) bir kerelik taşınır ve SİLİNİR.
+      final legacyRaw = await legacyFuture;
       if ((raw == null || raw.isEmpty) && legacyRaw != null && legacyRaw.isNotEmpty) {
         raw = legacyRaw;
         try {
@@ -75,17 +119,112 @@ class AuthService extends ChangeNotifier {
           try {
             await _secureStorage.delete(key: _storageKey);
           } catch (_) {}
-          await prefs.remove(_storageKey);
         }
       }
 
-      if (!kIsWeb) {
-        await _loadLocalDoorCache();
-      }
+      await cacheFuture;
     } catch (_) {}
 
     _isReady = true;
     _notifySafely();
+
+    // C11: kayıtlı oturum varsa sunucudaki güncel rol/aktiflik bilgisiyle doğrula.
+    // Çevrimdışı açılışı engellememek için beklenmez.
+    if (_session != null) {
+      unawaited(refreshSession(force: true));
+    }
+  }
+
+  /// Eski (SharedPreferences) oturum kopyasını okuyup siler; yoksa null döner.
+  Future<String?> _takeLegacySession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getString(_storageKey);
+      if (legacy != null) {
+        await prefs.remove(_storageKey);
+      }
+      return (legacy == null || legacy.isEmpty) ? null : legacy;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// C11: Sunucudaki GET /me yanıtını kaynak kabul eder. 401 veya 403 (hesap pasif /
+  /// onaysız) durumunda oturumu kapatır; ağ/5xx hatalarında mevcut oturum korunur.
+  /// Uygulama açılışında ve ön plana dönüşte çağrılır.
+  Future<void> refreshSession({bool force = false}) async {
+    // Süren bir doğrulama varsa: normal çağrı onu bekleyip biter; zorlamalı çağrı (örn.
+    // cihaz sahiplenme sonrası rol eşitleme) bittikten sonra güncel veriyle bir kez daha çalışır.
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) {
+      await inFlight;
+      if (!force) {
+        return;
+      }
+    }
+
+    final active = _session;
+    if (active == null) {
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastSessionCheckAt;
+    if (!force && last != null && now.difference(last) < _sessionCheckMinInterval) {
+      return;
+    }
+
+    _lastSessionCheckAt = now;
+    final run = _runSessionRefresh(active);
+    _refreshInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (identical(_refreshInFlight, run)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _runSessionRefresh(UserSession active) async {
+    try {
+      final fresh = await api.fetchMe(token: active.token, current: active);
+      if (_session?.token != active.token) {
+        return; // Bu arada oturum değişti/kapandı.
+      }
+      if (!fresh.isActive) {
+        _sessionNotice = 'Hesabınız pasif duruma alındı. Lütfen yöneticinizle iletişime geçin.';
+        await logout();
+        return;
+      }
+      if (_sessionDiffers(active, fresh)) {
+        _session = fresh;
+        await _persist();
+        _notifySafely();
+      }
+    } on ApiException catch (e) {
+      if (_session?.token != active.token) {
+        return;
+      }
+      if (e.isUnauthorized || e.isForbidden) {
+        if (_credentialSwapDepth > 0 && e.code == 'TOKEN_REVOKED') {
+          return; // Parola değişimi sürüyor: yeni token değişim yanıtıyla gelecek.
+        }
+        _sessionNotice = e.message;
+        await logout();
+      }
+      // Diğer hatalar (ağ, 5xx, ara katman 401/403): çevrimdışı oturum korunur.
+    } catch (_) {
+      // Beklenmeyen/ağ hatası: oturumu bozma.
+    }
+  }
+
+  bool _sessionDiffers(UserSession a, UserSession b) {
+    return a.role != b.role ||
+        a.isActive != b.isActive ||
+        a.fullName != b.fullName ||
+        a.email != b.email ||
+        a.loginName != b.loginName ||
+        a.phoneNumber != b.phoneNumber;
   }
 
   Future<String?> login({
@@ -95,11 +234,11 @@ class AuthService extends ChangeNotifier {
   }) async {
     try {
       _session = await api.login(email: email, password: password, role: role);
+      _lastSessionCheckAt = DateTime.now();
       await _persist();
       _notifySafely();
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -136,10 +275,15 @@ class AuthService extends ChangeNotifier {
         email: email,
         code: code,
       );
+      _lastSessionCheckAt = DateTime.now();
       await _persist();
       _notifySafely();
       return null;
     } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        // Aktif kod yok: kod 10 dakika geçerlidir; kullanıcıyı yeni kod istemeye yönlendir.
+        return '${e.message} Kod 10 dakika geçerlidir; yeni kod için "Kodu Tekrar Gönder"e dokunun.';
+      }
       return e.message;
     } catch (_) {
       return 'Doğrulama işlemi sırasında hata oluştu.';
@@ -159,37 +303,46 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> claimDevice({
-    required String deviceInput,
+  /// Tüm yetkili (Bearer) API çağrıları için ortak sarmalayıcı: oturum yoksa hata fırlatır,
+  /// 401 gibi oturum hatalarında merkezi çıkışı uygular ve hatayı yeniden fırlatır.
+  Future<T> _runAuthorized<T>(
+    Future<T> Function(String token) call, {
+    String noSessionMessage = 'Oturum açmanız gerekmektedir.',
   }) async {
     final token = _session?.token;
     if (token == null) {
-      throw ApiException('Oturum açmanız gerekmektedir.');
+      throw ApiException(noSessionMessage);
     }
-    final res = await api.claimDevice(token: token, deviceInput: deviceInput);
-    if (_session != null && _session!.role != UserRole.superUser) {
-      _session = _session!.copyWith(role: UserRole.siteManager);
-      await _persist();
-      _notifySafely();
+    try {
+      return await call(token);
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: token);
+      rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> claimDevice({
+    required String deviceInput,
+  }) async {
+    final res = await _runAuthorized(
+      (token) => api.claimDevice(token: token, deviceInput: deviceInput),
+    );
+    // Rol yükseltmesi sunucuda yapılır; yerelde tahmin etmek yerine /me ile eşitle (C11).
+    await refreshSession(force: true);
     return res;
   }
 
   Future<List<Map<String, dynamic>>> getMyClaimedDevices() async {
-    final token = _session?.token;
-    if (token == null) {
+    final active = _session;
+    if (active == null) {
       return [];
     }
     try {
-      final devices = await api.getMyClaimedDevices(token: token);
-      if (devices.isNotEmpty && _session != null && _session!.role == UserRole.individual) {
-        _session = _session!.copyWith(role: UserRole.siteManager);
-        await _persist();
-        _notifySafely();
-      }
-      return devices;
-    } catch (_) {
-      return [];
+      // Salt-okunur: rol değişimi yerelde yapılmaz, /me ile eşitlenir.
+      return await api.getMyClaimedDevices(token: active.token);
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      rethrow;
     }
   }
 
@@ -203,26 +356,21 @@ class AuthService extends ChangeNotifier {
     int doorCount = 1,
     String? deviceUid,
   }) async {
-    final token = _session?.token;
-    if (token == null) {
-      throw ApiException('Oturum açmanız gerekmektedir.');
-    }
-    final res = await api.setupSite(
-      token: token,
-      name: name,
-      city: city,
-      district: district,
-      address: address,
-      blocks: blocks,
-      doors: doors,
-      doorCount: doorCount,
-      deviceUid: deviceUid,
+    final res = await _runAuthorized(
+      (token) => api.setupSite(
+        token: token,
+        name: name,
+        city: city,
+        district: district,
+        address: address,
+        blocks: blocks,
+        doors: doors,
+        doorCount: doorCount,
+        deviceUid: deviceUid,
+      ),
     );
-    if (_session != null && _session!.role != UserRole.superUser) {
-      _session = _session!.copyWith(role: UserRole.siteManager);
-      await _persist();
-      _notifySafely();
-    }
+    // Site kurulumunda sunucu rolü site_manager yapar; /me ile eşitle (C11).
+    await refreshSession(force: true);
     return res;
   }
 
@@ -233,15 +381,15 @@ class AuthService extends ChangeNotifier {
     int? blockId,
     String? deviceUid,
   }) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    final res = await api.createDoor(
-      token: token,
-      siteCode: siteCode,
-      doorName: doorName,
-      accessScope: accessScope,
-      blockId: blockId,
-      deviceUid: deviceUid,
+    final res = await _runAuthorized(
+      (token) => api.createDoor(
+        token: token,
+        siteCode: siteCode,
+        doorName: doorName,
+        accessScope: accessScope,
+        blockId: blockId,
+        deviceUid: deviceUid,
+      ),
     );
     _notifySafely();
     return res;
@@ -254,31 +402,31 @@ class AuthService extends ChangeNotifier {
     int? blockId,
     bool? isActive,
   }) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    final res = await api.updateDoor(
-      token: token,
-      doorId: doorId,
-      doorName: doorName,
-      accessScope: accessScope,
-      blockId: blockId,
-      isActive: isActive,
+    final res = await _runAuthorized(
+      (token) => api.updateDoor(
+        token: token,
+        doorId: doorId,
+        doorName: doorName,
+        accessScope: accessScope,
+        blockId: blockId,
+        isActive: isActive,
+      ),
     );
     _notifySafely();
     return res;
   }
 
   Future<void> deleteDoor({required int doorId}) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    await api.deleteDoor(token: token, doorId: doorId);
+    await _runAuthorized(
+      (token) => api.deleteDoor(token: token, doorId: doorId),
+    );
     _notifySafely();
   }
 
   Future<Map<String, dynamic>> unassignDoorDevice({required int doorId}) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    final res = await api.unassignDoorDevice(token: token, doorId: doorId);
+    final res = await _runAuthorized(
+      (token) => api.unassignDoorDevice(token: token, doorId: doorId),
+    );
     _notifySafely();
     return res;
   }
@@ -288,46 +436,49 @@ class AuthService extends ChangeNotifier {
     String? deviceInput,
     int? deviceId,
   }) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    final res = await api.replaceDoorDevice(
-      token: token,
-      doorId: doorId,
-      deviceInput: deviceInput,
-      deviceId: deviceId,
+    final res = await _runAuthorized(
+      (token) => api.replaceDoorDevice(
+        token: token,
+        doorId: doorId,
+        deviceInput: deviceInput,
+        deviceId: deviceId,
+      ),
     );
     _notifySafely();
     return res;
   }
 
   Future<List<Map<String, dynamic>>> getAssignableDevices({required int siteCode}) async {
-    final token = _session?.token;
-    if (token == null) return [];
+    final active = _session;
+    if (active == null) return [];
     try {
-      return await api.getAssignableDevices(token: token, siteCode: siteCode);
+      return await api.getAssignableDevices(token: active.token, siteCode: siteCode);
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      return [];
     } catch (_) {
       return [];
     }
   }
 
   Future<SiteJoinTokenRecord> getSiteJoinToken({required int siteCode}) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    return await api.getSiteJoinToken(token: token, siteCode: siteCode);
+    return _runAuthorized(
+      (token) => api.getSiteJoinToken(token: token, siteCode: siteCode),
+    );
   }
 
   Future<SiteJoinTokenRecord> rotateSiteJoinToken({required int siteCode}) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    final res = await api.rotateSiteJoinToken(token: token, siteCode: siteCode);
+    final res = await _runAuthorized(
+      (token) => api.rotateSiteJoinToken(token: token, siteCode: siteCode),
+    );
     _notifySafely();
     return res;
   }
 
   Future<Map<String, dynamic>> getSiteJoinInfo({required String joinToken}) async {
-    final token = _session?.token;
-    if (token == null) throw ApiException('Oturum açmanız gerekmektedir.');
-    return await api.getSiteJoinInfo(token: token, joinToken: joinToken);
+    return _runAuthorized(
+      (token) => api.getSiteJoinInfo(token: token, joinToken: joinToken),
+    );
   }
 
   Future<String?> register({
@@ -345,19 +496,39 @@ class AuthService extends ChangeNotifier {
         role: role,
         phoneNumber: phoneNumber,
       );
+      _lastSessionCheckAt = DateTime.now();
       await _persist();
       _notifySafely();
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
     }
   }
 
+  Future<String?> forgotPassword({required String email}) async {
+    try {
+      await api.forgotPassword(email: email);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol ediniz.';
+    }
+  }
+
   Future<void> logout() async {
+    final hadSession = _session != null;
     _session = null;
+    _lastSessionCheckAt = null;
+    _lastMyDoors = null;
+    _localDoorCache.clear();
+    _doorStatusCloudDown.clear();
+    // Arayüz hemen giriş ekranına dönsün; temizlik arka planda tamamlanır.
+    _notifySafely();
+
+    // Eski sürümlerden kalmış olabilecek düz metin kopyayı da sil.
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_storageKey);
@@ -366,9 +537,13 @@ class AuthService extends ChangeNotifier {
       await _secureStorage.delete(key: _storageKey);
       await _secureStorage.delete(key: _localDoorCacheKey);
     } catch (_) {}
-    _localDoorCache.clear();
-    unawaited(DoorWidgetService.instance.clearDoorData());
-    _notifySafely();
+
+    // Widget'ta kalan kapı listesi ve token silinir (çıkış sonrası widget kapı açamasın).
+    if (hadSession) {
+      try {
+        await DoorWidgetService.instance.clearDoorData();
+      } catch (_) {}
+    }
   }
 
   Future<ManagedUserPage> listManagedUsers({
@@ -389,7 +564,7 @@ class AuthService extends ChangeNotifier {
         search: search,
       );
     } catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       rethrow;
     }
   }
@@ -409,7 +584,7 @@ class AuthService extends ChangeNotifier {
         approvalStatus: approvalStatus,
       );
     } catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       rethrow;
     }
   }
@@ -426,7 +601,7 @@ class AuthService extends ChangeNotifier {
         pageSize: pageSize,
       );
     } catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       rethrow;
     }
   }
@@ -456,7 +631,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -471,6 +646,7 @@ class AuthService extends ChangeNotifier {
     String? phoneNumber,
     bool? isActive,
     UserRole? role,
+    bool? emailVerified,
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
@@ -487,10 +663,11 @@ class AuthService extends ChangeNotifier {
         phoneNumber: phoneNumber,
         isActive: isActive,
         role: role,
+        emailVerified: emailVerified,
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -514,7 +691,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -531,7 +708,7 @@ class AuthService extends ChangeNotifier {
       await api.deleteManagedUser(token: active.token, userCode: userCode);
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -543,7 +720,7 @@ class AuthService extends ChangeNotifier {
     try {
       return await api.getDatabaseHealth(token: active.token);
     } catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       rethrow;
     }
   }
@@ -555,7 +732,7 @@ class AuthService extends ChangeNotifier {
       _notifySafely();
       return res;
     } catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       rethrow;
     }
   }
@@ -590,7 +767,7 @@ class AuthService extends ChangeNotifier {
       );
       return (site, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (e) {
       return (null, e.toString());
@@ -627,7 +804,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -657,7 +834,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -701,7 +878,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -737,7 +914,7 @@ class AuthService extends ChangeNotifier {
         error: null,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (
         deleted: false,
         pending: false,
@@ -779,7 +956,7 @@ class AuthService extends ChangeNotifier {
         error: null,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (
         success: false,
         message: null,
@@ -819,7 +996,7 @@ class AuthService extends ChangeNotifier {
         error: null,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (
         success: false,
         message: null,
@@ -859,7 +1036,7 @@ class AuthService extends ChangeNotifier {
         error: null,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (
         success: false,
         message: null,
@@ -902,7 +1079,7 @@ class AuthService extends ChangeNotifier {
         error: null,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (
         success: false,
         message: null,
@@ -933,7 +1110,7 @@ class AuthService extends ChangeNotifier {
       );
       return (structure, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -968,7 +1145,7 @@ class AuthService extends ChangeNotifier {
       );
       return (apartment, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -989,7 +1166,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1010,7 +1187,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1045,7 +1222,7 @@ class AuthService extends ChangeNotifier {
       );
       return (logPage, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1071,7 +1248,7 @@ class AuthService extends ChangeNotifier {
       );
       return (report, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Baglanti loglari yuklenirken bir hata olustu.');
@@ -1082,16 +1259,20 @@ class AuthService extends ChangeNotifier {
     required String deviceUid,
     required List<Map<String, dynamic>> logs,
   }) async {
+    // Sunucu bu uçta JWT zorunlu kılar (S3); oturum yoksa istek boşuna gönderilmez.
+    final active = session;
+    if (active == null) {
+      return (0, 'Oturum bulunamadi.');
+    }
     try {
-      final token = session?.token;
       final count = await api.syncDeviceLogs(
         deviceUid: deviceUid,
         logs: logs,
-        token: token,
+        token: active.token,
       );
       return (count, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (0, e.message);
     } catch (_) {
       return (0, 'Log senkronizasyonu icin sunucuya baglanilamadi.');
@@ -1116,7 +1297,7 @@ class AuthService extends ChangeNotifier {
       );
       return (door, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1142,7 +1323,7 @@ class AuthService extends ChangeNotifier {
       );
       return (device, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1167,7 +1348,7 @@ class AuthService extends ChangeNotifier {
       );
       return (devices, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1196,7 +1377,7 @@ class AuthService extends ChangeNotifier {
       );
       return (device, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1217,7 +1398,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1234,7 +1415,7 @@ class AuthService extends ChangeNotifier {
       final result = await api.broadcastOtaCheck(token: active.token);
       return (result, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1257,12 +1438,22 @@ class AuthService extends ChangeNotifier {
       );
       return (result, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
     }
   }
+
+  /// Kapı durum yoklaması hatası "bulut erişilemiyor" türündeyse (ağ yok, zaman aşımı, 5xx,
+  /// proxy/HTML yanıtı) true. Karar hata metnine DEĞİL, [ApiException] türüne/durum koduna dayanır;
+  /// sunucunun açık iş hataları (403/404 vb.) bulut sorunu sayılmaz. Son yoklama başarılıysa false.
+  bool isDoorStatusCloudUnreachable(int doorId) => _doorStatusCloudDown.contains(doorId);
+
+  final Set<int> _doorStatusCloudDown = <int>{};
+
+  static bool _isCloudUnreachableError(ApiException e) =>
+      e.statusCode == null || e.isServerError || e.fromIntermediary;
 
   Future<(DoorRuntimeStatus?, String?)> getDoorRuntimeStatus({
     required int doorId,
@@ -1277,12 +1468,19 @@ class AuthService extends ChangeNotifier {
         token: active.token,
         doorId: doorId,
       );
+      _doorStatusCloudDown.remove(doorId);
       await _cacheLocalDoorAccess(status);
       return (status, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      if (_isCloudUnreachableError(e)) {
+        _doorStatusCloudDown.add(doorId);
+      } else {
+        _doorStatusCloudDown.remove(doorId);
+      }
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
+      _doorStatusCloudDown.add(doorId);
       return (null, 'Sunucuya baglanilamadi.');
     }
   }
@@ -1296,14 +1494,34 @@ class AuthService extends ChangeNotifier {
       return (null, 'Oturum bulunamadı.');
     }
     try {
-      final res = await api.requestDoorQrToken(
-        token: active.token,
-        doorId: doorId,
-        location: location,
-      );
+      Map<String, dynamic> res;
+      try {
+        res = await api.requestDoorQrToken(
+          token: active.token,
+          doorId: doorId,
+          location: location,
+        );
+      } on ApiException catch (e) {
+        // Kapı bayrakları bayat olabilir: sunucu konum istiyorsa (token üretilmeden, yan etkisiz
+        // reddedildi) konumu alıp BİR KEZ yeniden dene (open / scan-qr-open ile aynı kalıp).
+        if (location == null && e.code == 'GEOFENCE_LOCATION_REQUIRED') {
+          final fix = await _locationProvider();
+          final position = fix.position;
+          if (position == null) {
+            return (null, fix.errorMessage ?? e.message);
+          }
+          res = await api.requestDoorQrToken(
+            token: active.token,
+            doorId: doorId,
+            location: GeofenceService.locationRequestFields(position),
+          );
+        } else {
+          rethrow;
+        }
+      }
       return (res, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya bağlanılamadı.');
@@ -1322,7 +1540,7 @@ class AuthService extends ChangeNotifier {
       );
       return (res, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya bağlanılamadı.');
@@ -1341,7 +1559,7 @@ class AuthService extends ChangeNotifier {
       );
       return (res, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya bağlanılamadı.');
@@ -1366,43 +1584,156 @@ class AuthService extends ChangeNotifier {
       return (null, 'Oturum bulunamadı.');
     }
 
-    final hasWifi = await _localDoorService.hasLocalWifiConnection();
-    final uid = door?.assignedDeviceUid?.trim().toUpperCase();
-    final hasDeviceUid = uid != null && uid.isNotEmpty;
-
-    // YEREL AĞ YALNIZCA VE YALNIZCA CİHAZ CANLI BEACON GÖNDERİYORSA DENENİR (Sıfır Gecikme):
-    final liveBeacon = hasDeviceUid ? _localDoorService.getCachedDevice(uid) : null;
-    final isDeviceLocallyAlive = liveBeacon != null && liveBeacon.isFresh;
-
-    if (hasWifi && isDeviceLocallyAlive && door != null) {
-      debugPrint('[AuthService] ⚡ Cihaz yerel ağda canlı (${liveBeacon.ip}), hızlı yerel UDP deneniyor...');
-      final localResult = await _tryOpenDoorLocally(door);
-      if (localResult != null && localResult.$1 != null) {
-        debugPrint('[AuthService] ⚡ Yerel ağ üzerinden kapı ANINDA açıldı!');
-        return localResult;
-      }
-
-      debugPrint('[AuthService] Yerel ağ yanıt vermedi -> Anında buluta devrediliyor...');
+    // Kapı politikası: bayraklar biliniyorsa istemci de uygular (sunucu yine nihai karar verir).
+    // Sunucu süper kullanıcıya remote/local kanallarında istisna tanır (door_access_policy.js);
+    // istemci de aynı istisnayı uygular (aksi halde istek hiç gönderilmeden reddedilirdi).
+    final isSuper = active.role == UserRole.superUser;
+    final allowRemote = door == null || door.canOpenRemote || isSuper;
+    final allowLocal = door != null && (door.canOpenLocalUdp || isSuper);
+    if (!allowRemote && !allowLocal) {
+      return (null, 'Bu kapı için uygulamadan açma kapalı.');
     }
 
-    // Bulut üzerinden anında kapı açma (MQTT ~150-250ms)
+    // YEREL AĞ YALNIZCA cihaz canlı beacon gönderiyorsa, kapı yerel açmaya izin veriyorsa
+    // ve sunucudan alınmış yerel erişim token'ı varsa denenir (C4: token yoksa yerel yok).
+    if (allowLocal) {
+      final localResult = await _tryOpenDoorLocallyIfAlive(door);
+      if (localResult != null) {
+        return localResult;
+      }
+    }
+
+    if (!allowRemote) {
+      return (
+        null,
+        'Bu kapıda uzaktan açma kapalı. Cihaza yerel ağdan ulaşılamadı; telefonu cihazla aynı Wi-Fi ağına bağlayıp tekrar deneyin.',
+      );
+    }
+
+    // C3: Konum zorunlu kapıda konum alınamıyorsa istek HİÇ gönderilmez.
+    Map<String, dynamic>? location;
+    if (door != null && door.requireGeofence) {
+      final fix = await _locationProvider();
+      final position = fix.position;
+      if (position == null) {
+        return (
+          null,
+          fix.errorMessage ??
+              'Bu kapı için konum doğrulaması zorunludur. Lütfen konum servisini ve izinlerini açın.',
+        );
+      }
+      location = GeofenceService.locationRequestFields(position);
+    }
+
+    // Bulut üzerinden kapı açma (MQTT ~150-250ms)
     try {
-      final status = await api.openDoor(token: active.token, doorId: doorId);
+      DoorRuntimeStatus status;
+      try {
+        status = await api.openDoor(
+          token: active.token,
+          doorId: doorId,
+          location: location,
+        );
+      } on ApiException catch (e) {
+        // Kapı bayrakları bayat olabilir: sunucu konum istiyorsa (hiçbir yan etki olmadan
+        // reddedildi) konumu alıp BİR KEZ yeniden dene; konum alınamazsa gönderme.
+        if (location == null && e.code == 'GEOFENCE_LOCATION_REQUIRED') {
+          final fix = await _locationProvider();
+          final position = fix.position;
+          if (position == null) {
+            return (null, fix.errorMessage ?? e.message);
+          }
+          status = await api.openDoor(
+            token: active.token,
+            doorId: doorId,
+            location: GeofenceService.locationRequestFields(position),
+          );
+        } else {
+          rethrow;
+        }
+      }
       unawaited(_cacheLocalDoorAccess(status));
       return (status, null);
     } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Kapı açılamadı. Sunucuya bağlanılamadı.');
     }
   }
 
+  /// Kapının yerel (UDP/HTTP) kontrol için kullanılabilir olup olmadığı:
+  /// kapı politikası izin vermeli ve sunucudan alınmış geçerli bir token önbellekte olmalı.
   bool canTryLocalDoorOpen(DoorRecord door) {
+    // Süper kullanıcı için sunucu politika bayrağını yok sayar (token yine sunucudan gelir).
+    if (!door.canOpenLocalUdp && _session?.role != UserRole.superUser) {
+      return false;
+    }
     final uid = door.assignedDeviceUid?.trim().toUpperCase();
     if (uid == null || uid.isEmpty) {
       return false;
     }
-    return true;
+    final cached = _localDoorCache[uid];
+    return cached != null && cached.isUsable && cached.token.trim().isNotEmpty;
+  }
+
+  Future<(Map<String, dynamic>?, String?)> openDoorWithScannedQr({
+    required String qrPayload,
+    bool requireLocation = false,
+  }) async {
+    final active = session;
+    if (active == null) {
+      return (null, 'Oturum bulunamadı.');
+    }
+
+    // C3: Konum zorunluysa alınamadığında istek GÖNDERİLMEZ ve anlaşılır hata döner.
+    Map<String, dynamic>? location;
+    if (requireLocation) {
+      final fix = await _locationProvider();
+      final position = fix.position;
+      if (position == null) {
+        return (
+          null,
+          fix.errorMessage ??
+              'Bu kapı için konum doğrulaması zorunludur. Lütfen konum servisini ve izinlerini açın.',
+        );
+      }
+      location = GeofenceService.locationRequestFields(position);
+    }
+
+    try {
+      Map<String, dynamic> res;
+      try {
+        res = await api.openDoorWithScannedQr(
+          token: active.token,
+          qrPayload: qrPayload,
+          location: location,
+        );
+      } on ApiException catch (e) {
+        // Okutulan karekod başka bir kapıya/ekransız cihaza aitse ve sunucu konum istiyorsa
+        // (karekod henüz tüketilmedi) konumu alıp BİR KEZ yeniden dene.
+        if (location == null && e.code == 'GEOFENCE_LOCATION_REQUIRED') {
+          final fix = await _locationProvider();
+          final position = fix.position;
+          if (position == null) {
+            return (null, fix.errorMessage ?? e.message);
+          }
+          res = await api.openDoorWithScannedQr(
+            token: active.token,
+            qrPayload: qrPayload,
+            location: GeofenceService.locationRequestFields(position),
+          );
+        } else {
+          rethrow;
+        }
+      }
+      return (res, null);
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      return (null, e.message);
+    } catch (_) {
+      return (null, 'Karekod okutularak kapı açılamadı. Sunucuya bağlanılamadı.');
+    }
   }
 
   Future<(List<DoorRecord>?, String?)> listMyDoors() async {
@@ -1413,13 +1744,83 @@ class AuthService extends ChangeNotifier {
 
     try {
       final doors = await api.listMyDoors(token: active.token);
+      if (_session?.token == active.token) {
+        _syncDoorWidget(active, doors);
+      }
       return (doors, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
     }
+  }
+
+  /// Masaüstü widget'ının kapı listesi için TEK kaynak: kullanıcının erişebildiği kapılar
+  /// (listMyDoors). Liste boşsa widget temizlenir. Süper kullanıcı için widget kullanılmaz.
+  void _syncDoorWidget(UserSession active, List<DoorRecord> doors) {
+    if (kIsWeb || active.role == UserRole.superUser) {
+      return;
+    }
+    _lastMyDoors = List<DoorRecord>.unmodifiable(doors);
+    try {
+      unawaited(
+        DoorWidgetService.instance
+            .syncDoorsList(
+              doors: doors,
+              token: active.token,
+              apiBaseUrl: api.baseUrl,
+            )
+            .catchError((_) {}),
+      );
+    } catch (_) {}
+  }
+
+  /// Kullanıcı arayüzde bir kapıyı AÇIKÇA seçtiğinde widget'ın aktif kapısını da ona çeker
+  /// (`forceSelectDoor: true`). Otomatik senkronlar bunu KULLANMAZ; widget'ta kullanıcının
+  /// seçtiği kapı korunur.
+  void selectWidgetDoor(DoorRecord door, {bool? isOnline}) {
+    final active = _session;
+    if (kIsWeb || active == null || active.role == UserRole.superUser) {
+      return;
+    }
+    final doors = _lastMyDoors;
+    if (doors == null) {
+      // Liste henüz alınmadıysa önce alınır (listMyDoors widget'ı da senkronlar), sonra seçim uygulanır.
+      unawaited(listMyDoors().then((_) {
+        final loaded = _lastMyDoors;
+        if (loaded != null && _session?.token == active.token) {
+          _forceWidgetDoor(active, loaded, door, isOnline);
+        }
+      }));
+      return;
+    }
+    _forceWidgetDoor(active, doors, door, isOnline);
+  }
+
+  void _forceWidgetDoor(
+    UserSession active,
+    List<DoorRecord> doors,
+    DoorRecord door,
+    bool? isOnline,
+  ) {
+    if (!doors.any((d) => d.id == door.id)) {
+      return;
+    }
+    try {
+      unawaited(
+        DoorWidgetService.instance
+            .syncDoorsList(
+              doors: doors,
+              token: active.token,
+              apiBaseUrl: api.baseUrl,
+              selectedDoor: door,
+              isSelectedDoorOnline: isOnline,
+              forceSelectDoor: true,
+            )
+            .catchError((_) {}),
+      );
+    } catch (_) {}
   }
 
   Future<String?> resolveSubscriptionRequest({
@@ -1439,7 +1840,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1463,7 +1864,7 @@ class AuthService extends ChangeNotifier {
       );
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1475,12 +1876,23 @@ class AuthService extends ChangeNotifier {
     required String email,
     String? phoneNumber,
     String? password,
+    String? currentPassword,
   }) async {
     final active = _session;
     if (active == null) {
       return 'Oturum bulunamadi.';
     }
 
+    // C8: şifre değiştirilirken mevcut şifre zorunludur.
+    if (password != null && password.isNotEmpty && (currentPassword ?? '').isEmpty) {
+      return 'Şifrenizi değiştirmek için mevcut şifrenizi girin.';
+    }
+
+    // Parola değişimi sürerken eşzamanlı isteklerin TOKEN_REVOKED 401'i oturumu kapatmasın.
+    final isPasswordChange = password != null && password.isNotEmpty;
+    if (isPasswordChange) {
+      _credentialSwapDepth++;
+    }
     try {
       final updated = await api.updateMyProfile(
         token: active.token,
@@ -1491,16 +1903,34 @@ class AuthService extends ChangeNotifier {
         email: email,
         phoneNumber: phoneNumber,
         password: password,
+        currentPassword: currentPassword,
       );
+      if (_session?.token != active.token) {
+        // Yanıt beklenirken oturum kapandı/değişti: eski oturumu yeniden yazma.
+        return null;
+      }
+      final tokenChanged = updated.token != active.token;
       _session = updated;
       await _persist();
+      // Parola değişince sunucu yeni token döndürür; masaüstü widget'ı eski (iptal edilmiş)
+      // token ile kalmasın.
+      final knownDoors = _lastMyDoors;
+      if (tokenChanged && knownDoors != null) {
+        _syncDoorWidget(updated, knownDoors);
+      }
       _notifySafely();
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      // PATCH /me'nin KENDİ 401'i (token iptal/süre dolumu/silinmiş kullanıcı) gerçek oturum sonudur;
+      // yanlış mevcut şifre 400 CURRENT_PASSWORD_INVALID döner ve oturumu kapatmaz.
+      _handleSessionError(e, usedToken: active.token, ownCredentialSwap: true);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
+    } finally {
+      if (isPasswordChange) {
+        _credentialSwapDepth--;
+      }
     }
   }
 
@@ -1527,7 +1957,7 @@ class AuthService extends ChangeNotifier {
       );
       return (pass, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1544,7 +1974,7 @@ class AuthService extends ChangeNotifier {
       final passes = await api.listGuestPasses(token: active.token);
       return (passes, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sunucuya baglanilamadi.');
@@ -1561,7 +1991,7 @@ class AuthService extends ChangeNotifier {
       await api.revokeGuestPass(token: active.token, passId: passId);
       return null;
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return e.message;
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
@@ -1603,22 +2033,44 @@ class AuthService extends ChangeNotifier {
     return active;
   }
 
-  void _handleSessionError(Object error) {
+  /// [ownCredentialSwap]: hata, parola değişimini yapan isteğin KENDİSİNE aittir (gerçek oturum sonu).
+  void _handleSessionError(
+    Object error, {
+    String? usedToken,
+    bool ownCredentialSwap = false,
+  }) {
+    final current = _session;
+    if (current == null) {
+      return; // Zaten oturum yok (örn. giriş denemesi hatası).
+    }
+    // Eski bir token ile başlatılmış gecikmiş isteğin 401'i yeni oturumu kapatmasın.
+    if (usedToken != null && current.token != usedToken) {
+      return;
+    }
+    // Parola değişimi sürerken eşzamanlı (örn. 3 sn'lik durum yoklaması) bir isteğin TOKEN_REVOKED
+    // 401'i yok sayılır: yeni token yanıtla gelecek; gerçekten iptal edilmişse sonraki istek kapatır.
+    if (!ownCredentialSwap &&
+        _credentialSwapDepth > 0 &&
+        error is ApiException &&
+        error.code == 'TOKEN_REVOKED') {
+      return;
+    }
     if (error is SessionExpiredException ||
-        (error is ApiException && error.isUnauthorized)) {
-      logout();
+        (error is ApiException && error.invalidatesSession)) {
+      _sessionNotice = (error as ApiException).message;
+      unawaited(logout());
+    } else if (error is ApiException && error.isForbidden) {
+      // 403 hesap pasifleştirme/onay bekleme olabilir: /me ile doğrula (kısıtlı sıklıkta).
+      unawaited(refreshSession());
     }
   }
 
+  /// Oturum yalnızca flutter_secure_storage'da saklanır.
   Future<void> _persist() async {
     if (_session == null) {
       return;
     }
     final raw = jsonEncode(_session!.toJson());
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKey, raw);
-    } catch (_) {}
     try {
       await _secureStorage.write(
         key: _storageKey,
@@ -1675,19 +2127,72 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _cacheLocalDoorAccess(DoorRuntimeStatus status) async {
     final uid = status.deviceUid.trim().toUpperCase();
+    if (uid.isEmpty) {
+      return;
+    }
     final token = status.localControlToken?.trim() ?? '';
-    if (uid.isEmpty || token.isEmpty) {
+    if (token.isEmpty) {
+      // Sunucu bu kullanıcıya token vermiyor (yetki kalktı / token döndürüldü):
+      // önbellekteki eski token düşürülür, yerel açma denenmez (C4 fail-closed).
+      if (_localDoorCache.remove(uid) != null) {
+        await _persistLocalDoorCache();
+      }
+      return;
+    }
+
+    final existing = _localDoorCache[uid];
+    final port = status.localControlPort ?? 8765;
+    final ip = status.localIp ?? existing?.ip;
+    final now = DateTime.now();
+
+    // Durum yoklaması her ~3 sn'de bu metodu çağırır; veri değişmediyse güvenli depoya
+    // yeniden yazma (saatte en fazla bir kez tazele).
+    if (existing != null &&
+        existing.token == token &&
+        existing.ip == ip &&
+        existing.port == port &&
+        now.difference(existing.updatedAt) < _localCacheRewriteInterval) {
       return;
     }
 
     _localDoorCache[uid] = LocalDoorAccess(
       deviceUid: uid,
       token: token,
-      ip: status.localIp,
-      port: status.localControlPort ?? 8765,
-      updatedAt: DateTime.now(),
+      ip: ip,
+      port: port,
+      updatedAt: now,
     );
     await _persistLocalDoorCache();
+  }
+
+  /// Yerel yolu yalnızca cihaz canlı beacon gönderiyorsa, telefon yerel Wi-Fi'deyse ve
+  /// geçerli bir token önbellekteyse dener. Başarısızsa null döner (bulutla devam edilir).
+  Future<(DoorRuntimeStatus?, String?)?> _tryOpenDoorLocallyIfAlive(
+    DoorRecord door,
+  ) async {
+    final uid = door.assignedDeviceUid?.trim().toUpperCase();
+    if (uid == null || uid.isEmpty) {
+      return null;
+    }
+    final cached = _localDoorCache[uid];
+    if (cached == null || !cached.isUsable || cached.token.trim().isEmpty) {
+      return null;
+    }
+    if (!await _localDoorService.hasLocalWifiConnection()) {
+      return null;
+    }
+    final liveBeacon = _localDoorService.getCachedDevice(uid);
+    if (liveBeacon == null || !liveBeacon.isFresh) {
+      return null;
+    }
+
+    debugPrint('[AuthService] Cihaz yerel ağda canlı (${liveBeacon.ip}), yerel UDP deneniyor...');
+    final localResult = await _tryOpenDoorLocally(door);
+    if (localResult != null && localResult.$1 != null) {
+      return localResult;
+    }
+    debugPrint('[AuthService] Yerel ağ yanıt vermedi -> buluta devrediliyor...');
+    return null;
   }
 
   Future<(DoorRuntimeStatus?, String?)?> _tryOpenDoorLocally(
@@ -1699,14 +2204,19 @@ class AuthService extends ChangeNotifier {
     }
 
     final cached = _localDoorCache[uid];
+    if (cached == null || !cached.isUsable || cached.token.trim().isEmpty) {
+      return null;
+    }
     final liveBeacon = _localDoorService.getCachedDevice(uid);
-    final targetIp = liveBeacon?.ip ?? cached?.ip ?? door.assignedDeviceLocalIp?.trim();
+    final targetIp = liveBeacon?.ip ?? cached.ip ?? door.assignedDeviceLocalIp?.trim();
+    // Önbellekteki token'ın GERÇEK yaşı korunur (updatedAt = sunucudan alındığı an);
+    // yerel açma başarısı token'ı "yenilemiş" sayılmaz, geçerlilik süresi uzamaz.
     final access = LocalDoorAccess(
       deviceUid: uid,
-      token: cached?.token ?? '',
+      token: cached.token,
       ip: targetIp,
-      port: liveBeacon?.port ?? cached?.port ?? 8765,
-      updatedAt: DateTime.now(),
+      port: liveBeacon?.port ?? cached.port,
+      updatedAt: cached.updatedAt,
     );
 
     final result = await _localDoorService.openDoor(access);
@@ -1714,15 +2224,18 @@ class AuthService extends ChangeNotifier {
       return (null, result.message);
     }
 
+    // Yalnızca IP güncellenir; token ve yaş bilgisi aynen kalır.
     final updatedAccess = LocalDoorAccess(
       deviceUid: access.deviceUid,
       token: access.token,
       ip: result.ip ?? access.ip,
       port: access.port,
-      updatedAt: DateTime.now(),
+      updatedAt: cached.updatedAt,
     );
-    _localDoorCache[uid] = updatedAccess;
-    await _persistLocalDoorCache();
+    if (updatedAccess.ip != cached.ip) {
+      _localDoorCache[uid] = updatedAccess;
+      await _persistLocalDoorCache();
+    }
 
     final active = session;
     if (active != null) {
@@ -1733,7 +2246,9 @@ class AuthService extends ChangeNotifier {
               doorId: door.id,
               localIp: result.ip ?? access.ip,
             )
-            .catchError((_) {}),
+            .catchError((Object e) {
+          _handleSessionError(e, usedToken: active.token);
+        }),
       );
     }
 
@@ -1771,7 +2286,7 @@ class AuthService extends ChangeNotifier {
       );
       return (info, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Site bilgileri alınamadı.');
@@ -1798,7 +2313,7 @@ class AuthService extends ChangeNotifier {
       );
       return (result, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Katılım başvurusu gönderilemedi.');
@@ -1814,7 +2329,7 @@ class AuthService extends ChangeNotifier {
       final list = await api.getMyJoinRequests(token: active.token);
       return (list, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Başvurular listelenemedi.');
@@ -1837,7 +2352,7 @@ class AuthService extends ChangeNotifier {
       );
       return (list, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Site başvuruları listelenemedi.');
@@ -1856,7 +2371,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Başvuru onaylandı.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Başvuru onaylanamadı.');
@@ -1876,7 +2391,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Başvuru reddedildi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Başvuru reddedilemedi.');
@@ -1892,7 +2407,7 @@ class AuthService extends ChangeNotifier {
       final list = await api.getMyApartments(token: active.token);
       return (list, null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Daireler yüklenemedi.');
@@ -1912,7 +2427,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Üye daireden çıkarıldı.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'İşlem başarısız.');
@@ -1931,7 +2446,7 @@ class AuthService extends ChangeNotifier {
       );
       return (DoorPermissionsData.fromJson(json), null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Kapı yetkileri alınamadı.');
@@ -1958,7 +2473,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Yetki güncellendi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Yetki güncellenemedi.');
@@ -1989,7 +2504,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Toplu yetkilendirme uygulandı.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Toplu işlem başarısız.');
@@ -2008,7 +2523,7 @@ class AuthService extends ChangeNotifier {
       );
       return (SiteResidentsTreeData.fromJson(json), null);
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
     } catch (_) {
       return (null, 'Sakin listesi yüklenemedi.');
@@ -2033,7 +2548,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Sakin durumu güncellendi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Durum güncellenirken bir hata oluştu.');
@@ -2056,7 +2571,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Sakin daireden silindi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Sakin silinirken bir hata oluştu.');
@@ -2067,24 +2582,49 @@ class AuthService extends ChangeNotifier {
     required int apartmentId,
     required int targetUserCode,
     required String newPassword,
+    required String currentPassword,
   }) async {
     final active = session;
     if (active == null) {
       return (false, 'Oturum bulunamadı.');
     }
+    if (currentPassword.isEmpty) {
+      return (false, 'Şifrenizi değiştirmek için mevcut şifrenizi girin.');
+    }
+    // Kendi şifresi değişirse sunucu eski token'ı iptal eder: eşzamanlı isteklerin TOKEN_REVOKED'ı
+    // oturumu kapatmasın (yeni token bu yanıtla gelir).
+    _credentialSwapDepth++;
     try {
       final res = await api.changeApartmentMemberPassword(
         token: active.token,
         apartmentId: apartmentId,
         targetUserCode: targetUserCode,
         newPassword: newPassword,
+        currentPassword: currentPassword,
       );
+      // Parola değişince eski token'lar iptal olur; sunucunun döndürdüğü yeni token'ı yaz.
+      final newToken = res['token'];
+      if (newToken is String &&
+          newToken.isNotEmpty &&
+          newToken != active.token &&
+          _session?.token == active.token) {
+        final updated = active.copyWith(token: newToken);
+        _session = updated;
+        await _persist();
+        final knownDoors = _lastMyDoors;
+        if (knownDoors != null) {
+          _syncDoorWidget(updated, knownDoors);
+        }
+        _notifySafely();
+      }
       return (true, res['message'] as String? ?? 'Şifre başarıyla güncellendi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token, ownCredentialSwap: true);
       return (false, e.message);
     } catch (_) {
       return (false, 'Şifre güncellenirken bir hata oluştu.');
+    } finally {
+      _credentialSwapDepth--;
     }
   }
 
@@ -2104,7 +2644,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Aile reisi başarıyla güncellendi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Aile reisi atanırken bir hata oluştu.');
@@ -2122,7 +2662,7 @@ class AuthService extends ChangeNotifier {
         siteCode: siteCode,
       );
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return null;
     } catch (_) {
       return null;
@@ -2147,7 +2687,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Yönetici daveti başarıyla iletildi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Yönetici davet edilirken bir hata oluştu.');
@@ -2170,7 +2710,7 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Yönetici yetkisi başarıyla kaldırıldı.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Yönetici yetkisi kaldırılırken bir hata oluştu.');
@@ -2193,10 +2733,58 @@ class AuthService extends ChangeNotifier {
       );
       return (true, res['message'] as String? ?? 'Davet başarıyla iptal edildi.');
     } on ApiException catch (e) {
-      _handleSessionError(e);
+      _handleSessionError(e, usedToken: active.token);
       return (false, e.message);
     } catch (_) {
       return (false, 'Davet iptal edilirken bir hata oluştu.');
+    }
+  }
+
+  Future<(bool, String?)> setDeviceDefectStatus({
+    required int deviceId,
+    required bool isDefective,
+    String? defectiveReason,
+  }) async {
+    final active = session;
+    if (active == null) {
+      return (false, 'Oturum bulunamadı.');
+    }
+    try {
+      final res = await api.setDeviceDefectStatus(
+        token: active.token,
+        deviceId: deviceId,
+        isDefective: isDefective,
+        defectiveReason: defectiveReason,
+      );
+      return (true, res['message'] as String? ?? 'Cihaz arıza durumu güncellendi.');
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      return (false, e.message);
+    } catch (_) {
+      return (false, 'Arıza durumu güncellenirken bir hata oluştu.');
+    }
+  }
+
+  Future<(bool, String?)> releaseDeviceOwnership({
+    required int deviceId,
+    String? reason,
+  }) async {
+    final active = session;
+    if (active == null) {
+      return (false, 'Oturum bulunamadı.');
+    }
+    try {
+      final res = await api.releaseDeviceOwnership(
+        token: active.token,
+        deviceId: deviceId,
+        reason: reason,
+      );
+      return (true, res['message'] as String? ?? 'Cihaz sahipliği sıfırlandı ve depoya alındı.');
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      return (false, e.message);
+    } catch (_) {
+      return (false, 'Cihaz sahipliği sıfırlanırken bir hata oluştu.');
     }
   }
 

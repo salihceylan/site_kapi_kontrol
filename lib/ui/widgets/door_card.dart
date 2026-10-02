@@ -1,230 +1,249 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class DoorCard extends StatelessWidget {
   const DoorCard({
     super.key,
     required this.door,
     required this.onAssignDevice,
+    this.onReplaceDevice,
+    this.onEditDoor,
+    this.onDeleteDoor,
+    this.onManagePermissions,
   });
 
   final DoorRecord door;
   final VoidCallback onAssignDevice;
+  final VoidCallback? onReplaceDevice;
+  final VoidCallback? onEditDoor;
+  final VoidCallback? onDeleteDoor;
+  final VoidCallback? onManagePermissions;
+
+  /// Donanım rozetinin tonu: WROOM = mor, C3 = mavi, diğer cihaz = yeşil, cihaz yok = uyarı.
+  AppTone get _hardwareTone {
+    if (door.isHardwareWroom) return AppTone.violet;
+    if (door.isHardwareC3) return AppTone.primary;
+    return door.hasDevice ? AppTone.success : AppTone.warning;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final hasDevice = door.assignedDeviceUid != null &&
         door.assignedDeviceUid!.trim().isNotEmpty;
+    final hasMenu = (hasDevice && onReplaceDevice != null) ||
+        onEditDoor != null ||
+        onDeleteDoor != null ||
+        onManagePermissions != null;
+    final deviceTone = hasDevice ? _hardwareTone : AppTone.warning;
+    final unitStyle = th.bodySmall;
 
-    Color badgeBgColor(bool isDark) {
-      if (door.isHardwareWroom) {
-        return (isDark ? const Color(0xFF7C3AED) : const Color(0xFF8B5CF6)).withValues(alpha: isDark ? 0.25 : 0.12);
-      } else if (door.isHardwareC3) {
-        return (isDark ? AppColors.primary : AppColors.primaryLight).withValues(alpha: isDark ? 0.25 : 0.12);
-      } else if (hasDevice) {
-        return AppColors.emerald.withValues(alpha: isDark ? 0.25 : 0.12);
-      }
-      return AppColors.amber.withValues(alpha: isDark ? 0.25 : 0.12);
-    }
-
-    Color badgeTextColor(bool isDark) {
-      if (door.isHardwareWroom) {
-        return isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED);
-      } else if (door.isHardwareC3) {
-        return isDark ? const Color(0xFF93C5FD) : AppColors.primary;
-      } else if (hasDevice) {
-        return isDark ? AppColors.emeraldLight : AppColors.emerald;
-      }
-      return isDark ? AppColors.amberLight : const Color(0xFFD97706);
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF1E293B).withValues(alpha: 0.85)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: hasDevice
-              ? (isDark ? const Color(0x333B82F6) : const Color(0xFFBFDBFE))
-              : (isDark ? const Color(0x33F59E0B) : const Color(0xFFFED7AA)),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    // Cihazsız kapı = uyarı tonlu kart (kapı kontrolü pasif). Tek eylem satırı: önceki "dar/geniş"
+    // çift dal ve iki PopupMenu kopyası kalktı; satır sığmayınca sarar.
+    return AppCard(
+      tone: hasDevice ? null : AppTone.warning,
+      padding: listCardPadding(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconTile(
+                icon: door.isHardwareWroom
+                    ? Icons.developer_board_rounded
+                    : Icons.meeting_room_rounded,
+                tone: deviceTone,
+                gap: AppSpace.md,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpace.sm,
+                      runSpacing: AppSpace.xs,
+                      children: [
+                        Text(door.doorName, style: th.titleMedium),
+                        StatusChip(
+                          label: door.accessScopeLabel,
+                          tone: door.isBlockScope
+                              ? AppTone.info
+                              : AppTone.neutral,
+                        ),
+                        StatusChip(
+                          label: door.hardwareBadgeText,
+                          tone: deviceTone,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    if (hasDevice) ...[
+                      Text(
+                        'UID: ${door.assignedDeviceUid} • ${door.hardwareModelTitle}',
+                        style: th.bodyMedium,
+                      ),
+                      if (door.assignedDeviceFirmwareVersion != null ||
+                          door.assignedDeviceIsOnline != null ||
+                          door.assignedDeviceLocalIp != null) ...[
+                        const SizedBox(height: AppSpace.xs),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: AppSpace.sm,
+                          runSpacing: AppSpace.xs,
+                          children: [
+                            if (door.assignedDeviceIsOnline != null)
+                              StatusChip(
+                                label: door.assignedDeviceIsOnline == true
+                                    ? 'Online'
+                                    : 'Offline',
+                                tone: door.assignedDeviceIsOnline == true
+                                    ? AppTone.success
+                                    : AppTone.danger,
+                                pulse: door.assignedDeviceIsOnline == true,
+                              ),
+                            if (door.assignedDeviceFirmwareVersion != null)
+                              Text(
+                                'v${door.assignedDeviceFirmwareVersion}',
+                                style: unitStyle,
+                              ),
+                            if (door.assignedDeviceLocalIp != null)
+                              Text(
+                                'IP: ${door.assignedDeviceLocalIp}',
+                                style: unitStyle,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ] else
+                      Text(
+                        'Cihaz atanmamış (Kapı kontrolü pasif)',
+                        style: th.bodyMedium?.copyWith(
+                          color: AppTone.warning.ink(p),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: onAssignDevice,
+                  style: tonalActionStyle(
+                    context,
+                    tone: hasDevice ? AppTone.primary : AppTone.warning,
+                  ),
+                  icon: const Icon(
+                    Icons.settings_input_component_rounded,
+                    size: 16,
+                  ),
+                  label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
+                ),
+                if (hasMenu) _buildMenu(context, hasDevice),
+              ],
+            ),
           ),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 360;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildMenu(BuildContext context, bool hasDevice) {
+    final p = context.palette;
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.more_vert_rounded, color: p.textSecondary),
+      style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      onSelected: (val) {
+        if (val == 'permissions') onManagePermissions?.call();
+        if (val == 'replace') onReplaceDevice?.call();
+        if (val == 'edit') onEditDoor?.call();
+        if (val == 'delete') onDeleteDoor?.call();
+      },
+      itemBuilder: (ctx) {
+        final mp = ctx.palette;
+        return [
+          if (onManagePermissions != null)
+            PopupMenuItem(
+              value: 'permissions',
+              child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: hasDevice
-                          ? AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1)
-                          : AppColors.amber.withValues(alpha: isDark ? 0.2 : 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      door.isHardwareWroom ? Icons.developer_board_rounded : Icons.meeting_room_rounded,
-                      color: hasDevice
-                          ? (door.isHardwareWroom
-                              ? (isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED))
-                              : (isDark ? AppColors.accentLight : AppColors.primary))
-                          : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
-                      size: 22,
-                    ),
+                  Icon(
+                    Icons.vpn_key_rounded,
+                    size: 18,
+                    color: AppTone.primary.ink(mp),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            Text(
-                              door.doorName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15.5,
-                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                              decoration: BoxDecoration(
-                                color: badgeBgColor(isDark),
-                                borderRadius: BorderRadius.circular(7),
-                                border: Border.all(
-                                  color: badgeTextColor(isDark).withValues(alpha: 0.35),
-                                  width: 0.9,
-                                ),
-                              ),
-                              child: Text(
-                                door.hardwareBadgeText,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.4,
-                                  color: badgeTextColor(isDark),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        if (hasDevice) ...[
-                          Text(
-                            'UID: ${door.assignedDeviceUid} • ${door.hardwareModelTitle}',
-                            style: TextStyle(
-                              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (door.assignedDeviceFirmwareVersion != null || door.assignedDeviceIsOnline != null || door.assignedDeviceLocalIp != null) ...[
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                if (door.assignedDeviceIsOnline != null) ...[
-                                  Container(
-                                    width: 7,
-                                    height: 7,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: door.assignedDeviceIsOnline == true ? AppColors.emeraldLight : AppColors.rose,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    door.assignedDeviceIsOnline == true ? 'Online' : 'Offline',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: door.assignedDeviceIsOnline == true
-                                          ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
-                                          : (isDark ? AppColors.roseLight : AppColors.rose),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                if (door.assignedDeviceFirmwareVersion != null) ...[
-                                  Text(
-                                    'v${door.assignedDeviceFirmwareVersion}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                if (door.assignedDeviceLocalIp != null) ...[
-                                  Text(
-                                    'IP: ${door.assignedDeviceLocalIp}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ] else ...[
-                          Text(
-                            'Cihaz atanmamış (Kapı kontrolü pasif)',
-                            style: TextStyle(
-                              color: isDark ? AppColors.amberLight : const Color(0xFFD97706),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (!isNarrow) ...[
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: onAssignDevice,
-                      icon: const Icon(Icons.settings_input_component_rounded, size: 16),
-                      label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
-                    ),
-                  ],
+                  const SizedBox(width: AppSpace.sm),
+                  const Flexible(child: Text('Kapı Yetkileri')),
                 ],
               ),
-              if (isNarrow) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: onAssignDevice,
-                    icon: const Icon(Icons.settings_input_component_rounded, size: 16),
-                    label: Text(hasDevice ? 'Değiştir' : 'Cihaz Ata'),
+            ),
+          if (hasDevice && onReplaceDevice != null)
+            PopupMenuItem(
+              value: 'replace',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.published_with_changes_rounded,
+                    size: 18,
+                    color: AppTone.warning.ink(mp),
                   ),
-                ),
-              ],
-            ],
-          );
-        },
-      ),
+                  const SizedBox(width: AppSpace.sm),
+                  const Flexible(child: Text('Arızalı Cihazı Değiştir')),
+                ],
+              ),
+            ),
+          if (onEditDoor != null)
+            PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_outlined, size: 18, color: mp.textSecondary),
+                  const SizedBox(width: AppSpace.sm),
+                  const Flexible(child: Text('Kapıyı Düzenle')),
+                ],
+              ),
+            ),
+          if (onDeleteDoor != null)
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: AppTone.danger.ink(mp),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Flexible(
+                    child: Text(
+                      'Kapıyı Sil',
+                      style: TextStyle(color: AppTone.danger.ink(mp)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ];
+      },
     );
   }
 }

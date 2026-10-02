@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
-import 'package:site_kapi_kontrol/styles/role_theme.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 enum SirketMenuItem {
   dashboard,
@@ -15,6 +15,7 @@ enum SirketMenuItem {
   siteYoneticileriYonetimi,
   daireKullanicilariYonetimi,
   siteler,
+  katilimVeKurulum,
   cihazEkle,
   kayitliCihazlar,
   bluetoothWifiKur,
@@ -44,200 +45,231 @@ class YanMenu extends StatelessWidget {
   final VoidCallback? onToggleMode;
   final bool canToggleMode;
 
+  /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
+  /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
+  /// (en büyük yazıda 56 dp'ye düşerdi) ve Column ekran yüksekliğini aşıp taşabilirdi.
+  static const double _compactHeight = 480;
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final roleColor = role.accentColor;
+    final p = context.palette;
+    final tone = role.tone;
+    final compact = MediaQuery.sizeOf(context).height < _compactHeight;
     final items = _itemsForRole(
       role,
       isResidentMode: isResidentMode,
       canToggleMode: canToggleMode,
     );
+    final showToggle = canToggleMode && onToggleMode != null;
+    // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
+    final firstItemIndex = showToggle ? 1 : 0;
 
+    // Header Alanı (Rol Temalı Gradient)
+    final header = _DrawerHeader(
+      fullName: fullName,
+      userEmail: userEmail,
+      role: role,
+      compact: compact,
+    );
+
+    // Menü Öğeleri Listesi
+    final menuList = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showToggle) ...[
+          StaggeredEntry(
+            key: const ValueKey<String>('yan_menu_gecis'),
+            index: 0,
+            child: _MenuTile(
+              icon: isResidentMode
+                  ? Icons.admin_panel_settings_rounded
+                  : Icons.home_rounded,
+              title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
+              selected: false,
+              tone: isResidentMode ? AppTone.primary : AppTone.success,
+              onTap: onToggleMode!,
+            ),
+          ),
+          const _MenuDivider(),
+        ],
+        for (var i = 0; i < items.length; i++)
+          StaggeredEntry(
+            key: ValueKey<SirketMenuItem>(items[i]),
+            index: firstItemIndex + i,
+            child: _MenuTile(
+              icon: _iconForItem(items[i]),
+              title: _titleForItem(items[i], role),
+              selected: selectedItem == items[i],
+              tone: tone,
+              onTap: () => onSelect(items[i]),
+            ),
+          ),
+        const _MenuDivider(),
+        StaggeredEntry(
+          key: const ValueKey<String>('yan_menu_cikis'),
+          index: firstItemIndex + items.length,
+          child: _MenuTile(
+            icon: Icons.logout_rounded,
+            title: 'Çıkış Yap',
+            selected: false,
+            tone: AppTone.danger,
+            onTap: onLogout,
+          ),
+        ),
+      ],
+    );
+
+    // Alt Sürüm Bilgisi
+    final version = Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      child: Center(
+        child: Text(
+          AppConfig.versionDisplay,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: p.textMuted,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+
+    const listPadding = EdgeInsets.symmetric(vertical: 12, horizontal: 10);
+
+    // Yüzey rengi AppTheme.drawerTheme'den gelir (açık beyaz, koyu #0F172A: eski değerlerle aynı).
     return Drawer(
-      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topRight: Radius.circular(28),
-          bottomRight: Radius.circular(28),
+          topRight: Radius.circular(AppRadius.xl),
+          bottomRight: Radius.circular(AppRadius.xl),
+        ),
+      ),
+      child: compact
+          ? SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  Padding(padding: listPadding, child: menuList),
+                  version,
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                header,
+                // Liste kısa (en çok 15 satır) ve öğeler State taşır (giriş animasyonu): tembel
+                // ListView yerine SingleChildScrollView; kaydırılıp dönülünce animasyon yinelenmez.
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: listPadding,
+                    child: menuList,
+                  ),
+                ),
+                version,
+              ],
+            ),
+    );
+  }
+}
+
+/// Çekmece başlığı: rol gradyanı (beyaz metin >= 4,5:1), düz beyaz logo halkası, rol rozeti,
+/// ad (en çok 2 satır) ve e-posta. Kısa ekranda ([compact]) üst boşluk azalır.
+class _DrawerHeader extends StatelessWidget {
+  const _DrawerHeader({
+    required this.fullName,
+    required this.userEmail,
+    required this.role,
+    required this.compact,
+  });
+
+  final String fullName;
+  final String userEmail;
+  final UserRole role;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, compact ? AppSpace.xl : 56, 20, AppSpace.xl),
+      decoration: BoxDecoration(
+        gradient: role.tone.gradient,
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(AppRadius.xl),
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Alanı (Rol Temalı Gradient)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isDark
-                    ? [
-                        roleColor.withValues(alpha: 0.9),
-                        const Color(0xFF0F172A),
-                      ]
-                    : [
-                        roleColor,
-                        roleColor.withValues(alpha: 0.85),
-                      ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(28),
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  width: 1,
+          Row(
+            children: [
+              // Logo halkası: düz beyaz, gölge yok.
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
                 ),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Colors.white, role.lightAccentColor],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: roleColor.withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: const CircleAvatar(
-                        radius: 26,
-                        backgroundColor: Colors.white,
-                        backgroundImage: AssetImage('assets/images/app_logo.png'),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.22),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Text(
-                              role.label,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  fullName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
+                child: CircleAvatar(
+                  radius: 26,
+                  backgroundColor: Colors.white,
+                  // 1024x1024 kaynak 52 dp gösterilir: görüntü boyutuna göre küçük çözülür.
+                  backgroundImage: ResizeImage(
+                    const AssetImage('assets/images/app_logo.png'),
+                    width: (52 * MediaQuery.devicePixelRatioOf(context)).ceil(),
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  userEmail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      // Gradyan üstünde beyaz %22 zemin beyaz metni ~3,5:1'e düşürür; koyu perde
+                      // rozet metnini >= 4,5:1 tutar.
+                      color: Colors.black.withValues(alpha: 0.24),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      role.label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // Menü Öğeleri Listesi
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-              children: [
-                if (canToggleMode && onToggleMode != null) ...[
-                  _MenuTile(
-                    icon: isResidentMode ? Icons.admin_panel_settings_rounded : Icons.home_rounded,
-                    title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',
-                    selected: false,
-                    color: isResidentMode ? const Color(0xFF2563EB) : const Color(0xFF10B981),
-                    onTap: onToggleMode!,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                    child: Divider(
-                      color: isDark ? const Color(0x1AFFFFFF) : const Color(0x150F172A),
-                      height: 1,
-                    ),
-                  ),
-                ],
-                for (final item in items) ...[
-                  _MenuTile(
-                    icon: _iconForItem(item),
-                    title: _titleForItem(item),
-                    selected: selectedItem == item,
-                    color: roleColor,
-                    onTap: () => onSelect(item),
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  child: Divider(
-                    color: isDark ? const Color(0x1AFFFFFF) : const Color(0x150F172A),
-                    height: 1,
-                  ),
-                ),
-                _MenuTile(
-                  icon: Icons.logout_rounded,
-                  title: 'Çıkış Yap',
-                  selected: false,
-                  color: AppColors.roseLight,
-                  onTap: onLogout,
-                ),
-              ],
-            ),
+          const SizedBox(height: AppSpace.lg),
+          Text(
+            fullName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.titleLarge?.copyWith(color: Colors.white),
           ),
-
-          // Alt Sürüm Bilgisi
-          Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 16),
-            child: Center(
-              child: Text(
-                AppConfig.versionDisplay,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: isDark ? const Color(0xFFCBD5E1) : AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            userEmail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.bodyMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -257,6 +289,7 @@ List<SirketMenuItem> _itemsForRole(
       SirketMenuItem.profilim,
       SirketMenuItem.siteler,
       SirketMenuItem.kayitliCihazlar,
+      SirketMenuItem.katilimVeKurulum,
       SirketMenuItem.bluetoothWifiKur,
     ];
   }
@@ -270,6 +303,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
@@ -278,6 +312,7 @@ List<SirketMenuItem> _itemsForRole(
       if (isResidentMode) {
         return const [
           SirketMenuItem.dashboard,
+          SirketMenuItem.katilimVeKurulum,
           SirketMenuItem.profilim,
           SirketMenuItem.ellerSerbest,
         ];
@@ -287,21 +322,26 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
         SirketMenuItem.kayitliCihazlar,
+        SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.bluetoothWifiKur,
       ];
     case UserRole.apartmentOwner:
       return const [
         SirketMenuItem.dashboard,
+        SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.ellerSerbest,
+        SirketMenuItem.profilim,
       ];
     case UserRole.individual:
       return const [
         SirketMenuItem.dashboard,
+        SirketMenuItem.katilimVeKurulum,
+        SirketMenuItem.profilim,
       ];
   }
 }
 
-String _titleForItem(SirketMenuItem item) {
+String _titleForItem(SirketMenuItem item, [UserRole? role]) {
   switch (item) {
     case SirketMenuItem.dashboard:
       return 'Panel';
@@ -323,9 +363,14 @@ String _titleForItem(SirketMenuItem item) {
       return 'Daire Sakinleri';
     case SirketMenuItem.siteler:
       return 'Site Yönetimi';
+    case SirketMenuItem.katilimVeKurulum:
+      return 'Daireye Katıl & Cihaz Ekle';
     case SirketMenuItem.cihazEkle:
+      if (role == UserRole.superUser) return 'Şirket Cihazı Kaydet';
+      if (role == UserRole.individual) return 'Yönetici Olarak Cihaz Ekle';
       return 'Cihaz Kaydet';
     case SirketMenuItem.kayitliCihazlar:
+      if (role == UserRole.superUser) return 'Şirket Cihaz Envanteri';
       return 'Kayıtlı Cihazlar';
     case SirketMenuItem.bluetoothWifiKur:
       return 'Bluetooth ile Wi-Fi Kur';
@@ -353,9 +398,11 @@ IconData _iconForItem(SirketMenuItem item) {
     case SirketMenuItem.daireKullanicilariYonetimi:
       return Icons.groups_2_rounded;
     case SirketMenuItem.siteler:
-      return Icons.location_city_rounded;
+      return Icons.apartment_rounded;
+    case SirketMenuItem.katilimVeKurulum:
+      return Icons.add_home_work_rounded;
     case SirketMenuItem.cihazEkle:
-      return Icons.qr_code_scanner_rounded;
+      return Icons.add_to_photos_rounded;
     case SirketMenuItem.kayitliCihazlar:
       return Icons.devices_other_rounded;
     case SirketMenuItem.bluetoothWifiKur:
@@ -363,80 +410,119 @@ IconData _iconForItem(SirketMenuItem item) {
   }
 }
 
+/// Menü grupları arasındaki ince ayırıcı.
+class _MenuDivider extends StatelessWidget {
+  const _MenuDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: AppSpace.sm,
+        horizontal: AppSpace.md,
+      ),
+      child: Divider(color: context.palette.border, height: 1),
+    );
+  }
+}
+
+/// Menü öğesi: `ListTile` (dokunma >= 48 dp). Seçili = ton zemini (hap) + ton mürekkebi (ikon/
+/// başlık kalın) + sağda 4x22 dp çubuk (200 ms; hareket azaltmada anında).
+///
+/// Hap zemini `ListTile.selectedTileColor` ile DEĞİL, ListTile'ı saran bir `AnimatedContainer` ile
+/// çizilir: `selectedTileColor` `Ink` olarak en yakın Material'in katmanına boyanır; öğe
+/// `StaggeredEntry`nin `Opacity`si 0 iken (`paintsChild` false) ve kaydırma alanı ayrı bir katman
+/// olduğundan o Material sonradan yeniden boyanmaz: hap hiç görünmezdi. Widget katmanındaki zemin
+/// öğeyle birlikte solar/kayar ve her zaman çizilir. ListTile kendi saydam Material'ine sarılır:
+/// dalga/hover (Ink) hapın ÜSTÜNE, öğenin kendi alt ağacına (Opacity/kaydırma içinde) çizilir ve
+/// Flutter'ın "arka plan ink'i gizliyor" denetimi (araya renkli kutu girmesi) tetiklenmez.
 class _MenuTile extends StatelessWidget {
   const _MenuTile({
     required this.icon,
     required this.title,
     required this.selected,
-    required this.color,
+    required this.tone,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
   final bool selected;
-  final Color color;
+  final AppTone tone;
   final VoidCallback onTap;
+
+  /// Seçili çubuğun anahtarı (her öğede bir tane; yalnız seçilide yükseklik 22).
+  static const Key selectedBarKey = ValueKey<String>('yan_menu_secili_cubuk');
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final ink = tone.ink(p);
+    final tint = tone.tint(p);
+    final duration = AppMotion.of(context, AppMotion.base);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: selected
-            ? color.withValues(alpha: isDark ? 0.15 : 0.12)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        border: selected
-            ? Border.all(
-                color: color.withValues(alpha: isDark ? 0.4 : 0.35),
-                width: 1.2,
-              )
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          dense: true,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          leading: Icon(
-            icon,
-            color: selected
-                ? color
-                : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
-            size: 22,
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected
-                  ? (isDark ? Colors.white : color)
-                  : (isDark ? AppColors.textLight : AppColors.textDarkSecondary),
-            ),
-          ),
-          trailing: selected
-              ? Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: color,
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.8),
-                        blurRadius: 6,
-                        spreadRadius: 1,
-                      ),
-                    ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: AnimatedContainer(
+        duration: duration,
+        curve: AppMotion.standard,
+        decoration: BoxDecoration(
+          // Seçili değilken aynı rengin saydamı: geçişte yalnız alfa değişir (siyaha kaymaz).
+          color: selected ? tint : tint.withValues(alpha: 0),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: Stack(
+            alignment: AlignmentDirectional.centerEnd,
+            children: [
+              ListTile(
+                dense: true,
+                selected: selected,
+                onTap: onTap,
+                selectedColor: ink,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                leading: Icon(
+                  icon,
+                  size: 22,
+                  color: selected ? ink : p.textSecondary,
+                ),
+                // Başlık kırpılmaz: en büyük yazıda (x2,0) dar çekmecede en çok 3 satıra iner.
+                title: Text(
+                  title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    color: selected ? p.text : p.textSecondary,
                   ),
-                )
-              : null,
-          onTap: onTap,
+                ),
+              ),
+              // Çubuk ListTile.trailing yerine üstte çizilir: trailing en az 32 dp yer ayırır ve
+              // başlığın genişliğini her öğede daraltırdı (uzun başlıklar gereksiz sarardı).
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 6),
+                child: ExcludeSemantics(
+                  child: IgnorePointer(
+                    child: AnimatedContainer(
+                      key: selectedBarKey,
+                      duration: duration,
+                      curve: AppMotion.standard,
+                      width: 4,
+                      height: selected ? 22 : 0,
+                      decoration: BoxDecoration(
+                        color: ink,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

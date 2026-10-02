@@ -160,15 +160,35 @@
             android:background="@drawable/widget_nav_button" />
     </LinearLayout>
 
-    <!-- 3. Main Door Action Button -->
-    <Button
-        android:id="@+id/widget_open_button"
+    <!-- 3. Main Door Action Buttons (Open & QR) -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="46dp"
-        android:text="KAPIYI AÇ"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:background="@drawable/widget_button_background" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/widget_open_button"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:text="KAPIYI AÇ"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_button_background" />
+
+        <Button
+            android:id="@+id/widget_btn_qr"
+            android:layout_width="78dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="8dp"
+            android:text="QR KOD"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_qr_button_background"
+            android:visibility="gone" />
+    </LinearLayout>
 
 </LinearLayout>

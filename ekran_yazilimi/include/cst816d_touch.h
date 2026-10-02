@@ -11,7 +11,9 @@ class CST816DTouch {
 public:
   CST816DTouch() : _sdaPin(-1), _sclPin(-1), _rstPin(-1), _intPin(-1), _initialized(false) {}
 
-  bool begin(int sda, int scl, int rst = -1, int irq = -1) {
+  // Birden fazla kez cagrilabilir (main.cpp: acilista bir kez, hazir degilse 5 sn'de bir yeniden dener; ~60 ms bloklar).
+  // verbose=false: yeniden denemelerde "algilanamadi" satiri seri portu doldurmasin (basari her zaman yazilir).
+  bool begin(int sda, int scl, int rst = -1, int irq = -1, bool verbose = true) {
     _sdaPin = sda;
     _sclPin = scl;
     _rstPin = rst;
@@ -27,9 +29,12 @@ public:
     }
 
     if (_intPin >= 0) {
-      pinMode(_intPin, INPUT);
+      pinMode(_intPin, INPUT_PULLUP);
     }
 
+    // Yeniden denemede I2C gercekten sifirlansin: arduino-esp32 2.0.14'te Wire.begin() zaten baslatilmissa hicbir sey yapmaz.
+    // Wire.end() baslatilmamis veriyolunda zararsizdir; sira: end() -> begin().
+    Wire.end();
     Wire.begin(_sdaPin, _sclPin, 400000);
 
     // Test communication with CST816D
@@ -40,7 +45,9 @@ public:
       return true;
     }
 
-    Serial.println("[TOUCH] CST816D not detected (fallback to button input)");
+    if (verbose) {
+      Serial.println("[TOUCH] CST816D not detected (fallback to button input)");
+    }
     _initialized = false;
     return false;
   }
@@ -52,11 +59,6 @@ public:
   // Non-blocking read of touch coordinates
   bool readTouch(int16_t &x, int16_t &y) {
     if (!_initialized) return false;
-
-    // If INT pin is available, only read when pressed (active LOW on CST816)
-    if (_intPin >= 0 && digitalRead(_intPin) == HIGH) {
-      return false;
-    }
 
     Wire.beginTransmission(CST816D_I2C_ADDR);
     Wire.write(0x02); // Register 0x02: Finger Num

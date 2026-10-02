@@ -29,25 +29,35 @@ Sistemde tek `users` tablosu vardir. Roller ayri tablolar yerine `role` kolonu i
 
 Roller:
 
-- `super_user`
-- `site_manager`
-- `apartment_owner`
+- `super_user` (Super Kullanici)
+- `site_manager` (Site Yoneticisi)
+- `apartment_owner` (Daire Sahibi / Sakin)
+- `individual` (Bireysel Kullanici)
 
 Yetki mantigi:
 
 - `super_user`
   - sirket uygulamasina girer
-  - super user, site yoneticisi, daire kullanicisi yonetir
+  - super user, site yoneticisi, daire kullanicisi, bireysel kullanici yonetir
   - abonelik taleplerini onaylar / reddeder
   - site ve cihaz kayitlarini olusturur
+  - tum kullanicilari yonetir (Kullanici Yonetimi sayfasi)
 - `site_manager`
   - `ahbu` uygulamasinda kayit olabilir
   - e-posta dogrulamasindan gecer
   - sirket onayindan sonra giris yapabilir
   - kendine tanimli cihazlari site kapilarina atayabilir
+  - bir veya birden fazla siteyi yonetebilir
 - `apartment_owner`
   - `ahbu` uygulamasinda kayit ekrani gormez
   - hesaplari yonetici / sistem tarafindan olusturulur
+  - daire ve kapilara erisim yetkileri vardir
+- `individual`
+  - Bireysel kullanici olarak kaydolur (self-service)
+  - E-posta dogrulama kodu (6 hane) ile hesap dogrulanir
+  - Kutu QR kodu veya seri no ile cihaz sahiplenir
+  - Cihazin sahibi olarak site kurucu yoneticisi olur
+  - Site katilim QR ile baslattigi uyelik talebi onaylaninca daire ve site erisimi kazanir
 
 ## 3. Repo ve Dizin Yapisi
 
@@ -246,6 +256,16 @@ Responsive kurallar:
 - dar ekranda alt alta yerlesim
 - dialog genisligi ekrana gore hesaplanir
 
+### 7.1 Arayuz Tasarim Sistemi ("Cilali Safir") ve Akicilik
+
+- Tasarim sistemi `lib/ui/design/` altindadir: `tokens.dart` (AppSpace, AppRadius, AppMotion, AppPalette ThemeExtension, AppTone), `page_transitions.dart`, `buttons.dart`, `motion_widgets.dart`, `app_card.dart`, `status_chip.dart`, `empty_state.dart`, `app_dialog.dart`, `door_open_button.dart`, `countdown_ring.dart`, `skeleton.dart`, `app_snack.dart`, `login_hero.dart`. Ortak liste parcalari: `lib/ui/widgets/list_parts.dart`.
+- Kural: yeni ekran/dialogda ham renk (`Color(0xFF...)`, `Colors.red`), `isDark ?:` uclusu ve sabit fontSize yazilmaz; `context.palette`, `AppTone.<ton>` ve tema TextTheme kullanilir. Metin renkleri iki temada da >= 4,5:1 kontrast olmalidir (`test/design/contrast_test.dart` hakemdir).
+- Animasyon sureleri `AppMotion.of(context)` ile alinir (sistemde "animasyonlari azalt" aciksa sifir). `AnimatedSize`/`AnimatedCrossFade` icin sifir sure kullanilmaz (Flutter assert atar; 1 ms verilir). Kararli durumda sonsuz animasyon birakilmaz (rozet nabzi 3 tur sonra durur, iskelet parlamasi yalnizca yuklenirken).
+- Dokunma hedefleri >= 44 dp; metin olcegi `lib/app.dart` icinde en cok 2,0 ile sinirlanir; yeni ekranlar 320x640 x 2,0 yazida tasmamalidir (AGENTS.md kural 6, `test/screens/`).
+- Tek bilesenler: kapi acma `DoorOpenButton`, QR geri sayimi `CountdownRing`, yukleme `SkeletonBox`/`ShimmerScope`, bos liste `EmptyState`, durum rozeti `StatusChip`, diyalog `AppDialog`/`AppDialogHeader`, bildirim `AppSnack`/`InlineNotice`.
+- Akicilik: ag yoklamalari `lib/services/adaptive_poller.dart` ile yapilir (arka planda/ortulu iken durur, hatada ustel geri cekilme, ust uste binmez; HomePage 3 sn, bireysel kapi listesi 15 sn, QR modali 0,8 sn); agir isler (PDF uretimi, >= 64 KB JSON) `lib/services/background_work.dart` ile arka plan izolesinde calisir; GET zaman asimi 20 sn, yazma 45 sn, kapi acma 10 sn.
+- Kare suresi olcumu: `integration_test/perf_frames_test.dart` + `test_driver/perf_driver.dart` (komut `SAHA_KONTROL_LISTESI.md` bolum 52); calistirmak proje sahibine aittir.
+
 ## 8. Ahbu Uygulamasi
 
 `ahbu` ayri repodadir.
@@ -385,6 +405,10 @@ Firmware cikti klasorleri:
 - derleme: `cihaz_kontrol/.pio/build/<env>/`
 - surumleme: `cihaz_kontrol/firmware_releases/`
 
+Yerel (LAN) kapi kontrolu: UDP 8765, protokol v2 (challenge'a bagli HMAC-SHA256; token ag uzerinde gonderilmez, HTTP `/ahbu/open` kaldirildi). Sozlesme: `docs/YEREL_KONTROL_V2.md`. Firmware ve uygulama birlikte guncellenmelidir.
+
+Firmware ana makine testleri (donanimsiz, Windows + MSVC): `cihaz_kontrol/host_test/` (`python run_all.py`, 719 dogrulama; ayrinti `cihaz_kontrol/host_test/README.md`).
+
 ## 12. Uretim Sunucu Kurulumu
 
 Detaylar:
@@ -452,7 +476,7 @@ Sirket uygulamasi:
 flutter clean
 flutter pub get
 flutter analyze
-flutter test
+flutter test        # 2357 test
 flutter build apk --release
 ```
 

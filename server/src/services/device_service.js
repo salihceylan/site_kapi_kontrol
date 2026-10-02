@@ -69,10 +69,17 @@ export async function findDeviceByUid(deviceUid) {
         runtime.last_seen_at,
         runtime.last_event,
         runtime.hardware_target,
+        devices.hardware_type,
+        devices.is_defective,
+        devices.defective_reason,
+        devices.owner_user_id,
+        owner_u.user_code AS owner_user_code,
+        devices.qr_reader_enabled,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN users owner_u ON owner_u.id = devices.owner_user_id
       LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.device_uid = $1
       LIMIT 1
@@ -110,10 +117,22 @@ export async function findDeviceById(deviceId) {
         runtime.last_seen_at,
         runtime.last_event,
         runtime.hardware_target,
+        devices.hardware_type,
+        devices.qr_reader_enabled,
+        devices.is_defective,
+        devices.defective_reason,
+        devices.defective_at,
+        devices.inventory_notes,
+        devices.owner_user_id,
+        devices.claimed_at,
+        owner_u.user_code AS owner_user_code,
+        owner_u.full_name AS owner_full_name,
+        owner_u.email AS owner_email,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN users owner_u ON owner_u.id = devices.owner_user_id
       LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.id = $1
       LIMIT 1
@@ -362,13 +381,30 @@ export async function listCompanyDevices({ page, pageSize }) {
         runtime.last_seen_at,
         runtime.last_event,
         runtime.hardware_target,
+        devices.hardware_type,
+        devices.qr_reader_enabled,
+        devices.is_defective,
+        devices.defective_reason,
+        devices.defective_at,
+        devices.inventory_notes,
+        devices.owner_user_id,
+        devices.claimed_at,
+        u.user_code AS owner_user_code,
+        u.full_name AS owner_full_name,
+        u.email AS owner_email,
         devices.created_at,
         COUNT(*) OVER() AS total_count
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN users u ON u.id = devices.owner_user_id
       LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
-      ORDER BY sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
+      ORDER BY
+        CASE WHEN devices.is_defective THEN 0 ELSE 1 END ASC,
+        CASE WHEN door.id IS NULL THEN 0 ELSE 1 END ASC,
+        sites.name ASC NULLS LAST,
+        door.door_index ASC NULLS LAST,
+        devices.device_uid ASC
       LIMIT $1 OFFSET $2
     `,
     [pageSize, offset],
@@ -487,12 +523,17 @@ export async function listManagedDevicesForUser(authUser) {
   if (userCode == null) {
     return [];
   }
+  const userId = Number(authUser?.db_id || authUser?.userId || authUser?.id);
 
   const result = await pool.query(
     `
       SELECT
         devices.id,
         devices.device_uid,
+        devices.hardware_type,
+        devices.is_defective,
+        devices.defective_reason,
+        devices.owner_user_id,
         devices.assigned_user_code,
         devices.site_code,
         sites.name AS site_name,
@@ -515,20 +556,29 @@ export async function listManagedDevicesForUser(authUser) {
         runtime.last_seen_at,
         runtime.last_event,
         runtime.hardware_target,
+        owner_u.user_code AS owner_user_code,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN users owner_u ON owner_u.id = devices.owner_user_id
       LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
-      WHERE EXISTS (
-        SELECT 1
-        FROM site_manager_sites sms
-        WHERE sms.manager_user_code = $1
-          AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+      WHERE (
+        EXISTS (
+          SELECT 1
+          FROM site_manager_sites sms
+          WHERE sms.manager_user_code = $1
+            AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+        )
+        OR (
+          -- Yöneticinin bizzat kendi eklediği (sahiplendiği) cihazlar
+          devices.assigned_user_code = $1
+          OR (devices.owner_user_id IS NOT NULL AND devices.owner_user_id = $2)
+        )
       )
-      ORDER BY sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
+      ORDER BY CASE WHEN door.id IS NULL THEN 0 ELSE 1 END ASC, sites.name ASC NULLS LAST, door.door_index ASC NULLS LAST, devices.device_uid ASC
     `,
-    [userCode],
+    [userCode, userId],
   );
   return result.rows;
 }
@@ -538,12 +588,17 @@ export async function findManagedDeviceById({ authUser, deviceId }) {
   if (userCode == null) {
     return null;
   }
+  const userId = Number(authUser?.db_id || authUser?.userId || authUser?.id);
 
   const result = await pool.query(
     `
       SELECT
         devices.id,
         devices.device_uid,
+        devices.hardware_type,
+        devices.is_defective,
+        devices.defective_reason,
+        devices.owner_user_id,
         devices.assigned_user_code,
         devices.site_code,
         sites.name AS site_name,
@@ -566,21 +621,27 @@ export async function findManagedDeviceById({ authUser, deviceId }) {
         runtime.last_seen_at,
         runtime.last_event,
         runtime.hardware_target,
+        owner_u.user_code AS owner_user_code,
         devices.created_at
       FROM devices
       LEFT JOIN site_doors door ON door.assigned_device_id = devices.id
       LEFT JOIN sites ON sites.site_code = COALESCE(door.site_code, devices.site_code)
+      LEFT JOIN users owner_u ON owner_u.id = devices.owner_user_id
       LEFT JOIN device_runtime_status runtime ON runtime.device_uid = devices.device_uid
       WHERE devices.id = $1
-        AND EXISTS (
-          SELECT 1
-          FROM site_manager_sites sms
-          WHERE sms.manager_user_code = $2
-            AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM site_manager_sites sms
+            WHERE sms.manager_user_code = $2
+              AND sms.site_code = COALESCE(door.site_code, devices.site_code)
+          )
+          OR devices.assigned_user_code = $2
+          OR (devices.owner_user_id IS NOT NULL AND devices.owner_user_id = $3)
         )
       LIMIT 1
     `,
-    [deviceId, userCode],
+    [deviceId, userCode, userId],
   );
   return result.rows[0] || null;
 }
@@ -610,31 +671,59 @@ export async function updateDeviceAssignment({
   return result.rows[0] || null;
 }
 
+// PATCH /admin/devices/:id: kismi guncelleme. Atama alanlari (assigned_user_code, site_code, gate_name)
+// yalnizca istemci o anahtari GONDERDIYSE degisir (null gonderilirse temizlenir, hic gonderilmezse korunur);
+// qr_reader_enabled ve hardware_type de yalnizca verildiyse degisir (hardware_type: OTA hedef kontrolu icin
+// yanlis etiketli cihazlari duzeltmek). $7..$9 = ilgili atama alaninin gonderilip gonderilmedigi.
+export const UPDATE_DEVICE_DETAILS_SQL = `
+  UPDATE devices
+  SET
+    assigned_user_code = CASE WHEN $7::boolean THEN $1::integer ELSE assigned_user_code END,
+    site_code = CASE WHEN $8::boolean THEN $2::bigint ELSE site_code END,
+    gate_name = CASE WHEN $9::boolean THEN $3::text ELSE gate_name END,
+    qr_reader_enabled = COALESCE($4::boolean, qr_reader_enabled),
+    hardware_type = COALESCE($5::text, hardware_type)
+  WHERE id = $6
+  RETURNING id
+`;
+
 export async function updateDeviceDetails({
   deviceId,
   assignedUserCode,
   siteCode,
   gateName,
+  qrReaderEnabled,
+  hardwareType,
+  // Geriye uyum: bayrak verilmeyen cagrilar eski (tam degistirme) davranisini korur.
+  assignedUserCodeProvided = true,
+  siteCodeProvided = true,
+  gateNameProvided = true,
 }) {
   const result = await pool.query(
-    `
-      UPDATE devices
-      SET
-        assigned_user_code = $1,
-        site_code = $2,
-        gate_name = $3
-      WHERE id = $4
-      RETURNING id
-    `,
-    [assignedUserCode, siteCode, gateName, deviceId],
+    UPDATE_DEVICE_DETAILS_SQL,
+    [
+      assignedUserCode ?? null,
+      siteCode ?? null,
+      gateName ?? null,
+      typeof qrReaderEnabled === 'boolean' ? qrReaderEnabled : null,
+      hardwareType === 'esp32_c3' || hardwareType === 'esp32_wroom' ? hardwareType : null,
+      deviceId,
+      Boolean(assignedUserCodeProvided),
+      Boolean(siteCodeProvided),
+      Boolean(gateNameProvided),
+    ],
   );
   if (result.rowCount === 0) {
     return null;
   }
-  await rotateLocalControlTokensForDeviceIds(
-    [deviceId],
-    'device_details_changed',
-  );
+  // Yerel kontrol anahtari yalnizca erisim/atama alanlari degistiyse doner (yalniz hardware_type/qr duzeltmesi
+  // uygulamalardaki onbellekli anahtarlari bosuna gecersiz kilmaz).
+  if (assignedUserCodeProvided || siteCodeProvided || gateNameProvided) {
+    await rotateLocalControlTokensForDeviceIds(
+      [deviceId],
+      'device_details_changed',
+    );
+  }
   return findDeviceById(deviceId);
 }
 
@@ -777,4 +866,198 @@ export async function getDeviceConnectivityLogs({
       totalPages: Math.ceil(total / limit) || 1,
     },
   };
+}
+
+const COMPANY_DEVICE_UID_PATTERN = /^[0-9A-F]{12}$/;
+
+/**
+ * Envantere kaydedilecek UID'yi dogrular: 12 haneli onaltilik (ESP32 MAC tabanli, ornek D4C771A172E0).
+ * `:`/`-`/bosluk ayiraclari kaldirilir; baska karakter varsa null doner (normalizeDeviceUid gibi sessizce atilmaz).
+ */
+export function parseCompanyDeviceUid(raw) {
+  const text = String(raw ?? '').trim().toUpperCase().replace(/[:\-\s]/g, '');
+  return COMPANY_DEVICE_UID_PATTERN.test(text) ? text : null;
+}
+
+/**
+ * Şirket Envanterine Yeni Cihaz Kaydet (Süper User)
+ */
+export async function registerCompanyDevice({ deviceUid, hardwareType = 'esp32_wroom', inventoryNotes, authUser }) {
+  const normalizedUid = parseCompanyDeviceUid(deviceUid);
+  if (!normalizedUid) {
+    const err = new Error('Geçerli bir Cihaz Unique ID (UID) giriniz (12 haneli onaltılık, örn. D4C771A172E0).');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const validHardware = hardwareType === 'esp32_c3' ? 'esp32_c3' : 'esp32_wroom';
+
+  // Cihazın zaten kayıtlı olup olmadığını kontrol et
+  const existing = await pool.query(
+    `SELECT id, device_uid, hardware_type, is_defective, owner_user_id, site_code FROM devices WHERE device_uid = $1 LIMIT 1`,
+    [normalizedUid],
+  );
+
+  if (existing.rowCount > 0) {
+    const dev = existing.rows[0];
+    const err = new Error(`Cihaz (${normalizedUid}) zaten şirket veritabanında kayıtlı.`);
+    err.statusCode = 409;
+    err.device = dev;
+    throw err;
+  }
+
+  const result = await pool.query(
+    `
+      INSERT INTO devices (
+        device_uid,
+        hardware_type,
+        qr_reader_enabled,
+        inventory_notes,
+        mqtt_username,
+        mqtt_password,
+        local_control_token
+      )
+      VALUES ($1, $2, TRUE, $3, $4, $5, $6)
+      RETURNING id, device_uid, hardware_type, qr_reader_enabled, inventory_notes, is_defective, created_at
+    `,
+    [
+      normalizedUid,
+      validHardware,
+      inventoryNotes ? String(inventoryNotes).trim() : null,
+      mqttUsernameForDevice(normalizedUid),
+      generateMqttPassword(),
+      generateLocalControlToken(),
+    ],
+  );
+
+  auditLog('company_device_registered', {
+    device_uid: normalizedUid,
+    hardware_type: validHardware,
+    registered_by: authUser?.email,
+  });
+
+  return result.rows[0];
+}
+
+/**
+ * Cihazı Arızalı Olarak İşaretle veya Arıza Durumunu Kaldır (Süper User)
+ */
+export async function setDeviceDefectStatus({ deviceId, isDefective, defectiveReason, authUser }) {
+  const id = Number(deviceId);
+  if (!Number.isInteger(id)) {
+    const err = new Error('Geçersiz cihaz ID.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const defectFlag = Boolean(isDefective);
+  const reason = defectFlag ? (defectiveReason ? String(defectiveReason).trim() : 'Arıza bildirildi') : null;
+  const defectTime = defectFlag ? new Date() : null;
+
+  const result = await pool.query(
+    `
+      UPDATE devices
+      SET
+        is_defective = $1,
+        defective_reason = $2,
+        defective_at = $3
+      WHERE id = $4
+      RETURNING id, device_uid, is_defective, defective_reason, defective_at, site_code, gate_name
+    `,
+    [defectFlag, reason, defectTime, id],
+  );
+
+  if (result.rowCount === 0) {
+    const err = new Error('Cihaz bulunamadı.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  auditLog(defectFlag ? 'device_marked_defective' : 'device_defect_cleared', {
+    device_id: id,
+    device_uid: result.rows[0].device_uid,
+    reason,
+    changed_by: authUser?.email,
+  });
+
+  return result.rows[0];
+}
+
+/**
+ * Cihaz Sahipliğini Sıfırla / Şirket Stokuna İade Al (Süper User)
+ * - Müşteriden iade alınan veya servise gelen cihazı fabrika durumuna çeker
+ * - Kapı atamasını ve kullanıcı sahipliğini kaldırır
+ */
+export async function releaseDeviceOwnership({ deviceId, authUser }) {
+  const id = Number(deviceId);
+  if (!Number.isInteger(id)) {
+    const err = new Error('Geçersiz cihaz ID.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Cihazı bul
+    const devRes = await client.query(
+      `SELECT id, device_uid, site_code, owner_user_id FROM devices WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+
+    if (devRes.rowCount === 0) {
+      const err = new Error('Cihaz bulunamadı.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const dev = devRes.rows[0];
+
+    // Kapıdan sök (eğer atanmış bir kapı varsa)
+    await client.query(
+      `UPDATE site_doors SET assigned_device_id = NULL WHERE assigned_device_id = $1`,
+      [id],
+    );
+
+    // Cihazın sahipliğini, site kodunu ve kapı adını sıfırla
+    const updatedRes = await client.query(
+      `
+        UPDATE devices
+        SET
+          owner_user_id = NULL,
+          assigned_user_code = NULL,
+          site_code = NULL,
+          gate_name = NULL,
+          claimed_at = NULL
+        WHERE id = $1
+        RETURNING id, device_uid, hardware_type, is_defective, owner_user_id, site_code
+      `,
+      [id],
+    );
+
+    await client.query('COMMIT');
+
+    auditLog('device_ownership_released', {
+      device_id: id,
+      device_uid: dev.device_uid,
+      previous_owner: dev.owner_user_id,
+      previous_site: dev.site_code,
+      released_by: authUser?.email,
+    });
+
+    // Onceki sahibin/sitenin uygulamasinda onbellekte kalan yerel kontrol anahtari gecersiz kilinsin.
+    try {
+      await rotateLocalControlTokensForDeviceIds([id], 'device_ownership_released');
+    } catch (tokenErr) {
+      console.warn('Local control token rotasyonu atlandi:', tokenErr.message);
+    }
+
+    return updatedRes.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

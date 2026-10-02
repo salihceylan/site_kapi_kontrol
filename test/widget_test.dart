@@ -13,5 +13,13 @@ void main() {
 
     expect(find.text('AHBU Giriş'), findsOneWidget);
     expect(find.text('Giriş Yap'), findsOneWidget);
+    expect(find.text('Şifremi Unuttum?'), findsOneWidget);
+
+    await tester.tap(find.text('Şifremi Unuttum?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Şifre Sıfırlama'), findsNothing); // Dialog title is 'Şifremi Unuttum'
+    expect(find.text('Bağlantı Gönder'), findsOneWidget);
+    expect(find.text('E-posta Adresi'), findsOneWidget);
   });
 }

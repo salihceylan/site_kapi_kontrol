@@ -1,0 +1,54 @@
+# Satir sonu normalizasyonu: depoda (index) her zaman LF, calisma agacinda
+# platformun varsayilani. Mevcut calisma agaci yeniden yazilmaz; yalnizca
+# bundan sonraki add/checkout islemleri bu kurallara uyar.
+* text=auto
+
+# Linux'ta calisan betikler LF OLMAK ZORUNDA (CRLF "\r: command not found" uretir)
+*.sh text eol=lf
+server/scripts/kapi-mqtt-sync.sh text eol=lf
+.nvmrc text eol=lf
+Dockerfile text eol=lf
+
+# Windows betikleri CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Ikili dosyalar: asla donusturme / diff'e sokma
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.7z binary
+*.jar binary
+*.aar binary
+*.apk binary
+*.aab binary
+*.ipa binary
+*.keystore binary
+*.jks binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.so binary
+*.dll binary
+*.exe binary
+*.a binary
+*.lib binary
+*.elf binary
+*.bin binary
+*.sqlite binary
+*.db binary
+*.p12 binary
+*.pem binary
+*.key binary

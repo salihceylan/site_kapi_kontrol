@@ -1,43 +1,83 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/user_session.dart';
-import '../../styles/app_colors.dart';
-import '../../styles/role_theme.dart';
+import '../design/app_card.dart';
+import '../design/status_chip.dart';
+import '../design/tokens.dart';
 
 class DigitalClockWidget extends StatefulWidget {
   const DigitalClockWidget({
     super.key,
     required this.session,
     this.showUserInfo = true,
+    this.nowProvider = DateTime.now,
   });
 
   final UserSession session;
   final bool showUserInfo;
 
+  /// Şimdiki zaman kaynağı (testlerde sanal saat verilir; üretimde sistem saati).
+  final DateTime Function() nowProvider;
+
   @override
   State<DigitalClockWidget> createState() => _DigitalClockWidgetState();
 }
 
-class _DigitalClockWidgetState extends State<DigitalClockWidget> {
-  late DateTime _currentTime;
+class _DigitalClockWidgetState extends State<DigitalClockWidget>
+    with WidgetsBindingObserver {
+  // Saniyelik güncelleme yalnız bu iki dinleyiciyi (saat metni, tarih metni) yeniden kurar; kart
+  // iskeleti (dekorasyon, gölge, kullanıcı satırı) her saniye yeniden kurulmaz. Tarih yalnız gün
+  // değişince bildirir (ValueNotifier eşit değeri yayınlamaz).
+  late final ValueNotifier<String> _timeText;
+  late final ValueNotifier<String> _dateText;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _currentTime = DateTime.now();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTime.now();
-        });
-      }
-    });
+    WidgetsBinding.instance.addObserver(this);
+    final now = widget.nowProvider();
+    _timeText = ValueNotifier<String>(_formatTime(now));
+    _dateText = ValueNotifier<String>(_formatTurkishDate(now));
+    _startTimer();
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    final now = widget.nowProvider();
+    _timeText.value = _formatTime(now);
+    _dateText.value = _formatTurkishDate(now);
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _tick();
+      _startTimer();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _stopTimer();
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimer();
+    _timeText.dispose();
+    _dateText.dispose();
     super.dispose();
   }
 
@@ -80,267 +120,221 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final roleColor = widget.session.role.accentColor;
-    final timeStr = _formatTime(_currentTime);
-    final dateStr = _formatTurkishDate(_currentTime);
+    // RepaintBoundary: saniyelik metin güncellemesi ve sayfa kaydırması kartın gölgeli
+    // katmanını birbirine yeniden çizdirmez.
+    return RepaintBoundary(child: _buildCard(context));
+  }
 
+  // Üst satır yerleşimi için doğal genişlik tahminleri (dp; yazı ölçeğiyle büyür): saat bloğu =
+  // simge karosu 34 + boşluk 8 + 8 monospace hane; rozet = bayrak + rozet dolgusu/ikon + etiket.
+  static const double _timeBlockBase = 42;
+  static const double _timeTextWidth = 122;
+  static const double _badgeBase = 42;
+  static const double _badgeTextWidth = 97;
+
+  /// Tek satıra sığması için saat bloğunun en çok bu orana (%85) kadar küçülmesi kabul edilir.
+  static const double _minInlineShrink = 0.85;
+
+  /// Saat + saat dilimi rozeti. Yan yana en çok ~%15 küçülerek sığıyorsa tek satır (kompakt); sığmıyorsa
+  /// (büyük yazı / dar ekran) rozet alt satıra iner ve saat okunaklı kalır. Düzen kararı yalnız
+  /// kısıtlar/yazı ölçeği değişince yeniden verilir (saniyelik güncellemede değil).
+  Widget _buildTopRow(BuildContext context, Widget timeBlock, Widget zoneBadge) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: isDark
-                ? const Color(0xFF1E293B).withValues(alpha: 0.9)
-                : Colors.white.withValues(alpha: 0.94),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: roleColor.withValues(alpha: isDark ? 0.35 : 0.3),
-              width: 1.3,
-            ),
-            boxShadow: isDark
-                ? [
-                    BoxShadow(
-                      color: roleColor.withValues(alpha: 0.12),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                    const BoxShadow(
-                      color: Color(0x40000000),
-                      blurRadius: 14,
-                      offset: Offset(0, 4),
-                    ),
-                  ]
-                : [
-                    const BoxShadow(
-                      color: Color(0x0F0F172A),
-                      blurRadius: 18,
-                      offset: Offset(0, 6),
-                    ),
-                    BoxShadow(
-                      color: roleColor.withValues(alpha: 0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        final scale = MediaQuery.textScalerOf(context).scale(1);
+        final timeWidth = _timeBlockBase + _timeTextWidth * scale;
+        final badgeWidth = _badgeBase + _badgeTextWidth * scale;
+        final shrink = (constraints.maxWidth - AppSpace.sm - badgeWidth) / timeWidth;
+        if (constraints.hasBoundedWidth && shrink >= _minInlineShrink) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Üst Satır: Dijital Saat & Canlı Zaman Dilimi Rozeti
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Dijital Saat (Expanded + FittedBox ile taşmaya karşı tam koruma)
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
-                                    : AppColors.primary.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.access_time_filled_rounded,
-                                color: isDark ? const Color(0xFF38BDF8) : AppColors.primary,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              timeStr,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.8,
-                                fontFamily: 'monospace',
-                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                                shadows: isDark
-                                    ? const [
-                                        Shadow(
-                                          color: Color(0x8038BDF8),
-                                          blurRadius: 12,
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Canlı Saat Bölgesi Rozeti (FittedBox ile taşmaya karşı korumalı)
-                  Flexible(
-                    flex: 0,
-                    fit: FlexFit.loose,
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: timeBlock),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+                child: zoneBadge,
+              ),
+            ],
+          );
+        }
+        return Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          children: [timeBlock, zoneBadge],
+        );
+      },
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final tone = widget.session.role.tone;
+    // Saat: dijital görünüm için monospace + sabit genişlikli (tabular) rakamlar; gölge yok.
+    final timeStyle = th.headlineMedium?.copyWith(
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0.8,
+      fontFamily: 'monospace',
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    // Dijital Saat (FittedBox ile taşmaya karşı tam koruma). Yalnız saat metni her saniye yeniden
+    // kurulur (kendi RepaintBoundary'sinde).
+    final timeBlock = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppTone.info.tint(p),
+              shape: BoxShape.circle,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.sm),
+              child: Icon(
+                Icons.access_time_filled_rounded,
+                color: AppTone.info.ink(p),
+                size: 18,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          RepaintBoundary(
+            child: ValueListenableBuilder<String>(
+              valueListenable: _timeText,
+              builder: (context, timeStr, _) => Text(timeStr, style: timeStyle),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Canlı Saat Bölgesi Rozeti (bayrak emojisi + bilgi tonlu rozet)
+    final zoneBadge = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('🇹🇷 ', style: th.bodySmall),
+          const StatusChip(
+            label: 'TSİ (UTC+3)',
+            tone: AppTone.info,
+            icon: Icons.public_rounded,
+          ),
+        ],
+      ),
+    );
+
+    return SizedBox(
+      width: double.infinity,
+      child: AppCard(
+        // Rol kimliği: renkli çerçeve yerine 3 dp üst şerit (metin rengi ayrıca `ink` ile okunur).
+        accentBar: tone.hue,
+        padding: const EdgeInsets.all(AppSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Üst Satır: Dijital Saat & Canlı Zaman Dilimi Rozeti
+            _buildTopRow(context, timeBlock, zoneBadge),
+            const SizedBox(height: AppSpace.sm),
+
+            // Tarih Satırı (Türkçe)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.calendar_today_rounded,
+                  size: 13,
+                  color: p.textSecondary,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF0284C7).withValues(alpha: 0.2)
-                              : const Color(0xFF0284C7).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isDark
-                                ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
-                                : const Color(0xFF0284C7).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('🇹🇷 ', style: TextStyle(fontSize: 11)),
-                            Text(
-                              'TSİ (UTC+3)',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Tarih Satırı (Türkçe)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.calendar_today_rounded,
-                    size: 13,
-                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Align(
                       alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
+                      child: ValueListenableBuilder<String>(
+                        valueListenable: _dateText,
+                        builder: (context, dateStr, _) => Text(
                           dateStr,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12.5,
+                          style: th.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                            color: p.textSecondary,
                           ),
                         ),
                       ),
                     ),
+                  ),
+                ),
+              ],
+            ),
+
+            if (widget.showUserInfo) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpace.md),
+                child: Divider(height: 1),
+              ),
+              // Kullanıcı Bilgisi ve Rolü: ad/rol satırı ikincil ağırlıkta; sığmazsa rol alt satıra iner
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.xs,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: tone.tint(p),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpace.xs),
+                          child: Icon(
+                            Icons.person_rounded,
+                            color: tone.ink(p),
+                            size: 15,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Flexible(
+                        child: Text(
+                          widget.session.fullName,
+                          style: th.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: p.text,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  StatusChip(
+                    label: widget.session.role.label,
+                    tone: tone,
+                    icon: Icons.shield_outlined,
                   ),
                 ],
               ),
-
-              if (widget.showUserInfo) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(
-                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
-                    height: 1,
-                  ),
-                ),
-                // Kullanıcı Bilgisi ve Rolü (Taşma Korumalı)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: roleColor.withValues(alpha: isDark ? 0.15 : 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.person_rounded,
-                              color: roleColor,
-                              size: 15,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              widget.session.fullName,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      flex: 0,
-                      fit: FlexFit.loose,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: roleColor.withValues(alpha: isDark ? 0.15 : 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: roleColor.withValues(alpha: isDark ? 0.4 : 0.35),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.shield_outlined, color: roleColor, size: 13),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.session.role.label,
-                                style: TextStyle(
-                                  color: roleColor,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

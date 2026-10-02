@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_connectivity_logs_accordion.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class CompanyDeviceCard extends StatefulWidget {
   const CompanyDeviceCard({
@@ -14,6 +17,8 @@ class CompanyDeviceCard extends StatefulWidget {
     required this.onEdit,
     required this.onAssignToDoor,
     required this.onDelete,
+    this.onToggleDefect,
+    this.onReleaseOwnership,
   });
 
   final DeviceRecord device;
@@ -22,6 +27,8 @@ class CompanyDeviceCard extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onAssignToDoor;
   final VoidCallback onDelete;
+  final VoidCallback? onToggleDefect;
+  final VoidCallback? onReleaseOwnership;
 
   @override
   State<CompanyDeviceCard> createState() => _CompanyDeviceCardState();
@@ -32,277 +39,231 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final device = widget.device;
+    final isAssigned = device.assignedDoorId != null && device.assignedDoorId != 0;
     final siteText = device.siteName == null
         ? (device.siteCode == null ? '-' : 'Site ID: ${device.siteCode}')
         : '${device.siteName} (${device.siteCode ?? '-'})';
-    final doorText = device.assignedDoorName ?? 'Kapı atanmamış';
-    final userText = device.assignedUserCode?.toString() ?? '-';
-    final dateText = formatDateTime(device.createdAt);
+    final doorText = isAssigned
+        ? (device.assignedDoorName ?? 'Kapı #${device.assignedDoorId}')
+        : 'Kapı atanmamış';
     final isOnline = device.mqttConnected == true;
     final onlineText = device.mqttConnected == null
         ? 'Bilinmiyor'
         : (isOnline ? 'Online' : 'Offline');
-    final signalText = device.wifiSignalPercent == null
-        ? '-'
-        : '%${device.wifiSignalPercent}'
-            '${device.wifiRssi == null ? '' : ' (${device.wifiRssi} dBm)'}';
-    final lastSeenText = formatDateTime(device.lastSeenAt);
+    final hardware = device.hardwareTarget;
 
+    // Tek yüzey: kart AppCard'dır; kapısız cihaz uyarı tonlu. Durum rozetleri UID'nin altında akar
+    // (sağ sütunda sıkışmaz); çevrimiçi rozet nabız atar ve durur.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF1E293B).withValues(alpha: 0.85)
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isOnline
-                    ? AppColors.emerald.withValues(alpha: 0.4)
-                    : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
-                width: isOnline ? 1.4 : 1.0,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isDark ? const Color(0x30000000) : const Color(0x080F172A),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: AppCard(
+        tone: isAssigned ? null : AppTone.warning,
+        padding: listCardPadding(context),
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
+            Row(
               children: [
-                Row(
-                  children: [
-                    Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.memory_rounded,
-                            color: isDark ? AppColors.accentLight : AppColors.primary,
-                            size: 22,
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 11,
-                            height: 11,
-                            decoration: BoxDecoration(
-                              color: isOnline
-                                  ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
-                                  : (isDark ? AppColors.roseLight : AppColors.rose),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                IconTile(
+                  icon: !isAssigned
+                      ? Icons.door_sliding_outlined
+                      : Icons.memory_rounded,
+                  tone: !isAssigned ? AppTone.warning : AppTone.primary,
+                  gap: AppSpace.md,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(device.deviceUid, style: th.titleMedium),
+                      const SizedBox(height: AppSpace.xs),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.xs,
                         children: [
-                          Row(
-                            children: [
-                              Text(
-                                device.deviceUid,
-                                style: TextStyle(
-                                  fontSize: 15.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                                ),
-                              ),
-                              if (device.hardwareTarget != null && device.hardwareTarget!.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: (device.hardwareTarget == 'esp32-wroom'
-                                            ? const Color(0xFF7C3AED)
-                                            : AppColors.primary)
-                                        .withValues(alpha: isDark ? 0.2 : 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    device.hardwareTarget!.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: device.hardwareTarget == 'esp32-wroom'
-                                          ? (isDark ? const Color(0xFFA78BFA) : const Color(0xFF7C3AED))
-                                          : (isDark ? AppColors.accentLight : AppColors.primary),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+                          StatusChip(
+                            label: onlineText,
+                            tone: device.mqttConnected == null
+                                ? AppTone.neutral
+                                : (isOnline ? AppTone.success : AppTone.danger),
+                            pulse: isOnline,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Site: $siteText | Kapı: $doorText',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
+                          if (hardware != null && hardware.isNotEmpty)
+                            StatusChip(
+                              label: hardware.toUpperCase(),
+                              tone: hardware == 'esp32-wroom'
+                                  ? AppTone.violet
+                                  : AppTone.primary,
                             ),
-                          ),
+                          if (!isAssigned)
+                            const StatusChip(
+                              label: 'KAPI ATANMAMIŞ',
+                              tone: AppTone.warning,
+                            ),
+                          if (device.isDefective)
+                            const StatusChip(
+                              label: 'ARIZALI',
+                              tone: AppTone.danger,
+                              icon: Icons.warning_amber_rounded,
+                            ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isOnline
-                            ? AppColors.emerald.withValues(alpha: 0.15)
-                            : (isDark ? const Color(0x20FFFFFF) : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isOnline
-                              ? AppColors.emerald.withValues(alpha: 0.4)
-                              : (isDark ? const Color(0x20FFFFFF) : const Color(0xFFE2E8F0)),
+                      const SizedBox(height: AppSpace.xs),
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: 'Site: $siteText | Kapı: '),
+                            TextSpan(
+                              text: doorText,
+                              style: !isAssigned
+                                  ? TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTone.warning.ink(p),
+                                    )
+                                  : null,
+                            ),
+                          ],
                         ),
+                        style: th.bodyMedium,
                       ),
-                      child: Text(
-                        onlineText,
-                        style: TextStyle(
-                          color: isOnline
-                              ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
-                              : (isDark ? AppColors.textMutedLight : AppColors.textMuted),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      _expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                      size: 20,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                if (_expanded) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(
-                      color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
-                      height: 1,
-                    ),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _buildChip(context, 'Kullanıcı ID: $userText'),
-                      _buildChip(context, 'MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
-                      _buildChip(context, 'Firmware: ${device.firmwareVersion ?? "-"}'),
-                      _buildChip(context, 'Model: ${device.hardwareTarget?.toUpperCase() ?? "ESP32-C3"}'),
-                      if (widget.isSuperUser)
-                        _buildChip(context, 'OTA Durumu: ${device.otaStatus ?? "-"}'),
-                      _buildChip(context, 'Wi-Fi Gücü: $signalText'),
-                      _buildChip(context, 'Yerel IP: ${device.localIp ?? "-"}'),
-                      _buildChip(context, 'Genel IP: ${device.publicIp ?? "-"}'),
-                      _buildChip(context, 'Son Görülme: $lastSeenText'),
-                      if ((device.mqttUsername ?? '').isNotEmpty)
-                        _buildChip(context, 'MQTT Kullanıcı: ${device.mqttUsername}'),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Kayıt: $dateText',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: widget.onEdit,
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Düzenle'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: widget.onAssignToDoor,
-                        icon: const Icon(Icons.meeting_room_outlined, size: 16),
-                        label: const Text('Kapıya Ata'),
-                      ),
-                      if (widget.isSuperUser)
-                        OutlinedButton.icon(
-                          onPressed: widget.onDelete,
-                          icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.roseLight),
-                          label: const Text('Sil', style: TextStyle(color: AppColors.roseLight)),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: AppColors.rose.withValues(alpha: 0.4)),
-                          ),
-                        ),
-                    ],
-                  ),
-                  if (widget.isSuperUser && widget.authService != null) ...[
-                    const SizedBox(height: 14),
-                    DeviceConnectivityLogsAccordion(
-                      device: widget.device,
-                      authService: widget.authService!,
-                    ),
-                  ],
-                ],
+                const SizedBox(width: AppSpace.sm),
+                ExpandChevron(expanded: _expanded),
               ],
             ),
-          ),
+            ExpandableSection(
+              expanded: _expanded,
+              child: _buildDetails(context, isAssigned),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildChip(BuildContext context, String label) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF0F172A).withValues(alpha: 0.6)
-            : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE2E8F0),
+  Widget _buildDetails(BuildContext context, bool isAssigned) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final device = widget.device;
+    final userText = device.assignedUserCode?.toString() ?? '-';
+    final dateText = formatDateTime(device.createdAt);
+    final signalText = device.wifiSignalPercent == null
+        ? '-'
+        : '%${device.wifiSignalPercent}'
+              '${device.wifiRssi == null ? '' : ' (${device.wifiRssi} dBm)'}';
+    final lastSeenText = formatDateTime(device.lastSeenAt);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpace.md),
+        const Divider(),
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            InfoChip('Kullanıcı ID: $userText'),
+            if ((device.ownerFullName ?? device.ownerEmail ?? '').isNotEmpty)
+              InfoChip('Sahip: ${device.ownerFullName ?? device.ownerEmail}'),
+            if (device.isDefective)
+              InfoChip(
+                'Arıza Nedeni: ${device.defectiveReason ?? "Belirtilmedi"}',
+              ),
+            InfoChip('MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
+            InfoChip('Firmware: ${device.firmwareVersion ?? "-"}'),
+            InfoChip('Model: ${device.hardwareTarget?.toUpperCase() ?? "Bilinmiyor"}'),
+            if (device.hasHardwareMismatch)
+              InfoChip(
+                'Kayıtlı Tür: ${DeviceRecord.normalizeHardwareTarget(device.hardwareType)?.toUpperCase()} (cihaz bildirimiyle uyuşmuyor)',
+                tone: AppTone.warning,
+              ),
+            if (widget.isSuperUser)
+              InfoChip('OTA Durumu: ${device.displayOtaStatus}'),
+            InfoChip('Wi-Fi Gücü: $signalText'),
+            InfoChip('Yerel IP: ${device.localIp ?? "-"}'),
+            InfoChip('Genel IP: ${device.publicIp ?? "-"}'),
+            InfoChip('Son Görülme: $lastSeenText'),
+            if ((device.mqttUsername ?? '').isNotEmpty)
+              InfoChip('MQTT Kullanıcı: ${device.mqttUsername}'),
+          ],
         ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+        const SizedBox(height: AppSpace.sm),
+        // Kapısız cihazda kart uyarı tonlu: textMuted yerine ikincil metin (>= 4,5:1).
+        Text(
+          'Kayıt: $dateText',
+          style: th.bodySmall?.copyWith(color: p.textSecondary),
         ),
-      ),
+        const SizedBox(height: AppSpace.lg),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            OutlinedButton.icon(
+              onPressed: widget.onEdit,
+              style: tonalActionStyle(context),
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Düzenle'),
+            ),
+            ElevatedButton.icon(
+              style: !isAssigned
+                  ? filledToneStyle(context, tone: AppTone.warning)
+                  : tonalActionStyle(context),
+              onPressed: widget.onAssignToDoor,
+              icon: const Icon(Icons.meeting_room_outlined, size: 16),
+              label: const Text('Kapıya Ata'),
+            ),
+            if (widget.isSuperUser && widget.onToggleDefect != null)
+              OutlinedButton.icon(
+                onPressed: widget.onToggleDefect,
+                style: tonalActionStyle(
+                  context,
+                  tone: device.isDefective ? AppTone.success : AppTone.warning,
+                ),
+                icon: Icon(
+                  device.isDefective
+                      ? Icons.check_circle_outline
+                      : Icons.warning_amber_rounded,
+                  size: 16,
+                ),
+                label: Text(
+                  device.isDefective ? 'Arızayı Kaldır' : 'Arızalı İşaretle',
+                ),
+              ),
+            if (widget.isSuperUser &&
+                widget.onReleaseOwnership != null &&
+                (device.assignedDoorId != null || device.hasOwner))
+              OutlinedButton.icon(
+                onPressed: widget.onReleaseOwnership,
+                style: tonalActionStyle(context, tone: AppTone.neutral),
+                icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
+                label: const Text('Depoya Al'),
+              ),
+            if (widget.isSuperUser)
+              OutlinedButton.icon(
+                onPressed: widget.onDelete,
+                style: dangerOutlineStyle(context),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Sil'),
+              ),
+          ],
+        ),
+        if (widget.isSuperUser && widget.authService != null) ...[
+          const SizedBox(height: AppSpace.lg),
+          DeviceConnectivityLogsAccordion(
+            device: widget.device,
+            authService: widget.authService!,
+          ),
+        ],
+      ],
     );
   }
 }

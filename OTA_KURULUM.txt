@@ -13,33 +13,91 @@ Karar verilen model:
   "Tumune OTA Kontrolu" butonu ile kayitli tum cihazlara tek tusla ayni
   ota_check komutu gonderilebilir.
 
-Sunucu dosya yapisi:
-- Manifest:
+Sunucu dosya yapisi (her donanim hedefi icin AYRI klasor):
+- ESP32-C3 cihazlari:
   server/firmware/esp32-c3/manifest.json
-- Firmware:
   server/firmware/esp32-c3/firmware.bin
+- ESP32-WROOM (ekranli) cihazlari:
+  server/firmware/esp32-wroom/manifest.json
+  server/firmware/esp32-wroom/firmware.bin
+- Klasor yolu FIRMWARE_DIR ortam degiskeniyle degistirilebilir (varsayilan: server/firmware).
+- Her cihaz yalnizca kendi hedefinin manifestini ister (C3: /firmware/esp32-c3/manifest.json,
+  WROOM: /firmware/esp32-wroom/manifest.json). Iki donanimin firmware.bin dosyalari ASLA
+  birbirinin klasorune konmamalidir.
 
 Manifest ornegi:
 {
   "enabled": true,
-  "version": "1.1.1",
+  "target": "esp32-c3",
+  "version": "4.2.0",
   "filename": "firmware.bin",
   "force": false,
+  "usb_required": false,
   "interval_hours": 24,
   "allowed_uids": [],
-  "notes": "Röle ve WiFi iyilestirmeleri"
+  "sha256": "<firmware.bin dosyasinin SHA-256 ozeti, 64 hane hex>",
+  "md5": "<istege bagli: MD5 ozeti, 32 hane hex>",
+  "notes": "Surum notlari"
 }
 
 Notlar:
 - enabled false ise cihazlar guncelleme indirmez.
-- allowed_uids bos ise tum ESP32-C3 cihazlari bu yayini gorebilir.
+- target: manifestin hangi donanim icin oldugu (esp32-c3 | esp32-wroom). Klasorle uyusmazsa
+  sunucu guncelleme sunmaz. Ayrica DB'de kayitli cihazin KENDI bildirdigi donanim hedefi istenen
+  hedefle celisirse sunucu 403 FIRMWARE_TARGET_MISMATCH doner; cihaz da manifest hedefi kendi
+  hedefinden farkliysa indirmez (ota_target_mismatch).
+- sha256 ZORUNLUDUR. Cihaz indirirken akisli SHA-256 hesaplar; manifestte sha256 yoksa/gecersizse
+  veya ozet uyusmazsa guncelleme YAPILMAZ (ota_failed olayi, boot bolumu degismez). md5 varsa
+  ikinci kontrol olarak uygulanir (sunucu x-MD5 basligini da gonderir).
+  Ozeti uretmek icin: sha256sum firmware.bin   (Windows: certutil -hashfile firmware.bin SHA256)
+- Surum yalnizca ARTAN olabilir: cihaz, manifest surumu kendi surumunden BUYUK degilse indirmez
+  (parcali karsilastirma: 4.1.4 -> 4.2.0 tamam; 4.2.0 -> 4.1.9 REDDEDILIR). Geri donus
+  gerekiyorsa eski kodu DAHA YUKSEK bir surum numarasiyla yayinlayin.
+- Indirme adresi cihazda yalnizca https://api.gudeteknoloji.com.tr/ ile baslayan URL'ler icin
+  kabul edilir; sunucuda PUBLIC_BASE_URL bu adrese ayarli olmalidir (manifest yanitindaki url
+  buradan uretilir).
+- usb_required true ise cihaz uzaktan guncellenmez (ota_usb_required olayi); OTA ile yapilamayan
+  guncellemeler (ornegin bolum tablosu/bootloader degisikligi) icin USB ile tam yukleme gerekir.
+- allowed_uids bos ise o hedefin tum cihazlari bu yayini gorebilir.
 - allowed_uids dolu ise sadece listedeki UID'ler guncelleme alir. Bu, once
   1-2 test cihazina yayin yapmak icin kullanilir.
 - Cihaz firmware'ine OTA ozelligi bir kez USB ile yuklenmelidir. Sonraki
   firmware.bin yayinlari uzaktan alinabilir.
+- Rele aktifken (kapi pulse'u sirasinda) ve saat (NTP) senkron degilken OTA baslamaz.
+- Ayni surum icin en fazla 3 deneme yapilir; hata sonrasi bekleme 10, 20, 40 dk ... seklinde
+  uzar (en fazla manifestteki interval_hours). 3 deneme asilirsa cihaz daha yeni bir surum
+  yayinlanana kadar o surumu denemez.
+- Gecici ag hatalari (baglanti/TLS/zaman asimi, HTTP durum hatasi, indirme kopmasi) deneme
+  hakkini YAKMAZ; flash yazma hatasi, sha256 uyusmazligi ve Update hatalari hakki yakar.
+- Yoneticinin MQTT ota_check komutu {"retry":true} tasir (sunucu toplu/elle kontrolde ekler):
+  cihaz ayni surum icin tukenen deneme sayacini ve geri cekilmeyi sifirlar.
+- Panelden toplu is (ota_job_id iceren ota_check) cihazlarda MAC'e gore 0-120 sn rastgele
+  gecikmeyle baslar (hepsi ayni anda 1,8 MB indirmesin); ota_job_id icermeyen tekil komut hemen calisir.
+- Calisan imaj henuz dogrulanmamissa (yeni yuklenen imajin ilk 60 saniyesi) yeni OTA BASLAMAZ;
+  bekleyen kontrol dogrulama bitince calisir.
+- Indirmeden hemen once cihaz MQTT oturumunu kapatir (retained availability = "offline"; TLS bellegi
+  serbest kalir) ve indirme bitince yeniden baglanip OTA olayini yayinlar. Bu nedenle her OTA'da
+  sunucuda kisa bir "offline (LWT)" baglanti kaydi gorulmesi normaldir.
+- MQTT 6 saatten uzun baglanamayan cihaz (kimlik var, Wi-Fi hazir) kendini kontrollu yeniden baslatir
+  (role guvenli; acilista self_recovery_restart olayi yayinlanir).
+
+Geri alma (rollback) ve saglik kontrolu:
+- Yeni imaj ilk acilista "dogrulama bekliyor" durumundadir. Wi-Fi + MQTT baglantisi 60 saniye
+  kesintisiz saglikli kalirsa imaj gecerli isaretlenir ve ota_validated olayi yayinlanir.
+- Yeni imaj gecerli isaretlenmeden cihaz yeniden baslarsa (baglanamama, guc dongusu, cokme)
+  bootloader onceki surume doner (durum: "geri alindi: <surum> yuklenemedi").
+
+Yayin adimlari (ozet):
+1) Ilgili ortami derleyin (C3: lolin_c3_mini, WROOM: esp32_relay_wroom) ve surum numarasini
+   cihaz_kontrol/include/ota_guncelleme.h icinde artirin (OTA_VERSION_C3 / OTA_VERSION_WROOM).
+2) firmware.bin dosyasini ilgili hedef klasorune kopyalayin; sha256 (ve istege bagli md5) hesaplayin.
+3) manifest.json'u yukaridaki ornege gore yazin (once allowed_uids ile 1-2 test cihazi, sonra bos birakin).
+4) Asagidaki "Sunucuda hizli kontrol" komutu update_available:true, dogru sha256 ve
+   https://api.gudeteknoloji.com.tr/... url'sini dondurmeli.
 
 Sunucuda hizli kontrol:
-curl "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=1.1.0&uid=D4C771A172E0"
+curl "https://api.gudeteknoloji.com.tr/firmware/esp32-c3/manifest.json?current_version=4.1.4&uid=D4C771A172E0"
+(WROOM icin yol: /firmware/esp32-wroom/manifest.json)
 
 MQTT ile acil OTA kontrol komutu:
 mosquitto_pub -h mqtt.gudeteknoloji.com.tr -p 8883 \

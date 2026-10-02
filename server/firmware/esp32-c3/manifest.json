@@ -1,14 +1,14 @@
 {
   "enabled": true,
   "target": "esp32-c3",
-  "version": "3.0.3",
+  "version": "3.5.0",
   "filename": "firmware.bin",
   "force": true,
   "usb_required": false,
   "partition_scheme": "ota_4mb_littlefs_v1",
   "interval_hours": 1,
   "allowed_uids": [],
-  "sha256": "599eb19fb23259fcbe5adfc8f6ff644fb728a501915f44483216db9636dceb17",
-  "md5": "ce67f1ad0d4cf72585b0c0bdf0f3f3d1",
-  "notes": "AHBU firmware v3.0.3."
+  "sha256": "fa925f36d012d9f254fe448095ab453106eead74ea459876dbccb300838e4ab6",
+  "md5": "23d222ac97766158d85dd5109ea1ac60",
+  "notes": "AHBU firmware v3.5.0 (esp32-c3)."
 }

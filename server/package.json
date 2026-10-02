@@ -6,8 +6,15 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/**/*.test.js",
+    "test": "node --test",
+    "lint": "eslint src",
+    "lint:all": "eslint .",
+    "migrate": "node scripts/migrate.js",
+    "migrate:status": "node scripts/migrate.js --status",
     "mqtt:sync": "node scripts/sync_mqtt_acl.js"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -16,7 +23,12 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.14.1",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^10.0.13",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.13.0"
   }
 }

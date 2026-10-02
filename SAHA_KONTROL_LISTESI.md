@@ -68,7 +68,7 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Nasıl Test Edilir:** QR kod ekranını açıp bekleyin.
   - **Beklenen Sonuç:** Belirlenen süre (örn: 30 saniye) dolduğunda sayaç sıfırlanmalı ve yeni dinamik QR kod ekranda otomatik yenilenmeli.
 - [ ] **3.6. Coğrafi Konum (Geofence) Kısıtlaması:**
-  - **Nasıl Test Edilir:** Siteye koordinat ve yarıçap (örn: 75 metre) tanımlayın.
+  - **Nasıl Test Edilir:** Siteye koordinat ve yarıçap (örn: 100 metre; varsayılan yarıçap 100 m) tanımlayın.
   - **Beklenen Sonuç:** Site sınırları dışından kapı açılmaya çalışıldığında kullanıcıya konum uyarısı verilmeli ve kapı açılmamalı.
 
 ---
@@ -333,7 +333,7 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 
 ---
 
-## 17. 👤 Üyelik Sistemi — Aşama 2: Bireysel Kullanıcı Self-Service Kaydı ve 4 Haneli E-posta Doğrulaması
+## 17. 👤 Üyelik Sistemi — Aşama 2: Bireysel Kullanıcı Self-Service Kaydı ve 6 Haneli E-posta Doğrulaması
 
 - [ ] **17.1. Giriş Ekranından "Yeni Hesap Oluştur" Sayfasına Geçiş:**
   - **Nasıl Test Edilir:** Uygulama giriş ekranının en altında yer alan *"Hesabınız yok mu? Yeni Hesap Oluştur"* butonuna dokunun.
@@ -341,18 +341,18 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **17.2. Form Doğrulamaları ve Hata Denetimi:**
   - **Nasıl Test Edilir:** Alanları boş bırakarak veya şifreleri birbiriyle uyumsuz girerek "Kayıt Ol" butonuna basın.
   - **Beklenen Sonuç:** Form geçersiz alanları kırmızı uyarı ile belirtmeli, şifrelerin eşleşmediğini kullanıcıya bildirmelidir.
-- [ ] **17.3. Kayıt Olma ve SMTP ile 4 Haneli Doğrulama Kodu Gönderimi:**
+- [ ] **17.3. Kayıt Olma ve SMTP ile 6 Haneli Doğrulama Kodu Gönderimi:**
   - **Nasıl Test Edilir:** Geçerli bir e-posta adresi (örneğin kendi e-postanız) girerek "Kayıt Ol" butonuna basın.
-  - **Beklenen Sonuç:** Kullanıcı hesabı veritabanına `email_verified = false` ve `role = 'individual'` olarak kaydedilmeli; kurumsal SMTP (`kodver@gudeteknoloji.com.tr`) üzerinden ilgili e-postaya 4 haneli sayısal kod gönderilmeli ve uygulama otomatik olarak "E-Posta Doğrulama" ekranına geçmelidir.
-- [ ] **17.4. 4 Haneli Kod ile Hesap Doğrulama ve Otomatik Giriş:**
-  - **Nasıl Test Edilir:** E-postaya gelen 4 haneli kodu büyük kutucuğa girin ve "Doğrula" butonuna basın (veya klavyeden onaylayın).
+  - **Beklenen Sonuç:** Kullanıcı hesabı veritabanına `email_verified = false` ve `role = 'individual'` olarak kaydedilmeli; kurumsal SMTP (`kodver@gudeteknoloji.com.tr`) üzerinden ilgili e-postaya 6 haneli sayısal kod gönderilmeli ve uygulama otomatik olarak "E-Posta Doğrulama" ekranına geçmelidir.
+- [ ] **17.4. 6 Haneli Kod ile Hesap Doğrulama ve Otomatik Giriş:**
+  - **Nasıl Test Edilir:** E-postaya gelen 6 haneli kodu büyük kutucuğa girin ve "Doğrula" butonuna basın (veya klavyeden onaylayın).
   - **Beklenen Sonuç:** Kod başarıyla doğrulanmalı (`is_used = true`), kullanıcının e-postası `email_verified = true` olarak işaretlenmeli; kullanıcıya JWT token üretilerek doğrudan ana ekrana yönlendirilmelidir.
 - [ ] **17.5. Hatalı Kod Girildiğinde Deneme Hakkı Koruması:**
-  - **Nasıl Test Edilir:** Kasıtlı olarak yanlış bir 4 haneli kod girip "Doğrula"ya basın.
+  - **Nasıl Test Edilir:** Kasıtlı olarak yanlış bir 6 haneli kod girip "Doğrula"ya basın.
   - **Beklenen Sonuç:** Ekranda "Geçersiz veya süresi dolmuş doğrulama kodu. Kalan hakkınız: X" uyarısı çıkmalı, 5 hatalı denemeden sonra kod bloke edilmelidir.
 - [ ] **17.6. Kodu Yeniden Gönder (Resend Code) Fonksiyonu:**
   - **Nasıl Test Edilir:** Doğrulama ekranındaki "Kodu Tekrar Gönder" butonuna dokunun.
-  - **Beklenen Sonuç:** E-posta kutusuna yeni bir 4 haneli kod gelmeli ve eski kod iptal edilmelidir.
+  - **Beklenen Sonuç:** E-posta kutusuna yeni bir 6 haneli kod gelmeli ve eski kod iptal edilmelidir.
 
 ---
 
@@ -564,7 +564,7 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Uygulamadan çıkış yapmaya gerek kalmadan tek dokunuşla "Yönetici Paneli" ve "Sakin Modu" arasında geçiş yapılabilmelidir. Sakin Moduna geçildiğinde kullanıcının dairesi ve kapıları, Yönetici Paneline geçildiğinde ise site yönetim araçları aktif olmalıdır.
 - [ ] **28.3. Bireysel Ekranda Çoklu Site Filtresi (Site Switcher Çipleri):**
   - **Nasıl Test Edilir:** Kullanıcının 2 veya daha fazla farklı sitede dairesi veya kapı yetkisi olduğunda Sakin Modu ana ekranını inceleyin.
-  - **Beklenen Sonuç:** Ekranın üst kısmında yatay kaydırılabilir site filtre çipleri (`[ 🏢 Tüm Siteler (X) ]`, `[ 🏢 Gül Sitesi (Y) ]`, `[ 🏢 Lale Sitesi (Z) ]`) görüntülenmelidir. Bir site çipine tıklandığında hem "Yetkili Kapılarım" hem de "Kayıtlı Dairelerim" yalnızca seçilen siteye göre anında süzülmeli; "Tüm Siteler" seçildiğinde tümü tekrar gösterilmelidir.
+  - **Beklenen Sonuç:** Ekranın üst kısmında (dar ekranda alt satıra sarılan, yatay kaydırma gerektirmeyen) site filtre çipleri (`[ 🏢 Tüm Siteler (X) ]`, `[ 🏢 Gül Sitesi (Y) ]`, `[ 🏢 Lale Sitesi (Z) ]`) görüntülenmelidir. Bir site çipine tıklandığında hem "Yetkili Kapılarım" hem de "Kayıtlı Dairelerim" yalnızca seçilen siteye göre anında süzülmeli; "Tüm Siteler" seçildiğinde tümü tekrar gösterilmelidir.
 - [ ] **28.4. Kapı Kartlarında Belirgin Site Adı Rozeti:**
   - **Nasıl Test Edilir:** Bireysel kapı kartlarındaki başlık alanını inceleyin.
   - **Beklenen Sonuç:** Farklı sitelere ait kapıların hangi siteye ait olduğunu anında anlamak için kapı adının altında bina ikonuyla birlikte site adı rozeti (`🏢 Site Adı`) belirgin şekilde görüntülenmeli, taşma (overflow) olmamalıdır.
@@ -618,7 +618,7 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Sunucu Haversine formülüyle mesafeyi hesaplamalı; sınır içinde olunduğunu doğrulayıp yeşil onay ile 30 saniyelik QR kodunu üretmelidir.
 - [ ] **31.2. Geofence Alanı Dışındayken QR Üretiminin Engellenmesi:**
   - **Nasıl Test Edilir:** Siteden 200m veya daha uzaktayken QR kodu açmayı deneyin.
-  - **Beklenen Sonuç:** Sunucu `403 Forbidden` (`GEOFENCE_EXCEEDED`) hatası dönmeli; ekranda *"Kapı konumunda değilsiniz (Mesafe: ~Xm, İzin verilen sınır: Ym)"* uyarısı çıkmalı ve QR kod kesinlikle üretilmemelidir.
+  - **Beklenen Sonuç:** Sunucu `403 Forbidden` (`GEOFENCE_OUT_OF_RANGE`) hatası dönmeli; ekranda *"Kapı konumunda değilsiniz (Mesafe: ~Xm, İzin verilen sınır: Ym)"* uyarısı çıkmalı ve QR kod kesinlikle üretilmemelidir.
 - [ ] **31.3. Konum Servisi Kapalıyken veya İzin Verilmediğinde Bilgilendirme:**
   - **Nasıl Test Edilir:** Telefonun GPS konumunu kapatıp QR kod butonuna dokunun.
   - **Beklenen Sonuç:** Uygulama *"Bu kapı için konum doğrulaması zorunludur. Lütfen telefonunuzun GPS konum servisini ve uygulama izinlerini açınız."* uyarısı vermeli, çökme yaşanmamalıdır.
@@ -629,13 +629,13 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 
 - [ ] **32.1. Sahte Konum (Mock Location / Fake GPS) Tespiti ve Engelleme:**
   - **Nasıl Test Edilir:** Android Geliştirici Seçenekleri'nden sahte konum (Mock Location) uygulaması açarak konumu site içine ayarlayın ve QR kodu isteyin.
-  - **Beklenen Sonuç:** Sunucu `is_mocked: true` tespitini yakalamalı; `403 Forbidden` (`MOCK_LOCATION_DETECTED`) hatası vermeli ve audit loga güvenlik ihlali olarak kaydetmelidir.
+  - **Beklenen Sonuç:** Sunucu `is_mocked: true` tespitini yakalamalı; `403 Forbidden` (`GEOFENCE_MOCK_LOCATION`) hatası vermeli ve audit loga güvenlik ihlali olarak kaydetmelidir.
 - [ ] **32.2. Bayat / Eski Konum Bilgisi (Stale Location) Engeli:**
-  - **Nasıl Test Edilir:** Konum zaman damgasının 15 saniyeden eski olduğu senaryoyu test edin.
-  - **Beklenen Sonuç:** Sunucu `LOCATION_STALE` hatası vermeli ve taze GPS sinyali alınana kadar geçişe izin vermemelidir.
-- [ ] **32.3. Yetersiz GPS Doğruluğu (Inaccurate Accuracy > 150m) Koruması:**
-  - **Nasıl Test Edilir:** GPS sinyalinin çok zayıf olduğu kapalı/bodrum alanında doğruluk payı 150 metreden büyükken istek gönderin.
-  - **Beklenen Sonuç:** `LOCATION_INACCURATE` uyarısı verilmeli, açık alana çıkılması istenmelidir.
+  - **Nasıl Test Edilir:** Konum zaman damgasının 60 saniyeden eski (veya gelecekte) olduğu senaryoyu test edin.
+  - **Beklenen Sonuç:** Sunucu `GEOFENCE_LOCATION_STALE` hatası vermeli ve taze GPS sinyali alınana kadar geçişe izin vermemelidir.
+- [ ] **32.3. Yetersiz GPS Doğruluğu (Inaccurate Accuracy > 100m) Koruması:**
+  - **Nasıl Test Edilir:** GPS sinyalinin çok zayıf olduğu kapalı/bodrum alanında doğruluk payı 100 metreden büyükken istek gönderin.
+  - **Beklenen Sonuç:** `GEOFENCE_LOCATION_INACCURATE` uyarısı verilmeli, açık alana çıkılması istenmelidir.
 
 ---
 
@@ -687,14 +687,14 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 ## 36. 👥 Daire Sakinleri Yönetimi (Aktif/Pasif, Silme, Şifre Değiştirme, Aile Reisi Devri)
 
 - [ ] **36.1. Daire Sakini Aktif / Pasif (Deaktif) Yapma:**
-  - **Nasıl Test Edilir:** Süper kullanıcı veya site yöneticisi olarak Siteler sayfasından "Site Sakinleri" akordiyon ağacını açın. İlgili daire sakin kartındaki üç nokta menüsünden "Hesabı Pasife Al" seçeneğine dokunun ve onaylayın.
-  - **Beklenen Sonuç:** Sakinin durumu pasife alınmalı, listede "İnaktif" kırmızı rozeti belirip metin üzeri çizili tona geçmeli; pasif sakinin kapı erişimleri durdurulmalıdır. Aynı menüden "Hesabı Aktif Et" dendiğinde tekrar aktifleşmelidir. Sayfa kapatıp açılmadan anında güncellenmelidir.
+  - **Nasıl Test Edilir:** Süper kullanıcı veya site yöneticisi olarak Siteler sayfasından "Site Sakinleri" akordiyon ağacını açın. İlgili daire sakin kartındaki üç nokta menüsünden "Üyeliği Pasife Al" seçeneğine dokunun ve onaylayın.
+  - **Beklenen Sonuç:** Sakinin durumu pasife alınmalı, listede "İnaktif" kırmızı rozeti belirip metin üzeri çizili tona geçmeli; pasif sakinin kapı erişimleri durdurulmalıdır. Aynı menüden "Üyeliği Aktif Et" dendiğinde tekrar aktifleşmelidir. Yalnızca o daire üyeliği/kapı erişimi pasifleşir; kişinin hesabı (giriş) etkilenmez. Sistem yöneticisi hesabı pasife aldıysa kartta "Hesap pasif (sistem yöneticisi)" rozeti çıkar ve menüde işlem yerine bilgi satırı görünür. Sayfa kapatıp açılmadan anında güncellenmelidir.
 - [ ] **36.2. Daire Sakinini Daireden Tamamen Silme:**
   - **Nasıl Test Edilir:** Sakin kartındaki menüden kırmızı renkli "Daireden Sil" seçeneğini seçip onaylayın.
   - **Beklenen Sonuç:** Sakin daireden tamamen çıkarılmalı, kapı yetki istisnaları temizlenmeli; eğer silinen kişi daire yöneticisi ise dairedeki diğer sakinlerden ilki otomatik olarak yeni yönetici yapılmalı (yoksa daire boşaltılmalıdır). Liste anında güncellenmelidir.
-- [ ] **36.3. Daire Sakini Şifre / PIN Güncelleme:**
-  - **Nasıl Test Edilir:** Sakin kartındaki menüden "Şifre Değiştir" seçeneğine dokunun. Açılan modalda en az 4 karakterli yeni şifre girip "Güncelle" butonuna basın.
-  - **Beklenen Sonuç:** Sunucuda şifre güvenli hash (bcrypt) ile güncellenmeli, başarı bildirimi gösterilmeli ve sakin yeni şifresiyle sisteme giriş yapabilmelidir.
+- [ ] **36.3. Daire Sakini Kendi Şifresini Değiştirme (Mevcut Parola Zorunlu):**
+  - **Nasıl Test Edilir:** Daire sakini hesabıyla Profil ekranından şifre değiştirin: önce yanlış, sonra doğru mevcut parola girin. (Sakin kartındaki üç nokta menüsünde yönetici için "Şifre Değiştir" seçeneği YOKTUR.)
+  - **Beklenen Sonuç:** Yanlış mevcut parola → 400 `CURRENT_PASSWORD_INVALID`; art arda 5 hata → 429 `CURRENT_PASSWORD_LOCKED` (Retry-After). Doğru parolada şifre bcrypt ile güncellenir, yanıtla yeni oturum anahtarı gelir (uygulama oturumu açık kalır) ve sakin yeni şifresiyle giriş yapabilir.
 - [ ] **36.4. Aile Reisi Değiştirme (Yeni Daire Yöneticisi Atama):**
   - **Nasıl Test Edilir:** Standart aile üyesi olan bir sakin için üç nokta menüsünden "Aile Reisi Yap" seçeneğine dokunun ve onaylayın.
   - **Beklenen Sonuç:** Seçilen sakin `APARTMENT_ADMIN` ("Daire Admini") rozetine kavuşmalı; önceki daire yöneticisi standart aile üyesine dönüştürülmelidir.
@@ -783,10 +783,10 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Dairenin kullanıcı ile ilişiği kesilmeli (`resident_user_code = null`) ancak gerçek kullanıcının kendisi veritabanından ASLA silinmemelidir.
 - [ ] **40.3. Otomatik 24 Saatlik Arka Plan Bakım ve Çöp Toplayıcı (Maintenance Service):**
   - **Nasıl Test Edilir:** Sunucu başlangıç loglarını (`pm2 logs kapi-api`) inceleyin.
-  - **Beklenen Sonuç:** API başladığında ve her 24 saatte bir `runDatabaseCleanup` otomatik tetiklenmeli; süresi geçmiş QR tokenler, 2 günden eski e-posta doğrulama kodları, 30 günden eski cihaz ve kapı logları ile yetim ilişkiler otomatik temizlenmeli ve loglanmalıdır.
+  - **Beklenen Sonuç:** API başladığında ve her 24 saatte bir `runDatabaseCleanup` otomatik tetiklenmeli; süresi geçmiş QR tokenler (1 günden eski), 2 günden eski e-posta doğrulama kodları ve 30 günden eski cihaz bağlantı/kapı logları otomatik temizlenmeli ve loglanmalıdır. Bakım servisi KULLANICI HESABI, üyelik veya tablo SİLMEZ (eski @ahbu.local silme ve yetim kayıt temizliği kaldırıldı); günlük bakımdan sonra kullanıcı sayısı değişmemelidir.
 - [ ] **40.4. Süper Kullanıcı Canlı Veritabanı Sağlığı ve Manuel Temizlik Butonu:**
   - **Nasıl Test Edilir:** Süper Kullanıcı olarak "Kullanıcı Yönetimi" sayfasına girin ve üst bardaki temizlik fırçası (`Icons.cleaning_services_rounded`) simgesine dokunun.
-  - **Beklenen Sonuç:** Veritabanı sağlık modalı açılmalı; gerçek kullanıcı sayısı (4), çöp kullanıcı sayısı (0), aktif siteler, çevrimiçi cihazlar ve log durumları canlı gösterilmeli; "Çöp Temizliği Yap" butonuna basıldığında temizlik tetiklenip kaç kaydın temizlendiği bildirilmelidir.
+  - **Beklenen Sonuç:** Veritabanı sağlık modalı açılmalı; gerçek kullanıcı sayısı (4), çöp kullanıcı sayısı (0), aktif siteler, çevrimiçi cihazlar ve log durumları canlı gösterilmeli; "Çöp Temizliği Yap" butonuna basıldığında temizlik tetiklenip kaç kaydın temizlendiği bildirilmelidir (yalnızca süresi geçmiş token/kod ve eski loglar silinir; hiçbir kullanıcı hesabı silinmez). "Kukla" sayacı yalnızca hiçbir daireye/üyeliğe bağlı olmayan @ahbu.local hesaplarını sayar; temizlik bu hesapları silmez.
 
 ---
 
@@ -813,3 +813,294 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **41.7. Bir Kullanıcının Birden Fazla Siteyi Yönetebilmesi (Çoklu Site Yönetimi):**
   - **Nasıl Test Edilir:** Site Yöneticisi rolündeki bir hesapla giriş yapın. Siteler menüsünde "Yeni Site" butonuna dokunarak ikinci bir site kurun veya başka bir siteye yönetici olarak davet edin.
   - **Beklenen Sonuç:** Site yöneticisi birden fazla siteyi listeleyebilmeli, siteler arasında serbestçe geçiş yapabilmeli ve her bir sitenin kapılarını, dairelerini ve telemetrisini bağımsız olarak yönetebilmelidir.
+
+---
+
+> **Bölüm 42–52 hakkında (2026-10 güvenlik/dayanıklılık + arayüz/akıcılık turu):** Bu bölümlerdeki maddeler, söz konusu turda sunucu, Flutter/Android istemcisi ve firmware üzerinde yapılan değişikliklerin saha doğrulama adımlarıdır. Her madde ilgili uygulama ajanının raporundan olduğu gibi ("yap → beklenen sonuç") aktarılmıştır. Eski bölümlerle çelişen bir adım olursa bu bölümlerdeki (daha yeni) davranış geçerlidir. Gizli değerler (parola, token, API anahtarı) listeye yazılmaz; komutlardaki `<paket>`, `<uid>` gibi yer tutucuları kendi değerlerinizle değiştirin. ESP32-C3 ve ESP32-WROOM ayrı donanımlardır: firmware maddeleri yalnız ilgili donanımda denenir. docker-compose.yml / ecosystem.config.cjs ile ilgili maddeler yalnız bu dosyalar canlıya uygulanırsa geçerlidir.
+
+---
+
+## 42. 🔐 Sunucu Sertleştirme — Kimlik Doğrulama, Oturum, Hız Sınırı, CORS, Şirket Uçları (S1)
+
+- [ ] **42.1.** Dağıtımdan ÖNCE sunucu .env'de COMPANY_API_KEY (≥24), gerekiyorsa CORS_ORIGINS, (opsiyonel) NODE_ENV=production tanımla → pm2 logs başlangıçta [ENV] UYARI satırlarında bunlar kalmaz; "[CORS] Izinli origin sayisi" görünür.
+- [ ] **42.2.** Mevcut 20 karakterlik JWT_SECRET ile `pm2 restart kapi-api --update-env` → sunucu açılır; logda yalnız "[ENV] UYARI: JWT_SECRET 20 karakter..." (değer görünmez); /health OK.
+- [ ] **42.3.** Planlı pencerede JWT_SECRET'ı ≥32 karaktere çıkar (tüm oturumlar düşer, kullanıcılara duyur) ve JWT_EXPIRES_IN'i 30d yap → yeni girişlerde token exp-iat=30 gün.
+- [ ] **42.4.** JWT_SECRET boş veya change_this_secret iken servis başlat → exit 1, "[ENV] HATA: JWT_SECRET...", DB'ye bağlanılmaz.
+- [ ] **42.5.** Yanlış parolayla art arda 5 giriş → 5. denemede 429 LOGIN_LOCKED + Retry-After ~900; kilitte doğru parola da 429; başka hesap normal girer; 15 dk sonra açılır.
+- [ ] **42.6.** Profilde parolayı mevcut parola OLMADAN değiştirmeyi dene → 400 CURRENT_PASSWORD_REQUIRED; doğru mevcut parola ile → 200, yanıtta yeni token, uygulama oturumu düşmeden devam eder.
+- [ ] **42.7.** Parola değiştirdikten sonra başka cihazdaki eski oturumla istek → 401 TOKEN_REVOKED, uygulama giriş ekranına döner; güncelleme öncesi (pv'siz) eski token'lar süresi dolana dek çalışır.
+- [ ] **42.8.** Kayıtlı ve kayıtsız e-postayla "Şifremi unuttum" → ikisinde de aynı başarı mesajı; yalnız kayıtlı aktif hesaba e-posta gelir (migration 025 kolonları canlıda olmalı). Gelen sıfırlama bağlantısı iki kez kullanılamaz.
+- [ ] **42.9.** Aynı e-postaya 4+ "şifremi unuttum"/"kodu tekrar gönder" → 429.
+- [ ] **42.10.** `curl -i https://api.gudeteknoloji.com.tr/health` → X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security var; izinsiz Origin ile Access-Control-Allow-Origin YOK.
+- [ ] **42.11.** Anahtarsız `curl https://api.gudeteknoloji.com.tr/api/company/labeled-devices` → 401; `-H "X-Company-Key: <anahtar>"` ile 200; /qrcodes/<UID>.png aynı şekilde anahtar ister.
+- [ ] **42.12.** company_qr_tool COMPANY_API_KEY ile cihaz kaydet/listele/sil → başarılı; denetim logunda company_device_saved/deleted (actor:company_key).
+- [ ] **42.13.** Sıfırlama linki, misafir linki (/guest/<tok>) ve katılım token'ı ile istek → pm2 logs satırlarında token yerine *** görünür.
+- [ ] **42.14.** Bozuk JSON gövdesi → 400 "Gecersiz JSON govdesi."; sunucu hatasında yanıtta yalnız genel mesaj+errorId, pm2 logs'ta aynı errorId ile ayrıntı.
+- [ ] **42.15.** 8080'e dışarıdan doğrudan erişim kapalı (yalnız nginx).
+
+---
+
+## 43. 📧 Üyelik, 6 Haneli E-posta Kodu, Cihaz Sahiplenme, Site Kurulumu ve Daire Yönetimi (S2)
+
+- [ ] **43.1.** Yeni e-postayla kayıt → 6 haneli kod gelir; kayıt yanıtı code_length:6; 6 hane girince doğrulama başarılı, giriş yapılır.
+- [ ] **43.2.** Yanlış kodu 5 kez gir → 429 "Çok fazla hatalı deneme"; yeni kod isteyip toplam 10 yanlış denemeye ulaşınca → 429 "30 dakika sonra tekrar deneyiniz".
+- [ ] **43.3.** Kodu 10 dk sonra gir → 404 "Aktif bir doğrulama kodu bulunamadı"; yeni kod istendikten sonra eski kodla doğrulama → reddedilir.
+- [ ] **43.4.** "Kodu tekrar gönder"e 30 sn içinde iki kez bas → aynı başarı mesajı ama ikinci e-posta gitmez; kayıtsız/doğrulanmış e-postada da aynı mesaj.
+- [ ] **43.5.** Cihaz sahiplen (kutu QR) → yanıtta role: site_manager; aynı cihazı ikinci hesapla okut → 409; my-devices çağrısı rolü değiştirmez.
+- [ ] **43.6.** Site kur: 101 blok / toplam 5001 daire / 101 kapı → 400; aynı blok adı iki kez → 400 "benzersiz olmalı"; normal kurulum 201.
+- [ ] **43.7.** Daire sakinini pasifleştir → yalnız o dairedeki üyelik pasif, kişinin hesabı (giriş) etkilenmez; dairede kayıtlı olmayan kullanıcıya istek → 404.
+- [ ] **43.8.** Sakini daireden çıkar/sil veya kapı iznini kaldır → cihaza yeni local_control_token MQTT ile gider; eski token ile yerel açma reddedilir; uygulama yeni token ile yerel/bulut açabilir.
+- [ ] **43.9.** Daire yöneticisi "sakini kalıcı sil" → 403; site yöneticisi aynı işlemi yapınca 200.
+- [ ] **43.10.** Pasif/çıkarılmış üyeyi "aile reisi yap" → 409.
+- [ ] **43.11.** Toplu kapı yetkisinde başka siteye ait blok/daire id'si → "Seçilen alanda aktif sakin bulunamadı" (0 kişi).
+- [ ] **43.12.** Sunucuyu yeniden başlat → loglarda ensureDbSchema hatası yok; veriler aynen; users.password_reset_token_hash, users.updated_at, idx_users_email_lower oluşmuş; şifremi unuttum çalışır.
+- [ ] **43.13.** Günlük bakım koştuktan sonra kullanıcı sayısı değişmez.
+- [ ] **43.14.** (M2 sonrası) Profil/daire "şifre değiştir" ekranı current_password ile çalışır.
+
+---
+
+## 44. 🔧 Cihaz Servisi, Firmware/OTA Sunucu Tarafı, MQTT ACL ve Kapı Günlükleri (S3)
+
+- [ ] **44.1.** Çevrimdışı log: cihaz Wi-Fi/MQTT yokken 3 kapı açılışı yap, bağlantıyı geri ver → 3 kayıt kapı loglarında görünür; aynı batch tekrar yayınlansa çift kayıt oluşmaz.
+- [ ] **44.2.** `node scripts/sync_mqtt_acl.js --dry-run` → api_bridge'de `topic read device/+/logs`, her cihaz bloğunda `topic write device/<UID>/logs`; geçersiz UID'li kayıt UYARI ile atlanır.
+- [ ] **44.3.** ACL senkronu + broker reload sonrası cihaz device/<uid>/logs yayınlayabiliyor (mosquitto logunda ACL denied yok).
+- [ ] **44.4.** Süper kullanıcı panelinden cihaz ekle → yanıtta mqtt_sync.ok:true (sudoers sarmalayıcı root olarak çalışıyor); kapi-mqtt-sync.sh root-sahipli kopyadan, LF satır sonlu.
+- [ ] **44.5.** POST /device/sync-logs Authorization'sız → 401; yetkisiz kullanıcı → 403; yetkili → 200 {synced_count,duplicate_count,rejected_count}.
+- [ ] **44.6.** Admin panelde cihaz düzenle (kapı adı/site/kullanıcı ataması) → kayıt başarılı (eskiden SQL hatasıydı).
+- [ ] **44.7.** OTA: GET /firmware/esp32-wroom/manifest.json?uid=<UID>&current_version=<eski> → update_available:true, anahtarlar aynı, target:"esp32-wroom"; C3 için esp32-c3.
+- [ ] **44.8.** DB'de hardware_type'ı esp32_c3 olan cihazla wroom manifesti iste → 403 FIRMWARE_TARGET_MISMATCH; admin PATCH /admin/devices/:id {hardware_type:"esp32_wroom"} ile düzeltince OTA çalışır.
+- [ ] **44.9.** Kayıtsız (rastgele) UID ile manifest iste → 200; device_runtime_status'ta yeni satır OLUŞMAZ.
+- [ ] **44.10.** Süper kullanıcı site silme e-posta kodu: 5 hatalı kod → 429 + Retry-After.
+- [ ] **44.11.** /admin/sites/:id/features: uzaktan açma açıkken yalnız QR'ı kapat → başarılı; ikisini birden kapat → 400.
+- [ ] **44.12.** MQTT api_bridge parolasını döndür ve server/.env MQTT_PASSWORD'ü güncelle; scripts/trigger_ota.js <UID> env ile çalışıyor.
+
+---
+
+## 45. 🚪 Kapı Açma Politikası, Geofence, Dinamik QR ve MQTT Köprüsü (S4a)
+
+- [ ] **45.1.** WROOM ekranlı kapıda uygulamadan ekran karekodunu okut → kapı açılır; AYNI karekodu tekrar okut → "bu karekod daha önce kullanıldı" (403 SCREEN_QR_ALREADY_USED).
+- [ ] **45.2.** Sunucuyu yeniden başlat; ekran yeni token yayınlayana kadar karekod okut → 409 EKRAN_QR_BEKLENIYOR, kapı AÇILMAZ; birkaç sn sonra tekrar → açılır.
+- [ ] **45.3.** C3 (ekransız) kapıda, site koordinatı tanımlıyken uygulamayla statik karekod okut: kapıdayken → açılır; >100 m uzakta → GEOFENCE_OUT_OF_RANGE; konum izni kapalı → istek gönderilmez / GEOFENCE_LOCATION_REQUIRED.
+- [ ] **45.4.** Site politikasında "uygulamadan uzaktan açma"yı kapat (süper kullanıcı) → uygulamadan Aç → 403 REMOTE_OPEN_DISABLED; kapıdaki karekod okuyucu ve karekod okutma çalışmaya devam eder.
+- [ ] **45.5.** "Karekod girişi aktif"i kapat → karekod üretimi ve okuyucuda geçiş QR_ENTRY_INACTIVE ile reddedilir; tekrar aç → çalışır.
+- [ ] **45.6.** Karekod üretildikten sonra (okutmadan) kullanıcının daire/kapı yetkisini kaldır, sonra okuyucuya okut → reddedilir (ACCESS_REVOKED), kapı açılmaz.
+- [ ] **45.7.** MQTT'ye engel koy (veya cihazı çevrimdışı yap), karekodu okut → kapı açılmaz, karekod geçerlilik süresi içinde tekrar okutulabilir, geçiş logunda "açıldı" kaydı YOK, "Komutu Gönderilemedi" kaydı var.
+- [ ] **45.8.** Geofence zorunlu sitede sahte konum (mock) ile Aç → 403 GEOFENCE_MOCK_LOCATION; konum 60 sn'den eski → GEOFENCE_LOCATION_STALE.
+- [ ] **45.9.** Cihaz çevrimdışıyken kapıyı birkaç kez aç, Wi-Fi'yi geri getir → kayıtlar görünür; sunucu loglarında "[MQTT Logs] ... eklenen=N"; cihaz batch'i yalnız logs_ack sonrası siler; aynı batch tekrar gelirse çift kayıt oluşmaz.
+- [ ] **45.10.** Henüz siteye atanmamış cihazın offline logları: ack yok → cihaz saklar; cihaz kapıya atanınca loglar gelir.
+- [ ] **45.11.** Pulse yükünde request_id (hex string) ve requested_at (epoch sn) var; firmware requested_at 60 sn'den eskiyse (saat senkronsa) pulse'u reddeder.
+- [ ] **45.12.** qr_verify'a request_id (tamsayı) konur → qr_result aynı request_id ile döner; eşleşmeyen sonuç firmware'de yok sayılır.
+- [ ] **45.13.** Broker'da device/<uid>/screen_qr retained mesajı bırak (test) → sunucu bunu görmez; cihaz retain=false yayınlar.
+
+---
+
+## 46. 🏢 Site, Yönetici Davetleri, Güvenlik Politikası ve Misafir Geçişi (S4b)
+
+- [ ] **46.1.** Site yöneticisi hesabıyla Güvenlik Politikası penceresinde yalnız konum doğrulaması/yarıçap/QR giriş durumunu kaydet → 200, değişiklik görünür, 403 yok; giriş yöntemi anahtarları (uzaktan/QR/misafir) yöneticiye kapalı kalır.
+- [ ] **46.2.** Site yöneticisi politika isteğinde require_geofence=true gönderip koordinat vermeden kaydet → 400 "enlem/boylam zorunlu".
+- [ ] **46.3.** Süper kullanıcı ile qr_entry_active açıkken yalnız yarıçapı değiştir → QR giriş durumu değişmez.
+- [ ] **46.4.** Tek kullanımlık misafir linki oluştur, tarayıcıda aç, "KAPIYI AÇ" → bir kez açılır; ikinci basışta "Kullanım limiti dolmuş". İki telefonla aynı anda basınca yalnız biri açar.
+- [ ] **46.5.** Cihazı çevrimdışı yapıp aynı linke bas → "Kapı cihazı şu anda bağlı değil" (503); cihaz dönünce aynı link çalışır (hak harcanmamış).
+- [ ] **46.6.** Linki oluşturan kullanıcının daire üyeliğini kaldır/hesabı pasifleştir → linke basınca 403, kapı açılmaz.
+- [ ] **46.7.** Site misafir geçişi kapalıyken linke bas → 403 ve ilgili mesaj.
+- [ ] **46.8.** Başlığa <b>x</b> yazıp link oluştur, sayfayı aç → başlık düz metin görünür.
+- [ ] **46.9.** Site yöneticisi davet ekranında kayıtlı ve kayıtsız e-posta gir → iki durumda da aynı mesaj; geçersiz e-posta → hata.
+- [ ] **46.10.** Sitenin tek yöneticisini çıkarmayı dene → "Son yönetici çıkarılamaz"; iki yöneticiden birini çıkar → başarılı; çıkarılanın başka sitesi yoksa rolü individual/apartment_owner'a döner, varsa site_manager kalır.
+- [ ] **46.11.** Süper kullanıcı e-posta kodu ile site silme: yanlış kodu 5 kez gir → kilit (429) ve kod iptal; yeni kodla doğru silme çalışır; silinen sitenin cihazının eski local token'ıyla yerel açma reddedilir.
+- [ ] **46.12.** replace-device ile başkasının cihazını seç → 403/409 ile reddedilir.
+
+---
+
+## 47. 🛠️ Operasyon — Dağıtım, Migration, CI ve Şirket Aracı (D1)
+
+- [ ] **47.1.** VPS: depo kökündeki .env'e POSTGRES_PASSWORD ekle (chmod 600), `docker-compose config` hatasız; değişken yokken "POSTGRES_PASSWORD zorunlu" hatası.
+- [ ] **47.2.** VPS: server/.env DB_HOST=127.0.0.1 doğrula; compose yeniden oluşturulursa `docker ps` PORTS 127.0.0.1:5432->5432; healthcheck healthy; /health bağlı. (Mevcut DB parolası değişmez.)
+- [ ] **47.3.** Dışarıdan 5432 kapalı (zaten doğrulandı 2026-10-01).
+- [ ] **47.4.** Yerelde `cd server && npm ci && npm run lint && npm test` → lint 0 hata, testler geçer.
+- [ ] **47.5.** VPS (isteğe bağlı): `pm2 delete kapi-api && pm2 start ecosystem.config.cjs && pm2 save` → online; loglar hatasız; /health OK.
+- [ ] **47.6.** VPS: `node scripts/migrate.js --status` (salt okunur) → schema_migrations yok + 25 bekleyen; `--apply` baseline'sız REDDEDİLİR (exit 3); şema 001-024 ile uyumlu doğrulanınca `--baseline 24`, `--apply --dry-run` yalnız 025, `--apply` → 025 uygulanır.
+- [ ] **47.7.** company_qr_tool: .env'de sunucudakiyle aynı COMPANY_API_KEY → "Cihazı Sunucuya Kaydet" başarılı; anahtar yoksa uyarı ve istek yok; yanlış anahtar → "HTTP 401 reddetti"; known_hosts yokken ilk kurulum diyaloğu; SSH_KEY_FILE ile parola sorulmaz.
+- [ ] **47.8.** GitHub: PR'da Actions "Server", "Flutter", "Secret scan" çalışır (gitleaks geçmişteki parola yüzünden kırmızı çıkabilir → parolayı döndür).
+- [ ] **47.9.** Temiz klonda `git ls-files --eol server/scripts/kapi-mqtt-sync.sh` → w/lf.
+- [ ] **47.10.** `git status`'ta server/data/ ve server/public/qrcodes/ görünmez.
+
+---
+
+## 48. 🧪 Sözleşme Denetimi Düzeltmeleri — Sunucu: Cihaz Tipi, Şirket Uçları, Kapı/Site/Üyelik/Parola (SX1, SX2)
+
+- [ ] **48.1.** Şirket aracıyla chip'i 'ESP32-WROOM' okunan kartı kaydet → /admin/devices'ta kart WROOM görünür (rozet + Model: ESP32-WROOM), cihaz OTA manifest isteğinde 403 almaz.
+- [ ] **48.2.** DB'de hardware_type yanlış (WROOM kart esp32_c3 kayıtlı) bir cihazı MQTT'ye bağla → PM2 logunda "Cihaz donanim tipi cihaz bildirimine gore duzeltildi: <UID> esp32_c3 -> esp32_wroom"; /admin/devices'ta tip düzelir, OTA manifest 200.
+- [ ] **48.3.** PATCH /admin/devices/:id yalnızca {"hardware_type":"esp32_wroom"} → site/kullanıcı/kapı adı atamaları KORUNUR, yanıtta device.hardware_type "esp32_wroom", yerel kontrol anahtarı dönmez.
+- [ ] **48.4.** Şirket aracından cihaz sil → araç başarılı der, /admin/devices'ta cihaz yok, yanıtta mqtt_sync özeti var; MQTT_SYNC_COMMAND tanımlıysa broker passwd/acl'den cihaz çıkar.
+- [ ] **48.5.** DB geçici kapalıyken şirket aracında 'Cihazı Sunucuya Kaydet' → araç hata gösterir ("başarıyla kaydedildi" denmez); DB gelince aynı UID ile tekrar kayıt çalışır.
+- [ ] **48.6.** Süper kullanıcı kendi satırında parola yazıp kaydeder (veya PATCH /admin/users/<kendi kodu> {password}) → 400 "Kendi şifrenizi Profilim ekranından..." (USE_PROFILE_PASSWORD_CHANGE); Profilim'den mevcut şifreyle değiştirme çalışır.
+- [ ] **48.7.** GET /health → mqtt içinde ham hata metni yok, yalnızca has_error ve kısa last_error kodu.
+- [ ] **48.8.** 50'den fazla siteli süper kullanıcıda kapı kontrolü site seçicisi tüm siteleri listeler.
+- [ ] **48.9.** Veritabanı Bakım penceresi: daire sakini (@ahbu.local, daireye bağlı) hesapları 'Kukla' sayılmaz; 'Çöp Temizliği Yap' sonrası süresi dolmuş kayıt kalmadıysa 'Veritabanı temiz' görünür.
+- [ ] **48.10.** Offline kapı logu: DB bağlantısı kısa süre kesilip geri geldikten sonra (PM2 restart OLMADAN) cihazın bekleyen logları sunucuya yazılır ve ack gider.
+- [ ] **48.11.** Süper kullanıcı → Siteler → "Giriş & Güvenlik Politikaları" → misafir geçişi / yarıçap / QR süresi değiştirip Kaydet → "Route bulunamadı" çıkmaz, ayarlar kaydedilir; site yöneticisi giriş yöntemi bayrağını değiştirmeye çalışırsa yine 403.
+- [ ] **48.12.** Site yöneticisi → kapı kartı → "Arızalı Cihazı Değiştir" → şirket envanterindeki sahipsiz yeni cihazın kutu QR'ı → cihaz değişir (500 yok). Kendi önceden sahiplendiği cihaz 409 vermez; başka hesabın cihazı 409 "başka hesap sahiplenmiş".
+- [ ] **48.13.** Daire sakini change-password ucu (API): 5 yanlış mevcut parola → 5. denemede 429 CURRENT_PASSWORD_LOCKED (Retry-After ≈ 900 sn); Profilim'deki parola değişimi de aynı kilide takılır, kilitliyken doğru parola da reddedilir.
+- [ ] **48.14.** Yönetici → Kapı Yetkileri: sakin Ali'ye CUSTOM kapı için ek izin ver → Ali'yi "Hesabı Pasife Al" → Ali o kapıyı listede görmez/açamaz (uzaktan, QR, misafir); "Aktif Et" → izin geri gelir.
+- [ ] **48.15.** Aile reisini (ilk onaylanan sakin) pasife al → daire ağaçta kalır, diğer aile üyeleri erişimini korur, aile reisi göstergesi diğer aktif üyeye geçer; reisi tekrar aktif et → erişimi geri gelir.
+- [ ] **48.16.** Süper kullanıcı bir sakinin hesabını pasife aldıktan sonra yönetici ağaçta o üyeyi "Aktif Et" yapar → "hesap sistem yöneticisi tarafından pasife alınmış" uyarısı görünür (normal başarı mesajı değil).
+- [ ] **48.17.** Daireler → sakini olan daire → Düzenle (şifre alanı yok) → ad/telefon/aktiflik değiştirip Kaydet → 400 vermez, kaydedilir. Boş dairede 4 haneli şifre girmeden sakin eklemek 400 "Sifre 4 haneli sayisal olmali."
+- [ ] **48.18.** Üyelik sistemiyle gelen (e-postalı) sakinin dairesini bu diyalogla düzenle → sakinin e-postası ve giriş adı değişmez, giriş yapabilmeye devam eder.
+- [ ] **48.19.** Cihaz sahiplenmemiş bireysel hesapla POST /membership/setup-site (API) → 400 "önce bir cihaz sahiplenmelisiniz", site oluşmaz; başkasının cihaz UID'siyle → 404; kutu QR'ını sahiplenip kurulum → başarılı; 10 dk'da 10'dan fazla istek → 429.
+- [ ] **48.20.** Mevcut site yöneticisi "Site Ekle" (cihaz seçmeden) → site yine kurulabilir (cihazsız kurulum korundu).
+- [ ] **48.21.** 5 yanlış girişle kilitlenen hesap → "Şifremi unuttum" → yeni şifre belirle → hemen giriş 200 (15 dk beklemez).
+- [ ] **48.22.** Profilim → mevcut şifrenin sonuna boşluk ekleyerek şifre değiştir → kabul edilir (girişle tutarlı).
+- [ ] **48.23.** Süper kullanıcı site politikasında "Yerel Ağ (UDP) ile açma"yı kapatır → daha önce token almış telefon aynı Wi-Fi'dan UDP "open" gönderince cihaz reddeder; bayrak tekrar açılınca /status yeni token verir.
+- [ ] **48.24.** Yeni kurulan sitede konum yarıçapı varsayılanı 100 m; mevcut sitelerin yarıçapı değişmemiş.
+- [ ] **48.25.** Misafir geçişi kapalı sitede süper kullanıcı "Kurye/Misafir Geçişi Oluştur" → 403 GUEST_DISABLED, link üretilmez.
+- [ ] **48.26.** Site yöneticisi → cihaz düzenleme → kapı etiketi boş bırakıp Kaydet → 400 vermez.
+- [ ] **48.27.** Süper kullanıcı cihaz siler (DELETE /manager/devices/:id) → 204; broker ACL senkronu çalışır, senkron hatasında 503 + mesaj.
+- [ ] **48.28.** Başka sitenin yöneticisiyle katılım talebini onayla/reddet (API) → talep durumu ne olursa olsun 403 (409 "zaten APPROVED" sızmaz).
+
+---
+
+## 49. 🤖 Android — Widget, Derin Bağlantı, Sesli Komut ve Yerel Kontrol (M1)
+
+- [ ] **49.1.** Android ana ekrana widget ekle, "KAPIYI AÇ"a dokun → "Açılıyor... ⏳" → "Açıldı! ✅" → ~3 sn sonra "Çevrimiçi / Hazır"; kapı açılır; ◀ ▶ kapı değiştirir (receiver exported=false sonrası çalışmalı).
+- [ ] **49.2.** Widget'a 1 sn içinde 2-3 kez dokun → sunucuda tek açma komutu/log.
+- [ ] **49.3.** Uçak modunda widget'a dokun → "Bağlantı hatası ❌"; widget kalıcı çevrimdışına dönmez, ağ gelince tekrar açılır.
+- [ ] **49.4.** Cihaz çevrimdışıyken widget'a dokun → "Kapı çevrimdışı ❌"; düğme "ÇEVRİMDIŞI - DENE" ve tıklanabilir.
+- [ ] **49.5.** Uygulamadan çıkış → widget "Kapı Tanımlı Değil / Giriş Yapın"; `adb shell run-as <paket> cat shared_prefs/HomeWidgetPreferences.xml` içinde auth_token, api_base_url, door_* YOK.
+- [ ] **49.6.** `adb shell am broadcast -a es.antonborri.home_widget.action.BACKGROUND -d sitekapi://open_door_action -n <paket>/es.antonborri.home_widget.HomeWidgetBackgroundReceiver` → erişim reddedilir (exported değil), kapı açılmaz.
+- [ ] **49.7.** `adb shell am start -a android.intent.action.VIEW -d "sitekapi://open?doorIndex=1" <paket>` → "Kapı açılsın mı?" diyaloğu; "Vazgeç" açmaz; "Kapıyı Aç" açar; soğuk başlangıçta diyalog TEK kez.
+- [ ] **49.8.** Çok siteli hesapta aynı doorIndex iki sitede varsa aynı link "Hangi kapı açılsın?" listesi; seçince o kapı açılır; siteCode=<kod> ile liste çıkmadan o siteye gider.
+- [ ] **49.9.** Uygulama ikonuna uzun bas → kapı kısayolu → önce onay penceresi.
+- [ ] **49.10.** Sesli: "kapıyı kapat"/"kapıyı açma" → açmaz ve uyarır; çok kapılı hesapta "kapıyı aç" → "Hangi kapıyı açmamı istersiniz?"; "1. kapıyı aç"/"otopark kapısını aç" → o kapı açılır.
+- [ ] **49.11.** Çıkış yapıp başka hesapla gir, sesli komut → önceki hesabın kapıları kullanılmaz.
+- [ ] **49.12.** Release APK: `aapt dump badging`/`apkanalyzer manifest print` → allowBackup=false, usesCleartextTraffic=false, receiver/service exported=false; debug APK'da usesCleartextTraffic=true; iki build de manifest birleştirme hatasız.
+- [ ] **49.13.** Cihaz local_control_config token'ını almamışken uygulama yerel açmayı denemez, doğrudan buluta düşer; token varsa ve cihaz LAN'daysa yerel UDP açar.
+
+---
+
+## 50. 📱 Flutter İstemci — Oturum, Hata Eşlemeleri, Geofence ve Arayüz (M2, FX1, FX2)
+
+- [ ] **50.1.** Eski sürümden güncelle (oturum açık) → açılışta oturum korunur; eski SharedPreferences oturum kaydı silinir.
+- [ ] **50.2.** Hesabı sunucudan pasif yap, uygulamayı arka plandan öne getir → oturum kapanır, giriş ekranında "Hesap aktif degil" bildirimi.
+- [ ] **50.3.** Başka cihazdan şifre değiştir → bu cihazdaki ilk istekte oturum kapanır ve "Şifreniz değiştirildiği için oturumunuz sonlandırıldı" görünür.
+- [ ] **50.4.** Profilde Mevcut Şifre olmadan yeni şifre → kayıt engellenir; yanlış mevcut şifre → "Mevcut şifreniz hatalı", oturum açık kalır; doğru girince şifre değişir, oturum açık kalır, widget çalışır.
+- [ ] **50.5.** Giriş ekranında 5+ hatalı şifre → "Çok fazla hatalı deneme yapıldı. N dakika sonra tekrar deneyin." (SnackBar, taşma yok).
+- [ ] **50.6.** Konum zorunlu sitede (GPS kapalı) "Kapıyı Aç" → istek gitmez, "Konum servisleri kapalı"; GPS açıkken kapı açılır; kapıdan uzakta → "X m uzaktasınız, izin verilen Y m".
+- [ ] **50.7.** Mock location uygulamasıyla konum zorunlu kapıyı aç → "Sahte konum tespit edildi" ile reddedilir.
+- [ ] **50.8.** Ekransız (C3) kapıda statik karekodla açma → konum istenir ve gönderilir (site geofence kapalı olsa bile).
+- [ ] **50.9.** Site güvenlik politikası: konum doğrulamasını aç, koordinatı boş bırak → kayıt engellenir, alan altında hata; "Mevcut Konumu Al" çalışır; 320 px genişlikte taşma yok.
+- [ ] **50.10.** Yönetici panelinde hızlı site değiştir (A→B) → ekranda daima son seçilen sitenin kapıları kalır.
+- [ ] **50.11.** Panelde kapı seçince masaüstü widget'ının aktif kapısı da değişir; kapı listesi boşalınca widget temizlenir; çıkışta widget'ta token kalmaz.
+- [ ] **50.12.** Uygulama arka plandan öne gelince /me çağrılır (rol/hesap durumu güncellenir); kapı durumu yoklaması yavaş ağda üst üste binmez.
+- [ ] **50.13.** Doğrulama kodu ekranı: 6 haneli kod girilir; 4 haneli kod reddedilir.
+- [ ] **50.14.** Haftalık log PDF'i 200'den fazla kayıtlı sitede tüm kayıtları içerir (sayfalı çekim).
+- [ ] **50.15.** Kapı açma sırasında ağ kopsa → komut ikinci kez gönderilmez (çift açma yok); 10 sn içinde yanıt yoksa "Kapı açılmış olabilir" mesajı.
+- [ ] **50.16.** Yeni bireysel hesap oluştur, 6 haneli kodu gir → ana sayfa açılır; sonra Çıkış Yap (veya başka cihazdan şifre değiştir) → uygulamayı yeniden başlatmadan giriş ekranına dönülür.
+- [ ] **50.17.** Doğrulama ekranında "Kodu Tekrar Gönder" ilk 30 sn pasif ve "(NN sn)" geri sayımı gösterir; süre dolunca basınca yeni kod e-postası gelir ve geri sayım yeniden başlar (320 px'te taşma yok).
+- [ ] **50.18.** Başka cihazdan şifresi değişmiş hesapta Profilim'de adı değiştirip Kaydet → oturum kapanır, giriş ekranında "Şifreniz değiştirildiği için..." bildirimi görünür.
+- [ ] **50.19.** Profilim'de yanlış mevcut şifre ile şifre değiştir → "Mevcut şifreniz hatalı..." mesajı, oturum açık kalır.
+- [ ] **50.20.** Kapı seçili ana ekranda Profilim'den şifre değiştir → giriş ekranına atılmaz, "Profil güncellendi" görünür ve yeni şifreyle oturum sürer.
+- [ ] **50.21.** HTML 403/401 dönen proxy/WAF'lı ağda (kurum/okul ağı) uygulama açıkken çıkış yapılmaz, "Sunucuya ulaşılamadı. Ağ bağlantınızı (güvenlik duvarı/proxy)..." görünür.
+- [ ] **50.22.** Site silerken sunucu boş/5xx yanıt dönerse "Site silindi." görünmez, hata mesajı çıkar; başarılı silmede liste yenilenir.
+- [ ] **50.23.** Süper kullanıcı: kullanıcı düzenleme penceresinde "E-Posta Doğrulandı" anahtarını değiştirip Kaydet → listede rozet güncellenir, kullanıcı giriş yapabilir.
+- [ ] **50.24.** Süper kullanıcı kendi satırını düzenlerken şifre alanı yok, "Profilim ekranından değiştirin" notu görünür; yeni kullanıcı eklerken şifre alanı var.
+- [ ] **50.25.** Süper kullanıcı: sitede uzaktan açma kapalıyken uygulamadan kapıyı açabilir (sunucu izin verir).
+- [ ] **50.26.** Site konum doğrulaması açılmış, uygulamadaki kapı kaydı eski iken "Kapıya QR Göster" → konum alınır ve QR açılır; "Tekrar Dene" aynı hatayı vermez.
+- [ ] **50.27.** Yerel ağ kapalı/yerel token'ı olmayan kullanıcıda cihaz beacon'u görünse bile "Yerel Ağda Aktif" yazmaz (Çevrimdışı görünür); token varken yazar.
+- [ ] **50.28.** Bulut zaman aşımı/5xx iken cihaz yerel ağda erişilebilir ve yerel token varsa kapı durumu hata şeridi gizlenir; sunucu 403/404 iş hatalarında şerit görünür.
+- [ ] **50.29.** Bireysel (yönetici olmayan) hesapla uygulamayı açınca sunucu loglarında GET /manager/sites 403 oluşmaz; yönetici/süper kullanıcıda site listesi normal yüklenir.
+- [ ] **50.30.** Yönetici, kapı kartı → Yetkiler → blok başlığında doğru "X/Y Yetkili", daire başlığı "Daire N" (çift önek yok), rol "Daire Admini/Aile Üyesi", yetkili sakinin anahtarı açık; dokununca durum tersine döner ve liste yenilenir.
+- [ ] **50.31.** Süper kullanıcı, listeden onaylı site → Düzenle → "Mevcut daire sayıları okunuyor..." sonra gerçek blok sayıları (ör. 24/30) görünür; yalnız adı değiştirip Güncelle → daire ve sakin üyelikleri değişmez; ağ kesikken Güncelle kapalı, "Tekrar Dene" çıkar.
+- [ ] **50.32.** Süper kullanıcı → Şirket Cihazları: WROOM kartında rozet/Model "ESP32-WROOM"; kayıtlı tür ile cihaz bildirimi çelişirse "Kayıtlı Tür: ... (cihaz bildirimiyle uyuşmuyor)" çipi; sahipli ama kapısız cihazda "Depoya Al" görünür.
+- [ ] **50.33.** Sakin, "Kapı Ekranından QR Oku" başarılı → tek "açıldı" mesajı; geçiş logunda tek satır (screen_qr), ikinci "Kapı açma komutu gönderildi" yok.
+- [ ] **50.34.** Kapı geçiş günlüğü ve PDF: yerel UDP, ekran yönetici PIN'i, seri port geçişleri doğru etiketli; PDF özet kutularının toplamı toplam geçişe eşit.
+- [ ] **50.35.** Sakin QR penceresi açıkken yönetici karekod girişini kapatır veya yetki alır, okuyucuya okutulur → modalda "Kapı Yetkisi Yok / Karekod Girişi Kapalı" mesajı, yoklama durur; okuyucu komutu iletemezse "tekrar gösterin" uyarısı birkaç sn görünür.
+- [ ] **50.36.** Bireysel kullanıcı: cihaz kapalıyken uygulama açılır, cihaz bağlanır → ~15 sn içinde kapı "Çevrimiçi" olur; "Çevrimdışı" görünen kapıda düğmeye basınca liste tazelenir, cihaz çevrimiçiyse komut gider.
+- [ ] **50.37.** Site kurulum sihirbazı: A, B, C ekle → B'yi sil → Blok Ekle → "D Blok" gelir; aynı adı elle yazarsan "Blok adı benzersiz olmalı." uyarısı çıkar.
+- [ ] **50.38.** Güvenlik politikası: yarıçapı 500 m olan sitede pencere "500 metre" gösterir, kaydırıcıya dokunmadan kaydedince 500 kalır; QR süresi 45 sn olan sitede seçici "45 saniye" gösterir ve değer korunur.
+- [ ] **50.39.** Site yöneticisi → Cihaz düzenleme: Kapı Etiketi boş + Kaydet → başarılı; 1 karakter → "en az 2 karakter".
+- [ ] **50.40.** Sitede misafir geçişi kapalıyken yönetici kapı kartında "Kurye / Misafir Geçişi Oluştur" düğmesi görünmez.
+- [ ] **50.41.** Misafir geçiş linki penceresinde "Paylaş" sistem paylaşım sayfasını açar.
+- [ ] **50.42.** Site → Sakinler: sistem yöneticisinin hesabını pasife aldığı sakinde "Hesap pasif (sistem yöneticisi)" rozeti çıkar, menüde işlem yerine bilgi satırı olur; diğer sakinlerde menü/onay metinleri "Üyeliği Aktif Et/Pasife Al" (üyelik/kapı erişimi) der.
+- [ ] **50.43.** Cihaz sürüm raporu PDF: C3 ve WROOM için ayrı en yüksek sürüm "güncel" sayılır.
+
+---
+
+## 51. 🔌 Firmware — ESP32-C3, ESP32-WROOM ve Ekran Yazılımı (F1, F2A1, F2A2, F2B)
+
+- [ ] **51.1.** WROOM'u USB ile yükle, saat senkron olduktan sonra seri izle → "MQTT baglaniyor ... baglandi"; sunucuda cihaz çevrimiçi. Doğrulama hatasında "Hata rc=-2 tls=..." çıkar (CA/zaman kontrolü).
+- [ ] **51.2.** Wi-Fi'siz/saatsiz açılışta → TLS denenmez, NTP gelince bağlanır.
+- [ ] **51.3.** Açılışta röle tıklamaz (self-test kaldırıldı); cihaz resetlenince röle pasif.
+- [ ] **51.4.** Uygulamadan/MQTT'den pulse → röle ~1,5 sn çeker ve bırakır; bu sürede MQTT/OTA/Wi-Fi bloklanmış olsa bile kapanır (pulse sırasında Wi-Fi kes) ve gDoorLocked yine kilitlenir.
+- [ ] **51.5.** Aynı request_id ile pulse'ı iki kez yayınla (mosquitto_pub) → ikincisi yok sayılır; requested_at'i 2 dk geçmiş sayı ver → röle çekmez, pulse_rejected olayı; requested_at'siz pulse → kabul.
+- [ ] **51.6.** Düz metin pulse/on yayını → röle ÇEKMEZ.
+- [ ] **51.7.** Üyelik/izin kaldır → sunucu token'ı döndürür → cihaz yeni token'ı alır, eski token reddedilir.
+- [ ] **51.8.** İnternet kesikken yerel açma yap → kayıt /offline_logs.ndjson'a düşer (? ile durum). İnternet gelince device/<uid>/logs batch'i yayınlanır, sunucu logs_ack yollar ve satırlar silinir; ack'i engelle (cihaz atanmamış) → batch silinmez, artan aralıkla tekrar yayınlanır. ACL: cihaza write device/<uid>/logs, api_bridge'e read device/+/logs (sync_mqtt_acl.js çalıştırılmış olmalı).
+- [ ] **51.9.** Çevrimdışıyken saat gelmeden açılan kayıtlar (epoch=0) saat gelince doğru zamanla gelir.
+- [ ] **51.10.** Ekran: PIN tanımsız iken AYAR → "PIN tanimli degil / Yonetici menusu kilitli". mosquitto_pub ile {"action":"admin_pin_config","admin_pin":"123456"} (veya seri ADMINPIN:123456) → PIN tanımlanır.
+- [ ] **51.11.** Doğru PIN → menü açılır, "Oturum: NN sn" geri sayar ve 20. sn'de dokunmasan da ana ekrana döner; dokunmaya devam etsen de 20 sn'de kapanır.
+- [ ] **51.12.** Yanlış PIN → "Hatali PIN (kalan: n)"; 5 yanlış → "Kilitli: 300 sn" geri sayım; kilitliyken doğru PIN de reddedilir; cihazı resetle → kilit yine ~5 dk; kilit bitince 1 deneme hakkı.
+- [ ] **51.13.** "KAPIYI AC → AC" → röle çeker, ekran "KAPI ACILDI"; PIN ekran RAM'inde tutulmaz.
+- [ ] **51.14.** "Cihaz Bilgisi" → gerçek UID, sürüm (5.2.0) ve hedef (esp32-wroom); "Ekran FW: 1.1.1"; kamera gerçek durum; MQTT kopunca "Bulut YOK".
+- [ ] **51.15.** Seride PIN/QR token/local token/MQTT parolası görünmez ([GM60] QR okundu, uzunluk: N; ADMIN_AUTH|***).
+- [ ] **51.16.** QR okut → ekranda gerçek token'lı QR 30 sn'de bir döner; aynı QR'ı hemen okutmak 5 sn debounce'a takılır; sunucuya yayın başarısızsa debounce ilerlemez.
+- [ ] **51.17.** Çok uzun (>512 B) QR → reddedilir, ekranda "GECERSIZ QR".
+- [ ] **51.18.** OTA: manifest sha256 DOLU olmalı; yeni sürüm → indirme % ilerler, doğrulama sonrası yeniden başlar, ~60 sn sonra ota_validated olayı; aynı/eski sürüm manifest'i → "guncel", indirme yok; yanlış sha256 → ota_failed, boot bölümü değişmez; yeni imaj açılıp bağlanamadan güç döngüsü → eski sürüme geri döner.
+- [ ] **51.19.** C3 (sahadaki) cihazda: WiFi/BLE provisioning akışı bozulmadan çalışır (BLE yalnız Wi-Fi yokken/reset sonrası); mqtt.gudeteknoloji.com.tr dışı host reddedilir.
+- [ ] **51.20.** Yeni/Wi-Fi'siz WROOM kartta seri araçla h → röle çeker, "Role manuel GPIO 16 = HIGH" ve "60 sn sonra OTOMATIK birakilacak" yazar; l göndermesen de ~60. sn'de röle kendiliğinden bırakır ("Role birak okuma GPIO 16 = LOW").
+- [ ] **51.21.** h tutarken uygulamadan/MQTT'den pulse dene → reddedilir (pulse_rejected / HTTP 429 role_mesgul); OTA bu sürede başlamaz.
+- [ ] **51.22.** l röleyi anında bırakır; r tek pulse verir (2,5 sn içinde ikinci r debounce mesajı); k kamera ışık/bip testini çalıştırır; ? UID/hedef/sürümü döker.
+- [ ] **51.23.** p → pinler sırayla yanar; test bitince röle PASİF, seri çıktı "PIN BULMA TESTI BITTI."; GM60 ve (WROOM'da) ekran çalışmaya devam eder; C3'te Wi-Fi reset butonu pini yanlışlıkla "basılı" görünmez.
+- [ ] **51.24.** Wi-Fi'si kayıtlı saha cihazında h, l, p → yalnız "Atolye modu kapali (Wi-Fi sifirlayin veya reset butonu 3 sn)" yazar, röle/GPIO değişmez; ?, r, k çalışır. Reset butonu 3 sn basılı tutulunca cihaz provisioning'e girer ve h/l/p açılır.
+- [ ] **51.25.** ≥26 gün kesintisiz çalıştır, sonra router'ı 2 dk kapat-aç → Wi-Fi gelince MQTT ≤~60–90 sn'de döner, sunucuda "online" (eski kodda ~25 gün bağlanamazdı).
+- [ ] **51.26.** OTA ile yeni imaj yükle; seri "OTA: calisan imaj dogrulanmadi (PENDING_VERIFY)..." görünür. İlk 60 sn içinde ota_check gönder → "OTA kontrol talebi" hemen, "OTA kontrolu basladi" ancak "gecerli olarak isaretlendi" satırından sonra.
+- [ ] **51.27.** İndirme ortasında AP'yi kapat → "indirme eksik/hatali" veya "indirme http hata: -1"; NVS `ota_cfg/try_cnt` artmaz, 4+ ağ hatasında "deneme siniri asildi" çıkmaz, tekrar aralıkları katlanır. Manifest sha256'yı bozdurunca 3. denemede "deneme siniri asildi (3)".
+- [ ] **51.28.** Panelden 2+ cihaza OTA işi (ota_job_id'li) → her cihazda "OTA kontrol talebi" ile "OTA kontrolu basladi" arası 0–120 sn, cihaza göre farklı; tekil ota_check hemen çalışır.
+- [ ] **51.29.** MQTT bağlıyken modem WAN'ını çek (Wi-Fi açık) → "MQTT: broker TCP on-kontrolu basarisiz..." satırları; bu sırada UDP discover / `/ahbu/status` yanıtı <1 sn (her 4. denemede ~15 sn'ye kadar gecikebilir); WAN gelince ≤60 sn'de bağlanır.
+- [ ] **51.30.** Gerçek OTA'da (C3) seri "MQTT: OTA indirmesi icin oturum kapatildi."; broker'da retained availability=offline; OTA bitince/yenilenince online; panelde iş "installed" (OTA öncesi/sonrası ESP.getFreeHeap()/getMaxAllocHeap() logu eklemek faydalı).
+- [ ] **51.31.** Kendini toparlama (geçici derleme: MQTT_KENDINI_TOPARLA_MS = 2 dk, sonra geri al): broker erişimini kes → ~2 dk sonra "kontrollu yeniden baslatma"; röle pininde (C3 GPIO10 / WROOM GPIO16) osiloskopla tık yok; açılış sonrası bağlanınca `self_recovery_restart` olayı.
+- [ ] **51.32.** AP'yi kapat → "WiFi baglantisi yeniden deneniyor" satırları ~6, 12, 24, 48, 60, 60 sn aralıkla; AP'yi aç → ≤60 sn'de bağlanır, sonraki kopma yine 6 sn'den başlar.
+- [ ] **51.33.** NVS silinmiş cihazda bir kapı geçişi → client_log_id `<UID>-<çoğunlukla ≥2^20 sayı>-1`; sunucu logunda `eklenen=1 tekrar=0`.
+- [ ] **51.34.** C3'e laptop USB bağla, `?` gönder → çıktı eksiksiz; USB'yi çıkar → durum dökümü sırasında bile UDP/HTTP yanıt süresi normal.
+- [ ] **51.35.** (Uygulama v2 ile) aynı Wi-Fi'de UDP dinle → ~5 sn'de bir beacon `{"device_uid","ip","port":8765,"rssi","hw","ch":"<16 hex>"}`; `ch` ~10 sn'de bir değişir.
+- [ ] **51.36.** Uygulamadan yerel "Kapıyı aç" → röle ~1,5 sn çeker, yanıt ok:true; paket yakalamada (tcpdump/Wireshark) pakette `token` alanı YOK, `ch` ve 64 haneli `sig` var.
+- [ ] **51.37.** Yakalanan açma paketini 5+ sn sonra yeniden gönder (replay) → `{"ok":false,"error":"challenge","ch":"<güncel>"}`, röle çekmez; aynı paketi 3 sn içinde yeniden göndermek → `{"ok":true,"duplicate":true}`, röle ikinci kez çekmez.
+- [ ] **51.38.** Yanlış imza (ch doğru) → `unauthorized`; sunucu local_control_config göndermemişken açma → `unauthorized` + `local_control_available:false`; eski biçim (`token` alanlı) paket → `challenge` yanıtı, röle çekmez.
+- [ ] **51.39.** Röle çekiliyorken ikinci imzalı istek → `role_mesgul`; aynı `ch` ile röle bırakıldıktan sonra yeniden denenebilir (challenge tüketilmemiştir).
+- [ ] **51.40.** `POST /ahbu/open` → 404 route_bulunamadi; `GET /ahbu/status` çalışır ve sır içermez.
+- [ ] **51.41.** Açılış seri günlüğünde HMAC öz-testi geçti satırı; (bozuk derlemede) `local_control_selftest_failed` olayı ve yerel açma kapalı.
+- [ ] **51.42.** `ADMINPIN:123456` / `000000` / `111111` / `654321` / `012345` → reddedilir (seride "weak_pin"; PIN değeri yazılmaz); `ADMINPIN:482915` kabul. MQTT admin_pin_config ile zayıf PIN → reddedilir, `weak_pin` olayı.
+- [ ] **51.43.** 5 yanlış PIN → 5 dk kilit; kilit bitince tek deneme hakkı ve ekran tekrar "kilitli" göstermez.
+- [ ] **51.44.** Çok-kullanımlı misafir QR'ı ikinci kişi 10 sn sonra okutur → sunucuya gider (8 sn pencere); sunucu reddi/hata sonrası aynı QR yeniden denenebilir.
+- [ ] **51.45.** Panelden toplu OTA işi → cihaz olayları `ota_job_id` taşır; sunucuda iş durumu (installed/failed/already_current) doğru görünür.
+- [ ] **51.46.** Ekranı flash et, admin menüsü → CİHAZ BİLGİSİ → "Ekran FW: 1.1.1"; USB seri `?` → `...|FW:1.1.1`.
+- [ ] **51.47.** USB monitörü bağlayıp kapat/kabloyu çek, 2 dk PIN tuşla/dokun → takılma yok (öncesinde log halkası dolunca her dokunuş ~100 ms takılırdı).
+- [ ] **51.48.** USB monitör açıkken ekrana dokun → `[TOUCH] Tap at` satırı YOK (`[TX->WROOM]` satırları var); yalnız `-D AHBU_DEBUG_TOUCH` derlemesinde görünür.
+- [ ] **51.49.** Açılışta dokunmatiği devre dışı bırak (konektör gevşek) → log `[TOUCH] CST816D not detected`; bağla → 5 sn içinde `CST816D touch controller initialized` + `TOUCH_READY`, AYAR → PIN ekranı güç döngüsüsüz açılır.
+- [ ] **51.50.** Ana kartla 10 dk izle → "WiFi OK / Bulut OK" sabit, QR 30 sn'de bir yenilenir, yanlış alarm yok.
+- [ ] **51.51.** WROOM'u reset'te tut veya UART hattını ayır → ~45 sn sonra "WiFi YOK / Bulut YOK", QR yer tutucu, "Kalan Sure: 00 sn"; bağlantıyı geri ver → en geç ~2 sn içinde WiFi/Bulut OK ve yeni QR.
+- [ ] **51.52.** Router'ın internetini (WAN) kes, Wi-Fi açık kalsın → ekran "WiFi OK" kalır (yalnız Bulut YOK); "WiFi YOK" titremesi olmaz.
+
+---
+
+## 52. ✨ Arayüz Yenileme ve Akıcılık — Tasarım Sistemi, Performans, Yoklama ve Zaman Aşımları (FAZ5)
+
+- [ ] **52.1.** Açık ve koyu temada her rolle (süper kullanıcı, site yöneticisi, daire sakini, bireysel) tüm menüleri gez: kart alt yazıları, "Detaylar/Gizle", rozetler, hata/uyarı metinleri soluk değil okunur; kartlar, rozetler, düğmeler tutarlı; menü değişince yalnız yeni içerik yumuşakça solarak gelir (çift içerik/titreme yok); sayfa geçişleri (hafif solma+kayma) akıcı.
+- [ ] **52.2.** En küçük ekran + en büyük sistem yazı boyutunda (masaüstünde pencereyi ≈360x640'a küçült) tüm rollerin ekranlarını, diyaloglarını ve çekmecesini aç: sarı-siyah taşma şeridi yok, başlık/düğme etiketi kırpılmıyor (yazı ölçeği 2,0'da sınırlanır); giriş ekranında "Yeni Hesap Oluştur" ve "Şifremi Unuttum?" rahat dokunulur (>=44 dp).
+- [ ] **52.3.** Ana panel üst çubuğu: yenile/çıkış/widget-iğneleme ikonları >=44 dp dokunma alanında; çift modlu rolde "Sakin Modu/Yönetici Paneli" hapı geniş ekranda etiketli, ekran <400 dp ya da yazı >1,3x iken yalnız ikon (basılı tutunca ipucu etiketi çıkar, mod geçişi yine çalışır); kaydırınca üst çubuk rengi değişmez; yazı büyüdükçe alt satır büyür, araç çubuğu kırpılmaz.
+- [ ] **52.4.** Çekmece: başlık rol rengine göre gradyan (süper=mavi, yönetici=zümrüt, sakin/bireysel=mor), ad ve e-posta beyaz ve okunur, rol rozeti okunur; seçili menü öğesi tint'li "hap" + sağda ince çubuk; açılışta ilk 8 öğe kademeli belirir; kısa ekranda (<480 dp, yatay telefon) başlık+liste+sürüm birlikte kaydırılır; menü sırası, çıkış ve mod geçişi eskisi gibi.
+- [ ] **52.5.** Kapı açma düğmesi (yönetici kartı, sakin kartı, bireysel kapı kartı): çevrimiçi cihazda "Kapıyı Aç"a dokun → "açılıyor" halkası → başarıda tik + yeşil ton (bireysel kartta "Gönderildi") ~1,4 sn sonra eski hâline döner; Android'de dokunuşta/başarıda hafif titreşim; komut sürerken ikinci dokunuş yeni istek göndermez. Çevrimdışı cihazda dokun → düğme kısa titrer ve mevcut uyarı/yeniden-kontrol akışı eskisi gibi çalışır. Düzen: önce tek dolu "Kapıyı Aç", altında QR/Misafir tonal düğmeleri.
+- [ ] **52.6.** Daire sakini kartı (birden çok kapılı hesap): kapı çipleri yatay kaydırma olmadan alt satıra sarar, hiçbir kapı gizli kalmaz, seçili çipte beyaz onay işareti; durum cümlesi değişince yumuşak geçiş; IP/bağlantı rozetleri okunur; "Konum Hatası" ve "Geçiş Reddedildi" uyarıları eskisi gibi çıkar.
+- [ ] **52.7.** Dinamik QR modalı: geri sayım halkası akıcı (takılma yok) ve kalan saniye rakamı görünür; halka rengi yeşil→amber→kırmızı; durum başlığı (Güvenli Kapı QR Kodu / Süresi Dolmuş QR Kod / ret başlıkları) rozet olarak, kapı adı başlıkta; arka plana alıp geri dönünce durum doğru ("Kapı Açıldı!" tespiti, süre dolunca yenileme/uyarı eskisi gibi); açık ve koyu temada halka/gölge okunur; kapat düğmesinin "Kapat" ipucu var.
+- [ ] **52.8.** Listeler (Site Yönetimi, Kullanıcı Yönetimi, Site Yöneticileri, Şirket Cihaz Envanteri, Bekleyen Site/Abonelik Talepleri, kapı günlükleri): ilk yüklemede iskelet satırlar, boş listede açıklamalı boş durum ekranı, ilk 8 öğe kademeli belirir; her öğe tek yüzeyli kart (kart içinde kart yok); eylem düğmeleri (Yönet/Sil/Onayla/Reddet vb.) görünür ve çalışır, sıra karar → yönetim → yıkıcı; rol/site çipleri yatay kaydırmasız sarar; kullanıcı dizininde daire sakini ve bireysel kullanıcı aynı mor tonda, pasif hesap kartı nötr tonlu; çekip yenileme ve yenile düğmeleri çalışır, sayfalama düğmeleri (Önceki/Sonraki sayfa) 44 dp.
+- [ ] **52.9.** Diyaloglar (kapı/cihaz/site, misafir geçişi, yönetici daveti, sakin yönetimi, güvenlik politikası, site kurulumu, cihaz sahiplenme, katılım istekleri): ortak başlık şeridi (ikon + başlık/alt başlık) ve eylem satırı; klavye açıkken ve büyük yazıda başlık+içerik birlikte kaydırılır, alanlar kaybolmaz; büyük yazıda (>1,3x) bazı diyaloglarda alt başlık/eylem düğmeleri içeriğin sonuna taşınır (kasıtlı); Kapat/Yenile düğmeleri 44 dp; iptal/kaydet davranışı ve metinler eskisi gibi.
+- [ ] **52.10.** Giriş → "Yeni Hesap Oluştur" → Kayıt → E-posta doğrulama ekranları: giriş ekranında logo + başlık + tek kart, yükleme sırasında düğmede çark; "Beni Hatırla" satırının tamamı dokunulabilir; Kayıt'ta Ad/Soyad geniş ekranda yan yana, dar ekran/büyük yazıda alt alta; 6 haneli kod alanı büyük yazıda da sığar, hata/başarı kutuları okunur; "Şifremi Unuttum" diyaloğu çalışır; internet yok ekranı ve "Tekrar Dene" okunur.
+- [ ] **52.11.** Bireysel ana ekran: ilk yüklemede iskelet (Hoş Geldiniz/kurulum kartları o sırada gizli), sonra kartlar; site filtre çipleri sarar; "Üyeyi Çıkar" 44 dp; Wi-Fi/BLE kurulum sayfasında cihaz/ağ satırlarında sinyal gücü rozetleri ("Çok güçlü (-48 dBm)" vb.) ve "Şifreli/Açık ağ" rozeti; kaydet düğmesi "Bağlanıyor ve Kaydediliyor..." metnini korur.
+- [ ] **52.12.** Sesli kapı komutu: sesli komutu başlat → kart içindeki canlı banner (dinleniyor/algılanıyor) okunur; dar ekran + büyük yazıda metin kırpılmaz (kompakt düzen); mikrofon parıltısı yalnız dinlerken döner, durunca animasyon kalmaz.
+- [ ] **52.13.** Sistem ayarında animasyonları kaldır/azalt açıkken (Android: Geliştirici seçenekleri → animasyon ölçekleri kapalı ya da Erişilebilirlik → Animasyonları kaldır; Windows: Erişilebilirlik → Animasyon efektleri kapalı): kayma/titreme/nabız/iskelet parıltısı anında biter, hiçbir ekran takılı kalmaz, kapı açma yine çalışır.
+- [ ] **52.14.** Dijital saat kartı: saniyelik güncellemede sayfa kaydırma takılmaz; gece yarısı (ya da cihaz saatini ileri alarak) tarih metni değişir; küçük ekran/büyük yazıda taşma yok; rozet metni "TSİ (UTC+3)".
+- [ ] **52.15.** Günlük PDF dışa aktar (site/kapı, ~400 satıra kadar): "hazırlanıyor" göstergesi ve SnackBar animasyonu donmaz, kaydırma akıcı, yazdır/paylaş önizlemesi açılır; ~600+ satırda hata iletisi eskisi gibi ("PDF oluşturulurken hata ... more than 20 pages").
+- [ ] **52.16.** Sunucu erişim günlüğünden yoklama trafiği: Panel (kapı kartı) açıkken ~3 sn'de bir /app/doors/:id/status isteği; Profilim/Site Yönetimi menüsüne geçince ya da opak sayfa açılınca kesilir, Panel'e dönünce sürer; uygulamayı arka plana alınca kesilir, öne gelince hemen tek istek; bireysel kullanıcıda status isteği yok (kapı listesi ~15 sn'de bir); QR modalı açıkken ~800 ms'de bir.
+- [ ] **52.17.** Uçak modu/zayıf ağ: durum yoklaması 3→6→12→24→30 sn aralıkla seyrekleşir, ağ dönünce 3 sn'ye döner (QR modalında tavan 5 sn); okuma (GET) istekleri 20 sn'de "Sunucu yanıt vermedi, tekrar deneyin." der; kapı açma 10 sn, yazma 45 sn davranışı değişmedi; kapı açarken düğme kilidi çalışır.
+- [ ] **52.18.** Soğuk açılış: oturumlu ve oturumsuz açılışta ilk ekran hızlı (logo + ilerleme göstergesi; Android'de `adb shell am start -W` ile süre ölç, taban sürümle karşılaştır); internet yokken ~6,5 sn içinde "internet yok" ekranı; logo (giriş sayfası + çekmece avatarı) DPR 3+ cihazda keskin.
+- [ ] **52.19.** Büyük site (300+ daire): Site Yönetimi → Daireler akordiyonunu aç ve hızlı kaydır (akıcı, takılma yok); sakin ağacı penceresinde arama yazarken liste ~220 ms bekleyip tek geçişte süzülür, temizle düğmesi anında; pencere açılış süresini not et (5x60x3 ağaçta test VM'de ≈3 sn; telefonda belirgin yavaşsa bildir).
+- [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d windows --driver=test_driver/perf_driver.dart --target=integration_test/perf_frames_test.dart --dart-define=API_BASE_URL=<yerel API> --dart-define=PERF_USER=<kullanıcı> --dart-define=PERF_SITE=<site> --dart-define=PERF_OUT=<çıktı klasörü> --dart-define=PERF_LABEL=faz5` (yerel/test API'si; üretime bağlanma); aynı komut eski sürümde PERF_LABEL=taban ile çalıştırılıp perf_frames.json'lar kıyaslanır (hedef: build/raster p90 ≤8 ms, jank oranı ≤%2; özellikle ana_panel_bosta, kapi_karti, site_yonetimi_liste aşamaları).

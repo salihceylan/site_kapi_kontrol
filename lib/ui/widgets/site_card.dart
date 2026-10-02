@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class SiteCard extends StatefulWidget {
   const SiteCard({
@@ -18,6 +21,12 @@ class SiteCard extends StatefulWidget {
     this.onConfigurePolicy,
     this.onDownloadPdf,
     this.onDownloadLogsPdf,
+    this.onShowJoinQr,
+    this.onManageJoinRequests,
+    this.onApproveDeletion,
+    this.onRejectDeletion,
+    this.onDeleteWithEmail,
+    this.isSuperUser = false,
   });
 
   final SiteRecord site;
@@ -33,6 +42,12 @@ class SiteCard extends StatefulWidget {
   final VoidCallback? onConfigurePolicy;
   final VoidCallback? onDownloadPdf;
   final VoidCallback? onDownloadLogsPdf;
+  final VoidCallback? onShowJoinQr;
+  final VoidCallback? onManageJoinRequests;
+  final VoidCallback? onApproveDeletion;
+  final VoidCallback? onRejectDeletion;
+  final VoidCallback? onDeleteWithEmail;
+  final bool isSuperUser;
 
   @override
   State<SiteCard> createState() => _SiteCardState();
@@ -43,255 +58,273 @@ class _SiteCardState extends State<SiteCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     final site = widget.site;
-    final isSelected = widget.selected;
     final hasManager =
         site.managerName != null && site.managerName!.trim().isNotEmpty;
-    final approvalColor = site.approvalStatus == 'approved'
-        ? (isDark ? AppColors.emeraldLight : const Color(0xFF059669))
-        : (site.approvalStatus == 'rejected'
-            ? (isDark ? AppColors.roseLight : AppColors.rose)
-            : (isDark ? AppColors.amberLight : const Color(0xFFD97706)));
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          widget.onTap();
-          setState(() => _expanded = !_expanded);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: isDark
-                ? (isSelected
-                    ? const Color(0xFF1E293B).withValues(alpha: 0.95)
-                    : const Color(0xFF1E293B).withValues(alpha: 0.75))
-                : (isSelected
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.9)),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? AppColors.primary
-                  : (isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0)),
-              width: isSelected ? 1.8 : 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? AppColors.primary.withValues(alpha: isDark ? 0.25 : 0.15)
-                    : (isDark ? const Color(0x30000000) : const Color(0x080F172A)),
-                blurRadius: isSelected ? 16 : 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    // Tek yüzey: kart kendi başına bir AppCard'dır (seçili = 1,5 px kenar + seviye 2); dış "cam" kart
+    // yoktur (kart-içinde-kart kalktı). Durum rozetleri başlıkla aynı akışta: sığmazsa alta iner.
+    return AppCard(
+      selected: widget.selected,
+      padding: listCardPadding(context),
+      onTap: () {
+        widget.onTap();
+        setState(() => _expanded = !_expanded);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.primaryLight.withValues(alpha: isDark ? 0.3 : 0.2),
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.apartment_rounded,
-                      color: isDark ? AppColors.accentLight : AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const IconTile(icon: Icons.apartment_rounded, gap: AppSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpace.sm,
+                      runSpacing: AppSpace.xs,
                       children: [
-                        Text(
-                          site.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15.5,
-                            letterSpacing: -0.2,
-                            color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
+                        Text(site.name, style: th.titleMedium),
+                        if (site.isDeletionPending)
+                          const StatusChip(
+                            label: 'Silme Onayı',
+                            tone: AppTone.danger,
+                          )
+                        else if (site.approvalStatus == 'pending')
+                          const StatusChip(
+                            label: 'Onay Bekliyor',
+                            tone: AppTone.warning,
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          hasManager
-                              ? 'Yönetici: ${site.managerName}'
-                              : 'Yönetici atanmamış',
-                          style: TextStyle(
-                            color: hasManager
-                                ? (isDark ? AppColors.textMutedLight : AppColors.textMuted)
-                                : (isDark ? AppColors.amberLight : const Color(0xFFD97706)),
-                            fontSize: 12.5,
-                            fontWeight: hasManager
-                                ? FontWeight.normal
-                                : FontWeight.w600,
-                          ),
-                        ),
                       ],
                     ),
-                  ),
-                  if (site.approvalStatus == 'pending')
-                    Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: approvalColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: approvalColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        'Onay Bekliyor',
-                        style: TextStyle(
-                          color: approvalColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
-                        ),
-                      ),
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      hasManager
+                          ? 'Yönetici: ${site.managerName}'
+                          : 'Yönetici atanmamış',
+                      style: hasManager
+                          ? th.bodyMedium
+                          : th.bodyMedium?.copyWith(
+                              color: AppTone.warning.ink(p),
+                              fontWeight: FontWeight.w600,
+                            ),
                     ),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: isDark ? AppColors.textMutedLight : AppColors.textMuted,
-                  ),
-                ],
+                  ],
+                ),
               ),
-              if (_expanded) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Divider(
-                    color: isDark ? const Color(0x1FFFFFFF) : const Color(0x150F172A),
-                    height: 1,
-                  ),
-                ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _buildChip(context, 'ID: ${site.id}'),
-                    _buildChip(context, 'Oluşturulma: ${widget.formattedCreatedAt}'),
-                    if (site.address != null && site.address!.isNotEmpty)
-                      _buildChip(context, 'Adres: ${site.address}'),
-                    if (site.city != null && site.city!.isNotEmpty)
-                      _buildChip(context, 'Şehir: ${site.city}'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (widget.onApprove != null)
-                      ElevatedButton.icon(
-                        onPressed: widget.approvalBusy ? null : widget.onApprove,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.emerald,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Onayla'),
-                      ),
-                    if (widget.onReject != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.approvalBusy ? null : widget.onReject,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.roseLight,
-                          side: const BorderSide(color: AppColors.rose),
-                        ),
-                        icon: const Icon(Icons.cancel_outlined, size: 16),
-                        label: const Text('Reddet'),
-                      ),
-                    if (widget.onConfigurePolicy != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onConfigurePolicy,
-                        icon: Icon(
-                          Icons.security_outlined,
-                          size: 16,
-                          color: isDark ? const Color(0xFF6EE7B7) : AppColors.emerald,
-                        ),
-                        label: const Text('Giriş & Güvenlik Politikaları'),
-                      ),
-                    if (widget.onEdit != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onEdit,
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Düzenle'),
-                      ),
-                    if (widget.onDelete != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.deleteBusy ? null : widget.onDelete,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.roseLight,
-                          side: const BorderSide(color: AppColors.rose),
-                        ),
-                        icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                        label: const Text('Sil'),
-                      ),
-                    if (widget.onDownloadPdf != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onDownloadPdf,
-                        icon: Icon(
-                          Icons.key_outlined,
-                          size: 16,
-                          color: isDark ? const Color(0xFF93C5FD) : AppColors.primary,
-                        ),
-                        label: const Text('Şifreleri İndir (PDF)'),
-                      ),
-                    if (widget.onDownloadLogsPdf != null)
-                      OutlinedButton.icon(
-                        onPressed: widget.onDownloadLogsPdf,
-                        icon: Icon(
-                          Icons.assignment_outlined,
-                          size: 16,
-                          color: isDark ? const Color(0xFF60A5FA) : const Color(0xFF0284C7),
-                        ),
-                        label: const Text('Geçiş Raporu (PDF)'),
-                      ),
-                  ],
-                ),
-              ],
+              const SizedBox(width: AppSpace.sm),
+              ExpandChevron(expanded: _expanded),
             ],
           ),
-        ),
+          if (site.isDeletionPending) ...[
+            const SizedBox(height: AppSpace.md),
+            _buildDeletionApprovalBanner(context),
+          ],
+          ExpandableSection(
+            expanded: _expanded,
+            child: _buildDetails(context),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildChip(BuildContext context, String label) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF0F172A).withValues(alpha: 0.6)
-            : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDark ? const Color(0x1FFFFFFF) : const Color(0xFFE2E8F0),
+  /// Açık kartın gövdesi: bilgi çipleri + gruplanmış eylemler. Eylem düğmeleri GÖRÜNÜR kalır
+  /// (menüye taşınmadı): onay kararları, yönetim eylemleri (ton zeminli), yıkıcı eylemler (danger
+  /// kenarlı) ayrı satırlarda.
+  Widget _buildDetails(BuildContext context) {
+    final site = widget.site;
+
+    final decisions = <Widget>[
+      if (widget.onApprove != null)
+        ElevatedButton.icon(
+          onPressed: widget.approvalBusy ? null : widget.onApprove,
+          style: filledToneStyle(context, tone: AppTone.success),
+          icon: const Icon(Icons.check_circle_outline, size: 16),
+          label: const Text('Onayla'),
         ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+      if (widget.onReject != null)
+        OutlinedButton.icon(
+          onPressed: widget.approvalBusy ? null : widget.onReject,
+          style: dangerOutlineStyle(context),
+          icon: const Icon(Icons.cancel_outlined, size: 16),
+          label: const Text('Reddet'),
         ),
-      ),
+    ];
+    final manage = <Widget>[
+      if (widget.onConfigurePolicy != null)
+        OutlinedButton.icon(
+          onPressed: widget.onConfigurePolicy,
+          style: tonalActionStyle(context),
+          icon: const Icon(Icons.security_outlined, size: 16),
+          label: const Text('Giriş & Güvenlik Politikaları'),
+        ),
+      if (widget.onEdit != null)
+        OutlinedButton.icon(
+          onPressed: widget.onEdit,
+          style: tonalActionStyle(context),
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: const Text('Düzenle'),
+        ),
+      if (widget.onDownloadLogsPdf != null)
+        OutlinedButton.icon(
+          onPressed: widget.onDownloadLogsPdf,
+          style: tonalActionStyle(context),
+          icon: const Icon(Icons.assignment_outlined, size: 16),
+          label: const Text('Geçiş Raporu (PDF)'),
+        ),
+      if (widget.onShowJoinQr != null)
+        OutlinedButton.icon(
+          onPressed: widget.onShowJoinQr,
+          style: tonalActionStyle(context),
+          icon: const Icon(Icons.qr_code_2_rounded, size: 16),
+          label: const Text('Site Katılım QR'),
+        ),
+      if (widget.onManageJoinRequests != null)
+        OutlinedButton.icon(
+          onPressed: widget.onManageJoinRequests,
+          style: tonalActionStyle(context, tone: AppTone.warning),
+          icon: const Icon(Icons.how_to_reg_outlined, size: 16),
+          label: const Text('Katılım Talepleri'),
+        ),
+    ];
+    final destructive = <Widget>[
+      if (widget.onDelete != null && !site.isDeletionPending)
+        OutlinedButton.icon(
+          onPressed: widget.deleteBusy ? null : widget.onDelete,
+          style: dangerOutlineStyle(context),
+          icon: const Icon(Icons.delete_outline_rounded, size: 16),
+          label: const Text('Sil'),
+        ),
+      if (widget.isSuperUser &&
+          widget.onDeleteWithEmail != null &&
+          !site.isDeletionPending)
+        OutlinedButton.icon(
+          onPressed: widget.deleteBusy ? null : widget.onDeleteWithEmail,
+          style: dangerOutlineStyle(context),
+          icon: const Icon(Icons.mark_email_read_outlined, size: 16),
+          label: const Text('E-Posta Koduyla Sil'),
+        ),
+    ];
+    final groups = <List<Widget>>[
+      decisions,
+      manage,
+      destructive,
+    ].where((group) => group.isNotEmpty).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: AppSpace.md),
+        const Divider(),
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            InfoChip('ID: ${site.id}'),
+            InfoChip('Oluşturulma: ${widget.formattedCreatedAt}'),
+            if (site.address != null && site.address!.isNotEmpty)
+              InfoChip('Adres: ${site.address}'),
+            if (site.city != null && site.city!.isNotEmpty)
+              InfoChip('Şehir: ${site.city}'),
+          ],
+        ),
+        if (groups.isNotEmpty) const SizedBox(height: AppSpace.md),
+        for (var i = 0; i < groups.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpace.sm),
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: groups[i],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDeletionApprovalBanner(BuildContext context) {
+    final site = widget.site;
+    final isSuperUser = widget.isSuperUser;
+
+    // Beklenen onay makami kullanici mi yoksa karsi taraf mi?
+    final isUserApprovalRequired =
+        (isSuperUser && site.isPendingSuperUserApproval) ||
+        (!isSuperUser && site.isPendingSiteManagerApproval);
+
+    final requesterName =
+        site.deletionRequestedByName ??
+        (site.deletionRequestedByRole == 'super_user'
+            ? 'Süper Kullanıcı'
+            : 'Site Yöneticisi');
+
+    final String message;
+    if (isUserApprovalRequired) {
+      message =
+          '$requesterName bu sitenin ve bağlı tüm birimlerinin kalıcı olarak silinmesini talep etti. Sitenin silinmesi için ONAYINIZ bekleniyor.';
+    } else {
+      message =
+          'Bu site için kalıcı silme talebinde bulundunuz. ${isSuperUser ? "Site Yöneticisinin" : "Süper Kullanıcının"} onayı bekleniyor.';
+    }
+
+    final tone = isUserApprovalRequired ? AppTone.danger : AppTone.warning;
+    final actions = <Widget>[
+      if (isUserApprovalRequired && widget.onApproveDeletion != null)
+        ElevatedButton.icon(
+          onPressed: widget.deleteBusy ? null : widget.onApproveDeletion,
+          style: filledToneStyle(context, tone: AppTone.danger),
+          icon: widget.deleteBusy
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_forever_rounded, size: 16),
+          label: const Text('Silmeyi Onayla'),
+        ),
+      if (widget.onRejectDeletion != null)
+        OutlinedButton.icon(
+          onPressed: widget.deleteBusy ? null : widget.onRejectDeletion,
+          style: tonalActionStyle(context, tone: tone),
+          icon: Icon(
+            isUserApprovalRequired
+                ? Icons.cancel_outlined
+                : Icons.undo_rounded,
+            size: 16,
+          ),
+          label: Text(
+            isUserApprovalRequired ? 'Talebi Reddet' : 'Talebi İptal Et',
+          ),
+        ),
+      if (isSuperUser && widget.onDeleteWithEmail != null)
+        OutlinedButton.icon(
+          onPressed: widget.deleteBusy ? null : widget.onDeleteWithEmail,
+          style: dangerOutlineStyle(context),
+          icon: const Icon(Icons.mark_email_read_outlined, size: 16),
+          label: const Text('E-Posta Kodu İle Hemen Sil'),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InlineNotice(
+          message: message,
+          tone: tone,
+          icon: isUserApprovalRequired
+              ? Icons.warning_amber_rounded
+              : Icons.hourglass_top_rounded,
+        ),
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.sm),
+          Wrap(spacing: AppSpace.sm, runSpacing: AppSpace.sm, children: actions),
+        ],
+      ],
     );
   }
 }

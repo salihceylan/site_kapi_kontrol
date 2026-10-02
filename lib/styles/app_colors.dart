@@ -17,6 +17,14 @@ class AppColors {
   static const Color rose = Color(0xFFEF4444);
   static const Color roseLight = Color(0xFFF87171);
 
+  // Standart Semantik Kısayollar
+  static const Color error = rose;
+  static const Color errorLight = roseLight;
+  static const Color success = emerald;
+  static const Color warning = amber;
+  static const Color bgDark = backgroundTop;
+  static const Color bgLight = lightBackgroundTop;
+
   // Koyu Tema Arka Plan ve Yüzeyler (Deep Luxury Slate)
   static const Color backgroundTop = Color(0xFF0F172A);
   static const Color backgroundBottom = Color(0xFF020617);

@@ -1,10 +1,12 @@
 import express from 'express';
 import { pool } from '../db.js';
 import { authRequired, requireSuperUser, requireSiteManager } from '../middlewares/auth_middleware.js';
-import { mapDoorAccessLogRow } from '../utils/helpers.js';
+import { mapDoorAccessLogRow, normalizeDeviceUid } from '../utils/helpers.js';
 import { findDeviceByUid } from '../services/device_service.js';
-import { listSiteDoors } from '../services/site_service.js';
-import { recordDoorAccessLog } from '../services/door_service.js';
+import { hasSiteManagementAccess } from '../services/site_service.js';
+import { listAccessibleDoorsForUser } from '../services/door_service.js';
+import { MAX_DEVICE_LOG_BATCH, insertDeviceLogBatch } from '../services/door_log_service.js';
+import { newErrorId } from '../middlewares/error_handler.js';
 
 export const doorLogRouter = express.Router();
 
@@ -94,8 +96,9 @@ doorLogRouter.get('/admin/door-logs', authRequired, requireSuperUser, async (req
       total_pages: Math.ceil(total / pageSize) || 1,
     });
   } catch (error) {
-    console.error('Error fetching admin door logs:', error);
-    return res.status(500).json({ error: 'Kapi loglari alinamadi.' });
+    const errorId = newErrorId();
+    console.error(`[door-logs] ${errorId} Error fetching admin door logs:`, error);
+    return res.status(500).json({ error: 'Kapi loglari alinamadi.', errorId });
   }
 });
 
@@ -189,58 +192,80 @@ doorLogRouter.get('/manager/door-logs', authRequired, requireSiteManager, async 
       total_pages: Math.ceil(total / pageSize) || 1,
     });
   } catch (error) {
-    console.error('Error fetching manager door logs:', error);
-    return res.status(500).json({ error: 'Kapi loglari alinamadi.' });
+    const errorId = newErrorId();
+    console.error(`[door-logs] ${errorId} Error fetching manager door logs:`, error);
+    return res.status(500).json({ error: 'Kapi loglari alinamadi.', errorId });
   }
 });
 
 // POST /device/sync-logs
-doorLogRouter.post('/device/sync-logs', async (req, res) => {
-  const deviceUid = String(req.body.device_uid || req.headers['x-ahbu-device-uid'] || '').trim().toUpperCase();
-  const logs = Array.isArray(req.body.logs) ? req.body.logs : [];
+// Cevrimdisi kapi gecis kayitlarini (cihaz/uygulama) toplu yukler. JWT zorunlu; yetki: super_user,
+// cihazin sitesinin yoneticisi veya cihazin bagli oldugu kapiya erisimi olan kullanici.
+// Istek alanlari geriye donuk uyumlu: `device_uid` govde alani veya `X-AHBU-Device-UID` basligi.
+const SYNC_LOGS_MAX_BODY_BYTES = 256 * 1024;
 
+async function canSyncLogsForDevice(authUser, device) {
+  if (authUser?.role === 'super_user') {
+    return true;
+  }
+  const siteCodeRaw = device.assigned_door_site_code ?? device.site_code;
+  const siteCode = Number(siteCodeRaw);
+  if (Number.isSafeInteger(siteCode) && siteCode > 0 && (await hasSiteManagementAccess(authUser, siteCode))) {
+    return true;
+  }
+  const doors = await listAccessibleDoorsForUser(authUser);
+  return doors.some((door) => Number(door.assigned_device_id) === Number(device.id));
+}
+
+export async function syncDeviceLogsHandler(req, res) {
+  const contentLength = Number(req.headers['content-length'] || 0);
+  if (Number.isFinite(contentLength) && contentLength > SYNC_LOGS_MAX_BODY_BYTES) {
+    return res.status(413).json({ error: 'Istek govdesi cok buyuk.', code: 'PAYLOAD_TOO_LARGE' });
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const deviceUid = normalizeDeviceUid(body.device_uid || req.headers['x-ahbu-device-uid']);
   if (!deviceUid) {
     return res.status(400).json({ error: 'device_uid zorunlu.' });
+  }
+  if (body.logs !== undefined && !Array.isArray(body.logs)) {
+    return res.status(400).json({ error: 'logs bir dizi olmali.' });
+  }
+  const logs = Array.isArray(body.logs) ? body.logs : [];
+  if (logs.length > MAX_DEVICE_LOG_BATCH) {
+    return res.status(413).json({
+      error: `Tek istekte en fazla ${MAX_DEVICE_LOG_BATCH} kayit gonderilebilir.`,
+      code: 'TOO_MANY_LOGS',
+    });
   }
 
   try {
     const device = await findDeviceByUid(deviceUid);
-    if (!device || !device.site_code) {
+    if (!device || !(device.assigned_door_site_code ?? device.site_code)) {
       return res.status(404).json({ error: 'Cihaz veya bagli oldugu site bulunamadi.' });
     }
-
-    const doors = await listSiteDoors(Number(device.site_code));
-    const assignedDoor = doors.find((d) => Number(d.assigned_device_id) === Number(device.id)) || doors[0];
-    const doorName = assignedDoor ? assignedDoor.door_name : (device.gate_name || 'Site Kapısı');
-    const doorId = assignedDoor ? Number(assignedDoor.id) : null;
-
-    let insertedCount = 0;
-    for (const item of logs) {
-      const triggerType = String(item.trigger_type || 'offline_sync').trim();
-      const userName = String(item.user_name || item.user_label || 'Yerel Yetkili Kullanıcı').trim();
-      const userRole = String(item.user_role || 'apartment_owner').trim();
-      const apartmentLabel = item.apartment_label ? String(item.apartment_label).trim() : null;
-      const openedAt = item.opened_at ? new Date(item.opened_at) : new Date();
-
-      await recordDoorAccessLog({
-        siteCode: Number(device.site_code),
-        doorId,
-        doorName,
-        userCode: null,
-        userName,
-        userRole,
-        apartmentLabel,
-        triggerType,
-        openedAt,
-        ipAddress: req.ip,
-      });
-      insertedCount++;
+    if (!(await canSyncLogsForDevice(req.authUser, device))) {
+      return res.status(403).json({ error: 'Bu cihaz icin log gonderme yetkiniz yok.' });
     }
 
-    return res.status(200).json({ ok: true, synced_count: insertedCount });
-  } catch (error) {
-    console.error('Error syncing device offline logs:', error);
-    return res.status(500).json({ error: 'Log senkronizasyonu basarisiz.' });
-  }
-});
+    const result = await insertDeviceLogBatch({
+      deviceUid,
+      logs,
+      source: 'app',
+      ipAddress: req.ip,
+    });
 
+    return res.status(200).json({
+      ok: true,
+      synced_count: result.inserted,
+      duplicate_count: result.duplicates,
+      rejected_count: result.rejected,
+    });
+  } catch (error) {
+    const errorId = newErrorId();
+    console.error(`[door-logs] ${errorId} Error syncing device offline logs:`, error);
+    return res.status(500).json({ error: 'Log senkronizasyonu basarisiz.', errorId });
+  }
+}
+
+doorLogRouter.post('/device/sync-logs', authRequired, syncDeviceLogsHandler);

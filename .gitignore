@@ -44,8 +44,9 @@ migrate_working_dir/
 .env.*
 !/server/.env.example
 /server/.env
-/server/package-lock.json.server-backup
 /server/firmware/**/*.bin
+cihaz_kontrol/firmware_releases/
+*.bin
 
 # Symbolication related
 app.*.symbols
@@ -57,3 +58,34 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+
+# --- Sunucu calisma verisi / uretilmis dosyalar (D1) ---
+# Etiketli cihaz indeksi ve QR gorselleri sunucuda uretilir, depoya girmez
+/server/data/
+/server/public/qrcodes/
+# Yerel hata notlari / yedekler
+hatalaar.txt
+*.bak
+
+# Sirlar / sertifika anahtarlari (.env* yukarida; ornek dosya haric)
+*.pem
+*.key
+*.p12
+!/server/.env.example
+
+# Ekran yazilimi surum ikilileri (*.bin genel kurali da kapsar; acik tutuldu)
+ekran_yazilimi/firmware_releases/**/*.bin
+
+# E2E (integration_test) ekran goruntusu/rapor ciktilari ve uretilen define dosyalari
+/integration_test/out/
+/integration_test/**/dart_defines*.json
+
+# Firmware ana makine testleri (cihaz_kontrol/host_test): derleme ciktilari ve uretilen vektorler
+/cihaz_kontrol/host_test/*.exe
+/cihaz_kontrol/host_test/*.obj
+/cihaz_kontrol/host_test/*.pdb
+/cihaz_kontrol/host_test/*.ilk
+/cihaz_kontrol/host_test/vectors.txt
+/cihaz_kontrol/host_test/_calistir_*.bat

@@ -1,14 +1,14 @@
 {
   "enabled": true,
   "target": "esp32-wroom",
-  "version": "3.0.3",
+  "version": "5.0.5",
   "filename": "firmware.bin",
   "force": true,
   "usb_required": false,
   "partition_scheme": "ota_4mb_littlefs_v1",
   "interval_hours": 1,
   "allowed_uids": [],
-  "sha256": "6d3cfe14becd0f9f0d5c2522c1e0fc3415c5383fb0dab1c52380fb59b9ee4afa",
-  "md5": "3bc98cc5922a2af18d4630c42d153aea",
-  "notes": "AHBU firmware v3.0.3 (esp32-wroom)."
+  "sha256": "718ca938a9e5bfb005efaec4f67b363a5d7d66a2b503b2e9b6e9b8fb19785923",
+  "md5": "cdf460416fa6cee39433e3f6345afd42",
+  "notes": "AHBU firmware v5.0.5 (esp32-wroom): 30 saniyelik dinamik ekran QR token rotasyonu ve MQTT yayini destegi."
 }

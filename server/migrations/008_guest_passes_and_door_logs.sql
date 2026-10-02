@@ -12,6 +12,25 @@ ADD COLUMN IF NOT EXISTS last_online_at TIMESTAMPTZ;
 ALTER TABLE devices
 ADD COLUMN IF NOT EXISTS last_offline_at TIMESTAMPTZ;
 
+-- device_runtime_status daha önce YALNIZCA src/db.js (ensureDbSchema) içinde oluşturuluyordu; bu yüzden migration
+-- zinciri boş bir veritabanında (docker-compose initdb.d veya scripts/migrate.js) bu satırdan sonra düşüyordu.
+-- Tanım db.js ile aynıdır; IF NOT EXISTS olduğu için mevcut veritabanlarını etkilemez.
+CREATE TABLE IF NOT EXISTS device_runtime_status (
+  device_uid TEXT PRIMARY KEY REFERENCES devices(device_uid) ON DELETE CASCADE,
+  mqtt_connected BOOLEAN NOT NULL DEFAULT FALSE,
+  door_locked BOOLEAN,
+  firmware_version TEXT,
+  ota_status TEXT,
+  ota_last_version TEXT,
+  wifi_rssi INTEGER,
+  wifi_signal_percent INTEGER,
+  last_event TEXT,
+  last_event_detail TEXT,
+  last_payload_at TIMESTAMPTZ,
+  last_seen_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE device_runtime_status
 ADD COLUMN IF NOT EXISTS local_ip TEXT;
 

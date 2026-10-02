@@ -67,6 +67,27 @@ export function generateLocalControlToken() {
   return crypto.randomBytes(32).toString('base64url');
 }
 
+/**
+ * Kriptografik olarak güvenli, sabit uzunlukta (baştaki sıfırlar dahil) sayısal kod üretir.
+ * Math.random yerine crypto.randomInt kullanılır.
+ */
+export function generateNumericCode(digits = 6) {
+  const length = Math.min(Math.max(Number.parseInt(digits, 10) || 6, 1), 9);
+  return String(crypto.randomInt(0, 10 ** length)).padStart(length, '0');
+}
+
+/**
+ * Sabit zamanlı metin karşılaştırması (uzunluk bilgisini de sızdırmaz).
+ */
+export function timingSafeEqualStrings(a, b) {
+  const left = Buffer.from(String(a ?? ''), 'utf8');
+  const right = Buffer.from(String(b ?? ''), 'utf8');
+  const leftDigest = crypto.createHash('sha256').update(left).digest();
+  const rightDigest = crypto.createHash('sha256').update(right).digest();
+  const digestsEqual = crypto.timingSafeEqual(leftDigest, rightDigest);
+  return digestsEqual && left.length === right.length;
+}
+
 export function normalizePhone(raw) {
   const text = String(raw || '').trim();
   return text || null;
@@ -189,8 +210,7 @@ export function mapSiteRow(row) {
     require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
     geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
     geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
-    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
-    qr_totp_secret: row.qr_totp_secret ?? null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 100),
     qr_rotation_seconds: Number(row.qr_rotation_seconds ?? 30),
     manager_user_code:
       row.manager_user_code === null || row.manager_user_code === undefined
@@ -232,13 +252,28 @@ export function normalizeOtaStatus(otaStatus, firmwareVersion, otaLastVersion, l
   return otaStatus;
 }
 
+// Donanim tipi (DB: esp32_c3 | esp32_wroom) <-> firmware hedefi (esp32-c3 | esp32-wroom).
+// `_` ve `-` esdegerdir; taninmayan/bos deger null doner (varsayilan UYDURULMAZ).
+export function normalizeHardwareType(value) {
+  const text = String(value ?? '').trim().toLowerCase().replace(/-/g, '_');
+  return text === 'esp32_c3' || text === 'esp32_wroom' ? text : null;
+}
+
+export function hardwareTargetFromType(value) {
+  const type = normalizeHardwareType(value);
+  return type ? type.replace(/_/g, '-') : null;
+}
+
 export function mapDeviceRow(row) {
+  // hardware_type: DB degeri esastir; satirda yoksa cihazin bildirdigi hardware_target'tan turetilir.
+  // hardware_target: cihazin kendi (calisma zamani) bildirimi; yoksa hardware_type'tan turetilir.
+  const hardwareType = normalizeHardwareType(row.hardware_type) ?? normalizeHardwareType(row.hardware_target);
   return {
     id: Number(row.id),
     device_uid: row.device_uid,
     assigned_user_code: row.assigned_user_code,
     gate_name: row.gate_name,
-    hardware_type: row.hardware_type || 'esp32_c3',
+    hardware_type: hardwareType,
     assigned_door_id:
       row.assigned_door_id === null || row.assigned_door_id === undefined
         ? null
@@ -258,7 +293,7 @@ export function mapDeviceRow(row) {
       ? null
       : Boolean(row.mqtt_connected),
     firmware_version: row.firmware_version ?? null,
-    hardware_target: row.hardware_target ?? null,
+    hardware_target: row.hardware_target ?? hardwareTargetFromType(hardwareType),
     ota_status: normalizeOtaStatus(row.ota_status, row.firmware_version, row.ota_last_version, row.last_seen_at),
     ota_last_version: row.ota_last_version ?? null,
     wifi_rssi:
@@ -274,6 +309,19 @@ export function mapDeviceRow(row) {
     last_seen_at: row.last_seen_at ?? null,
     last_event: row.last_event ?? null,
     qr_reader_enabled: Boolean(row.qr_reader_enabled),
+    is_defective: Boolean(row.is_defective),
+    defective_reason: row.defective_reason ?? null,
+    defective_at: row.defective_at ?? null,
+    inventory_notes: row.inventory_notes ?? null,
+    owner_user_id: row.owner_user_id ? Number(row.owner_user_id) : null,
+    // owner_user_id = users.id (ic anahtar); istemciler kullanici koduyla (users.user_code) calisir.
+    owner_user_code:
+      row.owner_user_code === null || row.owner_user_code === undefined
+        ? null
+        : Number(row.owner_user_code),
+    owner_full_name: row.owner_full_name ?? null,
+    owner_email: row.owner_email ?? null,
+    claimed_at: row.claimed_at ?? null,
     created_at: row.created_at,
   };
 }
@@ -380,8 +428,7 @@ export function mapDoorRow(row) {
     require_geofence: row.require_geofence === undefined ? false : Boolean(row.require_geofence),
     geofence_latitude: row.geofence_latitude !== null && row.geofence_latitude !== undefined ? Number(row.geofence_latitude) : null,
     geofence_longitude: row.geofence_longitude !== null && row.geofence_longitude !== undefined ? Number(row.geofence_longitude) : null,
-    geofence_radius_meters: Number(row.geofence_radius_meters ?? 75),
-    qr_totp_secret: row.qr_totp_secret ?? null,
+    geofence_radius_meters: Number(row.geofence_radius_meters ?? 100),
     qr_rotation_seconds: Number(row.qr_rotation_seconds ?? 30),
     access_scope: row.access_scope || 'SITE_COMMON',
     block_id: row.block_id ? Number(row.block_id) : null,
@@ -660,8 +707,9 @@ export function validateSiteManagerRegistrationInput({
   return null;
 }
 
+// E-posta doğrulama kodu: CSPRNG ile 6 haneli.
 export function generateVerificationCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  return generateNumericCode(6);
 }
 
 export function parseApprovalStatus(value) {
@@ -737,8 +785,9 @@ export function apartmentBaseLoginName({ siteCode, blockName, sortOrder }) {
   return `${siteCode}_${blockSegment}_Daire${sortOrder}`;
 }
 
+// Daire PIN'i (tasarım gereği 4 haneli sayısal, 1000-9999): CSPRNG ile üretilir.
 export function generateApartmentPin() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  return String(crypto.randomInt(1000, 10000));
 }
 
 export function generateInternalApartmentEmail({ loginName, apartmentId, siteCode }) {

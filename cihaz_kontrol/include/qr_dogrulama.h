@@ -1,6 +1,12 @@
 ﻿#ifndef QR_DOGRULAMA_H
 #define QR_DOGRULAMA_H
 
+// !!! KULLANILMIYOR (olu kod) !!!
+// Bu dosya hicbir yerden include edilmez ve qrKoduGecerliMi() hicbir yerde cagrilmaz. QR dogrulamasi
+// YALNIZ sunucuda yapilir (gm60_scanner.h -> MQTT qr_verify -> qr_result). Asagidaki yerel kurallar
+// (UID/uzunluk/on-ek tabanli kabul) GUVENLIDIR DEGIL; kapi acma karari icin ASLA kullanilmamali.
+// Silinmedi: gecmis referans icin tutuluyor.
+
 #include <Arduino.h>
 #include "role_kontrol.h"
 #include "wifi_baglanti.h"
