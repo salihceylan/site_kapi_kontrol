@@ -324,5 +324,387 @@ export default {
       tests: ['test/design/app_shell_test.dart', 'test/widget_test.dart'],
       related: ['cekirdek-acilis-splash-takili', 'cekirdek-json-ayristirma-hatasi'],
     },
+    {
+      id: 'cekirdek-oturum-kendiliginden-dusuyor',
+      symptom: 'Oturum kendiliğinden düşüyor: uygulama bir anda giriş ekranına dönüyor ("Oturum süreniz doldu. Lütfen tekrar giriş yapın.")',
+      keywords: ['oturum düştü', 'oturum süreniz doldu', 'çıkış yaptı', '401', 'token', 'logout', 'me', 'otomatik çıkış'],
+      refs: [
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'void _handleSessionError(',
+          note: 'Her yetkili istek hatası buradan geçer: 401 (SessionExpiredException) oturumu kapatır, 403 ise önce /me ile doğrulanır',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'if (error is SessionExpiredException ||',
+          note: 'Oturumu kapatma kararı: durum koduna dayanır (metne değil); mesaj girişte bir kez gösterilmek üzere saklanır',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'if (status == 401 && unauthorizedIsSession) {',
+          note: 'Yetkili uçlarda 401 -> SessionExpiredException ("Oturum süreniz doldu..."); giriş uçlarında bu dal atlanır',
+        },
+        {
+          file: 'lib/services/api_exception.dart',
+          find: 'bool get invalidatesSession =>',
+          note: 'Varsayılan: yalnız 401 ve ara katmandan gelmeyen yanıt oturumu geçersiz sayar',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<void> _runSessionRefresh(UserSession active) async {',
+          note: 'GET /me doğrulaması: 401/403 oturumu kapatır; ağ/5xx/ara katman hatasında çevrimdışı oturum KORUNUR',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'static const Duration _sessionCheckMinInterval = Duration(seconds: 20);',
+          note: '/me doğrulaması art arda en çok 20 sn\'de bir (force olmadıkça)',
+        },
+        {
+          file: 'lib/ui/pages/home_page.dart',
+          find: 'unawaited(widget.authService.refreshSession());',
+          note: 'Uygulama ön plana dönünce /me doğrulaması tetiklenir (oturum bu anda düşebilir)',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'String? takeSessionNotice() {',
+          note: 'Düşme nedeni mesajı giriş ekranında BİR KEZ gösterilir ve temizlenir',
+        },
+      ],
+      causes: [
+        'Sunucu 401 döndü: token süresi doldu, iptal edildi (parola değişti: TOKEN_REVOKED) ya da kullanıcı silindi',
+        '/me doğrulaması (açılış, ön plana dönüş) 401 ya da 403 aldı: hesap pasif/onaysız -> çıkış',
+        'Yanıtta is_active=false: "Hesabınız pasif duruma alındı..." mesajıyla çıkış (cekirdek-hesap-pasif-oturum-kapandi)',
+        'Başka cihazda/ekranda parola değişimi (cekirdek-sifre-degisince-oturum-kapandi)',
+        'ÇIKIŞ OLMAYAN durumlar: ağ hatası, 5xx, proxy/HTML 401-403, eski token ile geç gelen istek yeni oturumu kapatmaz',
+      ],
+      checks: [
+        'Girişte gösterilen mesaj nedeni söyler: "Oturum süreniz doldu", "Şifreniz değiştirildiği için ...", "Hesabınız pasif ..."',
+        'Sunucu günlüğünde o kullanıcının /me ve diğer isteklerinin durum kodlarına bakın (401/403 mü)',
+        'Sorun yalnız belirli bir ağdaysa 401/403 HTML ise oturum kapanmaz; kapanıyorsa yanıt JSON hata zarfıdır (sunucu kaynaklı)',
+        'Token süresi/iptal kuralları sunucu tarafındadır: sunucu alanı klavuzundaki giriş/oturum girişlerine bakın',
+      ],
+      commands: [
+        'ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostream | grep -a /me"',
+        `${FLUTTER} test test/auth_service_session_test.dart test/fix_fx1_session_test.dart`,
+      ],
+      tests: ['test/auth_service_session_test.dart', 'test/fix_fx1_session_test.dart', 'test/auth_api_policy_test.dart'],
+      related: ['cekirdek-hesap-pasif-oturum-kapandi', 'cekirdek-sifre-degisince-oturum-kapandi', 'cekirdek-acilista-oturum-yok'],
+    },
+    {
+      id: 'cekirdek-sifre-degisince-oturum-kapandi',
+      symptom: '"Şifreniz değiştirildiği için oturumunuz sonlandırıldı" mesajıyla çıkış yapılıyor ya da şifre değişince uygulama düşüyor',
+      keywords: ['şifre değişti', 'token_revoked', 'oturum sonlandırıldı', 'parola', 'password change', 'yeni token'],
+      refs: [
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "if (code == 'TOKEN_REVOKED') {",
+          note: 'Parola değişince eski token\'lar iptal edilir (sunucu 401 TOKEN_REVOKED): özel mesajlı SessionExpiredException',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'int _credentialSwapDepth = 0;',
+          note: 'Süren parola değişimi sayısı: bu aralıkta eşzamanlı isteklerin TOKEN_REVOKED 401\'i yok sayılır',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<String?> updateMyProfile({',
+          note: 'Profil/şifre güncelleme: sunucunun döndürdüğü YENİ token oturuma yazılır; kendi 401\'i gerçek oturum sonudur',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "final newToken = payload['token'];",
+          note: 'Şifre değişiminde sunucu yeni token döndürürse o kullanılır, yoksa eski token korunur',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'if (tokenChanged && knownDoors != null) {',
+          note: 'Token değişince ana ekran widget\'ı da yeni token ile yeniden yazılır (aksi halde widget eski token ile 401 alır)',
+        },
+      ],
+      causes: [
+        'Başka cihazda parola değiştirildi: bu cihazdaki eski token iptal oldu (beklenen davranış)',
+        'Sunucu parola değişiminde yeni token döndürmedi: istemci eski (iptal) token ile kalır ve sonraki istek 401 alır',
+        'Widget eski token ile kaldı: widget "Giriş Yapın" gösterir (cekirdek-widget-bos-ya-da-giris-yapin)',
+      ],
+      checks: [
+        'Mesaj "Şifreniz değiştirildiği için..." ise nedeni parola değişimidir; yeniden giriş yeterlidir',
+        'Parolayı bu cihazda değiştirdiyseniz ve çıkış olduysa PATCH /me yanıtında "token" alanı var mı (sunucu alanı)',
+        'Değişimi yapan istek sırasında eşzamanlı isteklerin oturumu kapatmadığı testle doğrulanır (auth_service_session_test)',
+      ],
+      tests: ['test/auth_service_session_test.dart', 'test/verify_and_profile_ui_test.dart'],
+      related: ['cekirdek-oturum-kendiliginden-dusuyor', 'cekirdek-sifre-degistirme-hatalari'],
+    },
+    {
+      id: 'cekirdek-hesap-pasif-oturum-kapandi',
+      symptom: '"Hesabınız pasif duruma alındı. Lütfen yöneticinizle iletişime geçin." diyerek oturum kapanıyor',
+      keywords: ['hesap pasif', 'pasif', 'is_active', '403', 'onaysız', 'yönetici'],
+      refs: [
+        {
+          file: 'lib/services/auth_service.dart',
+          find: "_sessionNotice = 'Hesabınız pasif duruma alındı. Lütfen yöneticinizle iletişime geçin.';",
+          note: '/me yanıtında is_active=false ise bu mesajla çıkış yapılır',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: '} else if (error is ApiException && error.isForbidden) {',
+          note: 'Bir istek 403 alırsa oturum hemen kapanmaz: önce /me ile hesabın gerçekten pasif olup olmadığı doğrulanır',
+        },
+        {
+          file: 'lib/services/api_exception.dart',
+          find: 'bool get isForbidden => statusCode == 403 && !fromIntermediary;',
+          note: 'Proxy/WAF kaynaklı 403 bu sınıfa girmez (hesap pasif sinyali sayılmaz)',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'Future<UserSession> fetchMe({',
+          note: 'GET /me: 401 -> SessionExpiredException; 403 -> ApiException(403); is_active alanı oturuma işlenir',
+        },
+      ],
+      causes: [
+        'Yönetici hesabı pasifleştirdi ya da site onayı/hesap onayı bekleniyor (sunucu 403 döner)',
+        '/me yanıtında is_active=false',
+        'ÇIKIŞ DEĞİL: 403 HTML ise (proxy/WAF) bu akış tetiklenmez',
+      ],
+      checks: [
+        'Kullanıcının is_active değerini sunucu tarafında doğrulayın (kullanıcı yönetimi ekranı ya da veritabanı; sunucu alanı klavuzu)',
+        'Yönetici kullanıcıyı yeniden etkinleştirdiyse kullanıcı yeniden giriş yapmalıdır',
+      ],
+      tests: ['test/auth_service_session_test.dart', 'test/fix_fx1_session_test.dart'],
+      related: ['cekirdek-oturum-kendiliginden-dusuyor'],
+    },
+    {
+      id: 'cekirdek-acilista-oturum-yok',
+      symptom: 'Uygulama her açılışta giriş istiyor (oturum hatırlanmıyor) ya da kayıtlı oturum silinmiş görünüyor',
+      keywords: ['oturum hatırlanmıyor', 'her seferinde giriş', 'secure storage', 'keystore', 'keychain', 'kalıcı değil', 'persist'],
+      refs: [
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'final data = jsonDecode(raw) as Map<String, dynamic>;',
+          until: '} catch (_) {',
+          note: 'Kayıtlı oturum JSON\'u çözülemezse ya da UserSession.fromJson fırlatırsa kayıt SESSİZCE SİLİNİR ve giriş ekranı gelir',
+        },
+        {
+          file: 'lib/models/user_session.dart',
+          find: 'factory UserSession.fromJson(Map<String, dynamic> json) {',
+          note: 'id/full_name/email/role/token zorunlu cast\'ler: biri eksik/tipi farklıysa fırlatır (eski şemalı kayıtlar silinir)',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<void> _persist() async {',
+          note: 'Oturumu güvenli depoya yazar; yazma hatası YUTULUR (catch (_) {}): giriş çalışır ama kalıcı olmaz',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();',
+          note: 'Oturum yalnızca güvenli depoda tutulur (SharedPreferences\'ta tutulmaz)',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<String?> _takeLegacySession() async {',
+          note: 'Eski sürümlerin SharedPreferences kopyası bir kez güvenli depoya taşınır ve silinir',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<void> logout() async {',
+          note: 'Çıkış: oturum + yerel erişim önbelleği + widget verisi silinir; sonraki açılışta oturum olmaması normaldir',
+        },
+      ],
+      causes: [
+        'Güvenli depo yazması başarısız (platform Keystore/Keychain hatası): _persist hatayı yutar, oturum yalnızca bellekte kalır',
+        'Uygulama verisi temizlendi / yeniden yüklendi: güvenli depo boş',
+        'Kayıtlı JSON bozuk ya da eski şemalı: initialize kaydı siler',
+        'Açılışta /me 401/403 aldı: oturum sunucuca geçersiz (cekirdek-oturum-kendiliginden-dusuyor)',
+      ],
+      checks: [
+        'Girişten sonra uygulamayı kapatıp açın: hâlâ giriş istiyorsa güvenli depo yazma/okuma sorunudur',
+        'Girişte bir mesaj gösterildi mi (takeSessionNotice)? Gösterildiyse oturum sunucu tarafından sonlandırılmıştır',
+        'Testle doğrulama: auth_service_session_test "Oturum saklama: yalnızca güvenli depo"',
+      ],
+      tests: ['test/auth_service_session_test.dart', 'test/cold_start_test.dart', 'test/model_parsing_test.dart'],
+      related: ['cekirdek-oturum-kendiliginden-dusuyor', 'cekirdek-acilis-splash-takili'],
+    },
+    {
+      id: 'cekirdek-yanlis-rol-menu',
+      symptom: 'Kullanıcı yanlış rolle görünüyor (yönetici menüsü yok / daire kullanıcısı gibi) ya da rol değişikliği uygulamaya yansımıyor',
+      keywords: ['rol', 'yanlış rol', 'menü yok', 'yetki', 'site_manager', 'apartment_owner', 'individual', 'super_user'],
+      refs: [
+        {
+          file: 'lib/models/user_role.dart',
+          find: 'orElse: () => UserRole.apartmentOwner,',
+          note: 'Bilinmeyen/yeni rol değeri SESSİZCE daire kullanıcısına düşer (hata vermez)',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'bool _sessionDiffers(UserSession a, UserSession b) {',
+          note: '/me yanıtındaki rol/aktiflik/ad/e-posta farkı oturuma yazılır ve ekran yenilenir',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'UserSession _toUserSession({',
+          note: 'Sunucu yanıtından oturum üretir; rol alanı yoksa önceki (fallback) rol korunur',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'Future<Map<String, dynamic>> claimDevice({',
+          note: 'Cihaz sahiplenince rol sunucuda yükselir; istemci tahmin etmez, /me ile eşitler',
+        },
+        {
+          file: 'lib/app.dart',
+          find: 'final currentRole = _authService.session?.role;',
+          note: 'Kısayol/deep link ile sesli komut yalnız daire kullanıcısı ve bireysel kullanıcı için açılır',
+        },
+      ],
+      causes: [
+        'Sunucuda rol değişti ama /me henüz çalışmadı: açılışta, ön plana dönüşte (20 sn aralık) ve cihaz sahiplenmeden sonra eşitlenir',
+        'Sunucu uygulamanın bilmediği bir rol değeri döndürdü: istemci apartmentOwner varsayar',
+        'Kayıtlı (eski) oturumdaki rol: /me çevrimdışıyken güncellenmez',
+      ],
+      checks: [
+        'Uygulamayı arka plana alıp geri getirin (/me tetiklenir) ya da çıkış-giriş yapın',
+        'Sunucuda kullanıcının rol değerini doğrulayın; değer UserRole.apiValue listesinde olmalı (super_user, site_manager, apartment_owner, individual)',
+        'Menü/ekran seçimi rolden gelir: ekran alanı klavuzuna bakın',
+      ],
+      tests: ['test/auth_service_session_test.dart', 'test/model_parsing_test.dart'],
+      related: ['cekirdek-oturum-kendiliginden-dusuyor'],
+    },
+    {
+      id: 'cekirdek-sifre-degistirme-hatalari',
+      symptom: 'Profilde şifre değişmiyor: "Mevcut şifreniz hatalı", "mevcut şifrenizi girmelisiniz" ya da "Kendi şifrenizi Profilim ekranından değiştirin"',
+      keywords: ['şifre değiştir', 'mevcut şifre', 'current_password', 'profil', 'parola', 'şifre hatalı'],
+      refs: [
+        {
+          file: 'lib/services/auth_service.dart',
+          find: "return 'Şifrenizi değiştirmek için mevcut şifrenizi girin.';",
+          note: 'İstemci tarafı ön kontrol: yeni şifre varsa mevcut şifre boş olamaz (istek gitmez)',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "if (password != null) 'current_password': currentPassword,",
+          note: 'Şifre değişiyorsa mevcut şifre sunucuya zorunlu olarak gönderilir',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "case 'CURRENT_PASSWORD_INVALID':",
+          note: 'Yanlış mevcut şifre: 400 ve oturumu KAPATMAZ',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "case 'CURRENT_PASSWORD_LOCKED':",
+          note: 'Mevcut şifre için çok fazla hatalı deneme: bekleme süresi mesaja eklenir',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "case 'USE_PROFILE_PASSWORD_CHANGE':",
+          note: 'Yönetici ekranından kendi parolasını değiştirmeye çalışınca çıkar (Profilim kullanılmalı)',
+        },
+      ],
+      causes: [
+        'Mevcut şifre yanlış girildi (CURRENT_PASSWORD_INVALID)',
+        'Art arda yanlış denemeyle mevcut şifre kilitlendi (CURRENT_PASSWORD_LOCKED, Retry-After)',
+        'Yönetici kendi hesabının parolasını kullanıcı yönetiminden değiştirmeyi denedi',
+      ],
+      checks: [
+        'Mesaj metnine bakın: kod -> mesaj eşlemesi messageForErrorCode içindedir',
+        'Kilit mesajındaki bekleme süresi dolana kadar bekleyin',
+        'Değişiklikten sonra çıkış olursa cekirdek-sifre-degisince-oturum-kapandi',
+      ],
+      tests: ['test/verify_and_profile_ui_test.dart', 'test/fix_fx1_session_test.dart', 'test/auth_api_policy_test.dart'],
+      related: ['cekirdek-sifre-degisince-oturum-kapandi', 'cekirdek-hiz-siniri-cok-fazla-deneme'],
+    },
+    {
+      id: 'cekirdek-hiz-siniri-cok-fazla-deneme',
+      symptom: '"Çok fazla hatalı deneme yapıldı. N dakika sonra tekrar deneyin" ya da "Çok fazla istek gönderildi" (429) mesajı çıkıyor',
+      keywords: ['429', 'login_locked', 'çok fazla deneme', 'hız sınırı', 'rate limit', 'retry-after', 'kilitli'],
+      refs: [
+        {
+          file: 'lib/services/auth_api.dart',
+          find: "case 'LOGIN_LOCKED':",
+          note: 'Giriş kilidi: "Çok fazla hatalı deneme yapıldı." + bekleme süresi',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'int? _retryAfterSeconds(http.Response response, Map<String, dynamic> payload) {',
+          note: 'Bekleme süresi: önce gövdedeki retry_after_seconds, yoksa Retry-After başlığı',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'static String formatWait(int seconds) {',
+          note: 'Saniyeyi "45 saniye / 5 dakika / 2 saat" yazar (yukarı yuvarlar)',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'if (status == 429 && mappedMessage == null) {',
+          note: 'Kodu eşlenmemiş genel 429: mesaja "Lütfen X sonra tekrar deneyin." eklenir',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'if (status == 429) {',
+          note: 'Proxy (nginx) JSON olmayan 429 döndürürse de "Çok fazla istek gönderildi." sınıflanır',
+        },
+        {
+          file: 'lib/services/api_exception.dart',
+          find: 'bool get isRateLimited => statusCode == 429;',
+          note: 'Arayüzün 429 durumunu ayırt etmesi için',
+        },
+      ],
+      causes: [
+        'Art arda hatalı giriş: sunucu hesabı/IP\'yi geçici kilitler (LOGIN_LOCKED)',
+        'Kapı açma/istek sıklığı sunucu hız sınırını aştı (genel 429)',
+        'Nginx/proxy kendi hız sınırını uyguladı (JSON olmayan 429)',
+      ],
+      checks: [
+        'Mesajdaki bekleme süresi kadar bekleyin; süre sunucudan gelir (istemci uydurmaz)',
+        'Sunucu günlüğünde ilgili yolun 429 yanıtlarını arayın',
+        'Kilit/sınır kuralları sunucu alanındadır: sunucu alanı klavuzundaki giriş kilidi ve hız sınırı girişleri',
+      ],
+      commands: ['ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostream | grep -a /auth/login"'],
+      tests: ['test/auth_api_policy_test.dart', 'test/fix_fx1_session_test.dart'],
+      related: ['cekirdek-sifre-degistirme-hatalari'],
+    },
+    {
+      id: 'cekirdek-dogrulama-kodu-hatalari',
+      symptom: 'E-posta doğrulama kodu kabul edilmiyor ("Kod 30 dakika geçerlidir; yeni kod için ...") ya da kod tekrar gönderilemiyor',
+      keywords: ['doğrulama kodu', 'e-posta kodu', 'verify-code', 'resend-code', '30 dakika', 'kayıt', 'bireysel kayıt', 'kodu tekrar gönder'],
+      refs: [
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'Future<Map<String, dynamic>> registerIndividual({',
+          note: 'Bireysel kayıt: oturum DÖNMEZ; kullanıcı kodu doğrulayınca oturum açılır',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'Future<UserSession> verifyIndividualCode({',
+          note: 'Kod doğrulama: başarılıysa sunucu oturum (token) döndürür',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: 'if (e.statusCode == 404) {',
+          note: '404 = aktif kod yok: mesaja "Kod 30 dakika geçerlidir; yeni kod için ..." yönlendirmesi eklenir',
+        },
+        {
+          file: 'lib/services/auth_service.dart',
+          find: "return 'Kod tekrar gönderilemedi.';",
+          note: 'Tekrar gönderme ApiException dışı hatada bu genel mesajı verir',
+        },
+        {
+          file: 'lib/services/auth_api.dart',
+          find: 'Future<Map<String, dynamic>> resendIndividualCode({',
+          note: 'Kodu yeniden gönderme isteği (POST /auth/resend-code)',
+        },
+      ],
+      causes: [
+        'Kodun 30 dakikalık süresi doldu ya da hiç oluşturulmadı (sunucu 404 "aktif kod yok")',
+        'Yanlış kod girildi (sunucu mesajı gösterilir)',
+        'E-posta teslim edilemedi: sunucu teslim hatasını açıkça döndürür (ayrıntı sunucu alanı ve docs/EPOSTA_DOGRULAMA.md)',
+      ],
+      checks: [
+        'Kullanıcıya "Kodu Tekrar Gönder" yaptırın ve gelen en son kodu girmesini söyleyin',
+        'Sunucuda /auth/verify-code ve /auth/resend-code isteklerinin durum kodlarına bakın',
+        'E-posta akışı ayrıntısı: docs/EPOSTA_DOGRULAMA.md',
+      ],
+      commands: ['ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostream | grep -a verify-code"'],
+      tests: ['test/verify_and_profile_ui_test.dart', 'test/screens/verify_email_code_layout_test.dart'],
+      related: ['cekirdek-sunucuya-baglanilamadi'],
+    },
   ],
 };
