@@ -1104,3 +1104,17 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **52.18.** Soğuk açılış: oturumlu ve oturumsuz açılışta ilk ekran hızlı (logo + ilerleme göstergesi; Android'de `adb shell am start -W` ile süre ölç, taban sürümle karşılaştır); internet yokken ~6,5 sn içinde "internet yok" ekranı; logo (giriş sayfası + çekmece avatarı) DPR 3+ cihazda keskin.
 - [ ] **52.19.** Büyük site (300+ daire): Site Yönetimi → Daireler akordiyonunu aç ve hızlı kaydır (akıcı, takılma yok); sakin ağacı penceresinde arama yazarken liste ~220 ms bekleyip tek geçişte süzülür, temizle düğmesi anında; pencere açılış süresini not et (5x60x3 ağaçta test VM'de ≈3 sn; telefonda belirgin yavaşsa bildir).
 - [ ] **52.20.** (Geliştirici) Windows profil kare ölçümü: `flutter drive --profile -d windows --driver=test_driver/perf_driver.dart --target=integration_test/perf_frames_test.dart --dart-define=API_BASE_URL=<yerel API> --dart-define=PERF_USER=<kullanıcı> --dart-define=PERF_SITE=<site> --dart-define=PERF_OUT=<çıktı klasörü> --dart-define=PERF_LABEL=faz5` (yerel/test API'si; üretime bağlanma); aynı komut eski sürümde PERF_LABEL=taban ile çalıştırılıp perf_frames.json'lar kıyaslanır (hedef: build/raster p90 ≤8 ms, jank oranı ≤%2; özellikle ana_panel_bosta, kapi_karti, site_yonetimi_liste aşamaları).
+
+---
+
+## 53. 🚀 Canlı Sunucu Dağıtımı, Yerel Web CORS ve Android Gradle JVM 21 Desteği
+
+- [ ] **53.1. Canlı Sunucu Sağlık ve Veritabanı Kontrolü:**
+  - **Nasıl Test Edilir:** `https://api.gudeteknoloji.com.tr/health` adresine tarayıcıdan veya curl ile istek atın.
+  - **Beklenen Sonuç:** `{"ok":true,"database":"connected","mqtt":{"configured":true,"connected":true,"has_error":false,"last_error":null,"acl_sync_configured":true}}` 200 OK yanıtı dönmeli.
+- [ ] **53.2. Android Gradle JDK 21 Uyumluluğu:**
+  - **Nasıl Test Edilir:** `flutter build apk --debug` veya `flutter run` komutunu çalıştırın.
+  - **Beklenen Sonuç:** Gradle Java 8 JVM yerine `android/gradle.properties` içinde tanımlı Android Studio JDK 21 (`jbr`) ile hatasız derlenmeli (`problems-report.html` hatası çıkmamalı).
+- [ ] **53.3. Web / Localhost CORS Doğrulaması:**
+  - **Nasıl Test Edilir:** Chrome veya Edge üzerinde yerel web debug (`flutter run -d chrome`) başlatıp giriş yapmayı deneyin.
+  - **Beklenen Sonuç:** "Sunucuya ulaşılamadı" CORS engellemesi olmadan doğrudan API yanıtı alınmalı.
