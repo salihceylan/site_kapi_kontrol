@@ -23,7 +23,9 @@ export function httpError(statusCode, message) {
 // ---------------------------------------------------------------------------
 
 export const VERIFICATION_CODE_DIGITS = 6;
-export const VERIFICATION_CODE_TTL_MINUTES = 10;
+// 30 dk: e-posta teslimi gecikebilir (gecikmiş kod kullanılamaz hâle gelmesin). Kaba kuvvet; kod başına 5 ve
+// pencere (30 dk) başına 10 deneme sınırıyla engellenir, yani süre uzunluğu tahmin riskini artırmaz.
+export const VERIFICATION_CODE_TTL_MINUTES = 30;
 export const VERIFICATION_MAX_ATTEMPTS_PER_CODE = 5;
 // Pencere içi toplam deneme: tekrar kod isteyerek deneme sayacı sıfırlanamaz.
 export const VERIFICATION_WINDOW_MINUTES = 30;
@@ -36,7 +38,8 @@ export function generateEmailVerificationCode() {
 }
 
 /**
- * Kod biçimi: 6 haneli (yeni) veya geçiş dönemi için 4 haneli (dağıtım öncesi üretilmiş, <=10 dk geçerli).
+ * Kod biçimi: 6 haneli (yeni) veya geçiş dönemi için 4 haneli (6 haneli koda geçiş öncesinde üretilmiş;
+ * bu satırlar bakım servisi tarafından 2 gün içinde silinir).
  */
 export function isValidVerificationCodeFormat(code) {
   return /^\d{6}$/.test(String(code ?? '')) || /^\d{4}$/.test(String(code ?? ''));
@@ -86,14 +89,95 @@ export function decideVerificationIssue({ secondsSinceLast, codesLastHour }) {
     secondsSinceLast !== undefined &&
     Number(secondsSinceLast) < VERIFICATION_RESEND_COOLDOWN_SECONDS
   ) {
-    return { allowed: false, reason: 'COOLDOWN' };
+    // Kalan süre yukarı yuvarlanır (en az 1 sn): istemciye dürüst bir geri sayım verilir.
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil(VERIFICATION_RESEND_COOLDOWN_SECONDS - Number(secondsSinceLast)),
+    );
+    return { allowed: false, reason: 'COOLDOWN', retryAfterSeconds };
   }
   return { allowed: true, reason: null };
 }
 
 /**
+ * Kod üretimi/gönderimi başarısız olduğunda (`issueVerificationCode` sonucu) istemciye dönecek tipli hata.
+ * Kural: kod gerçekten gönderilmediyse yanıt ASLA başarı gibi görünmez ("gönderildi" denmez).
+ * - MAIL_FAILED  -> 503 EMAIL_DELIVERY_FAILED (e-posta sunucusu kodu iletemedi; kullanıcı sonra yeniden dener)
+ * - COOLDOWN     -> 429 (kalan saniye söylenir)
+ * - HOURLY_CAP   -> 429
+ */
+export function verificationIssueError(result) {
+  const reason = result?.reason;
+  if (reason === 'COOLDOWN') {
+    const seconds = Math.max(1, Math.ceil(Number(result?.retryAfterSeconds) || VERIFICATION_RESEND_COOLDOWN_SECONDS));
+    return httpError(429, `Yeni kod istemek için lütfen ${seconds} saniye bekleyiniz.`);
+  }
+  if (reason === 'HOURLY_CAP') {
+    return httpError(429, 'Bu e-posta adresi için çok fazla kod istendi. Lütfen daha sonra tekrar deneyiniz.');
+  }
+  const err = httpError(
+    503,
+    'Doğrulama kodu şu anda e-posta ile gönderilemiyor. Lütfen birkaç dakika sonra tekrar deneyiniz.',
+  );
+  err.code = 'EMAIL_DELIVERY_FAILED';
+  return err;
+}
+
+// ---------------------------------------------------------------------------
+// Bekleyen kayıt (pending_registrations)
+// ---------------------------------------------------------------------------
+// Bireysel self-servis kayıtta `users` satırı, e-posta sahipliği doğru kodla kanıtlanana kadar OLUŞTURULMAZ.
+// Ad ve parola ÖZETİ (bcrypt; düz metin asla) bu tabloda bekler; doğrulamada tek işlemde users'a taşınır.
+
+// Kimlik bilgileri (ad + parola özeti) YALNIZCA kod e-postası gerçekten gönderildikten sonra yazılır; reddedilen
+// (429) veya başarısız (503) bir deneme bekleyen kaydı asla değiştirmez. $4 = bu isteğin kod satırı id'si:
+// daha YENİ bir açık kod varsa (bu istek bayatladı) hiçbir şey yazılmaz, yeni isteğin kimlik bilgileri ezilmez.
+// E-posta (büyük/küçük harf duyarsız) başına tek kayıt: tekrar kayıt ad/parola özetini günceller.
+export const SQL_UPSERT_PENDING_REGISTRATION = `
+  INSERT INTO pending_registrations (email, full_name, password_hash)
+  SELECT $1::text, $2::text, $3::text
+  WHERE NOT EXISTS (
+    SELECT 1 FROM email_verifications
+    WHERE LOWER(email) = LOWER($1) AND is_verified = FALSE AND id > $4
+  )
+  ON CONFLICT ((LOWER(email)))
+  DO UPDATE SET full_name = EXCLUDED.full_name,
+                password_hash = EXCLUDED.password_hash,
+                updated_at = NOW()
+`;
+
+// Geçiş: bu sürümden önce açılmış doğrulanmamış bireysel hesap için aynı kural (gönderim sonrası, bayat değilse).
+// $1 ad, $2 parola özeti, $3 user_code, $4 e-posta, $5 bu isteğin kod satırı id'si.
+export const SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS = `
+  UPDATE users
+  SET full_name = $1, password_hash = $2, updated_at = NOW()
+  WHERE user_code = $3 AND email_verified = FALSE
+    AND NOT EXISTS (
+      SELECT 1 FROM email_verifications
+      WHERE LOWER(email) = LOWER($4) AND is_verified = FALSE AND id > $5
+    )
+`;
+
+// Giriş denemesi: bekleyen kaydın doğru parolasına eski "e-posta doğrulanmadı" (403) yanıtını verebilmek için.
+export const SQL_FIND_PENDING_LOGIN_HASH = `
+  SELECT password_hash FROM pending_registrations WHERE LOWER(email) = LOWER($1) LIMIT 1
+`;
+
+// Atomik alma: iki eşzamanlı doğrulama aynı kaydı iki kez alamaz.
+export const SQL_TAKE_PENDING_REGISTRATION = `
+  DELETE FROM pending_registrations
+  WHERE LOWER(email) = LOWER($1)
+  RETURNING full_name, password_hash
+`;
+
+// "Tekrar gönder" için: yalnızca ad (parola özeti gereksiz yere okunmaz).
+export const SQL_FIND_PENDING_REGISTRATION = `
+  SELECT full_name FROM pending_registrations WHERE LOWER(email) = LOWER($1) LIMIT 1
+`;
+
+/**
  * Atomik deneme hakkı: increment-first. Tek UPDATE ile
- *  - en son geçerli (10 dk içinde, kullanılmamış) kod satırı seçilir,
+ *  - en son geçerli (VERIFICATION_CODE_TTL_MINUTES içinde, kullanılmamış) kod satırı seçilir,
  *  - satır başına ve pencere içi toplam deneme sınırı kontrol edilir,
  *  - sayaç artırılır.
  * Satır dönmezse deneme hakkı yoktur (veya aktif kod yoktur). Karşılaştırma bundan SONRA yapılır;
@@ -154,6 +238,15 @@ export const SQL_SUPERSEDE_VERIFICATION_CODES = `
   UPDATE email_verifications
   SET is_verified = TRUE
   WHERE LOWER(email) = LOWER($1) AND is_verified = FALSE
+`;
+
+// Yeni kod BAŞARIYLA gönderildikten sonra YALNIZCA daha eski açık kodlar geçersiz kılınır (id < $2). Daha yeni bir
+// kod (yavaş bir gönderimin ardından gelen yeni istek) asla iptal edilmez. Gönderim başarısız olursa bu çalışmaz:
+// kullanıcının elindeki (belki geç ulaşan) önceki geçerli kod boşuna iptal edilmez.
+export const SQL_SUPERSEDE_OLDER_VERIFICATION_CODES = `
+  UPDATE email_verifications
+  SET is_verified = TRUE
+  WHERE LOWER(email) = LOWER($1) AND is_verified = FALSE AND id < $2
 `;
 
 export const SQL_VERIFICATION_ISSUE_STATE = `

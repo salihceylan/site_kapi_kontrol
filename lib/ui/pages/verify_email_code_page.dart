@@ -22,6 +22,10 @@ class VerifyEmailCodePage extends StatefulWidget {
   /// pasif tutulur ve geri sayım gösterilir.
   static const int resendCooldownSeconds = 30;
 
+  /// Sunucu kodu bu süre (dakika) boyunca geçerli sayar (membership_rules.js VERIFICATION_CODE_TTL_MINUTES).
+  /// E-posta teslimi gecikebildiği için kullanıcıya açıkça söylenir.
+  static const int codeValidityMinutes = 30;
+
   final AuthService authService;
   final String email;
   final String? fullName;
@@ -131,7 +135,7 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
         // Sunucu kullanıcı varlığını ele vermemek için her durumda aynı yanıtı döner; bu yüzden
         // teslimat kesinmiş gibi yazılmaz. Yeni istek için bekleme süresi yeniden işler.
         _successMessage =
-            'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni ${VerifyEmailCodePage.codeLength} haneli kod birkaç dakika içinde e-postanıza ulaşır. Ulaşmazsa spam klasörünü kontrol edin.';
+            'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni ${VerifyEmailCodePage.codeLength} haneli kod birkaç dakika içinde e-postanıza ulaşır; önceki kodlar geçersiz olur. Ulaşmazsa spam klasörünü kontrol edin.';
         _beginCooldown();
       }
     });
@@ -215,6 +219,13 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
                       ),
                       textAlign: TextAlign.center,
                       style: th.bodyMedium,
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    // E-posta birkaç dakika gecikebilir; her yeni istek öncekini geçersiz kılar.
+                    Text(
+                      'E-posta birkaç dakika gecikebilir. Kod ${VerifyEmailCodePage.codeValidityMinutes} dakika geçerlidir; birden fazla e-posta aldıysanız yalnızca en son istenen e-postadaki kodu giriniz.',
+                      textAlign: TextAlign.center,
+                      style: th.bodySmall?.copyWith(color: p.textMuted),
                     ),
                     const SizedBox(height: AppSpace.xl),
 

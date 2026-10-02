@@ -7,7 +7,13 @@ import { fileURLToPath } from 'node:url';
 import {
   SQL_CLAIM_VERIFICATION_ATTEMPT,
   SQL_CONSUME_VERIFICATION_CODE,
+  SQL_FIND_PENDING_LOGIN_HASH,
+  SQL_FIND_PENDING_REGISTRATION,
+  SQL_SUPERSEDE_OLDER_VERIFICATION_CODES,
   SQL_SUPERSEDE_VERIFICATION_CODES,
+  SQL_TAKE_PENDING_REGISTRATION,
+  SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS,
+  SQL_UPSERT_PENDING_REGISTRATION,
   VERIFICATION_CODE_DIGITS,
   VERIFICATION_CODE_TTL_MINUTES,
   VERIFICATION_MAX_ATTEMPTS_PER_CODE,
@@ -18,6 +24,7 @@ import {
   generateEmailVerificationCode,
   isValidVerificationCodeFormat,
   verificationDenialError,
+  verificationIssueError,
 } from '../src/services/membership_rules.js';
 import {
   generateApartmentPin,
@@ -147,9 +154,14 @@ describe('members: kod biçimi ve ret nedenleri', () => {
       allowed: true,
       reason: null,
     });
+    // Kalan bekleme süresi yukarı yuvarlanır (en az 1 sn): istemciye dürüst geri sayım verilir.
     assert.deepEqual(
       decideVerificationIssue({ secondsSinceLast: VERIFICATION_RESEND_COOLDOWN_SECONDS - 1, codesLastHour: 1 }),
-      { allowed: false, reason: 'COOLDOWN' },
+      { allowed: false, reason: 'COOLDOWN', retryAfterSeconds: 1 },
+    );
+    assert.equal(
+      decideVerificationIssue({ secondsSinceLast: 10.2, codesLastHour: 1 }).retryAfterSeconds,
+      VERIFICATION_RESEND_COOLDOWN_SECONDS - 10,
     );
     assert.equal(
       decideVerificationIssue({ secondsSinceLast: VERIFICATION_RESEND_COOLDOWN_SECONDS + 1, codesLastHour: 1 })
@@ -168,7 +180,7 @@ describe('members: atomik deneme sayacı SQL metni', () => {
     assert.match(sql, /RETURNING ev\.id, ev\.code_hash, ev\.attempt_count$/);
   });
 
-  it('kod başına sınır, pencere içi toplam sınır ve 10 dk geçerlilik koşulları UPDATE içindedir', () => {
+  it('kod başına sınır, pencere içi toplam sınır ve geçerlilik süresi koşulları UPDATE içindedir', () => {
     assert.match(sql, /ev\.attempt_count < \$3::int/);
     assert.match(sql, /SUM\(w\.attempt_count\)/);
     assert.match(sql, /< \$5::int/);
@@ -178,7 +190,9 @@ describe('members: atomik deneme sayacı SQL metni', () => {
   });
 
   it('süre/sınır sabitleri beklenen değerlerde', () => {
-    assert.equal(VERIFICATION_CODE_TTL_MINUTES, 10);
+    // 30 dk: e-posta teslimi gecikebilir (gecikmiş kod kullanılamaz hâle gelmesin); kaba kuvveti kod başına
+    // 5 + pencere başına 10 deneme sınırı engeller, yani süre uzunluğu tahmin riskini artırmaz.
+    assert.equal(VERIFICATION_CODE_TTL_MINUTES, 30);
     assert.equal(VERIFICATION_MAX_ATTEMPTS_PER_CODE, 5);
     assert.ok(VERIFICATION_MAX_ATTEMPTS_PER_WINDOW >= VERIFICATION_MAX_ATTEMPTS_PER_CODE);
   });
@@ -188,6 +202,71 @@ describe('members: atomik deneme sayacı SQL metni', () => {
     assert.match(consume, /WHERE id = \$1 AND is_verified = FALSE RETURNING id/);
     const supersede = SQL_SUPERSEDE_VERIFICATION_CODES.replace(/\s+/g, ' ');
     assert.match(supersede, /SET is_verified = TRUE WHERE LOWER\(email\) = LOWER\(\$1\) AND is_verified = FALSE/);
+  });
+});
+
+describe('members: kod gönderilemediğinde dürüst hata (başarı gibi görünmez)', () => {
+  it('MAIL_FAILED -> 503 EMAIL_DELIVERY_FAILED; mesajda "gönderildi" yok', () => {
+    const error = verificationIssueError({ sent: false, reason: 'MAIL_FAILED' });
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, 'EMAIL_DELIVERY_FAILED');
+    assert.equal(error.expose, true);
+    assert.match(error.message, /gönderilemiyor/);
+    assert.equal(/gönderildi/.test(error.message), false);
+  });
+
+  it('COOLDOWN -> 429 ve kalan saniye; HOURLY_CAP -> 429', () => {
+    const cooldown = verificationIssueError({ sent: false, reason: 'COOLDOWN', retryAfterSeconds: 17 });
+    assert.equal(cooldown.statusCode, 429);
+    assert.match(cooldown.message, /17 saniye/);
+    assert.equal(verificationIssueError({ sent: false, reason: 'HOURLY_CAP' }).statusCode, 429);
+  });
+
+  it('bilinmeyen neden de başarı gibi sunulmaz (503)', () => {
+    assert.equal(verificationIssueError({ sent: false, reason: 'BEKLENMEYEN' }).statusCode, 503);
+  });
+});
+
+describe('members: bekleyen kayıt SQL metinleri', () => {
+  const flat = (text) => text.replace(/\s+/g, ' ').trim();
+
+  it('upsert: e-posta (büyük/küçük harf duyarsız) çakışmasında ad ve parola özetini günceller', () => {
+    const sql = flat(SQL_UPSERT_PENDING_REGISTRATION);
+    assert.match(sql, /^INSERT INTO pending_registrations \(email, full_name, password_hash\) SELECT \$1::text, \$2::text, \$3::text/);
+    assert.match(sql, /ON CONFLICT \(\(LOWER\(email\)\)\) DO UPDATE SET/);
+    assert.match(sql, /password_hash = EXCLUDED\.password_hash/);
+    assert.match(sql, /updated_at = NOW\(\)/);
+  });
+
+  it('bayat gönderim kimlik bilgilerini ezemez: daha yeni açık kod varsa upsert / eski hesap güncellemesi hiçbir şey yapmaz', () => {
+    const newerGuard = /NOT EXISTS \( SELECT 1 FROM email_verifications WHERE LOWER\(email\) = LOWER\(\$\d\) AND is_verified = FALSE AND id > \$\d \)/;
+    assert.match(flat(SQL_UPSERT_PENDING_REGISTRATION), newerGuard);
+    const legacy = flat(SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS);
+    assert.match(legacy, /^UPDATE users SET full_name = \$1, password_hash = \$2, updated_at = NOW\(\) WHERE user_code = \$3 AND email_verified = FALSE/);
+    assert.match(legacy, newerGuard);
+  });
+
+  it('giriş denemesi için bekleyen kayıt araması yalnızca parola özetini döner', () => {
+    assert.match(
+      flat(SQL_FIND_PENDING_LOGIN_HASH),
+      /^SELECT password_hash FROM pending_registrations WHERE LOWER\(email\) = LOWER\(\$1\) LIMIT 1$/,
+    );
+  });
+
+  it('alma: tek DELETE ... RETURNING ile atomik (iki istek aynı kaydı iki kez alamaz)', () => {
+    const sql = flat(SQL_TAKE_PENDING_REGISTRATION);
+    assert.match(sql, /^DELETE FROM pending_registrations WHERE LOWER\(email\) = LOWER\(\$1\) RETURNING full_name, password_hash$/);
+  });
+
+  it('eski kodları kapatma: YALNIZCA daha eski satırlar (id < $2); daha yeni bir kod asla iptal edilmez', () => {
+    const sql = flat(SQL_SUPERSEDE_OLDER_VERIFICATION_CODES);
+    assert.match(sql, /^UPDATE email_verifications SET is_verified = TRUE WHERE LOWER\(email\) = LOWER\(\$1\) AND is_verified = FALSE AND id < \$2$/);
+  });
+
+  it('arama: yalnızca ad döner; parola özeti gereksiz yere okunmaz', () => {
+    const sql = flat(SQL_FIND_PENDING_REGISTRATION);
+    assert.match(sql, /^SELECT full_name FROM pending_registrations WHERE LOWER\(email\) = LOWER\(\$1\) LIMIT 1$/);
+    assert.equal(/password_hash/.test(sql), false);
   });
 });
 

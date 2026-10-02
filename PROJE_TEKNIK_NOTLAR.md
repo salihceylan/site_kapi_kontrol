@@ -331,10 +331,11 @@ SMTP_PASSWORD=...
 SMTP_FROM=kodver@gudeteknoloji.com.tr
 ```
 
-Canli ortamda karsilasilan kritik not:
+Dogrulama akisi (bekleyen kayit, 30 dk kod, durust hata) ve isletim notlari: `docs/EPOSTA_DOGRULAMA.md`.
 
-- `mail.gudeteknoloji.com.tr` TLS sertifikasi `mint.trdns.com` ile uyusmamistir.
-- Bu nedenle dogru SMTP host olarak `mint.trdns.com` kullanilmasi gerekebilir.
+Not (2026-10-02 olcumu): `mint.trdns.com:587` ve `mail.gudeteknoloji.com.tr:587` her ikisi de (ayni IP 77.245.149.47)
+~0,3 sn'de baglanti + TLS + kimlik dogrulamayi gecti; daha once not edilen TLS hostname uyusmazligi artik gozlenmiyor.
+`mint.trdns.com` guvenli tercih olarak kalabilir.
 
 SMTP testi icin kullanilan komut:
 
@@ -462,6 +463,7 @@ Beklenen:
 
 - `mail.gudeteknoloji.com.tr` sertifika alani ile eslesmedi
 - sertifika `mint.trdns.com` icindi
+- (2026-10-02: her iki host da dogrulama testini gecti; bkz. `docs/EPOSTA_DOGRULAMA.md`)
 
 4. Flutter dialog / lifecycle hatalari
 

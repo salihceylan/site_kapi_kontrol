@@ -15,6 +15,7 @@ export async function runDatabaseCleanup(db = pool) {
     dummyUsersCleaned: 0,
     expiredQrTokensCleaned: 0,
     expiredEmailVerificationsCleaned: 0,
+    expiredPendingRegistrationsCleaned: 0,
     oldConnectivityLogsCleaned: 0,
     oldDoorLogsCleaned: 0,
     orphanedMembershipsCleaned: 0,
@@ -39,6 +40,13 @@ export async function runDatabaseCleanup(db = pool) {
       WHERE created_at < NOW() - INTERVAL '2 days'
     `);
     stats.expiredEmailVerificationsCleaned = delEmail.rowCount || 0;
+
+    // 3b. Doğrulanmamış bekleyen kayıtlar (HESAP DEĞİL: users satırı yok) 2 gün sonra silinir; kullanıcı yeniden kayıt olur
+    const delPending = await db.query(`
+      DELETE FROM pending_registrations
+      WHERE updated_at < NOW() - INTERVAL '2 days'
+    `);
+    stats.expiredPendingRegistrationsCleaned = delPending.rowCount || 0;
 
     // 4. 30 günden eski cihaz bağlantı (connectivity) loglarını temizle
     const delConn = await db.query(`
@@ -71,6 +79,7 @@ export async function runDatabaseCleanup(db = pool) {
       stats.dummyUsersCleaned +
       stats.expiredQrTokensCleaned +
       stats.expiredEmailVerificationsCleaned +
+      stats.expiredPendingRegistrationsCleaned +
       stats.oldConnectivityLogsCleaned +
       stats.oldDoorLogsCleaned +
       stats.orphanedMembershipsCleaned;
@@ -133,6 +142,8 @@ export async function getDatabaseHealth(db = pool) {
              OR (superseded_at IS NOT NULL AND superseded_at < NOW() - INTERVAL '1 day')) AS expired_qr_tokens,
         (SELECT COUNT(*)::int FROM email_verifications
           WHERE created_at < NOW() - INTERVAL '2 days') AS expired_email_verifications,
+        (SELECT COUNT(*)::int FROM pending_registrations
+          WHERE updated_at < NOW() - INTERVAL '2 days') AS expired_pending_registrations,
         (SELECT COUNT(*)::int FROM device_connectivity_logs
           WHERE created_at < NOW() - INTERVAL '30 days') AS old_connectivity_logs,
         (SELECT COUNT(*)::int FROM door_access_logs
@@ -154,6 +165,7 @@ export async function getDatabaseHealth(db = pool) {
     const pendingCleanup = {
       expiredQrTokens: Number(p.expired_qr_tokens || 0),
       expiredEmailVerifications: Number(p.expired_email_verifications || 0),
+      expiredPendingRegistrations: Number(p.expired_pending_registrations || 0),
       oldConnectivityLogs: Number(p.old_connectivity_logs || 0),
       oldDoorLogs: Number(p.old_door_logs || 0),
     };

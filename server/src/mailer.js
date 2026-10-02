@@ -19,11 +19,27 @@ function createTransporter() {
     port,
     secure: port === 465,
     requireTLS: port !== 465,
+    // Sınırlı zaman aşımları: nodemailer varsayılanları dakikalarca sürebilir; askıda kalan bir SMTP
+    // bağlantısı kayıt isteğini (ve istemciyi) o kadar bekletmesin, hata hızlıca ve dürüstçe dönsün.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
     auth: {
       user,
       pass,
     },
   });
+}
+
+// "14:32" biçimi (24 saat, Türkiye saati). Kullanıcı birden fazla kod e-postası aldığında hangisinin
+// en son istenen olduğunu e-postadaki saatten ayırt edebilir.
+export function formatIstanbulTime(date) {
+  return new Intl.DateTimeFormat('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
 }
 
 // Kullanici/yonetici kontrollu metinler HTML sablonlarina girmeden once kacirilir.
@@ -70,6 +86,8 @@ export async function sendIndividualVerificationEmail({
   to,
   fullName,
   code,
+  ttlMinutes,
+  requestedAt = new Date(),
 }) {
   const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!from) {
@@ -79,11 +97,17 @@ export async function sendIndividualVerificationEmail({
   const transporter = createTransporter();
   const safeFullName = escapeHtml(fullName);
   const safeCode = escapeHtml(code);
+  // E-posta gecikmeli ulaşabilir ve her yeni istek öncekini geçersiz kılar: istek saati ve süre açıkça yazılır.
+  const requestedTime = formatIstanbulTime(requestedAt);
+  const validityNote =
+    `Bu kod ${requestedTime} saatinde istendi` +
+    `${Number.isFinite(ttlMinutes) ? ` ve ${ttlMinutes} dakika geçerlidir` : ''}. ` +
+    'Birden fazla e-posta aldıysanız yalnızca en son istenen kod geçerlidir.';
   await transporter.sendMail({
     from,
     to,
     subject: 'AHBU e-posta doğrulama kodunuz',
-    text: `Merhaba ${fullName}, AHBU doğrulama kodunuz: ${code}`,
+    text: `Merhaba ${fullName}, AHBU doğrulama kodunuz: ${code}. ${validityNote}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 20px;">
@@ -96,6 +120,7 @@ export async function sendIndividualVerificationEmail({
           <span style="display: inline-block; padding: 14px 28px; font-size: 32px; font-weight: 700; letter-spacing: 10px; color: #1e40af; background-color: #eff6ff; border: 2px dashed #3b82f6; border-radius: 8px;">${safeCode}</span>
         </div>
         <p style="color: #6b7280; font-size: 13px; text-align: center;">Bu kodu uygulamadaki doğrulama ekranına giriniz.</p>
+        <p style="color: #6b7280; font-size: 13px; text-align: center;">${escapeHtml(validityNote)}</p>
         <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
         <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu işlemi siz başlatmadıysanız bu e-postayı dikkate almayınız.</p>
       </div>

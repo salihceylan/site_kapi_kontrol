@@ -46,6 +46,7 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
       'device_connectivity_logs',
       'door_access_logs',
       'email_verifications',
+      'pending_registrations',
       'qr_access_tokens',
     ]);
     // her DELETE zaman koşulu taşır (koşulsuz toplu silme yok)
@@ -63,6 +64,7 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
       'cleanedAt',
       'dummyUsersCleaned',
       'expiredEmailVerificationsCleaned',
+      'expiredPendingRegistrationsCleaned',
       'expiredQrTokensCleaned',
       'oldConnectivityLogsCleaned',
       'oldDoorLogsCleaned',
@@ -70,7 +72,17 @@ describe('members: maintenance_service yıkıcı işlem yapmaz', () => {
     ]);
     assert.equal(result.stats.dummyUsersCleaned, 0);
     assert.equal(result.stats.orphanedMembershipsCleaned, 0);
-    assert.equal(result.totalCleaned, 3 * 4);
+    assert.equal(result.totalCleaned, 3 * 5);
+  });
+
+  it('bekleyen kayıt (hesap DEĞİL) 2 gün sonra silinir; users tablosuna dokunulmaz', async () => {
+    const db = createFakeDb();
+    const result = await runDatabaseCleanup(db);
+    const pendingDelete = db.queries
+      .map((sql) => sql.replace(/\s+/g, ' ').trim())
+      .find((sql) => /^DELETE FROM pending_registrations/i.test(sql));
+    assert.match(pendingDelete, /WHERE updated_at < NOW\(\) - INTERVAL '2 days'/);
+    assert.equal(result.stats.expiredPendingRegistrationsCleaned, 3);
   });
 
   it('hata durumunda veritabanı hata metni sonuçta sızdırılmaz', async () => {
@@ -113,6 +125,17 @@ describe('members: db.js yalnızca additive şema değişikliği içerir', () =>
     assert.match(dbSource, /CREATE INDEX IF NOT EXISTS idx_users_password_reset_token/);
     assert.match(dbSource, /CREATE INDEX IF NOT EXISTS idx_users_email_lower\s+ON users \(LOWER\(email\)\)/);
     assert.match(dbSource, /ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\)/);
+  });
+
+  it('bekleyen kayıt tablosu ve e-postaya (küçük harf) göre tekil indeks idempotent eklenir', () => {
+    assert.match(dbSource, /CREATE TABLE IF NOT EXISTS pending_registrations/);
+    assert.match(dbSource, /CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_registrations_email\s+ON pending_registrations \(LOWER\(email\)\)/);
+    const migration = readFileSync(new URL('../migrations/028_pending_registrations.sql', import.meta.url), 'utf8');
+    assert.match(migration, /CREATE TABLE IF NOT EXISTS pending_registrations/);
+    assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_registrations_email/);
+    // parola düz metin tutulmaz: yalnızca özet kolonu vardır
+    assert.match(migration, /password_hash TEXT NOT NULL/);
+    assert.equal(/\bpassword\s+TEXT/i.test(migration), false);
   });
 
   it('tüm CREATE TABLE / CREATE INDEX / ADD COLUMN ifadeleri IF NOT EXISTS içerir', () => {

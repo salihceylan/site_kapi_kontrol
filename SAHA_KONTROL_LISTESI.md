@@ -343,16 +343,16 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
   - **Beklenen Sonuç:** Form geçersiz alanları kırmızı uyarı ile belirtmeli, şifrelerin eşleşmediğini kullanıcıya bildirmelidir.
 - [ ] **17.3. Kayıt Olma ve SMTP ile 6 Haneli Doğrulama Kodu Gönderimi:**
   - **Nasıl Test Edilir:** Geçerli bir e-posta adresi (örneğin kendi e-postanız) girerek "Kayıt Ol" butonuna basın.
-  - **Beklenen Sonuç:** Kullanıcı hesabı veritabanına `email_verified = false` ve `role = 'individual'` olarak kaydedilmeli; kurumsal SMTP (`kodver@gudeteknoloji.com.tr`) üzerinden ilgili e-postaya 6 haneli sayısal kod gönderilmeli ve uygulama otomatik olarak "E-Posta Doğrulama" ekranına geçmelidir.
+  - **Beklenen Sonuç:** Bu aşamada `users` tablosunda satır OLUŞMAMALI; `pending_registrations` tablosunda ad ve parola ÖZETİ (bcrypt) ile bekleyen kayıt bulunmalı. Kurumsal SMTP (`kodver@gudeteknoloji.com.tr`) üzerinden ilgili e-postaya 6 haneli kod gönderilmeli (e-postada istek saati ve "30 dakika geçerlidir" yazmalı) ve uygulama "E-Posta Doğrulama" ekranına geçmelidir. E-posta GÖNDERİLEMEZSE uygulama "Doğrulama kodu şu anda e-posta ile gönderilemiyor…" hatasını göstermeli ve doğrulama ekranına GEÇMEMELİDİR.
 - [ ] **17.4. 6 Haneli Kod ile Hesap Doğrulama ve Otomatik Giriş:**
   - **Nasıl Test Edilir:** E-postaya gelen 6 haneli kodu büyük kutucuğa girin ve "Doğrula" butonuna basın (veya klavyeden onaylayın).
-  - **Beklenen Sonuç:** Kod başarıyla doğrulanmalı (`is_used = true`), kullanıcının e-postası `email_verified = true` olarak işaretlenmeli; kullanıcıya JWT token üretilerek doğrudan ana ekrana yönlendirilmelidir.
+  - **Beklenen Sonuç:** Kod başarıyla doğrulanmalı; `users` satırı ANCAK ŞİMDİ oluşmalı (`email_verified = true`, `role = 'individual'`), `pending_registrations` satırı silinmeli, kod tek kullanımlık olmalı (aynı kod ikinci kez kabul edilmemeli). Kullanıcıya JWT token üretilerek doğrudan ana ekrana yönlendirilmelidir.
 - [ ] **17.5. Hatalı Kod Girildiğinde Deneme Hakkı Koruması:**
   - **Nasıl Test Edilir:** Kasıtlı olarak yanlış bir 6 haneli kod girip "Doğrula"ya basın.
   - **Beklenen Sonuç:** Ekranda "Geçersiz veya süresi dolmuş doğrulama kodu. Kalan hakkınız: X" uyarısı çıkmalı, 5 hatalı denemeden sonra kod bloke edilmelidir.
 - [ ] **17.6. Kodu Yeniden Gönder (Resend Code) Fonksiyonu:**
   - **Nasıl Test Edilir:** Doğrulama ekranındaki "Kodu Tekrar Gönder" butonuna dokunun.
-  - **Beklenen Sonuç:** E-posta kutusuna yeni bir 6 haneli kod gelmeli ve eski kod iptal edilmelidir.
+  - **Beklenen Sonuç:** E-posta kutusuna yeni bir 6 haneli kod gelmeli; eski kod, yeni kod BAŞARIYLA gönderildikten sonra iptal edilmelidir (gönderim başarısız olursa önceki geçerli kod geçerli kalır). Kod 30 dakika geçerlidir; e-posta gecikirse bu süre içinde girilen kod kabul edilmelidir.
 
 ---
 
@@ -1118,3 +1118,25 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **53.3. Web / Localhost CORS Doğrulaması:**
   - **Nasıl Test Edilir:** Chrome veya Edge üzerinde yerel web debug (`flutter run -d chrome`) başlatıp giriş yapmayı deneyin.
   - **Beklenen Sonuç:** "Sunucuya ulaşılamadı" CORS engellemesi olmadan doğrudan API yanıtı alınmalı.
+
+---
+
+## 54. ✉️ E-posta Doğrulama Standardı — Bekleyen Kayıt, Gecikmeye Dayanıklı Kod (2026-10-02)
+
+Ayrıntı ve işletim notları: `docs/EPOSTA_DOGRULAMA.md`.
+
+- [ ] **54.1. Doğrulamadan Önce Hesap Oluşmaması:**
+  - **Nasıl Test Edilir:** Yeni bir e-posta ile kayıt olun, kodu GİRMEDEN yönetici panelindeki "Tüm Kullanıcılar" listesine bakın (veya veritabanında `SELECT * FROM users WHERE LOWER(email) = '<e-posta>'`).
+  - **Beklenen Sonuç:** Kullanıcı listede/`users` tablosunda görünmemeli; giriş denemesi "Giris bilgileri hatali" döndürmeli. Kod girilince kullanıcı oluşmalı ve ana ekrana geçilmelidir.
+- [ ] **54.2. Geç Gelen Kod:**
+  - **Nasıl Test Edilir:** Kayıt olun, kodu 12-25 dakika sonra girin.
+  - **Beklenen Sonuç:** Kod kabul edilmeli (süre 30 dakika). 30 dakikadan sonra "Aktif bir doğrulama kodu bulunamadı… Kod 30 dakika geçerlidir" mesajı ve "Kodu Tekrar Gönder" yönlendirmesi çıkmalıdır.
+- [ ] **54.3. E-posta Sunucusu Çalışmazken Kayıt:**
+  - **Nasıl Test Edilir:** (Yerel API'de) `SMTP_HOST` değerini geçersiz yapıp kayıt olmayı deneyin.
+  - **Beklenen Sonuç:** Uygulama "Doğrulama kodu şu anda e-posta ile gönderilemiyor" hatasını göstermeli, doğrulama ekranına geçmemeli; hemen yeniden denenebilmelidir (30 sn bekleme dayatılmaz).
+- [ ] **54.4. Birden Fazla Kod E-postası:**
+  - **Nasıl Test Edilir:** "Kodu Tekrar Gönder" ile ikinci kodu isteyin; e-postaları karşılaştırın.
+  - **Beklenen Sonuç:** Her e-postada istek saati yazmalı; yalnızca EN SON istenen kod geçerli olmalı, öncekiler "kod hatalı" demelidir.
+- [ ] **54.5. Bekleyen Kayıt Temizliği:**
+  - **Nasıl Test Edilir:** Kayıt olup kodu hiç girmeyin; 2 gün sonra bakım çalıştıktan sonra `pending_registrations` tablosuna bakın.
+  - **Beklenen Sonuç:** 2 günden eski bekleyen kayıt silinmeli; `users` sayısı değişmemelidir (bakım hesap silmez).

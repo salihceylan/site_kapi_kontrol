@@ -37,6 +37,7 @@ import {
   verifyIndividualEmailCode,
   resendIndividualVerificationCode,
 } from '../services/membership_service.js';
+import { SQL_FIND_PENDING_LOGIN_HASH } from '../services/membership_rules.js';
 
 export const authRouter = express.Router();
 
@@ -52,6 +53,12 @@ authRouter.post('/auth/register-individual', registerLimiter, async (req, res) =
     });
     return res.status(201).json(result);
   } catch (error) {
+    // Kod e-postayla gönderilemediyse dürüst 503: respondWithServiceError 5xx mesajını gizlediği için burada
+    // üretilir (hata, kullanıcıya gösterilebilir tipli hatadır; ayrıntı/SMTP bilgisi içermez).
+    if (error?.code === 'EMAIL_DELIVERY_FAILED' && error.expose === true) {
+      res.set('Retry-After', '60');
+      return res.status(503).json({ error: error.message, code: error.code });
+    }
     return respondWithServiceError(res, error, {
       fallbackMessage: 'Kayıt işlemi başarısız.',
       logLabel: 'register-individual',
@@ -695,7 +702,23 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
       [identifier],
     );
 
-    const row = result.rows[0];
+    let row = result.rows[0];
+    if (!row) {
+      // Bekleyen kayıt (e-posta henüz doğrulanmadı, users satırı yok): doğru parola, eski doğrulanmamış hesapla aynı
+      // 403 "doğrulanmadı" yanıtını alır (401 + kilit sayacı yanıltıcı olurdu). Yanlış parola ve hiç kayıt olmayan
+      // hesap aynı 401'i alır; tek bcrypt karşılaştırması her durumda yapılır.
+      const pendingRes = await pool.query(SQL_FIND_PENDING_LOGIN_HASH, [identifier]);
+      const pendingHash = pendingRes.rows[0]?.password_hash;
+      if (pendingHash) {
+        row = {
+          role: 'individual',
+          is_active: true,
+          email_verified: false,
+          approval_status: 'approved',
+          password_hash: pendingHash,
+        };
+      }
+    }
     const storedHash = row?.password_hash ? String(row.password_hash) : '';
     const isPasswordMatch = await bcrypt.compare(password, storedHash || DUMMY_PASSWORD_HASH);
     if (!row || !storedHash || !isPasswordMatch) {

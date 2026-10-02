@@ -64,12 +64,12 @@ const String _tooShort = 'Lütfen 6 haneli doğrulama kodunu eksiksiz giriniz.';
 
 /// Sunucunun 404'te ürettiği uzun ek metin (auth_service.dart) dahil gerçekçi hata.
 const String _longError =
-    'Aktif doğrulama kodu bulunamadı. Kod 10 dakika geçerlidir; yeni kod için '
+    'Aktif doğrulama kodu bulunamadı. Kod 30 dakika geçerlidir; yeni kod için '
     '"Kodu Tekrar Gönder"e dokunun.';
 
 const String _resendNote =
     'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni 6 haneli kod birkaç dakika içinde '
-    'e-postanıza ulaşır. Ulaşmazsa spam klasörünü kontrol edin.';
+    'e-postanıza ulaşır; önceki kodlar geçersiz olur. Ulaşmazsa spam klasörünü kontrol edin.';
 
 Finder get _codeField => find.byType(TextField);
 

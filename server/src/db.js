@@ -836,6 +836,21 @@ export async function ensureDbSchema() {
       CREATE INDEX IF NOT EXISTS idx_email_verifications_created ON email_verifications(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_email_verifications_email_created ON email_verifications(LOWER(email), created_at DESC);
 
+      -- 028: BEKLEYEN KAYIT. Bireysel self-servis kayitta users satiri e-posta dogrulanana kadar OLUSTURULMAZ;
+      -- ad ve parola OZETI (bcrypt, duz metin degil) burada bekler (db.js ile migrations/028 ayni DDL).
+      CREATE TABLE IF NOT EXISTS pending_registrations (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_registrations_email
+        ON pending_registrations (LOWER(email));
+      CREATE INDEX IF NOT EXISTS idx_pending_registrations_updated
+        ON pending_registrations (updated_at);
+
       CREATE TABLE IF NOT EXISTS site_memberships (
         id BIGSERIAL PRIMARY KEY,
         site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,

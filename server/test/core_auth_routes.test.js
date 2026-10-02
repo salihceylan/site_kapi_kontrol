@@ -166,6 +166,42 @@ describe('auth_routes (C1/C8/C12, enumeration, sizinti)', () => {
       assert.deepEqual(await wrong.json(), await missing.json());
     });
 
+    describe('bekleyen kayit (e-posta henuz dogrulanmadi, users satiri yok)', () => {
+      const pendingHandler = async (text, params) => {
+        if (text.includes('FROM pending_registrations')) {
+          return String(params[0]).toLowerCase() === 'bekleyen@example.com'
+            ? { rows: [{ password_hash: PASSWORD_HASH }], rowCount: 1 }
+            : { rows: [], rowCount: 0 };
+        }
+        return { rows: [], rowCount: 0 };
+      };
+
+      it('dogru parola: eski davranis 403 "E-posta adresiniz dogrulanmadi" (401 degil); token yok', async () => {
+        poolHandler = pendingHandler;
+        const response = await post('/auth/login', { email: 'Bekleyen@Example.com', password: PASSWORD });
+        assert.equal(response.status, 403);
+        const body = await response.json();
+        assert.match(body.error, /dogrulanmadi/);
+        assert.equal(body.token, undefined);
+      });
+
+      it('yanlis parola, bekleyen kayit ve hic kayit olmayan hesap AYNI 401 yaniti (enumeration yok)', async () => {
+        poolHandler = pendingHandler;
+        const wrongPassword = await post('/auth/login', { email: 'bekleyen@example.com', password: 'yanlis-parola' });
+        const unknown = await post('/auth/login', { email: 'yok@example.com', password: PASSWORD });
+        assert.equal(wrongPassword.status, 401);
+        assert.equal(unknown.status, 401);
+        assert.deepEqual(await wrongPassword.json(), await unknown.json());
+      });
+
+      it('rol uyusmazligi eski dogrulanmamis bireysel hesapla ayni: 403 rol hatasi', async () => {
+        poolHandler = pendingHandler;
+        const response = await post('/auth/login', { email: 'bekleyen@example.com', password: PASSWORD, role: 'site_manager' });
+        assert.equal(response.status, 403);
+        assert.match((await response.json()).error, /rol/i);
+      });
+    });
+
     it('5 hatali denemeden sonra 429 LOGIN_LOCKED + Retry-After; dogru parola da kilit suresince reddedilir; baska hesap etkilenmez', async () => {
       poolHandler = loginHandler;
       let last;
@@ -316,6 +352,58 @@ describe('auth_routes (C1/C8/C12, enumeration, sizinti)', () => {
         assert.equal(raw.includes('secret-path'), false, path);
         assert.equal(raw.includes('relation'), false, path);
       }
+    });
+
+    describe('register-individual: e-posta teslimi dürüst raporlanır', () => {
+      const originalConnect = pool.connect;
+      const registerBody = { first_name: 'Ali', last_name: 'Veli', email: 'ali.yeni@example.com', password: 'abcdef12' };
+
+      beforeEach(() => {
+        poolHandler = async () => ({ rows: [], rowCount: 0 });
+        pool.connect = async () => ({
+          query: async (text) => {
+            const sql = String(text);
+            if (sql.includes('AS seconds_since_last')) {
+              return { rows: [{ seconds_since_last: null, codes_last_hour: 0 }], rowCount: 1 };
+            }
+            if (sql.includes('INSERT INTO email_verifications')) return { rows: [{ id: 9 }], rowCount: 1 };
+            return { rows: [], rowCount: 0 };
+          },
+          release() {},
+        });
+      });
+
+      afterEach(() => {
+        pool.connect = originalConnect;
+      });
+
+      it('mail gönderilemezse 503 + EMAIL_DELIVERY_FAILED + Retry-After; başarı mesajı yok; users satırı yok', async () => {
+        nodemailer.createTransport = () => ({
+          sendMail: async () => {
+            throw Object.assign(new Error('smtp down'), { code: 'ETIMEDOUT' });
+          },
+        });
+        const response = await post('/auth/register-individual', registerBody);
+        assert.equal(response.status, 503);
+        const body = await response.json();
+        assert.equal(body.code, 'EMAIL_DELIVERY_FAILED');
+        assert.match(body.error, /gönderilemiyor/);
+        assert.equal(/gönderildi/.test(body.error), false);
+        assert.equal(response.headers.get('retry-after'), '60');
+        assert.equal(calls.some((call) => /INSERT INTO users/i.test(call.text)), false);
+      });
+
+      it('mail gittiğinde 201; kodun geçerlilik süresi yanıtta; users satırı doğrulamaya kadar oluşmaz', async () => {
+        const response = await post('/auth/register-individual', registerBody);
+        assert.equal(response.status, 201);
+        const body = await response.json();
+        assert.equal(body.ok, true);
+        assert.equal(body.code_length, 6);
+        assert.equal(body.expires_in_minutes, 30);
+        assert.equal(sent.length, 1);
+        assert.equal(calls.some((call) => /INSERT INTO users/i.test(call.text)), false);
+        assert.equal(calls.some((call) => /INSERT INTO pending_registrations/i.test(call.text)), true);
+      });
     });
   });
 

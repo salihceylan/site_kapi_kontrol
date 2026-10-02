@@ -281,8 +281,8 @@ class AuthService extends ChangeNotifier {
       return null;
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
-        // Aktif kod yok: kod 10 dakika geçerlidir; kullanıcıyı yeni kod istemeye yönlendir.
-        return '${e.message} Kod 10 dakika geçerlidir; yeni kod için "Kodu Tekrar Gönder"e dokunun.';
+        // Aktif kod yok: kod 30 dakika geçerlidir; kullanıcıyı yeni kod istemeye yönlendir.
+        return '${e.message} Kod 30 dakika geçerlidir; yeni kod için "Kodu Tekrar Gönder"e dokunun.';
       }
       return e.message;
     } catch (_) {

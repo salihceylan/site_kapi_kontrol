@@ -804,14 +804,14 @@ void main() {
       h.service.dispose();
     });
 
-    test('doğrulama kodu 404 -> kodun 10 dk geçerli olduğu ve yeniden gönderme ipucu', () async {
+    test('doğrulama kodu 404 -> kodun 30 dk geçerli olduğu ve yeniden gönderme ipucu', () async {
       final h = _makeService(
         (r) => _json({'error': 'Aktif bir dogrulama kodu bulunamadi.'}, 404),
       );
       await h.service.initialize();
       final error = await h.service.verifyIndividualCode(email: 'a@b.c', code: '123456');
       expect(error, contains('Aktif bir dogrulama kodu bulunamadi.'));
-      expect(error, contains('10 dakika'));
+      expect(error, contains('30 dakika'));
       expect(error, contains('Kodu Tekrar Gönder'));
 
       final wrongCode = _makeService((r) => _json({'error': 'Kod hatali.'}, 400));

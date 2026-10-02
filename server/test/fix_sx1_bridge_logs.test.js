@@ -258,7 +258,7 @@ describe('SX1: getDatabaseHealth - kukla sayaci ve isClean', () => {
         if (/AS expired_qr_tokens/.test(text)) {
           return {
             rows: [{
-              expired_qr_tokens: 0, expired_email_verifications: 0, old_connectivity_logs: 0, old_door_logs: 0, ...pending,
+              expired_qr_tokens: 0, expired_email_verifications: 0, expired_pending_registrations: 0, old_connectivity_logs: 0, old_door_logs: 0, ...pending,
             }],
           };
         }
@@ -286,7 +286,7 @@ describe('SX1: getDatabaseHealth - kukla sayaci ve isClean', () => {
     assert.equal(orphanOnly.users.real, 9);
     assert.equal(orphanOnly.isClean, true);
     assert.deepEqual(orphanOnly.pendingCleanup, {
-      expiredQrTokens: 0, expiredEmailVerifications: 0, oldConnectivityLogs: 0, oldDoorLogs: 0,
+      expiredQrTokens: 0, expiredEmailVerifications: 0, expiredPendingRegistrations: 0, oldConnectivityLogs: 0, oldDoorLogs: 0,
     });
 
     const pending = await getDatabaseHealth(healthDb({ pending: { expired_qr_tokens: 4, old_door_logs: 2 } }));

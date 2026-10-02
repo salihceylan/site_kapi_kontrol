@@ -16,7 +16,12 @@ import {
   SQL_CLAIM_DEVICE_ATOMIC,
   SQL_CLAIM_VERIFICATION_ATTEMPT,
   SQL_CONSUME_VERIFICATION_CODE,
+  SQL_FIND_PENDING_REGISTRATION,
+  SQL_SUPERSEDE_OLDER_VERIFICATION_CODES,
   SQL_SUPERSEDE_VERIFICATION_CODES,
+  SQL_TAKE_PENDING_REGISTRATION,
+  SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS,
+  SQL_UPSERT_PENDING_REGISTRATION,
   SQL_VERIFICATION_ISSUE_STATE,
   SQL_VERIFICATION_STATE,
   VERIFICATION_CODE_DIGITS,
@@ -39,11 +44,28 @@ import {
   sanitizeUserCodeList,
   shouldPromoteToSiteManager,
   verificationDenialError,
+  verificationIssueError,
 } from './membership_rules.js';
 
 const NAME_MAX_LENGTH = 80;
 const PASSWORD_MAX_LENGTH = 128;
 const NOTE_MAX_LENGTH = 500;
+
+// Doğrulama sonrası oturum/yanıt için gereken kullanıcı kolonları (UPDATE ve INSERT ... RETURNING ortak listesi).
+const VERIFIED_USER_COLUMNS = `
+  user_code AS id,
+  user_code,
+  full_name,
+  email,
+  login_name,
+  role,
+  is_active,
+  email_verified,
+  approval_status,
+  phone_number,
+  created_at,
+  password_hash
+`;
 
 /**
  * Oturumdaki kullanıcı kodunu (user_code, int4) güvenle ayrıştırır.
@@ -65,15 +87,50 @@ async function rollbackQuietly(client) {
   }
 }
 
+// SMTP hata iletileri çoğu zaman alıcı adresini içerir ("<ali@x.com>: Recipient address rejected"): günlüğe
+// kişisel veri yazılmasın diye e-posta adresleri maskelenir.
+function describeMailError(error) {
+  return {
+    code: error?.code ?? null,
+    responseCode: error?.responseCode ?? null,
+    command: error?.command ?? null,
+    message: String(error?.message ?? '')
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<e-posta>')
+      .slice(0, 200),
+  };
+}
+
+/**
+ * Hiç gönderilemeyen kod kimseye ulaşmadı: satırı sil. Böylece başarısız bir deneme bekleme süresini /
+ * saatlik tavanı tüketmez ve kullanıcı hemen yeniden deneyebilir. (En iyi çaba: hata yalnızca loglanır.)
+ */
+async function discardUndeliveredCode(codeRowId) {
+  if (!codeRowId) {
+    return;
+  }
+  try {
+    await pool.query('DELETE FROM email_verifications WHERE id = $1', [codeRowId]);
+  } catch (error) {
+    console.error('[Doğrulama Kodu] Gönderilemeyen kod satırı silinemedi:', error?.code || error?.name || 'error');
+  }
+}
+
 /**
  * E-posta doğrulama kodu üretir ve gönderir.
  * - E-posta başına advisory lock + bekleme süresi (30 sn) + saatlik tavan: kod/e-posta seli engellenir.
- * - Eski kodlar yeni kod üretilince geçersiz kılınır (tek geçerli kod).
- * - Mail hatası fırlatılmaz (kullanıcı "tekrar gönder" yapabilir); { sent, reason } döner.
+ * - Mail hatası FIRLATILMAZ: { sent, reason, retryAfterSeconds? } döner; çağıran dürüst yanıt üretir
+ *   (kayıt: `verificationIssueError`; "tekrar gönder": yalnızca log, enumeration kapalı).
+ * - `persistCredentials(codeRowId)` (isteğe bağlı): kayıtta ad + parola özetini yazar. YALNIZCA e-posta gerçekten
+ *   gönderildikten sonra çalışır; reddedilen (429) / başarısız (503) bir deneme bekleyen kaydı değiştirmez.
+ * - Eski kodlar yeni kod BAŞARIYLA gönderildikten sonra (ve yalnızca daha ESKİ olanlar, id < yeni) geçersiz kılınır
+ *   (tek geçerli kod). Gönderim başarısızsa yeni satır silinir ve önceki geçerli kod korunur.
+ * - Bilinen sınırlama: yeni satır, gönderim bitene dek (normalde ~0,3 sn; en kötü ~40 sn) "en yeni açık kod"tur;
+ *   o sürede girilen önceki kod yeni satırla karşılaştırılır (bir deneme hakkı harcar).
  */
-async function issueVerificationCode({ email, fullName }) {
+async function issueVerificationCode({ email, fullName, persistCredentials }) {
   const client = await pool.connect();
   let code;
+  let codeRowId;
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`email_verify:${email}`]);
@@ -89,17 +146,17 @@ async function issueVerificationCode({ email, fullName }) {
     });
     if (!decision.allowed) {
       await client.query('ROLLBACK');
-      return { sent: false, reason: decision.reason };
+      return { sent: false, reason: decision.reason, retryAfterSeconds: decision.retryAfterSeconds };
     }
 
     code = generateEmailVerificationCode();
     const codeHash = await bcrypt.hash(code, 10);
 
-    await client.query(SQL_SUPERSEDE_VERIFICATION_CODES, [email]);
-    await client.query(
-      `INSERT INTO email_verifications (email, code_hash, attempt_count, is_verified) VALUES ($1, $2, 0, FALSE)`,
+    const inserted = await client.query(
+      `INSERT INTO email_verifications (email, code_hash, attempt_count, is_verified) VALUES ($1, $2, 0, FALSE) RETURNING id`,
       [email, codeHash],
     );
+    codeRowId = inserted.rows[0]?.id;
     await client.query('COMMIT');
   } catch (error) {
     await rollbackQuietly(client);
@@ -109,11 +166,38 @@ async function issueVerificationCode({ email, fullName }) {
   }
 
   try {
-    await sendIndividualVerificationEmail({ to: email, fullName, code });
+    await sendIndividualVerificationEmail({
+      to: email,
+      fullName,
+      code,
+      ttlMinutes: VERIFICATION_CODE_TTL_MINUTES,
+      requestedAt: new Date(),
+    });
   } catch (mailError) {
-    console.error('[Mail Gönderim Hatası]:', mailError?.message);
-    // Mail sunucusu geçici hata verse bile kod üretilmiştir; kullanıcı 'Tekrar Kod Gönder' yapabilir.
+    console.error('[Mail Gönderim Hatası]:', describeMailError(mailError));
+    await discardUndeliveredCode(codeRowId);
     return { sent: false, reason: 'MAIL_FAILED' };
+  }
+
+  // Gönderim başarılı: kimlik bilgileri (kayıtta) artık yazılabilir. Yazılamazsa kullanıcının elindeki kod boşa
+  // çıkmasın diye satır silinir ve hata yukarı fırlatılır (500).
+  if (persistCredentials) {
+    try {
+      await persistCredentials(codeRowId);
+    } catch (error) {
+      await discardUndeliveredCode(codeRowId);
+      throw error;
+    }
+  }
+
+  // Önceki açık kodlar artık geçersiz (yalnızca en son istenen kod geçerli).
+  if (codeRowId) {
+    try {
+      await pool.query(SQL_SUPERSEDE_OLDER_VERIFICATION_CODES, [email, codeRowId]);
+    } catch (error) {
+      // Eski kod açık kalması zararsızdır (doğrulama her zaman en son kodu kullanır); yalnızca logla.
+      console.error('[Doğrulama Kodu] Eski kodlar kapatılamadı:', error?.code || error?.name || 'error');
+    }
   }
   return { sent: true, reason: null };
 }
@@ -121,8 +205,11 @@ async function issueVerificationCode({ email, fullName }) {
 /**
  * Yeni Bireysel Kullanıcı Kaydı (Self-Service)
  * - Ad, Soyad, E-posta, Şifre alır.
- * - E-posta doğrulanana kadar email_verified = FALSE kalır.
- * - 6 haneli (CSPRNG) kod üretip kullanıcının e-postasına gönderir.
+ * - E-posta sahipliği kanıtlanana kadar `users` satırı OLUŞTURULMAZ: ad ve parola ÖZETİ `pending_registrations`
+ *   tablosunda bekler; doğru kod girilince `verifyIndividualEmailCode` hesabı tek işlemde açar.
+ *   (Geçiş: bu sürümden önce oluşmuş doğrulanmamış `users` satırları eskisi gibi çalışmaya devam eder.)
+ * - 6 haneli (CSPRNG) kod üretip kullanıcının e-postasına gönderir. Kod GÖNDERİLEMEZSE yanıt başarı gibi
+ *   görünmez (503 EMAIL_DELIVERY_FAILED / 429); kullanıcıya hiçbir şey vaat edilmez.
  */
 export async function registerIndividualUser({
   firstName,
@@ -163,6 +250,9 @@ export async function registerIndividualUser({
 
   const passwordHash = await bcrypt.hash(cleanPassword, 10);
 
+  // Kimlik bilgileri (ad + parola özeti) kod e-postası GÖNDERİLDİKTEN SONRA yazılır (bkz. issueVerificationCode):
+  // reddedilen/başarısız bir deneme, devam eden bir kaydın bekleyen verisini sessizce ezemez.
+  let persistCredentials;
   if (existingRes.rowCount > 0) {
     const existing = existingRes.rows[0];
     if (existing.email_verified) {
@@ -173,54 +263,54 @@ export async function registerIndividualUser({
     if (existing.role !== 'individual') {
       throw alreadyRegisteredError();
     }
-    await pool.query(
-      `UPDATE users SET full_name = $1, password_hash = $2, updated_at = NOW() WHERE user_code = $3 AND email_verified = FALSE`,
-      [fullName, passwordHash, existing.user_code],
-    );
+    // Geçiş: bu sürümden önce açılmış doğrulanmamış hesap eskisi gibi güncellenir.
+    persistCredentials = (codeRowId) =>
+      pool.query(SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS, [
+        fullName,
+        passwordHash,
+        existing.user_code,
+        cleanEmail,
+        codeRowId ?? Number.MAX_SAFE_INTEGER,
+      ]);
   } else {
-    try {
-      await pool.query(
-        `
-          INSERT INTO users (
-            full_name,
-            email,
-            role,
-            is_active,
-            email_verified,
-            approval_status,
-            password_hash
-          )
-          VALUES ($1, $2, 'individual', TRUE, FALSE, 'approved', $3)
-        `,
-        [fullName, cleanEmail, passwordHash],
-      );
-    } catch (insertError) {
-      // Eşzamanlı kayıt yarışı: aynı e-posta ile başka bir istek az önce ekledi.
-      if (insertError?.code === '23505') {
-        throw alreadyRegisteredError();
-      }
-      throw insertError;
-    }
+    // Hesap YOK: yalnızca bekleyen kayıt yazılır. Aynı e-postaya tekrar kayıt, bekleyen kaydı günceller
+    // (tek satır; unique indeks LOWER(email)).
+    persistCredentials = (codeRowId) =>
+      pool.query(SQL_UPSERT_PENDING_REGISTRATION, [
+        cleanEmail,
+        fullName,
+        passwordHash,
+        codeRowId ?? Number.MAX_SAFE_INTEGER,
+      ]);
   }
 
-  await issueVerificationCode({ email: cleanEmail, fullName });
+  const issued = await issueVerificationCode({ email: cleanEmail, fullName, persistCredentials });
+  if (!issued.sent) {
+    throw verificationIssueError(issued);
+  }
 
   return {
     ok: true,
-    message: `Kayıt başarılı. ${VERIFICATION_CODE_DIGITS} haneli doğrulama kodunuz e-posta adresinize gönderildi.`,
+    message:
+      `${VERIFICATION_CODE_DIGITS} haneli doğrulama kodu e-posta adresinize gönderildi. ` +
+      `Kod ${VERIFICATION_CODE_TTL_MINUTES} dakika geçerlidir; hesabınız kodu girdiğinizde oluşturulur.`,
     email: cleanEmail,
     code_length: VERIFICATION_CODE_DIGITS,
+    expires_in_minutes: VERIFICATION_CODE_TTL_MINUTES,
   };
 }
 
 /**
- * E-posta Doğrulama Kodu Onaylama (6 haneli; geçiş için eski 4 haneli kodlar da <=10 dk kabul edilir)
+ * E-posta Doğrulama Kodu Onaylama (6 haneli; geçiş için eski 4 haneli kodlar da kabul edilir)
+ *
+ * Doğru kodla bekleyen kayıt (varsa) aynı işlemde gerçek hesaba dönüşür; eski doğrulanmamış hesap varsa doğrulanır.
  *
  * Güvenlik:
  * - Deneme hakkı ATOMİK alınır (UPDATE ... SET attempt_count = attempt_count + 1 ... RETURNING) ve
  *   karşılaştırmadan ÖNCE sayılır; paralel isteklerle sınır aşılamaz.
  * - Kod başına 5, e-posta başına pencere (30 dk) içinde toplam 10 deneme (yeni kod istemek sayacı sıfırlamaz).
- * - Kod 10 dk geçerlidir; yeni kod üretilince eskileri geçersizdir; doğru kod tek kullanımlıktır.
+ * - Kod VERIFICATION_CODE_TTL_MINUTES (30 dk) geçerlidir; yeni kod gönderilince eskileri geçersizdir; doğru kod
+ *   tek kullanımlıktır.
  * - Karşılaştırma bcrypt.compare ile yapılır (bcryptjs hash karşılaştırması sabit zamanlıdır).
  */
 export async function verifyIndividualEmailCode({ email, code }) {
@@ -289,30 +379,34 @@ export async function verifyIndividualEmailCode({ email, code }) {
     // Aynı e-posta için varsa diğer açık kodları da kapat
     await client.query(SQL_SUPERSEDE_VERIFICATION_CODES, [cleanEmail]);
 
-    // Kullanıcıyı email_verified = TRUE yap
-    const userRes = await client.query(
-      `
-        UPDATE users
-        SET email_verified = TRUE
-        WHERE LOWER(email) = LOWER($1)
-        RETURNING
-          user_code AS id,
-          user_code,
-          full_name,
-          email,
-          login_name,
-          role,
-          is_active,
-          email_verified,
-          approval_status,
-          phone_number,
-          created_at,
-          password_hash
-      `,
+    // 1) Bu sürümden önce oluşmuş (doğrulanmamış) hesap varsa doğrulanır (geçiş uyumu).
+    let userRes = await client.query(
+      `UPDATE users SET email_verified = TRUE WHERE LOWER(email) = LOWER($1) RETURNING ${VERIFIED_USER_COLUMNS}`,
       [cleanEmail],
     );
     if (userRes.rowCount === 0) {
-      throw httpError(404, 'Kullanıcı hesabı bulunamadı.');
+      // 2) Bekleyen kayıt: e-posta sahipliği şimdi kanıtlandı, hesap ANCAK ŞİMDİ oluşturulur (aynı işlemde).
+      const pending = await client.query(SQL_TAKE_PENDING_REGISTRATION, [cleanEmail]);
+      if (pending.rowCount === 0) {
+        // Kayıt süresi dolmuş/silinmiş: işlem geri alınır (kod tüketilmez), kullanıcı yeniden kayıt olur.
+        throw httpError(404, 'Bekleyen kayıt bulunamadı. Lütfen yeniden kayıt olunuz.');
+      }
+      try {
+        userRes = await client.query(
+          `
+            INSERT INTO users (full_name, email, role, is_active, email_verified, approval_status, password_hash)
+            VALUES ($1, $2, 'individual', TRUE, TRUE, 'approved', $3)
+            RETURNING ${VERIFIED_USER_COLUMNS}
+          `,
+          [pending.rows[0].full_name, cleanEmail, pending.rows[0].password_hash],
+        );
+      } catch (insertError) {
+        // Aralarında aynı e-posta ile başka bir hesap açılmış (eşzamanlı kayıt/davet): işlem geri alınır.
+        if (insertError?.code === '23505') {
+          throw httpError(409, 'Bu e-posta adresiyle zaten kayıtlı ve doğrulanmış bir hesap bulunmaktadır.');
+        }
+        throw insertError;
+      }
     }
     user = userRes.rows[0];
 
@@ -394,9 +488,20 @@ export async function resendIndividualVerificationCode({ email }) {
   );
 
   const user = userRes.rows[0];
-  if (user && !user.email_verified) {
-    // Yanıt süresi hesap varlığını ele vermesin diye gönderim arka planda yapılır.
-    void issueVerificationCode({ email: cleanEmail, fullName: user.full_name }).catch((error) => {
+  // Gönderilecek ad: eski doğrulanmamış hesaptan veya (yeni model) bekleyen kayıttan. Doğrulanmış hesap ya da
+  // hiç kayıt yoksa gönderilmez; yanıt her durumda aynıdır.
+  let fullName;
+  if (user) {
+    fullName = user.email_verified ? null : user.full_name;
+  } else {
+    const pendingRes = await pool.query(SQL_FIND_PENDING_REGISTRATION, [cleanEmail]);
+    fullName = pendingRes.rows[0]?.full_name ?? null;
+  }
+
+  if (fullName !== null) {
+    // Yanıt süresi hesap varlığını ele vermesin diye gönderim arka planda yapılır. Gönderim başarısızlığı
+    // (MAIL_FAILED vb.) istemciye yansımaz (enumeration kapalı); issueVerificationCode nedenini loglar.
+    void issueVerificationCode({ email: cleanEmail, fullName }).catch((error) => {
       console.error('[Doğrulama Kodu] Yeniden gönderim hatası:', error?.code || error?.name || 'error');
     });
   }
