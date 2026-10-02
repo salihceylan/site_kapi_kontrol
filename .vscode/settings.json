@@ -14,7 +14,7 @@
     "**/.pio/**": true,
     "**/.gradle/**": true
   },
-  "git.autorefresh": false,
-  "git.autoFetch": false,
+  "git.autorefresh": true,
+  "git.autoFetch": true,
   "git.openRepositoryInParentFolders": "always"
 }
