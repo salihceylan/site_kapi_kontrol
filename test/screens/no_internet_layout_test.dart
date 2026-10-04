@@ -3,7 +3,7 @@
 // AGENTS.md kural 6: hiçbir ekranda taşma olmaz. Matris: 320x640 x2,0 ve 360x640 x1,5, her biri açık
 // ve koyu temada, hem "tekrar dene" hem "kontrol ediliyor" durumunda. Davranış (yeniden deneme
 // çağrısı, kontrol sırasında pasif düğme) ve metinler (ASCII Türkçe dahil) değişmez; yalnız görünüm:
-// AppCard(2) + uyarı tonlu ikon karosu; açıklama metni koyu temada `textSecondary`
+// AppCard(2) + uyarı tonlu cilalı IconOrb (hero, ışımalı); açıklama metni koyu temada `textSecondary`
 // (eskiden `textMuted`, koyuda ~3,1:1); "Tekrar Dene" `ElevatedButton.icon` olarak KALIR (tema).
 //
 // Not: widget testleri Ahem yazı tipiyle çalışır (her harf 1 em genişliğinde): satır sarma gerçek
@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
 
@@ -156,27 +157,30 @@ void main() {
     );
 
     testWidgets(
-      'tek AppCard(seviye 2); uyarı tonlu ikon karosu; başlık anlamsal başlık',
+      'tek AppCard(seviye 2); uyarı tonlu cilalı IconOrb (hero); başlık anlamsal başlık',
       (t) async {
         for (final dark in const <bool>[false, true]) {
           await _pumpPage(t, dark: dark);
-          final palette = dark ? AppPalette.dark : AppPalette.light;
           expect(t.widget<AppCard>(find.byType(AppCard)).level, 2);
 
+          // Görsel sözleşme (bilerek değişti): düz tint karosu yerine cilalı, ışımalı daire IconOrb
+          // (ekranın tek hero öğesi, uyarı tonu).
+          expect(find.byType(IconOrb), findsOneWidget);
+          final orb = t.widget<IconOrb>(find.byType(IconOrb));
+          expect(orb.tone, AppTone.warning, reason: 'dark=$dark');
+          expect(orb.glow, isTrue);
+          expect(orb.size, 72);
+          expect(orb.shape, IconOrbShape.circle);
           final icon = t.widget<Icon>(find.byIcon(Icons.wifi_off_rounded));
-          expect(
-            icon.color,
-            AppTone.warning.ink(palette),
-            reason: 'dark=$dark',
-          );
-          expect(
-            _contrast(
-              icon.color!,
-              Color.alphaBlend(AppTone.warning.tint(palette), palette.surface),
-            ),
-            greaterThanOrEqualTo(4.5),
-            reason: 'ikon tint karosu üstünde',
-          );
+          expect(icon.color, Colors.white);
+          // Beyaz ikon ton gradyanının iki ucunda da >= 3:1 (WCAG 1.4.11 grafik nesne).
+          for (final end in <Color>[AppTone.warning.a, AppTone.warning.b]) {
+            expect(
+              _contrast(Colors.white, end),
+              greaterThanOrEqualTo(3.0),
+              reason: 'beyaz ikon / uyarı gradyanı',
+            );
+          }
           // Ikon dekoratif: durum aşağıdaki başlıkta okunur.
           expect(
             find.ancestor(

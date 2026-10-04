@@ -363,28 +363,28 @@ void main() {
 
   group('kapı açma', () {
     testWidgets(
-      '"Kapıyı Aç" -> komut gider, başarı tiki ("Gönderildi") + başarı SnackBar; 1,4 sn sonra eski etiket',
+      '"KAPIYI AÇ" -> komut gider, başarı tiki ("Gönderildi") + başarı SnackBar; 1,4 sn sonra eski etiket',
       (t) async {
         final auth = G4Auth(
           doors: [g4Door(hardware: 'esp32_c3', qrReader: false)],
         );
         await _pumpView(t, auth);
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
 
-        await t.tap(find.text('Kapıyı Aç'));
+        await t.tap(find.text('KAPIYI AÇ'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
 
         expect(auth.openedDoorIds, [1]);
-        expect(find.text('Gönderildi'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
         expect(
           find.text('"Ana Giriş Kapısı" kapısı açılıyor...'),
           findsOneWidget,
         );
 
         await t.pump(const Duration(milliseconds: 1500));
-        expect(find.text('Gönderildi'), findsNothing);
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
         await _dispose(t);
       },
     );
@@ -396,13 +396,13 @@ void main() {
       );
       await _pumpView(t, auth);
 
-      await t.tap(find.text('Kapıyı Aç'));
+      await t.tap(find.text('KAPIYI AÇ'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
 
       expect(auth.openedDoorIds, [1]);
       expect(find.text('Cihaz yanıt vermedi.'), findsOneWidget);
-      expect(find.text('Gönderildi'), findsNothing);
+      expect(find.text('GÖNDERİLDİ'), findsNothing);
       await _dispose(t);
     });
 
@@ -426,15 +426,15 @@ void main() {
           ],
         );
         await _pumpView(t, auth);
-        expect(find.text('Kapıyı Aç'), findsNWidgets(2));
+        expect(find.text('KAPIYI AÇ'), findsNWidgets(2));
 
-        await t.tap(find.text('Kapıyı Aç').first);
+        await t.tap(find.text('KAPIYI AÇ').first);
         await t.pump();
         await t.pump(const Duration(milliseconds: 300));
 
         expect(auth.openedDoorIds, [1]);
-        expect(find.text('Gönderildi'), findsOneWidget);
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
         await _dispose(t);
       },
     );

@@ -152,12 +152,15 @@ void main() {
       final auth = _QrAuth();
       await _openModal(tester, auth);
       expect(find.byType(QrImageView), findsOneWidget);
+      // Diyalog girişi (route geçişi, güncel Flutter'da ~250 ms) sürerken TÜM diyalog alt ağacı her
+      // karede yeniden boyanır; iddia yalnız GERİ SAYIM karelerini ölçer: önce giriş bitsin.
+      await tester.pump(const Duration(milliseconds: 300));
 
       final paints = _PaintCounter()..start();
       addTearDown(paints.stop);
       RebuildProbe.start();
       for (var i = 0; i < 30; i++) {
-        await tester.pump(const Duration(milliseconds: 16)); // 480 ms: ilk yoklamadan (800 ms) önce
+        await tester.pump(const Duration(milliseconds: 16)); // 480 ms: geri sayım kareleri
       }
       paints.stop();
       print(

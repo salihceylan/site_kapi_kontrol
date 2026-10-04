@@ -6,8 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Başvuru durumu: (etiket, ton).
 typedef JoinRequestStatus = ({String label, AppTone tone});
@@ -15,7 +17,9 @@ typedef JoinRequestStatus = ({String label, AppTone tone});
 /// Bir katılım başvurusu kartı: site adı + durum rozeti + ayrıntı satırları.
 ///
 /// Durum rozeti site adının yanında (sığarsa) ya da altında durur (`Wrap`): ad kırpılmaz. Renk tek
-/// başına anlam taşımaz (rozet metni de vardır). Üst öğe sınırlı genişlikte olmalıdır.
+/// başına anlam taşımaz (rozet metni de vardır). Soldaki cilalı site rozeti ([IconOrb]) durumun
+/// tonunu taşır (bekliyor = uyarı, onaylı = başarı, reddedildi = hata); dekoratiftir ve büyük
+/// yazıda (>= 1,75x) metne yer kalsın diye gizlenir. Üst öğe sınırlı genişlikte olmalıdır.
 class JoinRequestCard extends StatelessWidget {
   const JoinRequestCard({
     super.key,
@@ -43,7 +47,6 @@ class JoinRequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
 
     return AppCard(
@@ -51,18 +54,16 @@ class JoinRequestCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: ExcludeSemantics(
-              child: Icon(
-                Icons.apartment_rounded,
-                size: 20,
-                color: AppTone.primary.ink(p),
-              ),
+          if (!isLargeText(context)) ...[
+            IconOrb(
+              icon: Icons.apartment_rounded,
+              tone: status.tone,
+              size: 40,
+              shape: IconOrbShape.squircle,
             ),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          // Ayrıntılar başlıkla aynı hizada (ikonun sağında) akar.
+            const SizedBox(width: AppSpace.md),
+          ],
+          // Ayrıntılar başlıkla aynı hizada (rozetin sağında) akar.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -72,7 +72,7 @@ Future<void> _setSize(
 void main() {
   group('görünürlük (eski kart ile aynı metinler)', () {
     testWidgets(
-      'WROOM + QR okuyucu: QR eylemleri, misafir kodu ve "Uzaktan Aç"; "Kapıyı Aç" yok',
+      'WROOM + QR okuyucu: QR eylemleri, misafir kodu ve "UZAKTAN AÇ"; "KAPIYI AÇ" yok',
       (t) async {
         await _setSize(t);
         final calls = _Calls();
@@ -89,13 +89,13 @@ void main() {
         expect(find.text('Kapı Ekranından QR Oku'), findsOneWidget);
         expect(find.text('Kapıya QR Göster'), findsOneWidget);
         expect(find.text('Misafir Kodu'), findsOneWidget);
-        expect(find.text('Uzaktan Aç'), findsOneWidget);
-        expect(find.text('Kapıyı Aç'), findsNothing);
+        expect(find.text('UZAKTAN AÇ'), findsOneWidget);
+        expect(find.text('KAPIYI AÇ'), findsNothing);
       },
     );
 
     testWidgets(
-      'C3 çevrimdışı: "Kapıyı Aç" + "Misafir Kodu"; QR eylemleri, Wi-Fi ve optik QR rozeti yok',
+      'C3 çevrimdışı: "KAPIYI AÇ" + "Misafir Kodu"; QR eylemleri, Wi-Fi ve optik QR rozeti yok',
       (t) async {
         await _setSize(t);
         final door = g4Door(
@@ -113,9 +113,9 @@ void main() {
         expect(find.text('Güneş Sitesi • B Blok'), findsOneWidget);
         expect(find.text('B Blok Kapısı'), findsOneWidget);
         expect(find.text('Çevrimdışı'), findsOneWidget);
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
         expect(find.text('Misafir Kodu'), findsOneWidget);
-        expect(find.text('Uzaktan Aç'), findsNothing);
+        expect(find.text('UZAKTAN AÇ'), findsNothing);
         expect(find.text('Kapı Ekranından QR Oku'), findsNothing);
         expect(find.text('Kapıya QR Göster'), findsNothing);
         expect(find.text('Optik QR'), findsNothing);
@@ -172,7 +172,7 @@ void main() {
       await t.pumpWidget(_app(_card(g4Door(), calls)));
       await t.pump(const Duration(milliseconds: 500));
 
-      await t.tap(find.text('Uzaktan Aç'));
+      await t.tap(find.text('UZAKTAN AÇ'));
       await t.pump();
       await t.tap(find.text('Kapı Ekranından QR Oku'));
       await t.pump();
@@ -193,7 +193,7 @@ void main() {
         await t.pumpWidget(_app(_card(door, calls)));
         await t.pump(const Duration(milliseconds: 500));
 
-        await t.tap(find.text('Uzaktan Aç'));
+        await t.tap(find.text('UZAKTAN AÇ'));
         await t.pump();
         await t.tap(find.text('Kapı Ekranından QR Oku'));
         await t.pump();
@@ -208,7 +208,7 @@ void main() {
     );
 
     testWidgets(
-      'komut sürerken "Kapı Açılıyor..." gösterilir ve ikinci dokunuş yok sayılır',
+      'komut sürerken "AÇILIYOR" gösterilir ve ikinci dokunuş yok sayılır',
       (t) async {
         await _setSize(t);
         final calls = _Calls();
@@ -216,25 +216,25 @@ void main() {
         await t.pumpWidget(_app(_card(door, calls, isOpening: true)));
         await t.pump(const Duration(milliseconds: 500));
 
-        expect(find.text('Kapı Açılıyor...'), findsOneWidget);
-        expect(find.text('Kapıyı Aç'), findsNothing);
+        expect(find.text('AÇILIYOR'), findsOneWidget);
+        expect(find.text('KAPIYI AÇ'), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-        await t.tap(find.text('Kapı Açılıyor...'), warnIfMissed: false);
+        await t.tap(find.text('AÇILIYOR'), warnIfMissed: false);
         await t.pump();
         expect(calls.open, 0);
       },
     );
 
-    testWidgets('"Uzaktan Aç" komutu sürerken kısa etiket "Açılıyor..." olur', (
+    testWidgets('"UZAKTAN AÇ" komutu sürerken kısa etiket "AÇILIYOR" olur', (
       t,
     ) async {
       await _setSize(t);
       await t.pumpWidget(_app(_card(g4Door(), _Calls(), isOpening: true)));
       await t.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Açılıyor...'), findsOneWidget);
-      expect(find.text('Uzaktan Aç'), findsNothing);
+      expect(find.text('AÇILIYOR'), findsOneWidget);
+      expect(find.text('UZAKTAN AÇ'), findsNothing);
     });
   });
 
@@ -248,24 +248,24 @@ void main() {
 
         await t.pumpWidget(_app(_card(door, calls)));
         await t.pump(const Duration(milliseconds: 500));
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
-        expect(find.text('Gönderildi'), findsNothing);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
 
         // Komut başladı.
         await t.pumpWidget(_app(_card(door, calls, isOpening: true)));
         await t.pump(const Duration(milliseconds: 300));
-        expect(find.text('Kapı Açılıyor...'), findsOneWidget);
+        expect(find.text('AÇILIYOR'), findsOneWidget);
 
         // Üst görünümün tek setState'i: komut bitti + başarı sayacı arttı.
         await t.pumpWidget(_app(_card(door, calls, successTick: 1)));
         await t.pump(const Duration(milliseconds: 300));
-        expect(find.text('Gönderildi'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
         expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-        expect(find.text('Kapıyı Aç'), findsNothing);
+        expect(find.text('KAPIYI AÇ'), findsNothing);
 
         await t.pump(const Duration(milliseconds: 1500));
-        expect(find.text('Gönderildi'), findsNothing);
-        expect(find.text('Kapıyı Aç'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
+        expect(find.text('KAPIYI AÇ'), findsOneWidget);
       },
     );
 
@@ -277,8 +277,8 @@ void main() {
       await t.pumpWidget(_app(_card(door, _Calls())));
       await t.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Gönderildi'), findsNothing);
-      expect(find.text('Kapıyı Aç'), findsOneWidget);
+      expect(find.text('GÖNDERİLDİ'), findsNothing);
+      expect(find.text('KAPIYI AÇ'), findsOneWidget);
     });
   });
 
@@ -316,7 +316,7 @@ void main() {
       await _setSize(t);
       await t.pumpWidget(_app(_card(g4Door(), _Calls()), reduce: true));
       await t.pump();
-      expect(find.text('Uzaktan Aç'), findsOneWidget);
+      expect(find.text('UZAKTAN AÇ'), findsOneWidget);
       expect(find.text('Çevrimiçi'), findsOneWidget);
     });
 
@@ -378,10 +378,10 @@ void main() {
         scale: scale,
         dark: dark,
       );
-      expect(find.text('Uzaktan Aç'), findsOneWidget);
+      expect(find.text('UZAKTAN AÇ'), findsOneWidget);
     });
 
-    g4LayoutMatrix('kapı kartı (çevrimdışı, "Kapıyı Aç")', (
+    g4LayoutMatrix('kapı kartı (çevrimdışı, "KAPIYI AÇ")', (
       t,
       width,
       height,
@@ -400,7 +400,7 @@ void main() {
         scale: scale,
         dark: dark,
       );
-      expect(find.text('Kapıyı Aç'), findsOneWidget);
+      expect(find.text('KAPIYI AÇ'), findsOneWidget);
     });
 
     g4LayoutMatrix('kapı kartı (komut sürüyor)', (
@@ -422,7 +422,7 @@ void main() {
         scale: scale,
         dark: dark,
       );
-      expect(find.text('Kapı Açılıyor...'), findsOneWidget);
+      expect(find.text('AÇILIYOR'), findsOneWidget);
     });
   });
 }

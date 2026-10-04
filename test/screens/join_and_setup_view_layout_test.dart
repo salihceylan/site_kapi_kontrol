@@ -9,9 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/setup_option_card.dart';
 
 import '../design/harness.dart';
 import 'g4_test_support.dart';
@@ -336,5 +339,148 @@ void main() {
         expect(find.byType(CircularProgressIndicator), findsNothing);
       },
     );
+  });
+
+  group('görsel dil (hero rozet, seviye 2 kart)', () {
+    testWidgets(
+      'kurulum kartları: 56 dp daire IconOrb (glow) + seviye 2 tonlu AppCard; eylem >= 48 dp',
+      (t) async {
+        await pumpAt(
+          t,
+          _view(G4Auth(), _Taps()),
+          width: 360,
+          scale: 1.0,
+          height: 1400,
+        );
+        for (final (title, tone, icon, action) in const <
+          (String, AppTone, IconData, String)
+        >[
+          (
+            'Site Sakini Girişi',
+            AppTone.success,
+            Icons.key_rounded,
+            'QR / Kod ile Daireye Katıl',
+          ),
+          (
+            'Yönetici & Cihaz Kurulumu',
+            AppTone.primary,
+            Icons.admin_panel_settings_rounded,
+            'Cihaz Ekleyerek Site Yöneticisi Ol',
+          ),
+        ]) {
+          final card = find.ancestor(
+            of: find.text(title),
+            matching: find.byType(SetupOptionCard),
+          );
+          final orb = t.widget<IconOrb>(
+            find.descendant(of: card, matching: find.byType(IconOrb)),
+          );
+          expect(orb.tone, tone, reason: title);
+          expect(orb.icon, icon, reason: title);
+          expect(orb.size, 56, reason: title);
+          expect(orb.shape, IconOrbShape.circle, reason: title);
+          expect(orb.glow, isTrue, reason: title);
+          expect(orb.semanticLabel, isNull, reason: 'rozet dekoratif');
+          final surface = t.widget<AppCard>(
+            find.descendant(of: card, matching: find.byType(AppCard)),
+          );
+          expect(surface.level, 2, reason: title);
+          expect(surface.tone, tone, reason: title);
+          expect(
+            t.getSize(find.widgetWithText(ElevatedButton, action)).height,
+            greaterThanOrEqualTo(48),
+            reason: '$action dokunma hedefi',
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'ekranda en çok iki hero (glow) rozet; başlık kartı rozeti sade 48 dp squircle',
+      (t) async {
+        await pumpAt(
+          t,
+          _view(G4Auth(), _Taps()),
+          width: 360,
+          scale: 1.0,
+          height: 1400,
+        );
+        final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+        expect(orbs.where((o) => o.glow), hasLength(2));
+        final header = orbs.singleWhere((o) => !o.glow);
+        expect(header.icon, Icons.add_home_work_rounded);
+        expect(header.size, 48);
+        expect(header.shape, IconOrbShape.squircle);
+      },
+    );
+
+    testWidgets(
+      'büyük yazıda başlık rozeti gizlenir, kurulum rozeti metnin ÜSTÜNE geçer (metin tam genişlik)',
+      (t) async {
+        await pumpAt(
+          t,
+          _view(G4Auth(), _Taps()),
+          width: 320,
+          scale: 2.0,
+          height: 2400,
+        );
+        expect(
+          find.byType(IconOrb),
+          findsNWidgets(2),
+          reason: 'yalnız iki hero rozet kalır (başlık rozeti gizli)',
+        );
+        for (final title in const <String>[
+          'Site Sakini Girişi',
+          'Yönetici & Cihaz Kurulumu',
+        ]) {
+          final card = find.ancestor(
+            of: find.text(title),
+            matching: find.byType(SetupOptionCard),
+          );
+          final orb = find.descendant(of: card, matching: find.byType(IconOrb));
+          expect(
+            t.getTopLeft(find.text(title)).dy,
+            greaterThanOrEqualTo(t.getBottomLeft(orb).dy - 0.5),
+            reason: '"$title" rozetin altında (yan yana yer kalmaz)',
+          );
+          expect(
+            t.getTopLeft(find.text(title)).dx,
+            closeTo(t.getTopLeft(orb).dx, 0.5),
+            reason: '"$title" rozetle sol kenarda hizalı',
+          );
+        }
+      },
+    );
+
+    testWidgets('başlık kartı başlığı anlamsal başlıktır (SectionHeader)', (
+      t,
+    ) async {
+      final handle = t.ensureSemantics();
+      await pumpAt(
+        t,
+        _view(G4Auth(), _Taps()),
+        width: 360,
+        scale: 1.0,
+        height: 1400,
+      );
+      expect(
+        t.getSemantics(find.text('Daireye Katıl & Cihaz Ekle')),
+        isSemantics(isHeader: true),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('kararlı durumda ticker yok (sonsuz animasyon yok)', (t) async {
+      await pumpAt(
+        t,
+        _view(G4Auth(requests: g4Requests()), _Taps()),
+        width: 360,
+        scale: 1.0,
+        height: 1400,
+      );
+      await t.pumpAndSettle();
+      expect(t.binding.transientCallbackCount, 0);
+      expect(t.binding.hasScheduledFrame, isFalse);
+    });
   });
 }

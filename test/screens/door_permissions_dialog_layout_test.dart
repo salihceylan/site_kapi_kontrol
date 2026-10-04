@@ -2,6 +2,8 @@
 //
 // DoorPermissionsDialog bir `Dialog`'tur: başlık şeridi sabit, geri kalan (kapsam bilgisi, arama,
 // blok kartları) tek kaydırma alanında akar; büyük yazıda içerik taşmaz.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/door_permission_record.dart';
@@ -11,8 +13,12 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/door_permissions_dialog.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 
 DoorRecord _door() => DoorRecord(
@@ -109,16 +115,20 @@ Map<String, dynamic> _json({bool empty = false}) => {
 };
 
 class _FakeAuth extends AuthService {
-  _FakeAuth({this.error, this.empty = false})
+  _FakeAuth({this.error, this.empty = false, this.gate})
     : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   final String? error;
   final bool empty;
+
+  /// Verilirse izinler bu tamamlanana dek "yükleniyor" kalır.
+  final Completer<void>? gate;
   final List<(int, bool?)> overrides = [];
   final List<(int?, bool?)> bulks = [];
 
   @override
   Future<(DoorPermissionsData?, String?)> getDoorPermissions(int doorId) async {
+    await gate?.future;
     if (error != null) return (null, error);
     return (DoorPermissionsData.fromJson(_json(empty: empty)), null);
   }
@@ -304,6 +314,7 @@ void main() {
   testWidgets(
     'DoorPermissionsDialog: anahtar dokunuşu yetkiyi tersine çevirir ve bildirim gösterir',
     (t) async {
+      final haptics = recordHaptics(t);
       final auth = _FakeAuth();
       await _open(t, auth, width: 400, height: 1000, scale: 1.0, dark: false);
 
@@ -314,7 +325,65 @@ void main() {
       expect(auth.overrides.length, 1);
       expect(auth.overrides.first.$1, 1002);
       expect(find.text('Yetki güncellendi.'), findsOneWidget);
+      expect(haptics, contains('HapticFeedbackType.lightImpact'));
       expect(t.takeException(), isNull);
+    },
+  );
+  // --- Görsel sözleşme (cilalı safir): iskelet, ikon rozetleri, durum hapları, 48 dp anahtar satırı ---
+
+  testWidgets(
+    'DoorPermissionsDialog: izinler yüklenirken iskelet (spinner yok); yüklenince iskelet kalkar',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) => DoorPermissionsDialog.show(
+          context,
+          door: _door(),
+          authService: _FakeAuth(gate: gate),
+        ),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsAtLeastNWidgets(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Kapı yetkileri yükleniyor...'), findsOneWidget);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(find.text('Ayşe Yılmaz Uzun Soyadlı Kişi'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'DoorPermissionsDialog: sakin satırı = ikon rozeti + durum hapı + en az 48 dp anahtar satırı',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Başlık + blok + sakin rozetleri (liste tembel: görünenler yeter).
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(5));
+      // Durumlar StatusChip (rozet tonu accessSource'tan: değişmedi).
+      expect(find.widgetWithText(StatusChip, 'Blok Sakini'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Ek İzinli'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Engellendi'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, '2/3 Yetkili'), findsOneWidget);
+
+      // Anahtar satırı okunaklı ve en az 48 dp; dokunma hedefi anahtardır (satır değil).
+      final switchRow = find
+          .ancestor(of: find.byType(Switch).first, matching: find.byType(Row))
+          .first;
+      expect(t.getSize(switchRow).height, greaterThanOrEqualTo(48));
     },
   );
 }

@@ -15,11 +15,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { AREA_DIR, renderAll } from './render.mjs';
+import { lintEntries } from './lint.mjs';
+
+export {
+  linkOf,
+  renderAll,
+  renderAppendices,
+  renderAreaDoc,
+  renderEntry,
+  renderIndex,
+  renderLanding,
+  renderMessages,
+} from './render.mjs';
+export { buildCorpus, lintCommand, lintEntries, logPhraseFound } from './lint.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const ENTRY_DIR = path.join(ROOT, 'tools', 'klavuz', 'entries');
-export const OUT_MAIN = path.join(ROOT, 'docs', 'ARIZA_KLAVUZU.md');
-export const OUT_MESSAGES = path.join(ROOT, 'docs', 'ARIZA_KLAVUZU_HATA_MESAJLARI.md');
 
 const IGNORED_DIRS = new Set([
   'node_modules', '.git', '.pio', '.dart_tool', 'build', '.venv', '__pycache__', '.idea', 'scratch', 'output',
@@ -199,19 +211,29 @@ export function resolveArea(area, io) {
   return { key: area.key, order: area.order ?? 100, title: area.title, intro: area.intro, files, entries, errors };
 }
 
-/** Alanlar arası kontroller: benzersiz id, geçerli related. */
-export function crossCheck(areas) {
+/**
+ * Alanlar arası kontroller: benzersiz id, geçerli related.
+ * `only`: yalnızca bu alanın girişleriyle ilgili hataları raporlar (id evreni yine TÜM alanlardır; böylece bir alanı
+ * yazan kişi, başka alanlarda henüz yazılmamış hedefleri kendi hatası sanmaz ama kendi eksik bağlantılarını görür).
+ */
+export function crossCheck(areas, { only = null } = {}) {
   const errors = [];
   const seen = new Map();
   for (const area of areas) {
     for (const entry of area.entries) {
       if (entry.id) {
-        if (seen.has(entry.id)) errors.push(`yinelenen id: ${entry.id} (${seen.get(entry.id)} ve ${area.key})`);
-        else seen.set(entry.id, area.key);
+        if (seen.has(entry.id)) {
+          if (!only || area.key === only || seen.get(entry.id) === only) {
+            errors.push(`yinelenen id: ${entry.id} (${seen.get(entry.id)} ve ${area.key})`);
+          }
+        } else {
+          seen.set(entry.id, area.key);
+        }
       }
     }
   }
   for (const area of areas) {
+    if (only && area.key !== only) continue;
     for (const entry of area.entries) {
       for (const rel of entry.related ?? []) {
         if (!seen.has(rel)) errors.push(`[${area.key}] ${entry.id}: related id yok: ${rel}`);
@@ -233,6 +255,28 @@ export async function loadAreas(dir = ENTRY_DIR, only = null) {
     areas.push({ key, order: Number.parseInt(key, 10) || 100, ...mod.default });
   }
   return areas;
+}
+
+/**
+ * Toleranslı yükleme: bir alan dosyası yüklenemezse (örn. başka biri o sırada düzenliyor ve sözdizimi geçici bozuk)
+ * tüm işlem çökmez; hata `failures` içinde döner. Paralel çalışan yazarlar birbirinin yarım dosyasından etkilenmesin diye.
+ */
+export async function loadAreasTolerant(dir = ENTRY_DIR) {
+  const areas = [];
+  const failures = [];
+  if (!fs.existsSync(dir)) return { areas, failures };
+  const names = fs.readdirSync(dir).filter((n) => n.endsWith('.mjs') && !n.startsWith('_')).sort();
+  for (const name of names) {
+    const key = name.replace(/\.mjs$/, '');
+    try {
+      const mod = await import(`${pathToFileURL(path.join(dir, name)).href}?t=${Date.now()}`);
+      if (!mod.default || typeof mod.default !== 'object') throw new Error('default export (nesne) yok');
+      areas.push({ key, order: Number.parseInt(key, 10) || 100, ...mod.default });
+    } catch (error) {
+      failures.push({ key, error: String(error?.message ?? error).split('\n')[0] });
+    }
+  }
+  return { areas, failures };
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +306,16 @@ export function scanRoutes(io) {
 }
 
 const DART_METHOD_RE = /^\s*(?:static\s+)?(?:Future|Stream)<.+?>\s+(\w+)\s*\(/;
-const DART_PATH_RES = [/\$baseUrl(\/[A-Za-z0-9_\-/${}.]*)/, /path:\s*'(\/[^']*)'/];
+const DART_PATH_RES = [/\$baseUrl(\/[^'"\s]*)/, /path:\s*'(\/[^']*)'/];
+
+/** Dart yol dizgesindeki ${...} ifadelerini $ad biçimine indirger; sorgu kısmını atar. */
+export function normalizeDartPath(raw) {
+  return raw
+    .replace(/\$\{Uri\.encodeComponent\((\w+)\)\}/g, '$$$1')
+    .replace(/\$\{(\w+)\}/g, '$$$1')
+    .replace(/\$\{[^}]*\}/g, '$param')
+    .replace(/\?.*$/, '');
+}
 
 export function scanAppCalls(io) {
   const files = io.list('lib/services', { exts: ['.dart'] });
@@ -278,10 +331,11 @@ export function scanAppCalls(io) {
       for (const re of DART_PATH_RES) {
         const pm = re.exec(text);
         if (!pm) continue;
-        const key = `${pm[1]}|${method}|${file}`;
+        const route = normalizeDartPath(pm[1]);
+        const key = `${route}|${method}|${file}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        rows.push({ route: pm[1], method, file, line: i + 1 });
+        rows.push({ route, method, file, line: i + 1 });
       }
     });
   }
@@ -329,6 +383,48 @@ export function scanTables(io) {
   return [...tables.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Kapsam ölçümüne giren KAYNAK dosyalar (testler, varlıklar, üretilmiş dosyalar hariç). */
+export const COVERAGE_SOURCES = [
+  { dir: 'lib', exts: ['.dart'], recursive: true },
+  { dir: 'server/src', exts: ['.js'], recursive: true },
+  { dir: 'server/scripts', exts: ['.js', '.mjs', '.sh'], recursive: false },
+  { dir: 'cihaz_kontrol/src', exts: ['.cpp', '.h', '.ino', '.c'], recursive: true },
+  { dir: 'cihaz_kontrol/include', exts: ['.h'], recursive: true },
+  { dir: 'ekran_yazilimi/src', exts: ['.cpp', '.h', '.ino', '.c'], recursive: true },
+  { dir: 'ekran_yazilimi/include', exts: ['.h'], recursive: true },
+  { dir: 'company_qr_tool', exts: ['.py'], recursive: false },
+  { dir: 'cihaz_dene', exts: ['.py'], recursive: false },
+  { dir: 'deploy', exts: ['.sh'], recursive: false },
+  { dir: 'tools/klavuz', exts: ['.mjs'], recursive: false },
+];
+
+/**
+ * Her kaynak dosya için: kaç satır, hangi girişlerin bağlantısı (strong), hangi alanların dosya haritasında (mapped).
+ * `areas`: resolveArea çıktıları (çözülemeyen bağlantılar zaten eleniyor; kısmi/hatalı girişlerde de çalışır).
+ */
+export function scanCoverage(io, areas) {
+  const byFile = new Map();
+  for (const src of COVERAGE_SOURCES) {
+    for (const file of io.list(src.dir, { exts: src.exts, recursive: src.recursive })) {
+      if (file.endsWith('.test.mjs')) continue;
+      byFile.set(file, { file, lines: (io.lines(file) ?? []).length, entries: [], mappedIn: [] });
+    }
+  }
+  for (const area of areas) {
+    for (const f of area.files ?? []) {
+      const row = byFile.get(f.file);
+      if (row && !row.mappedIn.includes(area.key)) row.mappedIn.push(area.key);
+    }
+    for (const entry of area.entries) {
+      for (const ref of entry.refs) {
+        const row = byFile.get(ref.file);
+        if (row && !row.entries.includes(entry.id)) row.entries.push(entry.id);
+      }
+    }
+  }
+  return [...byFile.values()].sort((a, b) => a.file.localeCompare(b.file));
+}
+
 const STR = String.raw`(['"\`])((?:\\.|(?!\1).)+)\1`;
 const SERVER_MESSAGE_RES = [
   { re: new RegExp(String.raw`\berror\s*:\s*${STR}`), group: 2 },
@@ -341,6 +437,9 @@ const APP_MESSAGE_RES = [
   { re: /(?:_errorMessage|errorMessage|_successMessage)\s*=\s*(['"])((?:\\.|(?!\1).)+)\1/, group: 2 },
   { re: /\breturn\s+(['"])((?:\\.|(?!\1).){16,})\1\s*;/, group: 2 },
 ];
+
+/** Kaynak dizgesindeki kaçışları (\' \" \\ \`) çözer: GPS\'i -> GPS'i */
+const unescapeSource = (s) => s.replace(/\\(['"`\\])/g, '$1');
 
 function messageLooksHuman(text) {
   return text.length >= 8 && /\p{L}/u.test(text) && /\s/.test(text);
@@ -358,7 +457,7 @@ export function scanMessages(io) {
       for (const { re, group } of SERVER_MESSAGE_RES) {
         const m = re.exec(text);
         if (m && messageLooksHuman(m[group])) {
-          server.push({ message: m[group], file, line: i + 1 });
+          server.push({ message: unescapeSource(m[group]), file, line: i + 1 });
           break;
         }
       }
@@ -374,7 +473,7 @@ export function scanMessages(io) {
         if (isReturn && !inServices) continue;
         const m = re.exec(text);
         if (m && messageLooksHuman(m[group])) {
-          app.push({ message: m[group], file, line: i + 1 });
+          app.push({ message: unescapeSource(m[group]), file, line: i + 1 });
           break;
         }
       }
@@ -386,183 +485,55 @@ export function scanMessages(io) {
 }
 
 // ---------------------------------------------------------------------------
-// Biçimlendirme
+// Doğrulama durumu ve belge yazımı
 // ---------------------------------------------------------------------------
 
-const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-const htmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\|/g, '&#124;');
-const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
-/** docs/ içinden köke göre bağlantı: ../dosya#L12 */
-export function linkOf(file, line, endLine = null) {
-  const label = endLine ? `${file}:${line}-${endLine}` : `${file}:${line}`;
-  const anchor = endLine ? `#L${line}-L${endLine}` : `#L${line}`;
-  return `[${label}](../${file}${anchor})`;
+/** tools/klavuz/durum.json: { "dogrulananAlanlar": ["10-sunucu-api", ...], "not": "..." } (yoksa hiçbiri doğrulanmamış). */
+export function loadStatus(io) {
+  const lines = io.lines('tools/klavuz/durum.json');
+  if (!lines) return { verified: [], note: '' };
+  try {
+    const raw = JSON.parse(lines.join('\n'));
+    return {
+      verified: Array.isArray(raw.dogrulananAlanlar) ? raw.dogrulananAlanlar : [],
+      note: String(raw.not ?? ''),
+    };
+  } catch {
+    return { verified: [], note: '' };
+  }
 }
 
-function renderEntry(entry) {
-  const out = [];
-  out.push(`<a id="${entry.id}"></a>`);
-  out.push(`#### ${entry.id} · ${entry.symptom}`);
-  out.push('');
-  out.push('| Dosya:satır | Satırdaki kod | Ne işe yarar |');
-  out.push('| --- | --- | --- |');
-  for (const ref of entry.refs) {
-    out.push(
-      `| ${linkOf(ref.file, ref.line, ref.endLine)} | <code>${htmlEsc(clip(ref.text, 90))}</code> | ${esc(ref.note)} |`,
-    );
-  }
-  out.push('');
-  const list = (title, items, code = false) => {
-    if (!items?.length) return;
-    out.push(`**${title}**`);
-    for (const item of items) out.push(code ? `- \`${item}\`` : `- ${item}`);
-    out.push('');
-  };
-  list('Olası nedenler', entry.causes);
-  list('Adım adım kontrol', entry.checks);
-  list('Günlükte aranacak ifadeler', entry.logs, true);
-  if (entry.commands?.length) {
-    out.push('**Komutlar**');
-    out.push('```bash');
-    for (const c of entry.commands) out.push(c);
-    out.push('```');
-    out.push('');
-  }
-  if (entry.tests?.length) {
-    out.push(`**İlgili testler:** ${entry.tests.map((t) => `[${t}](../${t})`).join(', ')}`);
-    out.push('');
-  }
-  if (entry.related?.length) {
-    out.push(`**Bkz.:** ${entry.related.map((r) => `[${r}](#${r})`).join(', ')}`);
-    out.push('');
-  }
-  return out;
+function readDoc(rel) {
+  const full = path.join(ROOT, rel);
+  return fs.existsSync(full) ? fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n') : null;
 }
 
-export function renderMain(areas, scans) {
-  const out = [];
-  const total = areas.reduce((n, a) => n + a.entries.length, 0);
-  const totalRefs = areas.reduce((n, a) => n + a.entries.reduce((m, e) => m + e.refs.length, 0), 0);
-  out.push('# Site Kapı Kontrol — Arıza Bulma Klavuzu');
-  out.push('');
-  out.push(
-    '> Bu klavuz **elle yazılmış satır numarası içermez**: her `dosya:satır` bağlantısı `tools/klavuz/build.mjs` ' +
-      'tarafından koddan çözülür; kod parçası bulunamazsa üretim hata verir. Kod değişince belgeyi yenileyin: ' +
-      '`node tools/klavuz/build.mjs` (denetim: `node tools/klavuz/build.mjs --check --fresh`).',
-  );
-  out.push('');
-  out.push(`Kapsam: ${areas.length} alan, ${total} arıza girişi, ${totalRefs} kod bağlantısı + otomatik ekler.`);
-  out.push('');
-  out.push('## Nasıl kullanılır (kişi ya da ajan için 4 adım)');
-  out.push('');
-  out.push('1. **Belirtiyi bulun:** aşağıdaki "Hızlı yönlendirme" tablosunda anahtar sözcüğü arayın; ekranda gördüğünüz **hata mesajını** biliyorsanız [ARIZA_KLAVUZU_HATA_MESAJLARI.md](ARIZA_KLAVUZU_HATA_MESAJLARI.md) içinde tam metni arayın (mesaj → dosya:satır).');
-  out.push('2. **Girişi açın:** her giriş "Dosya:satır → ne işe yarar", olası nedenler, adım adım kontrol, günlükte aranacak ifadeler, komutlar ve ilgili testleri verir.');
-  out.push('3. **Uçtan uca akış gerekiyorsa** "Akışlar" bölümündeki haritaya bakın (uygulama → sunucu → veritabanı → MQTT → cihaz).');
-  out.push('4. **Bulamazsanız:** `node tools/klavuz/build.mjs --where "aranan metin"` depoda dosya:satır döner; ekler (uç noktalar, uygulama çağrıları, ortam değişkenleri, tablolar) tüm yüzeyi listeler.');
-  out.push('');
-  out.push('Proje kuralları: [AGENTS.md](../AGENTS.md) (geriye uyumluluk, ESP32-C3 saha cihazı, taşma yasağı, canlı sunucu güncelleme). ' +
-    'Ek belgeler: [PROJE_TEKNIK_NOTLAR.md](../PROJE_TEKNIK_NOTLAR.md), [SAHA_KONTROL_LISTESI.md](../SAHA_KONTROL_LISTESI.md), ' +
-    '[docs/codebase/](codebase/), [deploy/README.md](../deploy/README.md), [docs/EPOSTA_DOGRULAMA.md](EPOSTA_DOGRULAMA.md).');
-  out.push('');
-
-  out.push('## Hızlı yönlendirme (belirti → giriş)');
-  out.push('');
-  out.push('| Belirti | Anahtar sözcükler | Alan | Giriş |');
-  out.push('| --- | --- | --- | --- |');
-  for (const area of areas) {
-    for (const e of area.entries) {
-      out.push(`| ${esc(e.symptom)} | ${esc((e.keywords ?? []).join(', '))} | ${esc(area.title)} | [${e.id}](#${e.id}) |`);
-    }
-  }
-  out.push('');
-
-  for (const area of areas) {
-    out.push(`<a id="alan-${area.key}"></a>`);
-    out.push(`## ${area.title}`);
-    out.push('');
-    out.push(area.intro);
-    out.push('');
-    if (area.files.length) {
-      out.push('**Dosya haritası**');
-      out.push('');
-      out.push('| Dosya | Rol |');
-      out.push('| --- | --- |');
-      for (const f of area.files) out.push(`| [${f.file}](../${f.file}) | ${esc(f.note)} |`);
-      out.push('');
-    }
-    for (const entry of area.entries) out.push(...renderEntry(entry));
-  }
-
-  // --- Ekler (otomatik)
-  out.push('## Ek A — Sunucu uç noktaları (otomatik)');
-  out.push('');
-  out.push('Kaynak: `server/src/routes/*.js` ve `server/src/server.js`. Sütunlar: yöntem, yol, o satırdaki ara katmanlar (yetki/hız sınırı).');
-  out.push('');
-  out.push('| Yöntem | Yol | Ara katmanlar | Dosya:satır |');
-  out.push('| --- | --- | --- | --- |');
-  for (const r of scans.routes) {
-    out.push(`| ${r.method} | \`${esc(r.route)}\` | ${esc(clip(r.middleware, 70))} | ${linkOf(r.file, r.line)} |`);
-  }
-  out.push('');
-  out.push('## Ek B — Uygulama → sunucu çağrıları (otomatik)');
-  out.push('');
-  out.push('Kaynak: `lib/services/*.dart`. Hangi uygulama metodunun hangi yola istek attığı (yol parametreleri `$` ile gösterilir).');
-  out.push('');
-  out.push('| Yol | Uygulama metodu | Dosya:satır |');
-  out.push('| --- | --- | --- |');
-  for (const r of scans.appCalls) {
-    out.push(`| \`${esc(r.route)}\` | \`${esc(r.method)}\` | ${linkOf(r.file, r.line)} |`);
-  }
-  out.push('');
-  out.push('## Ek C — Sunucu ortam değişkenleri (otomatik)');
-  out.push('');
-  out.push('Kaynak: `process.env.*` kullanımları (`server/src`, `server/scripts`). Değerler `server/.env` içindedir (canlıda `/var/www/site_kapi_kontrol/server/.env`); sır içerdiği için belgeye yazılmaz. Şablon: [server/.env.example](../server/.env.example).');
-  out.push('');
-  out.push('| Değişken | İlk kullanımlar |');
-  out.push('| --- | --- |');
-  for (const e of scans.env) {
-    out.push(`| \`${e.name}\` | ${e.places.map((p) => linkOf(p.file, p.line)).join('<br>')} |`);
-  }
-  out.push('');
-  out.push('## Ek D — Veritabanı tabloları (otomatik)');
-  out.push('');
-  out.push('Şema iki yerde tanımlanır: açılışta çalışan `server/src/db.js` (`ensureDbSchema`, ekleyici) ve numaralı `server/migrations/*.sql`.');
-  out.push('');
-  out.push('| Tablo | db.js | İlk migration |');
-  out.push('| --- | --- | --- |');
-  for (const t of scans.tables) {
-    out.push(
-      `| \`${t.name}\` | ${t.db ? linkOf('server/src/db.js', t.db) : '—'} | ${t.migration ? linkOf(t.migration.file, t.migration.line) : '—'} |`,
-    );
-  }
-  out.push('');
-  out.push('## Bu klavuza nasıl giriş eklenir');
-  out.push('');
-  out.push('`tools/klavuz/entries/<alan>.mjs` dosyasına giriş ekleyin (örnekler orada). Satır numarası YAZMAYIN: yalnızca dosya ve aranacak kod parçası (`find`). Ardından `node tools/klavuz/build.mjs --check` ile doğrulayıp `node tools/klavuz/build.mjs` ile belgeyi yenileyin.');
-  out.push('');
-  return `${out.join('\n')}\n`;
+function extraAreaDocs(docs) {
+  const dir = path.join(ROOT, AREA_DIR);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith('.md') && !docs.has(`${AREA_DIR}/${name}`))
+    .map((name) => `${AREA_DIR}/${name}`);
 }
 
-export function renderMessages(messages) {
-  const out = [];
-  out.push('# Hata mesajı → kaynak (otomatik)');
-  out.push('');
-  out.push('> Kullanıcıya/istemciye görünen metinleri üretildikleri `dosya:satır` ile eşler. `Ctrl+F` ile ekranda gördüğünüz mesajın bir parçasını arayın. Koddan otomatik üretilir: `node tools/klavuz/build.mjs`. Ana klavuz: [ARIZA_KLAVUZU.md](ARIZA_KLAVUZU.md).');
-  out.push('');
-  const table = (title, rows, note) => {
-    out.push(`## ${title} (${rows.length})`);
-    out.push('');
-    out.push(note);
-    out.push('');
-    out.push('| Mesaj | Dosya:satır |');
-    out.push('| --- | --- |');
-    for (const r of rows) out.push(`| ${esc(clip(r.message, 220))} | ${linkOf(r.file, r.line)} |`);
-    out.push('');
-  };
-  table('Sunucu mesajları', messages.server, 'Kaynak: `server/src` (`error:`, `message:`, `httpError(...)`, `new Error(...)`). Uygulama bu metinleri HTTP yanıt gövdesinde (`error` alanı) alır.');
-  table('Uygulama (Flutter) mesajları', messages.app, 'Kaynak: `lib` (`ApiException(...)`, `_errorMessage =`, `lib/services` içindeki `return \'...\'`).');
-  return `${out.join('\n')}\n`;
+/** Diskteki belgeler üretilenle uyuşmuyorsa yolları döner (fazlalık alan dosyaları dahil). */
+export function staleDocs(docs) {
+  const stale = [];
+  for (const [rel, expected] of docs) {
+    if (readDoc(rel) !== expected) stale.push(rel);
+  }
+  for (const rel of extraAreaDocs(docs)) stale.push(`${rel} (fazlalık)`);
+  return stale;
+}
+
+export function writeDocs(docs) {
+  for (const [rel, content] of docs) {
+    const full = path.join(ROOT, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content, 'utf8');
+  }
+  for (const rel of extraAreaDocs(docs)) fs.rmSync(path.join(ROOT, rel));
 }
 
 // ---------------------------------------------------------------------------
@@ -613,10 +584,11 @@ export function explainEntry(entry, io, { before = 1, after = 4 } = {}) {
 }
 
 export function parseArgs(argv) {
-  const opts = { check: false, fresh: false, only: null, where: null, explain: null, help: false };
+  const opts = { check: false, fresh: false, only: null, where: null, explain: null, coverage: false, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--check') opts.check = true;
+    else if (a === '--coverage') opts.coverage = true;
     else if (a === '--fresh') opts.fresh = true;
     else if (a === '--only') opts.only = argv[++i] ?? null;
     else if (a === '--where') opts.where = argv[++i] ?? null;
@@ -628,11 +600,12 @@ export function parseArgs(argv) {
 }
 
 const HELP = `Kullanım:
-  node tools/klavuz/build.mjs                       belgeleri üretir (docs/ARIZA_KLAVUZU*.md)
+  node tools/klavuz/build.mjs                       belgeleri üretir (docs/ARIZA_KLAVUZU*.md, docs/ariza-klavuzu/)
   node tools/klavuz/build.mjs --check [--fresh]     girişleri doğrular (dosya yazmaz); --fresh: diskteki belgeler güncel mi
   node tools/klavuz/build.mjs --check --only <alan> tek alan dosyasını doğrular
   node tools/klavuz/build.mjs --where "<metin>"     depoda metin arar (dosya:satır)
-  node tools/klavuz/build.mjs --explain <giriş-id>  girişin her bağlantısı için koddan ilgili satırları yazdırır`;
+  node tools/klavuz/build.mjs --explain <giriş-id>  girişin her bağlantısı için koddan ilgili satırları yazdırır
+  node tools/klavuz/build.mjs --coverage            hiçbir girişe bağlı olmayan kaynak dosyaları listeler`;
 
 export async function main(argv = process.argv.slice(2)) {
   const opts = parseArgs(argv);
@@ -663,13 +636,51 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  const rawAreas = await loadAreas(ENTRY_DIR, opts.only);
-  if (opts.only && rawAreas.length === 0) {
-    console.error(`alan bulunamadı: ${opts.only}`);
-    return 2;
+  if (opts.coverage) {
+    // Hatalı/kısmi girişlerde de çalışır: yalnız çözülebilen bağlantılar sayılır.
+    const all = (await loadAreas(ENTRY_DIR, null)).map((a) => resolveArea(a, io));
+    const rows = scanCoverage(io, all);
+    const bare = rows.filter((r) => r.entries.length === 0).sort((a, b) => b.lines - a.lines);
+    const linked = rows.length - bare.length;
+    console.log(`KAPSAM: ${linked}/${rows.length} kaynak dosya en az bir girişe bağlı; ${bare.length} dosya bağlı değil (büyükten küçüğe):`);
+    for (const r of bare) {
+      console.log(`${String(r.lines).padStart(6)}  ${r.file}${r.mappedIn.length ? `   [dosya haritasında: ${r.mappedIn.join(', ')}]` : ''}`);
+    }
+    return 0;
   }
-  const areas = rawAreas.map((a) => resolveArea(a, io)).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
-  const errors = [...areas.flatMap((a) => a.errors), ...(opts.only ? [] : crossCheck(areas))];
+
+  let areas;
+  let crossErrors;
+  if (opts.only) {
+    // Tek alan denetimi (paralel yazarlar için): id evreni tüm alanlardır; raporlananlar yalnız bu alanınkiler.
+    // Başka bir alan dosyası o an yüklenemiyorsa (biri düzenliyor) bu bir UYARIDIR, bu alanın hatası sayılmaz.
+    const { areas: loaded, failures } = await loadAreasTolerant(ENTRY_DIR);
+    const own = failures.find((f) => f.key === opts.only);
+    if (own) {
+      console.error(`HATA: ${opts.only} yüklenemedi: ${own.error}`);
+      return 1;
+    }
+    if (!loaded.some((a) => a.key === opts.only)) {
+      console.error(`alan bulunamadı: ${opts.only}`);
+      return 2;
+    }
+    const universe = loaded.map((a) => resolveArea(a, io));
+    areas = universe.filter((a) => a.key === opts.only);
+    crossErrors = crossCheck(universe, { only: opts.only });
+    if (failures.length) {
+      for (const f of failures) console.error(`[uyarı] ${f.key} şu an yüklenemiyor (başkası düzenliyor olabilir): ${f.error}`);
+      if (crossErrors.length) {
+        console.error('[uyarı] başka alan yüklenemediği için aşağıdaki related/yineleme sonuçları KESİN DEĞİL (hata sayılmadı):');
+        for (const e of crossErrors) console.error(`  ~ ${e}`);
+        crossErrors = [];
+      }
+    }
+  } else {
+    const rawAreas = await loadAreas(ENTRY_DIR, null);
+    areas = rawAreas.map((a) => resolveArea(a, io)).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
+    crossErrors = crossCheck(areas);
+  }
+  const errors = [...areas.flatMap((a) => a.errors), ...crossErrors];
 
   if (errors.length) {
     console.error(`HATA: ${errors.length} sorun`);
@@ -678,9 +689,16 @@ export async function main(argv = process.argv.slice(2)) {
   }
   const entryCount = areas.reduce((n, a) => n + a.entries.length, 0);
   const refCount = areas.reduce((n, a) => n + a.entries.reduce((m, e) => m + e.refs.length, 0), 0);
+  const warnings = lintEntries(areas, io);
+  const printWarnings = () => {
+    if (!warnings.length) return;
+    console.log(`UYARI (${warnings.length}; hata değil ama düzeltilmeli):`);
+    for (const w of warnings) console.log(`  ~ [${w.area}] ${w.id} ${w.kind}: ${w.text} — ${w.why}`);
+  };
 
   if (opts.only) {
     console.log(`TAMAM [${opts.only}]: ${entryCount} giriş, ${refCount} bağlantı çözüldü.`);
+    printWarnings();
     return 0;
   }
 
@@ -689,20 +707,24 @@ export async function main(argv = process.argv.slice(2)) {
     appCalls: scanAppCalls(io),
     env: scanEnv(io),
     tables: scanTables(io),
+    coverage: scanCoverage(io, areas),
   };
-  const main = renderMain(areas, scans);
-  const messages = renderMessages(scanMessages(io));
+  const status = loadStatus(io);
+  const unknown = status.verified.filter((k) => !areas.some((a) => a.key === k));
+  if (unknown.length) {
+    console.error(`HATA: durum.json'da olmayan alan(lar): ${unknown.join(', ')}`);
+    return 1;
+  }
+  const docs = renderAll(areas, scans, scanMessages(io), status);
 
   if (opts.check) {
     console.log(`TAMAM: ${areas.length} alan, ${entryCount} giriş, ${refCount} bağlantı çözüldü.`);
+    printWarnings();
     if (opts.fresh) {
-      const stale = [];
-      for (const [file, expected] of [[OUT_MAIN, main], [OUT_MESSAGES, messages]]) {
-        const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : null;
-        if (current !== expected) stale.push(path.relative(ROOT, file).replace(/\\/g, '/'));
-      }
+      const stale = staleDocs(docs);
       if (stale.length) {
-        console.error(`ESKİ: ${stale.join(', ')} kodla uyuşmuyor (satır numaraları kaymış); yenileyin: node tools/klavuz/build.mjs`);
+        console.error(`ESKİ: ${stale.length} belge kodla uyuşmuyor (satır numaraları kaymış olabilir); yenileyin: node tools/klavuz/build.mjs`);
+        for (const rel of stale.slice(0, 12)) console.error(`  - ${rel}`);
         return 1;
       }
       console.log('GÜNCEL: belgeler koddan üretilenle aynı.');
@@ -710,10 +732,11 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  fs.mkdirSync(path.dirname(OUT_MAIN), { recursive: true });
-  fs.writeFileSync(OUT_MAIN, main, 'utf8');
-  fs.writeFileSync(OUT_MESSAGES, messages, 'utf8');
-  console.log(`Yazıldı: docs/ARIZA_KLAVUZU.md (${entryCount} giriş, ${refCount} bağlantı, ${scans.routes.length} uç nokta) ve docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md`);
+  writeDocs(docs);
+  console.log(
+    `Yazıldı: ${docs.size} belge (${areas.length} bölüm, ${entryCount} giriş, ${refCount} bağlantı, ${scans.routes.length} uç nokta) -> docs/ARIZA_KLAVUZU.md, docs/ARIZA_KLAVUZU_INDEKS.md, docs/ariza-klavuzu/, docs/ARIZA_KLAVUZU_EKLER.md, docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md`,
+  );
+  if (warnings.length) printWarnings();
   return 0;
 }
 

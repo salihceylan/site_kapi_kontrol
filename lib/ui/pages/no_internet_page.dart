@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class NoInternetPage extends StatelessWidget {
@@ -16,7 +17,6 @@ class NoInternetPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    const tone = AppTone.warning;
     // Dar ekranda (< 400 dp) yan boşluklar 16 dp: büyük yazıda içeriğe daha çok genişlik kalır.
     final hPad = MediaQuery.sizeOf(context).width < 400 ? AppSpace.lg : AppSpace.xl;
 
@@ -34,23 +34,14 @@ class NoInternetPage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // İkon karosu (dekoratif: durum aşağıdaki başlıkta okunur)
-                  Center(
-                    child: ExcludeSemantics(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tone.tint(p),
-                          borderRadius: BorderRadius.circular(AppRadius.lg),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.lg),
-                          child: Icon(
-                            Icons.wifi_off_rounded,
-                            size: 40,
-                            color: tone.ink(p),
-                          ),
-                        ),
-                      ),
+                  // Ekranın tek "hero" öğesi: uyarı tonlu, ışımalı daire rozet (sakin: hata değil,
+                  // bağlantı bekleniyor). Rozet dekoratiftir; durum aşağıdaki başlıkta okunur.
+                  const Center(
+                    child: IconOrb(
+                      icon: Icons.wifi_off_rounded,
+                      tone: AppTone.warning,
+                      size: 72,
+                      glow: true,
                     ),
                   ),
                   const SizedBox(height: AppSpace.lg),

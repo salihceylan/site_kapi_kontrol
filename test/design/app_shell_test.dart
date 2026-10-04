@@ -175,6 +175,19 @@ void main() {
       expect(t.binding.hasScheduledFrame, isFalse);
     });
 
+    testWidgets('ikinci (mor) ışıma: açık/koyu temada tek ve statik', (t) async {
+      await _pumpApp(t, textScale: 1.0);
+      expect(_glow(AppGradients.pageGlowAccentLight), findsOneWidget);
+      expect(_glow(AppGradients.pageGlowAccentDark), findsNothing);
+      expect(t.binding.transientCallbackCount, 0);
+      expect(t.binding.hasScheduledFrame, isFalse);
+      await _pumpApp(t, textScale: 1.0, brightness: Brightness.dark);
+      expect(_glow(AppGradients.pageGlowAccentDark), findsOneWidget);
+      expect(_glow(AppGradients.pageGlowAccentLight), findsNothing);
+      expect(t.binding.transientCallbackCount, 0);
+      expect(t.binding.hasScheduledFrame, isFalse);
+    });
+
     testWidgets('tema AppPalette uzantısını taşır (kökten erişilebilir)', (
       t,
     ) async {

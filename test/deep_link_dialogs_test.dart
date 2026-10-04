@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/app.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 DoorRecord _door(int id, String name, String site) {
   return DoorRecord(
@@ -111,6 +114,37 @@ void main() {
       await tester.pumpAndSettle();
       expect(result, isFalse);
     });
+
+    testWidgets('premium görünüm: cilalı rozetli başlık + uyarı kutusu (metinler aynı)', (
+      tester,
+    ) async {
+      await _pumpWithButton(
+        tester,
+        size: const Size(400, 800),
+        textScale: 1.0,
+        onTap: (context) async {
+          await showDialog<bool>(
+            context: context,
+            builder: (_) => DoorOpenConfirmDialog(
+              door: _door(1, 'Ana Kapı', 'Güneş Sitesi'),
+            ),
+          );
+        },
+      );
+      expect(find.byType(AlertDialog), findsOneWidget);
+      final orb = tester.widget<IconOrb>(find.byType(IconOrb));
+      expect(orb.icon, Icons.lock_open_rounded);
+      expect(orb.tone, AppTone.warning);
+      final notice = tester.widget<InlineNotice>(find.byType(InlineNotice));
+      expect(notice.tone, AppTone.warning);
+      expect(
+        notice.message,
+        'Bu işlem bir bağlantı veya kısayol üzerinden başlatıldı. '
+        'Yalnızca siz başlattıysanız onaylayın.',
+      );
+      await tester.tap(find.text('Vazgeç'));
+      await tester.pumpAndSettle();
+    });
   });
 
   group('DoorChooserDialog', () {
@@ -137,6 +171,32 @@ void main() {
       await tester.tap(find.textContaining('$_veryLongName 1').first);
       await tester.pumpAndSettle();
       expect(picked?.id, 1);
+    });
+
+    testWidgets('premium görünüm: her aday dokunulabilir kart + rozet; seçilen kapı döner', (
+      tester,
+    ) async {
+      DoorRecord? picked;
+      await _pumpWithButton(
+        tester,
+        size: const Size(400, 800),
+        textScale: 1.0,
+        onTap: (context) async {
+          picked = await showDialog<DoorRecord>(
+            context: context,
+            builder: (_) => DoorChooserDialog(
+              candidates: [_door(1, 'Ana Kapı', 'A'), _door(2, 'Otopark', 'A')],
+            ),
+          );
+        },
+      );
+      expect(find.byType(AlertDialog), findsOneWidget);
+      // Başlık rozeti + aday başına bir rozet; her aday bir AppCard (dokunulabilir).
+      expect(find.byType(IconOrb), findsNWidgets(3));
+      expect(find.byType(AppCard), findsNWidgets(2));
+      await tester.tap(find.text('Otopark'));
+      await tester.pumpAndSettle();
+      expect(picked?.id, 2);
     });
 
     testWidgets('cancel option returns null', (tester) async {

@@ -8,11 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/subscription_request.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/subscription_requests_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/subscription_request_card.dart';
 
+import '../design/harness.dart';
 import 'list_fixtures.dart';
 
 SubscriptionRequestsView _view({
@@ -214,6 +217,114 @@ void main() {
             .onPressed,
         isNull,
       );
+    });
+  });
+
+  group('SubscriptionRequestsView görsel dil (rozet, durum, eylem hiyerarşisi, haptik)', () {
+    testWidgets('her kartta cilalı posta rozeti (48 squircle) ve "Onay Bekliyor" uyarı rozeti', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+      expect(orbs, hasLength(2));
+      expect(
+        orbs.every(
+          (o) =>
+              o.size == 48 &&
+              o.shape == IconOrbShape.squircle &&
+              o.icon == Icons.mark_email_unread_rounded &&
+              o.tone == AppTone.info &&
+              !o.glow,
+        ),
+        isTrue,
+      );
+      final chips = t
+          .widgetList<StatusChip>(
+            find.widgetWithText(StatusChip, 'Onay Bekliyor'),
+          )
+          .toList();
+      expect(chips, hasLength(2));
+      expect(chips.every((c) => c.tone == AppTone.warning), isTrue);
+      expect(find.text('Kod: 31'), findsOneWidget);
+    });
+
+    testWidgets('büyük yazıda rozet gizlenir; durum rozeti ve tüm metinler kalır', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 320,
+        height: 900,
+        scale: 2.0,
+        dark: false,
+      );
+      expect(find.byType(IconOrb), findsNothing);
+      expect(find.text('Onay Bekliyor'), findsNWidgets(2));
+      expect(find.text('Onayla'), findsNWidgets(2));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('hiyerarşi: Onayla dolu (ilk), Reddet danger kenarlı; yalnız Onayla hafif haptik verir', (
+      t,
+    ) async {
+      final haptics = recordHaptics(t);
+      final log = <String>[];
+      await pumpList(
+        t,
+        _view(log: log),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      final approve = find.ancestor(
+        of: find.text('Onayla').first,
+        matching: find.byType(FilledButton),
+      );
+      final reject = find.ancestor(
+        of: find.text('Reddet').first,
+        matching: find.byType(OutlinedButton),
+      );
+      expect(approve, findsOneWidget);
+      expect(reject, findsOneWidget);
+      // Okuma sırası: birincil eylem önde (aynı satırda solda, sarınca üstte).
+      final a = t.getTopLeft(approve);
+      final r = t.getTopLeft(reject);
+      expect(
+        a.dy < r.dy || (a.dy == r.dy && a.dx < r.dx),
+        isTrue,
+        reason: 'birincil eylem önde: onay $a, ret $r',
+      );
+      await tapFinder(t, find.text('Reddet').first);
+      expect(haptics, isEmpty, reason: 'ret: haptik yok');
+      await tapFinder(t, find.text('Onayla').first);
+      expect(haptics, <String>['HapticFeedbackType.lightImpact']);
+      expect(log, <String>['reject:31', 'approve:31']);
+    });
+
+    testWidgets('meşgul kartta Onayla haptik vermez (düğme devre dışı)', (t) async {
+      final haptics = recordHaptics(t);
+      final log = <String>[];
+      await pumpList(
+        t,
+        _view(log: log, busy: const <int>{31}),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      await t.tap(find.text('Onayla').first, warnIfMissed: false);
+      await t.pump();
+      expect(haptics, isEmpty);
+      expect(log, isEmpty);
     });
   });
 

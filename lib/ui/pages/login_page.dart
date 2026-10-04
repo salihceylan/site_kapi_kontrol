@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -113,6 +114,8 @@ class _LoginPageState extends State<LoginPage> {
       if (errorMessage != null) {
         AppSnack.show(context, errorMessage, kind: AppSnackKind.error, maxLines: 8);
       } else {
+        // Giriş onaylandı: hafif titreşim (ana sayfaya geçiş kökte oturuma tepki olarak olur).
+        HapticFeedback.lightImpact();
         await _saveCredentials(identifier);
       }
     }
@@ -166,6 +169,7 @@ class _LoginPageState extends State<LoginPage> {
                           } else {
                             Navigator.of(ctx).pop();
                             if (!mounted) return;
+                            HapticFeedback.lightImpact();
                             AppSnack.show(
                               context,
                               'Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi. Lütfen gelen kutunuzu (ve gereksiz klasörünü) kontrol ediniz.',

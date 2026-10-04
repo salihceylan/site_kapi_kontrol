@@ -6,6 +6,8 @@ import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -120,6 +122,9 @@ class SitesView extends StatelessWidget {
       children: [
         PageHeaderCard(
           title: apartmentMode ? 'Site Daireleri' : 'Siteler',
+          icon: apartmentMode
+              ? Icons.home_work_rounded
+              : Icons.location_city_rounded,
           action: canManageSites
               ? ElevatedButton.icon(
                   onPressed: onOpenAddSite,
@@ -231,7 +236,8 @@ class SitesView extends StatelessWidget {
     );
   }
 
-  /// Seçili sitenin özeti: ad, kimlik çipleri, yönetici/adres ve yönetim eylemleri (ton zeminli).
+  /// Seçili sitenin özeti: ad, kimlik çipleri, yönetici/adres ve yönetim eylemleri. Ekranın en önemli
+  /// özet kartı: hero yüzey (seviye 2) + durum tonunda cilalı site rozeti.
   Widget _buildStructureSummary(
     BuildContext context,
     SiteStructureRecord structure,
@@ -239,11 +245,22 @@ class SitesView extends StatelessWidget {
     final th = Theme.of(context).textTheme;
     final site = structure.site;
     return AppCard(
+      level: 2,
       padding: listCardPadding(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(site.name, style: th.titleLarge),
+          Row(
+            children: [
+              IconTile(
+                icon: Icons.apartment_rounded,
+                tone: siteStatusTone(site),
+                size: 48,
+                gap: AppSpace.md,
+              ),
+              Expanded(child: Text(site.name, style: th.titleLarge)),
+            ],
+          ),
           const SizedBox(height: AppSpace.sm),
           Wrap(
             spacing: AppSpace.sm,
@@ -398,7 +415,6 @@ class SitesView extends StatelessWidget {
                 : Icons.person_outline_rounded,
             tone: tone,
             size: 40,
-            iconSize: 20,
             gap: AppSpace.md,
           ),
           Expanded(
@@ -520,25 +536,21 @@ class SitesView extends StatelessWidget {
           horizontal: AppSpace.lg,
           vertical: AppSpace.xs,
         ),
-        childrenPadding: const EdgeInsets.fromLTRB(
-          AppSpace.lg,
-          0,
-          AppSpace.lg,
-          AppSpace.md,
-        ),
-        leading: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppTone.primary.tint(p),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpace.sm),
-            child: Icon(
-              Icons.apartment_rounded,
-              color: AppTone.primary.ink(p),
-              size: 20,
-            ),
-          ),
+        // Boşken EmptyState.compact kendi 12 dp dolgusunu taşır: 4 + 12 = başlıkla aynı 16 hizası.
+        childrenPadding: structure.apartments.isEmpty
+            ? const EdgeInsets.symmetric(horizontal: AppSpace.xs)
+            : const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                0,
+                AppSpace.lg,
+                AppSpace.md,
+              ),
+        // Daireler = mor ton (daire kullanıcısı); kartlardaki daire rozetleriyle aynı dil.
+        leading: const IconOrb(
+          icon: Icons.apartment_rounded,
+          tone: AppTone.violet,
+          size: 40,
+          shape: IconOrbShape.squircle,
         ),
         title: SectionHeader(
           title: 'Daireler',
@@ -553,25 +565,31 @@ class SitesView extends StatelessWidget {
         ),
         children: [
           if (structure.apartments.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpace.md),
-              child: Text('Bu site için daire kaydı bulunamadı.'),
+            const EmptyState.compact(
+              icon: Icons.home_outlined,
+              title: 'Bu site için daire kaydı bulunamadı.',
+              tone: AppTone.neutral,
             )
           else
             for (var i = 0; i < structure.apartments.length; i++) ...[
               if (i > 0) const Divider(),
-              ApartmentCard(
-                apartment: structure.apartments[i],
-                onEdit: () =>
-                    onEditApartmentResident(structure.apartments[i]),
-                onSendMail: () =>
-                    onSendApartmentMail(structure.apartments[i]),
-                sendingMail: busyApartmentMails.contains(
-                  structure.apartments[i].id,
+              // Akordiyon her açılışında ilk 8 satır kademeli gelir (diğerleri doğrudan görünür).
+              StaggeredEntry(
+                index: i,
+                child: ApartmentCard(
+                  apartment: structure.apartments[i],
+                  onEdit: () =>
+                      onEditApartmentResident(structure.apartments[i]),
+                  onSendMail: () =>
+                      onSendApartmentMail(structure.apartments[i]),
+                  sendingMail: busyApartmentMails.contains(
+                    structure.apartments[i].id,
+                  ),
+                  onDelete: onDeleteApartmentResident != null
+                      ? () =>
+                            onDeleteApartmentResident!(structure.apartments[i])
+                      : null,
                 ),
-                onDelete: onDeleteApartmentResident != null
-                    ? () => onDeleteApartmentResident!(structure.apartments[i])
-                    : null,
               ),
             ],
         ],
@@ -584,6 +602,8 @@ class SitesView extends StatelessWidget {
     return [
       SectionHeader(
         title: 'Kapılar',
+        count: structure.doors.length,
+        countSuffix: ' Kapı',
         trailing: onOpenAddDoor != null
             ? ElevatedButton.icon(
                 onPressed: onOpenAddDoor,
@@ -606,22 +626,27 @@ class SitesView extends StatelessWidget {
           title: 'Bu site için kapı kaydı bulunamadı.',
         )
       else
-        for (final door in structure.doors)
+        for (final (index, door) in structure.doors.indexed)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpace.md),
-            child: DoorCard(
-              door: door,
-              onAssignDevice: () => onAssignDoorDevice(door),
-              onReplaceDevice: onReplaceDevice != null
-                  ? () => onReplaceDevice!(door)
-                  : null,
-              onEditDoor: onEditDoor != null ? () => onEditDoor!(door) : null,
-              onDeleteDoor: onDeleteDoor != null
-                  ? () => onDeleteDoor!(door)
-                  : null,
-              onManagePermissions: onManageDoorPermissions != null
-                  ? () => onManageDoorPermissions!(door)
-                  : null,
+            child: StaggeredEntry(
+              index: index,
+              child: DoorCard(
+                door: door,
+                onAssignDevice: () => onAssignDoorDevice(door),
+                onReplaceDevice: onReplaceDevice != null
+                    ? () => onReplaceDevice!(door)
+                    : null,
+                onEditDoor: onEditDoor != null
+                    ? () => onEditDoor!(door)
+                    : null,
+                onDeleteDoor: onDeleteDoor != null
+                    ? () => onDeleteDoor!(door)
+                    : null,
+                onManagePermissions: onManageDoorPermissions != null
+                    ? () => onManageDoorPermissions!(door)
+                    : null,
+              ),
             ),
           ),
     ];

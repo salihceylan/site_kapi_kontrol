@@ -1,6 +1,8 @@
 // FAZ 5 / A2-G5: ManageJoinRequestsDialog taşma testi (AGENTS.md kural 6).
 //
 // `Dialog`: başlık şeridi + bekleyen rozeti sabit, başvuru kartları RefreshIndicator'lı listede akar.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
@@ -10,9 +12,12 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/manage_join_requests_dialog.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 
 SiteRecord _site() => SiteRecord.fromJson({
@@ -45,11 +50,14 @@ JoinRequestRecord _req(
 );
 
 class _FakeAuth extends AuthService {
-  _FakeAuth({this.error, this.requests = const []})
+  _FakeAuth({this.error, this.requests = const [], this.gate})
     : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   final String? error;
   final List<JoinRequestRecord> requests;
+
+  /// Verilirse talepler bu tamamlanana dek "yükleniyor" kalır.
+  final Completer<void>? gate;
   final List<int> approved = [];
   final List<(int, String?)> rejected = [];
 
@@ -58,6 +66,7 @@ class _FakeAuth extends AuthService {
     required int siteCode,
     String? status,
   }) async {
+    await gate?.future;
     if (error != null) return (null, error);
     return (requests, null);
   }
@@ -225,6 +234,7 @@ void main() {
   testWidgets(
     'ManageJoinRequestsDialog: onaylayınca servis çağrılır ve başarı bildirimi gösterilir',
     (t) async {
+      final haptics = recordHaptics(t);
       final auth = _FakeAuth(requests: [_req(1, 'PENDING')]);
       await _open(t, auth, width: 400, height: 900, scale: 1.0, dark: false);
 
@@ -232,6 +242,68 @@ void main() {
       await settleFor(t, 800);
       expect(auth.approved, [1]);
       expect(find.text('Başvuru onaylandı.'), findsOneWidget);
+      // Onay anında hafif haptik.
+      expect(haptics, contains('HapticFeedbackType.lightImpact'));
+      expect(t.takeException(), isNull);
+    },
+  );
+  // --- Görsel sözleşme (cilalı safir): iskelet, durum tonlu ikon rozeti ---
+
+  testWidgets(
+    'ManageJoinRequestsDialog: ilk yüklemede kart iskeleti (spinner yok); yüklenince iskelet kalkar',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) => ManageJoinRequestsDialog.show(
+          context,
+          site: _site(),
+          authService: _FakeAuth(requests: _mixed(), gate: gate),
+        ),
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsAtLeastNWidgets(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(find.text('Onay Bekliyor'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'ManageJoinRequestsDialog: talep kartları durum tonlu ikon rozetli; durum, not ve ret sebebi metinleri korunur',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(requests: _mixed()),
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Başlık + ilk kart(lar): cilalı ikon rozetleri.
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(2));
+      expect(find.textContaining('Not: Annem adına başvuruyorum'), findsOneWidget);
+
+      // Alttaki (reddedilmiş) karta kadar kaydır.
+      await scrollIntoBuilt(
+        t,
+        find.textContaining('Ret Sebebi:'),
+        find.byType(ListView),
+      );
+      expect(
+        find.textContaining('Ret Sebebi: Daire sahibi başvuruyu teyit etmedi.'),
+        findsOneWidget,
+      );
+      expect(find.text('Reddedildi'), findsOneWidget);
+      expect(find.text('Onaylandı'), findsOneWidget);
       expect(t.takeException(), isNull);
     },
   );

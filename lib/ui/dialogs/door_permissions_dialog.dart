@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/door_permission_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -7,8 +8,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 
 class DoorPermissionsDialog extends StatefulWidget {
   const DoorPermissionsDialog({
@@ -97,6 +100,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
   }
 
   Future<void> _toggleResidentAccess(DoorResidentPermission resident) async {
+    HapticFeedback.lightImpact();
     setState(() => _busyUserCodes.add(resident.userCode));
 
     // Anahtara dokunmak görünen durumun TERSİNİ üretmelidir: ek izin/engel kaydı varsayılanla
@@ -142,6 +146,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
   }
 
   Future<void> _applyBulkBlockAccess(DoorBlockPermission block, bool? isAllowed) async {
+    HapticFeedback.lightImpact();
     setState(() => _busyBlockIds.add(block.id));
 
     final (success, message) = await widget.authService.setBulkDoorAccessOverride(
@@ -176,7 +181,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
     final compactHeader = MediaQuery.textScalerOf(context).scale(1) > 1.3;
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.lg),
       child: ConstrainedBox(
         // Yükseklik üst sınırı: en az 720, büyük ekranda ekranın %90'ı (uzun sakin listeleri için).
         constraints: BoxConstraints(
@@ -244,7 +249,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
     final compactHeader = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+        padding: const EdgeInsets.fromLTRB(AppSpace.lg, AppSpace.md, AppSpace.lg, AppSpace.sm),
         child: Column(
           children: [
             if (compactHeader) ...[
@@ -255,7 +260,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpace.sm),
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: StatusChip(
@@ -263,10 +268,10 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                   tone: widget.door.isBlockScope ? AppTone.info : AppTone.primary,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpace.md),
             ],
             _buildScopeInfoBanner(),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpace.md),
             Row(
               children: [
                 Expanded(
@@ -286,7 +291,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                             )
                           : null,
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.md),
                     ),
                   ),
                 ),
@@ -331,25 +336,15 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
   /// Durum parçaları sırası: hata kutusu EN ÜSTTE (büyük yazıda kaydırmadan görünsün); yükleniyor/boş
   /// durumları kapsam bilgisi + aramanın altında; liste de aramanın altında.
   List<Widget> _buildSlivers() {
-    final th = Theme.of(context).textTheme;
     final head = _buildHeadSliver();
 
     if (_isLoading) {
       return [
         head,
-        SliverToBoxAdapter(
+        const SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 12),
-                  Text('Kapı yetkileri yükleniyor...', style: th.bodyMedium, textAlign: TextAlign.center),
-                ],
-              ),
-            ),
+            padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md, AppSpace.xl),
+            child: DialogRowsSkeleton(caption: 'Kapı yetkileri yükleniyor...'),
           ),
         ),
       ];
@@ -359,7 +354,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
       return [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpace.xl),
             child: InlineNotice(message: _errorMessage!, onRetry: _loadPermissions),
           ),
         ),
@@ -373,7 +368,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
         head,
         const SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpace.xl),
             child: EmptyState(
               icon: Icons.apartment_rounded,
               title: 'Bu sitede kayıtlı blok veya sakin bulunamadı.',
@@ -386,7 +381,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
     return [
       head,
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 16),
+        padding: const EdgeInsets.fromLTRB(AppSpace.sm, AppSpace.sm, AppSpace.sm, AppSpace.lg),
         sliver: SliverList.builder(
           itemCount: blocks.length,
           itemBuilder: (ctx, index) {
@@ -419,49 +414,35 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: AppCard(
         padding: EdgeInsets.zero,
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
           initiallyExpanded: true,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          leading: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTone.primary.tint(p),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.domain_rounded,
-              color: AppTone.primary.ink(p),
-              size: 20,
-            ),
-          ),
+          tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.xs),
+          childrenPadding: const EdgeInsets.fromLTRB(AppSpace.sm, 0, AppSpace.sm, AppSpace.sm),
+          // Büyük yazıda dekoratif rozet gizlenir (başlığa yer kalsın).
+          leading: hideRowOrbs(context)
+              ? null
+              : const IconOrb(
+                  icon: Icons.domain_rounded,
+                  size: 40,
+                  shape: IconOrbShape.squircle,
+                ),
           title: Wrap(
-            spacing: 8,
-            runSpacing: 4,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 block.blockName,
                 style: th.titleMedium,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTone.success.tint(p),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${block.allowedResidentsCount}/${block.totalResidents} Yetkili',
-                  style: th.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTone.success.ink(p),
-                  ),
-                ),
+              StatusChip(
+                label: '${block.allowedResidentsCount}/${block.totalResidents} Yetkili',
+                tone: block.allowedResidentsCount > 0 ? AppTone.success : AppTone.neutral,
               ),
             ],
           ),
@@ -474,7 +455,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
               : PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert_rounded, size: 20, color: p.textSecondary),
                   tooltip: 'Bloğa Toplu İşlem',
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                   onSelected: (action) {
                     if (action == 'grant_all') {
                       _applyBulkBlockAccess(block, true);
@@ -490,7 +471,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                       child: Row(
                         children: [
                           Icon(Icons.check_circle_outline_rounded, size: 18, color: AppTone.success.ink(p)),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpace.sm),
                           const Flexible(child: Text('Tüm Bloğa Yetki Ver')),
                         ],
                       ),
@@ -500,7 +481,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                       child: Row(
                         children: [
                           Icon(Icons.restart_alt_rounded, size: 18, color: AppTone.info.ink(p)),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpace.sm),
                           const Flexible(child: Text('Bloğun Yetkilerini Sıfırla')),
                         ],
                       ),
@@ -510,7 +491,7 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                       child: Row(
                         children: [
                           Icon(Icons.block_rounded, size: 18, color: AppTone.danger.ink(p)),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpace.sm),
                           Flexible(
                             child: Text(
                               'Tüm Bloğu Engelle',
@@ -524,12 +505,10 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
                 ),
           children: [
             if (filteredApartments.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Bu blokta kayıtlı daire bulunmuyor.',
-                  style: th.bodySmall,
-                ),
+              const EmptyState.compact(
+                icon: Icons.meeting_room_outlined,
+                title: 'Bu blokta kayıtlı daire bulunmuyor.',
+                tone: AppTone.neutral,
               )
             else
               for (final apt in filteredApartments) _buildApartmentSection(apt),
@@ -541,7 +520,6 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
   }
 
   Widget _buildApartmentSection(DoorApartmentPermission apt) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
     // Filter residents by search query if applicable
     final residents = apt.residents.where((r) {
@@ -554,46 +532,34 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
 
     if (residents.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: p.surfaceMuted,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: p.border, width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTone.primary.tint(p),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: DialogPanel(
+        padding: const EdgeInsets.all(AppSpace.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                DialogMetaPill(
                   apt.label,
-                  style: th.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppTone.primary.ink(p),
+                  tone: AppTone.primary,
+                  icon: Icons.door_front_door_rounded,
+                ),
+                if (apt.floor != null)
+                  Text(
+                    'Kat ${apt.floor}',
+                    style: th.bodySmall,
                   ),
-                ),
-              ),
-              if (apt.floor != null)
-                Text(
-                  'Kat ${apt.floor}',
-                  style: th.bodySmall,
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          for (final resident in residents) _buildResidentRow(resident),
-        ],
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            for (final resident in residents) _buildResidentRow(resident),
+          ],
+        ),
       ),
     );
   }
@@ -614,86 +580,92 @@ class _DoorPermissionsDialogState extends State<DoorPermissionsDialog> {
     }
   }
 
+  /// Sakin satırı: [ikon rozeti] [ad + durum hapı / rol • telefon] [yetki anahtarı]. Yalnız anahtar
+  /// yetkiyi değiştirir (satırın kalanına dokunmak bir şey yapmaz: kapı yetkisi yanlışlıkla
+  /// değişmesin). Büyük yazıda (>= 1,75x) rozet gizlenir ve anahtar metnin altına, sağa alınır.
   Widget _buildResidentRow(DoorResidentPermission resident) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final isBusy = _busyUserCodes.contains(resident.userCode);
     final statusTone = _statusTone(resident);
     final avatarTone = resident.canOpen ? AppTone.success : AppTone.neutral;
+    final large = hideRowOrbs(context);
+
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              resident.fullName,
+              style: th.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: p.text,
+              ),
+            ),
+            StatusChip(label: resident.statusLabel, tone: statusTone),
+          ],
+        ),
+        Text(
+          '${resident.roleLabel}${resident.phone != null ? ' • ${resident.phone}' : ''}',
+          style: th.bodySmall,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+    // İşlem sürerken anahtarla aynı boyutta yer tutar (satır yüksekliği oynamasın).
+    final Widget toggle = isBusy
+        ? const SizedBox(
+            width: 52,
+            height: 48,
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpace.xs),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          )
+        : Switch.adaptive(
+            value: resident.canOpen,
+            activeTrackColor: AppTone.success.a,
+            onChanged: (_) => _toggleResidentAccess(resident),
+          );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: avatarTone.tint(p),
-            child: Icon(
-              Icons.person_rounded,
-              size: 16,
-              color: avatarTone.ink(p),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      child: large
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      resident.fullName,
-                      style: th.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: p.text,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: statusTone.tint(p),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        resident.statusLabel,
-                        style: th.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: statusTone.ink(p),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  '${resident.roleLabel}${resident.phone != null ? ' • ${resident.phone}' : ''}',
-                  style: th.bodySmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                info,
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: toggle,
                 ),
               ],
-            ),
-          ),
-          if (isBusy)
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: Padding(
-                padding: EdgeInsets.all(4),
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
             )
-          else
-            Switch.adaptive(
-              value: resident.canOpen,
-              activeTrackColor: AppTone.success.a,
-              onChanged: (_) => _toggleResidentAccess(resident),
+          : Row(
+              children: [
+                IconOrb(
+                  icon: Icons.person_rounded,
+                  tone: avatarTone,
+                  size: 40,
+                  shape: IconOrbShape.squircle,
+                ),
+                const SizedBox(width: AppSpace.md),
+                Expanded(child: info),
+                const SizedBox(width: AppSpace.sm),
+                toggle,
+              ],
             ),
-        ],
-      ),
     );
   }
 }
-

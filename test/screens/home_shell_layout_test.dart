@@ -940,14 +940,14 @@ void main() {
         await _pumpShell(tester, auth, width: 400, height: 1400);
 
         expect(tick(tester), 0);
-        expect(find.text('Kapı Aç'), findsOneWidget);
-        expect(find.text('Gönderildi'), findsNothing);
+        expect(find.text('KAPI AÇ'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
 
         await tester.tap(openButton());
         await tester.pump();
         expect(auth.openDoorCalls, 1);
         expect(
-          find.text('Gönderiliyor...'),
+          find.text('AÇILIYOR'),
           findsOneWidget,
           reason: 'komut sürerken spinner durumu',
         );
@@ -957,8 +957,8 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
         expect(tick(tester), 1, reason: '_openDoor başarısında sayaç artar');
-        expect(find.text('Gönderildi'), findsOneWidget);
-        expect(find.text('Gönderiliyor...'), findsNothing);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
+        expect(find.text('AÇILIYOR'), findsNothing);
         expect(
           tester.widget<DoorOpenButton>(openButton()).successTick,
           1,
@@ -972,9 +972,9 @@ void main() {
         );
 
         await tester.pump(const Duration(milliseconds: 1500));
-        expect(find.text('Gönderildi'), findsNothing);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
         expect(
-          find.text('Kapı Aç'),
+          find.text('KAPI AÇ'),
           findsOneWidget,
           reason: 'tik 1,4 sn sonra geri döner',
         );
@@ -998,13 +998,13 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         expect(auth.openDoorCalls, 1);
         expect(tick(tester), 0);
-        expect(find.text('Gönderildi'), findsNothing);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
         expect(
           find.text('Bu kapı için uygulamadan açma kapalı.'),
           findsWidgets,
         );
         await tester.pump(const Duration(milliseconds: 1500));
-        expect(find.text('Gönderildi'), findsNothing);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
         await _disposeShell(tester);
       },
     );
@@ -1025,7 +1025,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(auth.openDoorCalls, 2);
       expect(tick(tester), 2);
-      expect(find.text('Gönderildi'), findsOneWidget);
+      expect(find.text('GÖNDERİLDİ'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 1500));
       await _disposeShell(tester);
     });
@@ -1074,7 +1074,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
         expect(tick(tester), 1);
-        expect(find.text('Gönderildi'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pump(const Duration(milliseconds: 1500));
         await _disposeShell(tester);

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class DeviceFormResult {
   const DeviceFormResult({
@@ -79,6 +82,7 @@ class _DeviceDialogState extends State<DeviceDialog> {
     final assignedUserCodeText = _assignedUserCodeController.text.trim();
     final siteCodeText = _siteCodeController.text.trim();
 
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       DeviceFormResult(
         deviceUid: _deviceUidController.text.trim().toUpperCase(),
@@ -92,6 +96,8 @@ class _DeviceDialogState extends State<DeviceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     return AppDialog(
       title: 'Cihaz Kaydet',
       icon: Icons.memory_rounded,
@@ -106,23 +112,28 @@ class _DeviceDialogState extends State<DeviceDialog> {
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Başlık şeridi ile ilk alanın (kayan etiketi) arasında nefes payı.
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _deviceUidController,
               decoration: const InputDecoration(
                 labelText: 'Cihaz Unique ID (UID)',
                 hintText: 'Örn: 1CDA72A172E0',
+                prefixIcon: Icon(Icons.memory_rounded),
               ),
               validator: (value) => (value ?? '').trim().length < 6
                   ? 'Cihaz Unique ID en az 6 karakter olmalı.'
                   : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _assignedUserCodeController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Kullanıcı ID (opsiyonel)',
+                prefixIcon: Icon(Icons.person_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -132,12 +143,13 @@ class _DeviceDialogState extends State<DeviceDialog> {
                     : null;
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _siteCodeController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Site ID (opsiyonel)',
+                prefixIcon: Icon(Icons.apartment_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -147,13 +159,19 @@ class _DeviceDialogState extends State<DeviceDialog> {
                     : null;
               },
             ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Kullanıcı ID ve Site ID alanlarını boş bırakabilirsiniz.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            const SizedBox(height: AppSpace.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 16, color: p.textMuted),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(
+                  child: Text(
+                    'Kullanıcı ID ve Site ID alanlarını boş bırakabilirsiniz.',
+                    style: th.bodySmall,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -230,10 +248,31 @@ class _DeviceEditDialogState extends State<DeviceEditDialog> {
     return int.tryParse(text) == null ? '$label sayısal olmalı.' : null;
   }
 
+  /// Donanım hedefi ve bağlantı durumu rozetleri (bilinmeyen bilgi için rozet çizilmez).
+  List<Widget> _deviceBadges() {
+    final hardware = widget.device.hardwareTarget;
+    final online = widget.device.mqttConnected;
+    return [
+      if (hardware != null && hardware.isNotEmpty)
+        StatusChip(
+          label: hardware.toUpperCase(),
+          tone: hardware.contains('wroom') ? AppTone.violet : AppTone.primary,
+          icon: Icons.memory_rounded,
+        ),
+      if (online != null)
+        StatusChip(
+          label: online ? 'Online' : 'Offline',
+          tone: online ? AppTone.success : AppTone.danger,
+          pulse: online,
+        ),
+    ];
+  }
+
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       DeviceEditResult(
         assignedUserCode: widget.isSuperUser
@@ -249,6 +288,7 @@ class _DeviceEditDialogState extends State<DeviceEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final badges = _deviceBadges();
     return AppDialog(
       title: '${widget.device.deviceUid} - Düzenle',
       icon: Icons.edit_rounded,
@@ -263,32 +303,46 @@ class _DeviceEditDialogState extends State<DeviceEditDialog> {
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Başlık şeridi ile ilk öğenin (rozet / kayan etiket) arasında nefes payı.
+            const SizedBox(height: AppSpace.md),
+            if (badges.isNotEmpty) ...[
+              Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.xs,
+                children: badges,
+              ),
+              const SizedBox(height: AppSpace.xl),
+            ],
             if (widget.isSuperUser) ...[
               TextFormField(
                 controller: _assignedUserCodeController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Kullanıcı ID (opsiyonel)',
+                  prefixIcon: Icon(Icons.person_rounded),
                 ),
                 validator: (value) =>
                     _validateOptionalInt(value, 'Kullanıcı ID'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
             ],
             TextFormField(
               controller: _siteCodeController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'Site ID (opsiyonel)',
+                prefixIcon: Icon(Icons.apartment_rounded),
               ),
               validator: (value) => _validateOptionalInt(value, 'Site ID'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _gateNameController,
               decoration: const InputDecoration(
                 labelText: 'Kapı Etiketi (opsiyonel)',
+                prefixIcon: Icon(Icons.meeting_room_rounded),
               ),
               // Boş bırakılabilir; girilirse sunucu kuralıyla aynı: en az 2 karakter.
               validator: (value) {

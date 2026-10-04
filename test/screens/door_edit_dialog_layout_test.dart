@@ -11,8 +11,10 @@ import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/door_edit_dialog.dart';
 
+import '../design/harness.dart';
 import 'dialog_layout_harness.dart';
 
 class _FakeAuth extends AuthService {
@@ -251,4 +253,104 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'DoorEditDialog: üç açılır liste ortak açılır liste dilinde (yuvarlak köşe, yüzey rengi, 320 dp, ok ikonu, düzgün yazı)',
+    (t) async {
+      await openDialogAt(
+        t,
+        (context) => DoorEditDialog.show(
+          context,
+          authService: _FakeAuth(),
+          siteCode: 101,
+          blocks: _blocks(),
+          availableDevices: _devices,
+        ),
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      final palette = t.element(find.byType(Dialog)).palette;
+      final body = Theme.of(t.element(find.byType(Dialog))).textTheme.bodyLarge;
+      void expectSharedStyle(DropdownButton<Object?> dropdown, String which) {
+        expect(dropdown.borderRadius, BorderRadius.circular(AppRadius.md), reason: which);
+        expect(dropdown.dropdownColor, palette.surface, reason: which);
+        expect(dropdown.menuMaxHeight, 320, reason: which);
+        expect((dropdown.icon! as Icon).icon, Icons.keyboard_arrow_down_rounded, reason: which);
+        expect(dropdown.style, body, reason: '$which: seçili değer metin alanı yazısıyla aynı');
+      }
+
+      expectSharedStyle(
+        t.widget<DropdownButton<String>>(find.byType(DropdownButton<String>)),
+        'erişim kapsamı',
+      );
+      expectSharedStyle(
+        t.widget<DropdownButton<String?>>(find.byType(DropdownButton<String?>)),
+        'cihaz ata',
+      );
+
+      // Blok kapsamı: blok listesi de aynı dilde.
+      await t.tap(find.text('Site Ortak Girişi (Tüm Sakinler)'));
+      await settleFor(t);
+      await t.tap(find.text('Blok Kapısı (Sadece İlgili Blok)').last);
+      await settleFor(t);
+      expectSharedStyle(
+        t.widget<DropdownButton<int>>(find.byType(DropdownButton<int>)),
+        'blok',
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'DoorEditDialog: başarıda hafif haptik verir; sunucu hatasında ve boş adda vermez',
+    (t) async {
+      final haptics = recordHaptics(t);
+      final failing = _FakeAuth(failWith: 'Bu kapı adı kullanılıyor.');
+      await openDialogAt(
+        t,
+        (context) => DoorEditDialog.show(
+          context,
+          authService: failing,
+          siteCode: 101,
+          blocks: _blocks(),
+        ),
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      await t.tap(find.text('Kapıyı Oluştur')); // boş ad
+      await settleFor(t);
+      await t.enterText(find.widgetWithText(TextFormField, 'Kapı Adı *'), 'Otopark');
+      await t.tap(find.text('Kapıyı Oluştur')); // sunucu hatası
+      await settleFor(t, 800);
+      expect(find.text('Bu kapı adı kullanılıyor.'), findsOneWidget);
+      expect(haptics, isEmpty);
+
+      final ok = _FakeAuth();
+      await openDialogAt(
+        t,
+        (context) => DoorEditDialog.show(
+          context,
+          authService: ok,
+          siteCode: 101,
+          blocks: _blocks(),
+        ),
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      await t.enterText(find.widgetWithText(TextFormField, 'Kapı Adı *'), 'Otopark');
+      await t.tap(find.text('Kapıyı Oluştur'));
+      await settleFor(t, 800);
+      expect(ok.created.length, 1);
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(find.byType(Dialog), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
 }

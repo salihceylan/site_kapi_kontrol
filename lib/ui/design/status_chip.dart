@@ -143,7 +143,19 @@ class _StatusChipState extends State<StatusChip>
               curve: AppMotion.standard,
               width: 8,
               height: 8,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: ink),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ink,
+                // LED parıltısı: yalnız nabızlı (canlı) noktada; tek, küçük, statik gölge.
+                boxShadow: widget.pulse
+                    ? [
+                        BoxShadow(
+                          color: tone.hue.withValues(alpha: 0.55),
+                          blurRadius: 6,
+                        ),
+                      ]
+                    : null,
+              ),
             ),
           ],
         ),

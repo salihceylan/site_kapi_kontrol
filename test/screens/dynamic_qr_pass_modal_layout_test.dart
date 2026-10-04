@@ -3,7 +3,8 @@
 // - Taşma matrisi: 320x640 x2,0 ve 360x640 x1,5; açık + koyu; tüm durumlar (yükleniyor, hata, canlı,
 //   kalıcı/geçici ret, uyuşmazlık, kullanılmış, hükümsüz, süresi doldu, başarı) ve pencere ekran içinde.
 // - Tasarım: AppDialogHeader, CountdownRing(+sn), StatusChip(pulse), PrimaryActionButton, SkeletonBox,
-//   InlineNotice, tek _QrOverlay; sonsuz _pulseController KALKTI (bitiş durumlarında kare yok).
+//   InlineNotice, tek _QrOverlay (opak tonlu kart + IconOrb + Pop; metin ink); başarı IconOrb(88, glow);
+//   sonsuz _pulseController KALKTI (bitiş durumlarında kare yok).
 // - Davranış: ret/kalıcı durum metinleri, yenile, kapat, otomatik kapanış; yoklama mantığı değişmedi
 //   (qr_modal_polling_test / fix_fx2_qr_modal_test ayrıca çalışır).
 import 'dart:async';
@@ -19,6 +20,8 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/countdown_ring.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -499,6 +502,25 @@ void main() {
         expect(_qrAlpha(t), closeTo(0.12, 0.01));
         expect(find.byIcon(Icons.block_rounded), findsOneWidget);
         expect(find.text('Kodu Yenile'), findsOneWidget);
+
+        // Ret kartı: cilalı danger küresi (IconOrb) + tek seferlik belirme (Pop); metin ink renginde.
+        final inRing = find.descendant(
+          of: find.byType(CountdownRing),
+          matching: find.byType(IconOrb),
+        );
+        expect(inRing, findsOneWidget);
+        expect(t.widget<IconOrb>(inRing).tone, AppTone.danger);
+        expect(
+          find.descendant(
+            of: find.byType(CountdownRing),
+            matching: find.byType(Pop),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          t.widget<Text>(find.text('Kapı Yetkisi Yok').last).style!.color,
+          AppTone.danger.ink(AppPalette.light),
+        );
         await _close(t);
       },
     );
@@ -621,21 +643,57 @@ void main() {
       },
     );
 
-    testWidgets('rozet beyaz metni ton gradyanının iki ucunda da >= 4,5:1', (
+    testWidgets(
+      'ret kartı: ink metin tonlu yüzeyde >= 4,5:1 (açık + koyu); küre beyaz ikonu gradyanın iki ucunda >= 4,5:1',
+      (t) async {
+        for (final tone in const <AppTone>[AppTone.danger, AppTone.warning]) {
+          // Küre (IconOrb): beyaz ikon ton gradyanında (eski beyaz-metin-üstü-gradyan iddiası küreye taşındı).
+          expect(
+            g2Contrast(Colors.white, tone.a),
+            greaterThanOrEqualTo(4.5),
+            reason: '${tone.name}.a',
+          );
+          expect(
+            g2Contrast(Colors.white, tone.b),
+            greaterThanOrEqualTo(4.5),
+            reason: '${tone.name}.b',
+          );
+          // Kart: opak ton tint'i diyalog yüzeyinin üstünde, metin ink.
+          for (final p in const <AppPalette>[AppPalette.light, AppPalette.dark]) {
+            expect(
+              g2Contrast(tone.ink(p), g2Over(tone.tint(p), p.surface)),
+              greaterThanOrEqualTo(4.5),
+              reason: '${tone.name} ink dark=${p.isDark}',
+            );
+          }
+        }
+      },
+    );
+
+    testWidgets('ret kartı koyu temada da ink renginde ve küre ton gradyanında', (
       t,
     ) async {
-      for (final tone in const <AppTone>[AppTone.danger, AppTone.warning]) {
-        expect(
-          g2Contrast(Colors.white, tone.a),
-          greaterThanOrEqualTo(4.5),
-          reason: '${tone.name}.a',
-        );
-        expect(
-          g2Contrast(Colors.white, tone.b),
-          greaterThanOrEqualTo(4.5),
-          reason: '${tone.name}.b',
-        );
-      }
+      await _open(
+        t,
+        _QrAuth(
+          status: {'last_denial_reason': 'DOOR_MISMATCH', 'denied_door_name': 'B'},
+        ),
+        dark: true,
+      );
+      await _settleState(t);
+      expect(
+        t.widget<Text>(find.text('Kapı Uyuşmazlığı!')).style!.color,
+        AppTone.danger.ink(AppPalette.dark),
+      );
+      final orb = t.widget<IconOrb>(
+        find.descendant(
+          of: find.byType(CountdownRing),
+          matching: find.byType(IconOrb),
+        ),
+      );
+      expect(orb.tone, AppTone.danger);
+      expect(orb.glow, isTrue);
+      await _close(t);
     });
   });
 
@@ -643,8 +701,25 @@ void main() {
     testWidgets(
       'başarı içeriği, dolu yeşil halka, tik animasyonu 320 ms easeOutBack, yenile düğmesi yok; 3,2 sn sonra kapanır',
       (t) async {
+        final haptics = recordHaptics(t);
         await _open(t, _QrAuth(status: {'used': true}));
         await _settleState(t);
+        // Onay anı: tek hafif haptik.
+        expect(
+          haptics.where((h) => h.contains('lightImpact')),
+          hasLength(1),
+          reason: 'geçiş onayında hafif haptik (bir kez)',
+        );
+        // Başarı: cilalı success küresi (IconOrb, glow) halkanın ortasında.
+        final orb = t.widget<IconOrb>(
+          find.descendant(
+            of: find.byType(CountdownRing),
+            matching: find.byType(IconOrb),
+          ),
+        );
+        expect(orb.tone, AppTone.success);
+        expect(orb.size, 88);
+        expect(orb.glow, isTrue);
         expect(find.text('Geçiş Başarılı'), findsOneWidget);
         expect(find.text('Kapı Açıldı!'), findsOneWidget);
         expect(find.text('Geçiş onaylandı'), findsOneWidget);

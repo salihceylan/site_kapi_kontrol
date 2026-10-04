@@ -213,7 +213,7 @@ void main() {
         reason: 'home_polling_test: tek Text',
       );
       expect(find.text('Detaylar'), findsOneWidget);
-      expect(find.text('Kapı Aç'), findsOneWidget);
+      expect(find.text('KAPI AÇ'), findsOneWidget);
       expect(find.text('Kurye / Misafir Geçişi Oluştur'), findsOneWidget);
       expect(find.text('📲 Giriş QR Kodu Göster'), findsOneWidget);
       expect(find.textContaining('Geçiş Logları'), findsOneWidget);
@@ -225,7 +225,7 @@ void main() {
         scale: 1.0,
       );
       expect(find.text('🟡 Yerel Ağda Aktif'), findsOneWidget);
-      expect(find.text('Kapı Aç (Yerel Wi-Fi)'), findsOneWidget);
+      expect(find.text('YEREL AĞDAN AÇ'), findsOneWidget);
 
       await pumpAt(
         t,
@@ -234,7 +234,7 @@ void main() {
         scale: 1.0,
       );
       expect(find.text('🔴 Çevrimdışı'), findsOneWidget);
-      expect(find.text('Cihaz Çevrimdışı'), findsOneWidget);
+      expect(find.text('ÇEVRİMDIŞI'), findsOneWidget);
     });
 
     testWidgets(
@@ -265,7 +265,7 @@ void main() {
     );
   });
 
-  group('kapı aç (tek DoorOpenButton, bar)', () {
+  group('kapı aç (tek DoorOpenButton, yuvarlak cilalı)', () {
     testWidgets('hazır: dokununca onOpenDoor çağrılır; orta şiddette haptik', (
       t,
     ) async {
@@ -278,19 +278,19 @@ void main() {
         scale: 1.0,
       );
       final button = t.widget<DoorOpenButton>(find.byType(DoorOpenButton));
-      expect(button.variant, DoorOpenVariant.bar);
+      expect(button.variant, DoorOpenVariant.circle);
       expect(button.state, DoorOpenState.ready);
       expect(button.tone, AppTone.primary);
-      expect(button.label, 'Kapı Aç');
+      expect(button.label, 'KAPI AÇ');
 
-      await t.tap(find.text('Kapı Aç'));
+      await t.tap(find.text('KAPI AÇ'));
       await t.pump();
       expect(opened, 1);
       expect(haptics, contains('HapticFeedbackType.mediumImpact'));
     });
 
     testWidgets(
-      'yerel ağda: warning tonu, Wi-Fi simgesi, etiket "Kapı Aç (Yerel Wi-Fi)"',
+      'yerel ağda: warning tonu, Wi-Fi simgesi, etiket "YEREL AĞDAN AÇ"',
       (t) async {
         var opened = 0;
         await pumpAt(
@@ -307,7 +307,7 @@ void main() {
         expect(button.tone, AppTone.warning);
         expect(button.icon, Icons.wifi);
         expect(button.state, DoorOpenState.ready);
-        await t.tap(find.text('Kapı Aç (Yerel Wi-Fi)'));
+        await t.tap(find.text('YEREL AĞDAN AÇ'));
         expect(opened, 1);
       },
     );
@@ -328,14 +328,14 @@ void main() {
         DoorOpenState.disabled,
         reason: 'yönetici kartında çevrimdışı dokunuşta iş yapılmaz',
       );
-      await t.tap(find.text('Cihaz Çevrimdışı'));
+      await t.tap(find.text('ÇEVRİMDIŞI'));
       await t.pump();
       expect(opened, 0);
       expect(find.byType(SnackBar), findsNothing);
     });
 
     testWidgets(
-      'komut sürerken: opening, "Gönderiliyor..." + aynı CircularProgressIndicator, dokunma yok',
+      'komut sürerken: opening, "AÇILIYOR" + aynı CircularProgressIndicator, dokunma yok',
       (t) async {
         var opened = 0;
         await pumpAt(
@@ -346,7 +346,7 @@ void main() {
         );
         final button = t.widget<DoorOpenButton>(find.byType(DoorOpenButton));
         expect(button.state, DoorOpenState.opening);
-        expect(find.text('Gönderiliyor...'), findsOneWidget);
+        expect(find.text('AÇILIYOR'), findsOneWidget);
         expect(
           find.descendant(
             of: find.byType(DoorOpenButton),
@@ -354,7 +354,7 @@ void main() {
           ),
           findsOneWidget,
         );
-        await t.tap(find.text('Gönderiliyor...'));
+        await t.tap(find.text('AÇILIYOR'));
         await t.pump();
         expect(opened, 0);
       },
@@ -378,7 +378,7 @@ void main() {
     );
 
     testWidgets(
-      'successTick artınca "Gönderildi" tiki gösterilir, 1,4 sn sonra "Kapı Aç"a döner',
+      'successTick artınca "GÖNDERİLDİ" tiki gösterilir, 1,4 sn sonra "KAPI AÇ"a döner',
       (t) async {
         final tick = ValueNotifier<int>(0);
         addTearDown(tick.dispose);
@@ -391,9 +391,9 @@ void main() {
           width: 360,
           scale: 1.0,
         );
-        expect(find.text('Kapı Aç'), findsOneWidget);
+        expect(find.text('KAPI AÇ'), findsOneWidget);
         expect(
-          find.text('Gönderildi'),
+          find.text('GÖNDERİLDİ'),
           findsNothing,
           reason: 'ilk kurulumdaki değer sinyal sayılmaz',
         );
@@ -401,12 +401,12 @@ void main() {
         tick.value = 1;
         await t.pump();
         await t.pump(const Duration(milliseconds: 250));
-        expect(find.text('Gönderildi'), findsOneWidget);
-        expect(find.text('Kapı Aç'), findsNothing);
+        expect(find.text('GÖNDERİLDİ'), findsOneWidget);
+        expect(find.text('KAPI AÇ'), findsNothing);
 
         await t.pump(const Duration(milliseconds: 1500));
-        expect(find.text('Gönderildi'), findsNothing);
-        expect(find.text('Kapı Aç'), findsOneWidget);
+        expect(find.text('GÖNDERİLDİ'), findsNothing);
+        expect(find.text('KAPI AÇ'), findsOneWidget);
         expect(t.takeException(), isNull);
       },
     );
@@ -420,7 +420,7 @@ void main() {
         0,
       );
       await t.pump(const Duration(seconds: 3));
-      expect(find.text('Gönderildi'), findsNothing);
+      expect(find.text('GÖNDERİLDİ'), findsNothing);
     });
   });
 
@@ -608,11 +608,13 @@ void main() {
     );
 
     testWidgets(
-      'düğmeler ikincil (tonal) ve tam genişlik; kapı aç tek dolu (gradyan) düğme',
+      'düğmeler ikincil (tonal) ve tam genişlik; kapı aç yuvarlak cilalı tek düğme (132-184 dp daire)',
       (t) async {
         await pumpAt(t, _card(), width: 360, scale: 1.0);
-        final cardWidth = t.getSize(find.byType(DoorOpenButton)).width;
-        expect(cardWidth, greaterThan(250));
+        final orb = t.getSize(find.byType(DoorOpenButton));
+        expect(orb.width, orb.height, reason: 'daire: kare kutu');
+        expect(orb.width, inInclusiveRange(132, 184));
+        double? cardWidth;
         for (final label in const <String>[
           'Kurye / Misafir Geçişi Oluştur',
           '📲 Giriş QR Kodu Göster',
@@ -623,6 +625,8 @@ void main() {
                 matching: find.byType(AnimatedContainer),
               )
               .first;
+          cardWidth ??= t.getSize(box).width;
+          expect(cardWidth, greaterThan(250), reason: 'tam genişlik');
           expect(t.getSize(box).width, closeTo(cardWidth, 0.5), reason: label);
           expect(
             t.getSize(box).height,
@@ -631,8 +635,9 @@ void main() {
           );
         }
         expect(
-          t.getSize(find.byType(DoorOpenButton)).height,
-          greaterThanOrEqualTo(52),
+          orb.width,
+          lessThan(cardWidth!),
+          reason: 'daire tam genişlikli değil, ortalıdır',
         );
       },
     );

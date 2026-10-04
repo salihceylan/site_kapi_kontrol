@@ -81,6 +81,29 @@ void main() {
       expect(block.center.dy, closeTo(320, 24));
     });
 
+    testWidgets(
+      'logonun aurası (halkanın dışına taşan boyama) kaydırıcının görünüm alanında kırpılmaz',
+      (t) async {
+        for (final dark in const <bool>[false, true]) {
+          await _pumpSplash(t, width: 360, height: 640, dark: dark);
+          final hero = t.getRect(find.byType(LoginHero));
+          final aura = hero.inflate(LoginHero.auraReach);
+          final viewport = t.getRect(
+            find.descendant(
+              of: find.byType(StartupSplash),
+              matching: find.byType(SingleChildScrollView),
+            ),
+          );
+          expect(viewport.left, lessThanOrEqualTo(aura.left), reason: 'dark=$dark');
+          expect(viewport.top, lessThanOrEqualTo(aura.top), reason: 'dark=$dark');
+          expect(viewport.right, greaterThanOrEqualTo(aura.right), reason: 'dark=$dark');
+          // Alt kenar: aura ile çark arasında boşluk kalır (çark auranın içine girmez).
+          final spinner = t.getRect(find.byType(CircularProgressIndicator));
+          expect(spinner.top, greaterThanOrEqualTo(aura.bottom - 1));
+        }
+      },
+    );
+
     testWidgets('alçak pencerede (320x120 x2,0 / 640x240) taşmaz, kaydırılır', (
       t,
     ) async {

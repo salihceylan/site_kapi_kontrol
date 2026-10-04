@@ -8,10 +8,11 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/managed_users_view.dart';
-import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 
 import 'list_fixtures.dart';
@@ -313,7 +314,7 @@ void main() {
       expect(log, <String>['page:1', 'page:3']);
     });
 
-    testWidgets('rol tonu: avatar rol tonunda; pasif hesap nötr tonlu kart', (
+    testWidgets('rol tonu: avatar rozeti rol tonunda; pasif hesap nötr tonlu kart', (
       t,
     ) async {
       await pumpList(
@@ -324,16 +325,33 @@ void main() {
         scale: 1,
         dark: false,
       );
-      final avatars = t
-          .widgetList<InitialAvatar>(find.byType(InitialAvatar))
-          .toList();
-      expect(avatars.map((a) => a.tone).toList(), <AppTone>[
+      // Avatar = cilalı ikon rozeti (IconOrb, 40 daire): ton rolü anlatır, rozet düz (glow yok).
+      final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+      expect(orbs.map((o) => o.tone).toList(), <AppTone>[
         AppTone.success, // site yöneticisi
         AppTone.success,
         AppTone.violet, // daire kullanıcısı
         AppTone.violet, // bireysel
         AppTone.primary, // süper kullanıcı
       ]);
+      expect(
+        orbs.every(
+          (o) => o.size == 40 && o.shape == IconOrbShape.circle && !o.glow,
+        ),
+        isTrue,
+        reason: 'satır rozeti: 40 dp daire, glow yok (hero değil)',
+      );
+      expect(
+        orbs.map((o) => o.icon).toList(),
+        <IconData>[
+          Icons.apartment_rounded,
+          Icons.apartment_rounded,
+          Icons.home_rounded,
+          Icons.person_rounded,
+          Icons.admin_panel_settings_rounded,
+        ],
+        reason: 'rol simgesi',
+      );
       final cards = t.widgetList<AppCard>(find.byType(AppCard)).toList();
       // Başlık kartı + 5 kullanıcı kartı; yalnız ikincisi (pasif) nötr tonlu.
       final userCards = cards.where((c) => c.onTap != null).toList();
@@ -344,6 +362,89 @@ void main() {
         null,
         null,
       ]);
+    });
+
+    testWidgets(
+      'rozetler: rol her kartta StatusChip (rol tonu); "Pasif" yalnız pasif hesapta, aktif hesapta anahtar söyler',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        AppTone toneOf(String label, {int index = 0}) => t
+            .widget<StatusChip>(find.widgetWithText(StatusChip, label).at(index))
+            .tone;
+        expect(find.widgetWithText(StatusChip, 'Site Yoneticisi'), findsNWidgets(2));
+        expect(toneOf('Site Yoneticisi'), AppTone.success);
+        expect(toneOf('Daire Kullanicisi'), AppTone.violet);
+        expect(toneOf('Bireysel Kullanici'), AppTone.violet);
+        expect(toneOf('Super User'), AppTone.primary);
+        // Aktiflik: tek pasif hesap (Mehmet) "Pasif" rozeti alır; aktiflere "Aktif" rozeti eklenmez
+        // (anahtar aynı bilgiyi zaten gösterir).
+        expect(find.widgetWithText(StatusChip, 'Pasif'), findsOneWidget);
+        expect(toneOf('Pasif'), AppTone.neutral);
+        expect(find.widgetWithText(StatusChip, 'Aktif'), findsNothing);
+        // Rozetler dokunulamaz süstür: kart dokunuşu (aç/kapa) rozete basınca da çalışır.
+        await tapFinder(t, find.widgetWithText(StatusChip, 'Super User'));
+        expect(find.text('Kullanıcı ID: 1'), findsOneWidget);
+      },
+    );
+
+    for (final (w, scale, why) in const <(double, double, String)>[
+      (360, 1.5, 'büyük yazı (> 1,3x)'),
+      (320, 1.0, 'dar ekran (< 340 dp)'),
+    ]) {
+      testWidgets('rozetler $why: düz metin (kırpılmaz); rozet ikonu gizlenmez', (
+        t,
+      ) async {
+        await pumpList(
+          t,
+          _view(),
+          width: w,
+          height: 900,
+          scale: scale,
+          dark: false,
+        );
+        // StatusChip tek satır + elips olduğundan etiket kırpılırdı: aynı metin düz yazı olur.
+        expect(find.byType(StatusChip), findsNothing);
+        expect(find.text('Site Yoneticisi'), findsNWidgets(2));
+        expect(find.text('Pasif'), findsOneWidget);
+        final role = t.widget<Text>(find.text('Super User'));
+        final p = AppPalette.light;
+        expect(role.style!.color, AppTone.primary.ink(p));
+        expect(
+          contrastRatio(role.style!.color!, p.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+        // Pasif kart nötr tonlu zemin: "Pasif" metni orada da >= 4,5:1.
+        final neutralBg = Color.alphaBlend(AppTone.neutral.tint(p), p.surface);
+        final passive = t.widget<Text>(find.text('Pasif'));
+        expect(
+          contrastRatio(passive.style!.color!, neutralBg),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(t.takeException(), isNull);
+      });
+    }
+
+    testWidgets('en büyük yazıda (2,0x) avatar rozeti gizlenir (metne yer kalır)', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 320,
+        height: 900,
+        scale: 2.0,
+        dark: false,
+      );
+      expect(find.byType(IconOrb), findsNothing);
+      expect(find.text('Ayşe Yılmaz'), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
   });
 

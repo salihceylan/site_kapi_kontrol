@@ -4,6 +4,23 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// Çekmecede "Panel"in hemen altına eklenen ek eylem (sayfa değiştirmez; dokununca [onTap] çalışır).
+///
+/// Sade daire sakini ekranında ana ekrandan kaldırılan komutlar (kapıya QR göster, kapı ekranından
+/// QR oku, misafir geçişi, sesli komut) böyle toplanır. [onTap] çekmeceyi kapatmayı kendisi yapar
+/// (diğer menü öğeleriyle aynı: `Navigator.pop`).
+class YanMenuAction {
+  const YanMenuAction({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+}
+
 enum SirketMenuItem {
   dashboard,
   profilim,
@@ -33,6 +50,7 @@ class YanMenu extends StatelessWidget {
     this.isResidentMode = false,
     this.onToggleMode,
     this.canToggleMode = false,
+    this.extraActions = const <YanMenuAction>[],
   });
 
   final String fullName;
@@ -44,6 +62,9 @@ class YanMenu extends StatelessWidget {
   final bool isResidentMode;
   final VoidCallback? onToggleMode;
   final bool canToggleMode;
+
+  /// "Panel"den hemen sonra gösterilen ek eylemler (varsayılan boş: menü eskisi gibidir).
+  final List<YanMenuAction> extraActions;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
@@ -92,10 +113,10 @@ class YanMenu extends StatelessWidget {
           ),
           const _MenuDivider(),
         ],
-        for (var i = 0; i < items.length; i++)
+        for (var i = 0; i < items.length; i++) ...[
           StaggeredEntry(
             key: ValueKey<SirketMenuItem>(items[i]),
-            index: firstItemIndex + i,
+            index: firstItemIndex + i + (i > 0 ? extraActions.length : 0),
             child: _MenuTile(
               icon: _iconForItem(items[i]),
               title: _titleForItem(items[i], role),
@@ -104,10 +125,25 @@ class YanMenu extends StatelessWidget {
               onTap: () => onSelect(items[i]),
             ),
           ),
+          // Ek eylemler "Panel"in hemen altında.
+          if (i == 0)
+            for (var k = 0; k < extraActions.length; k++)
+              StaggeredEntry(
+                key: ValueKey<String>('yan_menu_ek_$k'),
+                index: firstItemIndex + 1 + k,
+                child: _MenuTile(
+                  icon: extraActions[k].icon,
+                  title: extraActions[k].title,
+                  selected: false,
+                  tone: tone,
+                  onTap: extraActions[k].onTap,
+                ),
+              ),
+        ],
         const _MenuDivider(),
         StaggeredEntry(
           key: const ValueKey<String>('yan_menu_cikis'),
-          index: firstItemIndex + items.length,
+          index: firstItemIndex + items.length + extraActions.length,
           child: _MenuTile(
             icon: Icons.logout_rounded,
             title: 'Çıkış Yap',

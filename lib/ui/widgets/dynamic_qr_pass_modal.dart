@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
@@ -12,6 +13,8 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/countdown_ring.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -282,6 +285,8 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
         _isAlreadyUsed = false;
         _isSuperseded = false;
       });
+      // Onay anı: hafif haptik (yalnız sunum geri bildirimi; akış mantığı değişmedi).
+      HapticFeedback.lightImpact();
       _successAnimController.forward(from: 0.0);
       _speak('Kapı açıldı, geçebilirsiniz.');
 
@@ -532,6 +537,8 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
     );
   }
 
+  /// Geçiş başarılı: cilalı success küresi ([IconOrb], glow) + metin. Tek seferlik belirme, mevcut
+  /// 320 ms `easeOutBack` ölçek animasyonudur ([_scaleAnimation]); bitince hiçbir animasyon kalmaz.
   Widget _buildSuccessContent(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
@@ -543,20 +550,11 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppTone.success.tint(p),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppTone.success.hue.withValues(alpha: 0.4),
-                width: 2,
-              ),
-            ),
-            child: SizedBox(
-              width: 88,
-              height: 88,
-              child: Icon(Icons.check_rounded, color: ink, size: 56),
-            ),
+          const IconOrb(
+            icon: Icons.check_rounded,
+            tone: AppTone.success,
+            size: 88,
+            glow: true,
           ),
           const SizedBox(height: AppSpace.md),
           Text(
@@ -812,9 +810,11 @@ class _DynamicQrPassModalState extends State<DynamicQrPassModal>
   }
 }
 
-/// Karekodun üstüne binen durum rozeti (kapı uyuşmazlığı, kullanılmış, hükümsüz, ret nedeni, süresi
-/// doldu): ton gradyanı üstü beyaz metin (>= 4,5:1), tek yapı. Halka alanından (270 dp) taşmasın diye
-/// büyük yazıda orantılı küçülür (FittedBox); durum canlı bölge olarak duyurulur.
+/// Karekodun üstüne binen durum kartı (kapı uyuşmazlığı, kullanılmış, hükümsüz, ret nedeni, süresi
+/// doldu): opak tonlu yüzey (ton tint'i + ton kenarı) üzerinde cilalı ton küresi ([IconOrb], glow) ve
+/// `ink` metin (>= 4,5:1: AppTone sözleşmesi). Duruma girişte tek seferlik belirir ([Pop], 200 ms; sonlu,
+/// hareket azaltmada anında). Halka alanından (270 dp) taşmasın diye büyük yazıda orantılı küçülür
+/// (FittedBox); durum canlı bölge olarak duyurulur.
 class _QrOverlay extends StatelessWidget {
   const _QrOverlay({
     required this.tone,
@@ -830,58 +830,64 @@ class _QrOverlay extends StatelessWidget {
   final String message;
   final int messageMaxLines;
 
-  /// Rozet genişliği: halka alanı 270 dp - iki yandan 14 dp.
+  /// Kart genişliği: halka alanı 270 dp - iki yandan 14 dp.
   static const double _width = 242;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Semantics(
-        liveRegion: true,
-        container: true,
-        child: SizedBox(
-          width: _width,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: tone.gradient,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              boxShadow: p.shadow(2),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpace.lg,
-                vertical: AppSpace.md,
+    final ink = tone.ink(p);
+    return Pop(
+      // Anahtar: durum başlığı; farklı bir durum kartı geldiğinde belirme yeniden oynar.
+      key: ValueKey<String>('qr-overlay|$title'),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Semantics(
+          liveRegion: true,
+          container: true,
+          child: SizedBox(
+            width: _width,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Color.alphaBlend(tone.tint(p), p.surface),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: tone.hue.withValues(alpha: 0.5)),
+                boxShadow: p.shadow(2),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 36),
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    title,
-                    style: th.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.lg,
+                  vertical: AppSpace.md,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconOrb(icon: icon, tone: tone, size: 48, glow: true),
+                    const SizedBox(height: AppSpace.sm),
+                    Text(
+                      title,
+                      style: th.titleMedium?.copyWith(
+                        color: ink,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: AppSpace.xs),
-                  Text(
-                    message,
-                    style: th.bodySmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      message,
+                      style: th.bodySmall?.copyWith(
+                        color: ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: messageMaxLines,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: messageMaxLines,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

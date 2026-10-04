@@ -3,18 +3,14 @@ import '../../models/door_record.dart';
 import '../../models/door_runtime_status.dart';
 import '../../models/site_record.dart';
 import '../../services/auth_service.dart';
-import '../../services/geofence_service.dart';
 import '../../services/voice_door_service.dart';
 import '../design/app_card.dart';
-import '../design/app_dialog.dart';
-import '../design/app_snack.dart';
 import '../design/buttons.dart';
 import '../design/door_open_button.dart';
 import '../design/motion_widgets.dart';
 import '../design/status_chip.dart';
 import '../design/tokens.dart';
-import '../pages/qr_scan_page.dart';
-import 'dynamic_qr_pass_modal.dart';
+import 'resident_door_actions.dart';
 import 'voice_live_banner.dart';
 
 /// Büyük kapı düğmesine dokununca ne olacağı ([ResidentDoorUiState.tap] sonucu).
@@ -125,10 +121,10 @@ class ResidentDoorUiState {
 
   /// Açılmıyorken düğme etiketi (açılırken `DoorOpenButton.openingLabel` gösterilir).
   String get buttonLabel {
-    if (isQrOnly) return isOnline ? 'QR KOD İLE AÇ' : 'ÇEVRİMDİŞI';
+    if (isQrOnly) return isOnline ? 'QR KOD İLE AÇ' : 'ÇEVRİMDIŞI';
     if (commandEnabled) return isLocalOnline ? 'YEREL AĞDAN AÇ' : 'KAPIYI AÇ';
     if (!canRemote) return 'UZAKTAN KAPALI';
-    return isDeviceAssigned ? 'ÇEVRİMDİŞI' : 'KAPALI';
+    return isDeviceAssigned ? 'ÇEVRİMDIŞI' : 'KAPALI';
   }
 
   /// Düğmenin altındaki durum cümlesi (cümleler ve emojiler eskisiyle birebir).
@@ -204,6 +200,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     this.authService,
     required this.roleColor,
     this.successTick = 0,
+    this.minimal = false,
   });
 
   final SiteRecord? selectedSite;
@@ -226,6 +223,11 @@ class ResidentDoorRemoteCard extends StatelessWidget {
   /// Kapı açma başarı sayacı: her ARTIŞTA büyük düğme başarı tikini gösterir (varsayılan 0 = bağlı
   /// değil). Ebeveyn komut hatasız bitince bir artırır; sıfırlamaya gerek yoktur.
   final int successTick;
+
+  /// Sade kip: yalnız kapı seçici (birden çok kapı varsa) ya da kapı adı + yuvarlak kapı düğmesi.
+  /// Açıklama metni, rozetler, IP bilgileri, sesli banner ve QR/misafir düğmeleri çizilmez; bu eylemler
+  /// çekmece menüde ([ResidentDoorActions]) toplanır. Düğmenin durumu/etiketi/davranışı aynıdır.
+  final bool minimal;
 
   /// Başlıkta gösterilen site adı. Daire sakinleri site listesini göremediği için `selectedSite`
   /// çoğunlukla null'dır; bu durumda kapı kaydındaki site adı kullanılır (kapı adı iki kez yazılmasın).
@@ -251,6 +253,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
       isOpeningDoor: isOpeningDoor,
       isLoadingStatus: isLoadingStatus,
     );
+    if (minimal) return _buildMinimal(context, ui);
     final localIp = status?.localIp;
     final publicIp = status?.publicIp;
     final hasLocalIp = localIp != null && localIp.isNotEmpty;
@@ -415,6 +418,51 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     );
   }
 
+  /// Sade kip gövdesi: kapı seçici ya da kapı adı + yuvarlak kapı düğmesi (açıklama yok).
+  Widget _buildMinimal(BuildContext context, ResidentDoorUiState ui) {
+    final th = Theme.of(context).textTheme;
+    final door = selectedDoor;
+    return SizedBox(
+      width: double.infinity,
+      child: AppCard(
+        level: 2,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.lg,
+          vertical: AppSpace.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (doors.length > 1)
+              _buildDoorChips(context)
+            else
+              Text(
+                door?.doorName ?? 'Kapı Seçilmedi',
+                textAlign: TextAlign.center,
+                style: th.headlineMedium,
+              ),
+            const SizedBox(height: AppSpace.xl),
+            // Sade ekranda düğme tek hero'dur: genişliğin ~%62'si (168-220 dp; sığmazsa küçülür).
+            LayoutBuilder(
+              builder: (context, box) => DoorOpenButton(
+                key: const ValueKey<String>('resident_door_open_button'),
+                state: ui.buttonState,
+                label: ui.buttonLabel,
+                icon: ui.buttonIcon,
+                tone: ui.buttonTone,
+                successTick: successTick,
+                diameter: (box.maxWidth * 0.62).clamp(168.0, 220.0),
+                onPressed: ui.isQrOnly ? () => _handleQrPass(context) : onOpenDoor,
+                onBlocked: () => _showOfflineWarning(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Kapı seçici: seçili kapı dolu mavi, diğerleri soluk yüzey (>= 4,5:1). Yatay kaydırma yok:
   /// sığmayan çipler alt satıra iner (hiçbir kapı gizli kalmaz).
   Widget _buildDoorChips(BuildContext context) {
@@ -452,147 +500,28 @@ class ResidentDoorRemoteCard extends StatelessWidget {
     );
   }
 
-  void _showOfflineWarning(BuildContext context) {
-    AppSnack.show(
-      context,
-      '${selectedDoor?.doorName ?? "Kapı"} şu an çevrimdışı. Cihaz internete bağlı olmadığından işlem yapılamaz.',
-      kind: AppSnackKind.error,
-      duration: const Duration(seconds: 3),
-      maxLines: 6,
-    );
-  }
+  /// Bulut çevrimiçi ya da yerel ağda erişilebilir.
+  bool get _isOnline =>
+      (runtimeStatus?.mqttConnected == true) || canTryLocalDoorOpen;
 
-  Future<void> _handleQrPass(BuildContext context) async {
-    final isOnline = (runtimeStatus?.mqttConnected == true) || canTryLocalDoorOpen;
-    if (!isOnline) {
-      _showOfflineWarning(context);
-      return;
-    }
+  void _showOfflineWarning(BuildContext context) =>
+      ResidentDoorActions.showOfflineWarning(context, selectedDoor);
 
-    final door = selectedDoor;
-    if (door == null) return;
-
-    if (door.requireGeofence) {
-      AppSnack.show(
+  Future<void> _handleQrPass(BuildContext context) =>
+      ResidentDoorActions.showQrPass(
         context,
-        'Konum kontrol ediliyor...',
-        duration: const Duration(seconds: 1),
+        door: selectedDoor,
+        isOnline: _isOnline,
+        authService: authService,
       );
 
-      final result = await GeofenceService.instance.verifyWithinGeofence(
-        targetLat: door.geofenceLatitude,
-        targetLng: door.geofenceLongitude,
-        radiusMeters: door.geofenceRadiusMeters,
-      );
-
-      if (!context.mounted) return;
-
-      if (!result.allowed) {
-        showDialog<void>(
-          context: context,
-          builder: (ctx) => AppDialog(
-            title: 'Konum Hatası',
-            icon: Icons.location_off_outlined,
-            tone: AppTone.danger,
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Anladım'),
-              ),
-            ],
-            child: Text(result.errorMessage ?? 'Kapı çevresinde olmadığınız tespit edildi.'),
-          ),
-        );
-        return;
-      }
-    }
-
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => DynamicQrPassModal(door: door, authService: authService),
-    );
-  }
-
-  Future<void> _handleScanScreenQr(BuildContext context) async {
-    final isOnline = (runtimeStatus?.mqttConnected == true) || canTryLocalDoorOpen;
-    if (!isOnline) {
-      _showOfflineWarning(context);
-      return;
-    }
-
-    final door = selectedDoor;
-    if (door == null) return;
-
-    final scanned = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const QrScanPage(
-          title: 'Kapı Ekranından QR Oku',
-          instructionText: 'Cihazın 2.4" ekranındaki karekodu kameranıza gösterin.',
-        ),
-      ),
-    );
-
-    if (scanned == null || scanned.trim().isEmpty || !context.mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            ),
-            SizedBox(width: 12),
-            Expanded(child: Text('Karekod doğrulanıyor, kapı açılıyor...')),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    final aService = authService;
-    if (aService == null) return;
-
-    // Konum zorunluysa AuthService konumu alır; alınamazsa istek gönderilmez ve neden gösterilir.
-    final (result, error) = await aService.openDoorWithScannedQr(
-      qrPayload: scanned.trim(),
-      requireLocation: door.requiresLocationForQrScan,
-    );
-
-    if (!context.mounted) return;
-
-    if (error != null) {
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AppDialog(
-          title: 'Geçiş Reddedildi',
-          icon: Icons.error_outline_rounded,
-          tone: AppTone.danger,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Tamam'),
-            ),
-          ],
-          child: Text(error),
-        ),
-      );
-    } else {
-      final doorName = result?['door_name'] ?? door.doorName;
-      AppSnack.show(
+  Future<void> _handleScanScreenQr(BuildContext context) =>
+      ResidentDoorActions.scanScreenQr(
         context,
-        '✅ $doorName açıldı! Geçişiniz kaydedildi.',
-        kind: AppSnackKind.success,
-        duration: const Duration(seconds: 3),
+        door: selectedDoor,
+        isOnline: _isOnline,
+        authService: authService,
       );
-      // scan-qr-open sunucuda kapıyı zaten açtı ve geçişi kaydetti: ikinci bir "kapı aç" komutu
-      // (onOpenDoor) göndermek çift tetik/çift log üretir. Durum 3 sn'lik yoklamayla yenilenir.
-    }
-  }
 
   /// Sesli Dinleme Canlı Banner'ı: ortak [VoiceLiveBanner] (voice_live_banner.dart). Sakin kartı aday
   /// kapı vermez (`startListening()` ile aynı).

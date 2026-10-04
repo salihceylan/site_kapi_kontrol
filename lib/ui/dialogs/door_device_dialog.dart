@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -6,7 +7,11 @@ import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/replace_device_dialog.dart';
 
 class DoorDeviceAssignResult {
@@ -86,6 +91,7 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       DoorDeviceAssignResult(
         deviceUid: _deviceUidController.text.trim().toUpperCase(),
@@ -95,10 +101,114 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
   }
 
   void _unassign() {
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       const DoorDeviceAssignResult(
         deviceUid: null,
         unassign: true,
+      ),
+    );
+  }
+
+  /// Mevcut cihaz durumu: cihaz varsa birincil, yoksa uyarı tonlu panel + cilalı çip rozeti.
+  /// Büyük yazıda (>= 1,75x) rozet gizlenir.
+  Widget _buildStatusPanel(BuildContext context, AppTone statusTone) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return DialogPanel(
+      tone: statusTone,
+      child: Row(
+        children: [
+          if (!hideRowOrbs(context)) ...[
+            IconOrb(
+              icon: Icons.memory_rounded,
+              tone: statusTone,
+              size: 40,
+              shape: IconOrbShape.squircle,
+            ),
+            const SizedBox(width: AppSpace.md),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mevcut Cihaz: ${widget.door.assignedDeviceUid ?? "Atanmadı"}',
+                  style: th.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: statusTone.ink(p),
+                  ),
+                ),
+                if (widget.door.hasDevice) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    'Model: ${widget.door.hardwareModelTitle} (${widget.door.hardwareBadgeText})',
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Seçilebilir cihaz satırı: [donanım ikon rozeti] [UID + donanım] [seçim işareti]. Satırın
+  /// tamamı dokunma hedefidir (`AppCard`, >= 48 dp); seçili satır birincil kenarlıdır.
+  Widget _buildDeviceTile(BuildContext context, Map<String, dynamic> dev) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final uid = dev['device_uid']?.toString() ?? '';
+    final hw = dev['hardware_type']?.toString() ?? '';
+    final isWroom = hw.toLowerCase().contains('wroom');
+    final isSelected = _deviceUidController.text.trim().toUpperCase() == uid.toUpperCase();
+    final accent = AppTone.primary.ink(p);
+
+    return AppCard(
+      selected: isSelected,
+      padding: const EdgeInsets.all(AppSpace.md),
+      onTap: () {
+        setState(() {
+          _deviceUidController.text = uid;
+        });
+      },
+      child: Row(
+        children: [
+          if (!hideRowOrbs(context)) ...[
+            IconOrb(
+              icon: isWroom ? Icons.memory_rounded : Icons.developer_board_rounded,
+              tone: isSelected ? AppTone.primary : AppTone.neutral,
+              size: 40,
+              shape: IconOrbShape.squircle,
+            ),
+            const SizedBox(width: AppSpace.md),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  uid,
+                  style: th.bodyMedium?.copyWith(
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                    color: isSelected ? accent : p.text,
+                  ),
+                ),
+                Text(
+                  isWroom ? 'WROOM' : 'C3',
+                  style: th.bodySmall?.copyWith(color: p.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpace.sm),
+          Icon(
+            isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 22,
+            color: isSelected ? accent : p.textMuted,
+          ),
+        ],
       ),
     );
   }
@@ -126,41 +236,12 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Mevcut Cihaz Durumu
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: statusTone.tint(p),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusTone.hue.withValues(alpha: 0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Mevcut Cihaz: ${widget.door.assignedDeviceUid ?? "Atanmadı"}',
-                    style: th.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: statusTone.ink(p),
-                    ),
-                  ),
-                  if (widget.door.hasDevice) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      'Model: ${widget.door.hardwareModelTitle} (${widget.door.hardwareBadgeText})',
-                      style: th.bodySmall?.copyWith(color: p.textSecondary),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
+            _buildStatusPanel(context, statusTone),
+            const SizedBox(height: AppSpace.lg),
 
-            // Atanabilir Cihazlar Listesi
+            // Atanabilir Cihazlar Listesi (ilk 8 satır girişte kademeli belirir)
             if (_loadingDevices)
-              const Center(child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: CircularProgressIndicator(),
-              ))
+              const DialogRowsSkeleton(rows: 2)
             else if (_assignableDevices.isNotEmpty) ...[
               Text(
                 'Kullanılabilir Cihazlarınız:',
@@ -169,67 +250,15 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
                   color: p.textSecondary,
                 ),
               ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: _assignableDevices.map((dev) {
-                  final uid = dev['device_uid']?.toString() ?? '';
-                  final hw = dev['hardware_type']?.toString() ?? '';
-                  final isWroom = hw.toLowerCase().contains('wroom');
-                  final isSelected = _deviceUidController.text.trim().toUpperCase() == uid.toUpperCase();
-                  final accent = AppTone.primary.ink(p);
-
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        _deviceUidController.text = uid;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(10),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 44),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppTone.primary.tint(p) : p.surfaceMuted,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? accent : p.border,
-                            width: isSelected ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isWroom ? Icons.memory_rounded : Icons.developer_board_rounded,
-                              size: 14,
-                              color: isSelected ? accent : p.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                uid,
-                                style: th.bodySmall?.copyWith(
-                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                                  color: isSelected ? accent : p.text,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              isWroom ? 'WROOM' : 'C3',
-                              style: th.bodySmall?.copyWith(color: p.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpace.sm),
+              for (var i = 0; i < _assignableDevices.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpace.sm),
+                StaggeredEntry(
+                  index: i,
+                  child: _buildDeviceTile(context, _assignableDevices[i]),
+                ),
+              ],
+              const SizedBox(height: AppSpace.lg),
             ],
 
             // UID Girişi
@@ -248,7 +277,7 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
             // Cihaz Değiştir & Çıkar Butonları
             if (widget.door.hasDevice) ...[
               if (widget.authService != null) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: AppSpace.lg),
                 ElevatedButton.icon(
                   onPressed: () async {
                     final nav = Navigator.of(context);
@@ -269,7 +298,7 @@ class _DoorDeviceDialogState extends State<DoorDeviceDialog> {
                   ),
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpace.md),
               OutlinedButton.icon(
                 onPressed: _unassign,
                 icon: const Icon(Icons.link_off_rounded, size: 18),
@@ -363,11 +392,13 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
   void _submit() {
     final door = _selectedDoor;
     if (door == null) return;
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(door);
   }
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final doors = _structure?.doors ?? const <DoorRecord>[];
     return AppDialog(
       title: '${widget.device.deviceUid} - Kapıya Ata',
@@ -387,6 +418,10 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
         children: [
           DropdownButtonFormField<int>(
             isExpanded: true,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            dropdownColor: p.surface,
+            menuMaxHeight: 320,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded),
             initialValue: _selectedSite?.id,
             decoration: const InputDecoration(labelText: 'Site'),
             items: [
@@ -408,14 +443,21 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
               _loadDoors(site.id);
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.md),
           if (_loadingDoors)
-            const LinearProgressIndicator()
+            // Kapı seçicinin boyutunda iskelet (paylaşılan tek shimmer; yükleme bitince kalkar).
+            const ShimmerScope(
+              child: SkeletonBox(height: 56, radius: AppRadius.md),
+            )
           else if (_error != null)
             InlineNotice(message: _error!)
           else
             DropdownButtonFormField<int>(
               isExpanded: true,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              dropdownColor: p.surface,
+              menuMaxHeight: 320,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
               initialValue: _selectedDoor?.id,
               decoration: const InputDecoration(labelText: 'Kapı'),
               items: [
@@ -442,4 +484,3 @@ class _DeviceDoorAssignDialogState extends State<DeviceDoorAssignDialog> {
     );
   }
 }
-

@@ -15,8 +15,12 @@ import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_dialog.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 
 class _FakeAuth extends AuthService {
@@ -193,4 +197,128 @@ void main() {
     await scrollTo(t, find.text('C Blok'));
     await scrollTo(t, find.text('Güncelle'));
   });
+  // --- Görsel sözleşme (cilalı safir): iskelet, R8 açılır liste, ikon rozetleri, haptik ---
+
+  testWidgets(
+    'SiteDialog: yönetici listesi yüklenirken iskelet (spinner yok); yüklenince iskelet kalkar',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) =>
+            SiteDialog.show(context, authService: _FakeAuth(managersGate: gate)),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsAtLeastNWidgets(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Yöneticiler yükleniyor...'), findsOneWidget);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(find.text('Yönetici Atanmadı'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'SiteDialog: il/ilçe listeleri R8 (yuvarlak köşe, yüzey rengi, 320 dp menü, yuvarlak ok)',
+    (t) async {
+      await openDialogAt(
+        t,
+        (context) => SiteDialog.show(context, authService: _FakeAuth()),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+
+      final dropdowns = t
+          .widgetList<DropdownButton<String>>(find.byType(DropdownButton<String>))
+          .toList();
+      expect(dropdowns, hasLength(2));
+      for (final d in dropdowns) {
+        expect(d.borderRadius, BorderRadius.circular(AppRadius.md));
+        expect(d.dropdownColor, AppPalette.light.surface);
+        expect(d.menuMaxHeight, 320);
+        expect(
+          (d.icon! as Icon).icon,
+          Icons.keyboard_arrow_down_rounded,
+        );
+      }
+    },
+  );
+
+  testWidgets(
+    'SiteDialog: başlık + bölüm başlıkları cilalı ikon rozetidir; blok satırı hap + alan',
+    (t) async {
+      await openDialogAt(
+        t,
+        (context) => SiteDialog.show(context, authService: _FakeAuth()),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+
+      // Diyalog başlığı + "Blok Daireleri" + "Site Yöneticisi".
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(3));
+      expect(find.text('Blok Daireleri'), findsOneWidget);
+      expect(find.text('Site Yöneticisi'), findsOneWidget);
+      expect(find.text('A Blok'), findsOneWidget);
+      expect(find.text('Toplam: 10 Daire'), findsOneWidget);
+      // Eylemler korunur: tonlu "seç / değiştir" hâlâ OutlinedButton'dır (düğme tipi değişmedi).
+      expect(
+        find.ancestor(
+          of: find.text('Yönetici Seç / Değiştir'),
+          matching: find.bySubtype<OutlinedButton>(),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'SiteDialog: geçerli formda Kaydet hafif haptik verir ve sonucu döndürür',
+    (t) async {
+      final haptics = recordHaptics(t);
+      SiteFormResult? result;
+      await openDialogAt(
+        t,
+        (context) async {
+          result = await SiteDialog.show(context, authService: _FakeAuth());
+        },
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+
+      // Geçersiz form: haptik YOK, diyalog açık kalır.
+      await scrollTo(t, find.text('Kaydet'));
+      await t.tap(find.text('Kaydet'));
+      await settleFor(t);
+      expect(haptics, isEmpty);
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await t.enterText(
+        find.widgetWithText(TextFormField, 'Site Adı'),
+        'Güneş Sitesi',
+      );
+      await scrollTo(t, find.text('Kaydet'));
+      await t.tap(find.text('Kaydet'));
+      await settleFor(t);
+
+      expect(haptics, contains('HapticFeedbackType.lightImpact'));
+      expect(result?.name, 'Güneş Sitesi');
+      expect(result?.blockApartmentCounts, [10]);
+      expect(find.byType(AlertDialog), findsNothing);
+    },
+  );
 }

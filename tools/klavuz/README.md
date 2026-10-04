@@ -1,18 +1,31 @@
 # Arıza klavuzu üreticisi (`tools/klavuz`)
 
-`docs/ARIZA_KLAVUZU.md` ve `docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md` bu araçla **koddan** üretilir. Elle yazılmış satır numarası
-yoktur: her giriş yalnızca **dosya + aranacak kod parçası** taşır, satırı araç çözer. Parça kodda yoksa ya da birden fazla
-yerde varsa üretim HATA verir (klavuz sessizce yanlış satırı göstermez).
+`docs/ARIZA_KLAVUZU*.md` ve `docs/ariza-klavuzu/` bu araçla **koddan** üretilir. Elle yazılmış satır numarası yoktur: her giriş
+yalnızca **dosya + aranacak kod parçası** taşır, satırı araç çözer. Parça kodda yoksa ya da birden fazla yerde varsa üretim HATA
+verir (klavuz sessizce yanlış satırı göstermez).
+
+| Dosya | Görevi |
+| --- | --- |
+| `build.mjs` | Komut satırı, giriş yükleme/çözümleme/çapraz kontrol, koddan otomatik taramalar (uç noktalar, uygulama çağrıları, ortam değişkenleri, tablolar, mesajlar, kapsam), `--where` / `--explain` / `--coverage` |
+| `render.mjs` | Belge üretimi (saf fonksiyonlar): ana sayfa, indeks, bölüm dosyaları, ekler, hata mesajı dizini |
+| `lint.mjs` | Mekanik içerik denetimi: günlük ifadeleri kodda geçiyor mu, komutlar sır basıyor/yıkıcı mı |
+| `entries/NN-ad.mjs` | Klavuzun İÇERİĞİ: bölüm başına arıza girişleri (belirti → dosya + kod parçası + nedenler + adımlar) |
+| `durum.json` | Hangi bölümler bağımsız çürütücü incelemeden geçti (`dogrulananAlanlar`); geçmeyenler belgede "⚠ doğrulanmadı" etiketlenir |
+| `build.test.mjs` | Aracın testleri + gerçek girişlerin `--check` ve belge bağlantı bütünlüğü testleri |
 
 ```bash
-node tools/klavuz/build.mjs                          # belgeleri üret
-node tools/klavuz/build.mjs --check                  # girişler kodda hâlâ var mı (dosya yazmaz)
-node tools/klavuz/build.mjs --check --fresh          # + diskteki belgeler güncel mi
-node tools/klavuz/build.mjs --check --only 10-sunucu-api   # tek alan
+node tools/klavuz/build.mjs                          # belgeleri üret (docs/ARIZA_KLAVUZU*.md, docs/ariza-klavuzu/)
+node tools/klavuz/build.mjs --check                  # girişler kodda hâlâ var mı + mekanik denetim (dosya yazmaz)
+node tools/klavuz/build.mjs --check --fresh          # + diskteki belgeler koddan üretilenle aynı mı (satır kayması)
+node tools/klavuz/build.mjs --check --only 10-sunucu-api   # tek bölüm (çapraz related dahil)
 node tools/klavuz/build.mjs --where "Giris bilgileri hatali"  # depoda metin ara (dosya:satır)
 node tools/klavuz/build.mjs --explain sunucu-giris-401        # girişin bağlantılarını koddan satır bağlamıyla göster
-node --test "tools/klavuz/*.test.mjs"                # aracın testleri (+ gerçek girişlerin --check'i)
+node tools/klavuz/build.mjs --coverage               # hiçbir girişe bağlı olmayan kaynak dosyalar
+node --test "tools/klavuz/*.test.mjs"                # aracın testleri
 ```
+
+Kod değişince (özellikle girişlerin işaret ettiği dosyalar) `--check` bozulan girişi gösterir; düzeltip `node tools/klavuz/build.mjs` ile
+belgeleri yenileyin. Belgeler deterministiktir (zaman damgası yok), `--fresh` yalnızca gerçek kayma varsa başarısız olur.
 
 ## Alan dosyası biçimi — `tools/klavuz/entries/<NN-ad>.mjs`
 
@@ -40,30 +53,45 @@ export default {
       ],
       causes: ['Parola gerçekten yanlış', 'Hesap kilitli (LOGIN_LOCKED, Retry-After)'],   // olası nedenler
       checks: ['Günlükte isteği bulun', 'Kullanıcı satırı var mı: SELECT ...'],           // adım adım
-      logs: ['[API] POST /auth/login -> 401'],                                            // KODDA GERÇEKTEN geçen metinler
+      logs: ['Giris bilgileri hatali', '~[API] POST /auth/login -> 401'],                // KODDA geçen metinler (~ = dinamik)
       commands: ['ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostream | grep -a /auth/login"'],
       tests: ['server/test/core_auth_routes.test.js'],                                    // dosya VAR olmalı
-      related: ['sunucu-hesap-kilitli'],                                                  // başka giriş id'leri
+      related: ['sunucu-hesap-kilitli'],                                                  // başka giriş id'leri (VAR olmalı)
     },
   ],
 };
 ```
 
 ### Ref alanları
+
 - `find`: **string** (satırda aranan düz metin) ya da `{ regex: '...' }`. Satırdan kopyalayın; tahmin etmeyin.
 - Aynı parça birden fazla satırda geçiyorsa araç hata verir: daha ayırt edici parça seçin, `nth` (1 tabanlı) verin ya da
   bilerek ilkini istiyorsanız `any: true`.
 - `until`: aralık göstermek için bitiş parçası (başlangıçtan sonraki ilk eşleşme) → `dosya:100-160`.
 - `note`: bu satırın BU arıza için neden önemli olduğu (tek cümle).
 
-## Kalite kuralları (zorunlu)
+## Mekanik denetim (`--check` içinde, `lint.mjs`)
 
-1. **Uydurma yok.** Yazdığınız her nedeni/akışı ilgili kodu okuyarak yazın. Emin olmadığınız nedeni yazmayın.
-2. **Belirti odaklı:** `symptom` kullanıcının/operatörün gördüğü şeydir ("Kapı açılmıyor", "Cihaz çevrimdışı görünüyor",
-   "Ekranda X hatası"), dosya adı değil.
-3. **Günlük ifadeleri gerçek olmalı:** `logs` içindeki her metin kodda geçmeli
-   (`node tools/klavuz/build.mjs --where "metin"` ile doğrulayın).
-4. **Komutlar gerçek ve güvenli:** sır basmayın (`.env`, `pm2 env/jlist`, parola, anahtar yazdırma YOK); canlıda
-   salt-okunur komutlar (günlük, `/health`). Sunucu: `178.210.161.55`, SSH 22667, kullanıcı `salihceylan`, PM2 `kapi-api`.
-5. **Dar ve ayırt edici** `find`; satır numarası yazmayın; kod değişince `--check` uyarır.
-6. Proje kuralları için `AGENTS.md`'ye bakın (geriye uyumluluk, ESP32-C3 saha cihazı, taşma yasağı).
+Uyarılar hata sayılmaz (çıkış kodu 0) ama test paketi uyarısız olmasını ister:
+
+- **`logs`:** her ifade kodda geçmeli. "Önek + mesaj" biçiminde ayrı yerlerde birleşen metinler (`[ENV] UYARI: ...`) parçalı aranır.
+  Değeri dinamik olanları `~` ile başlatın (`~[ENV] UYARI: JWT_SECRET 20 karakter`): denetlenmez, belgede `~` görünmez.
+- **`commands`:** sır basanlar ASLA (`pm2 env/jlist`, `.env` okuma, `printenv`; `pm2 describe` yalnız `| grep` ile süzülürse).
+  Değiştiriciler (`rm -rf`, `DROP/DELETE/UPDATE` SQL, `git reset`, `pm2 restart/delete`, `docker stop` ...) yalnızca komutta
+  `# DEĞİŞTİRİR: ...` etiketi varsa kabul edilir.
+
+## Doğrulama durumu (`durum.json`)
+
+`--check` yalnızca **bağlantıları ve mekanik kuralları** garanti eder. Açıklamaların (nedenler, adımlar, "ne işe yarar") kodla
+uyuştuğunu bir insan ya da AYRI bir ajan koda karşı çürütmeye çalışarak doğrulamalıdır (`--explain <id>` her girişin kod bağlamını
+verir). Bir bölümün tüm girişleri böyle doğrulanınca bölüm anahtarını `dogrulananAlanlar` listesine ekleyin; belge o bölümü "✓
+doğrulandı" diye işaretler. Listede olmayan bölümler "⚠ doğrulanmadı" etiketli kalır.
+
+## Kalite kuralları (giriş yazarken)
+
+1. **Uydurma yok.** Yazdığınız her neden/adım/akış için ilgili kodu okuyun; emin olmadığınızı yazmayın.
+2. **Belirti odaklı:** `symptom` kullanıcının/operatörün gördüğü şeydir ("Kapı açılmıyor", "Ekranda X hatası"), dosya adı değil.
+3. **Dar ve ayırt edici** `find`; satır numarası yazmayın; kod değişince `--check` uyarır.
+4. **Komutlar güvenli:** sır basmayın; canlıda salt-okunur komutlar (günlük, `/health`, `SELECT`). Sunucu: `178.210.161.55`, SSH 22667,
+   kullanıcı `salihceylan`, PM2 `kapi-api`.
+5. Proje kuralları için `AGENTS.md`'ye bakın (geriye uyumluluk, ESP32-C3 saha cihazı, taşma yasağı).

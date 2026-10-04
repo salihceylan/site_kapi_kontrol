@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/invite_site_manager_dialog.dart';
 
+import '../design/harness.dart';
 import 'dialog_layout_harness.dart';
 
 class _FakeAuth extends AuthService {
@@ -130,6 +131,54 @@ void main() {
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('Davet iletildi.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'InviteSiteManagerDialog: başarıda hafif haptik verir (onay anı)',
+    (t) async {
+      final haptics = recordHaptics(t);
+      final auth = _FakeAuth(ok: true, message: 'Davet iletildi.');
+      await _open(t, auth, width: 360, height: 640, scale: 1.0, dark: false);
+
+      await t.enterText(
+        find.widgetWithText(TextFormField, 'E-posta Adresi *'),
+        'yonetici@ornek-site.com',
+      );
+      await t.tap(find.text('Davet Gönder'));
+      await settleFor(t, 700);
+
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'InviteSiteManagerDialog: hata ve doğrulama anında haptik verilmez; alan ikonları ortak dilde',
+    (t) async {
+      final haptics = recordHaptics(t);
+      final auth = _FakeAuth(message: 'Davet gönderilemedi.');
+      await _open(t, auth, width: 360, height: 640, scale: 1.0, dark: false);
+
+      // Boş gönderim: doğrulama hatası.
+      await t.tap(find.text('Davet Gönder'));
+      await settleFor(t);
+      expect(find.text('Lütfen e-posta adresi girin.'), findsOneWidget);
+
+      // Sunucu hatası.
+      await t.enterText(
+        find.widgetWithText(TextFormField, 'E-posta Adresi *'),
+        'yonetici@ornek-site.com',
+      );
+      await t.tap(find.text('Davet Gönder'));
+      await settleFor(t, 700);
+      expect(find.text('Davet gönderilemedi.'), findsOneWidget);
+      expect(haptics, isEmpty);
+
+      // Alan ikonları dolgulu-yuvarlak (rounded) ailesinden.
+      expect(find.byIcon(Icons.email_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.badge_rounded), findsOneWidget);
       expect(t.takeException(), isNull);
     },
   );

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 
 class ApartmentResidentFormResult {
   const ApartmentResidentFormResult({
@@ -91,6 +93,7 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
       return;
     }
 
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       ApartmentResidentFormResult(
         fullName: _fullNameController.text.trim(),
@@ -122,18 +125,27 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Başlık şeridi ile ilk alanın (kayan etiketi) arasında nefes payı.
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _fullNameController,
-              decoration: const InputDecoration(labelText: 'Ad Soyad'),
+              decoration: const InputDecoration(
+                labelText: 'Ad Soyad',
+                prefixIcon: Icon(Icons.person_rounded),
+              ),
               validator: (value) => (value ?? '').trim().length < 3
                   ? 'Ad Soyad en az 3 karakter olmalı.'
                   : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _loginNameController,
-              decoration: const InputDecoration(labelText: 'Kullanıcı Adı'),
+              decoration: const InputDecoration(
+                labelText: 'Kullanıcı Adı',
+                prefixIcon: Icon(Icons.alternate_email_rounded),
+              ),
               validator: (value) {
                 final text = (value ?? '').trim();
                 if (text.length < 3) {
@@ -144,13 +156,14 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                     : 'Sadece harf, rakam, nokta, alt çizgi ve tire kullanın.';
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Daire Sakini E-postası',
                 helperText: 'Mail gönderimi için opsiyonel.',
+                prefixIcon: Icon(Icons.email_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -161,17 +174,20 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
               },
             ),
             if (widget.apartment.residentUserCode == null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'İlk Giriş Şifresi / PIN'),
+                decoration: const InputDecoration(
+                  labelText: 'İlk Giriş Şifresi / PIN',
+                  prefixIcon: Icon(Icons.pin_rounded),
+                ),
                 keyboardType: TextInputType.number,
                 validator: (value) =>
                     RegExp(r'^\d{4}$').hasMatch((value ?? '').trim())
                         ? null
                         : 'PIN 4 haneli sayısal olmalı.',
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpace.sm),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
@@ -185,7 +201,7 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                 ),
               ),
             ] else ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               const InlineNotice(
                 tone: AppTone.info,
                 icon: Icons.lock_outline_rounded,
@@ -193,12 +209,13 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                     'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Sakin şifresini kendi hesabından değiştirmelidir.',
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Telefon (opsiyonel)',
+                prefixIcon: Icon(Icons.phone_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -208,16 +225,15 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                     : 'Geçerli bir telefon numarası girin.';
               },
             ),
-            const SizedBox(height: 12),
-            SwitchListTile.adaptive(
+            const SizedBox(height: AppSpace.lg),
+            DialogToggleTile(
               value: _isActive,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Aktif'),
-              subtitle: Text(
-                _isActive
-                    ? 'Daire kullanıcısı giriş yapabilir.'
-                    : 'Daire kullanıcısı askıda kalır.',
-              ),
+              title: 'Aktif',
+              subtitle: _isActive
+                  ? 'Daire kullanıcısı giriş yapabilir.'
+                  : 'Daire kullanıcısı askıda kalır.',
+              onIcon: Icons.how_to_reg_rounded,
+              offIcon: Icons.person_off_rounded,
               onChanged: (value) => setState(() => _isActive = value),
             ),
           ],

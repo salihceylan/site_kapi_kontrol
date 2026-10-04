@@ -6,6 +6,7 @@
 // Kapsam: açık+koyu tema x 320x640 (x2,0), 360x640 (x1,5), 412x915 (x1,0) taşmaz (üç durum: çevrimiçi +
 // loglar + sayfalama, çevrimdışı + boş log, hata + Tekrar Dene); açık temada metin >= 4,5:1 ve ikon
 // >= 3:1; metinler/davranış (aç/kapat, yenile, sayfa değiştir, tekrar dene) AYNI.
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,13 @@ import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_connectivity_logs_accordion.dart';
 
 import '../design/harness.dart';
@@ -81,12 +89,17 @@ DeviceConnectivityReport _report({
 });
 
 class _LogsAuth extends AuthService {
-  _LogsAuth({this.report, this.error})
+  _LogsAuth({this.report, this.error, this.never = false})
     : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   DeviceConnectivityReport? report;
   String? error;
+
+  /// true: yanıt hiç gelmez (ilk yükleme / iskelet durumu).
+  final bool never;
   final List<int> pages = <int>[];
+  final Completer<(DeviceConnectivityReport?, String?)> _pending =
+      Completer<(DeviceConnectivityReport?, String?)>();
 
   @override
   Future<(DeviceConnectivityReport?, String?)> getDeviceConnectivityLogs({
@@ -95,6 +108,7 @@ class _LogsAuth extends AuthService {
     int pageSize = 10,
   }) async {
     pages.add(page);
+    if (never) return _pending.future;
     if (error != null) return (null, error);
     return (report, null);
   }
@@ -126,7 +140,9 @@ double _ratio(Color a, Color b) {
 /// [fg] saydam rengini [bg] üstüne bindirir.
 Color _over(Color fg, Color bg) => Color.alphaBlend(fg, bg);
 
-const Color _lightSurface = Color(0xFFF8FAFC); // akordiyon açık zemini
+// Akordiyon açık zemini: sayfa zemini (en açık olası yüzey); panel artık palet.surfaceMuted (#F1F5F9).
+// Metin ve ikon kontrastı her iki zeminde de sınanır (en kötü durum alınır).
+const Color _lightSurface = Color(0xFFF8FAFC);
 
 Color _textColor(WidgetTester t, String text) {
   final w = t.widget<Text>(find.text(text));
@@ -135,6 +151,37 @@ Color _textColor(WidgetTester t, String text) {
 
 Color _iconColor(WidgetTester t, IconData icon) =>
     t.widget<Icon>(find.byIcon(icon)).color!;
+
+/// [icon] cilalı bir [IconOrb] içindedir: ikon BEYAZ ve [tone] gradyanının iki ucunda >= 3:1
+/// (ikon eşiği; eski düz tint dairesinin ink ikonu yerine geçti, eşik AYNI). Cila dahil gerçek piksel
+/// ölçümü `test/design/gloss_test.dart` ve `icon_orb_test.dart`'tadır.
+void _expectOrbIcon(
+  WidgetTester t,
+  IconData icon,
+  AppTone tone, {
+  required String reason,
+}) {
+  final icons = find.byIcon(icon).evaluate().toList();
+  expect(icons, isNotEmpty, reason: reason);
+  for (final e in icons) {
+    expect((e.widget as Icon).color, Colors.white, reason: reason);
+  }
+  final orbs = find.ancestor(
+    of: find.byIcon(icon),
+    matching: find.byType(IconOrb),
+  );
+  expect(orbs, findsWidgets, reason: '$reason: ikon IconOrb içinde');
+  for (final e in orbs.evaluate()) {
+    expect((e.widget as IconOrb).tone, tone, reason: reason);
+  }
+  for (final end in <Color>[tone.a, tone.b]) {
+    expect(
+      _ratio(Colors.white, end),
+      greaterThanOrEqualTo(3.0),
+      reason: '$reason (${tone.name} gradyanı)',
+    );
+  }
+}
 
 void main() {
   group('taşma: açık+koyu x 320 (x2,0) / 360 (x1,5) / 412 (x1,0)', () {
@@ -192,33 +239,31 @@ void main() {
       (t) async {
         final auth = _LogsAuth(report: _report());
         await pumpAt(t, _accordion(auth), width: 412, scale: 1.0);
-        // Başlık ikonu: akordiyon zemini üstünde.
-        expect(
-          _ratio(
-            _iconColor(t, Icons.history_toggle_off_rounded),
-            _lightSurface,
-          ),
-          greaterThanOrEqualTo(3.0),
+        const p = AppPalette.light;
+        // Başlık ikonu: çevrimiçi = success küresi.
+        _expectOrbIcon(
+          t,
+          Icons.history_toggle_off_rounded,
+          AppTone.success,
           reason: 'başlık ikonu (çevrimiçi)',
         );
         await _expand(t);
 
-        expect(
-          _ratio(
-            _textColor(t, 'Aktif Uptime: 4 saat 12 dakika'),
-            _lightSurface,
-          ),
-          greaterThanOrEqualTo(4.5),
-          reason: 'Aktif Uptime metni',
-        );
+        // Aktif Uptime metni: panel (soluk yüzey) ve sayfa zemini üstünde.
+        for (final surface in <Color>[_lightSurface, p.surfaceMuted]) {
+          expect(
+            _ratio(_textColor(t, 'Aktif Uptime: 4 saat 12 dakika'), surface),
+            greaterThanOrEqualTo(4.5),
+            reason: 'Aktif Uptime metni zemin=$surface',
+          );
+        }
 
-        // Çevrimiçi banner: zümrüt %8 zemin; ikon zümrüt %20 daire üstünde.
-        const emerald = Color(0xFF10B981);
-        final bannerBg = _over(emerald.withValues(alpha: 0.08), _lightSurface);
-        final iconBg = _over(emerald.withValues(alpha: 0.2), bannerBg);
-        expect(
-          _ratio(_iconColor(t, Icons.wifi_rounded), iconBg),
-          greaterThanOrEqualTo(3.0),
+        // Çevrimiçi banner: success tint'i satır yüzeyi (beyaz) üstünde; ikon success küresinde.
+        final bannerBg = _over(AppTone.success.tint(p), p.surface);
+        _expectOrbIcon(
+          t,
+          Icons.wifi_rounded,
+          AppTone.success,
           reason: 'banner ikonu',
         );
         expect(
@@ -228,17 +273,24 @@ void main() {
           ),
           greaterThanOrEqualTo(4.5),
         );
+        // Alt satırın saati yerel saat dilimine bağlıdır: yalnız önek ile bulunur.
+        final sinceColor = t
+            .widget<Text>(find.textContaining('Bağlantı başlangıcı: '))
+            .style!
+            .color!;
+        expect(
+          _ratio(sinceColor, bannerBg),
+          greaterThanOrEqualTo(4.5),
+          reason: 'banner alt satırı',
+        );
 
-        // Log kartı: gül %10 daire, beyaz kart.
-        const rose = Color(0xFFEF4444);
-        final logIconBg = _over(rose.withValues(alpha: 0.1), Colors.white);
-        for (final e in find.byIcon(Icons.cloud_off_rounded).evaluate()) {
-          expect(
-            _ratio((e.widget as Icon).color!, logIconBg),
-            greaterThanOrEqualTo(3.0),
-            reason: 'log kartı ikonu',
-          );
-        }
+        // Log kartı: danger küresi (beyaz kart üstünde).
+        _expectOrbIcon(
+          t,
+          Icons.cloud_off_rounded,
+          AppTone.danger,
+          reason: 'log kartı ikonu',
+        );
         expect(t.takeException(), isNull);
       },
     );
@@ -255,40 +307,44 @@ void main() {
           width: 412,
           scale: 1.0,
         );
-        expect(
-          _ratio(
-            _iconColor(t, Icons.history_toggle_off_rounded),
-            _lightSurface,
-          ),
-          greaterThanOrEqualTo(3.0),
+        const p = AppPalette.light;
+        _expectOrbIcon(
+          t,
+          Icons.history_toggle_off_rounded,
+          AppTone.warning,
           reason: 'başlık ikonu (çevrimdışı = uyarı tonu)',
         );
         await _expand(t);
 
-        const rose = Color(0xFFEF4444);
-        final bannerBg = _over(rose.withValues(alpha: 0.08), _lightSurface);
-        final iconBg = _over(rose.withValues(alpha: 0.2), bannerBg);
-        expect(
-          _ratio(_iconColor(t, Icons.wifi_off_rounded), iconBg),
-          greaterThanOrEqualTo(3.0),
+        _expectOrbIcon(
+          t,
+          Icons.wifi_off_rounded,
+          AppTone.danger,
           reason: 'çevrimdışı banner ikonu',
         );
-        // Boş durum kartı beyaz zeminde; onay ikonu 28 punto.
+        final bannerBg = _over(AppTone.danger.tint(p), p.surface);
         expect(
-          _ratio(_iconColor(t, Icons.verified_rounded), Colors.white),
-          greaterThanOrEqualTo(3.0),
+          _ratio(_textColor(t, '🔴 Cihaz Şu An Çevrimdışı'), bannerBg),
+          greaterThanOrEqualTo(4.5),
+          reason: 'çevrimdışı banner başlığı',
+        );
+        // Boş durum (EmptyState.compact): onay ikonu success küresinde.
+        _expectOrbIcon(
+          t,
+          Icons.verified_rounded,
+          AppTone.success,
           reason: 'boş durum onay ikonu',
         );
         expect(t.takeException(), isNull);
       },
     );
 
-    testWidgets('hata kutusu: metin ve ikon gül tonlu zeminde', (t) async {
+    testWidgets('hata kutusu: metin ve ikon danger tonlu zeminde', (t) async {
       final auth = _LogsAuth(error: 'Sunucu yanıt vermedi.');
       await pumpAt(t, _accordion(auth), width: 412, scale: 1.0);
       await _expand(t);
-      const rose = Color(0xFFEF4444);
-      final bg = _over(rose.withValues(alpha: 0.1), _lightSurface);
+      const p = AppPalette.light;
+      final bg = _over(AppTone.danger.tint(p), p.surface);
       expect(
         _ratio(_textColor(t, 'Sunucu yanıt vermedi.'), bg),
         greaterThanOrEqualTo(4.5),
@@ -351,6 +407,126 @@ void main() {
       expect(auth.pages, <int>[1, 1]);
       expect(find.text('Tekrar Dene'), findsNothing);
       expect(find.text('Kopma / Çevrimdışı Logları'), findsOneWidget);
+    });
+  });
+
+  group('premium görünüm: küreler, kademeli giriş, iskelet, dokunma hedefleri', () {
+    testWidgets(
+      'her log satırı: IconOrb + süre StatusChip + kademeli giriş (StaggeredEntry); başlık ve özet küreleri',
+      (t) async {
+        final auth = _LogsAuth(report: _report(logCount: 3));
+        await pumpAt(t, _accordion(auth), width: 412, scale: 1.0);
+        await _expand(t);
+        expect(find.byType(StaggeredEntry), findsNWidgets(3));
+        // başlık küresi + özet kutusu küresi + 3 satır küresi
+        expect(find.byType(IconOrb), findsNWidgets(5));
+        expect(find.byType(StatusChip), findsNWidgets(3));
+        expect(find.text('5 saat 50 dk'), findsNWidgets(3));
+        for (final chip in t.widgetList<StatusChip>(find.byType(StatusChip))) {
+          expect(chip.tone, AppTone.primary);
+          expect(chip.pulse, isFalse, reason: 'kararlı durumda nabız yok');
+        }
+        // Kararlı durumda hiçbir animasyon kalmaz (giriş sonlu).
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+      },
+    );
+
+    testWidgets('boş log: EmptyState(kompakt) ve mevcut iki cümle; satır küresi yok', (
+      t,
+    ) async {
+      final auth = _LogsAuth(
+        report: _report(online: false, logCount: 0, totalPages: 1),
+      );
+      await pumpAt(t, _accordion(auth, online: false), width: 412, scale: 1.0);
+      await _expand(t);
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(t.widget<EmptyState>(find.byType(EmptyState)).compact, isTrue);
+      expect(find.text('Kayıtlı kopma logu bulunmuyor.'), findsOneWidget);
+      expect(
+        find.text('Cihaz bağlantısı stabil ve kesintisiz çalışıyor.'),
+        findsOneWidget,
+      );
+      expect(find.byType(StaggeredEntry), findsNothing);
+    });
+
+    testWidgets('yenile ve sayfa düğmeleri >= 44 dp dokunma hedefi', (t) async {
+      final auth = _LogsAuth(report: _report());
+      await pumpAt(t, _accordion(auth), width: 360, scale: 1.0);
+      await _expand(t);
+      final targets = <String, Finder>{
+        'Yenile': find.byTooltip('Yenile'),
+        'önceki sayfa': find.ancestor(
+          of: find.byIcon(Icons.chevron_left_rounded),
+          matching: find.byType(IconButton),
+        ),
+        'sonraki sayfa': find.ancestor(
+          of: find.byIcon(Icons.chevron_right_rounded),
+          matching: find.byType(IconButton),
+        ),
+      };
+      for (final entry in targets.entries) {
+        final size = t.getSize(entry.value.first);
+        expect(size.width, greaterThanOrEqualTo(44), reason: entry.key);
+        expect(size.height, greaterThanOrEqualTo(44), reason: entry.key);
+      }
+    });
+
+    testWidgets('ilk yükleme: iskelet satırlar (tek ShimmerScope, "Yükleniyor"); spinner/boş durum yok', (
+      t,
+    ) async {
+      final handle = t.ensureSemantics();
+      final auth = _LogsAuth(never: true);
+      await pumpAt(t, _accordion(auth), width: 412, scale: 1.0);
+      await t.tap(find.text('Logları Gör'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.byType(ShimmerScope), findsOneWidget);
+      expect(
+        find.byType(SkeletonBox),
+        findsNWidgets(12),
+        reason: '3 satır x (küre + 2 satır + rozet)',
+      );
+      expect(find.bySemanticsLabel('Yükleniyor'), findsOneWidget);
+      expect(find.byType(EmptyState), findsNothing);
+      expect(find.byType(InlineNotice), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('hata: InlineNotice (danger) mesajı birebir; açık ve koyu temada taşmaz', (
+      t,
+    ) async {
+      for (final dark in const <bool>[false, true]) {
+        final auth = _LogsAuth(error: 'Sunucu yanıt vermedi.');
+        await pumpAt(
+          t,
+          _accordion(auth),
+          width: 320,
+          scale: 2.0,
+          dark: dark,
+        );
+        await _expand(t);
+        expect(find.byType(InlineNotice), findsOneWidget);
+        expect(t.widget<InlineNotice>(find.byType(InlineNotice)).tone, AppTone.danger);
+        expect(find.text('Sunucu yanıt vermedi.'), findsOneWidget);
+      }
+    });
+
+    testWidgets('başlık küresi: çevrimiçi success, çevrimdışı warning', (t) async {
+      for (final online in const <bool>[true, false]) {
+        final auth = _LogsAuth(report: _report(online: online));
+        await pumpAt(t, _accordion(auth, online: online), width: 412, scale: 1.0);
+        final orb = t.widget<IconOrb>(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.history_toggle_off_rounded),
+                matching: find.byType(IconOrb),
+              )
+              .first,
+        );
+        expect(orb.tone, online ? AppTone.success : AppTone.warning);
+        expect(orb.size, 36);
+      }
     });
   });
 }

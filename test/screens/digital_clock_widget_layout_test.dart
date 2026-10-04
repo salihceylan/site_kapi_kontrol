@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/digital_clock_widget.dart';
@@ -260,20 +261,51 @@ void main() {
               greaterThanOrEqualTo(4.5),
               reason: '${role.name} dark=$dark',
             );
+            // Avatar: rol tonlu cilalı küre (IconOrb), beyaz ikon gradyanın iki ucunda >= 4,5:1.
+            final avatarIcon = t.widget<Icon>(find.byIcon(Icons.person_rounded));
+            expect(avatarIcon.color, Colors.white);
+            final avatar = t.widget<IconOrb>(
+              find
+                  .ancestor(
+                    of: find.byIcon(Icons.person_rounded),
+                    matching: find.byType(IconOrb),
+                  )
+                  .first,
+            );
+            expect(avatar.tone, role.tone, reason: role.name);
+            for (final end in <Color>[role.tone.a, role.tone.b]) {
+              expect(
+                g2Contrast(Colors.white, end),
+                greaterThanOrEqualTo(4.5),
+                reason: '${role.name} avatar dark=$dark',
+              );
+            }
           }
-          // Saat ikonu: info ink'i, info tint'i üstünde.
+          // Saat ikonu: cilalı info küresi (IconOrb) içinde beyaz ikon; ton gradyanının iki ucunda
+          // >= 4,5:1 (cila dahil piksel ölçümü gloss_test.dart'ta). Eski düz tint dairesinin ink ikonu
+          // yerine geçti; kontrast eşiği AYNI.
           await pumpAt(t, _clock(), width: 360, scale: 1.0, dark: dark);
           final icon = t.widget<Icon>(
             find.byIcon(Icons.access_time_filled_rounded),
           );
-          expect(icon.color, AppTone.info.ink(p));
-          expect(
-            g2Contrast(
-              AppTone.info.ink(p),
-              g2Over(AppTone.info.tint(p), p.surface),
-            ),
-            greaterThanOrEqualTo(4.5),
+          expect(icon.color, Colors.white);
+          for (final end in <Color>[AppTone.info.a, AppTone.info.b]) {
+            expect(
+              g2Contrast(Colors.white, end),
+              greaterThanOrEqualTo(4.5),
+              reason: 'saat küresi dark=$dark',
+            );
+          }
+          final clockOrb = t.widget<IconOrb>(
+            find
+                .ancestor(
+                  of: find.byIcon(Icons.access_time_filled_rounded),
+                  matching: find.byType(IconOrb),
+                )
+                .first,
           );
+          expect(clockOrb.tone, AppTone.info);
+          expect(clockOrb.glow, isFalse, reason: 'sakin: hero değil, glow yok');
         }
       },
     );

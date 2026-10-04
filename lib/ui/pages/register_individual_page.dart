@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
@@ -70,6 +72,8 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
     if (error != null) {
       setState(() => _errorMessage = error);
     } else {
+      // Kayıt kabul edildi: hafif onay titreşimi, sonra kod doğrulama ekranına yönlendir.
+      HapticFeedback.lightImpact();
       // 4 Haneli Kod Doğrulama Ekranına Yönlendir
       Navigator.push(
         context,
@@ -113,6 +117,16 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Hero rozet: cilalı, ışımalı daire (dekoratif; anlam aşağıdaki başlıkta).
+                      const Center(
+                        child: IconOrb(
+                          icon: Icons.person_add_alt_1_rounded,
+                          size: 64,
+                          glow: true,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+
                       // Başlık
                       Semantics(
                         header: true,

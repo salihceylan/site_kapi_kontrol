@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// Sesli kapı kontrolü alt sayfası.
+///
+/// Görünüm: dinleme göstergesi cilalı bir küre ([IconOrb], 92 dp, durumun tonu) ve çevresinde
+/// düzene girmeyen statik bir aura (radyal ton halesi). Durum değişince durum metni bir kez belirir
+/// ([Pop], 200 ms). TEK sürekli animasyon, dinlerken dönen işlevsel mikrofon nabzıdır
+/// (`repeat(reverse: true)`): dinleme bitince (durma, işlem, başarı, hata) durur; hareket azaltmada hiç
+/// çalışmaz. Metinler ve davranış değişmedi.
 class VoiceControlModal extends StatefulWidget {
   const VoiceControlModal({
     super.key,
@@ -40,6 +50,14 @@ class _VoiceControlModalState extends State<VoiceControlModal>
 
   /// Hareket azaltma açıkken nabız atılmaz (didChangeDependencies'te güncellenir).
   bool _reduceMotion = false;
+
+  /// Son görülen durum: başarıya GEÇİŞ anında bir kez hafif haptik vermek için.
+  VoiceStatus? _lastStatus;
+
+  /// Küre kutusu (düzendeki yer) ve aurasının kutunun dışına taşan payı (dp).
+  static const double _orbSize = 92;
+  static const double _orbBox = 100;
+  static const double _auraBleed = 36;
 
   @override
   void initState() {
@@ -81,6 +99,14 @@ class _VoiceControlModalState extends State<VoiceControlModal>
 
   void _onVoiceStatusChange() {
     if (mounted) _syncPulse();
+    final status = widget.voiceService.status;
+    // Onay anı: kapı açılıyor (yalnız durum başarıya GEÇERKEN; aynı durumda tekrar bildirimde değil).
+    if (status == VoiceStatus.success &&
+        _lastStatus != VoiceStatus.success &&
+        mounted) {
+      HapticFeedback.lightImpact();
+    }
+    _lastStatus = status;
     if (widget.voiceService.status == VoiceStatus.success && mounted) {
       Future.delayed(const Duration(milliseconds: 1400), () {
         if (mounted) {
@@ -135,6 +161,45 @@ class _VoiceControlModalState extends State<VoiceControlModal>
       case VoiceStatus.idle:
         return 'Hazır';
     }
+  }
+
+  /// Dinleme küresi: cilalı [IconOrb] (durumun tonu, glow) ve çevresinde düzene GİRMEYEN statik aura
+  /// (radyal ton halesi; yalnız boyama, ticker yok). Küre durum değişince kaybolup yeniden belirmez
+  /// (açılışta hazır -> başlatılıyor -> dinliyor art arda değişir): ton anında değişir.
+  Widget _buildOrb(AppTone tone, bool isListening) {
+    return SizedBox(
+      width: _orbBox,
+      height: _orbBox,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: -_auraBleed,
+            top: -_auraBleed,
+            right: -_auraBleed,
+            bottom: -_auraBleed,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: <Color>[
+                    tone.hue.withValues(alpha: isListening ? 0.30 : 0.20),
+                    tone.hue.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconOrb(
+            icon: isListening ? Icons.mic : Icons.mic_none,
+            tone: tone,
+            size: _orbSize,
+            glow: true,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -249,7 +314,7 @@ class _VoiceControlModalState extends State<VoiceControlModal>
                 ),
                 const SizedBox(height: 24),
 
-                // Glowing Microphone animation
+                // Dinleme küresi: cilalı küre + statik aura; nabız yalnız dinlerken ölçekler.
                 Semantics(
                   button: true,
                   label: isListening ? 'Durdur' : 'Tekrar Dinle',
@@ -257,61 +322,45 @@ class _VoiceControlModalState extends State<VoiceControlModal>
                     onTap: toggleListening,
                     child: AnimatedBuilder(
                       animation: _pulseAnimation,
-                      builder: (context, child) {
-                        final scale = isListening ? _pulseAnimation.value : 1.0;
-                        return Transform.scale(
-                          scale: scale,
-                          child: Container(
-                            width: 90,
-                            height: 90,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: tone.hue.withValues(alpha: 0.18),
-                              border: Border.all(color: tone.hue, width: 2.5),
-                              boxShadow: [
-                                if (isListening)
-                                  // Dinleme parıltısı: tasarım bütçesi (blur <= 16, yayılma yok).
-                                  BoxShadow(
-                                    color: tone.hue.withValues(alpha: 0.4),
-                                    blurRadius: 16,
-                                  ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Icon(
-                                isListening ? Icons.mic : Icons.mic_none,
-                                color: tone.ink(p),
-                                size: 42,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      // Küre bir kez kurulur; nabız karelerinde yalnız ölçek dönüşümü yenilenir.
+                      child: _buildOrb(tone, isListening),
+                      builder: (context, orb) => Transform.scale(
+                        scale: isListening ? _pulseAnimation.value : 1.0,
+                        child: orb,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 18),
 
-                // Status Title
-                Text(
-                  _statusTitle(status),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: tone.ink(p),
+                // Durum başlığı + geri bildirim: durum değişince bir kez belirir (Pop).
+                Pop(
+                  key: ValueKey<VoiceStatus>(status),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _statusTitle(status),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: tone.ink(p),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (widget.voiceService.feedbackText.isNotEmpty)
+                        Text(
+                          widget.voiceService.feedbackText,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: status == VoiceStatus.error
+                                ? AppTone.danger.ink(p)
+                                : p.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 6),
-                if (widget.voiceService.feedbackText.isNotEmpty)
-                  Text(
-                    widget.voiceService.feedbackText,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: status == VoiceStatus.error
-                          ? AppTone.danger.ink(p)
-                          : p.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
                 const SizedBox(height: 20),
 
                 // Action Buttons: sığmazsa alt alta dizilir

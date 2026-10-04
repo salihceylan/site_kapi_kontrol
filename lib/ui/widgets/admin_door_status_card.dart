@@ -379,23 +379,26 @@ class _AdminDoorStatusCardState extends State<AdminDoorStatusCard> {
         ],
         const SizedBox(height: AppSpace.lg),
 
-        // Kapı Aç: tek DoorOpenButton (komut sürerken spinner, başarıda tik)
-        DoorOpenButton(
-          key: const ValueKey<String>('admin_door_open_button'),
-          variant: DoorOpenVariant.bar,
-          state: widget.isOpeningDoor
-              ? DoorOpenState.opening
-              : (commandEnabled ? DoorOpenState.ready : DoorOpenState.disabled),
-          label: isCloudOnline
-              ? 'Kapı Aç'
-              : (isLocalOnline ? 'Kapı Aç (Yerel Wi-Fi)' : 'Cihaz Çevrimdışı'),
-          openingLabel: 'Gönderiliyor...',
-          doneLabel: 'Gönderildi',
-          icon: isLocalOnline ? Icons.wifi : Icons.lock_open_rounded,
-          tone: isLocalOnline ? AppTone.warning : AppTone.primary,
-          successTick: widget.successTick,
-          onPressed: widget.onOpenDoor,
+        // Kapı Aç: yuvarlak cilalı tek DoorOpenButton (komut sürerken spinner + sonar, başarıda tik +
+        // patlama). Etiketler e2e uyumludur: `foldText('KAPI AÇ') == foldText('Kapı Aç')`.
+        Center(
+          child: DoorOpenButton(
+            key: const ValueKey<String>('admin_door_open_button'),
+            state: widget.isOpeningDoor
+                ? DoorOpenState.opening
+                : (commandEnabled ? DoorOpenState.ready : DoorOpenState.disabled),
+            label: isCloudOnline
+                ? 'KAPI AÇ'
+                : (isLocalOnline ? 'YEREL AĞDAN AÇ' : 'ÇEVRİMDIŞI'),
+            icon: !commandEnabled && !widget.isOpeningDoor
+                ? Icons.lock_outline_rounded
+                : (isLocalOnline ? Icons.wifi : Icons.lock_open_rounded),
+            tone: isLocalOnline ? AppTone.warning : AppTone.primary,
+            successTick: widget.successTick,
+            onPressed: widget.onOpenDoor,
+          ),
         ),
+        const SizedBox(height: AppSpace.lg),
         const SizedBox(height: AppSpace.md),
         // Kurye / Misafir Geçişi Butonu (site misafir geçişini kapattıysa link açılışta reddedileceği
         // için gösterilmez; diğer kartlarla aynı kural)

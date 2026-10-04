@@ -122,7 +122,9 @@ void main() {
     final menus = find.byType(PopupMenuButton<String>);
     expect(menus, findsNWidgets(3));
 
-    // Hesabı pasif sakinin menüsü: işlem yerine bilgi
+    // Hesabı pasif sakinin menüsü: işlem yerine bilgi (kartlar rozetli ve uzun: önce görünür alana kaydır)
+    await tester.ensureVisible(menus.at(2));
+    await tester.pumpAndSettle();
     await tester.tap(menus.at(2));
     await tester.pumpAndSettle();
     expect(find.textContaining('Hesap sistem yöneticisi tarafından pasife alındı'), findsOneWidget);
@@ -134,6 +136,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Yalnız üyeliği pasif sakin: üyelik/kapı erişimi diliyle aktif etme
+    await tester.ensureVisible(menus.at(1));
+    await tester.pumpAndSettle();
     await tester.tap(menus.at(1));
     await tester.pumpAndSettle();
     expect(find.text('Üyeliği Aktif Et'), findsOneWidget);
@@ -147,6 +151,8 @@ void main() {
     expect(auth.toggles, [(2, true)]);
 
     // Aktif sakin: pasife alma metni üyelik/kapı erişimi diliyle
+    await tester.ensureVisible(menus.at(0));
+    await tester.pumpAndSettle();
     await tester.tap(menus.at(0));
     await tester.pumpAndSettle();
     expect(find.text('Üyeliği Pasife Al'), findsOneWidget);

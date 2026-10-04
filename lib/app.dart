@@ -15,6 +15,9 @@ import 'package:site_kapi_kontrol/services/theme_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -345,7 +348,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     ? AppGradients.pageGlowDark
                     : AppGradients.pageGlowLight,
               ),
-              child: child,
+              // İkinci, çok hafif mor ışıma (sol-alt): sayfa derinliği; statik, tek gradyan.
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: context.palette.isDark
+                      ? AppGradients.pageGlowAccentDark
+                      : AppGradients.pageGlowAccentLight,
+                ),
+                child: child,
+              ),
             ),
           ),
         );
@@ -383,7 +394,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
 /// Açılış / ara ekranı: oturum ya da ağ durumu henüz belli değilken marka logosu + ilerleme göstergesi.
 /// Yalnız kompozisyon (eskiden tek başına bir çark); ekran seçim mantığı `home` içinde AYNIDIR.
-/// Dar/alçak pencerede (ya da büyük yazıda) taşmaz, kaydırılır.
+/// Dar/alçak pencerede (ya da büyük yazıda) taşmaz, kaydırılır. Logonun aurası halkanın dışına
+/// taşan boyamadır ve kaydırıcının görünüm alanı içeriği kadar dar olduğundan kırpılırdı: içerik
+/// aura payı ([LoginHero.auraReach]) kadar boşlukla sarılır (logo/çark konumu değişmez).
 @visibleForTesting
 class StartupSplash extends StatelessWidget {
   const StartupSplash({super.key});
@@ -393,13 +406,16 @@ class StartupSplash extends StatelessWidget {
     return const Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LoginHero(),
-              SizedBox(height: AppSpace.xl),
-              CircularProgressIndicator(),
-            ],
+          child: Padding(
+            padding: EdgeInsets.all(AppSpace.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LoginHero(),
+                SizedBox(height: AppSpace.xl),
+                CircularProgressIndicator(),
+              ],
+            ),
           ),
         ),
       ),
@@ -408,7 +424,8 @@ class StartupSplash extends StatelessWidget {
 }
 
 /// Deep link / kısayoldan kapı açmadan önce gösterilen onay penceresi.
-/// Uzun kapı/site adları taşmaz (maxLines + ellipsis, içerik kaydırılabilir).
+/// Uzun kapı/site adları taşmaz (maxLines + ellipsis, içerik kaydırılabilir). Premium görünüm: ortak
+/// [AppDialog] (cilalı ikon rozetli başlık) + dikkat tonlu [InlineNotice]; metinler ve düğmeler aynı.
 @visibleForTesting
 class DoorOpenConfirmDialog extends StatelessWidget {
   const DoorOpenConfirmDialog({required this.door});
@@ -419,43 +436,10 @@ class DoorOpenConfirmDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final siteName = door.siteName?.trim() ?? '';
-    return AlertDialog(
-      title: const Text(
-        'Kapı açılsın mı?',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              door.doorName,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (siteName.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                siteName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-            const SizedBox(height: 12),
-            Text(
-              'Bu işlem bir bağlantı veya kısayol üzerinden başlatıldı. '
-              'Yalnızca siz başlattıysanız onaylayın.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
+    return AppDialog(
+      title: 'Kapı açılsın mı?',
+      icon: Icons.lock_open_rounded,
+      tone: AppTone.warning,
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
@@ -466,11 +450,42 @@ class DoorOpenConfirmDialog extends StatelessWidget {
           child: const Text('Kapıyı Aç'),
         ),
       ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            door.doorName,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (siteName.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              siteName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: AppSpace.md),
+          const InlineNotice(
+            tone: AppTone.warning,
+            message:
+                'Bu işlem bir bağlantı veya kısayol üzerinden başlatıldı. '
+                'Yalnızca siz başlattıysanız onaylayın.',
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Birden çok kapı eşleştiğinde kullanıcıya seçtiren pencere (seçim = onay).
+/// Birden çok kapı eşleştiğinde kullanıcıya seçtiren pencere (seçim = onay). Her aday dokunulabilir
+/// bir kart: cilalı ikon rozeti + kapı adı (en çok 2 satır) + site adı (tek satır).
 @visibleForTesting
 class DoorChooserDialog extends StatelessWidget {
   const DoorChooserDialog({required this.candidates});
@@ -480,42 +495,61 @@ class DoorChooserDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SimpleDialog(
-      title: const Text(
-        'Hangi kapı açılsın?',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      children: [
-        for (final door in candidates)
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(context).pop(door),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  door.doorName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if ((door.siteName ?? '').trim().isNotEmpty)
-                  Text(
-                    door.siteName!.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall,
-                  ),
-              ],
-            ),
-          ),
-        SimpleDialogOption(
+    return AppDialog(
+      title: 'Hangi kapı açılsın?',
+      icon: Icons.meeting_room_rounded,
+      actions: [
+        TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Vazgeç'),
         ),
       ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < candidates.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpace.sm),
+            AppCard(
+              padding: const EdgeInsets.all(AppSpace.md),
+              onTap: () => Navigator.of(context).pop(candidates[i]),
+              child: Row(
+                children: [
+                  const IconOrb(
+                    icon: Icons.sensor_door_rounded,
+                    size: 40,
+                    shape: IconOrbShape.squircle,
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          candidates[i].doorName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if ((candidates[i].siteName ?? '').trim().isNotEmpty)
+                          Text(
+                            candidates[i].siteName!.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

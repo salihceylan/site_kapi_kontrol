@@ -5,6 +5,7 @@ Site / apartman kapi kontrol ekosistemi: Flutter istemci (Android, iOS, Windows,
 ## Dokumanlar
 
 - Genel teknik ozet: `PROJE_TEKNIK_NOTLAR.md`
+- Ariza bulma klavuzu (belirti -> hangi dosyada hangi satira bakilir): `docs/ARIZA_KLAVUZU.md` (araci: `tools/klavuz/README.md`)
 - Gelistirme kurallari: `AGENTS.md`
 - Sunucu kurulum notlari: `sunucu_kurulum.txt`
 - MQTT kurulum notlari: `MQTT_kurulum.txt`

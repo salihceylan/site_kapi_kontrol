@@ -1,4 +1,6 @@
 // FAZ 5 / A2-G5: DoorDeviceDialog ve DeviceDoorAssignDialog taşma testi (AGENTS.md kural 6).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
@@ -9,6 +11,9 @@ import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/door_device_dialog.dart';
 
 import 'dialog_layout_harness.dart';
@@ -37,26 +42,33 @@ SiteRecord _site(int id, String name) => SiteRecord.fromJson({
 });
 
 class _FakeAuth extends AuthService {
-  _FakeAuth({this.structureError})
+  _FakeAuth({this.structureError, this.gate})
     : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   final String? structureError;
 
+  /// Verilirse cihaz/kapı listeleri bu tamamlanana dek "yükleniyor" kalır.
+  final Completer<void>? gate;
+
   @override
   Future<List<Map<String, dynamic>>> getAssignableDevices({
     required int siteCode,
-  }) async => <Map<String, dynamic>>[
-    {'device_uid': 'ESP32_C3_BOS_CIHAZ_0001', 'hardware_type': 'esp32_c3'},
-    {
-      'device_uid': 'ESP32_WROOM_BOS_CIHAZ_0002',
-      'hardware_type': 'esp32_wroom',
-    },
-  ];
+  }) async {
+    await gate?.future;
+    return <Map<String, dynamic>>[
+      {'device_uid': 'ESP32_C3_BOS_CIHAZ_0001', 'hardware_type': 'esp32_c3'},
+      {
+        'device_uid': 'ESP32_WROOM_BOS_CIHAZ_0002',
+        'hardware_type': 'esp32_wroom',
+      },
+    ];
+  }
 
   @override
   Future<(SiteStructureRecord?, String?)> getSiteStructure({
     required int siteCode,
   }) async {
+    await gate?.future;
     if (structureError != null) return (null, structureError);
     return (
       SiteStructureRecord(
@@ -210,4 +222,111 @@ void main() {
     expect(find.textContaining('Site yapısı şu an okunamadı'), findsOneWidget);
     await scrollTo(t, find.byType(InlineNotice));
   });
+  // --- Görsel sözleşme (cilalı safir): iskelet, seçilebilir cihaz satırları, R8 açılır listeler ---
+
+  testWidgets(
+    'DoorDeviceDialog: cihaz listesi yüklenirken iskelet (spinner yok); yüklenince satırlar gelir',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) => DoorDeviceDialog.show(
+          context,
+          door: _door(),
+          initialDeviceUid: 'ESP32_C3_ARIZALI_CIHAZ_0001',
+          authService: _FakeAuth(gate: gate),
+        ),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsAtLeastNWidgets(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('ESP32_C3_BOS_CIHAZ_0001'), findsNothing);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(find.text('ESP32_C3_BOS_CIHAZ_0001'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'DoorDeviceDialog: cihaz satırları ikon rozetli AppCard; dokununca seçilir (seçili kenar) ve UID alanına yazılır',
+    (t) async {
+      await openDialogAt(
+        t,
+        (context) => DoorDeviceDialog.show(
+          context,
+          door: _door(),
+          initialDeviceUid: 'ESP32_C3_ARIZALI_CIHAZ_0001',
+          authService: _FakeAuth(),
+        ),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      await settleFor(t);
+
+      // Başlık + mevcut cihaz paneli + 2 cihaz satırı rozetleri.
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(4));
+      final tile = find.ancestor(
+        of: find.text('ESP32_WROOM_BOS_CIHAZ_0002'),
+        matching: find.byType(AppCard),
+      );
+      expect(tile, findsOneWidget);
+      expect(t.widget<AppCard>(tile).selected, isFalse);
+      expect(t.widget<AppCard>(tile).onTap, isNotNull);
+
+      await scrollTo(t, find.text('ESP32_WROOM_BOS_CIHAZ_0002'));
+      await t.tap(find.text('ESP32_WROOM_BOS_CIHAZ_0002'));
+      await settleFor(t);
+      expect(t.widget<AppCard>(tile).selected, isTrue);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'DeviceDoorAssignDialog: kapı yüklenirken iskelet (çizgi gösterge yok); site/kapı listeleri R8',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) => DeviceDoorAssignDialog.show(
+          context,
+          authService: _FakeAuth(gate: gate),
+          sites: [_site(101, 'Güneş Sitesi')],
+          device: DeviceRecord.fromJson({
+            'id': 1,
+            'device_uid': 'ESP32_C3_ABCDEF123456',
+          }),
+        ),
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+
+      final dropdowns = t
+          .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
+          .toList();
+      expect(dropdowns, hasLength(2));
+      for (final d in dropdowns) {
+        expect(d.borderRadius, BorderRadius.circular(AppRadius.md));
+        expect(d.dropdownColor, AppPalette.light.surface);
+        expect(d.menuMaxHeight, 320);
+        expect((d.icon! as Icon).icon, Icons.keyboard_arrow_down_rounded);
+      }
+      expect(t.takeException(), isNull);
+    },
+  );
 }

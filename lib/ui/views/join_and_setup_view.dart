@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/join_request_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/setup_option_card.dart';
 
 class JoinAndSetupView extends StatefulWidget {
@@ -57,7 +58,6 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    const headerTone = AppTone.primary;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -73,40 +73,24 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Başlık Bilgi Kartı
+                // Başlık Bilgi Kartı: cilalı rozet (büyük yazıda gizlenir) + SectionHeader başlığı.
                 StaggeredEntry(
                   index: 0,
                   child: AppCard(
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: headerTone.tint(p),
-                            shape: BoxShape.circle,
-                          ),
-                          child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: Center(
-                              child: Icon(
-                                Icons.add_home_work_rounded,
-                                color: headerTone.ink(p),
-                                size: 26,
-                              ),
-                            ),
-                          ),
+                        const IconTile(
+                          icon: Icons.add_home_work_rounded,
+                          size: 48,
+                          gap: AppSpace.md,
                         ),
-                        const SizedBox(width: AppSpace.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Semantics(
-                                header: true,
-                                child: Text(
-                                  'Daireye Katıl & Cihaz Ekle',
-                                  style: th.titleLarge,
-                                ),
+                              const SectionHeader(
+                                title: 'Daireye Katıl & Cihaz Ekle',
                               ),
                               const SizedBox(height: AppSpace.xs),
                               Text(

@@ -5,7 +5,10 @@ import '../../services/auth_service.dart';
 import '../design/app_card.dart';
 import '../design/app_dialog.dart';
 import '../design/buttons.dart';
+import '../design/icon_orb.dart';
+import '../design/motion_widgets.dart';
 import '../design/tokens.dart';
+import 'large_dialog_parts.dart';
 
 class _BlockDraft {
   _BlockDraft({required this.name, required this.apartmentCount})
@@ -227,7 +230,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         : <String>[];
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xl),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
         child: Column(
@@ -270,76 +273,18 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                     children: [
                       if (compactHeader) ...[
                         Text('Site Sahibi (SITE_OWNER) Yapılandırması', style: th.bodySmall),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpace.md),
                       ],
                       // Hata Mesajı
                       if (_errorMessage != null) ...[
                         InlineNotice(message: _errorMessage!),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpace.lg),
                       ],
 
                       // Bağlanacak Cihaz Bilgi Kartı
                       if (widget.deviceUid != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppTone.violet.tint(p),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTone.violet.hue.withValues(alpha: 0.4)),
-                          ),
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.spaceBetween,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.developer_board_rounded, color: AppTone.violet.ink(p), size: 20),
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Bağlanacak Cihaz:',
-                                          style: th.bodySmall?.copyWith(
-                                            color: AppTone.violet.ink(p),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        Text(
-                                          widget.deviceUid!,
-                                          style: th.bodyMedium?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.5,
-                                            color: p.text,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppTone.success.tint(p),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Kapı 1\'e Atanacak',
-                                  style: th.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTone.success.ink(p),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        _buildDevicePanel(context),
+                        const SizedBox(height: AppSpace.lg),
                       ],
 
                       // Site Adı
@@ -357,7 +302,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: AppSpace.md),
 
                       // İl & İlçe Seçimi
                       Row(
@@ -366,6 +311,10 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedCity,
                               isExpanded: true,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              dropdownColor: p.surface,
+                              menuMaxHeight: 320,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
                               decoration: const InputDecoration(
                                 labelText: 'İl',
                                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -379,11 +328,15 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                               },
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpace.md),
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               initialValue: _selectedDistrict,
                               isExpanded: true,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              dropdownColor: p.surface,
+                              menuMaxHeight: 320,
+                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
                               decoration: const InputDecoration(
                                 labelText: 'İlçe',
                                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -400,7 +353,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: AppSpace.md),
 
                       // Açık Adres
                       TextFormField(
@@ -412,11 +365,12 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                           prefixIcon: Icon(Icons.location_on_outlined),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpace.xl),
 
                       // Dinamik Bloklar ve Daireler Başlığı
                       SectionHeader(
                         title: 'Bloklar ve Daireler',
+                        icon: Icons.apartment_rounded,
                         trailing: TextButton.icon(
                           onPressed: _addBlock,
                           icon: const Icon(Icons.add_rounded, size: 18),
@@ -427,95 +381,19 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                         'Her bloğun adını ve daire sayısını belirleyin',
                         style: th.bodySmall,
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: AppSpace.md),
 
-                      // Blok Kartları Listesi
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _blocks.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (ctx, idx) {
-                          final b = _blocks[idx];
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: p.surfaceMuted,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: p.border),
-                            ),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                // Büyük yazı / dar kartta alanlar alt alta dizilir (okunur genişlik).
-                                final stacked =
-                                    MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
-                                    constraints.maxWidth < 300;
-                                // Blok Adı
-                                final nameField = TextFormField(
-                                  controller: b.nameController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Blok Adı',
-                                    isDense: true,
-                                    border: UnderlineInputBorder(),
-                                  ),
-                                  validator: (_) {
-                                    final key = _blockNameKey(b);
-                                    final sameCount =
-                                        _blocks.where((o) => _blockNameKey(o) == key).length;
-                                    return sameCount > 1 ? 'Blok adı benzersiz olmalı.' : null;
-                                  },
-                                );
-                                // Daire Sayısı
-                                final countField = TextFormField(
-                                  controller: b.countController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Daire Sayısı',
-                                    isDense: true,
-                                    border: UnderlineInputBorder(),
-                                  ),
-                                );
-                                // Sil Butonu
-                                final deleteButton = _blocks.length > 1
-                                    ? IconButton(
-                                        onPressed: () => _removeBlock(idx),
-                                        icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
-                                        tooltip: 'Bloğu Sil',
-                                      )
-                                    : null;
-                                if (stacked) {
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      nameField,
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Expanded(child: countField),
-                                          ?deleteButton,
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return Row(
-                                  children: [
-                                    Expanded(flex: 3, child: nameField),
-                                    const SizedBox(width: 14),
-                                    Expanded(flex: 2, child: countField),
-                                    ?deleteButton,
-                                  ],
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 20),
+                      // Blok Kartları Listesi (ilk 8 satır girişte kademeli belirir)
+                      for (var idx = 0; idx < _blocks.length; idx++) ...[
+                        if (idx > 0) const SizedBox(height: AppSpace.md),
+                        StaggeredEntry(index: idx, child: _buildBlockRow(context, idx)),
+                      ],
+                      const SizedBox(height: AppSpace.xl),
 
                       // Dinamik Kapılar Başlığı
                       SectionHeader(
                         title: 'Kapılar',
+                        icon: Icons.meeting_room_rounded,
                         trailing: TextButton.icon(
                           onPressed: _addDoor,
                           icon: const Icon(Icons.add_rounded, size: 18),
@@ -526,55 +404,15 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                         'Sitenin kapılarını ve isimlerini belirleyin',
                         style: th.bodySmall,
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: AppSpace.md),
 
-                      // Kapı Kartları Listesi
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _doors.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (ctx, idx) {
-                          final d = _doors[idx];
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: p.surfaceMuted,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: p.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.meeting_room_outlined,
-                                  size: 20,
-                                  color: p.textSecondary,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: d.nameController,
-                                    decoration: InputDecoration(
-                                      labelText: 'Kapı ${idx + 1} Adı',
-                                      hintText: 'Örn: Ana Giriş, Blok Girişi, Otopark...',
-                                      isDense: true,
-                                      border: const UnderlineInputBorder(),
-                                    ),
-                                  ),
-                                ),
-                                if (_doors.length > 1)
-                                  IconButton(
-                                    onPressed: () => _removeDoor(idx),
-                                    icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
-                                    tooltip: 'Kapıyı Sil',
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                      // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
+                      for (var idx = 0; idx < _doors.length; idx++) ...[
+                        if (idx > 0) const SizedBox(height: AppSpace.sm),
+                        StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
+                      ],
                       if (compactHeader) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: AppSpace.xl),
                         submitButton,
                       ],
                     ],
@@ -593,6 +431,172 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// "Bağlanacak cihaz" paneli: mor tonlu (cihaz) zemin, cilalı ikon rozeti, cihaz kimliği ve atama
+  /// durumu. Büyük yazıda (>= 1,75x) rozet gizlenir.
+  Widget _buildDevicePanel(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return DialogPanel(
+      tone: AppTone.violet,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (!hideRowOrbs(context)) ...[
+                const IconOrb(
+                  icon: Icons.developer_board_rounded,
+                  tone: AppTone.violet,
+                  size: 40,
+                  shape: IconOrbShape.squircle,
+                ),
+                const SizedBox(width: AppSpace.md),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bağlanacak Cihaz:',
+                      style: th.bodySmall?.copyWith(
+                        color: AppTone.violet.ink(p),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      widget.deviceUid!,
+                      style: th.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: p.text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.sm),
+          // Sarabilen hap: tek satırlı StatusChip büyük yazıda "Kapı 1'e Atan…" diye keserdi.
+          const DialogMetaPill(
+            'Kapı 1\'e Atanacak',
+            tone: AppTone.success,
+            icon: Icons.link_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tek blok satırı (blok adı + daire sayısı + sil): büyük yazı / dar kartta alanlar alt alta dizilir.
+  Widget _buildBlockRow(BuildContext context, int idx) {
+    final p = context.palette;
+    final b = _blocks[idx];
+    return DialogPanel(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Büyük yazı / dar kartta alanlar alt alta dizilir (okunur genişlik).
+          final stacked =
+              MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+              constraints.maxWidth < 300;
+          // Blok Adı
+          final nameField = TextFormField(
+            controller: b.nameController,
+            decoration: const InputDecoration(
+              labelText: 'Blok Adı',
+              isDense: true,
+              border: UnderlineInputBorder(),
+            ),
+            validator: (_) {
+              final key = _blockNameKey(b);
+              final sameCount =
+                  _blocks.where((o) => _blockNameKey(o) == key).length;
+              return sameCount > 1 ? 'Blok adı benzersiz olmalı.' : null;
+            },
+          );
+          // Daire Sayısı
+          final countField = TextFormField(
+            controller: b.countController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Daire Sayısı',
+              isDense: true,
+              border: UnderlineInputBorder(),
+            ),
+          );
+          // Sil Butonu
+          final deleteButton = _blocks.length > 1
+              ? IconButton(
+                  onPressed: () => _removeBlock(idx),
+                  icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
+                  tooltip: 'Bloğu Sil',
+                )
+              : null;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nameField,
+                const SizedBox(height: AppSpace.sm),
+                Row(
+                  children: [
+                    Expanded(child: countField),
+                    ?deleteButton,
+                  ],
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(flex: 3, child: nameField),
+              const SizedBox(width: AppSpace.md),
+              Expanded(flex: 2, child: countField),
+              ?deleteButton,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Tek kapı satırı: [kapı ikon rozeti] [kapı adı] [sil]. Büyük yazıda (>= 1,75x) rozet gizlenir.
+  Widget _buildDoorRow(BuildContext context, int idx) {
+    final p = context.palette;
+    final d = _doors[idx];
+    return DialogPanel(
+      child: Row(
+        children: [
+          if (!hideRowOrbs(context)) ...[
+            const IconOrb(
+              icon: Icons.meeting_room_rounded,
+              size: 32,
+              shape: IconOrbShape.squircle,
+            ),
+            const SizedBox(width: AppSpace.md),
+          ],
+          Expanded(
+            child: TextFormField(
+              controller: d.nameController,
+              decoration: InputDecoration(
+                labelText: 'Kapı ${idx + 1} Adı',
+                hintText: 'Örn: Ana Giriş, Blok Girişi, Otopark...',
+                isDense: true,
+                border: const UnderlineInputBorder(),
+              ),
+            ),
+          ),
+          if (_doors.length > 1)
+            IconButton(
+              onPressed: () => _removeDoor(idx),
+              icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
+              tooltip: 'Kapıyı Sil',
+            ),
+        ],
       ),
     );
   }

@@ -52,9 +52,11 @@ class _ApartmentCardState extends State<ApartmentCard> {
               Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
               Row(
                 children: [
+                  // Dolu daire = mor (daire kullanıcısı rolü), boş daire = uyarı: ton anlam taşır.
                   IconTile(
                     icon: Icons.home_rounded,
-                    tone: hasResident ? AppTone.primary : AppTone.warning,
+                    tone: hasResident ? AppTone.violet : AppTone.warning,
+                    size: 40,
                     gap: AppSpace.md,
                   ),
                   Expanded(

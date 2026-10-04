@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
@@ -23,13 +24,9 @@ Future<Duration> _settle(WidgetTester t) async =>
 Finder get _alert => find.byType(AlertDialog);
 Finder get _header => find.byType(AppDialogHeader);
 
-/// Başlık şeridinin ikon karosu (44 dp).
-Finder get _iconTile => find.descendant(
-  of: _header,
-  matching: find.byWidgetPredicate(
-    (w) => w is SizedBox && w.width == 44 && w.height == 44,
-  ),
-);
+/// Başlık şeridinin ikon rozeti ([IconOrb], 44 dp squircle).
+Finder get _iconTile =>
+    find.descendant(of: _header, matching: find.byType(IconOrb));
 
 Widget _dialog({
   String title = 'Şifremi Unuttum',
@@ -264,24 +261,19 @@ void main() {
 
   group('AppDialogHeader: başlık şeridi', () {
     testWidgets(
-      'ikon karosu 44 dp (tint zemin, ink ikon 24) + başlık + alt başlık; iç boşluk 24/24/24/12 (açık + koyu)',
+      'ikon rozeti 44 dp (squircle, glow, beyaz ikon 22) + başlık + alt başlık; iç boşluk 24/24/24/12 (açık + koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
           await _open(t, _dialog(), dark: dark);
-          final tone = AppTone.primary;
-          final tile = t.widget<DecoratedBox>(
-            find
-                .ancestor(of: _iconTile, matching: find.byType(DecoratedBox))
-                .first,
-          );
-          final deco = tile.decoration as BoxDecoration;
-          expect(deco.color, tone.tint(p));
-          expect(deco.borderRadius, BorderRadius.circular(AppRadius.md));
+          final orb = t.widget<IconOrb>(_iconTile);
+          expect(orb.tone, AppTone.primary);
+          expect(orb.shape, IconOrbShape.squircle);
+          expect(orb.glow, isTrue);
           expect(t.getSize(_iconTile), const Size(44, 44));
           final icon = t.widget<Icon>(find.byIcon(Icons.lock_reset_rounded));
-          expect(icon.size, 24);
-          expect(icon.color, tone.ink(p));
+          expect(icon.size, 22);
+          expect(icon.color, Colors.white);
           // İç boşluk.
           final header = t.getTopLeft(_header);
           expect(
@@ -314,9 +306,8 @@ void main() {
       },
     );
 
-    testWidgets('7 ton: karo zemini tint, ikon ink (açık + koyu)', (t) async {
+    testWidgets('7 ton: rozet tonu, beyaz ikon (açık + koyu)', (t) async {
       for (final dark in [false, true]) {
-        final p = _palette(dark);
         for (final tone in AppTone.values) {
           await t.pumpWidget(
             harnessApp(
@@ -331,19 +322,14 @@ void main() {
             ),
           );
           await t.pumpAndSettle(); // tema geçişi (200 ms) bitsin
-          final tile = t.widget<DecoratedBox>(
-            find
-                .ancestor(of: _iconTile, matching: find.byType(DecoratedBox))
-                .first,
-          );
           expect(
-            (tile.decoration as BoxDecoration).color,
-            tone.tint(p),
+            t.widget<IconOrb>(_iconTile).tone,
+            tone,
             reason: '${tone.name} dark=$dark',
           );
           expect(
             t.widget<Icon>(find.byIcon(Icons.warning_amber_rounded)).color,
-            tone.ink(p),
+            Colors.white,
           );
         }
       }

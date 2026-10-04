@@ -1,0 +1,116 @@
+# Tasarım Dili: "Cilalı Safir" Premium
+
+Bu belge arayüzün modern/premium görünümünün **kurallarını ve bileşenlerini** anlatır. Yeni bir ekran ya
+da bileşen yazarken önce buraya bakın; kod örnekleri `lib/ui/design/` altındadır.
+
+> Kısa özet: **derinlik** (cila, aura, gölge) + **canlılık** (olay-güdümlü, sonlu animasyon) +
+> **okunaklılık** (ölçülmüş kontrast) + **hız** (kararlı durumda sıfır ticker).
+
+## 1. Değişmez sözleşmeler
+
+Bunlar testlerle kilitlidir; bozan değişiklik testi kırar.
+
+| Sözleşme | Anlamı | Hakem |
+|---|---|---|
+| **Taşma yok** | 320/360/412/820 dp × yazı ölçeği 1,0/1,5/2,0 × açık/koyu | `test/design/*` taşma matrisleri, `AGENTS.md` kural 6 |
+| **Kararlı durumda ticker yok** | Boştayken hiçbir animasyon çalışmaz (`pumpAndSettle` biter, pil harcanmaz) | `transientCallbackCount == 0` testleri |
+| **Hareket azaltma** | `MediaQuery.disableAnimations` açıkken efektler yok, geçişler anında | `AppMotion.of/reduced` |
+| **Kontrast** | Metin ≥ 4,5:1, ikon/grafik ≥ 3:1 (cila dahil, gerçek piksel ölçümü) | `contrast_test.dart`, `gloss_test.dart` |
+| **Dokunma hedefi** | ≥ 44 dp (tercihen 48) | bileşen testleri |
+| **Pahalı efekt yok** | `BackdropFilter`, `Opacity` ile büyük alan, `ShaderMask`, `ImageFiltered`, çift gölge, blur > 16 yasak | `gloss_test.dart` ve bileşen testleri |
+| **Anlamsal ağaç** | Her etkileşimli öğe tek düğüm, etiket görünen metindir; süs katmanları dışlanır | Semantics testleri |
+
+## 2. Hareket sözlüğü
+
+Süre ve eğriler `AppMotion` (tokens.dart): `fast` 120 ms, `base` 200 ms, `slow` 320 ms;
+`enter` easeOutCubic, `standard` fastOutSlowIn. Hepsi `AppMotion.of(context, d)` üzerinden geçer.
+
+**Canlılık olaylarla gelir, sürekli döngüyle değil.** İzin verilen animasyon türleri:
+
+1. **Basış geri bildirimi**: `PressableScale` (ölçek 0,96-0,97, 120 ms).
+2. **Giriş**: `StaggeredEntry` (ilk 8 öğe), `PageEntry`, `Pop` (belirginleşme).
+3. **Durum değişimi**: renk/zemin morph 200 ms (`AnimatedContainer`/`TweenAnimationBuilder`).
+4. **Olay efekti (sonlu, ≤ 900 ms)**: halka dalgası, ışıltı süpürmesi, kıvılcım patlaması.
+5. **İşlevsel gösterge**: yalnız iş sürerken dönen (spinner, sonar halkaları); iş bitince durur.
+6. **Bounded dikkat**: `StatusChip.pulse` gibi N tur atıp duran vurgu.
+
+**Yasak**: boştayken sonsuza dek dönen/nefes alan efekt, ekran açılışında kendiliğinden başlayan
+süs animasyonu (sayfa girişi zaten var).
+
+## 3. Bileşenler
+
+### `Gloss` (`gloss.dart`): cilalı yüzey katmanı
+Bir yüzeyin ÜSTÜNE dört ince katman bindirir: sol-üst hacim ışığı, alt gölge, kenar ışığı, özel parıltı
+(daire) ya da üst cila (dikdörtgen). Tek `CustomPaint` + `RepaintBoundary`; durağanken yeniden
+boyanmaz. İsteğe bağlı `sweep` (0→1) tek seferlik ışıltı süpürmesi çizer. Yüksek karşıtlık modunda
+kapanır. `Stack` içinde `Positioned.fill(child: Gloss(...))` olarak kullanılır; içerik ve mürekkep
+dalgası cilanın ÜSTÜNDE durur. **Şiddet kalibre edilmiştir**: etiket bölgesi ≥ 4,5:1, ikon bölgesi ≥ 3:1.
+
+`glossyButtonLayer`: aynı katmanın `ButtonStyle.backgroundBuilder` biçimi. `AppTheme` bunu
+`ElevatedButton` ve `FilledButton` stillerine bağlar: **tüm standart dolu düğmeler otomatik cilalıdır**
+(devre dışı düğme düz kalır). `OutlinedButton`/`TextButton` bilerek düzdür (hiyerarşi).
+
+### `DoorOpenButton` (`door_open_button.dart`): kapıyı aç
+Cilalı yuvarlak (132-184 dp) ya da çubuk düğme; dört durum (`ready/opening/offline/disabled`).
+Yüzeyin altında renkli **aura**; olaylar:
+
+| Olay | Efekt |
+|---|---|
+| Basış (`ready`) | çift halka dalgası (520 ms) + ölçek 0,96 + orta haptik |
+| Komut sürüyor (`opening`) | sonar halkaları (yalnız sürerken döner) + merkezde spinner |
+| Başarı (`successTick` artar) | success tonuna morph, onay işareti, ışıltı süpürmesi, patlama halkası, sekiz kıvılcım (900 ms) |
+| Cihaz yeniden hazır (`offline/disabled → ready`) | ışıltı + yumuşak halka |
+| `offline` dokunuşu | yatay titreme + `onBlocked` |
+
+Çubuk varyantında halka yerine ışıltı süpürmesi oynar. Hareket azaltmada hiçbir efekt çalışmaz.
+
+### `IconOrb` (`icon_orb.dart`): ikon rozeti
+Düz renkli ikon kutularının yerine: ton gradyanı + cila + beyaz ikon (+ isteğe bağlı `glow`).
+`size` ≥ 24, ikon boyutun yarısı; `shape`: daire ya da squircle. Dekoratiftir (anlamsal ağaçta yok);
+tek başına anlam taşıyorsa `semanticLabel` verin. Listelerde onlarca rozet olabileceğinden cila katmansız
+çizilir (`Gloss.isolate: false`).
+
+### `PrimaryActionButton` (`buttons.dart`)
+`filled` görünüm cilalıdır; `success` true olunca üzerinden tek seferlik ışıltı geçer. `tonal` ve
+`outline` ikincil eylemdir, düz kalır.
+
+### `AppCard` (`app_card.dart`)
+Opak Material yüzey + tek katman gölge korunur. Üstüne: koyu temada cam gibi üst ışık; `level ≥ 2`
+(hero) kartlarda tonun sol-üst yıkaması; `accentBar` altında ışık sızıntısı. Statik gradyanlardır.
+
+### Kendiliğinden premium olan ortak bileşenler
+- `AppDialog` başlığı: `IconOrb` (44 squircle, glow). `EmptyState`: 72 dp glow'lu daire rozet (kompakt: 44).
+- `StatusChip`: `pulse` noktası parlayan LED (3 tur nabız atıp durur). `AppSnack`: simge cam daire rozette.
+- Tema (`AppTheme`): `ElevatedButton`/`FilledButton` cilalı; ilerleme göstergeleri yuvarlak uçlu; açılır menü,
+  ipucu ve alt sayfa yuvarlatılmış/koyu yumuşak; sayfa zemininde ikinci, çok hafif mor ışıma (sol-alt).
+- Ana sayfa başlığı: rol tonlu hafif gradyan + 34 dp avatar rozeti (yükseklik bütçesi değişmez).
+
+### Kapı açma kartları (yuvarlak cilalı düğme hero'dur)
+| Kart | Düzen |
+|---|---|
+| `ResidentDoorRemoteCard` (daire sakini) | hero kart (level 2), ortada 132-184 dp düğme |
+| `AdminDoorStatusCard` (yönetici/süper) | durum bandı + ortada 132-184 dp düğme, altta misafir/QR eylemleri |
+| `IndividualDoorCard` (bireysel) | geniş kartta solda 116 dp düğme + sağda bilgi; dar kart ya da yazı > 1,3x ise üstte ortalı |
+
+**Sade daire kullanıcısı ekranı** (`ResidentDoorRemoteCard(minimal: true)`, yalnız `UserRole.apartmentOwner`): açıklama, rozet, IP, saat ve ek düğme YOKTUR; yalnız kapı seçici (ya da tek kapı adı) + yuvarlak düğme. Kaldırılan komutlar `YanMenu.extraActions` ile çekmecede "Panel"in altında toplanır (`Sesli Kapı Açma`, `Kapıya QR Göster`, `Kapı Ekranından QR Oku`, `Kurye / Misafir Geçiş Linki Oluştur`; yetki/cihaz yoksa görünmez). Mantık `ResidentDoorActions` yardımcısındadır (kart ve çekmece aynısını çağırır).
+
+Etiketler büyük harf ve kısadır (`KAPI AÇ`, `KAPIYI AÇ`, `UZAKTAN AÇ`, `YEREL AĞDAN AÇ`, `ÇEVRİMDIŞI`;
+açılırken `AÇILIYOR`, başarıda `GÖNDERİLDİ`). e2e testleri metni `foldText` (küçük harf + aksansız) ile
+karşılaştırdığından büyük harf güvenlidir; YÖNETİCİ etiketi bilerek `KAPI AÇ`tır (katlanmış hâli
+`kapi ac`, eski "Kapı Aç" ile aynı).
+
+## 4. Ekran reçeteleri
+
+- **Liste ekranı**: başlık `SectionHeader` (+ sayaç), öğeler `AppCard`, öğe başına `IconOrb` +
+  `StatusChip`, ilk 8 öğe `StaggeredEntry`, yüklenirken `Skeleton`, boşken `EmptyState`.
+- **Eylem**: birincil `PrimaryActionButton(filled)`, ikincil `tonal`; kapı açma her zaman `DoorOpenButton`.
+- **Diyalog**: `AppDialog(icon, tone)`; iptal `TextButton`, onay dolu düğme.
+- **Geri bildirim**: `AppSnack`, formlarda `InlineNotice`.
+- **Renk**: yalnız `AppTone` (metin için `tone.ink(palette)`), düz hex yazmayın.
+
+## 5. Ne yapılmaz
+
+- Yeni `fontSize` literali (tipografi ölçeği `Theme.of(context).textTheme`).
+- Sabit genişlik/yükseklikli metin kutusu; dinamik metin daima `Flexible`/`Expanded`/`maxLines`.
+- Sonsuz `AnimationController.repeat()` (iş sürerken dönen gösterge hariç).
+- `BackdropFilter`, büyük alan `Opacity`, `ShaderMask`.

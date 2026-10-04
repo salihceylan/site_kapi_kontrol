@@ -99,7 +99,20 @@ abstract final class AppSnack {
       ),
       content: Row(
         children: <Widget>[
-          ExcludeSemantics(child: Icon(icon, color: Colors.white, size: 20)),
+          // İkon yarı saydam "cam" daire rozet içinde (premium dokunuş; anlamsal ağaçta yok).
+          ExcludeSemantics(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.xs),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
           const SizedBox(width: AppSpace.md),
           Expanded(
             child: Text(

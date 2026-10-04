@@ -10,7 +10,10 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
 class SiteJoinQrDialog extends StatefulWidget {
@@ -108,6 +111,7 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
     );
 
     if (confirm != true || !mounted) return;
+    HapticFeedback.lightImpact();
 
     setState(() {
       _isRotating = true;
@@ -147,6 +151,7 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
         'bu kodu tarayabilir veya doğrudan girebilir.';
 
     Clipboard.setData(ClipboardData(text: textToCopy));
+    HapticFeedback.lightImpact();
     AppSnack.show(context, 'Katılım bilgisi panoya kopyalandı.');
   }
 
@@ -251,6 +256,112 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
     }
   }
 
+  /// Site kartı: cilalı bina rozeti + site adı + il / ilçe. Büyük yazıda (>= 1,75x) rozet gizlenir.
+  Widget _buildSiteCard(BuildContext context, String cityDistrict) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return DialogPanel(
+      child: Row(
+        children: [
+          if (!hideRowOrbs(context)) ...[
+            const IconOrb(
+              icon: Icons.apartment_rounded,
+              size: 40,
+              shape: IconOrbShape.squircle,
+            ),
+            const SizedBox(width: AppSpace.md),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.site.name,
+                  style: th.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if ((widget.site.city ?? '').isNotEmpty || (widget.site.district ?? '').isNotEmpty) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    cityDistrict,
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Karekod kartı: HER temada beyaz zemin üstünde koyu modüller (okunabilirlik); çevresinde QR tonunun
+  /// (success) gradyan çerçevesi + tek katman parıltı gölgesi. Statiktir (animasyon yok). Çerçeve
+  /// dar alanda orantılı küçülür (`FittedBox`), karekod boyutu sabit 190 dp'dir.
+  Widget _buildQrFrame(String data) {
+    const tone = AppTone.success;
+    return Center(
+      key: const ValueKey<String>('site_join_qr_frame'),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            // Canlı ton (hue) -> koyu uç (a): halka hem açık hem koyu temada belirgin kalır.
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [tone.hue, tone.a],
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            boxShadow: [
+              BoxShadow(
+                color: tone.hue.withValues(alpha: 0.32),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.xs),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.lg),
+                // Sabit boyutlu sarmalayıcı: QrImageView LayoutBuilder kullanır; AlertDialog (kaydırılabilir)
+                // içerik yüksekliğini içsel olarak ölçer ve LayoutBuilder buna izin vermez.
+                child: SizedBox(
+                  width: 190,
+                  height: 190,
+                  child: QrImageView(
+                    data: data,
+                    version: QrVersions.auto,
+                    size: 190,
+                    gapless: true,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFF0F172A),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -292,51 +403,8 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Site Başlık Kartı
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: p.surfaceMuted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: p.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Icon(
-                          Icons.apartment_rounded,
-                          size: 16,
-                          color: AppTone.primary.ink(p),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          widget.site.name,
-                          style: th.titleMedium,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if ((widget.site.city ?? '').isNotEmpty || (widget.site.district ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      cityDistrict,
-                      style: th.bodySmall?.copyWith(color: p.textSecondary),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
+            _buildSiteCard(context, cityDistrict),
+            const SizedBox(height: AppSpace.md),
 
             // Bilgilendirme Rozeti
             const InlineNotice(
@@ -344,17 +412,22 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
               message:
                   'Bu QR kod kapıyı açmaz. Sakinlerin telefonlarıyla okutup siteye ve dairelerine katılım başvurusu yapması içindir.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
 
             // Yükleniyor veya QR Gösterimi
             if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: CircularProgressIndicator()),
+              // Karekod çerçevesi boyutunda iskelet (paylaşılan tek shimmer; yükleme bitince ağaçtan kalkar).
+              const ShimmerScope(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+                  child: Center(
+                    child: SkeletonBox(width: 230, height: 230, radius: AppRadius.lg),
+                  ),
+                ),
               )
             else if (_errorMessage != null)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
                 child: InlineNotice(
                   message: _errorMessage!,
                   onRetry: _loadToken,
@@ -362,50 +435,20 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
               )
             else if (_tokenRecord != null) ...[
               // QR Kod Kartı (QR okunabilirliği için her temada beyaz zemin üstünde koyu modüller)
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: p.shadow(2),
-                  ),
-                  // Sabit boyutlu sarmalayıcı: QrImageView LayoutBuilder kullanır; AlertDialog (kaydırılabilir)
-                  // içerik yüksekliğini içsel olarak ölçer ve LayoutBuilder buna izin vermez.
-                  child: SizedBox(
-                    width: 190,
-                    height: 190,
-                    child: QrImageView(
-                      data: _tokenRecord!.qrPayload,
-                      version: QrVersions.auto,
-                      size: 190,
-                      gapless: true,
-                      backgroundColor: Colors.white,
-                      eyeStyle: const QrEyeStyle(
-                        eyeShape: QrEyeShape.square,
-                        color: Color(0xFF0F172A),
-                      ),
-                      dataModuleStyle: const QrDataModuleStyle(
-                        dataModuleShape: QrDataModuleShape.square,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
+              _buildQrFrame(_tokenRecord!.qrPayload),
+              const SizedBox(height: AppSpace.md),
 
               // Token Metni (Tıklayınca Kopyalar)
               InkWell(
                 onTap: _copyToClipboard,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 44),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.sm),
                     decoration: BoxDecoration(
                       color: p.surfaceMuted,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       border: Border.all(color: p.border),
                     ),
                     child: Row(
@@ -413,7 +456,7 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.copy_rounded, size: 14, color: AppTone.primary.ink(p)),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppSpace.sm),
                         Flexible(
                           child: Text(
                             _tokenRecord!.token,
@@ -431,7 +474,7 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpace.lg),
 
               // Karekodu Paylaş Butonu (WhatsApp / Diğer platformlar)
               ElevatedButton.icon(
@@ -452,17 +495,18 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
                   foregroundColor: Colors.white,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpace.md),
 
               // Aksiyon Butonları (Kopyala & Yenile): sığmazsa alt alta dizilir.
               OverflowBar(
                 alignment: MainAxisAlignment.center,
-                spacing: 8,
-                overflowSpacing: 8,
+                spacing: AppSpace.sm,
+                overflowSpacing: AppSpace.sm,
                 overflowAlignment: OverflowBarAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _copyToClipboard,
+                    style: dialogTonalButtonStyle(context),
                     icon: const Icon(Icons.copy_rounded, size: 15),
                     label: const Text('Kodu Kopyala'),
                   ),

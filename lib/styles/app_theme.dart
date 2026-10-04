@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -131,6 +132,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 2,
           shadowColor: AppColors.shadowSoft,
+          backgroundBuilder: glossyButtonLayer,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -146,6 +148,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          backgroundBuilder: glossyButtonLayer,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -192,6 +195,47 @@ class AppTheme {
       drawerTheme: const DrawerThemeData(
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.white,
+      ),
+      // Premium ince ayarlar (tüm ekranlara tek yerden): yuvarlak uçlu ilerleme göstergeleri,
+      // yuvarlatılmış açılır menü, koyu yumuşak ipucu ve üstü yuvarlak alt sayfa.
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        strokeCap: StrokeCap.round,
+        linearMinHeight: 6,
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shadowColor: const Color(0x330F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: const Color(0xEB0F172A),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        textStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        waitDuration: const Duration(milliseconds: 500),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        modalBackgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
+        ),
       ),
     );
   }
@@ -328,6 +372,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 4,
           shadowColor: AppColors.shadowSoft,
+          backgroundBuilder: glossyButtonLayer,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -343,6 +388,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          backgroundBuilder: glossyButtonLayer,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -390,6 +436,46 @@ class AppTheme {
       drawerTheme: const DrawerThemeData(
         surfaceTintColor: Colors.transparent,
         backgroundColor: Color(0xFF0F172A),
+      ),
+      // Premium ince ayarlar (açık temadaki karşılıkları).
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        strokeCap: StrokeCap.round,
+        linearMinHeight: 6,
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: const Color(0xFF1E293B),
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shadowColor: const Color(0x80000000),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          side: const BorderSide(color: Color(0x22FFFFFF)),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: const Color(0xF0334155),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        textStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        waitDuration: const Duration(milliseconds: 500),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Color(0xFF1E293B),
+        modalBackgroundColor: Color(0xFF1E293B),
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
+        ),
       ),
     );
   }

@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Bir dairenin kartı: site/blok/daire başlığı, rol rozeti ve daire sakinleri listesi.
 ///
@@ -53,24 +54,13 @@ class IndividualApartmentCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: p.surface,
-                        shape: BoxShape.circle,
-                      ),
-                      child: SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Center(
-                          child: Icon(
-                            Icons.home_work_rounded,
-                            size: 20,
-                            color: tone.ink(p),
-                          ),
-                        ),
-                      ),
+                    // Rol tonunda cilalı rozet (yönetici = uyarı, üye = birincil); büyük yazıda gizlenir.
+                    IconTile(
+                      icon: Icons.home_work_rounded,
+                      tone: tone,
+                      size: 48,
+                      gap: AppSpace.md,
                     ),
-                    const SizedBox(width: AppSpace.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

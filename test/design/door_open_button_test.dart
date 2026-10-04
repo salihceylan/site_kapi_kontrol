@@ -13,6 +13,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/door_open_button.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -162,7 +163,7 @@ Widget _stateColumn(DoorOpenVariant variant, ValueNotifier<int> tick) {
         ),
         one(
           DoorOpenState.offline,
-          circle ? 'ÇEVRİMDİŞI' : 'Cihaz Çevrimdışı',
+          circle ? 'ÇEVRİMDIŞI' : 'Cihaz Çevrimdışı',
           'AÇILIYOR',
         ),
         one(
@@ -342,7 +343,7 @@ void main() {
           _app(
             _door(
               state: DoorOpenState.offline,
-              label: 'ÇEVRİMDİŞI',
+              label: 'ÇEVRİMDIŞI',
               icon: Icons.lock_outline_rounded,
               onPressed: () => pressed++,
               onBlocked: () => blocked++,
@@ -354,12 +355,12 @@ void main() {
         expect(deco.gradient, DoorOpenButton.neutralGradient(p));
         expect(deco.shadows, p.shadow(1));
         expect(
-          t.widget<Text>(find.text('ÇEVRİMDİŞI')).style!.color,
+          t.widget<Text>(find.text('ÇEVRİMDIŞI')).style!.color,
           p.textSecondary,
         );
         expect(_shakeDx(t), 0);
 
-        await t.tap(find.text('ÇEVRİMDİŞI'));
+        await t.tap(find.text('ÇEVRİMDIŞI'));
         await t.pump();
         expect(blocked, 1);
         expect(pressed, 0, reason: 'onBlocked varken onPressed çağrılmaz');
@@ -528,7 +529,7 @@ void main() {
                           _door(
                             variant: variant,
                             state: DoorOpenState.offline,
-                            label: 'ÇEVRİMDİŞI',
+                            label: 'ÇEVRİMDIŞI',
                             onBlocked: () => blocked++,
                           ),
                         ],
@@ -540,7 +541,7 @@ void main() {
             );
             await t.pumpAndSettle();
             await t.tap(find.text('KAPIYI AÇ'));
-            await t.tap(find.text('ÇEVRİMDİŞI'));
+            await t.tap(find.text('ÇEVRİMDIŞI'));
             await t.pumpAndSettle();
             expect(pressed, 1, reason: '${variant.name} dark=$dark');
             expect(blocked, 1, reason: '${variant.name} dark=$dark');
@@ -1313,7 +1314,7 @@ void main() {
           _app(
             _door(
               state: DoorOpenState.offline,
-              label: 'ÇEVRİMDİŞI',
+              label: 'ÇEVRİMDIŞI',
               onBlocked: () => blocked++,
             ),
           ),
@@ -1321,7 +1322,7 @@ void main() {
         expect(
           t.getSemantics(_button),
           isSemantics(
-            label: 'ÇEVRİMDİŞI',
+            label: 'ÇEVRİMDIŞI',
             isButton: true,
             isEnabled: true,
             hasEnabledState: true,
@@ -1329,7 +1330,7 @@ void main() {
           ),
         );
         expect(_tapNodes(t), 1);
-        t.semantics.tap(find.semantics.byLabel('ÇEVRİMDİŞI'));
+        t.semantics.tap(find.semantics.byLabel('ÇEVRİMDIŞI'));
         await t.pump();
         expect(blocked, 1);
         await t.pumpAndSettle();
@@ -1840,5 +1841,356 @@ void main() {
         }
       },
     );
+  });
+
+  group('premium görünüm: cila, aura ve olay efektleri', () {
+    /// Dairenin dışına yayılan efekt boyayıcısı (özel sınıf: alanlara dinamik erişilir).
+    dynamic halo(WidgetTester t) {
+      for (final c in t.widgetList<CustomPaint>(
+        find.descendant(of: _button, matching: find.byType(CustomPaint)),
+      )) {
+        final painter = c.painter;
+        if (painter != null && painter.runtimeType.toString() == '_HaloPainter') {
+          return painter;
+        }
+      }
+      throw StateError('_HaloPainter bulunamadı');
+    }
+
+    bool ringAnimating(WidgetTester t) =>
+        (halo(t).ring as AnimationController).isAnimating;
+    bool pulseAnimating(WidgetTester t) =>
+        (halo(t).pulse as AnimationController).isAnimating;
+
+    Finder aura() => find.byWidgetPredicate(
+      (w) =>
+          w is CustomPaint &&
+          w.painter != null &&
+          w.painter.runtimeType.toString() == '_AuraPainter',
+    );
+
+    testWidgets('cila (Gloss) her durumda vardır; aura yalnız canlı durumlarda', (
+      t,
+    ) async {
+      for (final variant in DoorOpenVariant.values) {
+        for (final s in DoorOpenState.values) {
+          await t.pumpWidget(
+            _app(
+              SizedBox(
+                width: 320,
+                child: _door(state: s, variant: variant, onPressed: () {}),
+              ),
+            ),
+          );
+          expect(
+            find.descendant(of: _button, matching: find.byType(Gloss)),
+            findsOneWidget,
+            reason: '${variant.name} ${s.name}',
+          );
+          final live = s == DoorOpenState.ready || s == DoorOpenState.opening;
+          expect(
+            aura(),
+            variant == DoorOpenVariant.circle && live
+                ? findsOneWidget
+                : findsNothing,
+            reason: 'aura ${variant.name} ${s.name}',
+          );
+          await t.pumpWidget(const SizedBox.shrink());
+        }
+      }
+    });
+
+    testWidgets(
+      'basış halkası: onayda başlar, <= 600 ms sonra biter (ticker kalmaz) ve dokunmayı yutmaz',
+      (t) async {
+        var calls = 0;
+        await t.pumpWidget(_app(_door(onPressed: () => calls++)));
+        expect(ringAnimating(t), isFalse, reason: 'ilk kurulumda efekt yok');
+        await t.tap(find.text('KAPIYI AÇ'));
+        await t.pump();
+        expect(ringAnimating(t), isTrue);
+        // Halka sürerken ikinci dokunuş da çalışır (efekt katmanı dokunmayı yutmaz).
+        await t.tap(find.text('KAPIYI AÇ'));
+        await t.pump(const Duration(milliseconds: 100));
+        expect(calls, 2);
+        await t.pump(DoorOpenButton.tapFxDuration);
+        await t.pump(const Duration(milliseconds: 50));
+        expect(ringAnimating(t), isFalse);
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+      },
+    );
+
+    testWidgets(
+      'sonar: yalnız komut sürerken döner; opening dışına çıkınca durur',
+      (t) async {
+        Widget build(DoorOpenState s) =>
+            _app(_door(state: s, onPressed: () {}));
+        await t.pumpWidget(build(DoorOpenState.ready));
+        expect(pulseAnimating(t), isFalse);
+        await t.pumpWidget(build(DoorOpenState.opening));
+        await t.pump(const Duration(milliseconds: 300));
+        expect(pulseAnimating(t), isTrue);
+        await t.pump(DoorOpenButton.sonarPeriod * 2);
+        expect(pulseAnimating(t), isTrue, reason: 'sürdükçe döner');
+        await t.pumpWidget(build(DoorOpenState.ready));
+        expect(pulseAnimating(t), isFalse);
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+      },
+    );
+
+    testWidgets(
+      'doğrudan opening ile kurulursa da sonar döner (efektli kurulum)',
+      (t) async {
+        await t.pumpWidget(_app(_door(state: DoorOpenState.opening)));
+        await t.pump(const Duration(milliseconds: 100));
+        expect(pulseAnimating(t), isTrue);
+      },
+    );
+
+    testWidgets(
+      'başarı: patlama (halka + kıvılcım + ışıltı) <= 1 sn sürer; ardından ticker kalmaz',
+      (t) async {
+        Widget build(int tick) =>
+            _app(_door(successTick: tick, onPressed: () {}));
+        await t.pumpWidget(build(0));
+        await t.pumpWidget(build(1));
+        await t.pump();
+        expect(ringAnimating(t), isTrue);
+        for (final ms in [60, 150, 300, 450, 600, 800]) {
+          await t.pump(const Duration(milliseconds: 60));
+          expect(t.takeException(), isNull, reason: '$ms ms');
+        }
+        await t.pump(DoorOpenButton.successFxDuration);
+        expect(ringAnimating(t), isFalse);
+        await t.pump(DoorOpenButton.doneHold);
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+      },
+    );
+
+    testWidgets(
+      'yeniden hazır: offline/disabled -> ready geçişinde ışıltı oynar; ilk kurulumda yok',
+      (t) async {
+        for (final from in [DoorOpenState.offline, DoorOpenState.disabled]) {
+          await t.pumpWidget(_app(_door(state: DoorOpenState.ready)));
+          expect(ringAnimating(t), isFalse, reason: 'ilk kurulumda efekt yok');
+          await t.pumpWidget(_app(_door(state: from, onPressed: () {})));
+          expect(ringAnimating(t), isFalse);
+          await t.pumpWidget(
+            _app(_door(state: DoorOpenState.ready, onPressed: () {})),
+          );
+          await t.pump();
+          expect(ringAnimating(t), isTrue, reason: '${from.name} -> ready');
+          await t.pump(DoorOpenButton.wakeFxDuration);
+          await t.pump(const Duration(milliseconds: 50));
+          expect(ringAnimating(t), isFalse);
+          await t.pumpAndSettle();
+          expect(t.binding.transientCallbackCount, 0);
+        }
+      },
+    );
+
+    testWidgets(
+      'opening -> ready (başarısız komut): "yeniden hazır" ışıltısı OYNAMAZ',
+      (t) async {
+        await t.pumpWidget(_app(_door(state: DoorOpenState.opening)));
+        await t.pump(const Duration(milliseconds: 100));
+        await t.pumpWidget(
+          _app(_door(state: DoorOpenState.ready, onPressed: () {})),
+        );
+        await t.pump();
+        expect(ringAnimating(t), isFalse);
+      },
+    );
+
+    testWidgets('hareket azaltma: hiçbir efekt çalışmaz (halka, sonar, patlama, ışıltı)', (
+      t,
+    ) async {
+      Widget build({
+        DoorOpenState s = DoorOpenState.ready,
+        int tick = 0,
+      }) => _app(_door(state: s, successTick: tick, onPressed: () {}), reduce: true);
+      await t.pumpWidget(build());
+      await t.tap(find.text('KAPIYI AÇ'));
+      await t.pump();
+      expect(ringAnimating(t), isFalse, reason: 'basış halkası yok');
+      await t.pumpWidget(build(tick: 1));
+      await t.pump();
+      expect(ringAnimating(t), isFalse, reason: 'patlama yok');
+      await t.pumpWidget(build(s: DoorOpenState.offline, tick: 1));
+      await t.pumpWidget(build(tick: 1));
+      await t.pump();
+      expect(ringAnimating(t), isFalse, reason: 'yeniden hazır ışıltısı yok');
+      await t.pumpWidget(build(s: DoorOpenState.opening, tick: 1));
+      await t.pump(const Duration(milliseconds: 200));
+      expect(pulseAnimating(t), isFalse, reason: 'sonar yok');
+    });
+
+    testWidgets(
+      'çubuk: halka yok; basışta ve başarıda ışıltı süpürmesi oynar',
+      (t) async {
+        Widget build(int tick) => _app(
+          SizedBox(
+            width: 320,
+            child: _door(
+              variant: DoorOpenVariant.bar,
+              successTick: tick,
+              onPressed: () {},
+            ),
+          ),
+        );
+        Animation<double> sweep() => t
+            .widget<Gloss>(
+              find.descendant(of: _button, matching: find.byType(Gloss)),
+            )
+            .sweep!;
+        await t.pumpWidget(build(0));
+        expect(sweep().value, 0);
+        await t.tap(find.text('KAPIYI AÇ'));
+        await t.pump(); // ilk kare ticker başlangıcını belirler (ilerleme 0)
+        await t.pump(const Duration(milliseconds: 200));
+        expect(sweep().value, greaterThan(0), reason: 'basışta ışıltı');
+        await t.pump(DoorOpenButton.sweepDuration);
+        await t.pump(const Duration(milliseconds: 50));
+        expect(sweep().status, AnimationStatus.completed);
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+        await t.pumpWidget(build(1));
+        await t.pump(); // ilk kare ticker başlangıcını belirler (ilerleme 0)
+        await t.pump(const Duration(milliseconds: 200));
+        expect(sweep().value, greaterThan(0), reason: 'başarıda ışıltı');
+      },
+    );
+
+    testWidgets(
+      'diameter: verilirse çap odur; sığmazsa küçülür; verilmezse otomatik',
+      (t) async {
+        Future<double> diameterOf({double? d, double width = 360}) async {
+          await t.pumpWidget(
+            harnessApp(
+              Center(
+                child: SizedBox(
+                  width: width,
+                  child: DoorOpenButton(
+                    state: DoorOpenState.ready,
+                    label: 'KAPIYI AÇ',
+                    icon: Icons.lock_open_rounded,
+                    onPressed: () {},
+                    diameter: d,
+                  ),
+                ),
+              ),
+            ),
+          );
+          return t.getSize(find.byType(AnimatedContainer)).width;
+        }
+
+        expect(await diameterOf(d: 116), 116);
+        expect(await diameterOf(d: 96), 96);
+        expect(await diameterOf(d: 184, width: 120), 120, reason: 'sığmıyorsa küçülür');
+        expect(await diameterOf(), 180, reason: 'otomatik: 360/2');
+      },
+    );
+
+    testWidgets(
+      'canlı <-> nötr geçişinde zemin morph olur (yüzey alt ağacı yeniden kurulmaz)',
+      (t) async {
+        await t.pumpWidget(_app(_door(onPressed: () {})));
+        final before = t.element(find.byType(InkWell));
+        await t.pumpWidget(
+          _app(_door(state: DoorOpenState.offline, onPressed: () {})),
+        );
+        await t.pump(const Duration(milliseconds: 100));
+        final mid = _gradientColors(t);
+        expect(mid, isNot(AppTone.primary.gradient.colors));
+        expect(
+          mid,
+          isNot(DoorOpenButton.neutralGradient(AppPalette.light).colors),
+          reason: 'ara değer: geçiş sürüyor',
+        );
+        expect(
+          identical(t.element(find.byType(InkWell)), before),
+          isTrue,
+          reason: 'InkWell elemanı korunur (alt ağaç yeniden kurulmadı)',
+        );
+        await t.pumpAndSettle();
+        expect(
+          _deco(t).gradient,
+          DoorOpenButton.neutralGradient(AppPalette.light),
+        );
+      },
+    );
+
+    testWidgets(
+      'klavye odağı: daire dışında net odak halkası çizilir (ready/offline); opening/disabled odaklanmaz',
+      (t) async {
+        bool focused() => halo(t).focused as bool;
+        await t.pumpWidget(_app(_door(onPressed: () {})));
+        expect(focused(), isFalse);
+        await t.sendKeyEvent(LogicalKeyboardKey.tab);
+        await t.pump();
+        expect(focused(), isTrue, reason: 'Tab: odak halkası');
+        FocusManager.instance.primaryFocus?.unfocus();
+        await t.pump();
+        expect(focused(), isFalse, reason: 'odak ayrılınca halka kalkar');
+        for (final dark in [false, true]) {
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          await t.pumpWidget(_app(_door(onPressed: () {}), dark: dark));
+          await t.pumpAndSettle();
+          await t.sendKeyEvent(LogicalKeyboardKey.tab);
+          await t.pump();
+          final ring = halo(t).focusColor as Color;
+          final surface = p.surface;
+          expect(
+            _contrast(ring, surface),
+            greaterThanOrEqualTo(3.0),
+            reason: 'odak halkası / zemin >= 3:1 (dark=$dark)',
+          );
+          FocusManager.instance.primaryFocus?.unfocus();
+          await t.pump();
+        }
+        for (final s in [DoorOpenState.opening, DoorOpenState.disabled]) {
+          await t.pumpWidget(_app(_door(state: s, onPressed: () {})));
+          await t.sendKeyEvent(LogicalKeyboardKey.tab);
+          await t.pump();
+          expect(focused(), isFalse, reason: s.name);
+          await t.pumpWidget(const SizedBox.shrink());
+        }
+      },
+    );
+
+    testWidgets('yüksek karşıtlık: cila çizilmez, düğme çalışır', (t) async {
+      var calls = 0;
+      await t.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(highContrast: true),
+            child: Scaffold(
+              body: Center(child: _door(onPressed: () => calls++)),
+            ),
+          ),
+        ),
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is GlossPainter,
+        ),
+        findsNothing,
+      );
+      await t.tap(find.text('KAPIYI AÇ'));
+      expect(calls, 1);
+      await t.pumpAndSettle();
+    });
+
+    testWidgets('pahalı efekt widget\'ı yok (BackdropFilter/ShaderMask/ImageFiltered)', (
+      t,
+    ) async {
+      await t.pumpWidget(_app(_door(onPressed: () {})));
+      expect(find.byType(BackdropFilter), findsNothing);
+      expect(find.byType(ShaderMask), findsNothing);
+      expect(find.byType(ImageFiltered), findsNothing);
+    });
   });
 }

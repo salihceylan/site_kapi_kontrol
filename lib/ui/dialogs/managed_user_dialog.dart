@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 
 class ManagedUserFormResult {
   const ManagedUserFormResult({
@@ -106,6 +108,7 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(
       ManagedUserFormResult(
         fullName: _fullNameController.text.trim(),
@@ -122,6 +125,7 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final th = Theme.of(context).textTheme;
 
     return AppDialog(
       title: _isEditing
@@ -140,15 +144,21 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Başlık şeridi ile ilk alanın (kayan etiketi) arasında nefes payı.
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _fullNameController,
-              decoration: const InputDecoration(labelText: 'Ad Soyad'),
+              decoration: const InputDecoration(
+                labelText: 'Ad Soyad',
+                prefixIcon: Icon(Icons.person_rounded),
+              ),
               validator: (value) => (value ?? '').trim().length < 3
                   ? 'Ad Soyad en az 3 karakter olmalı.'
                   : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
@@ -158,10 +168,12 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
               ),
               decoration: InputDecoration(
                 labelText: _isEditing ? 'E-posta (Değiştirilemez)' : 'E-posta',
+                prefixIcon: const Icon(Icons.email_rounded),
                 filled: _isEditing,
                 fillColor: _isEditing ? p.surfaceMuted : null,
                 suffixIcon: _isEditing ? const Icon(Icons.lock_outline_rounded, size: 18) : null,
                 helperText: _isEditing ? 'E-posta adresi güvenlik nedeniyle değiştirilemez' : null,
+                helperMaxLines: 2,
               ),
               validator: (value) {
                 if (_isEditing) return null;
@@ -171,12 +183,13 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                     : null;
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Telefon (opsiyonel)',
+                prefixIcon: Icon(Icons.phone_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -187,11 +200,19 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
               },
             ),
             if (widget.allowRoleSelection) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<UserRole>(
                 isExpanded: true,
                 initialValue: _selectedRole,
-                decoration: const InputDecoration(labelText: 'Kullanıcı Rolü'),
+                decoration: const InputDecoration(
+                  labelText: 'Kullanıcı Rolü',
+                  prefixIcon: Icon(Icons.admin_panel_settings_rounded),
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                dropdownColor: p.surface,
+                menuMaxHeight: 320,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                style: th.bodyLarge,
                 items: UserRole.values.map((r) {
                   return DropdownMenuItem(
                     value: r,
@@ -209,11 +230,14 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
             // kullanıcı için de gizlidir: sunucu bu uçta kendi şifre değişimini (mevcut şifre
             // doğrulaması olmadığından) reddeder; değişiklik "Profilim" ekranından yapılır.
             if (!_isEditing) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               TextFormField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Şifre'),
+                decoration: const InputDecoration(
+                  labelText: 'Şifre',
+                  prefixIcon: Icon(Icons.lock_rounded),
+                ),
                 validator: (value) {
                   final text = (value ?? '').trim();
                   if (text.length < 6) {
@@ -223,7 +247,7 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                 },
               ),
             ] else ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               InlineNotice(
                 tone: AppTone.info,
                 icon: Icons.lock_outline_rounded,
@@ -233,38 +257,40 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                     : 'Güvenlik gereği kullanıcı şifresini yalnızca kendi hesabından değiştirebilir.',
               ),
             ],
-            const SizedBox(height: 12),
-            SwitchListTile.adaptive(
+            const SizedBox(height: AppSpace.lg),
+            DialogToggleTile(
               value: _isActive,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Hesap Aktif'),
-              subtitle: Text(
-                _isActive
-                    ? 'Kullanıcı giriş yapabilir.'
-                    : 'Kullanıcı giriş yapamaz.',
-              ),
+              title: 'Hesap Aktif',
+              subtitle: _isActive
+                  ? 'Kullanıcı giriş yapabilir.'
+                  : 'Kullanıcı giriş yapamaz.',
+              onIcon: Icons.how_to_reg_rounded,
+              offIcon: Icons.person_off_rounded,
               onChanged: widget.isSelf
                   ? null
                   : (value) => setState(() => _isActive = value),
             ),
             if (widget.isSelf)
-              Align(
-                alignment: Alignment.centerLeft,
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpace.xs,
+                  top: AppSpace.xs,
+                ),
                 child: Text(
                   'Kendi süper kullanıcı hesabınızı burada pasif yapamazsınız.',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: th.bodySmall,
                 ),
               ),
-            const SizedBox(height: 8),
-            SwitchListTile.adaptive(
+            const SizedBox(height: AppSpace.md),
+            DialogToggleTile(
               value: _emailVerified,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('E-Posta Doğrulandı'),
-              subtitle: Text(
-                _emailVerified
-                    ? 'E-posta doğrulama şartı sağlanmış.'
-                    : 'E-posta henüz doğrulanmamış.',
-              ),
+              title: 'E-Posta Doğrulandı',
+              subtitle: _emailVerified
+                  ? 'E-posta doğrulama şartı sağlanmış.'
+                  : 'E-posta henüz doğrulanmamış.',
+              onIcon: Icons.mark_email_read_rounded,
+              offIcon: Icons.mark_email_unread_rounded,
+              offTone: AppTone.warning,
               onChanged: (value) => setState(() => _emailVerified = value),
             ),
           ],

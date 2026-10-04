@@ -10,8 +10,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/door_logs_accordion.dart';
 
@@ -271,6 +273,18 @@ void main() {
         );
         expect(find.text('Sayfa 1 / 3'), findsOneWidget);
         expect(find.byType(StaggeredEntry), findsNWidgets(5));
+        // Her satır: cilalı yöntem küresi (IconOrb 32) + yöntem rozeti (StatusChip), aynı tonda; başlıkta
+        // bir küre daha (ağaç sırasında ilk).
+        final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+        final chips = t.widgetList<StatusChip>(find.byType(StatusChip)).toList();
+        expect(orbs, hasLength(6), reason: '5 satır + başlık');
+        expect(chips, hasLength(5));
+        for (final orb in orbs) {
+          expect(orb.size, 32);
+        }
+        for (var i = 0; i < chips.length; i++) {
+          expect(orbs[i + 1].tone, chips[i].tone, reason: 'satır $i');
+        }
         expect(find.text('Ali Veli 1'), findsOneWidget);
         expect(find.text('Mobil Bulut'), findsOneWidget);
         expect(find.text('Yerel Wi-Fi'), findsOneWidget);

@@ -1,18 +1,19 @@
-// FAZ 5 / A1b (i): boş durum (ikon karosu + metin + isteğe bağlı eylem).
+// FAZ 5 / A1b (i): boş durum (cilalı ikon rozeti + metin + isteğe bağlı eylem).
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
-/// Boş / sonuç yok durumu: ikon karosu + [title] + [message] + isteğe bağlı eylem düğmesi.
+/// Boş / sonuç yok durumu: cilalı ikon rozeti ([IconOrb]) + [title] + [message] + isteğe bağlı eylem düğmesi.
 ///
 /// Aynı bileşen "boş liste", "boş + eylem" ve "filtre sonucu yok" için kullanılır; mevcut cümleler
 /// ("Kayıtlı site bulunamadı." vb.) birebir geçer. Eylem düğmesi yalnız [actionLabel] VE [onAction]
 /// ikisi de verilince gösterilir.
 ///
-/// Varsayılan (tam sayfa/bölüm): ortalanmış, en çok 360 dp genişlik, 64 dp ikon karosu. Yükseklik
+/// Varsayılan (tam sayfa/bölüm): ortalanmış, en çok 360 dp genişlik, 72 dp glow'lu daire rozet. Yükseklik
 /// sınırlıysa ve içerik (büyük yazıda) sığmıyorsa içerik KAYDIRILIR (taşma yok); sınırsızsa (ListView,
 /// SingleChildScrollView) içeriği kadar yer kaplar. [EmptyState.compact]: kart/akordiyon içi satır
-/// düzeni (40 dp ikon karosu solda, metin sağda, sola hizalı).
+/// düzeni (44 dp squircle rozet solda, metin sağda, sola hizalı).
 ///
 /// Giriş: 200 ms solma + 8 dp yukarı kayma (hareket azaltmada anında). Kararlı durumda animasyon yoktur.
 /// Erişilebilirlik: başlık + mesaj tek anlamsal düğüm ("başlık. mesaj"); eylem düğmesi dışlanmaz.
@@ -68,7 +69,6 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
     final message = this.message;
     final label = message == null ? title : '$title. $message';
@@ -98,15 +98,11 @@ class EmptyState extends StatelessWidget {
                 child: ExcludeSemantics(
                   child: Row(
                     children: [
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tone.tint(p),
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.sm),
-                          child: Icon(icon, size: 24, color: tone.ink(p)),
-                        ),
+                      IconOrb(
+                        icon: icon,
+                        tone: tone,
+                        size: 44,
+                        shape: IconOrbShape.squircle,
                       ),
                       const SizedBox(width: AppSpace.md),
                       Expanded(
@@ -153,16 +149,7 @@ class EmptyState extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: tone.tint(p),
-                              borderRadius: BorderRadius.circular(AppRadius.lg),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppSpace.lg),
-                              child: Icon(icon, size: 32, color: tone.ink(p)),
-                            ),
-                          ),
+                          IconOrb(icon: icon, tone: tone, size: 72, glow: true),
                           const SizedBox(height: AppSpace.lg),
                           Text(
                             title,

@@ -10,7 +10,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 
 class SiteResidentsAccordionDialog extends StatefulWidget {
   const SiteResidentsAccordionDialog({
@@ -140,6 +143,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
 
     if (!mounted) return;
     if (confirmed != true) return;
+    HapticFeedback.lightImpact();
 
     setState(() => _busyMemberCodes.add(resident.userCode));
     final (success, msg) = await widget.authService.toggleApartmentMemberStatus(
@@ -190,6 +194,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
 
     if (!mounted) return;
     if (confirmed != true) return;
+    HapticFeedback.lightImpact();
 
     setState(() => _busyMemberCodes.add(resident.userCode));
     final (success, msg) = await widget.authService.deleteApartmentMember(
@@ -240,6 +245,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
 
     if (!mounted) return;
     if (confirmed != true) return;
+    HapticFeedback.lightImpact();
 
     setState(() => _busyMemberCodes.add(resident.userCode));
     final (success, msg) = await widget.authService.setApartmentPrimaryAdmin(
@@ -272,7 +278,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.lg),
       child: ConstrainedBox(
         // Yükseklik üst sınırı: en az 760, büyük ekranda ekranın %96'sı (uzun sakin listeleri için).
         constraints: BoxConstraints(
@@ -328,7 +334,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
 
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        padding: const EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md, AppSpace.xs),
         child: Column(
           children: [
             Row(
@@ -336,12 +342,12 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
               children: [
                 Expanded(
                   child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: AppSpace.sm,
+                    runSpacing: AppSpace.sm,
                     children: [
-                      _buildStatBadge('$totalBlocks Blok', AppTone.primary),
-                      _buildStatBadge('$totalApts Daire', AppTone.info),
-                      _buildStatBadge('$totalResidents Sakin', AppTone.success),
+                      _buildStatChip('$totalBlocks Blok', AppTone.primary, Icons.domain_rounded),
+                      _buildStatChip('$totalApts Daire', AppTone.info, Icons.door_front_door_rounded),
+                      _buildStatChip('$totalResidents Sakin', AppTone.success, Icons.groups_rounded),
                     ],
                   ),
                 ),
@@ -353,7 +359,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.sm),
             TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
@@ -367,15 +373,15 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
                       )
                     : null,
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: AppSpace.md),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.sm),
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
+                spacing: AppSpace.xs,
+                runSpacing: AppSpace.xs,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _buildFilterChip('Tümü', 'ALL'),
@@ -391,7 +397,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
                     style: TextButton.styleFrom(
                       foregroundColor: p.textSecondary,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: AppSpace.sm),
                     ),
                   ),
                 ],
@@ -411,7 +417,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
       label: Text(label),
       selected: isSelected,
       showCheckmark: false,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+      labelPadding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       selectedColor: AppTone.primary.tint(p),
       side: BorderSide(color: isSelected ? accent : p.border),
@@ -423,51 +429,23 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
     );
   }
 
-  Widget _buildStatBadge(String text, AppTone tone) {
-    final p = context.palette;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: tone.tint(p),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: tone.hue.withValues(alpha: 0.3), width: 0.8),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: tone.ink(p),
-        ),
-      ),
-    );
+  /// Sayı hapı (blok / daire / sakin sayısı): kısa etiket + simge.
+  Widget _buildStatChip(String text, AppTone tone, IconData icon) {
+    return StatusChip(label: text, tone: tone, icon: icon);
   }
 
   /// Parça sırası: hata kutusu EN ÜSTTE (büyük yazıda kaydırmadan görünsün); yükleniyor/boş
   /// durumları sayı/arama alanının altında; liste de onun altında.
   List<Widget> _buildSlivers() {
-    final th = Theme.of(context).textTheme;
     final head = _buildHeadSliver();
 
     if (_isLoading) {
       return [
         head,
-        SliverToBoxAdapter(
+        const SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Sakinler ve daireler yükleniyor...',
-                    style: th.bodyMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
+            padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.md, AppSpace.md, AppSpace.xl),
+            child: DialogRowsSkeleton(caption: 'Sakinler ve daireler yükleniyor...'),
           ),
         ),
       ];
@@ -477,7 +455,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
       return [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpace.xl),
             child: InlineNotice(message: _errorMessage!, onRetry: _loadData),
           ),
         ),
@@ -491,7 +469,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
         head,
         const SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpace.xl),
             child: EmptyState(
               icon: Icons.account_tree_rounded,
               title: 'Bu sitede henüz tanımlı blok veya daire kaydı bulunmuyor.',
@@ -504,7 +482,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
     return [
       head,
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
+        padding: const EdgeInsets.fromLTRB(AppSpace.sm, AppSpace.xs, AppSpace.sm, AppSpace.lg),
         sliver: SliverList.builder(
           itemCount: blocks.length,
           itemBuilder: (ctx, index) {
@@ -517,7 +495,6 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
   }
 
   Widget _buildBlockAccordion(SiteResidentBlock block) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
     // Filter apartments according to search & filter chip
     final filteredApartments = block.apartments.where((apt) {
@@ -542,7 +519,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
     final blockResidentsCount = filteredApartments.fold<int>(0, (sum, a) => sum + a.totalResidents);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: AppCard(
         key: PageStorageKey('block_${block.id}_$_expandAll'),
         padding: EdgeInsets.zero,
@@ -550,53 +527,38 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             initiallyExpanded: _expandAll,
-            tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            childrenPadding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTone.primary.tint(p),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.domain_rounded,
-                color: AppTone.primary.ink(p),
-                size: 22,
-              ),
-            ),
+            tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: 0),
+            childrenPadding: const EdgeInsets.fromLTRB(AppSpace.sm, 0, AppSpace.sm, AppSpace.sm),
+            // Büyük yazıda dekoratif rozet gizlenir (başlığa yer kalsın).
+            leading: hideRowOrbs(context)
+                ? null
+                : const IconOrb(
+                    icon: Icons.domain_rounded,
+                    size: 40,
+                    shape: IconOrbShape.squircle,
+                  ),
             title: Wrap(
-              spacing: 8,
-              runSpacing: 4,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
                   block.blockName,
                   style: th.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTone.success.tint(p),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '$blockResidentsCount Sakin • ${filteredApartments.length} Daire',
-                    style: th.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppTone.success.ink(p),
-                    ),
-                  ),
+                DialogMetaPill(
+                  '$blockResidentsCount Sakin • ${filteredApartments.length} Daire',
+                  tone: AppTone.success,
+                  icon: Icons.groups_rounded,
                 ),
               ],
             ),
             children: [
               if (filteredApartments.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    'Bu blokta seçilen filtreye uygun daire bulunamadı.',
-                    style: th.bodySmall,
-                  ),
+                const EmptyState.compact(
+                  icon: Icons.filter_alt_off_rounded,
+                  title: 'Bu blokta seçilen filtreye uygun daire bulunamadı.',
+                  tone: AppTone.neutral,
                 )
               else
                 for (final apt in filteredApartments) _buildApartmentAccordion(apt),
@@ -615,13 +577,15 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
 
     return Container(
       key: PageStorageKey('apt_${apt.id}_$_expandAll'),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.symmetric(vertical: AppSpace.xs),
       decoration: BoxDecoration(
-        color: p.surfaceMuted,
-        borderRadius: BorderRadius.circular(12),
+        // Boş daire: soluk uyarı zemini (dolu daire nötr soluk yüzey).
+        color: hasResidents
+            ? p.surfaceMuted
+            : Color.alphaBlend(AppTone.warning.tint(p), p.surface),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(
           color: hasResidents ? p.border : AppTone.warning.hue.withValues(alpha: 0.5),
-          width: 0.9,
         ),
       ),
       child: Theme(
@@ -630,42 +594,32 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
           color: Colors.transparent,
           child: ExpansionTile(
             initiallyExpanded: _expandAll && hasResidents,
-            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            childrenPadding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+            tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: 0),
+            childrenPadding: const EdgeInsets.fromLTRB(AppSpace.xs, 0, AppSpace.xs, AppSpace.sm),
             leading: Icon(
               hasResidents ? Icons.door_front_door_rounded : Icons.door_sliding_outlined,
               size: 20,
               color: hasResidents ? AppTone.primary.ink(p) : AppTone.warning.ink(p),
             ),
             title: Wrap(
-              spacing: 8,
-              runSpacing: 4,
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.xs,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
                   apt.unitLabel,
                   style: th.titleMedium,
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: aptTone.tint(p),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    hasResidents ? '${apt.residents.length} Sakin' : 'Boş Daire',
-                    style: th.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: aptTone.ink(p),
-                    ),
-                  ),
+                StatusChip(
+                  label: hasResidents ? '${apt.residents.length} Sakin' : 'Boş Daire',
+                  tone: aptTone,
                 ),
               ],
             ),
             children: [
               if (!hasResidents)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  padding: EdgeInsets.symmetric(vertical: AppSpace.sm, horizontal: AppSpace.xs),
                   child: InlineNotice(
                     tone: AppTone.warning,
                     icon: Icons.info_outline_rounded,
@@ -694,7 +648,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 13, color: p.textSecondary),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpace.xs),
             Flexible(
               child: Text(
                 text,
@@ -706,7 +660,7 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpace.xs),
             Icon(Icons.copy_rounded, size: 11, color: p.textSecondary),
           ],
         ),
@@ -714,6 +668,9 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
     );
   }
 
+  /// Sakin kartı: [rol/durum ikon rozeti] [ad + rol/durum hapları + iletişim satırları] [menü].
+  /// Rozet tonu anlamlıdır (pasif: nötr, daire admini: uyarı, aile üyesi: mor). Büyük yazıda
+  /// (>= 1,75x) rozet gizlenir.
   Widget _buildResidentCard(
     SiteResidentApartment apt,
     SiteResidentMember resident,
@@ -725,210 +682,199 @@ class _SiteResidentsAccordionDialogState extends State<SiteResidentsAccordionDia
     final roleTone = inactive
         ? AppTone.neutral
         : (resident.isAdmin ? AppTone.warning : AppTone.violet);
+    final large = hideRowOrbs(context);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: p.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: p.border, width: 0.7),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: roleTone.tint(p),
-            child: Icon(
-              inactive
-                  ? Icons.person_off_rounded
-                  : (resident.isAdmin ? Icons.star_rounded : Icons.person_rounded),
-              size: 16,
-              color: roleTone.ink(p),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      resident.fullName,
-                      style: th.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: inactive ? p.textSecondary : p.text,
-                        decoration: inactive ? TextDecoration.lineThrough : null,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: roleTone.tint(p),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        resident.roleLabel,
-                        style: th.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: roleTone.ink(p),
-                        ),
-                      ),
-                    ),
-                    if (!resident.isActive || !resident.accountIsActive)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: AppTone.danger.tint(p),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          resident.accountIsActive ? 'İnaktif' : 'Hesap pasif (sistem yöneticisi)',
-                          style: th.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppTone.danger.ink(p),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                if (resident.phoneNumber != null && resident.phoneNumber!.isNotEmpty)
-                  _buildCopyRow(Icons.phone_rounded, resident.phoneNumber!, 'Telefon', link: true),
-                if (resident.email != null && resident.email!.isNotEmpty)
-                  _buildCopyRow(Icons.email_outlined, resident.email!, 'E-posta', link: false),
-              ],
-            ),
-          ),
-          if (isBusy)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            PopupMenuButton<String>(
-              icon: Icon(
-                Icons.more_vert_rounded,
-                size: 18,
-                color: p.textSecondary,
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              resident.fullName,
+              style: th.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: inactive ? p.textSecondary : p.text,
+                decoration: inactive ? TextDecoration.lineThrough : null,
               ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              onSelected: (action) {
-                if (action == 'toggle_status') {
-                  _toggleMemberStatus(apt, resident);
-                } else if (action == 'set_admin') {
-                  _setPrimaryAdmin(apt, resident);
-                } else if (action == 'delete') {
-                  _deleteMember(apt, resident);
-                } else if (action == 'copy_phone' && resident.phoneNumber != null) {
-                  _copyToClipboard(resident.phoneNumber!, 'Telefon');
-                } else if (action == 'copy_email' && resident.email != null) {
-                  _copyToClipboard(resident.email!, 'E-posta');
-                }
-              },
-              itemBuilder: (ctx) => [
-                if (!resident.accountIsActive)
-                  // Hesap sistem yöneticisi tarafından pasife alınmış: üyelik işlemi giriş ve kapı
-                  // erişimini açmaz, bu yüzden işlem yerine bilgi gösterilir.
-                  PopupMenuItem<String>(
-                    enabled: false,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline_rounded, size: 16),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Hesap sistem yöneticisi tarafından pasife alındı. Giriş ve kapı erişimi hesap aktif edilene kadar kapalıdır.',
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
-                            style: th.bodySmall,
-                          ),
-                        ),
-                      ],
+            ),
+            StatusChip(label: resident.roleLabel, tone: roleTone),
+            if (!resident.isActive || !resident.accountIsActive)
+              // Kısa durum (İnaktif) StatusChip; uzun cümle (hesap pasif) sarabilen hap: tek satırlı
+              // chip dar ekranda cümleyi keserdi.
+              resident.accountIsActive
+                  ? const StatusChip(label: 'İnaktif', tone: AppTone.danger)
+                  : const DialogMetaPill(
+                      'Hesap pasif (sistem yöneticisi)',
+                      tone: AppTone.danger,
+                      icon: Icons.block_rounded,
                     ),
-                  )
-                else
-                  PopupMenuItem<String>(
-                    value: 'toggle_status',
-                    child: Row(
-                      children: [
-                        Icon(
-                          resident.isActive ? Icons.pause_circle_outline_rounded : Icons.check_circle_outline_rounded,
-                          size: 16,
-                          color: resident.isActive ? AppTone.warning.ink(p) : AppTone.success.ink(p),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            resident.isActive ? 'Üyeliği Pasife Al' : 'Üyeliği Aktif Et',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: resident.isActive ? AppTone.warning.ink(p) : AppTone.success.ink(p),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (!resident.isAdmin)
-                  PopupMenuItem(
-                    value: 'set_admin',
-                    child: Row(
-                      children: [
-                        Icon(Icons.star_rounded, size: 16, color: AppTone.warning.ink(p)),
-                        const SizedBox(width: 8),
-                        const Flexible(child: Text('Aile Reisi Yap', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
-                  ),
-                if (resident.phoneNumber != null)
-                  const PopupMenuItem(
-                    value: 'copy_phone',
-                    child: Row(
-                      children: [
-                        Icon(Icons.phone_rounded, size: 16),
-                        SizedBox(width: 8),
-                        Flexible(child: Text('Numarayı Kopyala', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
-                  ),
-                if (resident.email != null)
-                  const PopupMenuItem(
-                    value: 'copy_email',
-                    child: Row(
-                      children: [
-                        Icon(Icons.email_outlined, size: 16),
-                        SizedBox(width: 8),
-                        Flexible(child: Text('E-postayı Kopyala', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
-                  ),
-                PopupMenuItem(
-                  value: 'delete',
+          ],
+        ),
+        const SizedBox(height: AppSpace.xs),
+        if (resident.phoneNumber != null && resident.phoneNumber!.isNotEmpty)
+          _buildCopyRow(Icons.phone_rounded, resident.phoneNumber!, 'Telefon', link: true),
+        if (resident.email != null && resident.email!.isNotEmpty)
+          _buildCopyRow(Icons.email_outlined, resident.email!, 'E-posta', link: false),
+      ],
+    );
+
+    final Widget menu = isBusy
+        ? const SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          )
+        : PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert_rounded,
+              size: 18,
+              color: p.textSecondary,
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+            onSelected: (action) {
+              if (action == 'toggle_status') {
+                _toggleMemberStatus(apt, resident);
+              } else if (action == 'set_admin') {
+                _setPrimaryAdmin(apt, resident);
+              } else if (action == 'delete') {
+                _deleteMember(apt, resident);
+              } else if (action == 'copy_phone' && resident.phoneNumber != null) {
+                _copyToClipboard(resident.phoneNumber!, 'Telefon');
+              } else if (action == 'copy_email' && resident.email != null) {
+                _copyToClipboard(resident.email!, 'E-posta');
+              }
+            },
+            itemBuilder: (ctx) => [
+              if (!resident.accountIsActive)
+                // Hesap sistem yöneticisi tarafından pasife alınmış: üyelik işlemi giriş ve kapı
+                // erişimini açmaz, bu yüzden işlem yerine bilgi gösterilir.
+                PopupMenuItem<String>(
+                  enabled: false,
                   child: Row(
                     children: [
-                      Icon(Icons.delete_forever_rounded, size: 16, color: AppTone.danger.ink(p)),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.info_outline_rounded, size: 16),
+                      const SizedBox(width: AppSpace.sm),
                       Flexible(
                         child: Text(
-                          'Daireden Sil',
+                          'Hesap sistem yöneticisi tarafından pasife alındı. Giriş ve kapı erişimi hesap aktif edilene kadar kapalıdır.',
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: th.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                PopupMenuItem<String>(
+                  value: 'toggle_status',
+                  child: Row(
+                    children: [
+                      Icon(
+                        resident.isActive ? Icons.pause_circle_outline_rounded : Icons.check_circle_outline_rounded,
+                        size: 16,
+                        color: resident.isActive ? AppTone.warning.ink(p) : AppTone.success.ink(p),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Flexible(
+                        child: Text(
+                          resident.isActive ? 'Üyeliği Pasife Al' : 'Üyeliği Aktif Et',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: AppTone.danger.ink(p)),
+                          style: TextStyle(
+                            color: resident.isActive ? AppTone.warning.ink(p) : AppTone.success.ink(p),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              if (!resident.isAdmin)
+                PopupMenuItem(
+                  value: 'set_admin',
+                  child: Row(
+                    children: [
+                      Icon(Icons.star_rounded, size: 16, color: AppTone.warning.ink(p)),
+                      const SizedBox(width: AppSpace.sm),
+                      const Flexible(child: Text('Aile Reisi Yap', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              if (resident.phoneNumber != null)
+                const PopupMenuItem(
+                  value: 'copy_phone',
+                  child: Row(
+                    children: [
+                      Icon(Icons.phone_rounded, size: 16),
+                      SizedBox(width: AppSpace.sm),
+                      Flexible(child: Text('Numarayı Kopyala', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              if (resident.email != null)
+                const PopupMenuItem(
+                  value: 'copy_email',
+                  child: Row(
+                    children: [
+                      Icon(Icons.email_outlined, size: 16),
+                      SizedBox(width: AppSpace.sm),
+                      Flexible(child: Text('E-postayı Kopyala', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_forever_rounded, size: 16, color: AppTone.danger.ink(p)),
+                    const SizedBox(width: AppSpace.sm),
+                    Flexible(
+                      child: Text(
+                        'Daireden Sil',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: AppTone.danger.ink(p)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+      padding: const EdgeInsets.all(AppSpace.sm),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!large) ...[
+            IconOrb(
+              icon: inactive
+                  ? Icons.person_off_rounded
+                  : (resident.isAdmin ? Icons.star_rounded : Icons.person_rounded),
+              tone: roleTone,
+              size: 40,
+              shape: IconOrbShape.squircle,
             ),
+            const SizedBox(width: AppSpace.md),
+          ],
+          Expanded(child: details),
+          menu,
         ],
       ),
     );

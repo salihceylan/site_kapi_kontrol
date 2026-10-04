@@ -55,6 +55,9 @@ import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/role_theme.dart';
 
 import 'package:site_kapi_kontrol/ui/design/page_transitions.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/widgets/resident_door_actions.dart';
+import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -584,6 +587,78 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
 
+
+  /// "Yerel Ağda Aktif" yalnızca cihaz yerelde görünüyorsa VE yerel açma gerçekten mümkünse (kapı
+  /// politikası izin veriyor + sunucudan alınmış geçerli token var).
+  bool get _canTryLocalDoorOpenNow =>
+      _doorControlDoor != null &&
+      _isDeviceLocalReachable &&
+      widget.authService.canTryLocalDoorOpen(_doorControlDoor!);
+
+  /// Sade daire sakini ekranından kaldırılan komutların çekmecedeki karşılıkları ("Panel"in altında).
+  /// Yalnız kapı paneli sakin kartıyla çiziliyorsa ve ilgili yetki/cihaz varsa görünür; hepsi eski
+  /// kart düğmeleriyle AYNI mantığı çalıştırır ([ResidentDoorActions]).
+  List<YanMenuAction> _residentExtraActions(UserSession session) {
+    if (session.role != UserRole.apartmentOwner || _showsIndividualHome(session)) {
+      return const <YanMenuAction>[];
+    }
+    final door = _doorControlDoor;
+    final isOnline =
+        _doorRuntimeStatus?.mqttConnected == true || _canTryLocalDoorOpenNow;
+    final voice = widget.voiceDoorService;
+    // Çekmece kapanır, sonra eylem çalışır (diğer menü öğeleriyle aynı).
+    VoidCallback act(VoidCallback action) => () {
+      Navigator.of(context).pop();
+      action();
+    };
+    return <YanMenuAction>[
+      if (voice != null)
+        YanMenuAction(
+          icon: Icons.mic_rounded,
+          title: 'Sesli Kapı Açma',
+          onTap: act(() => VoiceControlModal.show(context, voiceService: voice)),
+        ),
+      if (ResidentDoorActions.canShowQr(door))
+        YanMenuAction(
+          icon: Icons.qr_code_2_rounded,
+          title: 'Kapıya QR Göster',
+          onTap: act(
+            () => ResidentDoorActions.showQrPass(
+              context,
+              door: door,
+              isOnline: isOnline,
+              authService: widget.authService,
+            ),
+          ),
+        ),
+      if (ResidentDoorActions.canScanScreenQr(door))
+        YanMenuAction(
+          icon: Icons.qr_code_scanner_rounded,
+          title: 'Kapı Ekranından QR Oku',
+          onTap: act(
+            () => ResidentDoorActions.scanScreenQr(
+              context,
+              door: door,
+              isOnline: isOnline,
+              authService: widget.authService,
+            ),
+          ),
+        ),
+      if (ResidentDoorActions.canCreateGuestPass(door))
+        YanMenuAction(
+          icon: Icons.share_rounded,
+          title: 'Kurye / Misafir Geçiş Linki Oluştur',
+          onTap: act(
+            () => CreateGuestPassDialog.show(
+              context,
+              door: door!,
+              authService: widget.authService,
+              showMessage: _showMessage,
+            ),
+          ),
+        ),
+    ];
+  }
 
   void _selectMenu(SirketMenuItem item) {
 
@@ -3695,6 +3770,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             bottomRight: Radius.circular(20),
           ),
         ),
+        // Premium başlık sayfası: rol tonunun sol-üstten yumuşak yıkaması (statik, tek gradyan).
+        flexibleSpace: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  session.role.tone.hue.withValues(alpha: isDark ? 0.20 : 0.13),
+                  session.role.tone.hue.withValues(alpha: 0),
+                ],
+                stops: const [0.0, 0.7],
+              ),
+            ),
+          ),
+        ),
         actions: [
           if (_canToggleDualMode)
             _buildModeToggle(
@@ -3736,33 +3831,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Text(
-                  _titleForMenu(_selectedMenu),
-                  style: TextStyle(
-                    fontSize: 18,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // Avatar rozeti (rol tonu): 34 dp, iki satırlık metin bloğundan alçaktır, başlık
+                // yüksekliği değişmez. Dekoratif; kimlik bilgisi yanındaki metindedir.
+                IconOrb(
+                  icon: Icons.person_rounded,
+                  tone: session.role.tone,
+                  size: 34,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.2,
-                    fontWeight: FontWeight.w600,
-                    color: session.role.tone.ink(palette),
+                const SizedBox(width: AppSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _titleForMenu(_selectedMenu),
+                        style: TextStyle(
+                          fontSize: 18,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? const Color(0xFFF8FAFC) : AppColors.textDark,
+                          letterSpacing: -0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${session.fullName} • ${_isResidentMode ? "Sakin Modu" : session.role.label}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.2,
+                          fontWeight: FontWeight.w600,
+                          color: session.role.tone.ink(palette),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -3770,6 +3879,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
       drawer: YanMenu(
+        extraActions: _residentExtraActions(session),
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,
@@ -3891,9 +4001,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           // "Yerel Ağda Aktif" yalnızca cihaz yerelde görünüyorsa VE yerel açma gerçekten
           // mümkünse (kapı politikası izin veriyor + sunucudan alınmış geçerli token var).
-          canTryLocalDoorOpen: _doorControlDoor != null &&
-              _isDeviceLocalReachable &&
-              widget.authService.canTryLocalDoorOpen(_doorControlDoor!),
+          canTryLocalDoorOpen: _canTryLocalDoorOpenNow,
 
           isPhoneOnWifi: _isPhoneOnWifi,
 

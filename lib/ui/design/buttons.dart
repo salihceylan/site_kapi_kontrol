@@ -6,6 +6,7 @@
 // yerine geçer.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -84,6 +85,10 @@ enum AppButtonVariant {
 
 /// Özel gradyan düğmelerin yerine geçen birincil/ikincil eylem düğmesi.
 ///
+/// **Premium görünüm**: dolu ([AppButtonVariant.filled]) düğme cilalıdır ([Gloss]: üst ışık, alt
+/// gölge, kenar ışığı); başarı anında ([success] false -> true) üzerinden tek seferlik bir ışıltı
+/// geçer (hareket azaltmada yok). İkincil görünümler (tonal/outline) bilerek düzdür: hiyerarşi.
+///
 /// Durumlar: normal | basılı (ölçek 0,97) | devre dışı ([onPressed] null) | [loading] (etiket
 /// yerine spinner, tıklama kapalı; etiket ağaçta YOKTUR) | [success] (gradyan success tonuna 200 ms
 /// morph + onay işareti; tıklama kapalı; ebeveyn ~1,2 sn sonra false yapar).
@@ -99,7 +104,7 @@ enum AppButtonVariant {
 ///
 /// Erişilebilirlik: yüklenirken etiket ağaçtan kalkar ama ekran okuyucu "etiket, Yükleniyor"
 /// (canlı bölge) okur; başarılı/yüklenir iken düğme etkin değildir.
-class PrimaryActionButton extends StatelessWidget {
+class PrimaryActionButton extends StatefulWidget {
   const PrimaryActionButton({
     super.key,
     required this.label,
@@ -133,10 +138,49 @@ class PrimaryActionButton extends StatelessWidget {
   /// true: kullanılabilir tüm genişlik; false: içerik genişliği (en az 120 dp).
   final bool expand;
 
+  /// Başarı ışıltısının süresi.
+  static const Duration sweepDuration = Duration(milliseconds: 650);
+
+  @override
+  State<PrimaryActionButton> createState() => _PrimaryActionButtonState();
+}
+
+class _PrimaryActionButtonState extends State<PrimaryActionButton>
+    with SingleTickerProviderStateMixin {
+  /// Başarı ışıltısı: yalnız [PrimaryActionButton.success] true olunca bir kez oynar.
+  late final AnimationController _sweep = AnimationController(
+    vsync: this,
+    duration: PrimaryActionButton.sweepDuration,
+  );
+
+  @override
+  void didUpdateWidget(PrimaryActionButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.success &&
+        widget.success &&
+        widget.variant == AppButtonVariant.filled &&
+        !AppMotion.reduced(context)) {
+      _sweep.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _sweep.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final label = widget.label;
+    final onPressed = widget.onPressed;
+    final icon = widget.icon;
+    final variant = widget.variant;
+    final loading = widget.loading;
+    final success = widget.success;
+    final expand = widget.expand;
     final p = context.palette;
-    final t = success ? AppTone.success : tone;
+    final t = success ? AppTone.success : widget.tone;
     final radius = BorderRadius.circular(AppRadius.md);
     final canTap = onPressed != null && !loading && !success;
     final live = canTap || loading || success;
@@ -213,31 +257,45 @@ class PrimaryActionButton extends StatelessWidget {
                   ]
                 : null,
           ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: radius,
-              // Gradyan üstünde varsayılan gri dalga neredeyse görünmez: dolguda beyaz, diğerlerinde ton.
-              splashColor: (filled ? Colors.white : t.hue).withValues(
-                alpha: filled ? 0.24 : 0.18,
-              ),
-              highlightColor: (filled ? Colors.white : t.hue).withValues(
-                alpha: filled ? 0.10 : 0.08,
-              ),
-              onTap: canTap
-                  ? () {
-                      HapticFeedback.selectionClick();
-                      onPressed!();
-                    }
-                  : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpace.lg,
-                  vertical: AppSpace.md,
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              // Cila yalnız canlı dolu düğmede: zeminin üstünde, dalga ve içeriğin altında.
+              if (filled && live)
+                Positioned.fill(
+                  child: Gloss(
+                    radius: AppRadius.md,
+                    strength: 0.85,
+                    sweep: _sweep,
+                  ),
                 ),
-                child: Center(widthFactor: 1, child: content),
+              Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  borderRadius: radius,
+                  // Gradyan üstünde varsayılan gri dalga neredeyse görünmez: dolguda beyaz, diğerlerinde ton.
+                  splashColor: (filled ? Colors.white : t.hue).withValues(
+                    alpha: filled ? 0.24 : 0.18,
+                  ),
+                  highlightColor: (filled ? Colors.white : t.hue).withValues(
+                    alpha: filled ? 0.10 : 0.08,
+                  ),
+                  onTap: canTap
+                      ? () {
+                          HapticFeedback.selectionClick();
+                          onPressed();
+                        }
+                      : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.lg,
+                      vertical: AppSpace.md,
+                    ),
+                    child: Center(widthFactor: 1, child: content),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

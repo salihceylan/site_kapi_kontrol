@@ -5,6 +5,14 @@ import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
+/// Sitenin ikon rozeti tonu (ton anlam taşır): silme onayı bekliyorsa hata, kurulum onayı bekliyorsa
+/// uyarı, aksi hâlde birincil. Yanındaki durum rozetinin (`StatusChip`) tonuyla aynı dildir.
+AppTone siteStatusTone(SiteRecord site) {
+  if (site.isDeletionPending) return AppTone.danger;
+  if (site.approvalStatus == 'pending') return AppTone.warning;
+  return AppTone.primary;
+}
+
 class SiteCard extends StatefulWidget {
   const SiteCard({
     super.key,
@@ -79,7 +87,12 @@ class _SiteCardState extends State<SiteCard> {
           Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
           Row(
             children: [
-              const IconTile(icon: Icons.apartment_rounded, gap: AppSpace.md),
+              IconTile(
+                icon: Icons.apartment_rounded,
+                tone: siteStatusTone(site),
+                size: 48,
+                gap: AppSpace.md,
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,7 +156,9 @@ class _SiteCardState extends State<SiteCard> {
     final decisions = <Widget>[
       if (widget.onApprove != null)
         ElevatedButton.icon(
-          onPressed: widget.approvalBusy ? null : widget.onApprove,
+          onPressed: widget.approvalBusy
+              ? null
+              : withLightHaptic(widget.onApprove),
           style: filledToneStyle(context, tone: AppTone.success),
           icon: const Icon(Icons.check_circle_outline, size: 16),
           label: const Text('Onayla'),
@@ -276,7 +291,9 @@ class _SiteCardState extends State<SiteCard> {
     final actions = <Widget>[
       if (isUserApprovalRequired && widget.onApproveDeletion != null)
         ElevatedButton.icon(
-          onPressed: widget.deleteBusy ? null : widget.onApproveDeletion,
+          onPressed: widget.deleteBusy
+              ? null
+              : withLightHaptic(widget.onApproveDeletion),
           style: filledToneStyle(context, tone: AppTone.danger),
           icon: widget.deleteBusy
               ? const SizedBox(

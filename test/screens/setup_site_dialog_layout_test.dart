@@ -10,6 +10,9 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 
 import 'dialog_layout_harness.dart';
@@ -147,4 +150,60 @@ void main() {
     expect(find.byType(Dialog), findsNothing);
     expect(t.takeException(), isNull);
   });
+  // --- Görsel sözleşme (cilalı safir): R8 açılır liste, ikon rozetleri, kademeli giriş ---
+
+  testWidgets(
+    'SetupSiteDialog: il/ilçe listeleri R8 (yuvarlak köşe, yüzey rengi, 320 dp menü, yuvarlak ok)',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(),
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      final dropdowns = t
+          .widgetList<DropdownButton<String>>(find.byType(DropdownButton<String>))
+          .toList();
+      expect(dropdowns, hasLength(2));
+      for (final d in dropdowns) {
+        expect(d.borderRadius, BorderRadius.circular(AppRadius.md));
+        expect(d.dropdownColor, AppPalette.light.surface);
+        expect(d.menuMaxHeight, 320);
+        expect((d.icon! as Icon).icon, Icons.keyboard_arrow_down_rounded);
+      }
+    },
+  );
+
+  testWidgets(
+    'SetupSiteDialog: cihaz paneli ve kapı satırı ikon rozetli; blok/kapı satırları kademeli girişle eklenir',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(),
+        deviceUid: 'ESP32_C3_ABCDEF1234567890',
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Başlık + cihaz paneli + kapı satırı rozetleri; atama durumu metni korunur.
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(3));
+      expect(find.text("Kapı 1'e Atanacak"), findsOneWidget);
+
+      // Başlangıçta 1 blok + 1 kapı satırı; eklenince satırlar da kademeli giriş sarmalayıcısındadır.
+      expect(find.byType(StaggeredEntry), findsNWidgets(2));
+      await scrollTo(t, find.text('Blok Ekle'));
+      await t.tap(find.text('Blok Ekle'));
+      await settleFor(t);
+      await scrollTo(t, find.text('Kapı Ekle'));
+      await t.tap(find.text('Kapı Ekle'));
+      await settleFor(t);
+      expect(find.byType(StaggeredEntry), findsNWidgets(4));
+      expect(t.takeException(), isNull);
+    },
+  );
 }

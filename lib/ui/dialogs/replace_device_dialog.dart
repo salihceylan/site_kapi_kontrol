@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
 class ReplaceDeviceDialog extends StatefulWidget {
@@ -119,6 +123,7 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
       final message = res['message'] as String? ??
           'Cihaz başarıyla değiştirildi. Kapı yetkileri ve ayarları aynen korundu.';
 
+      HapticFeedback.lightImpact();
       AppSnack.show(context, message, kind: AppSnackKind.success);
 
       Navigator.of(context).pop(true);
@@ -135,7 +140,12 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
   Widget build(BuildContext context) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
-    final oldUid = widget.door.assignedDeviceUid ?? 'Tanımsız';
+    final door = widget.door;
+    final oldUid = door.assignedDeviceUid ?? 'Tanımsız';
+    // Eski cihazın donanım hedefi rozeti (yeni cihaz seçerken uyumluluk ipucu).
+    final hardwareTone = door.isHardwareWroom
+        ? AppTone.violet
+        : (door.isHardwareC3 ? AppTone.primary : AppTone.neutral);
 
     return AppDialog(
       title: 'Arızalı Cihazı Değiştir',
@@ -169,57 +179,42 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Kapı & Mevcut Cihaz Bilgi Kartı
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: p.surfaceMuted,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: p.border),
-              ),
+            AppCard(
+              padding: const EdgeInsets.all(AppSpace.md),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.meeting_room_outlined, size: 16, color: p.textSecondary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Kapı: ${widget.door.doorName}',
-                          style: th.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: p.text,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+                  DialogInfoRow(
+                    icon: Icons.meeting_room_rounded,
+                    tone: AppTone.neutral,
+                    title: 'Kapı: ${door.doorName}',
+                    titleStyle: th.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: p.text,
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.phonelink_erase_rounded, size: 16, color: AppTone.danger.ink(p)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Eski (Arızalı) Cihaz: $oldUid',
-                          style: th.bodyMedium?.copyWith(
-                            color: AppTone.danger.ink(p),
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: AppSpace.md),
+                  DialogInfoRow(
+                    icon: Icons.phonelink_erase_rounded,
+                    tone: AppTone.danger,
+                    title: 'Eski (Arızalı) Cihaz: $oldUid',
+                    titleStyle: th.bodyMedium?.copyWith(
+                      color: AppTone.danger.ink(p),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    chips: [
+                      if (door.hasDevice)
+                        StatusChip(
+                          label: door.hardwareBadgeText,
+                          tone: hardwareTone,
+                          icon: Icons.memory_rounded,
                         ),
-                      ),
                     ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
 
             // Güvence / Bilgilendirme Rozeti
             const InlineNotice(
@@ -228,23 +223,31 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
               message:
                   'Kapı numarası, daire izinleri ve sakinlerin tüm yetkileri aynen korunur. Sadece fiziksel donanım yenilenir.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
 
-            // Kamera ile QR Tara Butonu
-            ElevatedButton.icon(
+            // Kamera ile QR Tara Butonu: ikincil eylem (birincil dolu düğme altta "Cihazı Değiştir").
+            OutlinedButton.icon(
               onPressed: _isLoading ? null : _scanNewDeviceQr,
               icon: const Icon(Icons.qr_code_scanner_rounded),
               label: const Text('Yeni Cihazın Kutu QR Kodunu Tara'),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpace.lg),
 
             // Varsa Boştaki Cihazlardan Seç
-            if (_loadingDevices)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: LinearProgressIndicator(),
-              )
-            else if (_assignableDevices.isNotEmpty) ...[
+            if (_loadingDevices) ...[
+              const ShimmerScope(
+                child: Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
+                  children: [
+                    SkeletonBox(width: 120, height: 36, radius: AppRadius.md),
+                    SkeletonBox(width: 120, height: 36, radius: AppRadius.md),
+                    SkeletonBox(width: 120, height: 36, radius: AppRadius.md),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpace.lg),
+            ] else if (_assignableDevices.isNotEmpty) ...[
               Text(
                 'Veya Hesabınızdaki Boş Cihazlardan Seçin:',
                 style: th.bodySmall?.copyWith(
@@ -252,15 +255,22 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
                   color: p.textSecondary,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpace.sm),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.sm,
                 children: _assignableDevices.take(6).map((dev) {
                   final uid = (dev['device_uid'] ?? '').toString();
                   final isSelected = _inputController.text.trim().toUpperCase() == uid.toUpperCase();
                   final accent = AppTone.primary.ink(p);
                   return ChoiceChip(
+                    // Seçili durum renge ek olarak onay ikonuyla da anlatılır.
+                    avatar: Icon(
+                      isSelected ? Icons.check_circle_rounded : Icons.memory_rounded,
+                      size: 16,
+                      color: isSelected ? accent : p.textSecondary,
+                    ),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: AppSpace.xs),
                     label: Text(uid),
                     selected: isSelected,
                     showCheckmark: false,
@@ -284,7 +294,7 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpace.lg),
             ],
 
             // Manuel UID / Seri No Girişi
@@ -300,7 +310,7 @@ class _ReplaceDeviceDialogState extends State<ReplaceDeviceDialog> {
 
             // Hata Mesajı
             if (_errorMessage != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               InlineNotice(message: _errorMessage!),
             ],
           ],

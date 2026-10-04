@@ -115,7 +115,7 @@ void main() {
 
   group('rol eşlemesi ve düzen', () {
     testWidgets(
-      'daire sakini: saat + sakin kumandası; yönetici/süper: saat + yönetim kartı',
+      'daire sakini: SADE kumanda (saat yok); yönetici/süper: saat + yönetim kartı',
       (t) async {
         await pumpAt(
           t,
@@ -123,8 +123,15 @@ void main() {
           width: 360,
           scale: 1.0,
         );
-        expect(find.byType(DigitalClockWidget), findsOneWidget);
-        expect(find.byType(ResidentDoorRemoteCard), findsOneWidget);
+        expect(
+          find.byType(DigitalClockWidget),
+          findsNothing,
+          reason: 'sade sakin ekranında saat yok',
+        );
+        final card = t.widget<ResidentDoorRemoteCard>(
+          find.byType(ResidentDoorRemoteCard),
+        );
+        expect(card.minimal, isTrue);
         expect(find.byType(AdminDoorStatusCard), findsNothing);
 
         for (final role in <UserRole>[
@@ -144,21 +151,22 @@ void main() {
     );
 
     testWidgets(
-      'saat ile kapı kartı arası 16 dp (AppSpace.lg); ikisi de tam genişlik',
+      'saat ile kapı kartı arası 16 dp (yönetici/süper); sade sakin kartı tam genişlik',
       (t) async {
-        for (final role in <UserRole>[
-          UserRole.apartmentOwner,
-          UserRole.superUser,
-        ]) {
+        await pumpAt(
+          t,
+          _dashboard(role: UserRole.apartmentOwner),
+          width: 360,
+          scale: 1.0,
+        );
+        expect(
+          t.getRect(find.byType(ResidentDoorRemoteCard)).width,
+          closeTo(360 - 32, 0.5),
+        );
+        for (final role in <UserRole>[UserRole.superUser, UserRole.siteManager]) {
           await pumpAt(t, _dashboard(role: role), width: 360, scale: 1.0);
           final clock = t.getRect(find.byType(DigitalClockWidget));
-          final card = t.getRect(
-            find.byType(
-              role == UserRole.apartmentOwner
-                  ? ResidentDoorRemoteCard
-                  : AdminDoorStatusCard,
-            ),
-          );
+          final card = t.getRect(find.byType(AdminDoorStatusCard));
           expect(card.top - clock.bottom, AppSpace.lg, reason: role.name);
           expect(clock.width, closeTo(360 - 32, 0.5));
           expect(card.width, closeTo(360 - 32, 0.5));
@@ -192,8 +200,8 @@ void main() {
 
     for (final c in <({UserRole role, String ready, String done})>[
       (role: UserRole.apartmentOwner, ready: 'KAPIYI AÇ', done: 'GÖNDERİLDİ'),
-      (role: UserRole.superUser, ready: 'Kapı Aç', done: 'Gönderildi'),
-      (role: UserRole.siteManager, ready: 'Kapı Aç', done: 'Gönderildi'),
+      (role: UserRole.superUser, ready: 'KAPI AÇ', done: 'GÖNDERİLDİ'),
+      (role: UserRole.siteManager, ready: 'KAPI AÇ', done: 'GÖNDERİLDİ'),
     ]) {
       testWidgets(
         '${c.role.name}: sayaç artınca "${c.done}", 1,4 sn sonra "${c.ready}"',
@@ -253,7 +261,7 @@ void main() {
           width: 360,
           scale: 1.0,
         );
-        await t.tap(find.text('Kapı Aç'));
+        await t.tap(find.text('KAPI AÇ'));
         expect(opened, 2);
       },
     );

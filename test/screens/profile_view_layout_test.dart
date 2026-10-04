@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 
@@ -50,8 +53,9 @@ class _Form {
   final TextEditingController current;
   int saves = 0;
 
-  Widget view({bool isSaving = false}) => ProfileView(
-    session: _session,
+  Widget view({bool isSaving = false, UserSession session = _session}) =>
+      ProfileView(
+    session: session,
     formKey: key,
     fullNameController: fullName,
     emailController: email,
@@ -208,6 +212,178 @@ void main() {
       expect(find.text('Veli Can'), findsOneWidget);
       expect(find.text('Kullanıcı Adı'), findsNothing);
       expect(find.text('Telefon'), findsNothing);
+    });
+  });
+
+  group('görsel dil (hero kart, cilalı avatar, rol rozeti)', () {
+    testWidgets(
+      'hero: seviye 2 kart, rol tonunda 64 dp glow avatar, ad, e-posta ve rol rozeti; form ayrı kardeş kart',
+      (t) async {
+        final form = _Form();
+        await pumpAt(t, form.view(), width: 360, scale: 1.0, height: 1800);
+
+        // İki kardeş kart: hero (seviye 2) ve form (seviye 1); kart-içinde-kart yok.
+        final cards = t.widgetList<AppCard>(find.byType(AppCard)).toList();
+        expect(cards.map((c) => c.level).toList(), <int>[2, 1]);
+        expect(
+          find.descendant(
+            of: find.byType(AppCard),
+            matching: find.byType(AppCard),
+          ),
+          findsNothing,
+        );
+
+        final orb = t.widget<IconOrb>(find.byType(IconOrb));
+        expect(orb.size, 64);
+        expect(orb.glow, isTrue);
+        expect(orb.shape, IconOrbShape.circle);
+        expect(orb.tone, AppTone.violet); // bireysel kullanıcı
+        expect(orb.icon, Icons.person_rounded);
+
+        final hero = find.byType(AppCard).first;
+        expect(
+          find.descendant(of: hero, matching: find.text('Elif Şahin')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: hero,
+            matching: find.text('elif.sahin@e2e.local'),
+          ),
+          findsOneWidget,
+        );
+        final chip = t.widget<StatusChip>(
+          find.widgetWithText(StatusChip, UserRole.individual.label),
+        );
+        expect(chip.tone, AppTone.violet);
+        // Form kartı aynı kaldı: başlık + kaydet düğmesi ikinci kartta.
+        final formCard = find.byType(AppCard).last;
+        expect(
+          find.descendant(
+            of: formCard,
+            matching: find.text('Kendi Bilgilerini Düzenle'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: formCard, matching: find.text('Profili Kaydet')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('avatar rengi ve simgesi rolü anlatır (süper mavi, yönetici yeşil, sakin/bireysel mor)', (
+      t,
+    ) async {
+      for (final (role, tone, icon) in const <(UserRole, AppTone, IconData)>[
+        (UserRole.superUser, AppTone.primary, Icons.admin_panel_settings_rounded),
+        (UserRole.siteManager, AppTone.success, Icons.apartment_rounded),
+        (UserRole.apartmentOwner, AppTone.violet, Icons.home_rounded),
+        (UserRole.individual, AppTone.violet, Icons.person_rounded),
+      ]) {
+        final form = _Form();
+        await pumpAt(
+          t,
+          form.view(
+            session: UserSession(
+              token: 'tok',
+              id: 7,
+              fullName: 'Elif Şahin',
+              email: 'elif.sahin@e2e.local',
+              loginName: 'elif',
+              role: role,
+              isActive: true,
+            ),
+          ),
+          width: 360,
+          scale: 1.0,
+          height: 1800,
+        );
+        final orb = t.widget<IconOrb>(find.byType(IconOrb));
+        expect(orb.tone, tone, reason: '$role');
+        expect(orb.icon, icon, reason: '$role');
+        expect(
+          t.widget<StatusChip>(find.widgetWithText(StatusChip, role.label)).tone,
+          tone,
+          reason: '$role rozeti',
+        );
+      }
+    });
+
+    g4LayoutMatrix('hero büyük yazıda: avatar gizli, rol rozeti kırpılmayan düz metin, ad/e-posta tam', (
+      t,
+      width,
+      height,
+      scale,
+      dark,
+    ) async {
+      final form = _Form(name: 'Elif Şahin Uzun Soyadlı Bir Kullanıcı Adı');
+      await pumpAt(
+        t,
+        form.view(
+          session: const UserSession(
+            token: 'tok',
+            id: 1,
+            fullName: 'Elif Şahin Uzun Soyadlı Bir Kullanıcı Adı',
+            email: 'elif.sahin.cok.uzun.bir.eposta.adresi@e2e-ornek.local',
+            loginName: 'elif',
+            role: UserRole.individual,
+            isActive: true,
+          ),
+        ),
+        width: width,
+        height: height,
+        scale: scale,
+        dark: dark,
+      );
+      // 360 x 1,5: avatar görünür, rozet düz metin (> 1,3x); 320 x 2,0: avatar da gizli.
+      expect(find.byType(StatusChip), findsNothing);
+      expect(find.byType(IconOrb), scale >= 1.75 ? findsNothing : findsOneWidget);
+      expect(find.text(UserRole.individual.label), findsOneWidget);
+      final p = dark ? AppPalette.dark : AppPalette.light;
+      final role = t.widget<Text>(find.text(UserRole.individual.label));
+      expect(role.style!.color, AppTone.violet.ink(p));
+    });
+  });
+
+  group('ResidentProfileView görsel dil', () {
+    testWidgets('seviye 2 kart, 56 dp glow rozet ve "Hesap Türü" rol rozeti (metin tek)', (
+      t,
+    ) async {
+      await pumpAt(
+        t,
+        const ResidentProfileView(session: _resident),
+        width: 360,
+        scale: 1.0,
+        height: 900,
+      );
+      expect(t.widget<AppCard>(find.byType(AppCard)).level, 2);
+      final orb = t.widget<IconOrb>(find.byType(IconOrb));
+      expect(orb.size, 56);
+      expect(orb.glow, isTrue);
+      expect(orb.tone, AppTone.violet);
+      expect(orb.icon, Icons.home_rounded);
+      final chip = t.widget<StatusChip>(find.byType(StatusChip));
+      expect(chip.label, UserRole.apartmentOwner.label);
+      expect(chip.tone, AppTone.violet);
+      // Rozetin metni ekranda tek kez geçer (Hesap Türü satırı).
+      expect(find.text(UserRole.apartmentOwner.label), findsOneWidget);
+    });
+
+    testWidgets('büyük yazıda (2,0x) rozet gizli, "Hesap Türü" diğer satırlar gibi düz metin', (
+      t,
+    ) async {
+      await pumpAt(
+        t,
+        const ResidentProfileView(session: _resident),
+        width: 320,
+        scale: 2.0,
+        height: 1200,
+      );
+      expect(find.byType(IconOrb), findsNothing);
+      expect(find.byType(StatusChip), findsNothing);
+      expect(find.text(UserRole.apartmentOwner.label), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
   });
 

@@ -63,12 +63,12 @@ class _Old {
             : (!canRemote ? Icons.block_rounded : Icons.lock_outline_rounded));
 
   String get label => isQrOnly
-      ? (isOnline ? 'QR KOD İLE AÇ' : 'ÇEVRİMDİŞI')
+      ? (isOnline ? 'QR KOD İLE AÇ' : 'ÇEVRİMDIŞI')
       : (commandEnabled
             ? (isLocalOnline ? 'YEREL AĞDAN AÇ' : 'KAPIYI AÇ')
             : (!canRemote
                   ? 'UZAKTAN KAPALI'
-                  : (isDeviceAssigned ? 'ÇEVRİMDİŞI' : 'KAPALI')));
+                  : (isDeviceAssigned ? 'ÇEVRİMDIŞI' : 'KAPALI')));
 
   String get statusText {
     if (!isDeviceAssigned) {
@@ -276,7 +276,7 @@ void main() {
       () {
         final s = _state();
         expect(s.buttonState, DoorOpenState.offline);
-        expect(s.buttonLabel, 'ÇEVRİMDİŞI');
+        expect(s.buttonLabel, 'ÇEVRİMDIŞI');
         expect(s.tap, ResidentDoorTap.offlineWarning);
         expect(s.statusText, '🔴 Cihaz Çevrimdışı');
         expect(s.statusTone, AppTone.danger);
@@ -321,10 +321,10 @@ void main() {
       },
     );
 
-    test('yalnız karekod + çevrimdışı: ÇEVRİMDİŞI, uyarı gösterir', () {
+    test('yalnız karekod + çevrimdışı: ÇEVRİMDIŞI, uyarı gösterir', () {
       final s = _state(canRemote: false, canQr: true);
       expect(s.buttonState, DoorOpenState.offline);
-      expect(s.buttonLabel, 'ÇEVRİMDİŞI');
+      expect(s.buttonLabel, 'ÇEVRİMDIŞI');
       expect(s.tap, ResidentDoorTap.offlineWarning);
     });
 
@@ -405,7 +405,7 @@ void main() {
           isLoadingStatus: false,
         );
         expect(off.isCloudOnline, isFalse);
-        expect(off.buttonLabel, 'ÇEVRİMDİŞI');
+        expect(off.buttonLabel, 'ÇEVRİMDIŞI');
       },
     );
   });

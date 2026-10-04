@@ -2,11 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_connectivity_logs_accordion.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+
+/// OTA durum metni ([DeviceRecord.displayOtaStatus]) -> ton: Güncel = başarı, İndiriliyor = bilgi,
+/// Beklemede = uyarı, Hata = hata; bilinmeyen/boş durum nötr (ton yok).
+AppTone? otaStatusTone(String displayStatus) => switch (displayStatus) {
+  'Güncel' => AppTone.success,
+  'İndiriliyor' => AppTone.info,
+  'Beklemede' => AppTone.warning,
+  'Hata' => AppTone.danger,
+  _ => null,
+};
+
+/// Cihaz durum rozeti: normalde [StatusChip]; büyük yazıda (>= 1,75x) etiket tek satır + elips
+/// olduğundan kırpılırdı ("KAPI ATANMA…"), bu yüzden aynı tonda sarmalanan düz metin gösterilir
+/// (liste ekranındaki grup başlığıyla aynı kural). Metin her iki durumda da aynıdır.
+class _DeviceBadge extends StatelessWidget {
+  const _DeviceBadge({
+    required this.label,
+    required this.tone,
+    this.icon,
+    this.pulse = false,
+  });
+
+  final String label;
+  final AppTone tone;
+  final IconData? icon;
+  final bool pulse;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isLargeText(context)) {
+      return StatusChip(label: label, tone: tone, icon: icon, pulse: pulse);
+    }
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: tone.ink(context.palette),
+      ),
+    );
+  }
+}
 
 class CompanyDeviceCard extends StatefulWidget {
   const CompanyDeviceCard({
@@ -54,9 +96,19 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
         ? 'Bilinmiyor'
         : (isOnline ? 'Online' : 'Offline');
     final hardware = device.hardwareTarget;
+    // Süper kullanıcıya listede yalnız dikkat gerektiren OTA durumu (indiriliyor/beklemede/hata)
+    // rozet olur; "Güncel" ve bilinmeyen durum ayrıntıda kalır.
+    final otaStatus = device.displayOtaStatus;
+    final otaTone = otaStatusTone(otaStatus);
+    final AppTone? otaChipTone =
+        widget.isSuperUser && otaTone != null && otaTone != AppTone.success
+        ? otaTone
+        : null;
 
     // Tek yüzey: kart AppCard'dır; kapısız cihaz uyarı tonlu. Durum rozetleri UID'nin altında akar
-    // (sağ sütunda sıkışmaz); çevrimiçi rozet nabız atar ve durur.
+    // (sağ sütunda sıkışmaz); çevrimiçi rozet nabız atar ve durur. Soldaki cilalı rozet kapıya
+    // atanmış (birincil) / atama bekleyen (uyarı) cihazı ayırır; üst hizalıdır (rozetler alta sarınca
+    // ortada yüzmez).
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: AppCard(
@@ -68,14 +120,18 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
           children: [
             Semantics(expanded: _expanded), // Açık/kapalı durumu ekran okuyucuya bildirir (karta birleşir).
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconTile(
-                  icon: !isAssigned
-                      ? Icons.door_sliding_outlined
-                      : Icons.memory_rounded,
-                  tone: !isAssigned ? AppTone.warning : AppTone.primary,
-                  gap: AppSpace.md,
-                ),
+                if (!isLargeText(context)) ...[
+                  IconOrb(
+                    icon: !isAssigned
+                        ? Icons.door_sliding_outlined
+                        : Icons.memory_rounded,
+                    tone: !isAssigned ? AppTone.warning : AppTone.primary,
+                    size: 40,
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,7 +143,7 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                         spacing: AppSpace.sm,
                         runSpacing: AppSpace.xs,
                         children: [
-                          StatusChip(
+                          _DeviceBadge(
                             label: onlineText,
                             tone: device.mqttConnected == null
                                 ? AppTone.neutral
@@ -95,22 +151,30 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                             pulse: isOnline,
                           ),
                           if (hardware != null && hardware.isNotEmpty)
-                            StatusChip(
+                            _DeviceBadge(
                               label: hardware.toUpperCase(),
                               tone: hardware == 'esp32-wroom'
                                   ? AppTone.violet
                                   : AppTone.primary,
                             ),
                           if (!isAssigned)
-                            const StatusChip(
+                            const _DeviceBadge(
                               label: 'KAPI ATANMAMIŞ',
                               tone: AppTone.warning,
                             ),
                           if (device.isDefective)
-                            const StatusChip(
+                            const _DeviceBadge(
                               label: 'ARIZALI',
                               tone: AppTone.danger,
                               icon: Icons.warning_amber_rounded,
+                            ),
+                          if (otaChipTone != null)
+                            _DeviceBadge(
+                              label: 'OTA: $otaStatus',
+                              tone: otaChipTone,
+                              icon: otaChipTone == AppTone.danger
+                                  ? Icons.error_outline_rounded
+                                  : Icons.system_update_alt_rounded,
                             ),
                         ],
                       ),
@@ -179,7 +243,12 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                 'Arıza Nedeni: ${device.defectiveReason ?? "Belirtilmedi"}',
               ),
             InfoChip('MQTT: ${device.mqttConfigured ? "Hazır" : "Eksik"}'),
-            InfoChip('Firmware: ${device.firmwareVersion ?? "-"}'),
+            // Sürüm ve OTA durumu tonlu: bilinen sürüm birincil, OTA durumu anlamına göre (güncel =
+            // başarı, indiriliyor = bilgi, beklemede = uyarı, hata = hata) gözden hemen okunur.
+            InfoChip(
+              'Firmware: ${device.firmwareVersion ?? "-"}',
+              tone: device.firmwareVersion == null ? null : AppTone.primary,
+            ),
             InfoChip('Model: ${device.hardwareTarget?.toUpperCase() ?? "Bilinmiyor"}'),
             if (device.hasHardwareMismatch)
               InfoChip(
@@ -187,7 +256,10 @@ class _CompanyDeviceCardState extends State<CompanyDeviceCard> {
                 tone: AppTone.warning,
               ),
             if (widget.isSuperUser)
-              InfoChip('OTA Durumu: ${device.displayOtaStatus}'),
+              InfoChip(
+                'OTA Durumu: ${device.displayOtaStatus}',
+                tone: otaStatusTone(device.displayOtaStatus),
+              ),
             InfoChip('Wi-Fi Gücü: $signalText'),
             InfoChip('Yerel IP: ${device.localIp ?? "-"}'),
             InfoChip('Genel IP: ${device.publicIp ?? "-"}'),

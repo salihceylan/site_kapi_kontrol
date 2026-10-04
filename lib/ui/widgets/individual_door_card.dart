@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/door_open_button.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -183,20 +184,20 @@ class IndividualDoorCardModel {
 
   /// [DoorOpenButton] etiketi (mevcut metinler).
   String get openLabel =>
-      openKind == IndividualDoorOpenKind.main ? 'Kapıyı Aç' : 'Uzaktan Aç';
+      openKind == IndividualDoorOpenKind.main ? 'KAPIYI AÇ' : 'UZAKTAN AÇ';
 
   /// [DoorOpenButton] açılıyor etiketi (mevcut metinler).
-  String get openingLabel => openKind == IndividualDoorOpenKind.main
-      ? 'Kapı Açılıyor...'
-      : 'Açılıyor...';
+  String get openingLabel => 'AÇILIYOR';
 }
 
 /// Bireysel kullanıcının "Yetkili Kapılarım" kartı.
 ///
 /// Sunum: kapı adı + konum, rozet satırı (cihaz durumu [nabızlı], kapsam, konum koruması, optik QR,
-/// Wi-Fi sinyali) ve eylemler. Birincil eylem tek dolu düğmedir ([DoorOpenButton]); QR ve misafir
-/// eylemleri tonal düğmelerdir (çevrimdışıyken nötr ton: dokunuş yine çevrimiçi bilgisini yeniden
-/// kontrol eder). [successTick] her başarılı kapı açmada bir artar (başarı tiki).
+/// Wi-Fi sinyali) ve eylemler. Birincil eylem YUVARLAK CİLALI tek düğmedir ([DoorOpenButton]): geniş
+/// kartta solda (116 dp) bilgiler sağda, dar kart / büyük yazıda üstte ortalı; QR ve misafir eylemleri
+/// tonal düğmelerdir (çevrimdışıyken nötr ton: dokunuş yine çevrimiçi bilgisini yeniden kontrol eder).
+/// Açma yetkisi yoksa düğme yerine kapı [IconOrb] rozeti çizilir. [successTick] her başarılı kapı
+/// açmada bir artar (başarı tiki + patlama).
 ///
 /// Taşma: kapı adı 3, konum 2 satıra sarar; rozetler `Wrap`; düğme etiketleri 2 satıra sarar. Üst öğe
 /// sınırlı genişlikte olmalıdır (Column çocuğu).
@@ -235,18 +236,6 @@ class IndividualDoorCard extends StatelessWidget {
         '${door.siteName ?? 'Site'}${block != null && block.isNotEmpty ? ' • $block' : ''}';
 
     final actions = <Widget>[
-      if (m.openKind != IndividualDoorOpenKind.none)
-        DoorOpenButton(
-          key: const ValueKey<String>('individual_door_open'),
-          variant: DoorOpenVariant.bar,
-          state: m.openState,
-          label: m.openLabel,
-          openingLabel: m.openingLabel,
-          doneLabel: 'Gönderildi',
-          icon: Icons.lock_open_rounded,
-          onPressed: onOpenDoor,
-          successTick: successTick,
-        ),
       if (m.showScanScreenQr)
         PrimaryActionButton(
           label: 'Kapı Ekranından QR Oku',
@@ -273,115 +262,156 @@ class IndividualDoorCard extends StatelessWidget {
         ),
     ];
 
+    // Yuvarlak cilalı "kapıyı aç" düğmesi (yalnız uzaktan açma yetkisi varsa).
+    DoorOpenButton? orb({double? diameter}) =>
+        m.openKind == IndividualDoorOpenKind.none
+        ? null
+        : DoorOpenButton(
+            key: const ValueKey<String>('individual_door_open'),
+            state: m.openState,
+            label: m.openLabel,
+            openingLabel: m.openingLabel,
+            icon: Icons.lock_open_rounded,
+            onPressed: onOpenDoor,
+            successTick: successTick,
+            diameter: diameter,
+          );
+
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(
+            door.doorName,
+            style: th.titleLarge,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(height: AppSpace.xs),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: ExcludeSemantics(
+                child: Icon(
+                  Icons.location_on_outlined,
+                  size: 14,
+                  color: p.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpace.xs),
+            Expanded(
+              child: Text(
+                location,
+                style: th.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.md),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            StatusChip(
+              label: m.deviceStatusLabel,
+              tone: m.deviceStatusTone,
+              pulse: m.deviceStatus == IndividualDoorDeviceStatus.online,
+            ),
+            StatusChip(
+              label: m.scopeLabel,
+              tone: m.scopeTone,
+              icon: m.scopeIcon,
+            ),
+            if (door.requireGeofence)
+              StatusChip(
+                label: 'Konum (${door.geofenceRadiusMeters}m)',
+                tone: AppTone.info,
+                icon: Icons.near_me_rounded,
+              ),
+            if (door.canShowQrCode)
+              const StatusChip(
+                label: 'Optik QR',
+                tone: AppTone.success,
+                icon: Icons.qr_code_scanner_rounded,
+              ),
+            if (door.assignedDeviceWifiSignalPercent != null && m.isOnline)
+              StatusChip(
+                label: '%${door.assignedDeviceWifiSignalPercent}',
+                tone: AppTone.neutral,
+                icon: Icons.wifi_rounded,
+              ),
+          ],
+        ),
+      ],
+    );
+
+    // Düzen: geniş kartta düğme solda + bilgi sağda; dar kart / büyük yazıda düğme üstte ortalı.
+    // Düğme yoksa (açma yetkisi yok) rozet solda sabit, bilgi sağda.
+    final Widget header = LayoutBuilder(
+      builder: (context, box) {
+        final wide =
+            box.maxWidth >= _sideBySideMinWidth &&
+            MediaQuery.textScalerOf(context).scale(1) <=
+                _sideBySideMaxTextScale;
+        final side = orb(diameter: _sideDiameter);
+        if (side == null) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconOrb(
+                icon: Icons.meeting_room_rounded,
+                tone: m.scopeTone,
+                size: 48,
+                shape: IconOrbShape.squircle,
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(child: info),
+            ],
+          );
+        }
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Aura/halka dışa taştığından düğmenin çevresine boşluk bırakılır.
+              Padding(padding: const EdgeInsets.all(AppSpace.sm), child: side),
+              const SizedBox(width: AppSpace.md),
+              Expanded(child: info),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+                child: orb()!,
+              ),
+            ),
+            const SizedBox(height: AppSpace.md),
+            info,
+          ],
+        );
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.lg),
       child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: m.scopeTone.gradient,
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        Icons.meeting_room_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          door.doorName,
-                          style: th.titleLarge,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpace.xs),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: ExcludeSemantics(
-                              child: Icon(
-                                Icons.location_on_outlined,
-                                size: 14,
-                                color: p.textMuted,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpace.xs),
-                          Expanded(
-                            child: Text(
-                              location,
-                              style: th.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.sm,
-              children: [
-                StatusChip(
-                  label: m.deviceStatusLabel,
-                  tone: m.deviceStatusTone,
-                  pulse: m.deviceStatus == IndividualDoorDeviceStatus.online,
-                ),
-                StatusChip(
-                  label: m.scopeLabel,
-                  tone: m.scopeTone,
-                  icon: m.scopeIcon,
-                ),
-                if (door.requireGeofence)
-                  StatusChip(
-                    label: 'Konum (${door.geofenceRadiusMeters}m)',
-                    tone: AppTone.info,
-                    icon: Icons.near_me_rounded,
-                  ),
-                if (door.canShowQrCode)
-                  const StatusChip(
-                    label: 'Optik QR',
-                    tone: AppTone.success,
-                    icon: Icons.qr_code_scanner_rounded,
-                  ),
-                if (door.assignedDeviceWifiSignalPercent != null && m.isOnline)
-                  StatusChip(
-                    label: '%${door.assignedDeviceWifiSignalPercent}',
-                    tone: AppTone.neutral,
-                    icon: Icons.wifi_rounded,
-                  ),
-              ],
-            ),
-            if (m.hasActions) ...[
+            header,
+            if (actions.isNotEmpty) ...[
               const SizedBox(height: AppSpace.md),
               const Divider(),
               const SizedBox(height: AppSpace.md),
@@ -395,4 +425,11 @@ class IndividualDoorCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Yan yana düzen için en dar kart içi genişlik ve en büyük yazı ölçeği.
+  static const double _sideBySideMinWidth = 300;
+  static const double _sideBySideMaxTextScale = 1.3;
+
+  /// Yan yana düzendeki düğme çapı.
+  static const double _sideDiameter = 116;
 }

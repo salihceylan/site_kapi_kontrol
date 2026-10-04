@@ -4,8 +4,15 @@ import 'package:site_kapi_kontrol/services/voice_door_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// "Eller Serbest & Araba Modu" alt sayfası: açılışta dinleme anahtarı ve üç kısayol rehberi kartı.
+///
+/// Görünüm: başlık şeridi [AppDialogHeader] (cilalı küre), her kartın başlığında cilalı ton küresi
+/// ([IconOrb]; ton anlam taşır: info dinleme, primary Siri, success Google, violet NFC), anahtar satırı
+/// tam satır dokunulur ve ekran okuyucuya başlık + açıklamayla birlikte okunur ([SwitchListTile],
+/// >= 56 dp), güvenlik notu [InlineNotice]. Hepsi durağandır (ticker yok). Metinler ve davranış AYNIDIR.
 class HandsFreeSettingsDialog extends StatefulWidget {
   const HandsFreeSettingsDialog({
     super.key,
@@ -64,7 +71,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.md),
           Container(
             width: 44,
             height: 5,
@@ -81,41 +88,49 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
           const Divider(height: 1),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.lg,
+                AppSpace.lg,
+                AppSpace.xl,
+              ),
               children: [
-                // 1. Araba / Otomatik Dinleme Modu
+                // 1. Araba / Otomatik Dinleme Modu: tam satır dokunulan anahtar (SwitchListTile)
                 AppCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '🚗 Araba / Açılışta Dinleme Modu',
-                              style: th.titleMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Uygulama açılır açılmaz butona basmanıza gerek kalmadan mikrofonu açar ve sesli komutunuzu dinler.',
-                              style: bodyStyle,
-                            ),
-                          ],
-                        ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.lg,
+                    vertical: AppSpace.xs,
+                  ),
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    // Üç satırlı düzen: küre ve anahtar üstte hizalanır (uzun metinde ortada kalmaz).
+                    isThreeLine: true,
+                    secondary: const IconOrb(
+                      icon: Icons.hearing_rounded,
+                      tone: AppTone.info,
+                      size: 36,
+                      shape: IconOrbShape.squircle,
+                    ),
+                    title: Text(
+                      '🚗 Araba / Açılışta Dinleme Modu',
+                      style: th.titleMedium,
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: AppSpace.xs),
+                      child: Text(
+                        'Uygulama açılır açılmaz butona basmanıza gerek kalmadan mikrofonu açar ve sesli komutunuzu dinler.',
+                        style: bodyStyle,
                       ),
-                      const SizedBox(width: 12),
-                      Switch.adaptive(
-                        value: _autoListen,
-                        activeTrackColor: AppTone.primary.a,
-                        onChanged: (val) {
-                          setState(() => _autoListen = val);
-                          widget.voiceDoorService.setHandsFreeAutoListen(val);
-                        },
-                      ),
-                    ],
+                    ),
+                    value: _autoListen,
+                    activeTrackColor: AppTone.primary.a,
+                    onChanged: (val) {
+                      setState(() => _autoListen = val);
+                      widget.voiceDoorService.setHandsFreeAutoListen(val);
+                    },
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
 
                 // 2. Siri Kestirmesi Rehberi
                 AppCard(
@@ -127,17 +142,17 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         AppTone.primary,
                         'Apple Siri ("Hey Siri")',
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpace.sm),
                       Text(
                         'Telefonunuz kilitliyken veya Apple CarPlay ekranındayken "Hey Siri, Kapıyı Aç" diyerek dokunmadan açabilirsiniz.',
                         style: bodyStyle,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: AppSpace.md),
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpace.md),
                         decoration: BoxDecoration(
                           color: p.surfaceMuted,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           border: Border.all(color: p.border),
                         ),
                         child: Row(
@@ -167,7 +182,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpace.sm),
                       Text(
                         'Kurulum: iPhone Kestirmeler (Shortcuts) uygulamasında yeni kestirme oluşturun ➡️ "URL Aç" eylemini seçin ➡️ Yukarıdaki bağlantıyı yapıştırın.',
                         style: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
@@ -175,7 +190,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
 
                 // 3. Android & Google Asistan
                 AppCard(
@@ -187,7 +202,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         AppTone.success,
                         'Google Asistan & Ana Ekran Kısayolları',
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpace.sm),
                       Text(
                         'Android ana ekranınızda uygulama simgesine basılı tutarak doğrudan kapıyı açabilir veya Google Asistan rutinlerine ekleyebilirsiniz.',
                         style: bodyStyle,
@@ -195,7 +210,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
 
                 // 4. NFC Araç Tutacağı Dokunuşu
                 AppCard(
@@ -207,7 +222,7 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                         AppTone.violet,
                         '🏷️ NFC Araç Tutacağı Etiketi',
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpace.sm),
                       Text(
                         'Arabanızın telefon tutacağına yapıştırılan standart bir NFC etiketine "sitekapi://open?doorIndex=1" bağlantısını yazarak, telefonu tutacağa koyduğunuz anda kapıyı temassız açabilirsiniz.',
                         style: bodyStyle,
@@ -215,25 +230,14 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpace.lg),
 
                 // 5. Güvenlik notu: bağlantı/kısayolla kapı açmak onay ister
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      size: 18,
-                      color: p.textSecondary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Güvenlik: Bağlantı, NFC veya kısayolla kapı açılırken uygulama her seferinde onayınızı ister. Birden çok kapınız varsa hangisini açacağınızı seçersiniz.',
-                        style: bodyStyle,
-                      ),
-                    ),
-                  ],
+                const InlineNotice(
+                  tone: AppTone.info,
+                  icon: Icons.verified_user_outlined,
+                  message:
+                      'Güvenlik: Bağlantı, NFC veya kısayolla kapı açılırken uygulama her seferinde onayınızı ister. Birden çok kapınız varsa hangisini açacağınızı seçersiniz.',
                 ),
               ],
             ),
@@ -243,29 +247,16 @@ class _HandsFreeSettingsDialogState extends State<HandsFreeSettingsDialog> {
     );
   }
 
-  /// Kart başlığı: ton zeminli ikon karosu + başlık (taşmayan; uzun başlık satır atlar).
+  /// Kart başlığı: cilalı ton küresi ([IconOrb], 36 dp) + başlık (taşmayan; uzun başlık satır atlar).
   Widget _buildCardTitle(IconData icon, AppTone tone, String title) {
-    final p = context.palette;
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: tone.tint(p),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: tone.ink(p), size: 20),
-        ),
-        const SizedBox(width: 10),
+        IconOrb(icon: icon, tone: tone, size: 36, shape: IconOrbShape.squircle),
+        const SizedBox(width: AppSpace.md),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-          ),
+          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
         ),
       ],
     );
   }
 }
-

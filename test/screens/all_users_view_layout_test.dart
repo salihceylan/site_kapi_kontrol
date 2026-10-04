@@ -10,7 +10,9 @@ import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/all_users_view.dart';
 
@@ -425,6 +427,133 @@ void main() {
         expect(find.byTooltip('Listeyi Yenile'), findsOneWidget);
       },
     );
+  });
+
+  group('AllUsersView görsel dil (cilalı rozet, rol/aktiflik rozetleri, hero kart)', () {
+    testWidgets('satırlar: rol tonlu cilalı rozet + rol ve aktiflik StatusChip', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(session: _selfSession),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      // Süper kullanıcı dizinde yok: 4 satır (yönetici, pasif yönetici, sakin, bireysel).
+      final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+      expect(orbs.map((o) => o.tone).toList(), <AppTone>[
+        AppTone.success,
+        AppTone.success,
+        AppTone.violet,
+        AppTone.violet,
+      ]);
+      expect(
+        orbs.every(
+          (o) => o.size == 40 && o.shape == IconOrbShape.circle && !o.glow,
+        ),
+        isTrue,
+        reason: 'satır rozeti: 40 dp daire, glow yok',
+      );
+      AppTone toneOf(String label, {int index = 0}) => t
+          .widget<StatusChip>(find.widgetWithText(StatusChip, label).at(index))
+          .tone;
+      expect(find.widgetWithText(StatusChip, 'Site Yoneticisi'), findsNWidgets(2));
+      expect(toneOf('Site Yoneticisi'), AppTone.success);
+      expect(toneOf('Daire Kullanicisi'), AppTone.violet);
+      expect(toneOf('Bireysel Kullanici'), AppTone.violet);
+      // Aktiflik: dizinde anahtar yok, bu yüzden her satırda açıkça yazılır.
+      expect(find.widgetWithText(StatusChip, 'Aktif'), findsNWidgets(3));
+      expect(toneOf('Aktif'), AppTone.success);
+      expect(find.widgetWithText(StatusChip, 'Pasif'), findsOneWidget);
+      expect(toneOf('Pasif'), AppTone.neutral);
+      // "Siz" rozeti korunur (yalnız kendi satırında).
+      expect(find.widgetWithText(StatusChip, 'Siz'), findsOneWidget);
+    });
+
+    testWidgets('büyük yazı / dar ekran: avatar rozeti ve rozetler düz metne döner', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 320,
+        height: 900,
+        scale: 2.0,
+        dark: false,
+      );
+      expect(find.byType(IconOrb), findsNothing);
+      expect(find.byType(StatusChip), findsNothing);
+      expect(find.text('Site Yoneticisi'), findsNWidgets(2));
+      expect(find.text('Aktif'), findsNWidgets(3));
+      expect(find.text('Pasif'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('üst özet kartı hero yükseltisinde (seviye 2); satır ve sayfalama kartları seviye 1', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      final levels = t
+          .widgetList<AppCard>(find.byType(AppCard))
+          .map((c) => c.level)
+          .toList();
+      // Üst kart, 4 kullanıcı satırı, sayfalama kartı.
+      expect(levels, <int>[2, 1, 1, 1, 1, 1]);
+    });
+
+    testWidgets('detay alt sayfası: büyük rol rozeti (hero, glow) ad ve e-postanın yanında', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      await tapText(t, 'Selin Aydın');
+      final sheetOrb = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(IconOrb),
+      );
+      expect(sheetOrb, findsOneWidget);
+      final orb = t.widget<IconOrb>(sheetOrb);
+      expect(orb.size, 56);
+      expect(orb.glow, isTrue);
+      expect(orb.tone, AppTone.violet);
+      expect(orb.icon, Icons.home_rounded);
+    });
+
+    testWidgets('sayfa boyutu açılır listesi: yuvarlak köşe, palet zemini, sınırlı yükseklik, yuvarlak ok', (
+      t,
+    ) async {
+      for (final dark in const <bool>[false, true]) {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 900,
+          scale: 1,
+          dark: dark,
+        );
+        final p = dark ? AppPalette.dark : AppPalette.light;
+        final dd = t.widget<DropdownButton<int>>(find.byType(DropdownButton<int>));
+        expect(dd.borderRadius, BorderRadius.circular(AppRadius.md));
+        expect(dd.dropdownColor, p.surface);
+        expect(dd.menuMaxHeight, 320);
+        expect((dd.icon! as Icon).icon, Icons.keyboard_arrow_down_rounded);
+      }
+    });
   });
 
   group('AllUsersView kontrast', () {

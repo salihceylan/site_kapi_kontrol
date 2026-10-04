@@ -1,9 +1,10 @@
 // FAZ 5 / A1b (i): ortak diyalog şablonu (başlık şeridi + içerik + eylem satırı).
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
-/// Diyalog başlık şeridi: ikon karosu (44 dp, ton zeminli) + başlık + alt başlık.
+/// Diyalog başlık şeridi: cilalı ikon rozeti ([IconOrb], 44 dp squircle, glow'lu) + başlık + alt başlık.
 ///
 /// [AppDialog] bunu `AlertDialog.title` olarak kullanır; `Dialog` tabanlı özel diyaloglar (cihaz
 /// sahiplenme, QR modalı) doğrudan içeriklerinin başına koyar. Kendi kenar boşluğunu taşır
@@ -30,7 +31,6 @@ class AppDialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
     final subtitle = this.subtitle;
     return Padding(
@@ -44,16 +44,12 @@ class AppDialogHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: tone.tint(p),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: Center(child: Icon(icon, color: tone.ink(p), size: 24)),
-              ),
+            IconOrb(
+              icon: icon!,
+              tone: tone,
+              size: 44,
+              shape: IconOrbShape.squircle,
+              glow: true,
             ),
             const SizedBox(width: AppSpace.md),
           ],

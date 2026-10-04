@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// Cihaz eylem kartı: 56 dp cilalı daire [IconOrb] (glow'lu, dekoratif) + başlık + açıklama + tam
+/// genişlikte `ElevatedButton`. Kart başlık ve açıklamayı tek anlamsal düğüm olarak okutur, düğme ayrıdır.
 class DeviceActionTile extends StatelessWidget {
   const DeviceActionTile({
     super.key,
@@ -20,9 +23,7 @@ class DeviceActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final textTheme = Theme.of(context).textTheme;
-    const tone = AppTone.primary;
     // Kart satırın/sütunun tüm genişliğini kaplar (eski Container(width: double.infinity) gibi).
     return SizedBox(
       width: double.infinity,
@@ -30,14 +31,7 @@ class DeviceActionTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpace.md),
-              decoration: BoxDecoration(
-                color: tone.tint(p),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: tone.ink(p), size: 28),
-            ),
+            IconOrb(icon: icon, size: 56, glow: true),
             const SizedBox(height: AppSpace.md),
             Text(title, style: textTheme.titleLarge),
             const SizedBox(height: AppSpace.xs),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../data/turkey_cities_districts.dart';
 import '../../models/managed_user_account.dart';
 import '../../models/site_record.dart';
@@ -7,9 +8,11 @@ import '../../models/user_role.dart';
 import '../../services/auth_service.dart';
 import '../design/app_card.dart';
 import '../design/app_dialog.dart';
+import '../design/motion_widgets.dart';
 import '../design/tokens.dart';
 import '../helpers/ui_helpers.dart';
 import '../pages/site_manager_picker_page.dart';
+import 'large_dialog_parts.dart';
 
 class SiteFormResult {
   const SiteFormResult({
@@ -271,6 +274,7 @@ class _SiteDialogState extends State<SiteDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+    HapticFeedback.lightImpact();
 
     final doorCount = int.parse(_doorCountController.text.trim());
     final blockApartmentCounts = _blockApartmentControllers
@@ -294,7 +298,6 @@ class _SiteDialogState extends State<SiteDialog> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final th = Theme.of(context).textTheme;
 
     return AppDialog(
       title: _isEditing ? 'Site Düzenle' : 'Yeni Site Ekle',
@@ -322,19 +325,23 @@ class _SiteDialogState extends State<SiteDialog> {
                   ? 'Site adı en az 2 karakter olmalı.'
                   : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _addressController,
               decoration: const InputDecoration(
                 labelText: 'Adres (opsiyonel)',
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    dropdownColor: p.surface,
+                    menuMaxHeight: 320,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
                     initialValue: _selectedCity != null &&
                             turkeyCityNames.contains(_selectedCity)
                         ? _selectedCity
@@ -361,11 +368,15 @@ class _SiteDialogState extends State<SiteDialog> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpace.sm),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('district_$_selectedCity'),
                     isExpanded: true,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    dropdownColor: p.surface,
+                    menuMaxHeight: 320,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
                     initialValue: (_selectedCity != null &&
                             _selectedDistrict != null &&
                             getDistrictsForCity(_selectedCity)
@@ -401,7 +412,7 @@ class _SiteDialogState extends State<SiteDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             Row(
               children: [
                 Expanded(
@@ -421,7 +432,7 @@ class _SiteDialogState extends State<SiteDialog> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpace.sm),
                 Expanded(
                   child: TextFormField(
                     controller: _doorCountController,
@@ -440,252 +451,196 @@ class _SiteDialogState extends State<SiteDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpace.lg),
+            _buildBlocksPanel(context),
+            const SizedBox(height: AppSpace.lg),
+            _buildManagerPanel(context),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // BLOKLARA GÖRE DAİRE SAYILARI LİSTESİ
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: p.surfaceMuted,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: p.border, width: 1.2),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      Text(
-                        '🏢 Blok Daireleri',
-                        style: th.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: p.text,
-                        ),
-                      ),
-                      if (!_structureCountsPending)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTone.primary.tint(p),
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                          ),
-                          child: Text(
-                            'Toplam: $_calculatedTotalApartments Daire',
-                            style: th.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppTone.primary.ink(p),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Her blok için daire sayısını girin:',
-                    style: th.bodySmall,
-                  ),
-                  const SizedBox(height: 10),
-                  if (_isLoadingStructureCounts)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Mevcut daire sayıları okunuyor...',
-                              style: th.bodySmall?.copyWith(color: p.textSecondary),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (_structureCountsError != null)
-                    InlineNotice(
-                      message:
-                          '$_structureCountsError Mevcut daire sayıları okunmadan kayıt yapılamaz (daireler yanlışlıkla silinmesin).',
-                      onRetry: _retryStructureCounts,
-                    )
-                  else
-                  for (var i = 0; i < _blockApartmentControllers.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 72,
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                            decoration: BoxDecoration(
-                              color: AppTone.primary.tint(p),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppTone.primary.hue.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Text(
-                              '${blockLabelFromIndex(i)} Blok',
-                              textAlign: TextAlign.center,
-                              style: th.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: AppTone.primary.ink(p),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _blockApartmentControllers[i],
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Daire Sayısı',
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                              validator: (value) {
-                                final val = int.tryParse((value ?? '').trim());
-                                return val == null || val < 1
-                                    ? 'En az 1 daire olmalı.'
-                                    : null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTone.primary.tint(p),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppTone.primary.hue.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.manage_accounts_outlined,
-                        color: AppTone.primary.ink(p),
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Site Yöneticisi',
-                          style: th.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: p.text,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_isLoadingManagers)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Yöneticiler yükleniyor...',
-                              style: th.bodySmall?.copyWith(color: p.textSecondary),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: p.surface,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppTone.primary.hue.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.person_outline,
-                                color: AppTone.primary.ink(p),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _selectedManager == null
-                                      ? 'Yönetici Atanmadı'
-                                      : '${_selectedManager!.fullName} (${_selectedManager!.email})',
-                                  style: th.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: p.text,
-                                  ),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (_selectedManager != null)
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedManager = null;
-                                      _selectedManagerUserCode = null;
-                                    });
-                                  },
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                                  icon: Icon(
-                                    Icons.clear,
-                                    size: 18,
-                                    color: AppTone.danger.ink(p),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        OutlinedButton.icon(
-                          onPressed: _selectExistingManager,
-                          icon: const Icon(Icons.person_search, size: 16),
-                          label: const Text('Yönetici Seç / Değiştir'),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
+  /// Bloklara göre daire sayıları paneli: başlık + toplam hapı + (yükleniyor | hata | blok satırları).
+  Widget _buildBlocksPanel(BuildContext context) {
+    return DialogPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const DialogSectionTitle(
+            icon: Icons.apartment_rounded,
+            title: 'Blok Daireleri',
+            subtitle: 'Her blok için daire sayısını girin:',
+          ),
+          if (!_structureCountsPending) ...[
+            const SizedBox(height: AppSpace.sm),
+            DialogMetaPill(
+              'Toplam: $_calculatedTotalApartments Daire',
+              tone: AppTone.primary,
             ),
           ],
+          const SizedBox(height: AppSpace.md),
+          if (_isLoadingStructureCounts)
+            const DialogLoadingNote(text: 'Mevcut daire sayıları okunuyor...')
+          else if (_structureCountsError != null)
+            InlineNotice(
+              message:
+                  '$_structureCountsError Mevcut daire sayıları okunmadan kayıt yapılamaz (daireler yanlışlıkla silinmesin).',
+              onRetry: _retryStructureCounts,
+            )
+          else
+            for (var i = 0; i < _blockApartmentControllers.length; i++)
+              _buildBlockRow(context, i),
+        ],
+      ),
+    );
+  }
+
+  /// Tek blok satırı: blok etiketi hapı + daire sayısı alanı. Büyük yazıda etiket alanın üstüne alınır
+  /// (yan yana iki parça okunur genişlik bırakmaz). İlk 8 satır girişte kademeli belirir.
+  Widget _buildBlockRow(BuildContext context, int i) {
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final label = DialogMetaPill(
+      '${blockLabelFromIndex(i)} Blok',
+      tone: AppTone.primary,
+      minWidth: 64,
+    );
+    final field = TextFormField(
+      controller: _blockApartmentControllers[i],
+      keyboardType: TextInputType.number,
+      decoration: const InputDecoration(
+        labelText: 'Daire Sayısı',
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(
+          vertical: AppSpace.md,
+          horizontal: AppSpace.md,
+        ),
+      ),
+      onChanged: (_) => setState(() {}),
+      validator: (value) {
+        final val = int.tryParse((value ?? '').trim());
+        return val == null || val < 1 ? 'En az 1 daire olmalı.' : null;
+      },
+    );
+    return StaggeredEntry(
+      index: i,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.sm),
+        child: stacked
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  label,
+                  // Alanın yüzen etiketi kutunun üstüne taşar: hap ile çakışmasın.
+                  const SizedBox(height: AppSpace.md),
+                  field,
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: AppSpace.md - AppSpace.xs / 2,
+                    ),
+                    child: label,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(child: field),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// Site yöneticisi paneli: başlık (rol tonu: site yöneticisi = success) + seçili yönetici kutusu +
+  /// ikincil "seç / değiştir" eylemi.
+  Widget _buildManagerPanel(BuildContext context) {
+    return DialogPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const DialogSectionTitle(
+            icon: Icons.manage_accounts_rounded,
+            title: 'Site Yöneticisi',
+            tone: AppTone.success,
+          ),
+          const SizedBox(height: AppSpace.md),
+          if (_isLoadingManagers)
+            const DialogLoadingNote(text: 'Yöneticiler yükleniyor...')
+          else ...[
+            _buildManagerTile(context),
+            const SizedBox(height: AppSpace.sm),
+            OutlinedButton.icon(
+              onPressed: _selectExistingManager,
+              style: dialogTonalButtonStyle(context),
+              icon: const Icon(Icons.person_search, size: 16),
+              label: const Text('Yönetici Seç / Değiştir'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Seçili yönetici kutusu: atanmadıysa nötr, atandıysa rol tonlu (success) + temizle düğmesi.
+  Widget _buildManagerTile(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final manager = _selectedManager;
+    final tone = manager == null ? AppTone.neutral : AppTone.success;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(
+          color: manager == null ? p.border : tone.hue.withValues(alpha: 0.4),
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(start: AppSpace.md),
+          child: Row(
+            children: [
+              Icon(Icons.person_outline, color: tone.ink(p), size: 20),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
+                  child: Text(
+                    manager == null
+                        ? 'Yönetici Atanmadı'
+                        : '${manager.fullName} (${manager.email})',
+                    style: th.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              if (manager != null)
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedManager = null;
+                      _selectedManagerUserCode = null;
+                    });
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                  icon: Icon(
+                    Icons.clear,
+                    size: 18,
+                    color: AppTone.danger.ink(p),
+                  ),
+                )
+              else
+                const SizedBox(width: AppSpace.md),
+            ],
+          ),
         ),
       ),
     );

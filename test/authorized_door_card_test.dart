@@ -126,8 +126,8 @@ void main() {
     // Actions
     expect(find.text('Kapı Ekranından QR Oku'), findsOneWidget);
     expect(find.text('Kapıya QR Göster'), findsOneWidget);
-    expect(find.text('Uzaktan Aç'), findsOneWidget);
-    expect(find.text('Kapıyı Aç'), findsOneWidget);
+    expect(find.text('UZAKTAN AÇ'), findsOneWidget);
+    expect(find.text('KAPIYI AÇ'), findsOneWidget);
     expect(find.text('Misafir Kodu'), findsNWidgets(2));
   });
 }

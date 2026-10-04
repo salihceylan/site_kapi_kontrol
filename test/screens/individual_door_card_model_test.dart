@@ -129,15 +129,15 @@ void main() {
 
   group('örnek kapılar', () {
     test(
-      'WROOM + QR okuyucu (ekranlı): QR eylemleri + misafir + "Uzaktan Aç"',
+      'WROOM + QR okuyucu (ekranlı): QR eylemleri + misafir + "UZAKTAN AÇ"',
       () {
         final m = IndividualDoorCardModel.of(g4Door(), isOpening: false);
         expect(m.showScanScreenQr, isTrue);
         expect(m.showShowQr, isTrue);
         expect(m.showGuestPass, isTrue);
         expect(m.openKind, IndividualDoorOpenKind.remote);
-        expect(m.openLabel, 'Uzaktan Aç');
-        expect(m.openingLabel, 'Açılıyor...');
+        expect(m.openLabel, 'UZAKTAN AÇ');
+        expect(m.openingLabel, 'AÇILIYOR');
         expect(m.openState, DoorOpenState.ready);
         expect(m.deviceStatusLabel, 'Çevrimiçi');
         expect(m.deviceStatusTone, AppTone.success);
@@ -145,7 +145,7 @@ void main() {
       },
     );
 
-    test('C3 çevrimdışı: yalnız "Kapıyı Aç" + misafir; durum çevrimdışı', () {
+    test('C3 çevrimdışı: yalnız "KAPIYI AÇ" + misafir; durum çevrimdışı', () {
       final m = IndividualDoorCardModel.of(
         g4Door(hardware: 'esp32_c3', qrReader: false, online: false),
         isOpening: false,
@@ -153,8 +153,8 @@ void main() {
       expect(m.showScanScreenQr, isFalse);
       expect(m.showShowQr, isFalse);
       expect(m.openKind, IndividualDoorOpenKind.main);
-      expect(m.openLabel, 'Kapıyı Aç');
-      expect(m.openingLabel, 'Kapı Açılıyor...');
+      expect(m.openLabel, 'KAPIYI AÇ');
+      expect(m.openingLabel, 'AÇILIYOR');
       expect(m.openState, DoorOpenState.offline);
       expect(m.deviceStatusLabel, 'Çevrimdışı');
       expect(m.deviceStatusTone, AppTone.danger);

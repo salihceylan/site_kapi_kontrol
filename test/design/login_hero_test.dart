@@ -5,6 +5,7 @@
 // 1,0/1,5/2,0 x açık/koyu) ve Semantics.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -93,7 +94,7 @@ void main() {
     });
 
     testWidgets(
-      'halka: birincil gradyan, iç yüzey palet yüzeyi, TEK gölge (blur <= 16, spread yok)',
+      'halka: birincil gradyan, iç yüzey palet yüzeyi; BoxShadow YOK (tek ışıma = aura)',
       (t) async {
         for (final dark in const [false, true]) {
           await pumpAt(t, const LoginHero(), scale: 1.0, dark: dark);
@@ -101,14 +102,9 @@ void main() {
           final ring = _ringDecoration(t);
           expect(ring.shape, BoxShape.circle);
           expect(ring.gradient, AppTone.primary.gradient);
-          expect(
-            ring.boxShadow,
-            hasLength(1),
-            reason: 'yüzey başına 1 gölge katmanı',
-          );
-          expect(ring.boxShadow!.single.blurRadius, lessThanOrEqualTo(16));
-          expect(ring.boxShadow!.single.spreadRadius, 0);
-          expect(ring.boxShadow, p.shadow(2));
+          // Görsel sözleşme (bilerek değişti): eski nötr `p.shadow(2)` gölgesi yerine halkanın ARKASINDA
+          // tek, yumuşak renkli aura vardır (bkz. 'premium halka'): yüzeyde ikinci bir gölge katmanı yok.
+          expect(ring.boxShadow, isNull, reason: 'çift gölge yok: ışıma aura');
           final inner = t.widget<DecoratedBox>(
             find
                 .descendant(
@@ -164,6 +160,129 @@ void main() {
       );
       expect(t.takeException(), isNull);
       expect(t.getSize(find.byType(LoginHero)).width, 360);
+    });
+  });
+
+  group('LoginHero: premium halka (aura + cila)', () {
+    final aura = find.byWidgetPredicate(
+      (w) => w is CustomPaint && w.painter is LoginHeroAuraPainter,
+    );
+
+    testWidgets('cila: halkada tek daire Gloss; iç yüzeyin ve logonun ALTINDA', (
+      t,
+    ) async {
+      await pumpAt(t, const LoginHero(), scale: 1.0);
+      final gloss = find.descendant(
+        of: find.byType(LoginHero),
+        matching: find.byType(Gloss),
+      );
+      expect(gloss, findsOneWidget);
+      expect(t.widget<Gloss>(gloss).shape, GlossShape.circle);
+      // Boyama sırası: önce cila, sonra iç yüzey + logo (cila yalnız halka kuşağında görünür; logo
+      // görselinin üstüne beyaz parıltı binmez).
+      final stack = t.widget<Stack>(
+        find.ancestor(of: gloss, matching: find.byType(Stack)).first,
+      );
+      expect(stack.children.first, isA<Positioned>());
+      expect((stack.children.first as Positioned).child, isA<Gloss>());
+      expect(stack.children.last, isA<DecoratedBox>());
+    });
+
+    testWidgets(
+      'aura: tek MaskFilter.blur dairesi, kendi RepaintBoundary içinde; halkanın dışına taşar, düzeni değiştirmez',
+      (t) async {
+        for (final dark in const [false, true]) {
+          await pumpAt(t, const LoginHero(), scale: 1.0, dark: dark);
+          expect(aura, findsOneWidget, reason: 'dark=$dark');
+          // Kendi katmanı: statik aura yalnız renk/tema değişince yeniden boyanır.
+          final boundary = find.ancestor(
+            of: aura,
+            matching: find.byType(RepaintBoundary),
+          );
+          expect(
+            t.widget<RepaintBoundary>(boundary.first).child,
+            isA<CustomPaint>(),
+          );
+          // Boyama: halkadan biraz büyük TEK bulanık daire; renk birincil ton, koyuda daha belirgin.
+          expect(
+            t.renderObject(aura),
+            paints
+              ..circle(
+                radius: LoginHero.ringDiameter * 0.54,
+                color: LoginHeroAuraPainter.tone.a.withValues(
+                  alpha: dark
+                      ? LoginHeroAuraPainter.alphaDark
+                      : LoginHeroAuraPainter.alphaLight,
+                ),
+                hasMaskFilter: true,
+              ),
+            reason: 'dark=$dark',
+          );
+          expect(
+            (t.widget<CustomPaint>(aura).painter! as LoginHeroAuraPainter).dark,
+            dark,
+          );
+          // Tuval halkadan her yönde auraReach büyüktür; ama düzen boyutu yalnız halkadır.
+          const side = LoginHero.ringDiameter + 2 * LoginHero.auraReach;
+          expect(t.getSize(aura), const Size(side, side));
+          expect(
+            t.getTopLeft(aura),
+            t.getTopLeft(find.byType(LoginHero)) -
+                const Offset(LoginHero.auraReach, LoginHero.auraReach),
+          );
+          expect(t.getSize(find.byType(LoginHero)), const Size(96, 96));
+        }
+      },
+    );
+
+    testWidgets('aura bulanıklığı makul: sigma x 2 <= 16 (BoxShadow eşdeğeri); yalnız tek aura', (
+      t,
+    ) async {
+      expect(LoginHero.auraSigma * 2, lessThanOrEqualTo(16));
+      expect(LoginHero.auraReach, greaterThanOrEqualTo(LoginHero.auraSigma * 3));
+      await pumpAt(t, _full, scale: 1.0);
+      expect(aura, findsOneWidget);
+    });
+
+    testWidgets('boyayıcı yalnız koyu/açık değişince yeniden boyanır', (t) async {
+      const light = LoginHeroAuraPainter(dark: false);
+      expect(light.shouldRepaint(const LoginHeroAuraPainter(dark: false)), isFalse);
+      expect(light.shouldRepaint(const LoginHeroAuraPainter(dark: true)), isTrue);
+    });
+
+    testWidgets('yüksek karşıtlıkta aura ve cila çizilmez (süs yok); logo kalır', (
+      t,
+    ) async {
+      await t.pumpWidget(
+        harnessApp(
+          Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(highContrast: true),
+              child: const LoginHero(title: _title),
+            ),
+          ),
+        ),
+      );
+      await t.pump(const Duration(milliseconds: 450));
+      expect(aura, findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(Gloss),
+          matching: find.byType(CustomPaint),
+        ),
+        findsNothing,
+      );
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.text(_title), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('kararlı durumda ticker yok (aura/cila durağan); pumpAndSettle biter', (
+      t,
+    ) async {
+      await t.pumpWidget(harnessApp(_full));
+      await t.pumpAndSettle();
+      expect(t.binding.transientCallbackCount, 0);
     });
   });
 

@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/geofence_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+/// "Giriş & Güvenlik Politikaları" diyaloğu (süper kullanıcı ve site yöneticisi).
+///
+/// Görünüm: başlık şeridi [AppDialogHeader]; bölüm başlıkları cilalı ton küresiyle ([IconOrb]); erişim
+/// yöntemi seçimi [AppCard] (seçili durum kenar + yükselti); anahtar satırları [SwitchListTile]
+/// (>= 56 dp); QR yenilenme süresi açılır listesi tasarım sistemine uyumlu (yuvarlak köşe, yüzey rengi,
+/// en çok 320 dp menü); yarıçap hatası [InlineNotice]. Kaydetme başarısında hafif haptik. Metinler,
+/// doğrulama ve kaydetme mantığı AYNIDIR.
 class SiteSecurityPolicyDialog extends StatefulWidget {
   const SiteSecurityPolicyDialog({
     super.key,
@@ -276,6 +287,8 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
         qrRotationSeconds: _qrRotationSeconds,
       );
       if (mounted) {
+        // Onay anı: hafif haptik (başarı bildirimini çağıran sayfa gösterir).
+        HapticFeedback.lightImpact();
         Navigator.of(context).pop(true);
       }
     } catch (e) {
@@ -370,68 +383,54 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                       const SizedBox(height: 12),
                     ],
                     // SÜPER KULLANICI GİRİŞ YÖNTEMİ SEÇİMİ
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.lock_person_outlined, size: 18, color: accent),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                'Yetkili Giriş Yöntemi',
-                                style: th.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
-                              ),
+                    _sectionTitle(
+                      icon: Icons.lock_person_outlined,
+                      tone: AppTone.primary,
+                      title: 'Yetkili Giriş Yöntemi',
+                      badge: widget.isSuperUser
+                          ? null
+                          : const StatusChip(
+                              label: 'Sadece Süper User',
+                              tone: AppTone.neutral,
+                              icon: Icons.lock_outline_rounded,
                             ),
-                          ],
-                        ),
-                        if (!widget.isSuperUser)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppTone.neutral.tint(p),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Sadece Süper User',
-                              style: th.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppTone.neutral.ink(p),
-                              ),
-                            ),
-                          ),
-                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpace.xs),
                     Text(
                       'Site sakinlerinin kapıyı hangi yöntemlerle açabileceğini belirleyin.',
                       style: hintStyle,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpace.md),
 
-                    _buildAccessModeCard(
-                      mode: 'hybrid',
-                      title: '🔄 Hibrit (Uygulama + QR Kod)',
-                      subtitle: 'Sakinler hem uygulama butonundan hem de kapıdaki QR okuyucudan geçebilir.',
+                    StaggeredEntry(
+                      index: 0,
+                      child: _buildAccessModeCard(
+                        mode: 'hybrid',
+                        title: '🔄 Hibrit (Uygulama + QR Kod)',
+                        subtitle: 'Sakinler hem uygulama butonundan hem de kapıdaki QR okuyucudan geçebilir.',
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    _buildAccessModeCard(
-                      mode: 'app_only',
-                      title: '📱 Sadece Mobil Uygulama Butonu',
-                      subtitle: 'QR okuyucu devre dışıdır. Kapı yalnızca uygulama üzerinden internet/yerel ağ ile açılır.',
+                    StaggeredEntry(
+                      index: 1,
+                      child: _buildAccessModeCard(
+                        mode: 'app_only',
+                        title: '📱 Sadece Mobil Uygulama Butonu',
+                        subtitle: 'QR okuyucu devre dışıdır. Kapı yalnızca uygulama üzerinden internet/yerel ağ ile açılır.',
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    _buildAccessModeCard(
-                      mode: 'qr_only',
-                      title: '📷 Sadece QR Kod ile Giriş',
-                      subtitle: 'Uygulamadan uzaktan butona basarak açma kapalıdır. Sakin yalnızca kapı önünde QR ile açabilir.',
+                    StaggeredEntry(
+                      index: 2,
+                      child: _buildAccessModeCard(
+                        mode: 'qr_only',
+                        title: '📷 Sadece QR Kod ile Giriş',
+                        subtitle: 'Uygulamadan uzaktan butona basarak açma kapalıdır. Sakin yalnızca kapı önünde QR ile açabilir.',
+                      ),
                     ),
                     const SizedBox(height: 18),
                     const Divider(height: 1),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpace.md),
 
                     // MİSAFİR GEÇİŞ İZNİ
                     SwitchListTile(
@@ -446,55 +445,72 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                           ? (val) => setState(() => _featureGuestPassEnabled = val)
                           : null,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpace.sm),
 
                     // DİNAMİK QR YENİLENME SÜRESİ (Eğer QR aktifse)
-                    if (_accessMode != 'app_only') ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.timer_outlined, size: 18, color: accent),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Dinamik QR Yenilenme Süresi',
-                              style: th.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: p.text,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Seçici ayrı satırda ve tam genişlikte: dar ekranda yatay taşma olmaz.
-                      DropdownButton<int>(
-                        isExpanded: true,
-                        value: _qrRotationSeconds,
-                        dropdownColor: p.surface,
-                        underline: const SizedBox(),
-                        // Kayıtlı süre standart seçeneklerin dışındaysa (API 10-300 sn kabul eder)
-                        // kaybolmaz / seçiciyi çökertmez: ek seçenek olarak listelenir.
-                        items: [
-                          for (final seconds in ({15, 30, 60, _qrRotationSeconds}.toList()..sort()))
-                            DropdownMenuItem(
-                              value: seconds,
-                              child: Text(
-                                seconds == 30 ? '30 saniye (Önerilen)' : '$seconds saniye',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: widget.isSuperUser
-                            ? (val) {
-                                if (val != null) setState(() => _qrRotationSeconds = val);
-                              }
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                    AnimatedSize(
+                      duration: _revealDuration(context),
+                      curve: AppMotion.standard,
+                      alignment: Alignment.topCenter,
+                      child: _accessMode != 'app_only'
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: AppSpace.xs),
+                                _sectionTitle(
+                                  icon: Icons.timer_outlined,
+                                  tone: AppTone.success,
+                                  title: 'Dinamik QR Yenilenme Süresi',
+                                ),
+                                const SizedBox(height: AppSpace.sm),
+                                // Seçici ayrı satırda ve tam genişlikte: dar ekranda yatay taşma olmaz. Alan görünümü
+                                // metin girdileriyle aynıdır (InputDecorator); menü R8: yuvarlak köşe, yüzey rengi,
+                                // en çok 320 dp, aşağı ok.
+                                InputDecorator(
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    enabled: widget.isSuperUser,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpace.md,
+                                      vertical: AppSpace.xs,
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      isExpanded: true,
+                                      value: _qrRotationSeconds,
+                                      borderRadius: BorderRadius.circular(AppRadius.md),
+                                      dropdownColor: p.surface,
+                                      menuMaxHeight: 320,
+                                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                                      // Kayıtlı süre standart seçeneklerin dışındaysa (API 10-300 sn kabul eder)
+                                      // kaybolmaz / seçiciyi çökertmez: ek seçenek olarak listelenir.
+                                      items: [
+                                        for (final seconds in ({15, 30, 60, _qrRotationSeconds}.toList()..sort()))
+                                          DropdownMenuItem(
+                                            value: seconds,
+                                            child: Text(
+                                              seconds == 30 ? '30 saniye (Önerilen)' : '$seconds saniye',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                      ],
+                                      onChanged: widget.isSuperUser
+                                          ? (val) {
+                                              if (val != null) setState(() => _qrRotationSeconds = val);
+                                            }
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpace.md),
+                              ],
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
                     const Divider(height: 1),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpace.md),
 
                     // GPS GEOFENCE TOGGLE
                     SwitchListTile(
@@ -508,157 +524,151 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
                       onChanged: (val) => setState(() => _requireGeofence = val),
                     ),
 
-                    if (_requireGeofence) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: p.surfaceMuted,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: p.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                    AnimatedSize(
+                      duration: _revealDuration(context),
+                      curve: AppMotion.standard,
+                      alignment: Alignment.topCenter,
+                      child: _requireGeofence
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Icon(Icons.location_on_outlined, size: 18, color: accent),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Kapı / Site GPS Koordinatları',
-                                    style: th.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: p.text,
-                                    ),
+                                const SizedBox(height: AppSpace.sm),
+                                Container(
+                                  padding: const EdgeInsets.all(AppSpace.md),
+                                  decoration: BoxDecoration(
+                                    color: p.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(AppRadius.md),
+                                    border: Border.all(color: p.border),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: _isLocating ? null : _fetchCurrentLocation,
-                                icon: _isLocating
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.my_location, size: 15),
-                                label: const Text('Mevcut Konumu Al'),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            LayoutBuilder(
-                              builder: (context, constraints) {
-                                // Büyük yazı / dar kutuda enlem ve boylam alt alta dizilir (hata iletileri okunur).
-                                final stacked =
-                                    MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
-                                    constraints.maxWidth < 260;
-                                final latField = TextField(
-                                  controller: _latController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                    signed: true,
-                                  ),
-                                  onChanged: (_) {
-                                    if (_latError != null) setState(() => _latError = null);
-                                  },
-                                  decoration: InputDecoration(
-                                    labelText: 'Enlem (Latitude)',
-                                    hintText: '41.0082',
-                                    isDense: true,
-                                    errorText: _latError,
-                                    errorMaxLines: 3,
-                                  ),
-                                );
-                                final lngField = TextField(
-                                  controller: _lngController,
-                                  keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                    signed: true,
-                                  ),
-                                  onChanged: (_) {
-                                    if (_lngError != null) setState(() => _lngError = null);
-                                  },
-                                  decoration: InputDecoration(
-                                    labelText: 'Boylam (Longitude)',
-                                    hintText: '28.9784',
-                                    isDense: true,
-                                    errorText: _lngError,
-                                    errorMaxLines: 3,
-                                  ),
-                                );
-                                if (stacked) {
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      latField,
-                                      const SizedBox(height: 12),
-                                      lngField,
+                                      _sectionTitle(
+                                        icon: Icons.location_on_outlined,
+                                        tone: AppTone.info,
+                                        title: 'Kapı / Site GPS Koordinatları',
+                                      ),
+                                      const SizedBox(height: AppSpace.sm),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: OutlinedButton.icon(
+                                          onPressed: _isLocating ? null : _fetchCurrentLocation,
+                                          icon: _isLocating
+                                              ? const SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                )
+                                              : const Icon(Icons.my_location, size: 15),
+                                          label: const Text('Mevcut Konumu Al'),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          // Büyük yazı / dar kutuda enlem ve boylam alt alta dizilir (hata iletileri okunur).
+                                          final stacked =
+                                              MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                                              constraints.maxWidth < 260;
+                                          final latField = TextField(
+                                            controller: _latController,
+                                            keyboardType: const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                              signed: true,
+                                            ),
+                                            onChanged: (_) {
+                                              if (_latError != null) setState(() => _latError = null);
+                                            },
+                                            decoration: InputDecoration(
+                                              labelText: 'Enlem (Latitude)',
+                                              hintText: '41.0082',
+                                              isDense: true,
+                                              errorText: _latError,
+                                              errorMaxLines: 3,
+                                            ),
+                                          );
+                                          final lngField = TextField(
+                                            controller: _lngController,
+                                            keyboardType: const TextInputType.numberWithOptions(
+                                              decimal: true,
+                                              signed: true,
+                                            ),
+                                            onChanged: (_) {
+                                              if (_lngError != null) setState(() => _lngError = null);
+                                            },
+                                            decoration: InputDecoration(
+                                              labelText: 'Boylam (Longitude)',
+                                              hintText: '28.9784',
+                                              isDense: true,
+                                              errorText: _lngError,
+                                              errorMaxLines: 3,
+                                            ),
+                                          );
+                                          if (stacked) {
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                latField,
+                                                const SizedBox(height: 12),
+                                                lngField,
+                                              ],
+                                            );
+                                          }
+                                          return Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(child: latField),
+                                              const SizedBox(width: 12),
+                                              Expanded(child: lngField),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Wrap(
+                                        alignment: WrapAlignment.spaceBetween,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          Text(
+                                            'İzin Verilen Azami Mesafe:',
+                                            style: th.bodySmall?.copyWith(
+                                              fontWeight: FontWeight.w500,
+                                              color: p.textSecondary,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${_radiusMeters.round()} metre',
+                                            maxLines: 1,
+                                            style: th.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              color: accent,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Slider(
+                                        // Kaydırıcı aralığı dışındaki değerler (örn. API'den gelen 500 m) çökmesin.
+                                        value: _radiusMeters.clamp(25.0, 300.0).toDouble(),
+                                        min: 25,
+                                        max: 300,
+                                        divisions: 11,
+                                        label: '${_radiusMeters.round()} m',
+                                        onChanged: (val) => setState(() {
+                                          _radiusMeters = val;
+                                          _radiusError = null;
+                                        }),
+                                      ),
+                                      if (_radiusError != null)
+                                        InlineNotice(message: _radiusError!),
                                     ],
-                                  );
-                                }
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(child: latField),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: lngField),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: [
-                                Text(
-                                  'İzin Verilen Azami Mesafe:',
-                                  style: th.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    color: p.textSecondary,
-                                  ),
-                                ),
-                                Text(
-                                  '${_radiusMeters.round()} metre',
-                                  maxLines: 1,
-                                  style: th.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: accent,
                                   ),
                                 ),
                               ],
-                            ),
-                            Slider(
-                              // Kaydırıcı aralığı dışındaki değerler (örn. API'den gelen 500 m) çökmesin.
-                              value: _radiusMeters.clamp(25.0, 300.0).toDouble(),
-                              min: 25,
-                              max: 300,
-                              divisions: 11,
-                              label: '${_radiusMeters.round()} m',
-                              onChanged: (val) => setState(() {
-                                _radiusMeters = val;
-                                _radiusError = null;
-                              }),
-                            ),
-                            if (_radiusError != null)
-                              Text(
-                                _radiusError!,
-                                style: th.bodySmall?.copyWith(
-                                  color: AppTone.danger.ink(p),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
                     if (compactHeader) ...[
                       const SizedBox(height: 16),
                       const Divider(height: 1),
@@ -684,6 +694,44 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
     );
   }
 
+  /// Koşullu bölümlerin (QR süresi, konum koordinatları) açılış süresi: 200 ms; hareket azaltmada 1 ms.
+  /// SIFIR süre KULLANILMAZ: `AnimatedSize` süre sıfırken kendi `performLayout`'u içinde yeniden yerleşim
+  /// ister (bkz. `DoorLogsAccordion._foldDuration`); 1 ms görsel olarak anındadır.
+  static Duration _revealDuration(BuildContext context) =>
+      AppMotion.reduced(context) ? const Duration(milliseconds: 1) : AppMotion.base;
+
+  /// Bölüm başlığı: cilalı ton küresi ([IconOrb], 32 dp squircle) + başlık (+ isteğe bağlı rozet).
+  /// Başlık kırpılmaz: dar ekran/büyük yazıda satır atlar, rozet alt satıra iner.
+  Widget _sectionTitle({
+    required IconData icon,
+    required AppTone tone,
+    required String title,
+    Widget? badge,
+  }) {
+    final th = Theme.of(context).textTheme;
+    return Wrap(
+      spacing: AppSpace.sm,
+      runSpacing: AppSpace.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconOrb(icon: icon, tone: tone, size: 32, shape: IconOrbShape.squircle),
+            const SizedBox(width: AppSpace.md),
+            Flexible(
+              child: Text(
+                title,
+                style: th.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        ?badge,
+      ],
+    );
+  }
+
   Widget _buildAccessModeCard({
     required String mode,
     required String title,
@@ -694,47 +742,51 @@ class _SiteSecurityPolicyDialogState extends State<SiteSecurityPolicyDialog> {
     final isSelected = _accessMode == mode;
     final isEnabled = widget.isSuperUser;
     final accent = AppTone.primary.ink(p);
+    // Devre dışı (süper kullanıcı değil): Opacity (saveLayer) yerine yumuşatılmış palet renkleri;
+    // seçim yine kenar ve dolu/boş işaretle okunur. Hepsi >= 4,5:1 (palet sözleşmesi).
+    final titleColor = !isEnabled
+        ? p.textSecondary
+        : (isSelected ? accent : p.text);
+    final markColor = isSelected && isEnabled ? accent : p.textMuted;
 
     return AppCard(
       selected: isSelected,
       onTap: isEnabled ? () => setState(() => _accessMode = mode) : null,
-      padding: const EdgeInsets.all(12),
-      // Devre dışı (süper kullanıcı değil): içerik soluk gösterilir.
-      child: Opacity(
-        opacity: isEnabled ? 1 : 0.6,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                size: 20,
-                color: isSelected ? accent : p.textMuted,
-              ),
+      padding: const EdgeInsets.all(AppSpace.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              size: 20,
+              color: markColor,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: th.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? accent : p.text,
-                    ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: th.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: titleColor,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: th.bodySmall?.copyWith(
+                    color: isEnabled ? p.textSecondary : p.textMuted,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

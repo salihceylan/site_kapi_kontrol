@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../models/door_access_log_record.dart';
 import '../../models/door_record.dart';
@@ -5,10 +7,11 @@ import '../../models/site_record.dart';
 import '../../services/auth_service.dart';
 import '../design/app_card.dart';
 import '../design/empty_state.dart';
+import '../design/icon_orb.dart';
 import '../design/motion_widgets.dart';
 import '../design/skeleton.dart';
+import '../design/status_chip.dart';
 import '../design/tokens.dart';
-
 
 class DoorLogsAccordion extends StatefulWidget {
   const DoorLogsAccordion({
@@ -153,11 +156,14 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
           ),
           child: Row(
             children: [
-              Icon(
-                _isExpanded ? Icons.folder_open_rounded : Icons.history_rounded,
-                size: 20,
+              // Başlık küresi: cilalı info tonu (açılınca klasör simgesine döner).
+              IconOrb(
+                icon: _isExpanded ? Icons.folder_open_rounded : Icons.history_rounded,
+                tone: tone,
+                size: 32,
+                shape: IconOrbShape.squircle,
               ),
-              const SizedBox(width: AppSpace.sm),
+              const SizedBox(width: AppSpace.md),
               Expanded(
                 child: Text(
                   '📊 $doorName Geçiş Logları',
@@ -366,7 +372,6 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final (triggerIcon, triggerTone) = _getTriggerInfo(log.triggerType);
-    final triggerInk = triggerTone.ink(p);
 
     final roleLabel = log.userRoleDisplay;
     final aptText = log.apartmentLabel?.trim();
@@ -386,15 +391,22 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         ? (roleLabel.isNotEmpty ? roleLabel : 'Yetkili Geçiş')
         : rawName;
 
-    final timeText = Text(
-      _formatTimeOnly(log.openedAt),
-      style: th.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: p.text),
+    // Zaman damgası: sabit genişlikli (tabular) rakamlar; satırlar arası sütun hizalı kalır.
+    const tabular = <FontFeature>[FontFeature.tabularFigures()];
+    final timeString = _formatTimeOnly(log.openedAt);
+    final dateString = _formatDateOnly(log.openedAt);
+    final timeStyle = th.bodySmall?.copyWith(
+      fontWeight: FontWeight.w700,
+      color: p.text,
+      fontFeatures: tabular,
     );
+    final dateStyle = th.bodySmall?.copyWith(fontFeatures: tabular);
+    final timeText = Text(timeString, style: timeStyle);
     final dateText = Text(
-      _formatDateOnly(log.openedAt),
+      dateString,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: th.bodySmall,
+      style: dateStyle,
     );
 
     // Ad + yöntem rozeti: sığmazsa rozet alt satıra iner (ad kırpılmaz).
@@ -415,27 +427,8 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: triggerTone.tint(p),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpace.sm,
-                  vertical: AppSpace.xs,
-                ),
-                child: Text(
-                  log.triggerTypeDisplay,
-                  style: th.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: triggerInk,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
+            // Geçiş yöntemi: ton anlam taşır (bulut, yerel ağ, sesli, misafir...).
+            StatusChip(label: log.triggerTypeDisplay, tone: triggerTone),
           ],
         ),
         const SizedBox(height: AppSpace.xs),
@@ -461,24 +454,20 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Tarih/saat sütunu yan yana sığmıyorsa (dar ekran / büyük yazı) adın altına iner.
-          final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
-          final stacked = constraints.maxWidth - _rowFixedWidth - 60 * scale < _rowMinNameWidth;
+          // Tarih/saat sütunu yan yana sığmıyorsa (dar ekran / büyük yazı) adın altına iner. Sütunun
+          // genişliği tahminle değil GERÇEK ölçüyle bulunur: yöntem rozeti ([StatusChip]) en az ~42 dp
+          // ister, ad sütunu bunun altına ezilmemelidir (her yazı tipinde ve ölçekte doğru karar).
+          final rightWidth = math.max(
+            _measure(context, timeString, timeStyle),
+            _measure(context, dateString, dateStyle),
+          );
+          final stacked =
+              constraints.maxWidth - _rowFixedWidth - rightWidth < _rowMinNameWidth;
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Yöntem İkon Rozeti
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: triggerTone.tint(p),
-                  shape: BoxShape.circle,
-                ),
-                child: SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(triggerIcon, size: 16, color: triggerInk),
-                ),
-              ),
+              // Yöntem küresi (cilalı ton; tonun anlamı yanındaki StatusChip'te de yazılıdır)
+              IconOrb(icon: triggerIcon, tone: triggerTone, size: 32),
               const SizedBox(width: AppSpace.md),
 
               // Kullanıcı Adı ve Daire/Rol Bilgisi (+ dar düzende tarih & saat)
@@ -512,6 +501,19 @@ class _DoorLogsAccordionState extends State<DoorLogsAccordion> {
         },
       ),
     );
+  }
+
+  /// [text]'in [style] ve geçerli yazı ölçeğiyle tek satırdaki genişliği (dp).
+  static double _measure(BuildContext context, String text, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 
   /// Satırdaki sabit genişlikler: simge 32 + boşluk 12 + sağ sütun boşluğu 8.

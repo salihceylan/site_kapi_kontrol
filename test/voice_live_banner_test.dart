@@ -13,6 +13,7 @@ import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_live_banner.dart';
 
@@ -257,7 +258,23 @@ void main() {
             expect(find.text(c.feedback), findsNothing);
           }
           expect(_leadingIcon(t).icon, c.icon, reason: 'dark=$dark');
-          expect(_leadingIcon(t).color, c.tone.ink(p));
+          // Başlangıç küresi (IconOrb, cilalı ton): beyaz ikon, ton gradyanının iki ucunda >= 4,5:1
+          // (cila dahil piksel ölçümü gloss_test.dart'ta). Eski düz ton dairesinin ink ikonu yerine geçti.
+          expect(_leadingIcon(t).color, Colors.white);
+          for (final end in <Color>[c.tone.a, c.tone.b]) {
+            expect(
+              _contrast(Colors.white, end),
+              greaterThanOrEqualTo(4.5),
+              reason: '${c.name}: ${c.tone.name} gradyanı üstünde beyaz ikon',
+            );
+          }
+          final orb = t.widget<IconOrb>(find.byType(IconOrb));
+          expect(orb.tone, c.tone);
+          expect(
+            orb.glow,
+            c.status == VoiceStatus.listening,
+            reason: 'glow yalnız canlı dinlemede',
+          );
           expect(
             find.descendant(
               of: find.byType(IconButton),
@@ -286,6 +303,11 @@ void main() {
           );
           expect(d.borderRadius, BorderRadius.circular(AppRadius.md));
           expect(d.boxShadow, isNull, reason: 'kart-içinde-kart: ek gölge yok');
+          expect(
+            d.gradient,
+            isNotNull,
+            reason: 'cam hissi: sol-üstten inen statik ışık (gradyan)',
+          );
         }
       });
     }

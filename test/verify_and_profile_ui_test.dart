@@ -266,22 +266,27 @@ void main() {
       expect(find.text('Mevcut Şifre'), findsOneWidget);
       expect(find.text('Yeni Şifre (opsiyonel)'), findsOneWidget);
 
+      // Üstteki kimlik özeti (hero) formu aşağı iter: kullanıcı gibi düğmeyi görünür yapıp dokun.
+      Future<void> tapSave() async {
+        await tester.ensureVisible(find.text('Profili Kaydet'));
+        await tester.pump();
+        await tester.tap(find.text('Profili Kaydet'));
+        await tester.pump();
+      }
+
       // Şifre değişmiyorsa mevcut şifre zorunlu değildir.
-      await tester.tap(find.text('Profili Kaydet'));
-      await tester.pump();
+      await tapSave();
       expect(saved, 1);
 
       // Yeni şifre yazılınca mevcut şifre zorunlu olur.
       await tester.enterText(find.widgetWithText(TextFormField, 'Yeni Şifre (opsiyonel)'), 'yeniSifre1');
-      await tester.tap(find.text('Profili Kaydet'));
-      await tester.pump();
+      await tapSave();
       expect(saved, 1);
       expect(find.text('Şifre değiştirmek için mevcut şifrenizi girin.'), findsOneWidget);
 
       // Mevcut şifre girilince kayıt geçer.
       await tester.enterText(find.widgetWithText(TextFormField, 'Mevcut Şifre'), 'eskiSifre1');
-      await tester.tap(find.text('Profili Kaydet'));
-      await tester.pump();
+      await tapSave();
       expect(saved, 2);
       expect(tester.takeException(), isNull);
     });

@@ -10,7 +10,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/services/ble_wifi_provision_service.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/wifi_provision_page.dart';
@@ -479,5 +482,135 @@ void main() {
         await _dispose(t);
       },
     );
+  });
+
+  group('premium dokunuşlar (rozet, çip, ilerleme, geri bildirim)', () {
+    testWidgets('kart başlıklarında cilalı IconOrb; cihaz başlığı tek ışımalı odak', (
+      t,
+    ) async {
+      final service = FakeBleService(devices: _devices, state: _connectedState);
+      await _pumpPage(t, WifiProvisionPage(service: service), height: 1400);
+      // Kurulum sırası + Bluetooth cihazları başlığı + 4 cihaz satırı.
+      expect(find.byType(IconOrb), findsNWidgets(2 + 4));
+      await _connect(t);
+      final glowing = t
+          .widgetList<IconOrb>(find.byType(IconOrb))
+          .where((o) => o.glow);
+      expect(glowing, hasLength(1), reason: 'bir ekranda tek hero/ışımalı rozet');
+      expect(glowing.single.icon, Icons.memory_rounded);
+      // Seçili cihaz satırı birincil, diğerleri nötr tonlu rozet.
+      final tones = t
+          .widgetList<ListTile>(find.byType(ListTile))
+          .map((l) => (l.leading! as IconOrb).tone)
+          .toList();
+      expect(tones.first, AppTone.primary);
+      expect(tones.skip(1), everyElement(AppTone.neutral));
+      await _dispose(t);
+    });
+
+    testWidgets('durum göstergeleri StatusChip (metinler aynı); eksik MQTT uyarı bildirimi', (
+      t,
+    ) async {
+      final ready = FakeBleService(devices: _devices, state: _connectedState);
+      await _pumpPage(t, WifiProvisionPage(service: ready), height: 1400);
+      await _connect(t);
+      AppTone toneOf(String label) =>
+          t.widget<StatusChip>(find.widgetWithText(StatusChip, label)).tone;
+      expect(toneOf('Wi-Fi Durumu: Bağlı'), AppTone.success);
+      expect(toneOf('MQTT Kimliği: Hazır'), AppTone.success);
+      expect(find.byType(InlineNotice), findsNothing);
+      await _dispose(t);
+
+      final missing = FakeBleService(devices: _devices);
+      await _pumpPage(t, WifiProvisionPage(service: missing), height: 1400);
+      await _connect(t);
+      expect(toneOf('Wi-Fi Durumu: Bağlı değil'), AppTone.warning);
+      expect(find.text('MQTT Kimliği: Eksik veya henüz yazılmadı'), findsOneWidget);
+      expect(t.widget<InlineNotice>(find.byType(InlineNotice)).tone, AppTone.warning);
+      await _dispose(t);
+    });
+
+    testWidgets('kayıt sürerken yuvarlak uçlu LinearProgressIndicator; bitince kalkar', (
+      t,
+    ) async {
+      final gate = Completer<void>();
+      final service = FakeBleService(
+        devices: _devices,
+        networks: _networks,
+        state: _connectedState,
+        provisionGate: gate,
+      );
+      await _pumpPage(
+        t,
+        WifiProvisionPage(service: service, authService: G4MqttAuth()),
+        height: 1400,
+      );
+      await _connect(t);
+      await _tapVisible(t, find.text('Wi-Fi Ağlarını Tara'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await t.enterText(find.byType(TextField), 'gizli');
+      await _tapVisible(t, find.text('Wi-Fi Bilgilerini Cihaza Kaydet'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      final bar = find.byType(LinearProgressIndicator);
+      expect(bar, findsOneWidget);
+      final theme = Theme.of(t.element(bar)).progressIndicatorTheme;
+      expect(theme.strokeCap, StrokeCap.round);
+      gate.complete();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(bar, findsNothing);
+      await _dispose(t);
+    });
+
+    testWidgets('geri bildirimler tonlu AppSnack: başarı yeşil, uyarı amber', (t) async {
+      final service = FakeBleService(
+        devices: _devices,
+        networks: _networks,
+        state: _connectedState,
+      );
+      await _pumpPage(
+        t,
+        WifiProvisionPage(service: service, authService: G4MqttAuth()),
+        height: 1400,
+      );
+      await _connect(t);
+      await _tapVisible(t, find.text('Wi-Fi Ağlarını Tara'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      await _tapVisible(t, find.text('Wi-Fi Bilgilerini Cihaza Kaydet'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(
+        t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+        AppTone.warning.b,
+        reason: 'şifre boş: uyarı',
+      );
+      ScaffoldMessenger.of(t.element(find.byType(Scaffold).last)).clearSnackBars();
+      await t.pump();
+      await t.enterText(find.byType(TextField), 'gizli');
+      await _tapVisible(t, find.text('Wi-Fi Bilgilerini Cihaza Kaydet'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('Wi-Fi ayarı kaydedildi.'), findsOneWidget);
+      expect(
+        t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+        AppTone.success.b,
+      );
+      await _dispose(t);
+    });
+
+    testWidgets('ana kartlar kademeli girer; hareket azaltmada tek pump ile tam', (t) async {
+      final service = FakeBleService(devices: _devices);
+      await _pumpPage(t, WifiProvisionPage(service: service), reduce: true);
+      expect(find.byType(StaggeredEntry), findsNWidgets(2 + 4));
+      final opacity = t.widget<Opacity>(
+        find.ancestor(of: find.text('Kurulum Sırası'), matching: find.byType(Opacity)).first,
+      );
+      expect(opacity.opacity, 1.0);
+      await _dispose(t);
+    });
   });
 }

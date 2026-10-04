@@ -226,7 +226,7 @@ void main() {
     });
 
     testWidgets(
-      'çevrimdışı: ÇEVRİMDİŞI, dokununca "çevrimdışı" uyarısı (AppSnack hata); kapı açılmaz',
+      'çevrimdışı: ÇEVRİMDIŞI, dokununca "çevrimdışı" uyarısı (AppSnack hata); kapı açılmaz',
       (t) async {
         var opened = 0;
         final haptics = recordHaptics(t);
@@ -236,11 +236,11 @@ void main() {
           width: 360,
           scale: 1.0,
         );
-        expect(find.text('ÇEVRİMDİŞI'), findsOneWidget);
+        expect(find.text('ÇEVRİMDIŞI'), findsOneWidget);
         expect(_button(t).state, DoorOpenState.offline);
         expect(find.text('🔴 Cihaz Çevrimdışı'), findsOneWidget);
 
-        await t.tap(find.text('ÇEVRİMDİŞI'));
+        await t.tap(find.text('ÇEVRİMDIŞI'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
         expect(opened, 0);
@@ -315,7 +315,7 @@ void main() {
     );
 
     testWidgets(
-      'yalnız karekod + çevrimdışı: ÇEVRİMDİŞI, dokununca uyarı (karekod penceresi açılmaz)',
+      'yalnız karekod + çevrimdışı: ÇEVRİMDIŞI, dokununca uyarı (karekod penceresi açılmaz)',
       (t) async {
         await pumpAt(
           t,
@@ -326,8 +326,8 @@ void main() {
           width: 360,
           scale: 1.0,
         );
-        expect(find.text('ÇEVRİMDİŞI'), findsOneWidget);
-        await t.tap(find.text('ÇEVRİMDİŞI'));
+        expect(find.text('ÇEVRİMDIŞI'), findsOneWidget);
+        await t.tap(find.text('ÇEVRİMDIŞI'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
         expect(find.byType(DynamicQrPassModal), findsNothing);

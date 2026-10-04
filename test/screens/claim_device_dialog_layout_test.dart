@@ -1,6 +1,8 @@
 // FAZ 5 / A2-G5: ClaimDeviceDialog taşma testi (AGENTS.md kural 6).
 //
 // `Dialog` (AlertDialog değil): başlık şeridi AppDialogHeader, gövde kaydırılabilir.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
@@ -11,12 +13,18 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/widgets/claim_device_dialog.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 
 class _FakeAuth extends AuthService {
-  _FakeAuth({this.failWith}) : super(api: AuthApi(baseUrl: 'http://localhost'));
+  _FakeAuth({this.failWith, this.hold = false})
+    : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   final String? failWith;
+
+  /// true: istek [gate] tamamlanana kadar sürer (yükleniyor durumunu gözlemlemek için).
+  final bool hold;
+  final Completer<void> gate = Completer<void>();
   final List<String> claimed = [];
 
   @override
@@ -24,6 +32,7 @@ class _FakeAuth extends AuthService {
     required String deviceInput,
   }) async {
     claimed.add(deviceInput);
+    if (hold) await gate.future;
     if (failWith != null) throw ApiException(failWith!);
     return <String, dynamic>{
       'message': 'Cihaz hesabınıza bağlandı.',
@@ -112,6 +121,63 @@ void main() {
     expect(find.textContaining('başka bir hesaba bağlı'), findsOneWidget);
     await scrollTo(t, find.byType(InlineNotice));
   });
+
+  testWidgets(
+    'ClaimDeviceDialog: istek sürerken birincil düğme "yükleniyor"; başarıda tek hafif haptik + bildirim, kapanır',
+    (t) async {
+      final haptics = recordHaptics(t);
+      final auth = _FakeAuth(hold: true);
+      await _open(t, auth, width: 400, height: 900, scale: 1.0, dark: false);
+
+      // Elle giriş: ikincil gönder düğmesi tonal (birincil kutu QR düğmesi dolu kalır).
+      await t.tap(find.text('Seri No / UID ile Elle Ekle'));
+      await settleFor(t);
+      // Elle giriş formu yumuşak açılır (AnimatedSize, sonlu): kararlı durumda ticker kalmaz.
+      await t.pumpAndSettle();
+      expect(t.binding.transientCallbackCount, 0);
+      final submit = t.widget<PrimaryActionButton>(
+        find.widgetWithText(PrimaryActionButton, 'Cihazı Hesaba Bağla'),
+      );
+      expect(submit.variant, AppButtonVariant.tonal);
+      expect(
+        t
+            .widget<PrimaryActionButton>(
+              find.widgetWithText(PrimaryActionButton, 'Kutu QR Kodunu Tara'),
+            )
+            .variant,
+        AppButtonVariant.filled,
+      );
+
+      await t.enterText(find.byType(TextField), 'ABC123DEF456');
+      await t.tap(find.text('Cihazı Hesaba Bağla'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+
+      // Yükleniyor: tek düğme "yükleniyor" durumunda (tıklama kapalı) + mevcut açıklama metni.
+      expect(
+        find.text('Cihaz kontrol ediliyor ve hesabınıza bağlanıyor...'),
+        findsOneWidget,
+      );
+      final loading = t.widget<PrimaryActionButton>(
+        find.byType(PrimaryActionButton),
+      );
+      expect(loading.loading, isTrue);
+      expect(loading.onPressed, isNull);
+      expect(find.byType(TextField), findsNothing);
+      expect(haptics.where((h) => h.contains('lightImpact')), isEmpty);
+
+      auth.gate.complete();
+      await settleFor(t, 800);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('Cihaz hesabınıza bağlandı.'), findsOneWidget);
+      expect(
+        haptics.where((h) => h.contains('lightImpact')),
+        hasLength(1),
+        reason: 'başarı anında hafif haptik',
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'ClaimDeviceDialog: boş gönderimde mevcut uyarı metni; başarıda kapanır',

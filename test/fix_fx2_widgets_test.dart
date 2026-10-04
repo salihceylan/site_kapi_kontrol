@@ -632,7 +632,7 @@ void main() {
       final auth = _IndividualAuth(onlineAfterCalls: 2); // ilk yükleme çevrimdışı, sonraki yenileme çevrimiçi
       await _pumpIndividual(tester, auth);
 
-      await tester.tap(find.text('Kapıyı Aç'));
+      await tester.tap(find.text('KAPIYI AÇ'));
       await tester.pumpAndSettle();
 
       expect(auth.openDoorIds, [2], reason: 'tazelenen kayıt çevrimiçi: açma isteği gitmeli');
@@ -644,7 +644,7 @@ void main() {
       final auth = _IndividualAuth(onlineAfterCalls: 1000);
       await _pumpIndividual(tester, auth);
 
-      await tester.tap(find.text('Kapıyı Aç'));
+      await tester.tap(find.text('KAPIYI AÇ'));
       await tester.pumpAndSettle();
 
       expect(auth.openDoorIds, isEmpty);
@@ -668,15 +668,21 @@ void main() {
 
   group('Kaynak koruması', () {
     test('ekran QR okutma başarılı olunca ikinci "kapı aç" komutu gönderilmez (door-open#0)', () {
-      final source = File('lib/ui/widgets/resident_door_remote_card.dart').readAsStringSync();
-      final start = source.indexOf('Future<void> _handleScanScreenQr');
+      // Mantık kart ve çekmece için ortak yardımcıdadır (ResidentDoorActions).
+      final source = File('lib/ui/widgets/resident_door_actions.dart').readAsStringSync();
+      final start = source.indexOf('static Future<void> scanScreenQr');
       expect(start, isNonNegative);
-      final end = source.indexOf('/// Sesli Dinleme', start);
-      expect(end, greaterThan(start));
-      final body = source.substring(start, end);
+      final body = source.substring(start);
       expect(body.contains('openDoorWithScannedQr'), isTrue);
       expect(body.contains('onOpenDoor()'), isFalse,
           reason: 'scan-qr-open kapıyı zaten açtı; ikinci komut çift tetik/çift log üretir');
+      // Kart yalnız yardımcıya devreder; kendi başına kapı açma komutu göndermez.
+      final card = File('lib/ui/widgets/resident_door_remote_card.dart').readAsStringSync();
+      final cardStart = card.indexOf('Future<void> _handleScanScreenQr');
+      expect(cardStart, isNonNegative);
+      final cardBody = card.substring(cardStart, card.indexOf(';', cardStart));
+      expect(cardBody.contains('ResidentDoorActions.scanScreenQr'), isTrue);
+      expect(cardBody.contains('onOpenDoor()'), isFalse);
     });
 
     test('"Paylaş" düğmesi sistem paylaşım sayfasını açar (guest-pass#3)', () {

@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
@@ -963,29 +964,16 @@ class _WelcomeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
     const tone = AppTone.primary;
 
     return AppCard(
       child: Row(
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: tone.tint(p),
-              shape: BoxShape.circle,
-            ),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: Icon(
-                  Icons.waving_hand_rounded,
-                  color: tone.ink(p),
-                  size: 22,
-                ),
-              ),
-            ),
+          const IconOrb(
+            icon: Icons.waving_hand_rounded,
+            tone: tone,
+            size: 48,
           ),
           const SizedBox(width: AppSpace.md),
           Expanded(
@@ -1030,6 +1018,8 @@ class _DoorCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Yüklenen kartın düzenini taklit eder (solda yuvarlak düğme, sağda ad/konum/rozetler, altta iki
+    // eylem çubuğu): içerik gelince yer değiştirme zıplaması olmaz.
     return const Padding(
       padding: EdgeInsets.only(bottom: AppSpace.lg),
       child: AppCard(
@@ -1038,20 +1028,37 @@ class _DoorCardSkeleton extends StatelessWidget {
           children: [
             Row(
               children: [
-                SkeletonBox(width: 48, height: 48, radius: AppRadius.md),
-                SizedBox(width: AppSpace.md),
+                SkeletonBox(width: 116, height: 116, radius: AppRadius.pill),
+                SizedBox(width: AppSpace.lg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       FractionallySizedBox(
-                        widthFactor: 0.6,
+                        widthFactor: 0.7,
                         child: SkeletonBox(height: 18),
                       ),
                       SizedBox(height: AppSpace.sm),
                       FractionallySizedBox(
-                        widthFactor: 0.4,
+                        widthFactor: 0.45,
                         child: SkeletonBox(height: 12),
+                      ),
+                      SizedBox(height: AppSpace.md),
+                      Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.sm,
+                        children: [
+                          SkeletonBox(
+                            width: 84,
+                            height: 28,
+                            radius: AppRadius.pill,
+                          ),
+                          SkeletonBox(
+                            width: 108,
+                            height: 28,
+                            radius: AppRadius.pill,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1059,16 +1066,7 @@ class _DoorCardSkeleton extends StatelessWidget {
               ],
             ),
             SizedBox(height: AppSpace.md),
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.sm,
-              children: [
-                SkeletonBox(width: 96, height: 28, radius: AppRadius.pill),
-                SkeletonBox(width: 128, height: 28, radius: AppRadius.pill),
-              ],
-            ),
-            SizedBox(height: AppSpace.lg),
-            SkeletonBox(height: 52, radius: AppRadius.md),
+            SkeletonBox(height: 48, radius: AppRadius.md),
             SizedBox(height: AppSpace.sm),
             SkeletonBox(height: 48, radius: AppRadius.md),
           ],
@@ -1107,22 +1105,11 @@ class _ClaimedDeviceCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: tone.tint(p),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Center(
-                    child: Icon(
-                      Icons.developer_board_rounded,
-                      color: tone.ink(p),
-                      size: 22,
-                    ),
-                  ),
-                ),
+              IconOrb(
+                icon: Icons.developer_board_rounded,
+                tone: tone,
+                size: 44,
+                shape: IconOrbShape.squircle,
               ),
               const SizedBox(width: AppSpace.md),
               Expanded(

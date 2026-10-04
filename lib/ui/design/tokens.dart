@@ -328,6 +328,20 @@ abstract final class AppGradients {
     radius: 1.1,
     colors: <Color>[Color(0x1F3B82F6), Color(0x003B82F6)],
   );
+
+  /// İkinci, çok hafif ışıma (sol-alt köşe, mor): sayfaya derinlik verir. Birincil ışımayla aynı ilke:
+  /// statiktir (ticker yok), tek gradyan boyaması.
+  static const RadialGradient pageGlowAccentLight = RadialGradient(
+    center: Alignment(-1.0, 1.15),
+    radius: 1.0,
+    colors: <Color>[Color(0x0FA855F7), Color(0x00A855F7)],
+  );
+
+  static const RadialGradient pageGlowAccentDark = RadialGradient(
+    center: Alignment(-1.0, 1.15),
+    radius: 1.0,
+    colors: <Color>[Color(0x1AA855F7), Color(0x00A855F7)],
+  );
 }
 
 /// Tipografi ölçeği: yalnız mevcut temada tanımlı yuvalar (label* dokunulmaz: buton varsayılanları).

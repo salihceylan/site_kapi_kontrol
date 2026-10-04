@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 
+import '../design/harness.dart';
 import 'dialog_layout_harness.dart';
 
 ApartmentRecord _apartment({bool withResident = false}) => ApartmentRecord(
@@ -88,4 +92,107 @@ void main() {
     await scrollTo(t, find.text('Kaydet'));
     expect(find.text('İptal'), findsOneWidget);
   });
+
+  testWidgets(
+    'ApartmentResidentDialog: "Aktif" anahtarı durum rozetiyle anlatılır ve sonuca yansır; geçerli kayıt hafif haptik verir',
+    (t) async {
+      final haptics = recordHaptics(t);
+      ApartmentResidentFormResult? result;
+      await openDialogAt(
+        t,
+        (context) async {
+          result = await ApartmentResidentDialog.show(
+            context,
+            apartment: _apartment(),
+          );
+        },
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Aktif satırı: anahtar kartı + success tonlu rozet.
+      expect(find.byType(DialogToggleTile), findsOneWidget);
+      expect(find.text('Daire kullanıcısı giriş yapabilir.'), findsOneWidget);
+      IconOrb orbOf() => t.widget<IconOrb>(
+        find.descendant(
+          of: find.byType(DialogToggleTile),
+          matching: find.byType(IconOrb),
+        ),
+      );
+      expect(orbOf().tone, AppTone.success);
+
+      await scrollTo(t, find.text('Aktif'));
+      await t.tap(find.text('Aktif'));
+      await settleFor(t);
+      expect(find.text('Daire kullanıcısı askıda kalır.'), findsOneWidget);
+      expect(orbOf().tone, AppTone.neutral);
+
+      // Geçersiz gönderim: haptik yok.
+      await scrollTo(t, find.text('Kaydet'));
+      await t.tap(find.text('Kaydet'));
+      await settleFor(t);
+      expect(haptics, isEmpty);
+      expect(result, isNull);
+
+      await t.enterText(find.widgetWithText(TextFormField, 'Ad Soyad'), 'Ayşe Yılmaz');
+      await t.enterText(
+        find.widgetWithText(TextFormField, 'Kullanıcı Adı'),
+        'Ayse.Yilmaz',
+      );
+      await t.enterText(
+        find.widgetWithText(TextFormField, 'İlk Giriş Şifresi / PIN'),
+        '1234',
+      );
+      await scrollTo(t, find.text('Kaydet'));
+      await t.tap(find.text('Kaydet'));
+      await settleFor(t, 700);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(result, isNotNull);
+      expect(result!.fullName, 'Ayşe Yılmaz');
+      expect(result!.loginName, 'ayse.yilmaz');
+      expect(result!.password, '1234');
+      expect(result!.isActive, isFalse);
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'ApartmentResidentDialog: alanlar ortak dilde (ikonlu) ve Rastgele PIN dört haneli PIN üretir',
+    (t) async {
+      await openDialogAt(
+        t,
+        (context) =>
+            ApartmentResidentDialog.show(context, apartment: _apartment()),
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      for (final icon in const [
+        Icons.person_rounded,
+        Icons.alternate_email_rounded,
+        Icons.email_rounded,
+        Icons.pin_rounded,
+        Icons.phone_rounded,
+      ]) {
+        expect(find.byIcon(icon), findsOneWidget, reason: '$icon alan ikonu');
+      }
+
+      await scrollTo(t, find.text('Rastgele PIN'));
+      await t.tap(find.text('Rastgele PIN'));
+      await settleFor(t);
+      final pin = t
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'İlk Giriş Şifresi / PIN'),
+          )
+          .controller!
+          .text;
+      expect(RegExp(r'^[0-9]{4}$').hasMatch(pin), isTrue, reason: 'PIN: $pin');
+    },
+  );
 }

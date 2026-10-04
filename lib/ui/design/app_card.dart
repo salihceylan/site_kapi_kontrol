@@ -14,6 +14,11 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// Kart yüzeyi.
 ///
+/// **Premium yüzey**: koyu temada kartın üstünden sol-üstten cam gibi hafif bir ışık iner; yüksek
+/// seviyeli (2-3, "hero") kartlarda tonun (varsayılan birincil) sol-üst köşeden yumuşak bir yıkaması
+/// vardır; [accentBar] altına ince bir ışık sızıntısı bırakır. Üçü de statik gradyandır (opak
+/// Material yüzeyin ÜSTÜNDE, içeriğin ALTINDA; dokunmayı yutmaz, saveLayer yok).
+///
 /// Durumlar: varsayılan | hover/odak ([onTap] varsa `InkWell`: fare ve klavye) | [selected] (1,5 px
 /// kenar + en az seviye 2 yükselti) | [tone] (uyarı/hata tonlu zemin ve kenar) | devre dışı
 /// ([onTap] null: dokunulamaz; soluk içerik çağıranın işidir). Yükleme ve boş içerik kartın değil
@@ -66,6 +71,31 @@ class AppCard extends StatelessWidget {
   /// Seçili kart en az seviye 2 çizilir; daha yüksek seviye verilmişse düşürülmez.
   int get _effectiveLevel => selected && level < 2 ? 2 : level;
 
+  /// Yüzeyin üstüne binen statik ışık/yıkama (yoksa null). Opak Material rengi DEĞİŞMEZ.
+  static Widget? _sheen(AppPalette p, AppTone? tone, int level) {
+    Gradient? gradient;
+    if (level >= 2) {
+      // Hero kart: tonun sol-üst köşeden yumuşak yıkaması.
+      final hue = (tone ?? AppTone.primary).hue;
+      gradient = RadialGradient(
+        center: const Alignment(-1.0, -1.15),
+        radius: 1.35,
+        colors: [hue.withValues(alpha: p.isDark ? 0.16 : 0.09), hue.withValues(alpha: 0)],
+      );
+    } else if (p.isDark) {
+      // Koyu temada her karta cam gibi hafif üst ışık.
+      gradient = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0x0FFFFFFF), Color(0x00FFFFFF)],
+        stops: [0.0, 0.6],
+      );
+    }
+    return gradient == null
+        ? null
+        : DecoratedBox(decoration: BoxDecoration(gradient: gradient));
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -76,6 +106,16 @@ class AppCard extends StatelessWidget {
     final lvl = _effectiveLevel;
 
     Widget body = Padding(padding: padding, child: child);
+    final sheen = _sheen(p, tone, lvl);
+    if (sheen != null) {
+      body = Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Positioned.fill(child: IgnorePointer(child: sheen)),
+          body,
+        ],
+      );
+    }
     if (bar != null) {
       // passthrough: sınırlar şeritsiz kartla birebir aynı iletilir (düzen şeride bağlı değişmez).
       body = Stack(
@@ -83,6 +123,24 @@ class AppCard extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           body,
+          // Çubuğun altına inen ince ışık sızıntısı (dekoratif).
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 3,
+            height: 22,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [bar.withValues(alpha: 0.16), bar.withValues(alpha: 0)],
+                  ),
+                ),
+              ),
+            ),
+          ),
           Positioned(
             left: 0,
             right: 0,

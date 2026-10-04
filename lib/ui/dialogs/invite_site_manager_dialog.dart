@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
@@ -78,6 +79,7 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
     });
 
     if (success) {
+      HapticFeedback.lightImpact();
       AppSnack.show(
         context,
         message ?? 'Yönetici daveti başarıyla iletildi.',
@@ -128,7 +130,7 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
                   'Davet edilen kişi kayıtlıysa anında bu siteye yönetici olarak atanır. '
                   'Kayıtlı değilse e-posta adresine bir kayıt daveti gönderilir ve kaydolduğunda otomatik yönetici olur.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
@@ -136,8 +138,7 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
               decoration: const InputDecoration(
                 labelText: 'E-posta Adresi *',
                 hintText: 'ornek@eposta.com',
-                prefixIcon: Icon(Icons.email_outlined),
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email_rounded),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
@@ -151,18 +152,17 @@ class _InviteSiteManagerDialogState extends State<InviteSiteManagerDialog> {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpace.md),
             TextFormField(
               controller: _fullNameController,
               decoration: const InputDecoration(
                 labelText: 'Ad Soyad (İsteğe bağlı)',
                 hintText: 'Ahmet Yılmaz',
-                prefixIcon: Icon(Icons.badge_outlined),
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.badge_rounded),
               ),
             ),
             if (_errorMessage != null) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpace.md),
               InlineNotice(message: _errorMessage!),
             ],
           ],

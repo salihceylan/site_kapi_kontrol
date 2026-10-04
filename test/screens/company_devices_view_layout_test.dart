@@ -8,13 +8,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/company_devices_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/company_device_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
+import 'g4_test_support.dart';
 import 'list_fixtures.dart';
+
+/// OTA/sürüm senaryoları için kapıya atanmış, çevrimiçi cihaz ([ota] sunucudaki ham `ota_status`).
+DeviceRecord _otaDevice(
+  int id,
+  String? ota, {
+  String uid = '240AC4E2E001',
+  String? firmware = '3.0.3',
+}) {
+  return DeviceRecord.fromJson(<String, dynamic>{
+    'id': id,
+    'device_uid': uid,
+    'assigned_door_id': id,
+    'assigned_door_name': 'Ana Giriş Kapısı',
+    'site_code': 5899864115,
+    'site_name': 'Yeşilvadi Sitesi',
+    'mqtt_configured': true,
+    'mqtt_connected': true,
+    'firmware_version': firmware,
+    'hardware_target': 'esp32-wroom',
+    'hardware_type': 'esp32_wroom',
+    'ota_status': ota,
+    'created_at': '2026-10-01T12:30:00Z',
+  });
+}
 
 CompanyDevicesView _view({
   List<String>? log,
@@ -400,6 +428,173 @@ void main() {
       expect(find.text('Depoya Al'), findsNothing);
       expect(find.text('Arızalı İşaretle'), findsNothing);
       expect(find.textContaining('OTA Durumu'), findsNothing);
+    });
+  });
+
+  group('CompanyDevicesView görsel dil (cilalı rozet, tonlu sürüm/OTA, büyük yazı)', () {
+    testWidgets('kart rozeti: atama bekleyen = uyarı (kapı), atanmış = birincil (çip); 40 dp, glow yok', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      // Sıra: atama bekleyenler (2) sonra kapıya atanmış (1).
+      final orbs = t.widgetList<IconOrb>(find.byType(IconOrb)).toList();
+      expect(orbs.map((o) => o.tone).toList(), <AppTone>[
+        AppTone.warning,
+        AppTone.warning,
+        AppTone.primary,
+      ]);
+      expect(orbs.map((o) => o.icon).toList(), <IconData>[
+        Icons.door_sliding_outlined,
+        Icons.door_sliding_outlined,
+        Icons.memory_rounded,
+      ]);
+      expect(
+        orbs.every(
+          (o) => o.size == 40 && o.shape == IconOrbShape.circle && !o.glow,
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('giriş: her kart StaggeredEntry içinde, sırayla 0..n (ilk 8 hareketli, sonrası doğrudan)', (
+      t,
+    ) async {
+      final many = <DeviceRecord>[
+        for (var i = 1; i <= 10; i++)
+          fxDevice(i, uid: 'AABBCCDD00${i.toString().padLeft(2, '0')}'),
+      ];
+      await pumpList(
+        t,
+        _view(devices: many, page: fxDevicePage(many, total: 10)),
+        width: 360,
+        height: 900,
+        scale: 1,
+        dark: false,
+      );
+      final entries = t
+          .widgetList<StaggeredEntry>(find.byType(StaggeredEntry))
+          .toList();
+      expect(entries.map((e) => e.index).toList(), <int>[
+        for (var i = 0; i < 10; i++) i,
+      ]);
+      expect(find.byType(CompanyDeviceCard), findsNWidgets(10));
+      // Giriş animasyonları (en çok 440 ms) bitince kararlı durumda ticker kalmaz.
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(t.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('ayrıntıda sürüm ve OTA çipleri tonlu: sürüm birincil, OTA durumu anlamına göre', (
+      t,
+    ) async {
+      final devices = <DeviceRecord>[
+        _otaDevice(1, 'guncel'),
+        _otaDevice(2, 'hata', uid: 'AABBCCDD0002'),
+        _otaDevice(3, null, uid: 'AABBCCDD0003', firmware: null),
+      ];
+      await pumpList(
+        t,
+        _view(devices: devices, page: fxDevicePage(devices, total: 3)),
+        width: 360,
+        height: 1600,
+        scale: 1,
+        dark: false,
+      );
+      for (final uid in const <String>[
+        '240AC4E2E001',
+        'AABBCCDD0002',
+        'AABBCCDD0003',
+      ]) {
+        await tapText(t, uid);
+      }
+      AppTone? toneOf(String label) =>
+          t.widget<InfoChip>(find.widgetWithText(InfoChip, label).first).tone;
+      expect(toneOf('Firmware: 3.0.3'), AppTone.primary);
+      expect(toneOf('OTA Durumu: Güncel'), AppTone.success);
+      expect(toneOf('OTA Durumu: Hata'), AppTone.danger);
+      // Sürüm/OTA bilinmiyorsa nötr (ton yok).
+      expect(toneOf('Firmware: -'), isNull);
+      expect(toneOf('OTA Durumu: -'), isNull);
+    });
+
+    testWidgets('OTA dikkat rozeti: yalnız süper kullanıcıda ve yalnız dikkat gerektiren durumda', (
+      t,
+    ) async {
+      final devices = <DeviceRecord>[
+        _otaDevice(1, 'guncel'),
+        _otaDevice(2, 'hata', uid: 'AABBCCDD0002'),
+        _otaDevice(3, 'beklemede', uid: 'AABBCCDD0003'),
+        _otaDevice(4, 'indiriliyor', uid: 'AABBCCDD0004'),
+      ];
+      await pumpList(
+        t,
+        _view(devices: devices, page: fxDevicePage(devices, total: 4)),
+        width: 412,
+        height: 1600,
+        scale: 1,
+        dark: false,
+      );
+      AppTone toneOf(String label) =>
+          t.widget<StatusChip>(find.widgetWithText(StatusChip, label)).tone;
+      expect(toneOf('OTA: Hata'), AppTone.danger);
+      expect(toneOf('OTA: Beklemede'), AppTone.warning);
+      expect(toneOf('OTA: İndiriliyor'), AppTone.info);
+      expect(find.text('OTA: Güncel'), findsNothing, reason: 'güncel sessiz');
+      // Nabız yalnız çevrimiçi rozette (4 cihaz da çevrimiçi): OTA rozetleri nabız atmaz.
+      expect(
+        t
+            .widgetList<StatusChip>(find.byType(StatusChip))
+            .where((c) => c.label.startsWith('OTA:') && c.pulse),
+        isEmpty,
+      );
+
+      await pumpList(
+        t,
+        _view(
+          superUser: false,
+          devices: devices,
+          page: fxDevicePage(devices, total: 4),
+        ),
+        width: 412,
+        height: 1600,
+        scale: 1,
+        dark: false,
+      );
+      expect(find.textContaining('OTA:'), findsNothing);
+    });
+
+    testWidgets('büyük yazıda (2,0x) kart rozeti gizlenir, durum rozetleri kırpılmayan düz metin olur', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 320,
+        height: 900,
+        scale: 2.0,
+        dark: false,
+      );
+      expect(find.byType(IconOrb), findsNothing);
+      expect(find.byType(StatusChip), findsNothing);
+      for (final text in const <String>[
+        'Online',
+        'Offline',
+        'Bilinmiyor',
+        'ESP32-WROOM',
+        'KAPI ATANMAMIŞ',
+        'ARIZALI',
+      ]) {
+        expect(find.text(text), findsWidgets, reason: text);
+      }
+      // Düz metin tek satıra sıkıştırılmaz: elips yok.
+      expect(g4IsEllipsized(t, find.text('KAPI ATANMAMIŞ').first), isFalse);
+      expect(t.takeException(), isNull);
     });
   });
 

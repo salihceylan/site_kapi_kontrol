@@ -1,10 +1,13 @@
 // FAZ 5 / A2-G4: BluetoothWifiView ("Bluetooth ile Wi-Fi Kur" hero) taşma ve davranış testleri.
 //
-// AGENTS.md kural 6: 320x640 x2,0 ve 360x640 x1,5, açık + koyu tema (pumpAt). Görünüm: ikon karosu +
-// mevcut başlık + mevcut düğme (E2E "Bluetooth ile Wi-Fi Kurulumunu Aç" metni ve ElevatedButton tipi aynı).
+// AGENTS.md kural 6: 320x640 x2,0 ve 360x640 x1,5, açık + koyu tema (pumpAt). Görünüm: cilalı hero
+// ikon rozeti (IconOrb) + mevcut başlık + mevcut düğme (E2E "Bluetooth ile Wi-Fi Kurulumunu Aç" metni
+// ve ElevatedButton tipi aynı).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/bluetooth_wifi_view.dart';
 
 import '../design/harness.dart';
@@ -122,6 +125,37 @@ void main() {
           matchesSemantics(label: 'Bluetooth ile Wi-Fi Kur', isHeader: true),
         );
         handle.dispose();
+      },
+    );
+
+    testWidgets(
+      'hero: seviye 2 kart + 72 dp daire IconOrb (glow, dekoratif); kararlı durumda ticker yok',
+      (t) async {
+        await pumpAt(
+          t,
+          BluetoothWifiView(onOpenWifiProvision: () {}),
+          width: 360,
+          scale: 1.0,
+          height: 800,
+        );
+
+        final card = t.widget<AppCard>(find.byType(AppCard));
+        expect(card.level, 2);
+        final orb = t.widget<IconOrb>(find.byType(IconOrb));
+        expect(orb.icon, Icons.bluetooth_searching_outlined);
+        expect(orb.tone, AppTone.primary);
+        expect(orb.size, 72);
+        expect(orb.shape, IconOrbShape.circle);
+        expect(orb.glow, isTrue);
+        expect(orb.semanticLabel, isNull);
+        expect(
+          t.getCenter(find.byType(IconOrb)).dx,
+          closeTo(t.getCenter(find.byType(AppCard)).dx, 1.0),
+          reason: 'rozet kartta ortalı',
+        );
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+        expect(t.binding.hasScheduledFrame, isFalse);
       },
     );
   });

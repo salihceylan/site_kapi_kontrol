@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -109,6 +110,7 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
       // Kök rotayı SİLME (pushAndRemoveUntil ... false çıkış/oturum sonunda giriş ekranına
       // dönüşü öldürür ve ses/kısayol servisleri olmadan ikinci bir HomePage açar); yalnızca
       // Kayıt + Doğrulama sayfalarını kapatıp köke dön.
+      HapticFeedback.lightImpact();
       Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
@@ -137,6 +139,7 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
         // teslimat kesinmiş gibi yazılmaz. Yeni istek için bekleme süresi yeniden işler.
         _successMessage =
             'Bu e-posta adresi için bekleyen bir doğrulama varsa yeni ${VerifyEmailCodePage.codeLength} haneli kod birkaç dakika içinde e-postanıza ulaşır; önceki kodlar geçersiz olur. Ulaşmazsa spam klasörünü kontrol edin.';
+        HapticFeedback.lightImpact();
         _beginCooldown();
       }
     });
@@ -150,10 +153,14 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
     const tone = AppTone.primary;
     // Dar ekranda (< 400 dp) yan boşluklar 16 dp: büyük yazıda içeriğe daha çok genişlik kalır.
     final hPad = MediaQuery.sizeOf(context).width < 400 ? AppSpace.lg : AppSpace.xl;
-    // 6 haneli kod: iri ve geniş harf aralıklı.
-    final codeStyle = th.headlineMedium?.copyWith(
+    // 6 haneli kod: sayfa başlığından bir kademe daha iri, kalın, sabit genişlikli rakamlar ve geniş
+    // harf aralığı. Boyut tipografi ölçeğinden türetilir (başlık x 1,25); yazı ölçeği 1,4 ile sınırlıdır.
+    final headline = th.headlineMedium;
+    final codeStyle = headline?.copyWith(
+      fontSize: headline.fontSize == null ? null : headline.fontSize! * 1.25,
       letterSpacing: 10,
       color: tone.ink(p),
+      fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     );
 
     // Sayfa zemini kökte (lib/app.dart builder) tek kez boyanır: Scaffold şeffaf kalır.
@@ -177,22 +184,13 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // İkon
-                    Center(
-                      child: ExcludeSemantics(
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: tone.tint(p),
-                          ),
-                          child: Icon(
-                            Icons.mark_email_read_rounded,
-                            size: 38,
-                            color: tone.ink(p),
-                          ),
-                        ),
+                    // Hero rozet: cilalı, ışımalı daire (dekoratif; anlam aşağıdaki başlıkta).
+                    const Center(
+                      child: IconOrb(
+                        icon: Icons.mark_email_read_rounded,
+                        tone: tone,
+                        size: 64,
+                        glow: true,
                       ),
                     ),
                     const SizedBox(height: AppSpace.lg),
@@ -246,6 +244,9 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
                         ],
                         decoration: InputDecoration(
                           counterText: '',
+                          // İç yüzey kuyusu: kart yüzeyinden bir kademe soluk zemin (rakam ve ipucu
+                          // renkleri bu zeminde de >= 4,5:1).
+                          fillColor: p.surfaceMuted,
                           hintText: '••••••',
                           hintStyle: codeStyle?.copyWith(
                             color: p.textMuted,
@@ -302,9 +303,58 @@ class _VerifyEmailCodePageState extends State<VerifyEmailCodePage> {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
+                    // Bekleme süresi çizgisi: kalan süre azaldıkça tükenir. Yer HER durumda ayrılır
+                    // (süre bitince kart yüksekliği değişmez, içerik zıplamaz).
+                    _ResendCountdownBar(
+                      remaining: _cooldownLeft,
+                      total: VerifyEmailCodePage.resendCooldownSeconds,
+                    ),
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Kodu tekrar gönder" bekleme süresi için ince, dekoratif ilerleme çizgisi.
+///
+/// Tam çizgi = tam bekleme süresi; kalan saniye azaldıkça (saniyede bir adım, her adım 1 sn'lik
+/// doğrusal geçişle) tükenir. Süre bittiğinde çizgi ağaçtan kalkar ama YERİ korunur. Ekran okuyucuya kapalıdır: süre zaten düğme etiketinde ("... (23 sn)") okunur.
+/// Hareket azaltmada geçiş yoktur (çizgi saniyede bir adım atlar).
+class _ResendCountdownBar extends StatelessWidget {
+  const _ResendCountdownBar({required this.remaining, required this.total});
+
+  final int remaining;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    const tone = AppTone.primary;
+    final fraction = total <= 0 ? 0.0 : (remaining / total).clamp(0.0, 1.0);
+    const barHeight = 4.0;
+    // Süre bitince çizgi ağaçtan kalkar (animasyon/ticker kalmaz) ama YERİ ayrılı kalır.
+    if (remaining <= 0) {
+      return const SizedBox(height: AppSpace.xs + barHeight);
+    }
+    return ExcludeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpace.xs),
+        child: FractionallySizedBox(
+          widthFactor: 0.5,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: fraction),
+            duration: AppMotion.of(context, const Duration(seconds: 1)),
+            curve: Curves.linear,
+            builder: (context, value, _) => LinearProgressIndicator(
+              value: value,
+              minHeight: barHeight,
+              backgroundColor: tone.hue.withValues(alpha: p.isDark ? 0.28 : 0.20),
+              color: tone.hue,
             ),
           ),
         ),

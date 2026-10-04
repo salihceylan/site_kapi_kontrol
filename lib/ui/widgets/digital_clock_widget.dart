@@ -2,9 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/user_session.dart';
 import '../design/app_card.dart';
+import '../design/icon_orb.dart';
 import '../design/status_chip.dart';
 import '../design/tokens.dart';
 
+/// Saat kartı: tabular rakamlı dijital saat + Türkçe tarih + (isteğe bağlı) kullanıcı ve rol rozeti.
+///
+/// Görünüm: rol şeridi ([AppCard.accentBar]), cilalı saat küresi ([IconOrb], info tonu), rakamların
+/// altında rol tonundan info tonuna sönen ince, statik gradyan şerit (sakin vurgu). Saniyelik
+/// güncelleme YALNIZ saat metnini yeniden kurar (kart iskeleti, küre, şerit, kullanıcı satırı kurulmaz);
+/// kararlı durumda hiçbir animasyon yoktur.
 class DigitalClockWidget extends StatefulWidget {
   const DigitalClockWidget({
     super.key,
@@ -184,33 +191,51 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget>
     );
 
     // Dijital Saat (FittedBox ile taşmaya karşı tam koruma). Yalnız saat metni her saniye yeniden
-    // kurulur (kendi RepaintBoundary'sinde).
+    // kurulur (kendi RepaintBoundary'sinde). Küre ve şerit statiktir; şerit Stack ile bloğun altına
+    // oturur (FittedBox sınırsız genişlik verdiğinden Column+stretch yerine Positioned kullanılır).
     final timeBlock = FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Stack(
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppTone.info.tint(p),
-              shape: BoxShape.circle,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.sm),
-              child: Icon(
-                Icons.access_time_filled_rounded,
-                color: AppTone.info.ink(p),
-                size: 18,
-              ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const IconOrb(
+                  icon: Icons.access_time_filled_rounded,
+                  tone: AppTone.info,
+                  size: 34,
+                ),
+                const SizedBox(width: AppSpace.sm),
+                RepaintBoundary(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: _timeText,
+                    builder: (context, timeStr, _) =>
+                        Text(timeStr, style: timeStyle),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: AppSpace.sm),
-          RepaintBoundary(
-            child: ValueListenableBuilder<String>(
-              valueListenable: _timeText,
-              builder: (context, timeStr, _) => Text(timeStr, style: timeStyle),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 2,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                gradient: LinearGradient(
+                  colors: <Color>[
+                    tone.hue.withValues(alpha: 0.9),
+                    AppTone.info.hue.withValues(alpha: 0.45),
+                    AppTone.info.hue.withValues(alpha: 0),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -296,20 +321,7 @@ class _DigitalClockWidgetState extends State<DigitalClockWidget>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tone.tint(p),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.xs),
-                          child: Icon(
-                            Icons.person_rounded,
-                            color: tone.ink(p),
-                            size: 15,
-                          ),
-                        ),
-                      ),
+                      IconOrb(icon: Icons.person_rounded, tone: tone, size: 28),
                       const SizedBox(width: AppSpace.sm),
                       Flexible(
                         child: Text(

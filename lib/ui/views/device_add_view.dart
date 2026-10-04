@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_action_tile.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 class DeviceAddView extends StatelessWidget {
   const DeviceAddView({
@@ -28,25 +29,18 @@ class DeviceAddView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final th = Theme.of(context).textTheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Hero başlık kartı (AppCard seviye 2) + cilalı rozet; başlık SectionHeader (anlamsal başlık).
         SizedBox(
           width: double.infinity,
-          child: AppCard(
-            padding: const EdgeInsets.all(22),
-            child: Semantics(
-              header: true,
-              child: Text(
-                title ?? 'Şirket Veritabanına Cihaz Kaydet',
-                style: th.titleLarge,
-              ),
-            ),
+          child: PageHeaderCard(
+            title: title ?? 'Şirket Veritabanına Cihaz Kaydet',
+            icon: Icons.memory_rounded,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpace.lg),
         LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 680;
@@ -73,7 +67,7 @@ class DeviceAddView extends StatelessWidget {
               return Column(
                 children: [
                   children[0],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpace.md),
                   children[1],
                 ],
               );
@@ -83,7 +77,7 @@ class DeviceAddView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: children[0]),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpace.md),
                 Expanded(child: children[1]),
               ],
             );

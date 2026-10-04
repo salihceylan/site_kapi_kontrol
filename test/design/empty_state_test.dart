@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 import 'harness.dart';
@@ -23,19 +24,8 @@ const String _message = 'Yeni bir site ekleyerek başlayabilirsiniz.';
 
 Finder get _empty => find.byType(EmptyState);
 
-/// İkon karosu: ton zeminli DecoratedBox (EmptyState altındaki ilk ton kutusu).
-Finder get _tile => find
-    .descendant(
-      of: _empty,
-      matching: find.byWidgetPredicate(
-        (w) =>
-            w is DecoratedBox &&
-            w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).borderRadius != null &&
-            (w.decoration as BoxDecoration).color != null,
-      ),
-    )
-    .first;
+/// İkon rozeti: cilalı [IconOrb] (EmptyState altındaki tek rozet).
+Finder get _tile => find.descendant(of: _empty, matching: find.byType(IconOrb));
 
 Finder get _entranceOpacity =>
     find.descendant(of: _empty, matching: find.byType(Opacity)).first;
@@ -85,21 +75,21 @@ Widget _app(Widget w, {bool dark = false, bool reduce = false}) =>
 void main() {
   group('EmptyState: görünüm ve durumlar', () {
     testWidgets(
-      'ikon karosu (64 dp, tint zemin, ink ikon 32) + başlık + mesaj, ortalı (7 ton x açık/koyu)',
+      'ikon rozeti (72 dp daire, glow, beyaz ikon 36) + başlık + mesaj, ortalı (7 ton x açık/koyu)',
       (t) async {
         for (final dark in [false, true]) {
           final p = _palette(dark);
           for (final tone in AppTone.values) {
             await t.pumpWidget(_app(_es(tone: tone), dark: dark));
             await t.pumpAndSettle();
-            final box =
-                t.widget<DecoratedBox>(_tile).decoration as BoxDecoration;
-            expect(box.color, tone.tint(p), reason: '${tone.name} dark=$dark');
-            expect(box.borderRadius, BorderRadius.circular(AppRadius.lg));
-            expect(t.getSize(_tile), const Size(64, 64));
+            final orb = t.widget<IconOrb>(_tile);
+            expect(orb.tone, tone, reason: '${tone.name} dark=$dark');
+            expect(orb.shape, IconOrbShape.circle);
+            expect(orb.glow, isTrue);
+            expect(t.getSize(_tile), const Size(72, 72));
             final icon = t.widget<Icon>(find.byIcon(Icons.apartment_rounded));
-            expect(icon.size, 32);
-            expect(icon.color, tone.ink(p));
+            expect(icon.size, 36);
+            expect(icon.color, Colors.white);
             final title = t.widget<Text>(find.text(_title));
             expect(title.textAlign, TextAlign.center);
             expect(title.style!.fontSize, 15.5, reason: 'titleMedium');
@@ -328,17 +318,16 @@ void main() {
     );
 
     testWidgets(
-      'satır düzeni: 40 dp ikon karosu solda, metin sağda ve sola hizalı',
+      'satır düzeni: 44 dp squircle rozet solda, metin sağda ve sola hizalı',
       (t) async {
         for (final dark in [false, true]) {
-          final p = _palette(dark);
           await t.pumpWidget(compact(dark: dark));
           await t.pumpAndSettle();
-          final box = t.widget<DecoratedBox>(_tile).decoration as BoxDecoration;
-          expect(box.color, AppTone.primary.tint(p));
-          expect(box.borderRadius, BorderRadius.circular(AppRadius.sm));
-          expect(t.getSize(_tile), const Size(40, 40));
-          expect(t.widget<Icon>(find.byIcon(Icons.history_rounded)).size, 24);
+          final orb = t.widget<IconOrb>(_tile);
+          expect(orb.tone, AppTone.primary);
+          expect(orb.shape, IconOrbShape.squircle);
+          expect(t.getSize(_tile), const Size(44, 44));
+          expect(t.widget<Icon>(find.byIcon(Icons.history_rounded)).size, 22);
           final tile = t.getRect(_tile);
           final title = t.getRect(find.text('Henüz kayıt yok'));
           final message = t.getRect(

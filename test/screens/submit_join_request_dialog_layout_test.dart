@@ -2,6 +2,8 @@
 //
 // `Dialog`: başlık şeridi AppDialogHeader, gövde tek kaydırma alanında; kod alanı ile "Tara" düğmesi
 // büyük yazıda alt alta dizilir.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/site_join_info.dart';
@@ -9,8 +11,13 @@ import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 
+import '../design/harness.dart';
 import 'dialog_layout_harness.dart';
 
 class _FakeAuth extends AuthService {
@@ -60,6 +67,17 @@ class _FakeAuth extends AuthService {
   }) async {
     submitted.add(apartmentId);
     return (<String, dynamic>{'message': 'Başvurunuz iletildi.'}, null);
+  }
+}
+
+/// Site bilgisi isteği [gate] açılana kadar bekler (yükleniyor durumu sınanır).
+class _SlowAuth extends _FakeAuth {
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<(SiteJoinInfo?, String?)> fetchSiteJoinInfo(String joinToken) async {
+    await gate.future;
+    return super.fetchSiteJoinInfo(joinToken);
   }
 }
 
@@ -168,4 +186,133 @@ void main() {
     expect(find.byType(InlineNotice), findsOneWidget);
     await scrollTo(t, find.byType(InlineNotice));
   });
+
+  testWidgets(
+    'SubmitJoinRequestDialog: site bulununca site kartı (rozet + konum rozeti) ve ortak dilde açılır listeler',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(),
+        initialToken: 'SJT-ABC123',
+        width: 360,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Site kartı: 40 dp squircle rozet + konum rozeti; mevcut metinler aynen.
+      final card = find.ancestor(
+        of: find.text('Güneş Sitesi Uzun İsimli Konutları Yönetimi'),
+        matching: find.byType(AppCard),
+      );
+      expect(card, findsOneWidget);
+      final orb = t.widget<IconOrb>(
+        find.descendant(of: card, matching: find.byType(IconOrb)),
+      );
+      expect(orb.size, 40);
+      expect(orb.shape, IconOrbShape.squircle);
+      final location = find.widgetWithText(StatusChip, 'İstanbul / Kadıköy');
+      expect(location, findsOneWidget);
+      expect(t.widget<StatusChip>(location).tone, AppTone.info);
+      expect(find.text('Değiştir'), findsOneWidget);
+
+      // Açılır listeler: ortak dil.
+      final palette = t.element(find.byType(Dialog)).palette;
+      final body = Theme.of(t.element(find.byType(Dialog))).textTheme.bodyLarge;
+      void expectSharedStyle(DropdownButton<Object?> dropdown, String which) {
+        expect(dropdown.borderRadius, BorderRadius.circular(AppRadius.md), reason: which);
+        expect(dropdown.dropdownColor, palette.surface, reason: which);
+        expect(dropdown.menuMaxHeight, 320, reason: which);
+        expect((dropdown.icon! as Icon).icon, Icons.keyboard_arrow_down_rounded, reason: which);
+        expect(dropdown.style, body, reason: which);
+      }
+
+      expectSharedStyle(
+        t.widget<DropdownButton<SiteJoinBlockInfo>>(find.byType(DropdownButton<SiteJoinBlockInfo>)),
+        'blok',
+      );
+      expectSharedStyle(
+        t.widget<DropdownButton<SiteJoinApartmentInfo>>(
+          find.byType(DropdownButton<SiteJoinApartmentInfo>),
+        ),
+        'daire',
+      );
+
+      // Blok değişince daire listesi güncellenir (davranış korunur).
+      await t.tap(find.byType(DropdownButton<SiteJoinBlockInfo>));
+      await settleFor(t);
+      await t.tap(find.text('B Blok').last);
+      await settleFor(t);
+      expect(find.text('Daire 1'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'SubmitJoinRequestDialog: site bilgisi yüklenirken iskelet (dönen gösterge yok), sonra kart; ticker kalmaz',
+    (t) async {
+      final auth = _SlowAuth();
+      await _open(
+        t,
+        auth,
+        initialToken: 'SJT-ABC123',
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+
+      expect(find.byType(SkeletonBox), findsNWidgets(3));
+      expect(find.text('Site bilgileri yükleniyor...'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      auth.gate.complete();
+      await settleFor(t, 800);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(find.text('Site bilgileri yükleniyor...'), findsNothing);
+      expect(
+        find.text('Güneş Sitesi Uzun İsimli Konutları Yönetimi'),
+        findsOneWidget,
+      );
+      expect(t.binding.transientCallbackCount, 0, reason: 'iskelet kalkınca shimmer ticker kalmaz');
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'SubmitJoinRequestDialog: başvuru başarısında hafif haptik verir; hatada vermez',
+    (t) async {
+      final haptics = recordHaptics(t);
+      // Hata: site bulunamadı.
+      await _open(
+        t,
+        _FakeAuth(error: 'Kod geçersiz.'),
+        initialToken: 'SJT-YANLIS',
+        width: 360,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.text('Kod geçersiz.'), findsOneWidget);
+      expect(haptics, isEmpty);
+
+      // Başarı.
+      final auth = _FakeAuth();
+      await _open(
+        t,
+        auth,
+        initialToken: 'SJT-ABC123',
+        width: 360,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      await scrollTo(t, find.text('Katılım Başvurusunu Gönder'));
+      await t.tap(find.text('Katılım Başvurusunu Gönder'));
+      await settleFor(t, 800);
+      expect(auth.submitted, [501]);
+      expect(haptics, ['HapticFeedbackType.lightImpact']);
+      expect(find.byType(Dialog), findsNothing);
+    },
+  );
 }

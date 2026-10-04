@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/door_record.dart';
 import '../../models/site_block_record.dart';
 import '../../services/api_exception.dart';
@@ -108,6 +109,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
       }
 
       if (!mounted) return;
+      HapticFeedback.lightImpact();
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -126,6 +128,8 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xl),
       child: ConstrainedBox(
@@ -163,7 +167,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                 ),
                 const Divider(height: 1),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(AppSpace.xl, 18, AppSpace.xl, AppSpace.xl),
+                  padding: const EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.lg, AppSpace.xl, AppSpace.xl),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -171,7 +175,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                       // Hata Mesajı
                       if (_errorMessage != null) ...[
                         InlineNotice(message: _errorMessage!),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: AppSpace.lg),
                       ],
 
                       // Kapı Adı
@@ -180,7 +184,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                         decoration: const InputDecoration(
                           labelText: 'Kapı Adı *',
                           hintText: 'Örn: Ana Giriş Kapısı, A Blok Girişi, Otopark',
-                          prefixIcon: Icon(Icons.badge_outlined),
+                          prefixIcon: Icon(Icons.badge_rounded),
                         ),
                         validator: (val) {
                           if (val == null || val.trim().isEmpty) {
@@ -189,7 +193,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpace.lg),
 
                       // Erişim Kapsamı
                       DropdownButtonFormField<String>(
@@ -199,6 +203,11 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                           labelText: 'Erişim Kapsamı',
                           prefixIcon: Icon(Icons.security_rounded),
                         ),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        dropdownColor: p.surface,
+                        menuMaxHeight: 320,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        style: th.bodyLarge,
                         items: const [
                           DropdownMenuItem(
                             value: 'SITE_COMMON',
@@ -238,7 +247,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
 
                       // Eğer Blok Kapısı Seçilmişse Blok Listesi
                       if (_selectedScope == 'BLOCK') ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpace.lg),
                         if (widget.blocks.isEmpty)
                           const InlineNotice(
                             tone: AppTone.warning,
@@ -255,6 +264,11 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                               labelText: 'Bağlı Olduğu Blok *',
                               prefixIcon: Icon(Icons.apartment_rounded),
                             ),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            dropdownColor: p.surface,
+                            menuMaxHeight: 320,
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                            style: th.bodyLarge,
                             items: widget.blocks.map((b) {
                               return DropdownMenuItem<int>(
                                 value: b.id,
@@ -273,7 +287,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
 
                       // Yeni kapı ekleniyorsa ve boşta cihaz varsa hızlı atama seçeneği
                       if (!_isEditing && widget.availableDevices.isNotEmpty) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: AppSpace.lg),
                         DropdownButtonFormField<String?>(
                           initialValue: _selectedDeviceUid,
                           isExpanded: true,
@@ -281,6 +295,11 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                             labelText: 'Cihaz Ata (İsteğe Bağlı)',
                             prefixIcon: Icon(Icons.developer_board_rounded),
                           ),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          dropdownColor: p.surface,
+                          menuMaxHeight: 320,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          style: th.bodyLarge,
                           items: [
                             const DropdownMenuItem<String?>(
                               value: null,
@@ -310,7 +329,7 @@ class _DoorEditDialogState extends State<DoorEditDialog> {
                         ),
                       ],
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: AppSpace.xl),
 
                       // Kaydet Butonu
                       ElevatedButton.icon(

@@ -6,7 +6,11 @@ import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
 class CreateGuestPassDialog extends StatefulWidget {
   const CreateGuestPassDialog({
@@ -39,8 +43,6 @@ class CreateGuestPassDialog extends StatefulWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
-        final p = ctx.palette;
-        final th = Theme.of(ctx).textTheme;
         return AppDialog(
           title: '🎉 Geçiş Linki Hazır!',
           icon: Icons.link_rounded,
@@ -48,11 +50,12 @@ class CreateGuestPassDialog extends StatefulWidget {
           actions: [
             TextButton.icon(
               onPressed: () {
+                HapticFeedback.lightImpact();
                 Clipboard.setData(ClipboardData(text: pass.webUrl));
                 Navigator.pop(ctx);
                 showMessage('Geçiş linki panoya kopyalandı!');
               },
-              icon: const Icon(Icons.copy, size: 18),
+              icon: const Icon(Icons.copy_rounded, size: 18),
               label: const Text('Linki Kopyala'),
             ),
             ElevatedButton.icon(
@@ -77,37 +80,11 @@ class CreateGuestPassDialog extends StatefulWidget {
                   );
                 }
               },
-              icon: const Icon(Icons.share, size: 18),
+              icon: const Icon(Icons.share_rounded, size: 18),
               label: const Text('Paylaş'),
             ),
           ],
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Kurye veya misafiriniz bu linke tıklayarak ${door.doorName} kapısını açabilir.',
-                style: th.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: p.surfaceMuted,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: p.border),
-                ),
-                child: SelectableText(
-                  pass.webUrl,
-                  style: th.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTone.primary.ink(p),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: _GuestPassResult(pass: pass, doorName: door.doorName),
         );
       },
     );
@@ -166,6 +143,7 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
       return;
     }
 
+    HapticFeedback.lightImpact();
     Navigator.of(context).pop(pass);
   }
 
@@ -193,7 +171,7 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.link, size: 18),
+              : const Icon(Icons.link_rounded, size: 18),
           label: Text(_isCreating ? 'Üretiliyor...' : 'Linki Oluştur'),
         ),
       ],
@@ -201,45 +179,52 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               'Kurye veya misafirlerinizin uygulamayı yüklemesine gerek kalmadan tek tıkla kapıyı açabilmesi için geçici bağlantı üretin.',
               style: th.bodyMedium,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpace.lg),
             TextFormField(
               controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Geçiş Başlığı / Açıklama',
                 hintText: 'Örn: Trendyol Kuryesi, Misafir vb.',
+                prefixIcon: Icon(Icons.edit_note_rounded),
               ),
               validator: (value) => (value ?? '').trim().isEmpty
                   ? 'Başlık alanı boş bırakılamaz.'
                   : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpace.lg),
             Text('Geçiş Süresi ve Türü', style: th.titleMedium),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.sm),
             _buildPresetOption(
+              index: 0,
               key: 'single_30',
+              icon: Icons.local_shipping_rounded,
               title: 'Tek Kullanımlık (30 Dakika)',
               subtitle: 'Kurye ve tek seferlik teslimatlar için',
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpace.sm),
             _buildPresetOption(
+              index: 1,
               key: 'timed_120',
+              icon: Icons.group_rounded,
               title: 'Süreli Misafir (2 Saat - 5 Kullanım)',
               subtitle: 'Misafir ve akrabalar için',
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpace.sm),
             _buildPresetOption(
+              index: 2,
               key: 'timed_720',
+              icon: Icons.handyman_rounded,
               title: 'Günlük Geçiş (12 Saat - 10 Kullanım)',
               subtitle: 'Usta, nakliye ve servisler için',
             ),
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpace.md),
               InlineNotice(message: _error!),
             ],
           ],
@@ -248,8 +233,12 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
     );
   }
 
+  /// Süre/tür seçim satırı: seçili satır birincil tonlu rozet + onay işareti + vurgulu kenar,
+  /// diğerleri nötr rozet + boş halka. Satır bir [AppCard]'dır (düğme + "seçili" anlamı).
   Widget _buildPresetOption({
+    required int index,
     required String key,
+    required IconData icon,
     required String title,
     required String subtitle,
   }) {
@@ -257,29 +246,23 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
     final th = Theme.of(context).textTheme;
     final accent = AppTone.primary.ink(p);
     final selected = _selectedPreset == key;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => setState(() => _selectedPreset = key),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? AppTone.primary.tint(p) : p.surfaceMuted,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? accent : p.border,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
+    return StaggeredEntry(
+      index: index,
+      child: AppCard(
+        selected: selected,
+        padding: const EdgeInsets.all(AppSpace.md),
+        onTap: () => setState(() => _selectedPreset = key),
         child: Row(
           children: [
-            Icon(
-              selected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              color: selected ? accent : p.textSecondary,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
+            if (!dialogLargeText(context)) ...[
+              IconOrb(
+                icon: icon,
+                tone: selected ? AppTone.primary : AppTone.neutral,
+                size: 40,
+                shape: IconOrbShape.squircle,
+              ),
+              const SizedBox(width: AppSpace.md),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,13 +274,21 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
                       color: selected ? accent : p.text,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: AppSpace.xs),
                   Text(
                     subtitle,
                     style: th.bodySmall?.copyWith(color: p.textSecondary),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: selected ? accent : p.textSecondary,
+              size: 22,
             ),
           ],
         ),
@@ -306,3 +297,100 @@ class _CreateGuestPassDialogState extends State<CreateGuestPassDialog> {
   }
 }
 
+/// Oluşturulan geçiş linkinin sonuç kartı: başarı rozeti + açıklama + seçilebilir link + geçerlilik
+/// bilgisi. Kartın kendisi `level: 2` + success tonu (hero); yalnız rozet [Pop] ile belirir.
+///
+/// Link tek bir `SelectableText`'tir (kopyalanabilir, uzun linkte satır kırar). Geçerlilik satırları
+/// sunucunun döndürdüğü `expires_at` ve `max_uses` değerlerinden gelir; süresi geçmiş/ayrıştırılamamış
+/// bir tarih için "Son geçerlilik" satırı gösterilmez (uydurma zaman yazılmaz).
+class _GuestPassResult extends StatelessWidget {
+  const _GuestPassResult({required this.pass, required this.doorName});
+
+  final GuestPassRecord pass;
+  final String doorName;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final ink = AppTone.success.ink(p);
+    final expiry = pass.expiresAt;
+    final facts = <(IconData, String)>[
+      if (expiry.isAfter(DateTime.now()))
+        (Icons.schedule_rounded, 'Son geçerlilik: ${formatDateTime(expiry)}'),
+      if (pass.maxUses > 0)
+        (Icons.touch_app_rounded, 'Kullanım hakkı: ${pass.maxUses}'),
+    ];
+    return AppCard(
+      level: 2,
+      tone: AppTone.success,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Center(
+            child: Pop(
+              child: IconOrb(
+                icon: Icons.check_rounded,
+                tone: AppTone.success,
+                size: 56,
+                glow: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          Text(
+            'Kurye veya misafiriniz bu linke tıklayarak $doorName kapısını açabilir.',
+            textAlign: TextAlign.center,
+            style: th.bodyMedium,
+          ),
+          const SizedBox(height: AppSpace.md),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(color: p.border),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpace.xs),
+                    child: Icon(
+                      Icons.link_rounded,
+                      size: 18,
+                      color: p.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(
+                    child: SelectableText(
+                      pass.webUrl,
+                      style: th.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTone.primary.ink(p),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          for (final (icon, text) in facts)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpace.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, size: 18, color: ink),
+                  const SizedBox(width: AppSpace.sm),
+                  Expanded(child: Text(text, style: th.bodyMedium)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

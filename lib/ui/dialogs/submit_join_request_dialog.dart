@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/site_join_info.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
 
 class SubmitJoinRequestDialog extends StatefulWidget {
@@ -134,6 +139,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
       setState(() => _errorMessage = error);
     } else {
       final msg = res?['message'] as String? ?? 'Katılım başvurunuz site yöneticisine iletildi.';
+      HapticFeedback.lightImpact();
       AppSnack.show(context, msg, kind: AppSnackKind.success);
       Navigator.pop(context, true);
     }
@@ -146,9 +152,16 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
     final availableApts = _selectedBlock != null && _siteInfo != null
         ? _siteInfo!.apartments.where((a) => a.blockId == _selectedBlock!.id).toList()
         : (_siteInfo?.apartments ?? const []);
+    final site = _siteInfo;
+    // Şehir / ilçe metni (boş taraf atılır); yoksa konum rozeti çizilmez.
+    final location = site == null
+        ? ''
+        : ((site.city ?? '').isNotEmpty || (site.district ?? '').isNotEmpty)
+            ? '${site.city ?? ''} / ${site.district ?? ''}'.replaceAll(RegExp(r'^ / | / $'), '')
+            : '';
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xl),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: SingleChildScrollView(
@@ -214,7 +227,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 tokenField,
-                                const SizedBox(height: 8),
+                                const SizedBox(height: AppSpace.sm),
                                 scanButton,
                               ],
                             );
@@ -222,14 +235,14 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                           return Row(
                             children: [
                               Expanded(child: tokenField),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: AppSpace.sm),
                               scanButton,
                             ],
                           );
                         },
                       ),
                       if (_tokenController.text.trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: AppSpace.sm),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -241,11 +254,22 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                       ],
                     ],
 
-                    // Yükleniyor Durumu
+                    // Yükleniyor Durumu: gelecek site kartı + iki seçici iskeleti
                     if (_isLoadingInfo) ...[
-                      const SizedBox(height: 24),
-                      const Center(child: CircularProgressIndicator()),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpace.xl),
+                      const ShimmerScope(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SkeletonBox(height: 68, radius: AppRadius.lg),
+                            SizedBox(height: AppSpace.lg),
+                            SkeletonBox(height: 48, radius: AppRadius.md),
+                            SizedBox(height: AppSpace.md),
+                            SkeletonBox(height: 48, radius: AppRadius.md),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.md),
                       Center(
                         child: Text(
                           'Site bilgileri yükleniyor...',
@@ -257,70 +281,66 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
 
                     // Hata Mesajı
                     if (_errorMessage != null) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: AppSpace.md),
                       InlineNotice(message: _errorMessage!),
                     ],
 
                     // Site Bilgisi ve Blok/Daire Seçimi
-                    if (_siteInfo != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: p.surfaceMuted,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: p.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.apartment_rounded, color: AppTone.primary.ink(p), size: 20),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        _siteInfo!.siteName,
-                                        style: th.titleMedium,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _siteInfo = null;
-                                      _tokenController.clear();
-                                    });
-                                  },
-                                  child: const Text('Değiştir'),
-                                ),
-                              ],
-                            ),
-                            if ((_siteInfo!.city ?? '').isNotEmpty || (_siteInfo!.district ?? '').isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_siteInfo!.city ?? ''} / ${_siteInfo!.district ?? ''}'.replaceAll(RegExp(r'^ / | / $'), ''),
-                                style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    if (site != null) ...[
+                      const SizedBox(height: AppSpace.md),
+                      StaggeredEntry(
+                        index: 0,
+                        child: AppCard(
+                          padding: const EdgeInsets.all(AppSpace.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                runSpacing: AppSpace.xs,
+                                children: [
+                                  DialogInfoRow(
+                                    icon: Icons.apartment_rounded,
+                                    title: site.siteName,
+                                    titleMaxLines: null,
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _siteInfo = null;
+                                        _tokenController.clear();
+                                      });
+                                    },
+                                    child: const Text('Değiştir'),
+                                  ),
+                                ],
                               ),
+                              if (location.isNotEmpty)
+                                Padding(
+                                  // Rozet, başlık metninin hizasında (40 dp rozet + 12 dp boşluk).
+                                  padding: EdgeInsets.only(
+                                    left: dialogLargeText(context) ? 0 : 52,
+                                  ),
+                                  child: StatusChip(
+                                    label: location,
+                                    tone: AppTone.info,
+                                    icon: Icons.location_on_rounded,
+                                  ),
+                                ),
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpace.lg),
 
                       // Blok Seçimi
-                      if (_siteInfo!.blocks.isNotEmpty) ...[
+                      if (site.blocks.isNotEmpty) ...[
                         Text(
                           'Blok Seçiniz',
                           style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: p.text),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: AppSpace.sm),
                         DropdownButtonFormField<SiteJoinBlockInfo>(
                           isExpanded: true,
                           // ignore: deprecated_member_use
@@ -328,8 +348,14 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                           decoration: const InputDecoration(
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            prefixIcon: Icon(Icons.apartment_rounded),
                           ),
-                          items: _siteInfo!.blocks.map((b) {
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          dropdownColor: p.surface,
+                          menuMaxHeight: 320,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          style: th.bodyLarge,
+                          items: site.blocks.map((b) {
                             return DropdownMenuItem(
                               value: b,
                               child: Text(b.blockName, overflow: TextOverflow.ellipsis),
@@ -343,7 +369,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                             });
                           },
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: AppSpace.lg),
                       ],
 
                       // Daire Seçimi
@@ -351,7 +377,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                         'Daire Seçiniz',
                         style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: p.text),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: AppSpace.sm),
                       DropdownButtonFormField<SiteJoinApartmentInfo>(
                         isExpanded: true,
                         // ignore: deprecated_member_use
@@ -359,7 +385,13 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                         decoration: const InputDecoration(
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          prefixIcon: Icon(Icons.home_rounded),
                         ),
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        dropdownColor: p.surface,
+                        menuMaxHeight: 320,
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        style: th.bodyLarge,
                         items: availableApts.map((a) {
                           return DropdownMenuItem(
                             value: a,
@@ -368,7 +400,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                         }).toList(),
                         onChanged: (a) => setState(() => _selectedApartment = a),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: AppSpace.lg),
 
                       // Not (İsteğe Bağlı)
                       TextField(
@@ -380,7 +412,7 @@ class _SubmitJoinRequestDialogState extends State<SubmitJoinRequestDialog> {
                         ),
                         maxLines: 2,
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: AppSpace.xl),
 
                       // Gönder Butonu
                       ElevatedButton.icon(

@@ -2,6 +2,8 @@
 //
 // `Dialog`: başlık şeridi sabit; sayılar, arama, süzgeç çipleri ve blok/daire/sakin akordiyonları tek
 // kaydırma alanında akar. Onay pencereleri (AppDialog) ve kart menüsü de büyük yazıda taşmamalı.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -11,8 +13,13 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_residents_accordion_dialog.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 
 Map<String, dynamic> _member(
@@ -104,11 +111,14 @@ Map<String, dynamic> _tree({bool empty = false}) => {
 };
 
 class _FakeAuth extends AuthService {
-  _FakeAuth({this.error, this.empty = false})
+  _FakeAuth({this.error, this.empty = false, this.gate})
     : super(api: AuthApi(baseUrl: 'http://localhost'));
 
   final String? error;
   final bool empty;
+
+  /// Verilirse sakin ağacı bu tamamlanana dek "yükleniyor" kalır.
+  final Completer<void>? gate;
   final List<(int, bool)> toggles = [];
   final List<int> deleted = [];
 
@@ -116,6 +126,7 @@ class _FakeAuth extends AuthService {
   Future<(SiteResidentsTreeData?, String?)> getSiteResidentsTree(
     int siteCode,
   ) async {
+    await gate?.future;
     if (error != null) return (null, error);
     return (SiteResidentsTreeData.fromJson(_tree(empty: empty)), null);
   }
@@ -217,6 +228,7 @@ void main() {
     scale,
     dark,
   ) async {
+    final haptics = recordHaptics(t);
     final auth = _FakeAuth();
     await _open(
       t,
@@ -250,6 +262,8 @@ void main() {
     await t.tap(find.widgetWithText(ElevatedButton, 'Pasife Al'));
     await settleFor(t, 800);
     expect(auth.toggles, [(1, false)]);
+    // Onay anında hafif haptik.
+    expect(haptics, contains('HapticFeedbackType.lightImpact'));
   });
 
   layoutMatrix('SiteResidentsAccordionDialog (silme onayı: tehlike tonu)', (
@@ -333,4 +347,80 @@ void main() {
       findsOneWidget,
     );
   });
+  // --- Görsel sözleşme (cilalı safir): iskelet, sayı çipleri, ikon rozetleri, sarabilen uzun durum ---
+
+  testWidgets(
+    'SiteResidentsAccordionDialog: yüklenirken iskelet (spinner yok); yüklenince iskelet kalkar',
+    (t) async {
+      final gate = Completer<void>();
+      await openDialogAt(
+        t,
+        (context) => SiteResidentsAccordionDialog.show(
+          context,
+          site: _site(),
+          authService: _FakeAuth(gate: gate),
+        ),
+        width: 400,
+        height: 1000,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.byType(SkeletonBox), findsAtLeastNWidgets(1));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Sakinler ve daireler yükleniyor...'), findsOneWidget);
+
+      gate.complete();
+      await settleFor(t);
+      expect(find.byType(SkeletonBox), findsNothing);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'SiteResidentsAccordionDialog: sayı çipleri StatusChip, sakin kartları ikon rozetli, uzun durum cümlesi sarabilen hap',
+    (t) async {
+      await _open(
+        t,
+        _FakeAuth(),
+        width: 400,
+        height: 1400,
+        scale: 1.0,
+        dark: false,
+      );
+
+      // Üst sayı çipleri (blok / daire / sakin).
+      expect(find.widgetWithText(StatusChip, '2 Blok'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, '3 Daire'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, '3 Sakin'), findsAtLeastNWidgets(1));
+
+      // Başlık + blok + sakinler: cilalı ikon rozetleri.
+      expect(find.byType(IconOrb), findsAtLeastNWidgets(5));
+
+      // Rol / durum çipleri (kısa etiketler StatusChip).
+      expect(find.widgetWithText(StatusChip, 'Daire Admini'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'İnaktif'), findsOneWidget);
+      expect(
+        find.widgetWithText(StatusChip, 'Boş Daire'),
+        findsAtLeastNWidgets(1),
+      );
+
+      // Uzun cümle (hesap pasif): tek satırlı chip kesmesin diye sarabilen hap.
+      const longStatus = 'Hesap pasif (sistem yöneticisi)';
+      expect(
+        find.ancestor(
+          of: find.text(longStatus),
+          matching: find.byType(DialogMetaPill),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: find.text(longStatus),
+          matching: find.byType(StatusChip),
+        ),
+        findsNothing,
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
 }

@@ -3,10 +3,12 @@
 // AGENTS.md kural 6: taşma yok. Matris: 320x640 x2,0 ve 360x640 x1,5 (açık + koyu) dar kullanım
 // (DeviceAddView < 680 px: alt alta Column) ve geniş kullanım (>= 680 px: yan yana Row).
 // Düğme `ElevatedButton` KALIR (tema stili; e2e 'QR Oku' / 'Unique ID Gir' metinleriyle bulur);
-// kart `AppCard`, ikon karosu `AppTone.primary`, başlık/açıklama tema yuvalarıdır (ham renk yok).
+// kart `AppCard`, ikon rozeti cilalı `IconOrb` (primary, 56 dp daire, glow'lu), başlık/açıklama tema
+// yuvalarıdır (ham renk yok).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_action_tile.dart';
 
@@ -151,7 +153,7 @@ void main() {
   group('DeviceActionTile görünümü: AppCard + ton + tema yuvaları (ham renk yok)', () {
     for (final dark in const <bool>[false, true]) {
       testWidgets(
-        '${dark ? 'koyu' : 'açık'}: ikon karosu primary tonu; başlık/açıklama tema renkleri',
+        '${dark ? 'koyu' : 'açık'}: ikon rozeti primary IconOrb; başlık/açıklama tema renkleri',
         (t) async {
           await pumpAt(
             t,
@@ -169,7 +171,9 @@ void main() {
           expect(card.tone, isNull);
           expect(card.onTap, isNull);
 
-          // İkon karosu: 28 dp ikon (düğmedeki 18 dp ikondan ayrı), ton tint zemini + ink rengi.
+          // İkon rozeti: cilalı daire IconOrb (primary tonu, 56 dp, glow'lu). İkon boyutun yarısıdır
+          // (28 dp; düğmedeki 18 dp ikondan ayrı) ve beyazdır (ton gradyanı üstünde >= 3:1:
+          // gloss_test ölçer). Rozet dekoratiftir: etiketsiz, anlamsal ağaçta yok.
           final glyph = find.byWidgetPredicate(
             (w) =>
                 w is Icon &&
@@ -177,14 +181,20 @@ void main() {
                 w.size == 28,
           );
           expect(glyph, findsOneWidget);
-          expect(t.widget<Icon>(glyph).color, AppTone.primary.ink(p));
-          final tile = t.widget<Container>(
-            find.ancestor(of: glyph, matching: find.byType(Container)).first,
+          expect(t.widget<Icon>(glyph).color, Colors.white);
+          final orb = t.widget<IconOrb>(
+            find.ancestor(of: glyph, matching: find.byType(IconOrb)),
           );
-          final decoration = tile.decoration! as BoxDecoration;
-          expect(decoration.shape, BoxShape.circle);
-          expect(decoration.color, AppTone.primary.tint(p));
-          expect(tile.padding, const EdgeInsets.all(AppSpace.md));
+          expect(orb.tone, AppTone.primary);
+          expect(orb.size, 56);
+          expect(orb.shape, IconOrbShape.circle);
+          expect(orb.glow, isTrue);
+          expect(orb.semanticLabel, isNull);
+          expect(
+            find.byType(IconOrb),
+            findsNWidgets(2),
+            reason: 'her kartta tek rozet',
+          );
 
           // Başlık = titleLarge (palet metni), açıklama = bodyMedium (ikincil metin).
           final textTheme = Theme.of(

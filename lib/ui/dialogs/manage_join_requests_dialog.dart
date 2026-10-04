@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -6,8 +7,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 
 class ManageJoinRequestsDialog extends StatefulWidget {
@@ -73,6 +76,7 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
   }
 
   Future<void> _approve(JoinRequestRecord request) async {
+    HapticFeedback.lightImpact();
     setState(() => _busyRequestIds.add(request.id));
 
     final (success, message) = await widget.authService.approveJoinRequest(request.id);
@@ -121,7 +125,7 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
             Text(
               '${request.fullName ?? 'Kullanıcı'} (${request.blockName ?? ''} ${request.unitLabel ?? ''}) başvurusunu reddetmek istediğinize emin misiniz?',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             TextField(
               controller: reasonController,
               decoration: const InputDecoration(
@@ -137,6 +141,7 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
     );
 
     if (confirmed != true) return;
+    HapticFeedback.lightImpact();
 
     setState(() => _busyRequestIds.add(request.id));
     final (success, message) = await widget.authService.rejectJoinRequest(
@@ -169,7 +174,7 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
     final compactHeader = MediaQuery.textScalerOf(context).scale(1) > 1.3;
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xl),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
         child: Column(
@@ -238,10 +243,14 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
             // İçerik
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  // İlk yükleme: kart satırı iskeleti (paylaşılan tek shimmer; yükleme bitince kalkar).
+                  ? const SingleChildScrollView(
+                      padding: EdgeInsets.all(AppSpace.lg),
+                      child: DialogRowsSkeleton(),
+                    )
                   : _errorMessage != null
                       ? SingleChildScrollView(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(AppSpace.lg + AppSpace.xs),
                           child: InlineNotice(
                             message: _errorMessage!,
                             onRetry: _loadRequests,
@@ -256,10 +265,11 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
                             )
                           : RefreshIndicator(
                               onRefresh: _loadRequests,
+                              // Tembel liste (geçmiş talepler uzun olabilir): kademeli giriş yok.
                               child: ListView.separated(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(AppSpace.lg),
                                 itemCount: _requests.length,
-                                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                                separatorBuilder: (_, _) => const SizedBox(height: AppSpace.md),
                                 itemBuilder: (context, index) {
                                   final req = _requests[index];
                                   final isBusy = _busyRequestIds.contains(req.id);
@@ -274,6 +284,9 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
     );
   }
 
+  /// Talep kartı: [durum ikon rozeti] [ad + durum / iletişim / blok-daire / not / ret sebebi] ve
+  /// (yalnız bekleyen talepte) altta tam genişlikte Reddet / Onayla eylemleri. Rozet tonu durumdur
+  /// (bekliyor: uyarı, onaylı: başarı, reddedildi: hata); büyük yazıda (>= 1,75x) rozet gizlenir.
   Widget _buildRequestCard(
     BuildContext context,
     JoinRequestRecord req,
@@ -284,132 +297,144 @@ class _ManageJoinRequestsDialogState extends State<ManageJoinRequestsDialog> {
     final statusTone = req.isApproved
         ? AppTone.success
         : (req.isRejected ? AppTone.danger : AppTone.warning);
+    final statusIcon = req.isApproved
+        ? Icons.how_to_reg_rounded
+        : (req.isRejected ? Icons.person_off_rounded : Icons.person_add_alt_1_rounded);
 
     final statusText = req.isApproved
         ? 'Onaylandı'
         : (req.isRejected ? 'Reddedildi' : 'Onay Bekliyor');
+    final large = hideRowOrbs(context);
+
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Üst Satır: Kullanıcı Adı ve Durum Rozeti
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              req.fullName ?? 'İsimsiz Kullanıcı',
+              style: th.titleMedium,
+            ),
+            StatusChip(label: statusText, tone: statusTone),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xs),
+
+        // İletişim Bilgileri
+        Wrap(
+          spacing: AppSpace.md,
+          runSpacing: AppSpace.xs,
+          children: [
+            if ((req.email ?? '').isNotEmpty)
+              Text(
+                req.email!,
+                style: th.bodySmall?.copyWith(color: p.textSecondary),
+              ),
+            if ((req.phoneNumber ?? '').isNotEmpty)
+              Text(
+                req.phoneNumber!,
+                style: th.bodySmall?.copyWith(color: p.textSecondary),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.sm),
+
+        // Blok ve Daire Rozetleri
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if ((req.blockName ?? '').isNotEmpty)
+              DialogMetaPill(req.blockName!, tone: AppTone.primary),
+            DialogMetaPill(req.unitLabel ?? 'Daire ?'),
+            Text(
+              formatDateTimeOrUnknown(req.createdAt),
+              style: th.bodySmall?.copyWith(color: p.textSecondary),
+            ),
+          ],
+        ),
+
+        // Kullanıcı Notu
+        if ((req.notes ?? '').isNotEmpty) ...[
+          const SizedBox(height: AppSpace.sm),
+          DialogPanel(
+            padding: const EdgeInsets.all(AppSpace.sm),
+            child: Text(
+              'Not: ${req.notes!}',
+              style: th.bodySmall?.copyWith(
+                fontStyle: FontStyle.italic,
+                color: p.textSecondary,
+              ),
+            ),
+          ),
+        ],
+
+        // Ret Sebebi (varsa)
+        if ((req.rejectionReason ?? '').isNotEmpty) ...[
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: AppTone.danger.ink(p),
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Text(
+                  'Ret Sebebi: ${req.rejectionReason!}',
+                  style: th.bodySmall?.copyWith(
+                    color: AppTone.danger.ink(p),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
 
     return AppCard(
       tone: req.isPending ? AppTone.warning : null,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(
+        MediaQuery.sizeOf(context).width < 360 ? AppSpace.md : AppSpace.lg,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Üst Satır: Kullanıcı Adı ve Durum Rozeti
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                req.fullName ?? 'İsimsiz Kullanıcı',
-                style: th.titleMedium,
-              ),
-              StatusChip(label: statusText, tone: statusTone),
+              if (!large) ...[
+                IconOrb(
+                  icon: statusIcon,
+                  tone: statusTone,
+                  size: 40,
+                  shape: IconOrbShape.squircle,
+                ),
+                const SizedBox(width: AppSpace.md),
+              ],
+              Expanded(child: details),
             ],
           ),
-          const SizedBox(height: 4),
-
-          // İletişim Bilgileri
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              if ((req.email ?? '').isNotEmpty)
-                Text(
-                  req.email!,
-                  style: th.bodySmall?.copyWith(color: p.textSecondary),
-                ),
-              if ((req.phoneNumber ?? '').isNotEmpty)
-                Text(
-                  req.phoneNumber!,
-                  style: th.bodySmall?.copyWith(color: p.textSecondary),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Blok ve Daire Rozetleri
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if ((req.blockName ?? '').isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTone.primary.tint(p),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    req.blockName!,
-                    style: th.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: AppTone.primary.ink(p),
-                    ),
-                  ),
-                ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: p.surfaceMuted,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  req.unitLabel ?? 'Daire ?',
-                  style: th.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: p.text,
-                  ),
-                ),
-              ),
-              Text(
-                formatDateTimeOrUnknown(req.createdAt),
-                style: th.bodySmall?.copyWith(color: p.textSecondary),
-              ),
-            ],
-          ),
-
-          // Kullanıcı Notu
-          if ((req.notes ?? '').isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: p.surfaceMuted,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Not: ${req.notes!}',
-                style: th.bodySmall?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: p.textSecondary,
-                ),
-              ),
-            ),
-          ],
-
-          // Ret Sebebi (varsa)
-          if ((req.rejectionReason ?? '').isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Ret Sebebi: ${req.rejectionReason!}',
-              style: th.bodySmall?.copyWith(
-                color: AppTone.danger.ink(p),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
 
           // Aksiyon Butonları (Yalnızca PENDING ise): sığmazsa alt alta dizilir.
           if (req.isPending) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.md),
             OverflowBar(
               alignment: MainAxisAlignment.end,
-              spacing: 10,
-              overflowSpacing: 8,
+              spacing: AppSpace.md,
+              overflowSpacing: AppSpace.sm,
               overflowAlignment: OverflowBarAlignment.end,
               children: [
                 OutlinedButton.icon(

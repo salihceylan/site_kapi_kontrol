@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
-import 'package:site_kapi_kontrol/styles/app_colors.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class SiteManagerPickerResult {
   const SiteManagerPickerResult({required this.manager});
@@ -113,141 +117,203 @@ class _SiteManagerPickerPageState extends State<SiteManagerPickerPage> {
     }
   }
 
+  /// Yönetici satırı: tek dokunuşla seçilir ([AppCard] düğme); seçili satır birincil kenarlı + onay işaretli.
+  Widget _managerTile(ManagedUserAccount manager) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final isSelected = manager.id == widget.selectedUserCode;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.sm),
+      child: AppCard(
+        selected: isSelected,
+        padding: const EdgeInsets.all(AppSpace.md),
+        onTap: () => Navigator.of(
+          context,
+        ).pop(SiteManagerPickerResult(manager: manager)),
+        child: Row(
+          children: [
+            // Rol tonu (site yöneticisi) anlam taşır; satırlarda parlak "hero" yok: 40 dp squircle.
+            IconOrb(
+              icon: Icons.manage_accounts_rounded,
+              tone: UserRole.siteManager.tone,
+              size: 40,
+              shape: IconOrbShape.squircle,
+            ),
+            const SizedBox(width: AppSpace.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    manager.fullName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: th.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    '${manager.email} ${manager.phoneNumber != null ? '• ${manager.phoneNumber}' : ''}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: AppSpace.sm),
+              Icon(Icons.check_circle_rounded, color: AppTone.primary.ink(p)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// İlk yükleme: gerçek satırların iskeleti (yalnız yükleme süresince ağaçta; tek shimmer).
+  Widget _buildSkeleton() {
+    return ShimmerScope(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.lg,
+          0,
+          AppSpace.lg,
+          AppSpace.lg,
+        ),
+        children: const [
+          _ManagerSkeletonRow(),
+          _ManagerSkeletonRow(),
+          _ManagerSkeletonRow(),
+          _ManagerSkeletonRow(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) return _buildSkeleton();
+
+    final error = _error;
+    if (error != null) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.lg,
+          AppSpace.sm,
+          AppSpace.lg,
+          AppSpace.lg,
+        ),
+        child: InlineNotice(
+          message: error,
+          onRetry: () => _loadManagers(page: 1, reset: true),
+        ),
+      );
+    }
+
+    if (_managers.isEmpty) {
+      return const EmptyState(
+        icon: Icons.manage_accounts_rounded,
+        title: 'Kayıtlı site yöneticisi bulunamadı.',
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.lg,
+        0,
+        AppSpace.lg,
+        AppSpace.lg,
+      ),
+      itemCount: _managers.length + (_isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _managers.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.lg),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        return _managerTile(_managers[index]);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Sayfa zemini kökte (lib/app.dart builder) tek kez boyanır: Scaffold ve AppBar şeffaf kalır.
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        title: const Text('Site Yöneticisi Seç'),
-        backgroundColor: AppColors.primary,
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Ad, e-posta veya telefon ile ara...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          _loadManagers(page: 1, reset: true);
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+      appBar: AppBar(title: const Text('Site Yöneticisi Seç')),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.sm,
+                AppSpace.lg,
+                AppSpace.md,
+              ),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: 'Ad, e-posta veya telefon ile ara...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            _loadManagers(page: 1, reset: true);
+                          },
+                        )
+                      : null,
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_error!, style: const TextStyle(color: Colors.red)),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () => _loadManagers(page: 1, reset: true),
-                              child: const Text('Tekrar Dene'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _managers.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Kayıtlı site yöneticisi bulunamadı.',
-                              style: TextStyle(color: AppColors.textMuted),
-                            ),
-                          )
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _managers.length + (_isLoadingMore ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index == _managers.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                );
-                              }
-                              final manager = _managers[index];
-                              final isSelected =
-                                  manager.id == widget.selectedUserCode;
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  side: BorderSide(
-                                    color: isSelected
-                                        ? AppColors.primary
-                                        : Colors.black.withValues(alpha: 0.06),
-                                    width: isSelected ? 1.5 : 1,
-                                  ),
-                                ),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor:
-                                        AppColors.primary.withValues(alpha: 0.12),
-                                    child: Text(
-                                      manager.fullName.trim().isEmpty
-                                          ? '?'
-                                          : manager.fullName.trim()[0].toUpperCase(),
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    manager.fullName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    '${manager.email} ${manager.phoneNumber != null ? '• ${manager.phoneNumber}' : ''}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: isSelected
-                                      ? const Icon(
-                                          Icons.check_circle,
-                                          color: AppColors.primary,
-                                        )
-                                      : null,
-                                  onTap: () => Navigator.of(context).pop(
-                                    SiteManagerPickerResult(manager: manager),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-          ),
-        ],
+            Expanded(child: _buildBody()),
+          ],
+        ),
       ),
     );
   }
 }
 
+/// Yükleme iskeleti satırı: gerçek yönetici satırıyla aynı iskelet (40 dp rozet + iki metin satırı).
+class _ManagerSkeletonRow extends StatelessWidget {
+  const _ManagerSkeletonRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(bottom: AppSpace.sm),
+      child: AppCard(
+        padding: EdgeInsets.all(AppSpace.md),
+        child: Row(
+          children: [
+            SkeletonBox(width: 40, height: 40, radius: AppRadius.sm),
+            SizedBox(width: AppSpace.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FractionallySizedBox(
+                    widthFactor: 0.5,
+                    child: SkeletonBox(height: 14),
+                  ),
+                  SizedBox(height: AppSpace.sm),
+                  FractionallySizedBox(
+                    widthFactor: 0.8,
+                    child: SkeletonBox(height: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

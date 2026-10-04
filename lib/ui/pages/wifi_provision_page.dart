@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/ble_wifi_provision_service.dart';
 import 'package:site_kapi_kontrol/styles/app_colors.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -146,11 +150,10 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     super.dispose();
   }
 
-  void _showMessage(String message) {
-    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
-      context,
-    );
-    messenger?.showSnackBar(SnackBar(content: Text(message)));
+  /// Geri bildirim: [kind] tonlu [AppSnack] (başarı = yeşil, uyarı = amber, hata = kırmızı; varsayılan
+  /// nötr). Mesaj metinleri çağıranlarındır ve değişmez; uzun cümleler kırpılmasın diye 6 satıra kadar.
+  void _showMessage(String message, {AppSnackKind kind = AppSnackKind.info}) {
+    AppSnack.show(context, message, kind: kind, maxLines: 6);
   }
 
   Future<void> _scanDevices() async {
@@ -171,11 +174,12 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       if (devices.isEmpty) {
         _showMessage(
           'Kurulum modunda cihaz bulunamadı. Gerekirse cihazdaki butona 3 saniye basın.',
+          kind: AppSnackKind.warning,
         );
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
-      _showMessage(error.message);
+      _showMessage(error.message, kind: AppSnackKind.error);
     } finally {
       if (mounted) {
         setState(() => _loadingDevices = false);
@@ -204,11 +208,12 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       if (!state.provisioning) {
         _showMessage(
           'Cihaz kurulum modunda değil. Gerekirse butona 3 saniye basıp tekrar deneyin.',
+          kind: AppSnackKind.warning,
         );
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
-      _showMessage(error.message);
+      _showMessage(error.message, kind: AppSnackKind.error);
     } finally {
       if (mounted) {
         setState(() => _connectingDevice = false);
@@ -233,11 +238,14 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _selectedSsid = networks.isEmpty ? null : networks.first.ssid;
       });
       if (networks.isEmpty) {
-        _showMessage('Yakında görünen Wi-Fi ağı bulunamadı.');
+        _showMessage(
+          'Yakında görünen Wi-Fi ağı bulunamadı.',
+          kind: AppSnackKind.warning,
+        );
       }
     } on BleProvisionException catch (error) {
       if (!mounted) return;
-      _showMessage(error.message);
+      _showMessage(error.message, kind: AppSnackKind.error);
     } finally {
       if (mounted) {
         setState(() => _loadingNetworks = false);
@@ -265,6 +273,7 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     if (creds == null) {
       _showMessage(
         'Geçerli bir Wi-Fi karekodu bulunamadı. Lütfen modem veya Wi-Fi paylaşım karekodu okutun.',
+        kind: AppSnackKind.warning,
       );
       return;
     }
@@ -274,19 +283,24 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       _passwordController.text = creds.password;
     });
 
+    HapticFeedback.lightImpact();
     _showMessage(
       '"${creds.ssid}" ağı karekoddan okundu. "Wi-Fi Bilgilerini Cihaza Kaydet" butonuna basabilirsiniz.',
+      kind: AppSnackKind.success,
     );
   }
 
   Future<void> _saveWifi() async {
     final String? ssid = _selectedSsid;
     if (ssid == null || ssid.isEmpty) {
-      _showMessage('Önce bir Wi-Fi ağı seçin veya karekod okutun.');
+      _showMessage(
+        'Önce bir Wi-Fi ağı seçin veya karekod okutun.',
+        kind: AppSnackKind.warning,
+      );
       return;
     }
     if (_passwordController.text.trim().isEmpty) {
-      _showMessage('Seçilen ağ için şifre girin.');
+      _showMessage('Seçilen ağ için şifre girin.', kind: AppSnackKind.warning);
       return;
     }
 
@@ -325,12 +339,14 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
         _lastResult = result;
         _deviceState = state;
       });
+      HapticFeedback.lightImpact();
       _showMessage(
         result.message.isEmpty ? 'Wi-Fi ayarı kaydedildi.' : result.message,
+        kind: AppSnackKind.success,
       );
     } on BleProvisionException catch (error) {
       if (!mounted) return;
-      _showMessage(error.message);
+      _showMessage(error.message, kind: AppSnackKind.error);
     } finally {
       if (mounted) {
         setState(() => _savingWifi = false);
@@ -369,16 +385,39 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
     );
   }
 
-  Widget _buildInstructions() {
-    final th = Theme.of(context).textTheme;
+  /// Kart başlığı: cilalı [icon] rozeti (dekoratif; anlam başlıkta) + [header] (başlık bloğu; kalan
+  /// genişliği alır). Rozet ton gradyanlıdır; yalnız bir kartın odak başlığında [glow] verilir.
+  Widget _cardHeader({
+    required IconData icon,
+    required AppTone tone,
+    required Widget header,
+    double size = 40,
+    bool glow = false,
+  }) {
+    return Row(
+      children: <Widget>[
+        IconOrb(
+          icon: icon,
+          tone: tone,
+          size: size,
+          shape: IconOrbShape.squircle,
+          glow: glow,
+        ),
+        const SizedBox(width: AppSpace.md),
+        Expanded(child: header),
+      ],
+    );
+  }
 
+  Widget _buildInstructions() {
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Semantics(
-            header: true,
-            child: Text('Kurulum Sırası', style: th.titleLarge),
+          _cardHeader(
+            icon: Icons.format_list_numbered_rounded,
+            tone: AppTone.info,
+            header: const SectionHeader(title: 'Kurulum Sırası'),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -410,17 +449,21 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          SectionHeader(
-            title: 'Bluetooth Cihazları',
-            trailing: IconButton(
-              onPressed: _loadingDevices ? null : _scanDevices,
-              icon: _loadingDevices
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
+          _cardHeader(
+            icon: Icons.bluetooth_searching_rounded,
+            tone: AppTone.primary,
+            header: SectionHeader(
+              title: 'Bluetooth Cihazları',
+              trailing: IconButton(
+                onPressed: _loadingDevices ? null : _scanDevices,
+                icon: _loadingDevices
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -436,39 +479,50 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
             // Tarama sürüyor: cihaz satırı iskeletleri (yalnız tarama süresince ağaçta).
             const _ScanSkeleton()
           else
-            ..._devices.map(
-              (BleProvisionDevice device) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: AppCard(
-                  padding: EdgeInsets.zero,
-                  selected: _selectedDevice?.id == device.id,
-                  child: ListTile(
-                    selected: _selectedDevice?.id == device.id,
-                    title: Text(device.name),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(device.id),
-                        const SizedBox(height: AppSpace.xs),
-                        _signalChip(device.rssi),
-                      ],
-                    ),
-                    trailing:
-                        _connectingDevice && _selectedDevice?.id == device.id
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.bluetooth_connected_outlined),
-                    onTap: _connectingDevice
-                        ? null
-                        : () => _connectDevice(device),
-                  ),
-                ),
-              ),
-            ),
+            // Cihaz satırları ilk 8 sırada kademeli girer (tarama sonucu belirince); satırlar tembel
+            // liste değil `Column` çocuğudur.
+            for (var i = 0; i < _devices.length; i++)
+              StaggeredEntry(index: i, child: _deviceTile(_devices[i])),
         ],
+      ),
+    );
+  }
+
+  /// Cihaz satırı: seçili cihaz birincil tonlu, diğerleri nötr rozetli (ton anlam taşır); bağlanırken
+  /// sağda küçük çark. Dokunmak cihaza bağlanır (eski davranış).
+  Widget _deviceTile(BleProvisionDevice device) {
+    final selected = _selectedDevice?.id == device.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        selected: selected,
+        child: ListTile(
+          selected: selected,
+          leading: IconOrb(
+            icon: Icons.bluetooth_rounded,
+            tone: selected ? AppTone.primary : AppTone.neutral,
+            size: 40,
+            shape: IconOrbShape.squircle,
+          ),
+          title: Text(device.name),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(device.id),
+              const SizedBox(height: AppSpace.xs),
+              _signalChip(device.rssi),
+            ],
+          ),
+          trailing: _connectingDevice && selected
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : null,
+          onTap: _connectingDevice ? null : () => _connectDevice(device),
+        ),
       ),
     );
   }
@@ -499,14 +553,26 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Semantics(
-            header: true,
-            child: Text(device.name, style: th.titleLarge),
+          // Bağlanılan cihazın başlığı: sayfanın odak rozeti (ışımalı), cihaz adı + Bluetooth kimliği.
+          _cardHeader(
+            icon: Icons.memory_rounded,
+            tone: AppTone.primary,
+            size: 48,
+            glow: true,
+            header: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Semantics(
+                  header: true,
+                  child: Text(device.name, style: th.titleLarge),
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text('Bluetooth ID: ${device.id}'),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Text('Bluetooth ID: ${device.id}'),
           if (state != null) ...<Widget>[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: DecoratedBox(
@@ -519,19 +585,43 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
+                      // Durum göstergeleri: çip (renk + ikon/nokta + metin; renk tek başına anlam
+                      // taşımaz). Uzun "MQTT eksik" cümlesi çipe sığmaz (tek satır + elips): satır
+                      // sarmalı InlineNotice (uyarı) olarak gösterilir. Metinler eskisiyle aynıdır.
+                      Wrap(
+                        spacing: AppSpace.sm,
+                        runSpacing: AppSpace.sm,
+                        children: <Widget>[
+                          StatusChip(
+                            label:
+                                'Wi-Fi Durumu: ${state.wifiConnected ? 'Bağlı' : 'Bağlı değil'}',
+                            tone: state.wifiConnected
+                                ? AppTone.success
+                                : AppTone.warning,
+                          ),
+                          if (state.mqttConfigured)
+                            const StatusChip(
+                              label: 'MQTT Kimliği: Hazır',
+                              tone: AppTone.success,
+                            ),
+                        ],
+                      ),
+                      if (!state.mqttConfigured) ...<Widget>[
+                        const SizedBox(height: AppSpace.sm),
+                        const InlineNotice(
+                          message:
+                              'MQTT Kimliği: Eksik veya henüz yazılmadı',
+                          tone: AppTone.warning,
+                        ),
+                      ],
+                      const SizedBox(height: AppSpace.md),
                       Text(
                         'Unique ID: ${state.deviceUid.isEmpty ? '-' : state.deviceUid}',
                       ),
                       Text(
                         'Kayıtlı SSID: ${state.ssid.isEmpty ? '-' : state.ssid}',
                       ),
-                      Text(
-                        'Wi-Fi Durumu: ${state.wifiConnected ? 'Bağlı' : 'Bağlı değil'}',
-                      ),
                       Text('IP: ${state.ip.isEmpty ? '-' : state.ip}'),
-                      Text(
-                        'MQTT Kimliği: ${state.mqttConfigured ? 'Hazır' : 'Eksik veya henüz yazılmadı'}',
-                      ),
                     ],
                   ),
                 ),
@@ -598,10 +688,11 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                   tone: AppTone.success,
                   padding: EdgeInsets.zero,
                   child: ListTile(
-                    leading: Icon(
-                      Icons.qr_code_2_outlined,
-                      color: successInk,
-                      size: 28,
+                    leading: const IconOrb(
+                      icon: Icons.qr_code_2_rounded,
+                      tone: AppTone.success,
+                      size: 40,
+                      shape: IconOrbShape.squircle,
                     ),
                     title: Text(
                       _selectedSsid!,
@@ -693,6 +784,11 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                 ),
               ),
             ),
+            // Kayıt sürerken ilerleme: yuvarlak uçlu (tema) belirsiz çizgi; yalnız iş sürerken döner.
+            if (_savingWifi) ...<Widget>[
+              const SizedBox(height: AppSpace.md),
+              const LinearProgressIndicator(),
+            ],
           ],
         ],
       ),
@@ -756,12 +852,16 @@ class _WifiProvisionPageState extends State<WifiProvisionPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _buildInstructions(),
+                        // Üç ana kart kademeli girer (yalnız ilk kurulumda; hareket azaltmada anında).
+                        StaggeredEntry(index: 0, child: _buildInstructions()),
                         const SizedBox(height: 16),
-                        _buildDeviceList(),
+                        StaggeredEntry(index: 1, child: _buildDeviceList()),
                         if (_selectedDevice != null) ...<Widget>[
                           const SizedBox(height: 16),
-                          _buildProvisionPanel(),
+                          StaggeredEntry(
+                            index: 2,
+                            child: _buildProvisionPanel(),
+                          ),
                         ],
                       ],
                     ),

@@ -41,6 +41,15 @@ class DoorCard extends StatelessWidget {
         onDeleteDoor != null ||
         onManagePermissions != null;
     final deviceTone = hasDevice ? _hardwareTone : AppTone.warning;
+    // İkon rozetinin tonu cihaz DURUMUNU söyler (donanım modelini yanındaki rozet söyler): cihaz yok =
+    // uyarı, çevrimiçi = başarı, çevrimdışı = hata, durum bilinmiyor = nötr.
+    final statusTone = !hasDevice
+        ? AppTone.warning
+        : switch (door.assignedDeviceIsOnline) {
+            true => AppTone.success,
+            false => AppTone.danger,
+            null => AppTone.neutral,
+          };
     final unitStyle = th.bodySmall;
 
     // Cihazsız kapı = uyarı tonlu kart (kapı kontrolü pasif). Tek eylem satırı: önceki "dar/geniş"
@@ -58,7 +67,8 @@ class DoorCard extends StatelessWidget {
                 icon: door.isHardwareWroom
                     ? Icons.developer_board_rounded
                     : Icons.meeting_room_rounded,
-                tone: deviceTone,
+                tone: statusTone,
+                size: 48,
                 gap: AppSpace.md,
               ),
               Expanded(
@@ -169,8 +179,12 @@ class DoorCard extends StatelessWidget {
     return PopupMenuButton<String>(
       icon: Icon(Icons.more_vert_rounded, color: p.textSecondary),
       style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+      // Menü yüzeyi kartlarla aynı dil: palet yüzeyi + ince kenar + kart köşesi (tema rengi/tint yok).
+      color: p.surface,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: BorderSide(color: p.border),
       ),
       onSelected: (val) {
         if (val == 'permissions') onManagePermissions?.call();

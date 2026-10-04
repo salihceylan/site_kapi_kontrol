@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
 
@@ -559,5 +560,85 @@ void main() {
         expect(t.takeException(), isNull);
       },
     );
+  });
+
+  group('VerifyEmailCodePage: premium dokunuşlar', () {
+    testWidgets('başlıkta cilalı hero IconOrb (64 dp daire, ışımalı, birincil ton)', (
+      t,
+    ) async {
+      await _pumpVerify(t, _FakeAuth(), height: 900);
+      final orb = t.widget<IconOrb>(find.byType(IconOrb));
+      expect(orb.icon, Icons.mark_email_read_rounded);
+      expect(orb.size, 64);
+      expect(orb.glow, isTrue);
+      expect(orb.shape, IconOrbShape.circle);
+      expect(orb.tone, AppTone.primary);
+      expect(find.byType(IconOrb), findsOneWidget, reason: 'tek hero öğe');
+    });
+
+    testWidgets('kod alanı iri: başlıktan büyük punto, sabit genişlikli rakamlar, iç yüzey zemini', (
+      t,
+    ) async {
+      for (final dark in const <bool>[false, true]) {
+        await _pumpVerify(t, _FakeAuth(), height: 900, dark: dark);
+        final palette = dark ? AppPalette.dark : AppPalette.light;
+        final field = t.widget<TextField>(_codeField);
+        final headline = Theme.of(t.element(_codeField)).textTheme.headlineMedium!;
+        expect(field.style!.fontSize, greaterThan(headline.fontSize!));
+        expect(
+          field.style!.fontFeatures,
+          contains(const FontFeature.tabularFigures()),
+        );
+        expect(field.decoration!.fillColor, palette.surfaceMuted);
+        // Rakam ve ipucu rengi bu zeminde de >= 4,5:1.
+        expect(
+          _contrast(field.style!.color!, palette.surfaceMuted),
+          greaterThanOrEqualTo(4.5),
+          reason: 'dark=$dark',
+        );
+        expect(
+          _contrast(palette.textMuted, palette.surfaceMuted),
+          greaterThanOrEqualTo(4.5),
+          reason: 'dark=$dark',
+        );
+      }
+    });
+
+    testWidgets('bekleme çizgisi: süre boyunca var ve tükenir, bitince kalkar; kart yüksekliği değişmez', (
+      t,
+    ) async {
+      await _pumpVerify(t, _FakeAuth(), height: 900);
+      final card = find.byType(AppCard);
+      final bar = find.byType(LinearProgressIndicator);
+      final height = t.getSize(card).height;
+      expect(bar, findsOneWidget);
+      expect(t.widget<LinearProgressIndicator>(bar).value, 1.0);
+
+      await t.pump(const Duration(seconds: 16));
+      await t.pump(const Duration(seconds: 1));
+      expect(t.widget<LinearProgressIndicator>(bar).value, lessThan(0.6));
+      // Çizgi anlamsal ağaçta yok (süre düğme etiketinde okunur).
+      expect(
+        find.ancestor(of: bar, matching: find.byType(ExcludeSemantics)),
+        findsWidgets,
+      );
+
+      await t.pump(const Duration(seconds: 30));
+      expect(bar, findsNothing);
+      expect(t.getSize(card).height, height, reason: 'yer ayrılı kalır: zıplama yok');
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('yeniden gönderme başarısında ve doğrulama başarısında hafif haptik', (
+      t,
+    ) async {
+      final haptics = recordHaptics(t);
+      final auth = _FakeAuth();
+      await _pumpVerify(t, auth, height: 900);
+      await t.pump(const Duration(seconds: 30));
+      await _tapText(t, 'Kodu Tekrar Gönder');
+      await t.pump();
+      expect(haptics, contains('HapticFeedbackType.lightImpact'));
+    });
   });
 }

@@ -1160,3 +1160,91 @@ Ayrıntı ve işletim notları: `docs/EPOSTA_DOGRULAMA.md`.
 - [ ] **55.5. Erişilebilirlik:**
   - **Nasıl Test Edilir:** TalkBack/VoiceOver açıkken düğmeye odaklanın.
   - **Beklenen Sonuç:** "Koyu temaya geç" / "Aydınlık temaya geç" okunmalı.
+
+---
+
+## 56. 📚 Arıza Bulma Klavuzu (2026-10-02)
+
+Ana sayfa: `docs/ARIZA_KLAVUZU.md`. Araç ve giriş biçimi: `tools/klavuz/README.md`.
+
+- [ ] **56.1. Klavuz Güncel mi:**
+  - **Nasıl Test Edilir:** Depo kökünde `node tools/klavuz/build.mjs --check --fresh` çalıştırın; ardından `node --test "tools/klavuz/*.test.mjs"`.
+  - **Beklenen Sonuç:** `TAMAM`, `GÜNCEL` yazmalı, uyarı olmamalı; testler geçmeli. Kod değişikliğinden sonra `ESKİ` çıkarsa `node tools/klavuz/build.mjs` ile belgeleri yenileyin.
+- [ ] **56.2. Belirtiden Koda Ulaşma:**
+  - **Nasıl Test Edilir:** `docs/ARIZA_KLAVUZU_INDEKS.md` içinde "kapı açma" ya da "giriş 401" gibi bir belirtiyi aratın; satırdaki `dosya:satır` bağlantısına tıklayın.
+  - **Beklenen Sonuç:** Bağlantı, belirtiyle ilgili gerçek koda (örn. `server/src/routes/auth_routes.js` giriş ucu) götürmeli; girişteki "olası nedenler" ve "adım adım kontrol" koddaki davranışla uyuşmalı. Uyuşmayan bir açıklama bulursanız ilgili `tools/klavuz/entries/*.mjs` girişini düzeltin (bölümler "doğrulanmadı" etiketlidir).
+- [ ] **56.3. Hata Mesajından Koda Ulaşma:**
+  - **Nasıl Test Edilir:** Uygulamada gördüğünüz bir hata mesajının parçasını `docs/ARIZA_KLAVUZU_HATA_MESAJLARI.md` içinde aratın.
+  - **Beklenen Sonuç:** Mesajı üreten `dosya:satır` listelenmeli.
+
+
+---
+
+## 57. 💎 Modern Premium Arayüz — Cilalı Kapı Düğmesi ve Ortak Tasarım Dili (2026-10-03)
+
+Kurallar ve bileşenler: `docs/TASARIM_DILI.md`. Bu bölüm emülatörde/cihazda GÖZLE denenir; otomatik testler taşma, kontrast, hareket azaltma ve "boştayken animasyon yok" kurallarını zaten sınar.
+
+- [ ] **57.1. Yuvarlak Cilalı Kapı Düğmesi (3 kart):**
+  - **Nasıl Test Edilir:** Daire sakini, site yöneticisi/süper kullanıcı ve bireysel kullanıcı olarak giriş yapın; kapı kartlarına bakın. Yönetici panosunda düğme kartın ortasında, bireysel kartta solda (dar ekranda/büyük yazıda üstte ortalı), daire sakini kartında ortada olmalıdır.
+  - **Beklenen Sonuç:** Düğme yuvarlak, parlak (üstte cam gibi yansıma, kenar ışığı), altında yumuşak renkli ışıma olmalı; etiket ve ikon net okunmalı (`KAPIYI AÇ` / `KAPI AÇ` / `UZAKTAN AÇ` / `YEREL AĞDAN AÇ`). Boştayken hiçbir şey kıpırdamamalı.
+- [ ] **57.2. Basış ve Açılma Efektleri:**
+  - **Nasıl Test Edilir:** Çevrimiçi bir kapının düğmesine dokunun.
+  - **Beklenen Sonuç:** Dokunur dokunmaz hafif titreşim, düğme hafif küçülür ve dışa yayılan çift halka görülür; komut sürerken düğme "AÇILIYOR" olur, ortada dönen gösterge ve dışa yayılan sonar halkaları görülür; komut bitince düğme yeşile döner, onay işareti, ışıltı süpürmesi, patlama halkası ve kıvılcımlar görülür (`GÖNDERİLDİ`), 1,4 sn sonra eski haline döner. Hiçbir adım komutu geciktirmemeli (düğme anında tepki verir).
+- [ ] **57.3. Çevrimdışı ve Devre Dışı Durumlar:**
+  - **Nasıl Test Edilir:** Cihazı çevrimdışı yapın (ya da çevrimdışı bir kapı seçin); düğmeye dokunun. Cihazı yeniden çevrimiçi yapın.
+  - **Beklenen Sonuç:** Düğme soluk/camsı gri görünmeli (`ÇEVRİMDIŞI`); dokununca hafif titreşim + yatay titreme + uyarı; çevrimiçi olunca düğme canlanıp kısa bir ışıltı göstermeli.
+- [ ] **57.4. Hareket Azaltma ve Yüksek Karşıtlık:**
+  - **Nasıl Test Edilir:** Cihaz erişilebilirlik ayarlarından animasyonları kapatın (Android: "Animasyonları kaldır"; iOS: "Hareketi Azalt"), sonra "Yüksek karşıtlık" metnini açın.
+  - **Beklenen Sonuç:** Düğme çalışmaya devam eder (titreşim, durum değişimi) ama halka/ışıltı/kıvılcım efektleri görülmez; yüksek karşıtlıkta cila olmadan düz renkli ve net görünür.
+- [ ] **57.5. Aydınlık / Karanlık Tema:**
+  - **Nasıl Test Edilir:** Tema düğmesiyle iki tema arasında geçin; giriş, ana panel, listeler ve diyaloglara bakın.
+  - **Beklenen Sonuç:** İki temada da kartlar, rozetler ve düğmeler okunaklı; karanlıkta kartlarda hafif cam parıltısı, aydınlıkta hero kartlarda hafif ton yıkaması görülür; ana sayfa başlığında rol rengine uygun hafif gradyan ve avatar rozeti vardır.
+- [ ] **57.6. Ortak Bileşenler:**
+  - **Nasıl Test Edilir:** Bir diyalog açın (örn. Şifremi Unuttum, Site Ekle), boş bir liste görün, başarı/hata bildirimi tetikleyin, açılır bir menüye ya da ipucuna dokunun.
+  - **Beklenen Sonuç:** Diyalog başlığında cilalı ikon rozeti; boş listede büyük parlak rozet; bildirimde cam daire içinde simge; açılır menü ve alt sayfa köşeleri yuvarlak; ilerleme göstergelerinin uçları yuvarlak.
+- [ ] **57.7. Kısayol / Widget ile Kapı Açma Onayı:**
+  - **Nasıl Test Edilir:** Ana ekran widget'ından ya da uygulama kısayolundan bir kapıyı açmayı deneyin (birden çok kapı varsa seçim penceresi de açılır).
+  - **Beklenen Sonuç:** "Kapı açılsın mı?" penceresi cilalı kilit rozeti ve uyarı kutusuyla açılır; birden çok kapıda "Hangi kapı açılsın?" penceresinde her kapı dokunulabilir kartlardır; Vazgeç/Kapıyı Aç davranışı eskisi gibidir.
+- [ ] **57.8. Küçük Ekran, Büyük Yazı ve Taşma:**
+  - **Nasıl Test Edilir:** Sistem yazı boyutunu en büyüğe alın (uygulama içinde en çok 2,0x uygulanır) ve küçük bir telefonda (veya pencereyi daraltarak) tüm ana ekranları, diyalogları ve listeleri gezin.
+  - **Beklenen Sonuç:** Hiçbir yerde "overflowed" şeridi/kesilen metin olmamalı; bireysel kapı kartında düğme üstte ortalanmalı; tüm düğmeler en az 44 dp dokunma alanında kalmalı.
+- [ ] **57.9. Hız ve Akıcılık:**
+  - **Nasıl Test Edilir:** Orta/düşük seviye bir cihazda listeleri hızlıca kaydırın, menü ve sayfa geçişlerini, tema değişimini ve kapı açmayı tekrarlayın.
+  - **Beklenen Sonuç:** Kaydırma ve geçişler takılmadan akmalı; sayfa geçişi ~0,2 sn; boştayken (hiçbir şeye dokunmazken) cihaz ısınmamalı/pil harcamamalı (sürekli animasyon yoktur).
+- [ ] **57.10. Klavye / Odak (masaüstü ve erişilebilirlik):**
+  - **Nasıl Test Edilir:** Windows/web sürümünde Tab ile kapı düğmesine odaklanın; Enter'a basın. TalkBack/VoiceOver ile düğmeye odaklanın.
+  - **Beklenen Sonuç:** Odaktaki yuvarlak düğmenin dışında net bir halka görülür; Enter komutu gönderir; ekran okuyucu düğme etiketini ("Kapıyı Aç" vb.) ve açılırken/başarıda durumu okur.
+- [ ] **57.11. Ekranlar ve Listeler:**
+  - **Nasıl Test Edilir:** Süper kullanıcı/yönetici olarak Siteler, Kullanıcılar, Talepler ve Cihaz Envanteri ekranlarını; bireysel kullanıcıyla Kurulum ve Profil ekranlarını gezin.
+  - **Beklenen Sonuç:** Kart başlıklarında cilalı ikon rozetleri (durumuna göre ton: onaylı mavi, bekleyen amber, çevrimiçi yeşil, çevrimdışı kırmızı); listeler sırayla belirir; yüklenirken iskelet, boşken ikon rozetli boş durum görünür. Onay bekleyen kartlarda "Onayla" önde ve dokununca hafif titreşim verir; süper kullanıcıda cihaz kartı başlığında yalnız dikkat gerektiren OTA durumu ("OTA: Hata" vb.) rozet olur.
+- [ ] **57.12. Diyaloglar:**
+  - **Nasıl Test Edilir:** Site ekle/düzenle, kapı yetkileri, daire sakinleri, cihaz ekle/değiştir, misafir geçişi oluştur ve siteye katıl diyaloglarını açın.
+  - **Beklenen Sonuç:** Bölüm başlıklarında ikon rozeti, anahtarlarda durum rozeti, açılır listelerde yuvarlak köşe; kaydet/onayla başarıda hafif titreşim. Misafir geçişi oluşturulunca sonuç kartı bağlantıyı, "Son geçerlilik" ve "Kullanım hakkı" satırlarını göstermelidir.
+- [ ] **57.13. Giriş, Kayıt ve QR Tarama:**
+  - **Nasıl Test Edilir:** Çıkış yapıp giriş ekranına bakın; "Yeni Hesap Oluştur" ve e-posta doğrulama ekranlarını, ardından kapı ekranı QR tarama sayfasını açın.
+  - **Beklenen Sonuç:** Logo halkası parlak ve yumuşak ışımalı; doğrulama ekranında büyük kod alanı, 30 saniye bekleme süresince tükenen ince çizgi; QR sayfasında köşe işaretli tarama çerçevesi ve ipucu kapsülü. Giriş ve doğrulama başarısında hafif titreşim.
+
+---
+
+## 58. 🚪 Sade Daire Kullanıcısı Ekranı ve Çekmece Komutları (2026-10-04)
+
+Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yuvarlak "AÇ" düğmesi vardır; açıklama metinleri, rozetler, IP bilgileri ve saat kaldırıldı. Diğer komutlar sol üstteki üç çizgi (hamburger) menüsünde toplandı. (Bireysel kullanıcı ve yönetici ekranları değişmedi.)
+
+- [ ] **58.1. Sade Ana Ekran:**
+  - **Nasıl Test Edilir:** Daire kullanıcısı olarak giriş yapın.
+  - **Beklenen Sonuç:** Ekranda yalnız tek kart görünür: tek kapı varsa kapı adı, birden çok kapı varsa kapı seçici çipler; altında büyük yuvarlak düğme (`KAPIYI AÇ`). "AHBU AKILLI GEÇİŞ" rozeti, "Çevrimiçi - Kapıyı açmak için dokunun" cümlesi, IP rozetleri, saat, sesli banner ve QR / misafir düğmeleri görünmemelidir.
+- [ ] **58.2. Kapı Seçimi ve Açma:**
+  - **Nasıl Test Edilir:** Birden çok kapısı olan hesapta çiplerle kapı değiştirin, düğmeye dokunun; cihazı çevrimdışı yapıp tekrar dokunun.
+  - **Beklenen Sonuç:** Seçilen kapı vurgulanır, düğme o kapıyı açar (AÇILIYOR, GÖNDERİLDİ efektleri aynı). Çevrimdışıyken düğme `ÇEVRİMDIŞI` yazar ve dokununca "… şu an çevrimdışı" uyarısı çıkar.
+- [ ] **58.3. Çekmece Komutları:**
+  - **Nasıl Test Edilir:** Sol üstteki üç çizgi simgesine dokunun.
+  - **Beklenen Sonuç:** "Panel"in hemen altında, kapıdaki yetkiye ve cihaza göre şu öğeler görünür: `Sesli Kapı Açma`, `Kapıya QR Göster`, `Kapı Ekranından QR Oku` (yalnız ekranlı cihazda), `Kurye / Misafir Geçiş Linki Oluştur`; yetkisi olmayan öğe hiç görünmez. Ardından eski menü öğeleri (Daireye Katıl & Cihaz Ekle, Eller Serbest & Kestirmeler, Profilim, Çıkış Yap) gelir.
+- [ ] **58.4. Çekmeceden QR ve Misafir Geçişi:**
+  - **Nasıl Test Edilir:** Çekmeceden sırayla `Kapıya QR Göster`, `Kapı Ekranından QR Oku` ve `Kurye / Misafir Geçiş Linki Oluştur` öğelerine dokunun.
+  - **Beklenen Sonuç:** Çekmece kapanır ve eski ana ekran düğmeleriyle aynı akış çalışır: dinamik karekod penceresi (konum zorunluysa önce konum denetimi), kamera ile ekran karekodu okuma ve misafir geçişi diyaloğu. Cihaz çevrimdışıysa QR öğeleri uyarı gösterir.
+- [ ] **58.5. Sesli Komut:**
+  - **Nasıl Test Edilir:** Çekmeceden `Sesli Kapı Açma` öğesine dokunun, "kapıyı aç" deyin.
+  - **Beklenen Sonuç:** Alt sayfada dinleme göstergesi açılır ve eskiden ana ekrandaki sesli banner'la aynı şekilde komut çalışır.
+- [ ] **58.6. Küçük Ekran ve Büyük Yazı:**
+  - **Nasıl Test Edilir:** Yazı boyutunu en büyüğe alın, küçük telefonda ana ekranı ve çekmeceyi açın.
+  - **Beklenen Sonuç:** Taşma olmaz; kapı adı/çipler kırpılmadan sarar, çekmece öğeleri kaydırılabilir.

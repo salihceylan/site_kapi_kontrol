@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
@@ -568,6 +569,31 @@ void main() {
       await _pumpRegister(t, _FakeAuth(), width: 320, scale: 2.0, reduce: true);
       expect(find.text('Kayıt Ol'), findsNWidgets(2));
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('RegisterIndividualPage: premium dokunuşlar', () {
+    testWidgets('başlığın üstünde cilalı hero IconOrb; başlık ve alt başlık değişmez', (
+      t,
+    ) async {
+      await _pumpRegister(t, _FakeAuth(), height: 900);
+      final orb = t.widget<IconOrb>(find.byType(IconOrb));
+      expect(orb.size, 64);
+      expect(orb.glow, isTrue);
+      expect(orb.shape, IconOrbShape.circle);
+      expect(
+        t.getBottomLeft(find.byType(IconOrb)).dy,
+        lessThan(t.getTopLeft(find.text('Kayıt Ol').first).dy),
+      );
+      expect(find.byType(IconOrb), findsOneWidget);
+    });
+
+    testWidgets('kayıt başarısında hafif haptik', (t) async {
+      final haptics = recordHaptics(t);
+      await _pumpRegister(t, _FakeAuth(), width: 360, height: 900);
+      await _fillForm(t);
+      await _submit(t);
+      expect(haptics, contains('HapticFeedbackType.lightImpact'));
     });
   });
 }

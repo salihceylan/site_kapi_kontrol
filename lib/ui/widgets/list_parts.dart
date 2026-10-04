@@ -5,8 +5,10 @@
 // kartı ve eylem düğmesi stilleri. Hepsi `lib/ui/design` bileşenleri ve tokenları üzerine kurulur:
 // ham renk yoktur, her süre `AppMotion.of` üzerinden geçer (hareket azaltmada anında).
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/empty_state.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -23,28 +25,59 @@ EdgeInsets listCardPadding(BuildContext context) => EdgeInsets.all(
 
 /// Sayfa başlık kartı: [title] + isteğe bağlı birincil eylem ([action], genellikle `ElevatedButton.icon`).
 ///
+/// Hero yüzey: `AppCard(level: 2)` (tonun sol-üst yıkaması + seviye 2 gölge). [icon] verilirse başlığın
+/// solunda 48 dp cilalı squircle [IconOrb] durur (dekoratif; büyük yazıda >= 1,75x gizlenir, başlığa yer
+/// kalır). [icon] null ise düzen eskisiyle birebir aynıdır (yalnız başlık).
+///
 /// Dar ekranda (< 680) eylem başlığın altında tam genişlikte, geniş ekranda sağda durur. Başlık
 /// kırpılmaz (en çok 3 satır). Kartın tek dolu düğmesi eylemdir.
 class PageHeaderCard extends StatelessWidget {
-  const PageHeaderCard({super.key, required this.title, this.action});
+  const PageHeaderCard({
+    super.key,
+    required this.title,
+    this.action,
+    this.icon,
+    this.tone = AppTone.primary,
+  });
 
   final String title;
 
   /// null ise yalnız başlık gösterilir.
   final Widget? action;
 
+  /// Başlığın solundaki rozet simgesi; null ise rozet yok.
+  final IconData? icon;
+
+  /// [icon] rozetinin tonu (varsayılan birincil).
+  final AppTone tone;
+
   @override
   Widget build(BuildContext context) {
     final action = this.action;
+    final icon = this.icon;
     final compact = MediaQuery.sizeOf(context).width < 680;
+    final Widget heading = icon == null || isLargeText(context)
+        ? SectionHeader(title: title)
+        : Row(
+            children: [
+              IconOrb(
+                icon: icon,
+                tone: tone,
+                size: 48,
+                shape: IconOrbShape.squircle,
+              ),
+              const SizedBox(width: AppSpace.md),
+              Expanded(child: SectionHeader(title: title)),
+            ],
+          );
     final Widget content;
     if (action == null) {
-      content = SectionHeader(title: title);
+      content = heading;
     } else if (compact) {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionHeader(title: title),
+          heading,
           const SizedBox(height: AppSpace.md),
           SizedBox(width: double.infinity, child: action),
         ],
@@ -52,13 +85,13 @@ class PageHeaderCard extends StatelessWidget {
     } else {
       content = Row(
         children: [
-          Expanded(child: SectionHeader(title: title)),
+          Expanded(child: heading),
           const SizedBox(width: AppSpace.md),
           action,
         ],
       );
     }
-    return AppCard(child: content);
+    return AppCard(level: 2, child: content);
   }
 }
 
@@ -256,7 +289,12 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Kart başındaki ton zeminli yuvarlak ikon karosu (dekoratif, [size] x [size]); büyük yazıda gizlenir.
+/// Kart/satır başındaki cilalı ikon rozeti: ton gradyanı + cila + beyaz ikon ([IconOrb], squircle,
+/// [size] x [size]). Dekoratiftir (anlamsal ağaçta yok); büyük yazıda (>= 1,75x) gizlenir.
+///
+/// Ton ANLAM taşır: çağıran durumu yansıtan tonu verir (site onayı, cihaz çevrimiçi/çevrimdışı, rol...).
+/// Boyut rehberi: liste satırı 40, kart başlığı 44-48. [iconSize] geriye dönük uyumluluk için durur ama
+/// artık kullanılmaz: [IconOrb] ikonu her zaman boyutun yarısı çizer.
 class IconTile extends StatelessWidget {
   const IconTile({
     super.key,
@@ -272,29 +310,19 @@ class IconTile extends StatelessWidget {
   final double size;
   final double iconSize;
 
-  /// Karonun sağındaki boşluk (karoyla birlikte gizlenir).
+  /// Rozetin sağındaki boşluk (rozetle birlikte gizlenir).
   final double gap;
 
   @override
   Widget build(BuildContext context) {
     if (isLargeText(context)) return const SizedBox.shrink();
-    final p = context.palette;
-    return ExcludeSemantics(
-      child: Padding(
-        padding: EdgeInsets.only(right: gap),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: tone.tint(p),
-          ),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Center(
-              child: Icon(icon, size: iconSize, color: tone.ink(p)),
-            ),
-          ),
-        ),
+    return Padding(
+      padding: EdgeInsets.only(right: gap),
+      child: IconOrb(
+        icon: icon,
+        tone: tone,
+        size: size,
+        shape: IconOrbShape.squircle,
       ),
     );
   }
@@ -313,7 +341,8 @@ class ListSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget row() => Row(
       children: [
-        const SkeletonBox(width: 44, height: 44, radius: AppRadius.pill),
+        // Squircle: iskeletin yerini tutacağı ikon rozetiyle (IconTile) aynı biçim (köşe = boyutun %30'u).
+        const SkeletonBox(width: 44, height: 44, radius: 13),
         const SizedBox(width: AppSpace.md),
         Expanded(
           child: Column(
@@ -403,6 +432,10 @@ class EmptyCard extends StatelessWidget {
 
 /// İkincil (yönetim) eylemi: ton zeminli düğme. `ElevatedButton/OutlinedButton/FilledButton`'ın
 /// `style:`'ına verilir; düğme tipi (test bulucuları) değişmez. En az 44 dp yükseklik.
+///
+/// Hiyerarşi: ikincil eylem DÜZ kalır. `ElevatedButton`a verilirse tema cila katmanı (üst ışık + alt
+/// gölge) soluk ton zemininin üstünde kirli bir gradyan bırakıyordu; [_flatLayer] o katmanı kapatır
+/// (`OutlinedButton`ta zaten katman yoktur, etkisizdir).
 ButtonStyle tonalActionStyle(
   BuildContext context, {
   AppTone tone = AppTone.primary,
@@ -416,6 +449,7 @@ ButtonStyle tonalActionStyle(
     elevation: 0,
     minimumSize: const Size(0, 44),
   ).copyWith(
+    backgroundBuilder: _flatLayer,
     side: WidgetStateProperty.resolveWith(
       (states) => BorderSide(
         color: states.contains(WidgetState.disabled)
@@ -424,6 +458,22 @@ ButtonStyle tonalActionStyle(
       ),
     ),
   );
+}
+
+/// Tema cila katmanını ([glossyButtonLayer]) geçersiz kılan geçirgen katman: düğmenin içeriğini aynen döner.
+Widget _flatLayer(BuildContext context, Set<WidgetState> states, Widget? child) =>
+    child ?? const SizedBox.shrink();
+
+/// Onay anında hafif haptik veren sarmalayıcı: [onPressed] null ise null döner (düğme devre dışı kalır).
+///
+/// Kullanım: `onPressed: busy ? null : withLightHaptic(onApprove)`. Haptik yalnız dokunma tetiklenince
+/// verilir (kaydırma/odak değil); davranış ve geri çağrı sırası değişmez.
+VoidCallback? withLightHaptic(VoidCallback? onPressed) {
+  if (onPressed == null) return null;
+  return () {
+    HapticFeedback.lightImpact();
+    onPressed();
+  };
 }
 
 /// Yıkıcı eylem (sil, reddet, iptal): danger kenarlı, `ink` metinli çerçeveli düğme.

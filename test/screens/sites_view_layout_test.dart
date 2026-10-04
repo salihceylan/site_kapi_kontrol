@@ -2,7 +2,8 @@
 //
 // AGENTS.md kural 6: taşma YOK (320x640 x2,0 ve 360x640 x1,5; açık + koyu tema). Davranış: eylem
 // düğmeleri GÖRÜNÜR kalır (menüye taşınmaz), kapalı kartın içeriği ağaçta yoktur, yenile/sayfalama
-// geri çağrıları değişmedi. Kart-içinde-kart yok (tek yüzey).
+// geri çağrıları değişmedi. Kart-içinde-kart yok (tek yüzey). Görsel dil ("Cilalı Safir"): ikon
+// rozetleri (IconOrb, ton anlam taşır), hero başlık/özet kartı, kademeli giriş, onay haptiği.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
@@ -10,6 +11,9 @@ import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/gloss.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/skeleton.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/views/sites_view.dart';
@@ -17,6 +21,7 @@ import 'package:site_kapi_kontrol/ui/widgets/apartment_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/door_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_card.dart';
 
+import '../design/harness.dart' show harnessApp, recordHaptics;
 import 'list_fixtures.dart';
 
 const String _longName =
@@ -721,6 +726,442 @@ void main() {
             }
           }
         }
+      },
+    );
+  });
+
+  group('SitesView görsel dil (ikon rozeti, durum, giriş, haptik)', () {
+    /// [scope] içindeki cilalı ikon rozetleri (IconOrb), ağaç sırasıyla.
+    List<IconOrb> orbsIn(WidgetTester t, Finder scope) => t
+        .widgetList<IconOrb>(
+          find.descendant(of: scope, matching: find.byType(IconOrb)),
+        )
+        .toList();
+
+    testWidgets(
+      'site kartı rozeti durumu söyler: onaylı=primary, onay bekleyen=warning, silme onayı=danger',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        final cards = find.byType(SiteCard);
+        expect(cards, findsNWidgets(3));
+        final orbs = <IconOrb>[
+          for (var i = 0; i < 3; i++) orbsIn(t, cards.at(i)).single,
+        ];
+        expect(orbs.map((o) => o.tone).toList(), <AppTone>[
+          AppTone.primary,
+          AppTone.warning,
+          AppTone.danger,
+        ]);
+        for (final orb in orbs) {
+          expect(orb.icon, Icons.apartment_rounded);
+          expect(orb.size, 48);
+          expect(orb.shape, IconOrbShape.squircle);
+          expect(orb.glow, isFalse, reason: 'glow yalnız hero rozetlerde');
+          expect(orb.semanticLabel, isNull, reason: 'rozet dekoratif');
+        }
+      },
+    );
+
+    testWidgets(
+      'kapı kartı rozeti cihaz durumunu söyler: çevrimiçi=success, çevrimdışı=danger, cihazsız=warning, bilinmiyor=neutral',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        final cards = find.byType(DoorCard);
+        expect(cards, findsNWidgets(3));
+        final orbs = <IconOrb>[
+          for (var i = 0; i < 3; i++) orbsIn(t, cards.at(i)).single,
+        ];
+        expect(orbs.map((o) => o.tone).toList(), <AppTone>[
+          AppTone.success,
+          AppTone.danger,
+          AppTone.warning,
+        ]);
+        expect(orbs.map((o) => o.icon).toList(), <IconData>[
+          Icons.developer_board_rounded,
+          Icons.meeting_room_rounded,
+          Icons.meeting_room_rounded,
+        ]);
+        for (final orb in orbs) {
+          expect(orb.size, 48);
+          expect(orb.shape, IconOrbShape.squircle);
+        }
+
+        // Cihaz atanmış ama çevrimiçi durumu bilinmiyor: nötr.
+        await pumpList(
+          t,
+          DoorCard(
+            door: fxDoor(7, uid: '240AC4E2E007', target: 'esp32-c3'),
+            onAssignDevice: () {},
+          ),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        expect(orbsIn(t, find.byType(DoorCard)).single.tone, AppTone.neutral);
+      },
+    );
+
+    testWidgets(
+      'daire rozetleri: dolu=violet, boş=warning (40 dp); akordiyon başlığı violet',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        // Akordiyon başlığındaki rozet kapalıyken de görünür (ağaçta ilk rozet).
+        final head = t
+            .widgetList<IconOrb>(
+              find.descendant(
+                of: find.byType(ExpansionTile),
+                matching: find.byType(IconOrb),
+              ),
+            )
+            .first;
+        expect(head.tone, AppTone.violet);
+        expect(head.size, 40);
+        expect(head.shape, IconOrbShape.squircle);
+
+        await tapText(t, 'Daireler');
+        final rows = find.byType(ApartmentCard);
+        expect(rows, findsNWidgets(3));
+        final orbs = <IconOrb>[
+          for (var i = 0; i < 3; i++) orbsIn(t, rows.at(i)).single,
+        ];
+        expect(orbs.map((o) => o.tone).toList(), <AppTone>[
+          AppTone.violet,
+          AppTone.warning,
+          AppTone.violet,
+        ]);
+        for (final orb in orbs) {
+          expect(orb.icon, Icons.home_rounded);
+          expect(orb.size, 40);
+        }
+      },
+    );
+
+    testWidgets(
+      'sayfa başlığı hero kart: seviye 2 + 48 dp squircle rozet; büyük yazıda rozet gizlenir',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        var header = find
+            .ancestor(of: find.text('Siteler'), matching: find.byType(AppCard))
+            .first;
+        expect(t.widget<AppCard>(header).level, 2);
+        var orb = orbsIn(t, header).single;
+        expect(orb.icon, Icons.location_city_rounded);
+        expect(orb.size, 48);
+        expect(orb.shape, IconOrbShape.squircle);
+        expect(orb.tone, AppTone.primary);
+
+        await pumpList(
+          t,
+          _view(apartmentMode: true),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        header = find
+            .ancestor(
+              of: find.text('Site Daireleri'),
+              matching: find.byType(AppCard),
+            )
+            .first;
+        orb = orbsIn(t, header).single;
+        expect(orb.icon, Icons.home_work_rounded);
+
+        await pumpList(
+          t,
+          _view(),
+          width: 320,
+          height: 800,
+          scale: 2.0,
+          dark: false,
+        );
+        header = find
+            .ancestor(of: find.text('Siteler'), matching: find.byType(AppCard))
+            .first;
+        expect(
+          orbsIn(t, header),
+          isEmpty,
+          reason: 'büyük yazıda dekoratif rozet gizlenir (başlığa yer kalır)',
+        );
+        expect(find.text('Yeni Site'), findsOneWidget);
+      },
+    );
+
+    testWidgets('yapı özeti hero kart: seviye 2 + durum tonlu site rozeti', (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 800,
+        scale: 1,
+        dark: false,
+      );
+      final summary = find
+          .ancestor(
+            of: find.text('Site Kodu: 5899864115'),
+            matching: find.byType(AppCard),
+          )
+          .first;
+      expect(t.widget<AppCard>(summary).level, 2);
+      final orb = orbsIn(t, summary).single;
+      expect(orb.icon, Icons.apartment_rounded);
+      expect(orb.size, 48);
+      expect(orb.tone, AppTone.primary, reason: 'seçili site onaylı');
+    });
+
+    testWidgets("'Kapılar' bölümü kapı sayısı rozeti taşır (boşken 0)", (
+      t,
+    ) async {
+      await pumpList(
+        t,
+        _view(),
+        width: 360,
+        height: 800,
+        scale: 1,
+        dark: false,
+      );
+      expect(find.text('Kapılar'), findsOneWidget);
+      expect(find.text('3 Kapı'), findsOneWidget);
+
+      await pumpList(
+        t,
+        _view(structure: fxStructure(doors: const [])),
+        width: 360,
+        height: 800,
+        scale: 1,
+        dark: false,
+      );
+      expect(find.text('Kapılar'), findsOneWidget);
+      expect(find.text('0 Kapı'), findsOneWidget);
+    });
+
+    testWidgets(
+      'giriş: site kartları, kapı kartları ve daire satırları StaggeredEntry içinde',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        for (final type in <Type>[SiteCard, DoorCard]) {
+          final entries = find.ancestor(
+            of: find.byType(type),
+            matching: find.byType(StaggeredEntry),
+          );
+          expect(entries, findsNWidgets(3), reason: '$type');
+          expect(
+            t.widgetList<StaggeredEntry>(entries).map((e) => e.index).toList(),
+            <int>[0, 1, 2],
+            reason: '$type sırayla',
+          );
+        }
+        await tapText(t, 'Daireler');
+        expect(
+          find.ancestor(
+            of: find.byType(ApartmentCard),
+            matching: find.byType(StaggeredEntry),
+          ),
+          findsNWidgets(3),
+        );
+      },
+    );
+
+    testWidgets(
+      'hareket azaltma: giriş animasyonu kurulmaz (ilk karede ticker yok), içerik hemen tam görünür',
+      (t) async {
+        t.view.physicalSize = const Size(360, 800);
+        t.view.devicePixelRatio = 1.0;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(
+          harnessApp(SingleChildScrollView(child: _view()), reduce: true),
+        );
+        await t.pump();
+        expect(t.binding.transientCallbackCount, 0);
+        expect(find.text('Yeşilvadi Sitesi'), findsWidgets);
+        for (final entry in t.widgetList<Opacity>(
+          find.descendant(
+            of: find.byType(StaggeredEntry),
+            matching: find.byType(Opacity),
+          ),
+        )) {
+          expect(entry.opacity, 1.0, reason: 'giriş efekti yok: tam opak');
+        }
+        expect(t.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'kararlı durumda ticker yok: giriş ve nabız bitince kare planlı değil',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        await t.pumpAndSettle();
+        expect(t.binding.transientCallbackCount, 0);
+        expect(t.binding.hasScheduledFrame, isFalse);
+        expect(t.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'onay eylemleri hafif haptik verir; red vermez ve geri çağrılar değişmez',
+      (t) async {
+        final haptics = recordHaptics(t);
+        final log = <String>[];
+        await pumpList(
+          t,
+          _view(log: log),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        await tapText(t, _longName);
+        await tapText(t, 'Reddet');
+        expect(haptics, isEmpty, reason: 'red: haptik yok');
+        await tapText(t, 'Onayla');
+        expect(haptics, <String>['HapticFeedbackType.lightImpact']);
+
+        // Silme onayı uyarısı kart kapalıyken de görünür.
+        await tapText(t, 'Silmeyi Onayla');
+        expect(haptics, <String>[
+          'HapticFeedbackType.lightImpact',
+          'HapticFeedbackType.lightImpact',
+        ]);
+        expect(
+          log,
+          containsAllInOrder(<String>[
+            'reject:5899864116',
+            'approve:5899864116',
+            'approveDelete:5899864117',
+          ]),
+        );
+      },
+    );
+
+    for (final dark in const <bool>[false, true]) {
+      testWidgets(
+        'kapı menüsü yüzeyi: palet yüzeyi + ince kenar + kart köşesi; öğe ve geri çağrılar aynı (${dark ? 'koyu' : 'açık'})',
+        (t) async {
+          final log = <String>[];
+          await pumpList(
+            t,
+            DoorCard(
+              door: fxDoors().first,
+              onAssignDevice: () {},
+              onReplaceDevice: () => log.add('replace'),
+              onEditDoor: () => log.add('edit'),
+              onDeleteDoor: () => log.add('delete'),
+              onManagePermissions: () => log.add('perm'),
+            ),
+            width: 360,
+            height: 800,
+            scale: 1,
+            dark: dark,
+          );
+          await tapFinder(t, find.byIcon(Icons.more_vert_rounded));
+          final p = dark ? AppPalette.dark : AppPalette.light;
+          final surfaces = find
+              .ancestor(
+                of: find.text('Kapı Yetkileri'),
+                matching: find.byType(Material),
+              )
+              .evaluate()
+              .map((e) => e.widget as Material)
+              .where((m) => m.color == p.surface && m.shape != null)
+              .toList();
+          expect(surfaces, isNotEmpty, reason: 'menü yüzeyi palet yüzeyidir');
+          final shape = surfaces.first.shape! as RoundedRectangleBorder;
+          expect(shape.side.color, p.border);
+          expect(shape.borderRadius, BorderRadius.circular(AppRadius.md));
+          expect(surfaces.first.surfaceTintColor, Colors.transparent);
+          for (final item in const <String>[
+            'Kapı Yetkileri',
+            'Arızalı Cihazı Değiştir',
+            'Kapıyı Düzenle',
+            'Kapıyı Sil',
+          ]) {
+            expect(find.text(item), findsOneWidget, reason: item);
+          }
+          await tapText(t, 'Kapıyı Sil');
+          expect(log, <String>['delete']);
+        },
+      );
+    }
+
+    testWidgets(
+      'ikincil (tonal) ElevatedButton düz kalır, dolu Onayla cilalıdır (tema cilası yalnız dolu düğmede)',
+      (t) async {
+        await pumpList(
+          t,
+          _view(),
+          width: 360,
+          height: 800,
+          scale: 1,
+          dark: false,
+        );
+        // Kapı kartları "Değiştir" (2 cihazlı kapı) ve "Cihaz Ata": tonalActionStyle'lı ElevatedButton,
+        // cila katmanı yok.
+        for (final (label, count) in const <(String, int)>[
+          ('Değiştir', 2),
+          ('Cihaz Ata', 1),
+        ]) {
+          final tonal = find.widgetWithText(ElevatedButton, label);
+          expect(tonal, findsNWidgets(count), reason: label);
+          for (var i = 0; i < count; i++) {
+            expect(
+              find.descendant(of: tonal.at(i), matching: find.byType(Gloss)),
+              findsNothing,
+              reason: '$label düz kalır',
+            );
+          }
+        }
+        // Dolu "Onayla" (filledToneStyle): tema cilası var.
+        await tapText(t, _longName);
+        final approve = find.widgetWithText(ElevatedButton, 'Onayla');
+        expect(
+          find.descendant(of: approve, matching: find.byType(Gloss)),
+          findsOneWidget,
+        );
       },
     );
   });

@@ -13,6 +13,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 
 class AllUsersView extends StatefulWidget {
   const AllUsersView({
@@ -248,13 +249,13 @@ class _AllUsersViewState extends State<AllUsersView> {
                       ),
                     ),
 
-                    // Kullanıcı Başlık (Avatar, Ad Soyad, E-Posta)
+                    // Kullanıcı Başlık (rol rozeti: alt sayfanın tek "hero" öğesi, Ad Soyad, E-Posta)
                     Row(
                       children: [
-                        InitialAvatar(
-                          name: user.fullName,
-                          tone: tone,
-                          radius: 26,
+                        UserRoleOrb(
+                          role: user.role,
+                          size: 56,
+                          glow: true,
                           gap: AppSpace.md,
                         ),
                         Expanded(
@@ -648,8 +649,9 @@ class _AllUsersViewState extends State<AllUsersView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-          // 1. ÜST BAŞLIK KARTI
+          // 1. ÜST BAŞLIK KARTI (ekranın özet kartı: hero yükseltisi)
           AppCard(
+            level: 2,
             padding: listCardPadding(context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,7 +774,13 @@ class _AllUsersViewState extends State<AllUsersView> {
                         DropdownButton<int>(
                           value: _pageSize,
                           underline: const SizedBox.shrink(),
-                          icon: const Icon(Icons.arrow_drop_down, size: 18),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          dropdownColor: p.surface,
+                          menuMaxHeight: 320,
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 20,
+                          ),
                           style: th.bodySmall?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: AppTone.primary.ink(p),
@@ -855,7 +863,8 @@ class _AllUsersViewState extends State<AllUsersView> {
     );
   }
 
-  /// Kullanıcı satırı: dokununca detay alt sayfası açılır. Avatar rengi rol tonu.
+  /// Kullanıcı satırı: dokununca detay alt sayfası açılır. Rozet rengi rol tonu; rol ve aktiflik
+  /// rozetleri ad ve e-postanın altında.
   Widget _buildUserRow(BuildContext context, ManagedUserAccount user) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
@@ -865,11 +874,7 @@ class _AllUsersViewState extends State<AllUsersView> {
       padding: listCardPadding(context),
       child: Row(
         children: [
-          InitialAvatar(
-            name: user.fullName,
-            tone: user.role.tone,
-            gap: AppSpace.md,
-          ),
+          UserRoleOrb(role: user.role, gap: AppSpace.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -896,6 +901,8 @@ class _AllUsersViewState extends State<AllUsersView> {
                   overflow: TextOverflow.ellipsis,
                   style: th.bodyMedium,
                 ),
+                const SizedBox(height: AppSpace.sm),
+                UserBadges(user: user),
               ],
             ),
           ),

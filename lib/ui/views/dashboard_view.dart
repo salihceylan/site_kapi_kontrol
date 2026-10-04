@@ -67,14 +67,14 @@ class DashboardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // SADECE Daire Sakini için Modern Karanlık Akıllı Kumanda Modülü
+    // SADECE Daire Sakini için SADE kumanda: yalnız kapılar ve yuvarlak "aç" düğmesi (saat, açıklama,
+    // rozet ve ek komutlar yok; QR/misafir/sesli komut çekmece menüdedir, bkz. HomePage).
     if (session.role == UserRole.apartmentOwner) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DigitalClockWidget(session: session),
-          const SizedBox(height: AppSpace.lg),
           ResidentDoorRemoteCard(
+            minimal: true,
             selectedSite: selectedSite,
             selectedDoor: selectedDoor,
             doors: doors,

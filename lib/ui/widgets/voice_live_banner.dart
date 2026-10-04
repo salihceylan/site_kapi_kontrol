@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
@@ -56,8 +57,13 @@ class VoiceLiveBanner extends StatelessWidget {
 /// kırpılmaz.
 /// Erişilebilirlik: banner TEK anlamsal düğüm olarak okunur (başlık + alt başlık; dokunma = düğme);
 /// simge dekoratiftir. Düğmenin dokunma hedefi 48 dp'dir. Yeni metin eklenmedi (düğmenin ayrı
-/// ipucu/tooltip metni yok: mevcut başlık/alt başlık okunur).
+/// ipucu/tooltip metni yok: mevcut başlık/alt başlık okunur; bu yüzden ayrı bir durum rozeti
+/// ([StatusChip] etiketi) de eklenmedi: etiketi anlamsal düğüme yeni metin katardı).
 /// Hareket: durum değişince renk 200 ms morph eder, simge belirir (`Pop`); hareket azaltmada anında.
+///
+/// Görünüm ("cam" şerit): ton zemini + sol-üstten inen statik ışık (gradyan; `saveLayer`,
+/// `BackdropFilter`, ek gölge yok: kart-içinde-kart), başlangıçta cilalı ton küresi ([IconOrb];
+/// dinlerken tonun glow'u). Hepsi durağandır: kararlı durumda ticker yoktur.
 class VoiceLiveBannerView extends StatelessWidget {
   const VoiceLiveBannerView({
     super.key,
@@ -82,8 +88,23 @@ class VoiceLiveBannerView extends StatelessWidget {
   /// Dinlerken düğmeye basılınca.
   final VoidCallback onStop;
 
-  /// Normal düzende metin dışı sabit genişlik: simge dairesi 38 (22 + 2 x 8) + 12 + 8 + düğme 48.
-  static const double _fixedWidth = 38 + AppSpace.md + AppSpace.sm + 48;
+  /// Başlangıç küresinin çapı (dp).
+  static const double _orbSize = 38;
+
+  /// Normal düzende metin dışı sabit genişlik: simge küresi 38 + 12 + 8 + düğme 48.
+  static const double _fixedWidth = _orbSize + AppSpace.md + AppSpace.sm + 48;
+
+  /// Zeminin üstüne binen statik "cam" ışığı: koyuda soluk beyaz (AppCard ile aynı), açıkta daha belirgin
+  /// beyaz yansıma. İki uçta da beyazdır: metin kontrastını koyu temada çok az, açıkta artırarak etkiler.
+  static LinearGradient _glass(AppPalette p) => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: <Color>[
+      Colors.white.withValues(alpha: p.isDark ? 0.07 : 0.55),
+      Colors.white.withValues(alpha: 0),
+    ],
+    stops: const <double>[0.0, 0.65],
+  );
 
   /// Metin sütunu bundan (1 em = 16 dp x yazı ölçeği) dar kalacaksa kompakt düzen kullanılır.
   static const double _minTextEm = 7;
@@ -109,6 +130,7 @@ class VoiceLiveBannerView extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: neutral ? p.surfaceMuted : tone.tint(p),
+          gradient: _glass(p),
           borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
             color: neutral ? p.border : tone.hue.withValues(alpha: 0.6),
@@ -124,19 +146,17 @@ class VoiceLiveBannerView extends StatelessWidget {
             return Row(
               children: <Widget>[
                 if (!compact) ...<Widget>[
-                  ExcludeSemantics(
-                    child: Pop(
-                      // Anahtar durum değil SİMGE: boşta <-> başlatılıyor aynı görünür, simge
-                      // yeniden belirmez.
-                      key: ValueKey<IconData>(look.icon),
-                      child: Container(
-                        padding: const EdgeInsets.all(AppSpace.sm),
-                        decoration: BoxDecoration(
-                          color: tone.hue.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(look.icon, color: ink, size: 22),
-                      ),
+                  // Küre dekoratiftir (IconOrb anlamsal ağaçtan kendisi dışlanır).
+                  Pop(
+                    // Anahtar durum değil SİMGE: boşta <-> başlatılıyor aynı görünür, simge
+                    // yeniden belirmez.
+                    key: ValueKey<IconData>(look.icon),
+                    child: IconOrb(
+                      icon: look.icon,
+                      tone: tone,
+                      size: _orbSize,
+                      // Canlı dinleme: tonun glow'u (tek katman, statik).
+                      glow: listening,
                     ),
                   ),
                   const SizedBox(width: AppSpace.md),

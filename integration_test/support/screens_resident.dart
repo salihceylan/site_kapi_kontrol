@@ -1,5 +1,8 @@
 // Daire sakini (apartment_owner) ekran tanimlari: akilli kumanda karti + Eller Serbest diyalogu.
 
+import 'package:flutter/material.dart' show Drawer;
+import 'package:flutter_test/flutter_test.dart' show find;
+
 import 'e2e_driver.dart';
 import 'e2e_env.dart';
 import 'screens_common.dart';
@@ -55,9 +58,26 @@ Future<void> residentRemoteTour(E2eScreenContext c) async {
       break;
     }
   }
-  await c.openAndClose('Kapıya QR Göster', shotName: 'kapiya_qr_goster', required: false);
-  await c.openAndClose('Kapı Ekranından QR Oku', shotName: 'ekrandan_qr_oku', required: false);
-  await c.openAndClose('Kurye / Misafir Geçiş Linki Oluştur', shotName: 'misafir_gecisi', required: false);
+  // Sade ekranda QR / ekran QR / misafir geçişi komutları cekmecededir (Panel'in altinda); kapida
+  // yetki ya da cihaz yoksa oge hic gorunmez: atlanir.
+  await _drawerAction(c, 'Kapıya QR Göster', 'kapiya_qr_goster');
+  await _drawerAction(c, 'Kapı Ekranından QR Oku', 'ekrandan_qr_oku');
+  await _drawerAction(c, 'Kurye / Misafir Geçiş Linki Oluştur', 'misafir_gecisi');
+}
+
+/// Cekmecedeki ek komutu (varsa) acar, goruntu alir, kapatir.
+Future<void> _drawerAction(E2eScreenContext c, String label, String shotName) async {
+  await closeOverlays(c.tester);
+  if (!await openDrawer(c.tester)) return;
+  if (findText(label, exact: true, within: find.byType(Drawer)).evaluate().isEmpty) {
+    await closeOverlays(c.tester);
+    return;
+  }
+  if (await openDrawerAndTap(c.tester, label)) {
+    await c.settleUi(min: _s(2));
+    await c.shot(shotName);
+    await c.closeAll();
+  }
 }
 
 /// Eller Serbest & Kestirmeler diyalogu: kaydir, goruntule (kapatma generic akista yapilir).

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
@@ -31,20 +34,36 @@ class SiteApprovalRequestCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const IconTile(
-                icon: Icons.apartment_rounded,
-                size: 40,
-                gap: AppSpace.md,
-              ),
+              // Dekoratif site rozeti; büyük yazıda metne yer kalsın diye gizlenir.
+              if (!isLargeText(context)) ...[
+                const IconOrb(
+                  icon: Icons.apartment_rounded,
+                  size: 48,
+                  shape: IconOrbShape.squircle,
+                ),
+                const SizedBox(width: AppSpace.md),
+              ],
               Expanded(
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: AppSpace.sm,
-                  runSpacing: AppSpace.xs,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(site.name, style: th.titleMedium),
-                    InfoChip('ID: ${site.id}'),
+                    const SizedBox(height: AppSpace.xs),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpace.sm,
+                      runSpacing: AppSpace.xs,
+                      children: [
+                        const StatusChip(
+                          label: 'Onay Bekliyor',
+                          tone: AppTone.warning,
+                        ),
+                        InfoChip('ID: ${site.id}'),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -91,8 +110,12 @@ class SiteApprovalRequestCard extends StatelessWidget {
                   spacing: AppSpace.sm,
                   runSpacing: AppSpace.sm,
                   children: [
+                    // Birincil eylem dolu (tema cilası), ret ikincil: danger kenarlı.
                     FilledButton.icon(
-                      onPressed: onApprove,
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        onApprove();
+                      },
                       style: filledToneStyle(context, tone: AppTone.success),
                       icon: const Icon(Icons.check_circle_outline, size: 18),
                       label: const Text('Onayla'),

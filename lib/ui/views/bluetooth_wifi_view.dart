@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 class BluetoothWifiView extends StatelessWidget {
@@ -12,17 +13,17 @@ class BluetoothWifiView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
-    const tone = AppTone.primary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: double.infinity,
+          // Hero kart (AppCard seviye 2): ekranın tek odağı.
           child: AppCard(
-            padding: const EdgeInsets.all(22),
+            level: 2,
+            padding: const EdgeInsets.all(AppSpace.xl),
             // Hero: geniş ekranda (masaüstü/tablet) içerik ortada en çok 480 dp; düğme tüm karta yayılmaz.
             child: Center(
               child: ConstrainedBox(
@@ -30,23 +31,13 @@ class BluetoothWifiView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Hero: ikon karosu + başlık (AppBar başlığıyla tekrarlanan metin küçük kalır) + eylem.
-                    Center(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tone.tint(p),
-                          borderRadius: BorderRadius.circular(AppRadius.lg),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.lg),
-                          child: ExcludeSemantics(
-                            child: Icon(
-                              Icons.bluetooth_searching_outlined,
-                              size: 32,
-                              color: tone.ink(p),
-                            ),
-                          ),
-                        ),
+                    // Hero: cilalı daire rozet (72 dp, glow'lu; dekoratif) + başlık (AppBar başlığıyla
+                    // tekrarlanan metin küçük kalır) + eylem.
+                    const Center(
+                      child: IconOrb(
+                        icon: Icons.bluetooth_searching_outlined,
+                        size: 72,
+                        glow: true,
                       ),
                     ),
                     const SizedBox(height: AppSpace.lg),
@@ -58,7 +49,7 @@ class BluetoothWifiView extends StatelessWidget {
                         style: th.titleMedium,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppSpace.lg),
                     ElevatedButton.icon(
                       onPressed: onOpenWifiProvision,
                       icon: const Icon(Icons.bluetooth_searching_outlined),

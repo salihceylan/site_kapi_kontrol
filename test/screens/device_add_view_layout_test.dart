@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/views/device_add_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/device_action_tile.dart';
 
@@ -183,5 +184,80 @@ void main() {
       );
       handle.dispose();
     });
+  });
+
+  group('görsel dil (hero başlık kartı, cilalı rozetler)', () {
+    testWidgets(
+      'başlık kartı seviye 2 + sade 48 dp rozet; iki eylem kartında 56 dp glow rozet (ekranda iki hero)',
+      (t) async {
+        await pumpAt(
+          t,
+          _companyView(_Taps()),
+          width: 360,
+          scale: 1.0,
+          height: 1400,
+        );
+
+        final header = find
+            .ancestor(
+              of: find.text('Şirket Veritabanına Cihaz Kaydet'),
+              matching: find.byType(AppCard),
+            )
+            .first;
+        expect(t.widget<AppCard>(header).level, 2);
+        final headerOrb = t.widget<IconOrb>(
+          find.descendant(of: header, matching: find.byType(IconOrb)),
+        );
+        expect(headerOrb.icon, Icons.memory_rounded);
+        expect(headerOrb.size, 48);
+        expect(headerOrb.shape, IconOrbShape.squircle);
+        expect(headerOrb.glow, isFalse);
+
+        final tileOrbs = <IconOrb>[
+          for (var i = 0; i < 2; i++)
+            t.widget<IconOrb>(
+              find.descendant(
+                of: find.byType(DeviceActionTile).at(i),
+                matching: find.byType(IconOrb),
+              ),
+            ),
+        ];
+        expect(tileOrbs.map((o) => o.icon).toList(), <IconData>[
+          Icons.qr_code_scanner_outlined,
+          Icons.edit_note_outlined,
+        ]);
+        for (final orb in tileOrbs) {
+          expect(orb.size, 56);
+          expect(orb.shape, IconOrbShape.circle);
+          expect(orb.glow, isTrue);
+          expect(orb.semanticLabel, isNull, reason: 'rozet dekoratif');
+        }
+        expect(
+          t.widgetList<IconOrb>(find.byType(IconOrb)).where((o) => o.glow),
+          hasLength(2),
+        );
+      },
+    );
+
+    testWidgets(
+      'büyük yazıda başlık rozeti gizlenir (başlığa yer kalır), kart rozetleri ve metinler kalır',
+      (t) async {
+        await pumpAt(
+          t,
+          _companyView(_Taps()),
+          width: 320,
+          scale: 2.0,
+          height: 2400,
+        );
+        expect(
+          find.byType(IconOrb),
+          findsNWidgets(2),
+          reason: 'başlık rozeti gizli; yalnız iki kart rozeti',
+        );
+        expect(find.text('Şirket Veritabanına Cihaz Kaydet'), findsOneWidget);
+        expect(find.text('QR Oku'), findsOneWidget);
+        expect(find.text('Unique ID Gir'), findsOneWidget);
+      },
+    );
   });
 }

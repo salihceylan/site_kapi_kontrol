@@ -4,10 +4,21 @@
 // mikrofon nabzı YALNIZ dinlerken döner (durağan durumda ticker yok) ve hareket azaltmada çevrilmez.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/services/voice_door_service.dart';
+import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
+import '../design/harness.dart' show recordHaptics;
 import 'dialog_layout_harness.dart';
 import 'voice_fake.dart';
+
+/// Durumun beklenen küre tonu (sözleşme: dinliyor/başarı success, işleniyor primary, hata danger, boşta info).
+AppTone _toneFor(VoiceStatus status) => switch (status) {
+  VoiceStatus.listening || VoiceStatus.success => AppTone.success,
+  VoiceStatus.processing => AppTone.primary,
+  VoiceStatus.error => AppTone.danger,
+  VoiceStatus.initializing || VoiceStatus.idle => AppTone.info,
+};
 
 void main() {
   for (final c in <(String, VoiceStatus, String)>[
@@ -45,6 +56,10 @@ void main() {
       );
 
       expect(find.text('Sesli Kapı Kontrolü'), findsOneWidget);
+      // Dinleme göstergesi: tek cilalı küre (IconOrb), durumun tonunda; düzene girmeyen aura statiktir.
+      expect(find.byType(IconOrb), findsOneWidget);
+      expect(t.widget<IconOrb>(find.byType(IconOrb)).tone, _toneFor(c.$2));
+      expect(t.widget<IconOrb>(find.byType(IconOrb)).size, 92);
       expect(find.text('Kapat'), findsOneWidget);
       expect(
         find.text(c.$2 == VoiceStatus.listening ? 'Durdur' : 'Tekrar Dinle'),
@@ -86,7 +101,41 @@ void main() {
       voice.notifyListeners();
       await t.pump(const Duration(milliseconds: 400));
       expect(find.text('Tekrar Dinle'), findsOneWidget);
+      // Durum değişimi küre ve durum metni için tek seferlik belirme (Pop, 200 ms) başlatır: o sonlu
+      // animasyon bitince durağan durumda ticker KALMAMALIDIR (iddia aynı: nabız durdu, süs döngüsü yok).
+      await t.pump(const Duration(milliseconds: 400));
       expect(t.hasRunningAnimations, isFalse);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'VoiceControlModal: kapı açılıyor (başarı) anında bir kez hafif haptik; sonra kendiliğinden kapanır',
+    (t) async {
+      final haptics = recordHaptics(t);
+      final voice = FakeVoiceDoorService(
+        startStatus: VoiceStatus.success,
+        startFeedback: 'Ana kapı açılıyor',
+      );
+      await openDialogAt(
+        t,
+        (context) => VoiceControlModal.show(context, voiceService: voice),
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      expect(find.text('Kapı Açıldı!'), findsOneWidget);
+      expect(
+        haptics.where((h) => h.contains('lightImpact')),
+        hasLength(1),
+        reason: 'başarıya geçişte tek haptik',
+      );
+      // Aynı durumda tekrar bildirim ikinci haptik üretmez.
+      voice.notifyListeners();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(haptics.where((h) => h.contains('lightImpact')), hasLength(1));
+      await t.pump(const Duration(seconds: 3));
       expect(t.takeException(), isNull);
     },
   );
