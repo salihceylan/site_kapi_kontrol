@@ -107,9 +107,9 @@ Bu bölüm API sürecinin ayağa kalkması (PM2, ortam doğrulaması, /health), 
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:162](../../server/src/server.js#L162) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
-| [server/src/server.js:184](../../server/src/server.js#L184) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
-| [server/src/server.js:164](../../server/src/server.js#L164) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
+| [server/src/server.js:168](../../server/src/server.js#L168) | <code>async function startServer() {</code> | Açılış sırası: checkEnvOrExit → ensureDbSchema → startMqttBridge → temizlik → dinleme; ilk başarısız adım süreci düşürür |
+| [server/src/server.js:190](../../server/src/server.js#L190) | <code>console.error('Server startup failed:', error);</code> | Açılışta fırlatılan her hata (DB'ye ulaşılamadı, şema SQL hatası) buraya düşer, ardından process.exit(1) |
+| [server/src/server.js:170](../../server/src/server.js#L170) | <code>checkEnvOrExit();</code> | Ortam doğrulaması DB'den ÖNCE çalışır; JWT_SECRET hatasında DB'ye hiç bağlanılmaz |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Yakalanmamış istisna: günlüğe yazar ve exit(1); PM2 yeniden başlatır |
 | [server/ecosystem.config.cjs:38](../../server/ecosystem.config.cjs#L38) | <code>min_uptime: '15s',</code> | 15 sn dayanmayan çıkışlar "kararsız" sayılır ve yeniden başlatma sayacını artırır |
 | [server/ecosystem.config.cjs:39](../../server/ecosystem.config.cjs#L39) | <code>max_restarts: 30,</code> | Üst üste kararsız yeniden başlatma sınırı; aşılınca PM2 süreci errored bırakır |
@@ -151,7 +151,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 100 --nostrea
 | [server/src/config/env.js:64](../../server/src/config/env.js#L64) | <code>'JWT_SECRET tanimli degil veya yer tutucu bir deger. Guclu, rastgele bir secret tanimlayi…</code> | Hata iletisinin üretildiği yer: secret boş ya da yer tutucuysa evaluateJwtSecret ok:false döner |
 | [server/src/config/env.js:42](../../server/src/config/env.js#L42) | <code>export function isPlaceholderSecret(value) {</code> | Hangi değerlerin "yer tutucu" sayıldığı (PLACEHOLDER_EXACT / PLACEHOLDER_PATTERNS: change_this_secret, your-secret, <JWT_SECRET> ...) |
 | [server/src/config/env.js:100](../../server/src/config/env.js#L100) | <code>const jwtCheck = evaluateJwtSecret(env.JWT_SECRET);</code> | validateEnv içinde TEK "errors" kaynağı budur; diğer eksikler yalnız uyarıdır |
-| [server/src/server.js:96](../../server/src/server.js#L96) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
+| [server/src/server.js:102](../../server/src/server.js#L102) | <code>function checkEnvOrExit() {</code> | errors doluysa [ENV] HATA yazar ve process.exit(1); uyarılar [ENV] UYARI olarak yazılır |
 
 **Olası nedenler**
 - server/.env içinde JWT_SECRET yok ya da boş
@@ -182,7 +182,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 | --- | --- | --- |
 | [server/src/config/env.js:68](../../server/src/config/env.js#L68) | <code>if (length &lt; MIN_RECOMMENDED_JWT_SECRET_LENGTH) {</code> | 32 karakterden kısa secret yalnız UYARI üretir (ok:true); sunucu açılır |
 | [server/src/config/env.js:108](../../server/src/config/env.js#L108) | <code>warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); giris tokeni uretimi ba…</code> | JWT_EXPIRES_IN biçimi hatalıysa (30d, 12h gibi olmalı) yalnız uyarı; token üretimi başarısız olabilir |
-| [server/src/server.js:99](../../server/src/server.js#L99) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
+| [server/src/server.js:105](../../server/src/server.js#L105) | <code>console.warn(`[ENV] UYARI: ${warning}`);</code> | Tüm uyarıların yazıldığı yer; secret değeri asla yazılmaz (yalnız uzunluk) |
 | [deploy/README.md:38](../../deploy/README.md#L38) | <code>- Canlı `JWT_SECRET` (≥32 karakter), `JWT_EXPIRES_IN` ve `NODE_ENV=production` kararları …</code> | Canlıdaki secret/süre/NODE_ENV kararları kullanıcıya aittir; kendiliğinden değiştirilmez |
 
 **Olası nedenler**
@@ -211,7 +211,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 | [server/src/config/env.js:134](../../server/src/config/env.js#L134) | <code>warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile …</code> | Anahtar yoksa /api/company/* yalnız super_user JWT ile çalışır (şirket aracı X-Company-Key kullanamaz) |
 | [server/src/config/env.js:140](../../server/src/config/env.js#L140) | <code>warnings.push('CORS allowlist bos (CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL); tarayici…</code> | CORS_ORIGINS/PUBLIC_APP_URL/PUBLIC_BASE_URL üçü de boşsa tarayıcı tabanlı cross-origin istekler reddedilir |
 | [server/src/config/env.js:144](../../server/src/config/env.js#L144) | <code>warnings.push('NODE_ENV=production degil (Express gelistirme varsayilanlari aktif); oneri…</code> | NODE_ENV production değilse yalnız uyarı (hata yanıtları ortamdan bağımsız güvenlidir) |
-| [server/src/server.js:102](../../server/src/server.js#L102) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
+| [server/src/server.js:108](../../server/src/server.js#L108) | <code>console.warn(`[CORS] Gecersiz origin girdisi yok sayildi: ${entry}`);</code> | CORS_ORIGINS içindeki geçersiz girdi (şema yok, * vb.) sessizce atılmaz; burada loglanır |
 
 **Olası nedenler**
 - İlgili anahtar sunucudaki server/.env dosyasında yok/boş
@@ -241,7 +241,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:35](../../server/src/server.js#L35) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
+| [server/src/server.js:38](../../server/src/server.js#L38) | <code>dotenv.config();</code> | .env yalnız süreç AÇILIRKEN okunur; dotenv varsayılanı, süreç ortamında zaten tanımlı değişkenin üzerine YAZMAZ |
 | [deploy/README.md:26](../../deploy/README.md#L26) | <code>6. **Etkinleştirme:** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS acti…</code> | Dağıtım sonrası etkinleştirme PM2'yi --update-env ile yeniden başlatır |
 | [server/ecosystem.config.cjs:15](../../server/ecosystem.config.cjs#L15) | <code>// Gizli degerler BURAYA yazilmaz; server/.env dosyasindan dotenv ile okunur</code> | Gizli değerler ecosystem'e değil server/.env'e yazılır; cwd = server/ olduğu için dotenv bulur |
 
@@ -268,9 +268,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 restart kapi-api --update-env && sl
 | --- | --- | --- |
 | [server/src/routes/firmware_routes.js:95](../../server/src/routes/firmware_routes.js#L95) | <code>firmwareRouter.get('/health', async (_req, res) =&gt; {</code> | /health uç noktası: DB'ye SELECT 1 atar; başarılıysa ok:true/connected, hata olursa 500 |
 | [server/src/routes/firmware_routes.js:104](../../server/src/routes/firmware_routes.js#L104) | <code>res.status(500).json({ ok: false, database: 'disconnected', mqtt });</code> | catch (_e) hatayı YUTAR: nedeni ne yanıtta ne günlükte görünür; nedeni docker/psql ile arayın |
-| [server/src/db.js:38](../../server/src/db.js#L38) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
-| [server/src/db.js:26](../../server/src/db.js#L26) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
-| [server/src/db.js:13](../../server/src/db.js#L13) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
+| [server/src/db.js:39](../../server/src/db.js#L39) | <code>export async function checkDbConnection() {</code> | Havuzdan bağlantı alıp SELECT 1 çalıştırır; havuz doluysa ya da DB kapalıysa fırlatır |
+| [server/src/db.js:27](../../server/src/db.js#L27) | <code>connectionTimeoutMillis: DB_CONNECT_TIMEOUT_MS,</code> | Bağlantı alma/kurma zaman aşımı (varsayılan 5 sn, DB_CONNECT_TIMEOUT_MS) |
+| [server/src/db.js:14](../../server/src/db.js#L14) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Havuz üst sınırı 12; hepsi meşgulse yeni istek bağlantı bekler ve zaman aşımına düşer |
 
 **Olası nedenler**
 - PostgreSQL konteyneri durmuş / unhealthy / yeniden başlıyor
@@ -302,12 +302,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:1078](../../server/src/mqtt_bridge.js#L1078) | <code>export function mqttBridgeHealth() {</code> | /health'in mqtt alanı: configured, connected, has_error ve YALNIZ kısa kod last_error (ham hata metni dönmez) |
+| [server/src/mqtt_bridge.js:1090](../../server/src/mqtt_bridge.js#L1090) | <code>export function mqttBridgeHealth() {</code> | /health'in mqtt alanı: configured, connected, has_error ve YALNIZ kısa kod last_error (ham hata metni dönmez) |
 | [server/src/mqtt_bridge.js:25](../../server/src/mqtt_bridge.js#L25) | <code>function recordBridgeError(code, detail) {</code> | Hata kodunu ve ayrıntısını saklar; ayrıntı günlüğe EN FAZLA dakikada bir yazılır |
 | [server/src/mqtt_bridge.js:32](../../server/src/mqtt_bridge.js#L32) | <code>console.warn(`[MQTT bridge] ${detail}`);</code> | Köprü hatasının günlükteki hali; broker ayrıntısı yalnız burada görülür |
-| [server/src/mqtt_bridge.js:1047](../../server/src/mqtt_bridge.js#L1047) | <code>client.on('error', (error) =&gt; {</code> | Bağlantı/TLS/kimlik hataları mqtt_error koduyla kaydedilir |
-| [server/src/mqtt_bridge.js:1051](../../server/src/mqtt_bridge.js#L1051) | <code>client.on('offline', () =&gt; {</code> | Bağlantı koptuğunda mqtt_offline kaydedilir; kütüphane 3 sn'de bir yeniden dener (reconnectPeriod) |
-| [server/src/mqtt_bridge.js:1007](../../server/src/mqtt_bridge.js#L1007) | <code>reconnectPeriod: 3000,</code> | Otomatik yeniden bağlanma aralığı; broker dönünce köprü kendiliğinden bağlanır, API yeniden başlatmak gerekmez |
+| [server/src/mqtt_bridge.js:1059](../../server/src/mqtt_bridge.js#L1059) | <code>client.on('error', (error) =&gt; {</code> | Bağlantı/TLS/kimlik hataları mqtt_error koduyla kaydedilir |
+| [server/src/mqtt_bridge.js:1063](../../server/src/mqtt_bridge.js#L1063) | <code>client.on('offline', () =&gt; {</code> | Bağlantı koptuğunda mqtt_offline kaydedilir; kütüphane 3 sn'de bir yeniden dener (reconnectPeriod) |
+| [server/src/mqtt_bridge.js:1019](../../server/src/mqtt_bridge.js#L1019) | <code>reconnectPeriod: 3000,</code> | Otomatik yeniden bağlanma aralığı; broker dönünce köprü kendiliğinden bağlanır, API yeniden başlatmak gerekmez |
 
 **Olası nedenler**
 - Mosquitto servisi kapalı/çökmüş (MQTT_kurulum.txt 13-14)
@@ -341,9 +341,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo systemctl status mosquitto --no-pa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:992](../../server/src/mqtt_bridge.js#L992) | <code>if (!config.host &#124;&#124; !config.username &#124;&#124; !config.password) {</code> | Üç değerden biri boşsa köprü HİÇ başlamaz (yeniden deneme yok); bağlantı kurulmaz |
-| [server/src/mqtt_bridge.js:995](../../server/src/mqtt_bridge.js#L995) | <code>lastBridgeErrorCode = 'mqtt_not_configured';</code> | /health'te görünen kod |
-| [server/src/mqtt_bridge.js:54](../../server/src/mqtt_bridge.js#L54) | <code>function mqttConfig() {</code> | MQTT_HOST, MQTT_PORT (varsayılan 8883), MQTT_USER, MQTT_PASSWORD ve MQTT_ALLOW_INSECURE_TLS okunur |
+| [server/src/mqtt_bridge.js:1003](../../server/src/mqtt_bridge.js#L1003) | <code>if (!config.host &#124;&#124; !config.username &#124;&#124; !config.password) {</code> | Üç değerden biri boşsa köprü HİÇ başlamaz (yeniden deneme yok); bağlantı kurulmaz |
+| [server/src/mqtt_bridge.js:1006](../../server/src/mqtt_bridge.js#L1006) | <code>lastBridgeErrorCode = 'mqtt_not_configured';</code> | /health'te görünen kod |
+| [server/src/mqtt_bridge.js:65](../../server/src/mqtt_bridge.js#L65) | <code>function mqttConfig() {</code> | MQTT_HOST, MQTT_PORT (varsayılan 8883), MQTT_USER, MQTT_PASSWORD ve MQTT_ALLOW_INSECURE_TLS okunur |
 | [server/src/config/env.js:125](../../server/src/config/env.js#L125) | <code>warnings.push(`MQTT ayarlari eksik: ${missingMqtt.join(', ')}; cihaz komutlari calismayab…</code> | Açılışta aynı eksiği "[ENV] UYARI: MQTT ayarlari eksik" olarak bildirir |
 
 **Olası nedenler**
@@ -373,12 +373,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh   # s
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:398](../../server/src/mqtt_bridge.js#L398) | <code>recordBridgeError('db_error', `Device status DB yazilamadi: ${error.message}`);</code> | Cihaz durum satırı (device_runtime_status / devices.is_online) yazılamadı |
-| [server/src/mqtt_bridge.js:270](../../server/src/mqtt_bridge.js#L270) | <code>recordBridgeError('db_error', `Cihaz kaydi sorgulanamadi: ${error.message}`);</code> | Gelen iletinin cihazı kayıtlı mı diye DB sorgusu başarısız; ileti işlenmeden düşer |
-| [server/src/mqtt_bridge.js:536](../../server/src/mqtt_bridge.js#L536) | <code>recordBridgeError('db_error', `OTA job event DB yazilamadi: ${error.message}`);</code> | Cihazın OTA olayı iş kaydına yazılamadı |
-| [server/src/mqtt_bridge.js:438](../../server/src/mqtt_bridge.js#L438) | <code>recordBridgeError('db_error', `Cihaz donanim tipi senkronu basarisiz: ${error.message}`);</code> | Cihazın bildirdiği donanım hedefiyle devices.hardware_type eşitlenemedi |
-| [server/src/mqtt_bridge.js:593](../../server/src/mqtt_bridge.js#L593) | <code>recordBridgeError('local_control_sync_failed', `Yerel kontrol token senkronu basarisiz: $…</code> | Çevrimiçi olan cihaza yerel kontrol token'ı gönderilirken DB/yayın hatası |
-| [server/src/mqtt_bridge.js:1013](../../server/src/mqtt_bridge.js#L1013) | <code>lastBridgeError = null;</code> | Hata bayrağı YALNIZ bir sonraki MQTT "connect" olayında temizlenir: DB düzelse bile bayrak kalır |
+| [server/src/mqtt_bridge.js:409](../../server/src/mqtt_bridge.js#L409) | <code>recordBridgeError('db_error', `Device status DB yazilamadi: ${error.message}`);</code> | Cihaz durum satırı (device_runtime_status / devices.is_online) yazılamadı |
+| [server/src/mqtt_bridge.js:281](../../server/src/mqtt_bridge.js#L281) | <code>recordBridgeError('db_error', `Cihaz kaydi sorgulanamadi: ${error.message}`);</code> | Gelen iletinin cihazı kayıtlı mı diye DB sorgusu başarısız; ileti işlenmeden düşer |
+| [server/src/mqtt_bridge.js:547](../../server/src/mqtt_bridge.js#L547) | <code>recordBridgeError('db_error', `OTA job event DB yazilamadi: ${error.message}`);</code> | Cihazın OTA olayı iş kaydına yazılamadı |
+| [server/src/mqtt_bridge.js:449](../../server/src/mqtt_bridge.js#L449) | <code>recordBridgeError('db_error', `Cihaz donanim tipi senkronu basarisiz: ${error.message}`);</code> | Cihazın bildirdiği donanım hedefiyle devices.hardware_type eşitlenemedi |
+| [server/src/mqtt_bridge.js:604](../../server/src/mqtt_bridge.js#L604) | <code>recordBridgeError('local_control_sync_failed', `Yerel kontrol token senkronu basarisiz: $…</code> | Çevrimiçi olan cihaza yerel kontrol token'ı gönderilirken DB/yayın hatası |
+| [server/src/mqtt_bridge.js:1025](../../server/src/mqtt_bridge.js#L1025) | <code>lastBridgeError = null;</code> | Hata bayrağı YALNIZ bir sonraki MQTT "connect" olayında temizlenir: DB düzelse bile bayrak kalır |
 
 **Olası nedenler**
 - Geçici DB kesintisi/zaman aşımı; DB döndü ama bayrak MQTT yeniden bağlanana (ya da API yeniden başlayana) kadar kalır
@@ -411,7 +411,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/mqtt_acl_sync.js:157](../../server/src/mqtt_acl_sync.js#L157) | <code>export function mqttAclSyncConfigured() {</code> | Yalnızca MQTT_SYNC_COMMAND dolu mu diye bakar |
 | [server/src/mqtt_acl_sync.js:169](../../server/src/mqtt_acl_sync.js#L169) | <code>message: 'MQTT_SYNC_COMMAND tanimli degil.',</code> | Komut yoksa senkron atlanır (ok:false, skipped:true) |
 | [server/src/mqtt_acl_sync.js:257](../../server/src/mqtt_acl_sync.js#L257) | <code>if (!result.ok &amp;&amp; envFlag('MQTT_SYNC_REQUIRED', false)) {</code> | MQTT_SYNC_REQUIRED=true iken "atlandı" bile hata sayılır: cihaz ekleme/silme 503 MQTT_ACL_SYNC_FAILED verir |
-| [server/.env.example:89](../../server/.env.example#L89) | <code>MQTT_SYNC_COMMAND=sudo</code> | Beklenen canlı yapılandırma: sudo -n /usr/local/bin/kapi-mqtt-sync (MQTT_SYNC_ARGS ile) |
+| [server/.env.example:92](../../server/.env.example#L92) | <code>MQTT_SYNC_COMMAND=sudo</code> | Beklenen canlı yapılandırma: sudo -n /usr/local/bin/kapi-mqtt-sync (MQTT_SYNC_ARGS ile) |
 
 **Olası nedenler**
 - Canlı .env'de MQTT_SYNC_COMMAND/MQTT_SYNC_ARGS yok (cihaz ACL'i elle senkronlanmalı)
@@ -439,7 +439,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh
 | [sunucu_kurulum.txt:92](../../sunucu_kurulum.txt#L92) | <code>9) NGINX REVERSE PROXY</code> | nginx site dosyası /etc/nginx/sites-available/api.gudeteknoloji.com.tr; hedef 127.0.0.1:8080 (yapılandırma depoda YOK, sunucuda) |
 | [sunucu_kurulum.txt:99](../../sunucu_kurulum.txt#L99) | <code>sudo nginx -t</code> | Yapılandırma testi ve reload: sudo nginx -t; sudo systemctl reload nginx |
 | [sunucu_kurulum.txt:139](../../sunucu_kurulum.txt#L139) | <code>- Guvenlik duvari: 5432 (PostgreSQL) ve 8080 (Node) disariya ACIK olmamali; yalnizca 80/4…</code> | 8080 yalnız nginx'ten erişilmeli; dışarıdan 8080 testi başarısız olması normaldir |
-| [server/src/server.js:45](../../server/src/server.js#L45) | <code>app.set('trust proxy', 1);</code> | API tek proxy (nginx) arkasında varsayılır; istemci IP'si X-Forwarded-For'dan alınır |
+| [server/src/server.js:48](../../server/src/server.js#L48) | <code>app.set('trust proxy', 1);</code> | API tek proxy (nginx) arkasında varsayılır; istemci IP'si X-Forwarded-For'dan alınır |
 
 **Olası nedenler**
 - kapi-api çalışmıyor/çöküp yeniden başlıyor (nginx 502 verir) → önce altyapi-api-acilmiyor-pm2-dongu
@@ -466,8 +466,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo tail -n 30 /var/log/nginx/error.lo
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:46](../../server/src/server.js#L46) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
-| [server/src/server.js:171](../../server/src/server.js#L171) | <code>httpServer = app.listen(port, () =&gt; {</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ; Node'un yakalanmamış istisnasına döner |
+| [server/src/server.js:49](../../server/src/server.js#L49) | <code>const port = Number(process.env.PORT &#124;&#124; 8080);</code> | Dinlenen port: PORT ortam değişkeni, yoksa 8080 (nginx buraya yönlenir) |
+| [server/src/server.js:177](../../server/src/server.js#L177) | <code>httpServer = app.listen(port, () =&gt; {</code> | Dinleme hatası bu çağrıda try/catch ile YAKALANMAZ; Node'un yakalanmamış istisnasına döner |
 | [server/src/config/process_handlers.js:28](../../server/src/config/process_handlers.js#L28) | <code>const onUncaughtException = (error) =&gt; {</code> | Bu yüzden günlükte "Server startup failed" değil "[uncaughtException] <id>: Error: listen EADDRINUSE" görünür; exit(1) |
 
 **Olası nedenler**
@@ -496,10 +496,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 status"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:120](../../server/src/server.js#L120) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
-| [server/src/server.js:114](../../server/src/server.js#L114) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
-| [server/src/server.js:130](../../server/src/server.js#L130) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
-| [server/src/server.js:144](../../server/src/server.js#L144) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
+| [server/src/server.js:126](../../server/src/server.js#L126) | <code>async function shutdown(signal) {</code> | Düzgün kapanma: yeni bağlantı almayı bırakır, süren istekleri bitirir, MQTT ve DB havuzunu kapatır |
+| [server/src/server.js:120](../../server/src/server.js#L120) | <code>const SHUTDOWN_GRACE_MS = 8000;</code> | 8 sn içinde bitmezse zorla exit(1) |
+| [server/src/server.js:136](../../server/src/server.js#L136) | <code>console.error('[SHUTDOWN] Sure asildi, zorla cikiliyor.');</code> | Zorla çıkış satırı; uzun süren istek/bağlantı kapanmayı geciktirmiştir |
+| [server/src/server.js:150](../../server/src/server.js#L150) | <code>await stopMqttBridge();</code> | MQTT bağlantısı kapatılır (stopMqttBridge asla fırlatmaz) |
 | [server/ecosystem.config.cjs:41](../../server/ecosystem.config.cjs#L41) | <code>kill_timeout: 10000,</code> | PM2 SIGKILL'i 10 sn sonra gönderir; bu, 8 sn'lik kapanma süresinden büyük olmalıdır |
 
 **Olası nedenler**
@@ -614,8 +614,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 describe kapi-api | grep -E 'script
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:54](../../server/src/db.js#L54) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
-| [server/src/db.js:47](../../server/src/db.js#L47) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
+| [server/src/db.js:55](../../server/src/db.js#L55) | <code>'Veritabani semasi kurulu degil ("users" tablosu yok). Bos veritabaninda once `node scrip…</code> | ensureDbSchema ilk iş "users" tablosunu arar; yoksa anlaşılır bir hata fırlatır (ALTER TABLE users patlamasın diye) |
+| [server/src/db.js:48](../../server/src/db.js#L48) | <code>export async function ensureDbSchema() {</code> | Temel tablolar migration'larla gelir; ensureDbSchema yalnız EKLEYİCİ ve IF NOT EXISTS ifadeleri çalıştırır |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosunun tek tanımı migration 001'dedir (db.js bunu oluşturmaz) |
 | [docker-compose.yml:30](../../docker-compose.yml#L30) | <code>- ./server/migrations:/docker-entrypoint-initdb.d:ro</code> | Migration SQL'leri YALNIZ boş veri dizininde ilk kurulumda otomatik çalışır |
 | [server/scripts/migrate.js:497](../../server/scripts/migrate.js#L497) | <code>async function runApply(opts, env, log, logError, open, ask) {</code> | Boş veritabanına migration uygulayan elle komut (node scripts/migrate.js --apply) |
@@ -649,9 +649,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "cd /var/www/site_kapi_kontrol/server &&
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:47](../../server/src/db.js#L47) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
-| [server/src/db.js:841](../../server/src/db.js#L841) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
-| [server/src/db.js:514](../../server/src/db.js#L514) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
+| [server/src/db.js:48](../../server/src/db.js#L48) | <code>export async function ensureDbSchema() {</code> | Tablo/kolon/indeks tanımlarının çoğu burada (CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS); AÇILIŞTA çalışır |
+| [server/src/db.js:842](../../server/src/db.js#L842) | <code>CREATE TABLE IF NOT EXISTS pending_registrations (</code> | Örnek (son eklenen): e-posta doğrulama bekleyen kayıt tablosu; migration 028 ile aynı DDL |
+| [server/src/db.js:515](../../server/src/db.js#L515) | <code>CREATE TABLE IF NOT EXISTS ota_update_jobs (</code> | ota_update_jobs / ota_update_job_devices / app_maintenance_runs YALNIZ db.js'te tanımlı (migration'da yok) |
 | [server/migrations/001_init.sql:19](../../server/migrations/001_init.sql#L19) | <code>CREATE TABLE IF NOT EXISTS users (</code> | users tablosu YALNIZ migration'da tanımlı; db.js yalnız bu tabloya kolon ekler |
 | [server/scripts/migrate.js:43](../../server/scripts/migrate.js#L43) | <code>export const MIGRATIONS_TABLE = 'schema_migrations';</code> | Migration koşucusunun kendi takip tablosu (uygulama tablosu değildir) |
 
@@ -681,14 +681,14 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:148](../../server/src/db.js#L148) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
-| [server/src/db.js:363](../../server/src/db.js#L363) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
-| [server/src/db.js:360](../../server/src/db.js#L360) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
-| [server/src/db.js:460](../../server/src/db.js#L460) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
-| [server/src/db.js:741](../../server/src/db.js#L741) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
-| [server/src/db.js:731](../../server/src/db.js#L731) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
-| [server/src/db.js:125](../../server/src/db.js#L125) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
-| [server/src/server.js:184](../../server/src/server.js#L184) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
+| [server/src/db.js:149](../../server/src/db.js#L149) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_unique</code> | login_name (küçük harfe göre) benzersiz indeksi: mevcut veride yinelenen değer varsa oluşturulamaz |
+| [server/src/db.js:364](../../server/src/db.js#L364) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_mqtt_site_id_unique</code> | sites.mqtt_site_id benzersiz indeksi (önce NULL satırlar UPDATE ile doldurulur) |
+| [server/src/db.js:361](../../server/src/db.js#L361) | <code>ALTER COLUMN mqtt_site_id SET NOT NULL</code> | NULL kalan satır varsa başarısız olur; öncesindeki UPDATE bunu önlemek içindir |
+| [server/src/db.js:461](../../server/src/db.js#L461) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_mqtt_username_unique</code> | devices.mqtt_username benzersiz indeksi (NULL olmayanlar için) |
+| [server/src/db.js:742](../../server/src/db.js#L742) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Offline log idempotansı: (device_uid, client_log_id) benzersiz indeksi |
+| [server/src/db.js:732](../../server/src/db.js#L732) | <code>ALTER TABLE door_access_logs ALTER COLUMN site_code TYPE BIGINT;</code> | Her açılışta çalışan tip değişikliği ifadeleri (sütun zaten BIGINT ise yan etkisizdir) |
+| [server/src/db.js:126](../../server/src/db.js#L126) | <code>ELSIF current_def NOT LIKE '%super_user%'</code> | users_role_check yalnız eksikse/eski tanımsa yenilenir; her açılışta DROP/ADD yapılmaz |
+| [server/src/server.js:190](../../server/src/server.js#L190) | <code>console.error('Server startup failed:', error);</code> | Hata burada günlüğe yazılır ve süreç kapanır (PM2 döngüsü başlar) |
 
 **Olası nedenler**
 - Mevcut veride yinelenen değer yüzünden bir UNIQUE indeks oluşturulamıyor (login_name, mqtt_username, e-posta, client_log_id)
@@ -720,12 +720,12 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:13](../../server/src/db.js#L13) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
-| [server/src/db.js:27](../../server/src/db.js#L27) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
-| [server/src/db.js:28](../../server/src/db.js#L28) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
-| [server/src/db.js:23](../../server/src/db.js#L23) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
-| [server/src/db.js:35](../../server/src/db.js#L35) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
-| [server/src/db.js:30](../../server/src/db.js#L30) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
+| [server/src/db.js:14](../../server/src/db.js#L14) | <code>const DB_POOL_MAX = Math.max(2, Number(process.env.DB_POOL_MAX) &#124;&#124; 12);</code> | Aynı anda en fazla 12 bağlantı (DB_POOL_MAX); hepsi doluysa yenisi bağlantı bekler |
+| [server/src/db.js:28](../../server/src/db.js#L28) | <code>statement_timeout: DB_STATEMENT_TIMEOUT_MS,</code> | Tek sorgunun en uzun süresi 30 sn (DB_STATEMENT_TIMEOUT_MS); kilit beklemeyi de kapsar |
+| [server/src/db.js:29](../../server/src/db.js#L29) | <code>query_timeout: DB_STATEMENT_TIMEOUT_MS + 5000,</code> | İstemci tarafı sorgu zaman aşımı: sunucu iptal etmezse 5 sn sonra istemci bırakır |
+| [server/src/db.js:24](../../server/src/db.js#L24) | <code>options: '-c timezone=Europe/Istanbul -c idle_in_transaction_session_timeout=60000',</code> | Açık unutulan transaction 60 sn sonra SUNUCU tarafında kapatılır (kilit sızıntısını önler) |
+| [server/src/db.js:36](../../server/src/db.js#L36) | <code>console.error('[DB] Bosta bekleyen istemci hatasi:', error?.code &#124;&#124; error?.message);</code> | Boştaki bağlantı koparsa süreç düşmez; yalnız bu satır yazılır |
+| [server/src/db.js:31](../../server/src/db.js#L31) | <code>application_name: 'kapi-api',</code> | pg_stat_activity'de API bağlantılarını ayırt etmek için ad |
 
 **Olası nedenler**
 - Uzun süren sorgu ya da kilit (başka bir transaction satırı tutuyor) bağlantıları dolduruyor
@@ -755,7 +755,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/db.js:18](../../server/src/db.js#L18) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
+| [server/src/db.js:19](../../server/src/db.js#L19) | <code>host: process.env.DB_HOST,</code> | Bağlantı bilgileri yalnız ortamdan okunur (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD) |
 | [docker-compose.yml:19](../../docker-compose.yml#L19) | <code>- "127.0.0.1:5432:5432"</code> | Postgres yalnız loopback'e bağlıdır: API aynı makinede olmalı; dışarıdan erişim SSH tüneliyle |
 | [docker-compose.yml:5](../../docker-compose.yml#L5) | <code># NOT: POSTGRES_PASSWORD yalnizca BOS veri dizininde (ilk kurulum) uygulanir.</code> | POSTGRES_PASSWORD sonradan değişse de mevcut veritabanının parolası DEĞİŞMEZ (ALTER USER gerekir) |
 | [server/.env.example:31](../../server/.env.example#L31) | <code>DB_HOST=127.0.0.1</code> | Beklenen canlı DB_HOST; DB_PASSWORD docker-compose POSTGRES_PASSWORD ile aynı olmalı |
@@ -958,7 +958,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/_dev_guard.js:5](../../server/scripts/_dev_guard.js#L5) | <code>'Bu gelistirme betigi gercek veritabanina dokunabilir. Bilerek calistirmak icin ALLOW_DEV…</code> | Görülen mesaj |
 | [server/scripts/apply_016.js:1](../../server/scripts/apply_016.js#L1) | <code>import './_dev_guard.js';</code> | Her apply_*/check_*/test_* betiğinin İLK importu bekçidir |
 | [server/scripts/apply_024.js:12](../../server/scripts/apply_024.js#L12) | <code>const sqlPath = path.join(__dirname, '..', 'migrations', '024_device_inventory_and_defect…</code> | apply_* betikleri yalnız 013-024 içindir; 025-028 için betik YOKTUR (migrate.js ya da ensureDbSchema kullanılır) |
-| [server/.env.example:108](../../server/.env.example#L108) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
+| [server/.env.example:111](../../server/.env.example#L111) | <code># ALLOW_DEV_SCRIPTS=1</code> | Yalnız geliştirmede tanımlanır; üretimde tanımlamayın |
 
 **Olası nedenler**
 - Bekçi kasıtlı çalışıyor: ALLOW_DEV_SCRIPTS=1 verilmedi
@@ -977,9 +977,9 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/server.js:167](../../server/src/server.js#L167) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
-| [server/src/server.js:169](../../server/src/server.js#L169) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
-| [server/src/server.js:158](../../server/src/server.js#L158) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
+| [server/src/server.js:173](../../server/src/server.js#L173) | <code>void runCleanupSafely();</code> | Temizlik her AÇILIŞTA bir kez çalışır (PM2 sık yeniden başlıyorsa sık çalışır) |
+| [server/src/server.js:175](../../server/src/server.js#L175) | <code>setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();</code> | Ardından 24 saatte bir; unref sayesinde süreç kapanmasını engellemez |
+| [server/src/server.js:164](../../server/src/server.js#L164) | <code>console.error('[Bakim] Temizlik hatasi:', error?.code &#124;&#124; error?.message);</code> | Beklenmeyen fırlatma burada yakalanır (süreç düşmez) |
 | [server/src/services/maintenance_service.js:91](../../server/src/services/maintenance_service.js#L91) | <code>console.error('[Maintenance Cleanup] Hata:', error);</code> | DB hatası: ayrıntı yalnız günlükte; dönen değerde "Veritabanı temizliği başarısız oldu." genel metni vardır |
 | [server/src/services/maintenance_service.js:73](../../server/src/services/maintenance_service.js#L73) | <code>VALUES ('routine_cleanup', NOW())</code> | Son başarılı temizlik zamanı app_maintenance_runs'a yazılır |
 | [server/src/services/maintenance_service.js:202](../../server/src/services/maintenance_service.js#L202) | <code>isClean: pendingTotal === 0,</code> | Panelin "temiz" durumu yalnız silinebilir kayıt sayısına bağlıdır |
@@ -1038,9 +1038,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:1001](../../server/src/mqtt_bridge.js#L1001) | <code>client = mqtt.connect(`mqtts://${config.host}:${config.port}`, {</code> | Köprü HER ZAMAN mqtts://MQTT_HOST:MQTT_PORT (varsayılan 8883) ile bağlanır; düz mqtt yoktur |
-| [server/src/mqtt_bridge.js:64](../../server/src/mqtt_bridge.js#L64) | <code>rejectUnauthorized: !envFlag('MQTT_ALLOW_INSECURE_TLS', false),</code> | Sertifika doğrulaması varsayılan AÇIK; yalnız MQTT_ALLOW_INSECURE_TLS=1/true ile kapanır |
-| [server/src/mqtt_bridge.js:1008](../../server/src/mqtt_bridge.js#L1008) | <code>connectTimeout: 10000,</code> | Bağlantı kurma zaman aşımı 10 sn; erişilemeyen broker bu süre sonunda hata verir ve 3 sn'de bir yeniden denenir |
+| [server/src/mqtt_bridge.js:1012](../../server/src/mqtt_bridge.js#L1012) | <code>client = mqtt.connect(`mqtts://${config.connectHost}:${config.port}`, {</code> | Köprü HER ZAMAN mqtts://MQTT_HOST:MQTT_PORT (varsayılan 8883) ile bağlanır; düz mqtt yoktur |
+| [server/src/mqtt_bridge.js:75](../../server/src/mqtt_bridge.js#L75) | <code>rejectUnauthorized: !envFlag('MQTT_ALLOW_INSECURE_TLS', false),</code> | Sertifika doğrulaması varsayılan AÇIK; yalnız MQTT_ALLOW_INSECURE_TLS=1/true ile kapanır |
+| [server/src/mqtt_bridge.js:1020](../../server/src/mqtt_bridge.js#L1020) | <code>connectTimeout: 10000,</code> | Bağlantı kurma zaman aşımı 10 sn; erişilemeyen broker bu süre sonunda hata verir ve 3 sn'de bir yeniden denenir |
 | [MQTT_kurulum.txt:39](../../MQTT_kurulum.txt#L39) | <code>3) TLS sertifikasi (Let's Encrypt)</code> | Broker sertifikası certbot ile alınır (mqtt.gudeteknoloji.com.tr) |
 | [MQTT_kurulum.txt:42](../../MQTT_kurulum.txt#L42) | <code>4) Sertifika dosyalarini Mosquitto yoluna bagla</code> | Let's Encrypt dosyalarına /etc/mosquitto/certs altındaki bağlantılarla erişilir; izinler/sahiplik burada tanımlı |
 | [MQTT_kurulum.txt:145](../../MQTT_kurulum.txt#L145) | <code>tls_version tlsv1.2</code> | Broker 8883 dinleyicisi en az TLS 1.2 ister |
@@ -1074,8 +1074,8 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo ss -ltnp | grep 8883"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:1002](../../server/src/mqtt_bridge.js#L1002) | <code>username: config.username,</code> | Köprü MQTT_USER (api_bridge) ve MQTT_PASSWORD ile bağlanır |
-| [server/src/mqtt_bridge.js:1048](../../server/src/mqtt_bridge.js#L1048) | <code>recordBridgeError('mqtt_error', error.message);</code> | Kütüphanenin kimlik reddi iletisi buraya düşer ve /health'te last_error:"mqtt_error" olur |
+| [server/src/mqtt_bridge.js:1014](../../server/src/mqtt_bridge.js#L1014) | <code>username: config.username,</code> | Köprü MQTT_USER (api_bridge) ve MQTT_PASSWORD ile bağlanır |
+| [server/src/mqtt_bridge.js:1060](../../server/src/mqtt_bridge.js#L1060) | <code>recordBridgeError('mqtt_error', error.message);</code> | Kütüphanenin kimlik reddi iletisi buraya düşer ve /health'te last_error:"mqtt_error" olur |
 | [MQTT_kurulum.txt:52](../../MQTT_kurulum.txt#L52) | <code>5) MQTT kullanicilarini olustur</code> | api_bridge ve cihaz kullanıcıları mosquitto_passwd ile oluşturulur (-c yalnız İLK kullanıcıda: dosyayı sıfırlar) |
 | [MQTT_kurulum.txt:255](../../MQTT_kurulum.txt#L255) | <code>Sifre bir yere acik yazildiysa veya git gecmisine girdiyse DONDURULMALI:</code> | api_bridge parola döndürme sırası: mosquitto_passwd (-c OLMADAN) → server/.env MQTT_PASSWORD → pm2 restart --update-env |
 | [server/scripts/sync_mqtt_acl.js:86](../../server/scripts/sync_mqtt_acl.js#L86) | <code>if (username.startsWith('device_') &amp;&amp; !wantedUsers.has(username)) {</code> | Senkron yalnız device_* ve eski kullanıcıları siler; api_bridge passwd satırına dokunmaz (parolası elle yönetilir) |
@@ -1107,13 +1107,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:1015-1020](../../server/src/mqtt_bridge.js#L1015-L1020) | <code>client.subscribe('device/+/availability', { qos: 1 });</code> | Köprünün abone olduğu 6 konu: availability, state, event, logs, qr_verify, screen_qr (qos 1) |
-| [server/src/mqtt_bridge.js:219](../../server/src/mqtt_bridge.js#L219) | <code>export function deviceUidFromTopic(topic) {</code> | Konu device/<uid>/(availability\|state\|event\|logs\|qr_verify\|screen_qr) biçiminde ve UID 6-16 onaltılık olmalı; aksi sessizce atılır |
-| [server/src/mqtt_bridge.js:68](../../server/src/mqtt_bridge.js#L68) | <code>export function normalizeDeviceTopicUid(uid) {</code> | MAC biçimli UID (E0:72:...) bayt-ters çevrilip düz hex yapılır; diğerlerinde hex olmayan karakterler atılır |
-| [server/src/mqtt_bridge.js:1026](../../server/src/mqtt_bridge.js#L1026) | <code>if (payload.length &gt; MAX_INBOUND_PAYLOAD_BYTES) {</code> | 16 KB üstü yük SESSİZCE atılır (günlük yok) |
-| [server/src/mqtt_bridge.js:238](../../server/src/mqtt_bridge.js#L238) | <code>export async function isRegisteredDeviceUid(uid) {</code> | Yalnız devices tablosunda kayıtlı UID'ler için durum tutulur; kayıtsız sonucu 60 sn önbellekte kalır |
-| [server/src/mqtt_bridge.js:233](../../server/src/mqtt_bridge.js#L233) | <code>const REGISTERED_NEGATIVE_TTL_MS = 60 * 1000;</code> | Yeni kaydedilen cihaz, önceki "kayıtsız" sonucu yüzünden en çok 1 dk daha görünmeyebilir |
-| [server/src/mqtt_bridge.js:1025](../../server/src/mqtt_bridge.js#L1025) | <code>client.on('message', (topic, payload, packet) =&gt; {</code> | Gelen tüm iletilerin giriş noktası |
+| [server/src/mqtt_bridge.js:1027-1032](../../server/src/mqtt_bridge.js#L1027-L1032) | <code>client.subscribe('device/+/availability', { qos: 1 });</code> | Köprünün abone olduğu 6 konu: availability, state, event, logs, qr_verify, screen_qr (qos 1) |
+| [server/src/mqtt_bridge.js:230](../../server/src/mqtt_bridge.js#L230) | <code>export function deviceUidFromTopic(topic) {</code> | Konu device/<uid>/(availability\|state\|event\|logs\|qr_verify\|screen_qr) biçiminde ve UID 6-16 onaltılık olmalı; aksi sessizce atılır |
+| [server/src/mqtt_bridge.js:79](../../server/src/mqtt_bridge.js#L79) | <code>export function normalizeDeviceTopicUid(uid) {</code> | MAC biçimli UID (E0:72:...) bayt-ters çevrilip düz hex yapılır; diğerlerinde hex olmayan karakterler atılır |
+| [server/src/mqtt_bridge.js:1038](../../server/src/mqtt_bridge.js#L1038) | <code>if (payload.length &gt; MAX_INBOUND_PAYLOAD_BYTES) {</code> | 16 KB üstü yük SESSİZCE atılır (günlük yok) |
+| [server/src/mqtt_bridge.js:249](../../server/src/mqtt_bridge.js#L249) | <code>export async function isRegisteredDeviceUid(uid) {</code> | Yalnız devices tablosunda kayıtlı UID'ler için durum tutulur; kayıtsız sonucu 60 sn önbellekte kalır |
+| [server/src/mqtt_bridge.js:244](../../server/src/mqtt_bridge.js#L244) | <code>const REGISTERED_NEGATIVE_TTL_MS = 60 * 1000;</code> | Yeni kaydedilen cihaz, önceki "kayıtsız" sonucu yüzünden en çok 1 dk daha görünmeyebilir |
+| [server/src/mqtt_bridge.js:1037](../../server/src/mqtt_bridge.js#L1037) | <code>client.on('message', (topic, payload, packet) =&gt; {</code> | Gelen tüm iletilerin giriş noktası |
 
 **Olası nedenler**
 - Cihaz farklı bir konu adına yayın yapıyor (ör. device/<uid>/status) ya da UID 6-16 hex dışı
@@ -1221,7 +1221,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/src/mqtt_acl_sync.js:208](../../server/src/mqtt_acl_sync.js#L208) | <code>message: `MQTT ACL senkronu zaman asimina ugradi (${timeoutMs} ms).`,</code> | Zaman aşımı mesajı (mqtt_sync.message) |
 | [server/src/mqtt_acl_sync.js:247](../../server/src/mqtt_acl_sync.js#L247) | <code>message: code === 0 ? 'MQTT ACL senkronu tamamlandi.' : `MQTT ACL senkronu hata kodu: ${c…</code> | Komut sıfır olmayan kodla çıktı (mqtt_sync.message ve stderr nedeni verir) |
 | [server/src/mqtt_acl_sync.js:182](../../server/src/mqtt_acl_sync.js#L182) | <code>message: 'MQTT_SYNC_COMMAND/MQTT_SYNC_ARGS gecersiz karakter iceriyor.',</code> | Komut/argüman güvenli karakter kümesi dışındaysa hiç çalıştırılmaz (SAFE_COMMAND_PATTERN / SAFE_ARG_PATTERN) |
-| [server/src/routes/admin_routes.js:1484](../../server/src/routes/admin_routes.js#L1484) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Cihaz kaydı DB'de oluştu ama broker senkronu başarısız: cihaz yeniden denemeye değil senkronu düzeltmeye ihtiyaç duyar |
+| [server/src/routes/admin_routes.js:1512](../../server/src/routes/admin_routes.js#L1512) | <code>error: 'Cihaz kaydedildi ama MQTT broker senkronu basarisiz.',</code> | Cihaz kaydı DB'de oluştu ama broker senkronu başarısız: cihaz yeniden denemeye değil senkronu düzeltmeye ihtiyaç duyar |
 
 **Olası nedenler**
 - sudo parola istiyor: sudoers NOPASSWD satırı yok/yanlış (MQTT_SYNC_ARGS "-n" parola sorusunu hataya çevirir)
@@ -1291,7 +1291,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "ls -l /var/www/site_kapi_kontrol/server
 | --- | --- | --- |
 | [server/scripts/sync_mqtt_acl.js:86](../../server/scripts/sync_mqtt_acl.js#L86) | <code>if (username.startsWith('device_') &amp;&amp; !wantedUsers.has(username)) {</code> | DB'de olmayan device_* kullanıcıları passwd'den silinir |
 | [server/scripts/sync_mqtt_acl.js:89](../../server/scripts/sync_mqtt_acl.js#L89) | <code>if (legacyUsers.includes(username)) {</code> | Eski ortak kullanıcılar (varsayılan app_client, esp32_door_01; MQTT_LEGACY_USERS) silinir |
-| [server/src/routes/admin_routes.js:1421](../../server/src/routes/admin_routes.js#L1421) | <code>await syncMqttAclOrThrow({ reason: 'device_deleted' });</code> | Cihaz silinince senkron tetiklenir; başarısızsa 503 (cihaz DB'den silinmiştir ama broker eski kalır) |
+| [server/src/routes/admin_routes.js:1449](../../server/src/routes/admin_routes.js#L1449) | <code>await syncMqttAclOrThrow({ reason: 'device_deleted' });</code> | Cihaz silinince senkron tetiklenir; başarısızsa 503 (cihaz DB'den silinmiştir ama broker eski kalır) |
 | [server/src/mqtt_acl_sync.js:107](../../server/src/mqtt_acl_sync.js#L107) | <code>const CHILD_ENV_PREFIXES = ['LC_', 'DB_', 'PG', 'MQTT_', 'MOSQUITTO_', 'KAPI_'];</code> | Senkron alt sürecine geçen ortam: MQTT_PASSWD_FILE/MQTT_ACL_FILE gibi MQTT_* değişkenleri dahil |
 
 **Olası nedenler**
@@ -1351,12 +1351,12 @@ ssh -p 22667 salihceylan@178.210.161.55 "sudo ufw status | grep -E '8883|22667'"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:834](../../server/src/mqtt_bridge.js#L834) | <code>if (kind === 'availability') {</code> | Durum yalnız cihazın availability iletisinden ("online" dışı her şey offline) belirlenir; zaman aşımına dayalı otomatik offline yoktur |
-| [server/src/mqtt_bridge.js:847](../../server/src/mqtt_bridge.js#L847) | <code>void recordDeviceOfflineTransition(status, 'Wi-Fi/MQTT Bağlantısı Kesildi (LWT)');</code> | online→offline geçişinde (LWT) bağlantı logu yazılır |
-| [server/src/mqtt_bridge.js:726](../../server/src/mqtt_bridge.js#L726) | <code>) VALUES ($1, 'offline', $2, $3, $4, $5, $6, $7, $8, NOW())</code> | device_connectivity_logs'a yalnız "offline" satırı yazılır (köprü "online" satırı yazmaz) |
-| [server/src/mqtt_bridge.js:318](../../server/src/mqtt_bridge.js#L318) | <code>async function persistRuntimeStatus(status) {</code> | device_runtime_status ve devices.is_online/last_online_at/last_offline_at buradan güncellenir |
-| [server/src/mqtt_bridge.js:389](../../server/src/mqtt_bridge.js#L389) | <code>is_online = $2,</code> | devices.is_online güncellemesi: WHERE device_uid = $1 (UID birebir eşleşmezse satır güncellenmez) |
-| [server/src/mqtt_bridge.js:1087](../../server/src/mqtt_bridge.js#L1087) | <code>export function getDeviceRuntimeStatus(deviceUid) {</code> | API yanıtları bellekteki bu durumdan beslenir (DB değil) |
+| [server/src/mqtt_bridge.js:845](../../server/src/mqtt_bridge.js#L845) | <code>if (kind === 'availability') {</code> | Durum yalnız cihazın availability iletisinden ("online" dışı her şey offline) belirlenir; zaman aşımına dayalı otomatik offline yoktur |
+| [server/src/mqtt_bridge.js:858](../../server/src/mqtt_bridge.js#L858) | <code>void recordDeviceOfflineTransition(status, 'Wi-Fi/MQTT Bağlantısı Kesildi (LWT)');</code> | online→offline geçişinde (LWT) bağlantı logu yazılır |
+| [server/src/mqtt_bridge.js:737](../../server/src/mqtt_bridge.js#L737) | <code>) VALUES ($1, 'offline', $2, $3, $4, $5, $6, $7, $8, NOW())</code> | device_connectivity_logs'a yalnız "offline" satırı yazılır (köprü "online" satırı yazmaz) |
+| [server/src/mqtt_bridge.js:329](../../server/src/mqtt_bridge.js#L329) | <code>async function persistRuntimeStatus(status) {</code> | device_runtime_status ve devices.is_online/last_online_at/last_offline_at buradan güncellenir |
+| [server/src/mqtt_bridge.js:400](../../server/src/mqtt_bridge.js#L400) | <code>is_online = $2,</code> | devices.is_online güncellemesi: WHERE device_uid = $1 (UID birebir eşleşmezse satır güncellenmez) |
+| [server/src/mqtt_bridge.js:1099](../../server/src/mqtt_bridge.js#L1099) | <code>export function getDeviceRuntimeStatus(deviceUid) {</code> | API yanıtları bellekteki bu durumdan beslenir (DB değil) |
 
 **Olası nedenler**
 - MQTT köprüsü bağlı değil (/health mqtt.connected:false) — hiçbir cihaz iletisi işlenmiyor
@@ -1386,10 +1386,10 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:989](../../server/src/mqtt_bridge.js#L989) | <code>loadInitialDeviceRuntimeStatuses().catch(() =&gt; {});</code> | Köprü başlarken son bilinen durumlar DB'den belleğe yüklenir (hata yutulur) |
-| [server/src/mqtt_bridge.js:936](../../server/src/mqtt_bridge.js#L936) | <code>export async function loadInitialDeviceRuntimeStatuses() {</code> | device_runtime_status satırlarını belleğe taşır; mqtt_connected DB'deki son değerdir |
-| [server/src/mqtt_bridge.js:967](../../server/src/mqtt_bridge.js#L967) | <code>console.warn('Initial device runtime statuses yuklenemedi:', error.message);</code> | Yükleme başarısızsa durumlar boş başlar (cihaz iletileri gelince dolar) |
-| [server/src/mqtt_bridge.js:280](../../server/src/mqtt_bridge.js#L280) | <code>function ensureStatus(deviceUid) {</code> | Bilinmeyen cihaz için varsayılan durum mqtt_connected:false'tur |
+| [server/src/mqtt_bridge.js:1000](../../server/src/mqtt_bridge.js#L1000) | <code>loadInitialDeviceRuntimeStatuses().catch(() =&gt; {});</code> | Köprü başlarken son bilinen durumlar DB'den belleğe yüklenir (hata yutulur) |
+| [server/src/mqtt_bridge.js:947](../../server/src/mqtt_bridge.js#L947) | <code>export async function loadInitialDeviceRuntimeStatuses() {</code> | device_runtime_status satırlarını belleğe taşır; mqtt_connected DB'deki son değerdir |
+| [server/src/mqtt_bridge.js:978](../../server/src/mqtt_bridge.js#L978) | <code>console.warn('Initial device runtime statuses yuklenemedi:', error.message);</code> | Yükleme başarısızsa durumlar boş başlar (cihaz iletileri gelince dolar) |
+| [server/src/mqtt_bridge.js:291](../../server/src/mqtt_bridge.js#L291) | <code>function ensureStatus(deviceUid) {</code> | Bilinmeyen cihaz için varsayılan durum mqtt_connected:false'tur |
 
 **Olası nedenler**
 - Durum belleğe DB'den yüklenir; güncel durum cihazın sonraki availability/state iletisiyle (ya da brokerdaki retained availability ile) düzelir
@@ -1416,11 +1416,11 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_verify.sh
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:1110](../../server/src/mqtt_bridge.js#L1110) | <code>export async function publishDoorPulse({</code> | Kapı açma komutunu device/<UID>/cmd konusuna yayınlar (qos 1, retain yok) |
-| [server/src/mqtt_bridge.js:1129](../../server/src/mqtt_bridge.js#L1129) | <code>error.code = 'DEVICE_OFFLINE';</code> | Bellekteki durum çevrimdışıysa (assumeOnline değilse) komut YAYINLANMAZ ve DEVICE_OFFLINE fırlatılır |
-| [server/src/mqtt_bridge.js:1127](../../server/src/mqtt_bridge.js#L1127) | <code>if (status.mqtt_connected !== true &amp;&amp; !assumeOnline) {</code> | Kontrol köprü belleğine bakar: durum bayatsa komut gereksiz reddedilir ya da çevrimdışı cihaza yayınlanır |
-| [server/src/mqtt_bridge.js:1134](../../server/src/mqtt_bridge.js#L1134) | <code>const pulse = buildPulsePayload({ requestedBy, doorId, siteCode });</code> | Yük: {action:"pulse", request_id, requested_by, requested_at(epoch sn), door_id, site_code} |
-| [server/src/mqtt_bridge.js:91](../../server/src/mqtt_bridge.js#L91) | <code>export function buildPulsePayload({</code> | requested_at epoch SANİYE (sayı), request_id 16 karakter hex; firmware bu biçime göre doğrular |
+| [server/src/mqtt_bridge.js:1122](../../server/src/mqtt_bridge.js#L1122) | <code>export async function publishDoorPulse({</code> | Kapı açma komutunu device/<UID>/cmd konusuna yayınlar (qos 1, retain yok) |
+| [server/src/mqtt_bridge.js:1141](../../server/src/mqtt_bridge.js#L1141) | <code>error.code = 'DEVICE_OFFLINE';</code> | Bellekteki durum çevrimdışıysa (assumeOnline değilse) komut YAYINLANMAZ ve DEVICE_OFFLINE fırlatılır |
+| [server/src/mqtt_bridge.js:1139](../../server/src/mqtt_bridge.js#L1139) | <code>if (status.mqtt_connected !== true &amp;&amp; !assumeOnline) {</code> | Kontrol köprü belleğine bakar: durum bayatsa komut gereksiz reddedilir ya da çevrimdışı cihaza yayınlanır |
+| [server/src/mqtt_bridge.js:1146](../../server/src/mqtt_bridge.js#L1146) | <code>const pulse = buildPulsePayload({ requestedBy, doorId, siteCode });</code> | Yük: {action:"pulse", request_id, requested_by, requested_at(epoch sn), door_id, site_code} |
+| [server/src/mqtt_bridge.js:102](../../server/src/mqtt_bridge.js#L102) | <code>export function buildPulsePayload({</code> | requested_at epoch SANİYE (sayı), request_id 16 karakter hex; firmware bu biçime göre doğrular |
 | [server/src/mqtt_acl_sync.js:89](../../server/src/mqtt_acl_sync.js#L89) | <code>lines.push(`topic read device/${uid}/cmd`);</code> | Cihazın kendi cmd konusunu okuyabilmesi ACL'e bağlı; ACL'de yoksa komut cihaza hiç ulaşmaz |
 
 **Olası nedenler**
@@ -1453,10 +1453,10 @@ ssh -p 22667 salihceylan@178.210.161.55 "grep -A4 'user device_D4C771A172E0' /et
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:792](../../server/src/mqtt_bridge.js#L792) | <code>if (kind === 'qr_verify') {</code> | device/<uid>/qr_verify iletisini çözer; token 128 karakteri aşarsa boşaltılır; request_id cihaza aynen geri yankılanır |
-| [server/src/mqtt_bridge.js:758](../../server/src/mqtt_bridge.js#L758) | <code>if (retained &amp;&amp; (kind === 'screen_qr' &#124;&#124; kind === 'qr_verify')) {</code> | Retained qr_verify/screen_qr iletileri YOK SAYILIR (eski doğrulama tekrar işlenmesin); cihaz retain:false yayınlamalı |
-| [server/src/mqtt_bridge.js:827](../../server/src/mqtt_bridge.js#L827) | <code>const resTopic = `device/${normalizeDeviceTopicUid(match[1])}/qr_result`;</code> | Sonuç device/<uid>/qr_result konusuna yayınlanır; köprü bağlı değilse yayın SESSİZCE atlanır |
-| [server/src/mqtt_bridge.js:824](../../server/src/mqtt_bridge.js#L824) | <code>console.error('[MQTT QR Verify] Islem hatasi:', err.message);</code> | Doğrulama servisi hata verirse cihaza reason:"ERROR" sonucu gider; ayrıntı yalnız bu satırdadır |
+| [server/src/mqtt_bridge.js:803](../../server/src/mqtt_bridge.js#L803) | <code>if (kind === 'qr_verify') {</code> | device/<uid>/qr_verify iletisini çözer; token 128 karakteri aşarsa boşaltılır; request_id cihaza aynen geri yankılanır |
+| [server/src/mqtt_bridge.js:769](../../server/src/mqtt_bridge.js#L769) | <code>if (retained &amp;&amp; (kind === 'screen_qr' &#124;&#124; kind === 'qr_verify')) {</code> | Retained qr_verify/screen_qr iletileri YOK SAYILIR (eski doğrulama tekrar işlenmesin); cihaz retain:false yayınlamalı |
+| [server/src/mqtt_bridge.js:838](../../server/src/mqtt_bridge.js#L838) | <code>const resTopic = `device/${normalizeDeviceTopicUid(match[1])}/qr_result`;</code> | Sonuç device/<uid>/qr_result konusuna yayınlanır; köprü bağlı değilse yayın SESSİZCE atlanır |
+| [server/src/mqtt_bridge.js:835](../../server/src/mqtt_bridge.js#L835) | <code>console.error('[MQTT QR Verify] Islem hatasi:', err.message);</code> | Doğrulama servisi hata verirse cihaza reason:"ERROR" sonucu gider; ayrıntı yalnız bu satırdadır |
 | [server/src/mqtt_acl_sync.js:90](../../server/src/mqtt_acl_sync.js#L90) | <code>lines.push(`topic read device/${uid}/qr_result`);</code> | Cihazın qr_result okuyabilmesi için ACL satırı gerekir (api_bridge tarafında topic write device/+/qr_result) |
 
 **Olası nedenler**
@@ -1487,9 +1487,9 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 200 --nostrea
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:766](../../server/src/mqtt_bridge.js#L766) | <code>if (kind === 'screen_qr') {</code> | Ekran token'ı çözer (JSON {token, valid_seconds} ya da düz metin), geçerlilik süresini sınırlar ve belleğe yazar; token LOGLANMAZ |
+| [server/src/mqtt_bridge.js:777](../../server/src/mqtt_bridge.js#L777) | <code>if (kind === 'screen_qr') {</code> | Ekran token'ı çözer (JSON {token, valid_seconds} ya da düz metin), geçerlilik süresini sınırlar ve belleğe yazar; token LOGLANMAZ |
 | [server/src/mqtt_bridge.js:15](../../server/src/mqtt_bridge.js#L15) | <code>export const deviceScreenQrStore = new Map();</code> | Ekran QR'ları yalnız BELLEKTE tutulur: API yeniden başlayınca boşalır, cihazın sonraki yayınıyla dolar |
-| [server/src/mqtt_bridge.js:758](../../server/src/mqtt_bridge.js#L758) | <code>if (retained &amp;&amp; (kind === 'screen_qr' &#124;&#124; kind === 'qr_verify')) {</code> | Retained screen_qr yok sayılır: eski token "taze" görünmesin diye |
+| [server/src/mqtt_bridge.js:769](../../server/src/mqtt_bridge.js#L769) | <code>if (retained &amp;&amp; (kind === 'screen_qr' &#124;&#124; kind === 'qr_verify')) {</code> | Retained screen_qr yok sayılır: eski token "taze" görünmesin diye |
 | [server/src/mqtt_acl_sync.js:95](../../server/src/mqtt_acl_sync.js#L95) | <code>lines.push(`topic write device/${uid}/screen_qr`);</code> | Cihazın screen_qr konusuna yazabilmesi için ACL satırı gerekir |
 
 **Olası nedenler**
@@ -1516,13 +1516,13 @@ ssh -p 22667 salihceylan@178.210.161.55 "grep -c screen_qr /etc/mosquitto/acl"
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/mqtt_bridge.js:629](../../server/src/mqtt_bridge.js#L629) | <code>export async function handleDeviceLogsMessage(topicUid, text, deps = {}) {</code> | device/<uid>/logs paketini çözer, door_log_service'e yazar ve BAŞARILIYSA logs_ack yayınlar |
-| [server/src/mqtt_bridge.js:176](../../server/src/mqtt_bridge.js#L176) | <code>export function normalizeDeviceLogBatch(decoded, { nowMs = Date.now() } = {}) {</code> | Biçim: {"batch_id":N,"logs":[{client_log_id,epoch,boot_ms,trigger_type,user_name,apartment_label,action}]}; bozuk kalemler atlanır |
+| [server/src/mqtt_bridge.js:640](../../server/src/mqtt_bridge.js#L640) | <code>export async function handleDeviceLogsMessage(topicUid, text, deps = {}) {</code> | device/<uid>/logs paketini çözer, door_log_service'e yazar ve BAŞARILIYSA logs_ack yayınlar |
+| [server/src/mqtt_bridge.js:187](../../server/src/mqtt_bridge.js#L187) | <code>export function normalizeDeviceLogBatch(decoded, { nowMs = Date.now() } = {}) {</code> | Biçim: {"batch_id":N,"logs":[{client_log_id,epoch,boot_ms,trigger_type,user_name,apartment_label,action}]}; bozuk kalemler atlanır |
 | [server/src/mqtt_bridge.js:41](../../server/src/mqtt_bridge.js#L41) | <code>export const MAX_DEVICE_LOG_BATCH_ITEMS = 200;</code> | Tek pakette en fazla 200 kayıt; fazlası yok sayılır |
-| [server/src/mqtt_bridge.js:665](../../server/src/mqtt_bridge.js#L665) | <code>transientReject = result?.reason === 'DEVICE_NOT_ASSIGNED';</code> | Cihaz henüz siteye/kapıya atanmamışsa ack GÖNDERİLMEZ (cihaz sakladığı kayıtları atanınca yeniden yollar) |
-| [server/src/mqtt_bridge.js:612](../../server/src/mqtt_bridge.js#L612) | <code>function publishLogsAck(normalizedUid, batchId) {</code> | logs_ack, köprü bağlıysa device/<uid>/cmd konusuna yayınlanır |
+| [server/src/mqtt_bridge.js:676](../../server/src/mqtt_bridge.js#L676) | <code>transientReject = result?.reason === 'DEVICE_NOT_ASSIGNED';</code> | Cihaz henüz siteye/kapıya atanmamışsa ack GÖNDERİLMEZ (cihaz sakladığı kayıtları atanınca yeniden yollar) |
+| [server/src/mqtt_bridge.js:623](../../server/src/mqtt_bridge.js#L623) | <code>function publishLogsAck(normalizedUid, batchId) {</code> | logs_ack, köprü bağlıysa device/<uid>/cmd konusuna yayınlanır |
 | [server/src/services/door_log_service.js:419](../../server/src/services/door_log_service.js#L419) | <code>result.reason = 'DEVICE_NOT_ASSIGNED';</code> | Atanmamış cihaz nedeniyle yazılmayan kayıtlar rejected sayılır |
-| [server/src/db.js:741](../../server/src/db.js#L741) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
+| [server/src/db.js:742](../../server/src/db.js#L742) | <code>CREATE UNIQUE INDEX IF NOT EXISTS idx_door_access_logs_client_log</code> | Tekrar gelen aynı (device_uid, client_log_id) kayıtları eklenmez: tekrar yayın güvenlidir (idempotent) |
 | [server/src/mqtt_acl_sync.js:96](../../server/src/mqtt_acl_sync.js#L96) | <code>lines.push(`topic write device/${uid}/logs`);</code> | Cihazın logs konusuna yazabilmesi için ACL'de bu satır gerekir |
 
 **Olası nedenler**
@@ -1560,7 +1560,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [MQTT_kurulum.txt:40](../../MQTT_kurulum.txt#L40) | <code>sudo certbot certonly --nginx -d mqtt.gudeteknoloji.com.tr -m MAIL_ADRESIN --agree-tos -n</code> | MQTT sertifikası AYRI alınır (certonly): yalnız dosya üretir, mosquitto'yu kendiliğinden yeniden yüklemez |
 | [MQTT_kurulum.txt:44](../../MQTT_kurulum.txt#L44) | <code>sudo ln -sf /etc/letsencrypt/live/mqtt.gudeteknoloji.com.tr/fullchain.pem /etc/mosquitto/…</code> | Mosquitto /etc/mosquitto/certs altındaki bağlantı üzerinden okur; yenilenince hedef dosya değişir, süreç eski sertifikayı bellekte tutabilir |
 | [MQTT_kurulum.txt:143](../../MQTT_kurulum.txt#L143) | <code>certfile /etc/mosquitto/certs/fullchain.pem</code> | Broker 8883 dinleyicisinin sertifika yolu (mosquitto.conf) |
-| [server/src/mqtt_bridge.js:64](../../server/src/mqtt_bridge.js#L64) | <code>rejectUnauthorized: !envFlag('MQTT_ALLOW_INSECURE_TLS', false),</code> | API köprüsü sertifikayı DOĞRULAR: süresi dolan MQTT sertifikasıyla köprü bağlanamaz |
+| [server/src/mqtt_bridge.js:75](../../server/src/mqtt_bridge.js#L75) | <code>rejectUnauthorized: !envFlag('MQTT_ALLOW_INSECURE_TLS', false),</code> | API köprüsü sertifikayı DOĞRULAR: süresi dolan MQTT sertifikasıyla köprü bağlanamaz |
 | [server/scripts/trigger_ota.js:51](../../server/scripts/trigger_ota.js#L51) | <code>rejectUnauthorized: !allowInsecureTls,</code> | trigger_ota.js de doğrulamayı varsayılan açık tutar; sertifika sorunu bu betikte de görülür |
 
 **Olası nedenler**
@@ -1763,7 +1763,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'bash -s' < deploy/remote_audit.sh
 | [server/src/routes/firmware_routes.js:186](../../server/src/routes/firmware_routes.js#L186) | <code>const updateAvailable =</code> | Güncelleme sunma koşulu: enabled, hedef uyumu, allowed_uids, usb_required değil ve sürüm cihazınkinden BÜYÜK |
 | [server/src/routes/firmware_routes.js:176](../../server/src/routes/firmware_routes.js#L176) | <code>const blockedByUid = allowedUids.length &gt; 0 &amp;&amp; !allowedUids.includes(uid);</code> | allowed_uids doluysa listede olmayan cihaz yayını görmez; uid sorgu parametresi verilmezse de engellenir |
 | [server/src/routes/firmware_routes.js:201](../../server/src/routes/firmware_routes.js#L201) | <code>message = 'Bu surum icin USB ile tam yukleme gerekiyor.';</code> | usb_required:true ise uzaktan güncelleme sunulmaz |
-| [server/src/utils/helpers.js:33](../../server/src/utils/helpers.js#L33) | <code>export function compareVersionParts(left, right) {</code> | Sürüm karşılaştırması parça parça sayısaldır; manifest sürümü eşit ya da küçükse güncelleme sunulmaz |
+| [server/src/utils/helpers.js:34](../../server/src/utils/helpers.js#L34) | <code>export function compareVersionParts(left, right) {</code> | Sürüm karşılaştırması parça parça sayısaldır; manifest sürümü eşit ya da küçükse güncelleme sunulmaz |
 | [OTA_KURULUM.txt:61](../../OTA_KURULUM.txt#L61) | <code>- allowed_uids bos ise o hedefin tum cihazlari bu yayini gorebilir.</code> | Manifest alanlarının anlamı ve yayın adımları |
 
 **Olası nedenler**
@@ -1836,7 +1836,7 @@ ssh -p 22667 salihceylan@178.210.161.55 "pm2 logs kapi-api --lines 300 --nostrea
 | [server/src/routes/firmware_routes.js:212](../../server/src/routes/firmware_routes.js#L212) | <code>? `${publicBaseUrl(req)}/firmware/${folderTarget}/${fileName}`</code> | İndirme URL'si PUBLIC_BASE_URL'den üretilir; cihaz yalnız https://api.gudeteknoloji.com.tr/ ile başlayanı kabul eder (OTA_KURULUM.txt) |
 | [server/src/routes/firmware_routes.js:254](../../server/src/routes/firmware_routes.js#L254) | <code>headers['x-MD5'] = md5;</code> | Manifestte geçerli md5 varsa x-MD5 başlığı gönderilir (cihaz ikinci kontrol olarak kullanır) |
 | [server/src/routes/firmware_routes.js:25](../../server/src/routes/firmware_routes.js#L25) | <code>const firmwareRoot = path.resolve(process.env.FIRMWARE_DIR &#124;&#124; path.join(process.cwd(), 'f…</code> | Kök klasör FIRMWARE_DIR ya da <cwd>/firmware; PM2 cwd = server/ olmalı |
-| [server/src/utils/helpers.js:28](../../server/src/utils/helpers.js#L28) | <code>export function safeFirmwareFile(value) {</code> | Dosya adı yalnız harf/rakam/_/./- ve .bin uzantılı olabilir; aksi halde 400 |
+| [server/src/utils/helpers.js:29](../../server/src/utils/helpers.js#L29) | <code>export function safeFirmwareFile(value) {</code> | Dosya adı yalnız harf/rakam/_/./- ve .bin uzantılı olabilir; aksi halde 400 |
 
 **Olası nedenler**
 - .bin dosyası klasörde yok ya da manifest filename ile farklı adda
@@ -1865,11 +1865,11 @@ ssh -p 22667 salihceylan@178.210.161.55 "sha256sum /var/www/site_kapi_kontrol/se
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [server/src/routes/admin_routes.js:1295](../../server/src/routes/admin_routes.js#L1295) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Toplu uç: tüm cihaz UID'lerini alır, iş kaydı açar, her cihaza ota_check yayınlar; yalnız super_user |
-| [server/src/routes/admin_routes.js:1330](../../server/src/routes/admin_routes.js#L1330) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | Köprü bağlı değilse yayın yapılamaz: önce /health mqtt.connected (altyapi-health-mqtt-baglanti-yok) |
-| [server/src/mqtt_bridge.js:1181](../../server/src/mqtt_bridge.js#L1181) | <code>export async function publishOtaCheckToDevices({</code> | Her UID için device/<uid>/cmd konusuna {action:ota_check, retry:true, ota_job_id} QoS1 yayınlar; tekil hatalar failed listesine girer |
+| [server/src/routes/admin_routes.js:1323](../../server/src/routes/admin_routes.js#L1323) | <code>adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, async (req, …</code> | Toplu uç: tüm cihaz UID'lerini alır, iş kaydı açar, her cihaza ota_check yayınlar; yalnız super_user |
+| [server/src/routes/admin_routes.js:1358](../../server/src/routes/admin_routes.js#L1358) | <code>return res.status(503).json({ error: 'MQTT baglantisi hazir degil.' });</code> | Köprü bağlı değilse yayın yapılamaz: önce /health mqtt.connected (altyapi-health-mqtt-baglanti-yok) |
+| [server/src/mqtt_bridge.js:1193](../../server/src/mqtt_bridge.js#L1193) | <code>export async function publishOtaCheckToDevices({</code> | Her UID için device/<uid>/cmd konusuna {action:ota_check, retry:true, ota_job_id} QoS1 yayınlar; tekil hatalar failed listesine girer |
 | [server/src/services/device_service.js:427](../../server/src/services/device_service.js#L427) | <code>export async function createOtaUpdateJob({ authUser, deviceUids }) {</code> | ota_update_jobs ve cihaz bazlı satırlar oluşturulur; tablolar eksikse 500 |
-| [server/src/mqtt_bridge.js:442](../../server/src/mqtt_bridge.js#L442) | <code>function otaJobDeviceEventStatus(eventName) {</code> | Cihazın OTA olayları (ota_success, ota_failed...) iş satırının durumuna çevrilir |
+| [server/src/mqtt_bridge.js:453](../../server/src/mqtt_bridge.js#L453) | <code>function otaJobDeviceEventStatus(eventName) {</code> | Cihazın OTA olayları (ota_success, ota_failed...) iş satırının durumuna çevrilir |
 | [server/scripts/trigger_ota.js:59](../../server/scripts/trigger_ota.js#L59) | <code>`device/${targetUid}/cmd`,</code> | Tek cihaza elle ota_check: device/<UID>/cmd, yalnız UID argümanı zorunlu (varsayılan cihaz yok) |
 
 **Olası nedenler**
@@ -1952,7 +1952,7 @@ ssh -p 22667 salihceylan@178.210.161.55 'docker exec -i site_kapi_kontrol_postgr
 | [server/scripts/test_doors_qr.js:5](../../server/scripts/test_doors_qr.js#L5) | <code>const cleanUid = '00861A0D5020';</code> | SABİT bir UID için kapı eşleşmesini sorgular (salt-okunur); başka cihaz için dosyada UID değiştirilmeli |
 | [server/scripts/test_query.js:5](../../server/scripts/test_query.js#L5) | <code>const dev = await pool.query("SELECT * FROM devices WHERE device_uid = 'D4C771A172E0'");</code> | SABİT UID/kullanıcı için cihaz, kullanıcı ve üyelik satırlarını basar (salt-okunur); kişisel veri içerir, çıktıyı paylaşmayın |
 | [server/scripts/_dev_guard.js:3](../../server/scripts/_dev_guard.js#L3) | <code>if (process.env.ALLOW_DEV_SCRIPTS !== '1') {</code> | Tümü bekçi arkasında; ALLOW_DEV_SCRIPTS=1 olmadan çıkar |
-| [server/src/db.js:17](../../server/src/db.js#L17) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
+| [server/src/db.js:18](../../server/src/db.js#L18) | <code>export const pool = new Pool({</code> | Betikler src/db.js havuzunu kullanır: server/.env'deki DB_* hangisiyse O veritabanına bağlanır (canlı sunucuda çalıştırılırsa CANLI DB) |
 
 **Olası nedenler**
 - Beklenen: bu betikler geliştirme yardımcılarıdır, sabit UID/kullanıcıya bağlıdır; boş sonuç çoğu zaman o kayıt bu veritabanında yoktur demektir

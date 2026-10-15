@@ -837,7 +837,7 @@ export default {
         },
         {
           file: 'lib/services/auth_service.dart',
-          find: "return (null, 'Bu kapı için uygulamadan açma kapalı.');",
+          find: ": 'Bu kapı için uygulamadan açma kapalı.',",
           note: 'Hem uzaktan hem yerel kapalıysa istek GÖNDERİLMEZ',
         },
         {
@@ -1120,7 +1120,7 @@ export default {
         },
         {
           file: 'lib/services/auth_service.dart',
-          find: 'final allowLocal = door != null && (door.canOpenLocalUdp || isSuper);',
+          find: 'final allowLocal = door != null && (door.canOpenLocalUdp || isSuper) && !moduleClosed;',
           note: 'Kapı politikası yerel açmaya izin vermiyorsa yerel yol hiç denenmez',
         },
         {

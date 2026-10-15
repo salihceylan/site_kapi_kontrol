@@ -136,7 +136,7 @@ export default {
         { file: 'lib/ui/pages/home_page.dart', find: 'void _selectMenu(SirketMenuItem item) {',
           note: 'Menü seçimi: öğe tipine göre ilgili listeyi force ile yeniden yükler' },
         { file: 'lib/ui/pages/home_page.dart', find: 'String _titleForMenu(SirketMenuItem item) {',
-          note: 'AppBar başlığı çekmecedeki başlıktan ayrı tutulur (örn. dashboard "AHBU Panel" vs "Panel")' },
+          note: 'AppBar başlığı çekmecedeki başlıktan ayrı tutulur (AppBar başlığı menü öğesinin etiketiyle birebir aynı olmak zorunda değildir)' },
         { file: 'lib/menu.dart', find: "export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';",
           note: 'Eski içe aktarma yolu; menü tanımı yalnız yan_menu.dart\'ta' },
       ],
@@ -1716,7 +1716,7 @@ export default {
       refs: [
         { file: 'lib/ui/pages/home_page.dart', find: 'Future<void> _saveProfile() async {',
           note: 'Sakin rolü güncelleyemez; form doğrulanır; updateMyProfile çağrılır; başarıda şifre alanları temizlenir' },
-        { file: 'lib/ui/pages/home_page.dart', find: 'return ResidentProfileView(session: session);',
+        { file: 'lib/ui/pages/home_page.dart', find: 'return ResidentProfileView(',
           note: 'Daire sakini için düzenlenebilir form yerine salt okunur hesap bilgileri' },
         { file: 'lib/ui/views/profile_view.dart', find: "return 'Şifre değiştirmek için mevcut şifrenizi girin.';",
           note: 'Yeni şifre yazıldıysa mevcut şifre zorunlu' },

@@ -534,9 +534,9 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
-| [lib/ui/design/login_hero.dart:39](../../lib/ui/design/login_hero.dart#L39) | <code>static const String logoAsset = 'assets/images/app_logo.png';</code> | Logo dosyası pubspec varlıklarında olmalı |
-| [lib/ui/design/login_hero.dart:125](../../lib/ui/design/login_hero.dart#L125) | <code>cacheWidth: (logoDiameter * dpr).ceil(),</code> | Görsel ekran yoğunluğuna göre küçültülerek çözülür |
-| [lib/ui/design/login_hero.dart:58](../../lib/ui/design/login_hero.dart#L58) | <code>duration: AppMotion.of(context, AppMotion.slow),</code> | Giriş solma + yukarı kayma; hareket azaltmada anında |
+| [lib/ui/design/login_hero.dart:41](../../lib/ui/design/login_hero.dart#L41) | <code>static const String logoAsset = 'assets/images/app_logo.png';</code> | Logo dosyası pubspec varlıklarında olmalı |
+| [lib/ui/design/login_hero.dart:127](../../lib/ui/design/login_hero.dart#L127) | <code>cacheWidth: (logoDiameter * dpr).ceil(),</code> | Görsel ekran yoğunluğuna göre küçültülerek çözülür |
+| [lib/ui/design/login_hero.dart:60](../../lib/ui/design/login_hero.dart#L60) | <code>duration: AppMotion.of(context, AppMotion.slow),</code> | Giriş solma + yukarı kayma; hareket azaltmada anında |
 
 **Olası nedenler**
 - assets/images/app_logo.png pubspec te yok ya da silinmiş
@@ -1071,8 +1071,8 @@ Bu bölüm lib/ui/design (jeton, hareket, kart, düğme, rozet, iskelet, geri sa
 | Dosya:satır | Satırdaki kod | Ne işe yarar |
 | --- | --- | --- |
 | [lib/menu.dart:1](../../lib/menu.dart#L1) | <code>export 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';</code> | menu.dart tek satırlık yeniden dışa aktarımdır; gerçek kod yan_menu.dart ta |
-| [lib/ui/widgets/yan_menu.dart:317](../../lib/ui/widgets/yan_menu.dart#L317) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
-| [lib/ui/widgets/yan_menu.dart:108](../../lib/ui/widgets/yan_menu.dart#L108) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
+| [lib/ui/widgets/yan_menu.dart:373](../../lib/ui/widgets/yan_menu.dart#L373) | <code>List&lt;SirketMenuItem&gt; _itemsForRole(</code> | Rol ve mod başına menü öğeleri burada seçilir |
+| [lib/ui/widgets/yan_menu.dart:142](../../lib/ui/widgets/yan_menu.dart#L142) | <code>title: isResidentMode ? 'Yönetici Paneline Geç' : 'Sakin Moduna Geç',</code> | Çift rollü kullanıcıda mod değiştirme satırı |
 
 **Olası nedenler**
 - _itemsForRole listesinde öğe o rol/mod için yok

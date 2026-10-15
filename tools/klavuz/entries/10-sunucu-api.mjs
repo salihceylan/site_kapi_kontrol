@@ -431,7 +431,7 @@ export default {
         { file: 'server/src/services/membership_service.js', find: 'async function issueVerificationCode({ email, fullName, persistCredentials }) {', note: 'Kod üretir, DB\'ye yazar, e-posta gönderir; gönderim hatası fırlatılmaz, { sent:false } döner' },
         { file: 'server/src/services/membership_service.js', find: "console.error('[Mail Gönderim Hatası]:'", note: 'SMTP hatasının günlüğe yazıldığı satır (code/responseCode alanları, adres maskeli)' },
         { file: 'server/src/services/membership_service.js', find: 'function describeMailError(error) {', note: 'Günlüğe giden alanlar: code (ETIMEDOUT, EAUTH...), responseCode (535, 550...), command' },
-        { file: 'server/src/mailer.js', find: 'export async function sendIndividualVerificationEmail({', note: 'Bireysel kayıt kod e-postası: konu "AHBU e-posta doğrulama kodunuz"' },
+        { file: 'server/src/mailer.js', find: 'export async function sendIndividualVerificationEmail({', note: 'Bireysel kayıt kod e-postası: konu "Site ve Toplu Yaşam Yönetim Sistemi - E-posta doğrulama kodunuz"' },
         { file: 'server/src/mailer.js', find: 'connectionTimeout: 10_000,', note: 'SMTP zaman aşımları: bağlantı 10 sn, karşılama 10 sn, soket 20 sn' },
         { file: 'server/src/config/env.js', find: 'SMTP ayarlari eksik', note: 'Açılışta SMTP_HOST/SMTP_USER/SMTP_PASSWORD eksikse uyarı yazılır' },
       ],
