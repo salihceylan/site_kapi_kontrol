@@ -493,3 +493,61 @@ export async function sendModuleRequestNotificationEmail({
     html,
   });
 }
+
+/**
+ * SMTP yapılandırılmış mı (sunucu, kullanıcı, parola ve gönderen adresi dolu). Duyuru e-posta kuyruğu yapılandırma yokken satırları
+ * dürüstçe 'failed' yapar (sessiz kayıp yok).
+ */
+export function isSmtpConfigured(env = process.env) {
+  const filled = (name) => String(env[name] ?? '').trim() !== '';
+  return filled('SMTP_HOST') && filled('SMTP_USER') && filled('SMTP_PASSWORD') && (filled('SMTP_FROM') || filled('SMTP_USER'));
+}
+
+// Tek, düz adres: virgül/noktalı virgül/boşluk/açılı ayraç yok (alıcı listesi enjeksiyonu: "a@x.com, b@y.com" gönderilmez).
+const ANNOUNCEMENT_RECIPIENT_PATTERN = /^[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[^\s@,;<>"()]+$/;
+
+/**
+ * Duyuru e-postasını (konu, düz metin, HTML) hazırlar; ağ kullanmaz. Konu `[Site Adı] Başlık` (acil: `ACİL: ` öneki); başlık, site adı ve
+ * alıcı satır başı enjeksiyonuna (CRLF) karşı temizlenir; gövde düz yazıdır, HTML'de kaçırılır ve satır sonları korunur.
+ * Geçersiz alıcı adresi { code: 'INVALID_RECIPIENT' } hatası verir.
+ */
+export function buildAnnouncementEmail({ to, siteName, title, body, importance }) {
+  const recipient = String(to ?? '').trim();
+  if (recipient.length > 254 || !ANNOUNCEMENT_RECIPIENT_PATTERN.test(recipient)) {
+    const error = new Error('Gecersiz alici adresi.');
+    error.code = 'INVALID_RECIPIENT';
+    throw error;
+  }
+  const urgent = importance === 'urgent';
+  const site = singleLine(siteName, 120) || 'Site';
+  const titleText = singleLine(title, 200);
+  const subject = singleLine(`${urgent ? 'ACİL: ' : ''}[${site}] ${titleText}`);
+  const bodyText = String(body ?? '')
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .trim();
+  const footer = `Bu e-posta ${site} yönetimi tarafından gönderildi. Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.`;
+  const text = `${urgent ? 'ACİL DUYURU\n\n' : ''}${titleText}\n\n${bodyText}\n\n--\n${footer}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+      ${urgent ? '<p style="color: #b91c1c; font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 0 0 8px 0;">ACİL DUYURU</p>' : ''}
+      <h2 style="color: #111827; margin: 0 0 16px 0; font-size: 20px;">${escapeHtml(titleText)}</h2>
+      <div style="color: #374151; font-size: 15px; line-height: 1.6;">${escapeHtml(bodyText).replace(/\n/g, '<br />')}</div>
+      <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">${escapeHtml(footer)}</p>
+    </div>
+  `;
+  return { to: recipient, subject, text, html };
+}
+
+/** Site yönetiminin duyurusunu bir sakine e-postayla gönderir (düz yazı; HTML kaçırılır). Kuyruk işçisi çağırır; SMTP'yi yavaş varsayar. */
+export async function sendAnnouncementEmail({ to, siteName, title, body, importance }) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+  const message = buildAnnouncementEmail({ to, siteName, title, body, importance });
+  const transporter = createTransporter();
+  await transporter.sendMail({ from, ...message });
+}

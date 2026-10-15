@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Platform cekirdegi (modul sistemi Faz 1/1.1 + Kisi ve Daire Kayitlari Faz 2a) icin GERCEK PostgreSQL dogrulamasi.
+// Platform cekirdegi (modul sistemi Faz 1/1.1 + Kisi ve Daire Kayitlari Faz 2a + Duyuru ve Bildirim Faz 3a) icin GERCEK PostgreSQL dogrulamasi.
 // `npm test` ICINDE DEGILDIR (node --test yalnizca test/ dizinini tarar); elle / CI'da bilincli olarak calistirilir.
 //
 // NE YAPAR (bolumler, her biri ayri bir surec ve ayri bir tek kullanimlik veritabani):
@@ -25,6 +25,12 @@
 //             (hayalet kisi yok), pasif hesap baglanmaz, kullanici bazli LINK planinda SEQ SCAN yok (EXPLAIN, 90000+ satir).
 //   locks     onay/ac-kapa/talep ile site silme ESZAMANLI yarislari (kilit sirasi: sites FOR SHARE -> advisory -> talep
 //             FOR UPDATE; deadlock 40P01 OLMAMALI) + eski sirayla deadlock'u kanitlayan kontrol deneyi.
+//   announcements  Duyuru ve Bildirim (Faz 3a): yetki/IDOR matrisi, kitle kurallari (site/blok/daire, cok daireli kisi tek satir, pasif/gecmis
+//             iliski disarida, hesapsiz dahil), yasam dongusu ve duzenleme kurallari, yayin yarislari (cift yayin, zamanlayici x elle),
+//             okundu/gelen kutusu/ozet, tercihler, e-posta kuyrugu (SAHTE tasiyici: tercih, acil, adres yok, yinelenen adres, gunluk
+//             sinir, yeniden baslama devami, 3 deneme, SMTP yok -> failed, yavas SMTP istegi bekletmez, CRLF/HTML), zamanlayici
+//             (tek calisan, sizinti yok), audit gizliligi, 3000 daireli sitede yayin suresi ve kilit sirasi turlari (CRM yazmalari,
+//             uye cikarma, hesap silme, site silme, zamanlayici x elle; 40P01 OLMAMALI).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -98,7 +104,18 @@ const S3 = 1000000003;
 // Ortak: kapsamli sema katalogu (parent kullanir)
 // --------------------------------------------------------------------------------------------------------------
 
-const CATALOG_TABLES = ['site_modules', 'audit_log', 'module_requests', 'site_people', 'apartment_residencies', 'vehicles', 'platform_backfills'];
+const CATALOG_TABLES = [
+  'site_modules',
+  'audit_log',
+  'module_requests',
+  'site_people',
+  'apartment_residencies',
+  'vehicles',
+  'platform_backfills',
+  'announcements',
+  'announcement_recipients',
+  'notification_preferences',
+];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
   'sites_management_type_check',
@@ -209,6 +226,7 @@ async function runParent() {
     platform: `${prefix}_platform`,
     people: `${prefix}_people`,
     locks: `${prefix}_locks`,
+    announcements: `${prefix}_announcements`,
   };
   const admin = new pg.Client(connectConfig(process.env.QA_ADMIN_DB || 'postgres'));
   await admin.connect();
@@ -264,7 +282,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -277,7 +295,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -486,6 +504,8 @@ async function sectionChain() {
   check('bos DB: people_v1 kaydi yazildi (aktarilacak veri yok)', done.rows.length === 1 && done.rows[0].code === 'people_v1');
   const counts = await pool.query(`SELECT (SELECT COUNT(*) FROM site_people)::int AS p, (SELECT COUNT(*) FROM apartment_residencies)::int AS r, (SELECT COUNT(*) FROM site_modules)::int AS m`);
   check('bos DB: ensureDbSchema veri yazmadi', counts.rows[0].p === 0 && counts.rows[0].r === 0 && counts.rows[0].m === 0);
+  const announcementCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM announcements)::int AS a, (SELECT COUNT(*) FROM announcement_recipients)::int AS r, (SELECT COUNT(*) FROM notification_preferences)::int AS p`);
+  check('bos DB: duyuru tablolari (032) var ve BOS', announcementCounts.rows[0].a === 0 && announcementCounts.rows[0].r === 0 && announcementCounts.rows[0].p === 0);
   await finishChild(pool);
 }
 
@@ -505,7 +525,7 @@ const PLATFORM_DDL_MARKER = '-- 029: PLATFORM MODUL SISTEMI';
  */
 function installPoolHooks(pool) {
   if (pool.qaHooks) return pool.qaHooks;
-  const state = { counting: false, count: 0, cutPlatformDdl: undefined, cutApplied: false };
+  const state = { counting: false, count: 0, deadlocks: 0, cutPlatformDdl: undefined, cutApplied: false };
   const decorate = (client) => {
     if (!client || client.qaDecorated) return;
     client.qaDecorated = true;
@@ -519,7 +539,14 @@ function installPoolHooks(pool) {
         if (cut < 0) throw new Error(`db.js DDL isaretcisi bulunamadi: ${state.cutPlatformDdl}`);
         return query(text.slice(0, cut));
       }
-      return query(text, ...rest);
+      const result = query(text, ...rest);
+      // 40P01 (deadlock) tespit sayaci: uygulama tek yeniden denemeyle gecse bile her tespit sayilir (kilit sirasi turlari bunu 0 bekler)
+      if (result && typeof result.then === 'function') {
+        result.then(undefined, (error) => {
+          if (error && error.code === '40P01') state.deadlocks += 1;
+        });
+      }
+      return result;
     };
   };
   const original = pool.connect.bind(pool);
@@ -565,6 +592,7 @@ async function sectionUpgrade() {
   const hasModules = (await q(`SELECT to_regclass('public.site_modules') AS t`)).rows[0].t !== null;
   check(`${scenario}: baslangic semasi beklenen asamada (site_modules ${scenario === 'live' ? 'VAR' : 'YOK'})`, hasModules === (scenario === 'live'));
   check(`${scenario}: baslangicta kisi tablolari YOK`, (await q(`SELECT to_regclass('public.site_people') AS t`)).rows[0].t === null);
+  check(`${scenario}: baslangicta duyuru tablolari (032) YOK`, (await q(`SELECT to_regclass('public.announcements') AS t`)).rows[0].t === null);
   const beforeDoors = hasModules ? Object.fromEntries(await Promise.all(Object.keys(EXPECTED_DOORS).map(async (u) => [u, await doorNamesFor(doorSvc, q, Number(u))]))) : null;
   const beforeDumps = await legacyDumps(q);
 
@@ -573,6 +601,9 @@ async function sectionUpgrade() {
   await ensureDbSchema();
   const afterSecond = await crmDump(q);
   check(`${scenario}: ensureDbSchema iki kez hatasiz`, true);
+  const announcementTables = await q(`SELECT to_regclass('public.announcements') AS a, to_regclass('public.announcement_recipients') AS r, to_regclass('public.notification_preferences') AS p`);
+  const announcementRows = (await q(`SELECT (SELECT COUNT(*) FROM announcements)::int + (SELECT COUNT(*) FROM announcement_recipients)::int + (SELECT COUNT(*) FROM notification_preferences)::int AS n`)).rows[0].n;
+  check(`${scenario}: 032 tablolari (announcements, announcement_recipients, notification_preferences) olustu ve BOS (eski veriye satir yazilmadi)`, announcementTables.rows[0].a !== null && announcementTables.rows[0].r !== null && announcementTables.rows[0].p !== null && announcementRows === 0);
 
   // --- people_v1 sonucu
   const backfill = await q(`SELECT code FROM platform_backfills`);
@@ -704,10 +735,11 @@ async function startHttp(pool) {
   const { moduleRequestRouter } = await import('../src/modules/module_request_routes.js');
   const { moduleRequestHooks } = await import('../src/modules/module_request_service.js');
   const { peopleRouter } = await import('../src/modules/people_routes.js');
+  const { announcementRouter } = await import('../src/modules/announcement_routes.js');
   const { appDoorsRouter } = await import('../src/routes/app_doors_routes.js');
   const { adminRouter } = await import('../src/routes/admin_routes.js');
   const keep = new Set([requireSiteManager, requireSuperUser]);
-  for (const router of [moduleRouter, moduleRequestRouter, peopleRouter, appDoorsRouter, adminRouter]) {
+  for (const router of [moduleRouter, moduleRequestRouter, peopleRouter, announcementRouter, appDoorsRouter, adminRouter]) {
     for (const layer of router.stack) {
       if (!layer.route) continue;
       const stack = layer.route.stack;
@@ -726,6 +758,7 @@ async function startHttp(pool) {
   app.use(moduleRouter);
   app.use(moduleRequestRouter);
   app.use(peopleRouter);
+  app.use(announcementRouter);
   app.use(appDoorsRouter);
   app.use(adminRouter);
   const server = await new Promise((resolve) => {
@@ -2315,6 +2348,1158 @@ async function sectionPeople() {
 }
 
 // --------------------------------------------------------------------------------------------------------------
+// CHILD bolum: announcements (Duyuru ve Bildirim, Faz 3a)
+// --------------------------------------------------------------------------------------------------------------
+
+async function sectionAnnouncements() {
+  await childEnv();
+  process.env.ANNOUNCEMENT_SCHEDULER_DISABLED = '1';
+  delete process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE;
+  const { pool } = await import('../src/db.js');
+  const q = (sql, params = []) => pool.query(sql, params);
+  const nodemailer = (await import('nodemailer')).default;
+  const { syncSitePeople } = await import('../src/modules/people_sync.js');
+  const peopleSvc = await import('../src/modules/people_service.js');
+  const membershipSvc = await import('../src/services/membership_service.js');
+  const annSvc = await import('../src/modules/announcement_service.js');
+  const recipientsMod = await import('../src/modules/announcement_recipients.js');
+  const queue = await import('../src/modules/announcement_email_queue.js');
+  const scheduler = await import('../src/modules/announcement_scheduler.js');
+  const lockMod = await import('../src/modules/announcement_lock.js');
+  const routes = await import('../src/modules/announcement_routes.js');
+  routes.announcementRouteHooks.kickEmailQueue = () => {}; // yayin sonrasi otomatik kuyruk tetigi kapali: kuyruk senaryolarda ACIKCA calistirilir
+  const hooks = installPoolHooks(pool);
+  const http = await startHttp(pool);
+  const { call } = http;
+  const superActor = await actorOf(pool, 10001);
+
+  // sahte SMTP tasiyicisi (gercek SMTP'ye ASLA baglanilmaz): gecikme / hata kipleri
+  const mailState = { delayMs: 0, failAll: false, failAfter: null, sent: 0 };
+  nodemailer.createTransport = () => ({
+    sendMail: async (message) => {
+      if (mailState.delayMs > 0) await sleep(mailState.delayMs);
+      if (mailState.failAll || (mailState.failAfter !== null && mailState.sent >= mailState.failAfter)) {
+        throw Object.assign(new Error('sahte SMTP hatasi'), { code: 'ECONNECTION' });
+      }
+      mailState.sent += 1;
+      mails.push(message);
+    },
+  });
+  const resetMail = () => {
+    mails.length = 0;
+    mailState.delayMs = 0;
+    mailState.failAll = false;
+    mailState.failAfter = null;
+    mailState.sent = 0;
+  };
+
+  const SUPER = 10001;
+  const MGR = 10002; // S4 yoneticisi (asagida site_manager_sites'a eklenir)
+  const OTHER_MGR = 10003; // S2 SITE_ADMIN (S4 icin baska site yoneticisi)
+  const S1_OWNER = 10004; // S1 SITE_OWNER (S4 icin baska site yoneticisi)
+  const S4 = 1000000004;
+  const S5 = 1000000005;
+  const S6 = 1000000006;
+  const P = (site) => `/manager/sites/${site}/announcements`;
+
+  let nextUser = 11000;
+  const mkUser = async (name, email, { internal = false, active = true } = {}) => {
+    const code = nextUser;
+    nextUser += 1;
+    await q(
+      `INSERT INTO users (user_code, full_name, email, role, password_hash, login_name, is_active, email_verified, approval_status)
+       VALUES ($1, $2, $3, 'apartment_owner', 'x', $4, $5, TRUE, 'approved')`,
+      [code, name, email, internal ? `dq${code}` : null, active],
+    );
+    return code;
+  };
+  async function makeSite(code, name, layout) {
+    await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, 'approved', NOW())`, [code, name]);
+    const blockIds = {};
+    const aptIds = {};
+    let blockOrder = 0;
+    for (const [blockName, units] of Object.entries(layout)) {
+      blockOrder += 1;
+      const block = Number((await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, $2, $3) RETURNING id`, [code, blockName, blockOrder])).rows[0].id);
+      blockIds[blockName[0]] = block;
+      let order = 0;
+      for (const unit of units) {
+        order += 1;
+        aptIds[`${blockName[0]}${unit}`] = Number(
+          (await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) VALUES ($1, $2, $3, $4) RETURNING id`, [code, block, `Daire ${unit}`, order])).rows[0].id,
+        );
+      }
+    }
+    return { blockIds, aptIds };
+  }
+  const addMembership = (apartmentId, userCode) => q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, $2, 'FAMILY_MEMBER')`, [apartmentId, userCode]);
+  const addPerson = async (site, { name = null, email = null, userCode = null, active = true } = {}) =>
+    Number((await q(`INSERT INTO site_people (site_code, user_code, full_name, email, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id`, [site, userCode, userCode ? null : name, email, active])).rows[0].id);
+  const addResidency = (site, apartmentId, personId, { current = true } = {}) =>
+    q(
+      `INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, move_out_date)
+       VALUES ($1, $2, $3, 'resident', $4, '2025-01-01', CASE WHEN $4 THEN NULL ELSE '2025-06-01'::date END)`,
+      [site, apartmentId, personId, current],
+    );
+  const personOfUser = async (site, userCode) => (await q(`SELECT * FROM site_people WHERE site_code = $1 AND user_code = $2`, [site, userCode])).rows[0];
+  const recipientsOf = async (id) => (await q(`SELECT * FROM announcement_recipients WHERE announcement_id = $1 ORDER BY person_id`, [id])).rows;
+  const rowOf = async (id) => (await q(`SELECT * FROM announcements WHERE id = $1`, [id])).rows[0];
+  const auditOf = async (id) => (await q(`SELECT action, actor_name, actor_role, actor_user_code, site_code, target_type, target_id, details FROM audit_log WHERE target_type = 'announcement' AND target_id = $1 ORDER BY id`, [String(id)])).rows;
+  const statusCounts = async (id) => Object.fromEntries((await q(`SELECT email_status, COUNT(*)::int AS n FROM announcement_recipients WHERE announcement_id = $1 GROUP BY email_status`, [id])).rows.map((r) => [r.email_status, r.n]));
+  const create = (site, user, body) => call('POST', P(site), user, { title: 'Baslik', body: 'Metin', target: { type: 'site' }, publish: 'draft', ...body });
+  const SECRET_TITLE = 'GizliBaslikQX7';
+  const SECRET_BODY = 'GizliMetinQX7';
+
+  // =============================================================================================================
+  // 0) TOHUM: S4 (ana test sitesi). Hesapli/hesapsiz/dahili hesapli/tercihi kapali/cok daireli/gecmis/pasif kisiler.
+  // =============================================================================================================
+  console.log('--- tohum ---');
+  const s4 = await makeSite(S4, 'Duyuru Sitesi', { 'A Blok': [1, 2, 3, 4, 5, 6, 7], 'B Blok': [1, 2, 3, 4, 5] });
+  const A = (n) => s4.aptIds[`A${n}`];
+  const B = (n) => s4.aptIds[`B${n}`];
+  await q(`UPDATE apartments SET is_active = FALSE WHERE id = $1`, [A(7)]);
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S4, MGR]);
+  const BOARD = await mkUser('Kurul Uyesi Duyuru', 'kurul.duyuru@example.com');
+  const STAFF = await mkUser('Gorevli Duyuru', 'gorevli.duyuru@example.com');
+  await q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, 'BOARD_MEMBER'), ($1, $3, 'STAFF')`, [S4, BOARD, STAFF]);
+  const U1 = await mkUser('Ayse Hesapli', 'u1@example.com');
+  const U3 = await mkUser('Can Iki Daireli', 'u3@example.com');
+  const U8 = await mkUser('Daire B3 Hesabi', 'daire_b3@ahbu.local', { internal: true });
+  const U8b = await mkUser('Daire A6 Hesabi', 'daire_a6@ahbu.local', { internal: true });
+  const U9 = await mkUser('Deniz Tercih Kapali', 'u9@example.com');
+  await addMembership(A(1), U1);
+  await addMembership(A(2), U3);
+  await addMembership(B(1), U3);
+  await addMembership(B(4), U9);
+  await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'iletisim8@example.com', resident_pin_code = '1111' WHERE id = $1`, [B(3), U8]);
+  await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'IletISIM8@example.com', resident_pin_code = '2222' WHERE id = $1`, [A(6), U8b]);
+  await syncSitePeople(S4);
+  const P2 = await addPerson(S4, { name: 'Pelin Hesapsiz', email: 'p2@example.com' });
+  await addResidency(S4, A(1), P2);
+  const P4 = await addPerson(S4, { name: 'Pakize Adressiz' });
+  await addResidency(S4, A(3), P4);
+  const P11 = await addPerson(S4, { name: 'Pinar Sahte Adres', email: 'sahte@ahbu.local' });
+  await addResidency(S4, A(3), P11);
+  const P5 = await addPerson(S4, { name: 'Pasa Eski Sakin', email: 'p5@example.com' });
+  await addResidency(S4, A(4), P5, { current: false });
+  const P6 = await addPerson(S4, { name: 'Pasif Kisi', email: 'p6@example.com', active: false });
+  await addResidency(S4, A(5), P6);
+  const P7 = await addPerson(S4, { name: 'Pervin B Blok', email: 'p7@example.com' });
+  await addResidency(S4, B(2), P7);
+  const P10 = await addPerson(S4, { name: 'Pasif Dairedeki Kisi', email: 'p10@example.com' });
+  await addResidency(S4, A(7), P10);
+  const pU1 = Number((await personOfUser(S4, U1)).id);
+  const pU3 = Number((await personOfUser(S4, U3)).id);
+  const pU8 = Number((await personOfUser(S4, U8)).id);
+  const pU8b = Number((await personOfUser(S4, U8b)).id);
+  const pU9 = Number((await personOfUser(S4, U9)).id);
+  const SITE_AUDIENCE = [pU1, P2, pU3, P4, P11, P7, pU8, pU8b, pU9].sort((a, b) => a - b);
+  check('tohum: S4 kisileri kuruldu (hesapli 5, hesapsiz 7; gercek bag kuralina gore esitlendi)', SITE_AUDIENCE.every((id) => Number.isInteger(id) && id > 0) && (await q(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1`, [S4])).rows[0].n === 12);
+  await q(`INSERT INTO notification_preferences (user_code, email_announcements) VALUES ($1, FALSE)`, [U9]);
+
+  // =============================================================================================================
+  // 1) SEMA: CHECK kisitlari ve indeksler gercekten calisiyor (migrate zinciri = ensureDbSchema eslesmesi parent'ta)
+  // =============================================================================================================
+  console.log('--- sema ---');
+  const badRows = [
+    [`INSERT INTO announcements (site_code, title, body, importance) VALUES (${S4}, 't', 'b', 'kritik')`, 'gecersiz importance'],
+    [`INSERT INTO announcements (site_code, title, body, status) VALUES (${S4}, 't', 'b', 'iptal')`, 'gecersiz status'],
+    [`INSERT INTO announcements (site_code, title, body, target_type) VALUES (${S4}, 't', 'b', 'herkes')`, 'gecersiz target_type'],
+    [`INSERT INTO announcements (site_code, title, body) VALUES (${S4}, '', 'b')`, 'bos baslik'],
+    [`INSERT INTO announcements (site_code, title, body) VALUES (${S4}, repeat('x', 121), 'b')`, '121 karakterlik baslik'],
+    [`INSERT INTO announcements (site_code, title, body) VALUES (${S4}, 't', '')`, 'bos metin'],
+    [`INSERT INTO announcements (site_code, title, body) VALUES (${S4}, 't', repeat('x', 5001))`, '5001 karakterlik metin'],
+    [`INSERT INTO announcements (site_code, title, body, status) VALUES (${S4}, 't', 'b', 'scheduled')`, 'publish_at bos zamanlanmis'],
+  ];
+  for (const [sql, label] of badRows) {
+    let code = null;
+    try {
+      await q(sql);
+    } catch (error) {
+      code = error.code;
+    }
+    check(`sema: ${label} 23514 ile reddedilir`, code === '23514', String(code));
+  }
+  const okRow = await q(`INSERT INTO announcements (site_code, title, body) VALUES ($1, repeat('x', 120), repeat('y', 5000)) RETURNING id, status, importance, target_type, target_block_ids, target_apartment_ids, send_email, edit_count, recipient_count`, [S4]);
+  const okDefaults = okRow.rows[0];
+  check('sema: 120/5000 karakter sinirda kabul; varsayilanlar draft/normal/site/{}/false/0/0', okDefaults.status === 'draft' && okDefaults.importance === 'normal' && okDefaults.target_type === 'site' && okDefaults.target_block_ids.length === 0 && okDefaults.target_apartment_ids.length === 0 && okDefaults.send_email === false && okDefaults.edit_count === 0 && okDefaults.recipient_count === 0, okDefaults);
+  await q(`DELETE FROM announcements WHERE id = $1`, [okDefaults.id]);
+  let badRecipient = null;
+  try {
+    const tmp = Number((await q(`INSERT INTO announcements (site_code, title, body) VALUES ($1, 't', 'b') RETURNING id`, [S4])).rows[0].id);
+    await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email_status) VALUES ($1, $2, 'yok')`, [tmp, pU1]);
+  } catch (error) {
+    badRecipient = error.code;
+  }
+  check('sema: gecersiz email_status 23514 ile reddedilir', badRecipient === '23514', String(badRecipient));
+  await q(`DELETE FROM announcements WHERE site_code = $1`, [S4]);
+  const indexes = (await q(`SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename IN ('announcements', 'announcement_recipients')`)).rows;
+  const hasIndex = (name, fragment) => indexes.some((i) => i.indexname === name && i.indexdef.includes(fragment));
+  check('sema: indeksler (site,status,published_at DESC,id DESC) / (publish_at WHERE scheduled) / (person_id,announcement_id DESC) / (announcement_id WHERE read_at IS NULL) / (email_status WHERE pending)',
+    hasIndex('idx_announcements_site_status', 'site_code, status, published_at DESC, id DESC') && hasIndex('idx_announcements_due', "WHERE (status = 'scheduled'::text)") &&
+      hasIndex('idx_announcement_recipients_person', 'person_id, announcement_id DESC') && hasIndex('idx_announcement_recipients_unread', 'WHERE (read_at IS NULL)') && hasIndex('idx_announcement_recipients_pending', "WHERE (email_status = 'pending'::text)"), indexes.map((i) => i.indexname));
+
+  // =============================================================================================================
+  // 2) YETKI VE IDOR MATRISI
+  // =============================================================================================================
+  console.log('--- yetki ve IDOR ---');
+  let res = await create(S4, MGR, { title: SECRET_TITLE, body: SECRET_BODY });
+  const draftId = res.body?.id;
+  check('yonetici taslak olusturur (201); durum draft, kitle 0, hedef etiketi "Tum site"', res.status === 201 && res.body.status === 'draft' && res.body.stats.recipients === 0 && res.body.target.labels[0] === 'Tüm site' && res.body.created_by_name === 'Yonetici A', res.body);
+  for (const [name, users] of [
+    ['yonetici', [MGR]],
+    ['super', [SUPER]],
+    ['kurul', [BOARD]],
+  ]) {
+    const list = await call('GET', P(S4), users[0]);
+    const detail = await call('GET', `${P(S4)}/${draftId}`, users[0]);
+    check(`okuma (${name}): liste ve ayrinti 200`, list.status === 200 && detail.status === 200 && list.body.total >= 1, [list.status, detail.status]);
+  }
+  for (const [name, user] of [['gorevli (STAFF)', STAFF], ['sakin', U1]]) {
+    const codes = [];
+    for (const [method, path, body] of [
+      ['GET', P(S4)],
+      ['GET', `${P(S4)}/${draftId}`],
+      ['GET', `${P(S4)}/${draftId}/recipients`],
+      ['POST', `${P(S4)}/preview-audience`, { target: { type: 'site' } }],
+      ['POST', P(S4), { title: 'x', body: 'y', target: { type: 'site' } }],
+      ['PATCH', `${P(S4)}/${draftId}`, { title: 'x' }],
+      ['POST', `${P(S4)}/${draftId}/publish`],
+      ['POST', `${P(S4)}/${draftId}/withdraw`],
+      ['DELETE', `${P(S4)}/${draftId}`],
+    ]) {
+      const r = await call(method, path, user, body);
+      codes.push(`${r.status}/${r.body?.code}`);
+    }
+    check(`${name}: BUTUN duyuru uclari 403 FORBIDDEN_ROLE`, codes.every((c) => c === '403/FORBIDDEN_ROLE'), codes);
+  }
+  for (const [name, user] of [['baska site yoneticisi (S2)', OTHER_MGR], ['baska site sahibi (S1)', S1_OWNER]]) {
+    const codes = [];
+    for (const [method, path, body] of [['GET', P(S4)], ['GET', `${P(S4)}/${draftId}`], ['POST', P(S4), { title: 'x', body: 'y', target: { type: 'site' } }], ['PATCH', `${P(S4)}/${draftId}`, { title: 'x' }], ['DELETE', `${P(S4)}/${draftId}`]]) {
+      const r = await call(method, path, user, body);
+      codes.push(`${r.status}/${r.body?.code}`);
+    }
+    check(`${name}: S4 duyuru uclari 403 FORBIDDEN_SITE`, codes.every((c) => c === '403/FORBIDDEN_SITE'), codes);
+  }
+  check('kimliksiz 401', (await call('GET', P(S4), null)).status === 401 && (await call('GET', '/app/announcements', null)).status === 401 && (await call('GET', '/app/notifications/summary', null)).status === 401);
+  const boardWrites = [];
+  for (const [method, path, body] of [['POST', P(S4), { title: 'x', body: 'y', target: { type: 'site' } }], ['PATCH', `${P(S4)}/${draftId}`, { title: 'x' }], ['POST', `${P(S4)}/${draftId}/publish`], ['POST', `${P(S4)}/${draftId}/withdraw`], ['DELETE', `${P(S4)}/${draftId}`], ['GET', `${P(S4)}/${draftId}/recipients`], ['POST', `${P(S4)}/preview-audience`, { target: { type: 'site' } }]]) {
+    const r = await call(method, path, BOARD, body);
+    boardWrites.push(`${r.status}/${r.body?.code}`);
+  }
+  check('kurul: yazma, alici listesi ve kitle onizlemesi 403 FORBIDDEN_ROLE (yalniz sayilari ve icerigi okur)', boardWrites.every((c) => c === '403/FORBIDDEN_ROLE'), boardWrites);
+  check('yetkisiz denemeler hicbir sey degistirmedi (taslak ayni, baska duyuru yok)', (await rowOf(draftId)).title === SECRET_TITLE && (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S4])).rows[0].n === 1);
+  check('super + olmayan site 404 SITE_NOT_FOUND; gecersiz kod 400', (await call('GET', '/manager/sites/1999999998/announcements', SUPER)).body?.code === 'SITE_NOT_FOUND' && (await call('GET', '/manager/sites/abc/announcements', SUPER)).status === 400);
+
+  // kurul yanitinda kullanici kodu / olusturan adi YOK; yoneticide olusturan adi VAR
+  const boardList = await call('GET', P(S4), BOARD);
+  const boardDetail = await call('GET', `${P(S4)}/${draftId}`, BOARD);
+  const boardJson = JSON.stringify([boardList.body, boardDetail.body]);
+  check('kurul yanitlari: created_by / user_code / actor_user_code anahtari YOK, created_by_name null, yonetici adi sizmaz', !/"(created_by|user_code|actor_user_code)"/.test(boardJson) && boardList.body.items[0].created_by_name === null && boardDetail.body.created_by_name === null && !boardJson.includes('Yonetici A'), boardJson.slice(0, 300));
+  check('kurul icerigi gorur: baslik, metin, hedef, istatistik', boardDetail.body.title === SECRET_TITLE && boardDetail.body.body === SECRET_BODY && boardDetail.body.stats.recipients === 0);
+  const managerList = await call('GET', P(S4), MGR);
+  check('yonetici yanitinda created_by_name var, ham created_by kullanici kodu anahtari yok', managerList.body.items[0].created_by_name === 'Yonetici A' && !/"created_by"/.test(JSON.stringify(managerList.body)));
+
+  // IDOR: baska sitenin kaydi 404 (her sorguda site_code)
+  const s2draft = await create(S2, OTHER_MGR, { title: 'S2 Gizli', body: 'S2 metni' });
+  const s2Id = s2draft.body?.id;
+  check('IDOR hazirlik: S2 yoneticisi kendi sitesinde taslak olusturdu', s2draft.status === 201 && Number.isInteger(s2Id), s2draft.body);
+  const idor = [];
+  for (const [method, path, body] of [
+    ['GET', `${P(S4)}/${s2Id}`],
+    ['GET', `${P(S4)}/${s2Id}/recipients`],
+    ['PATCH', `${P(S4)}/${s2Id}`, { title: 'ele gecirildi' }],
+    ['POST', `${P(S4)}/${s2Id}/publish`],
+    ['POST', `${P(S4)}/${s2Id}/withdraw`],
+    ['DELETE', `${P(S4)}/${s2Id}`],
+  ]) {
+    const r = await call(method, path, MGR, body);
+    idor.push(`${r.status}/${r.body?.code}`);
+  }
+  check('IDOR: S4 yoneticisi S2 duyurusuna (S4 yolundan) ulasamaz: GET/recipients/PATCH/publish/withdraw/DELETE hepsi 404 ANNOUNCEMENT_NOT_FOUND', idor.every((c) => c === '404/ANNOUNCEMENT_NOT_FOUND'), idor);
+  const s2after = await rowOf(s2Id);
+  check('IDOR: S2 duyurusu degismedi (taslak, ayni baslik)', s2after && s2after.status === 'draft' && s2after.title === 'S2 Gizli');
+  check('IDOR: S2 yoneticisi S4 yolundan kendi duyurusuna da ulasamaz (403 FORBIDDEN_SITE)', (await call('GET', `${P(S4)}/${s2Id}`, OTHER_MGR)).body?.code === 'FORBIDDEN_SITE');
+  const s2aptId = Number((await q(`SELECT id FROM apartments WHERE site_code = $1 ORDER BY id LIMIT 1`, [S2])).rows[0].id);
+  const s2blockId = Number((await q(`SELECT id FROM site_blocks WHERE site_code = $1 ORDER BY id LIMIT 1`, [S2])).rows[0].id);
+  res = await create(S4, MGR, { target: { type: 'apartments', apartment_ids: [A(1), s2aptId] } });
+  check('IDOR: baska sitenin dairesi hedefte -> 400 INVALID_TARGET (hicbir sey yazilmaz)', res.status === 400 && res.body.code === 'INVALID_TARGET');
+  res = await create(S4, MGR, { target: { type: 'blocks', block_ids: [s2blockId] } });
+  check('IDOR: baska sitenin blogu hedefte -> 400 INVALID_TARGET', res.status === 400 && res.body.code === 'INVALID_TARGET');
+  res = await call('POST', `${P(S4)}/preview-audience`, MGR, { target: { type: 'apartments', apartment_ids: [s2aptId] } });
+  check('IDOR: onizlemede baska sitenin dairesi 400 INVALID_TARGET (baska sitenin kisi sayisi sizmaz)', res.status === 400 && res.body.code === 'INVALID_TARGET' && !('people' in res.body));
+  res = await create(S4, MGR, { target: { type: 'apartments', apartment_ids: Array.from({ length: 501 }, (_, i) => i + 1) } });
+  check('hedef: 501 kimlik -> 400 INVALID_TARGET (en cok 500)', res.status === 400 && res.body.code === 'INVALID_TARGET');
+  res = await create(S4, MGR, { target: { type: 'blocks', block_ids: [] } });
+  check('hedef: bos blok listesi -> 400 INVALID_TARGET', res.status === 400 && res.body.code === 'INVALID_TARGET');
+  res = await create(S4, MGR, { target: { type: 'herkes' } });
+  check('hedef: bilinmeyen tur -> 400 INVALID_BODY', res.status === 400 && res.body.code === 'INVALID_BODY');
+  check('hedef reddi hicbir kayit yazmadi', (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S4])).rows[0].n === 1);
+
+  // =============================================================================================================
+  // 3) KITLE KURALLARI (onizleme): site / bloklar / daireler
+  // =============================================================================================================
+  console.log('--- kitle ---');
+  const previewOf = async (target, extra = {}) => (await call('POST', `${P(S4)}/preview-audience`, MGR, { target, ...extra }));
+  res = await previewOf({ type: 'site' });
+  check('onizleme (tum site): 9 kisi, 8 daire, 5 hesapli, 7 e-postali, 2 e-postasiz (gecmis/pasif kisi ve pasif daire disarida; @ahbu.local adres degil)',
+    res.status === 200 && same(res.body, { people: 9, apartments: 8, with_account: 5, with_email: 7, without_email: 2 }), res.body);
+  res = await previewOf({ type: 'blocks', block_ids: [s4.blockIds.A] });
+  check('onizleme (A Blok): 6 kisi', res.status === 200 && res.body.people === 6, res.body);
+  res = await previewOf({ type: 'blocks', block_ids: [s4.blockIds.B] });
+  check('onizleme (B Blok): 4 kisi', res.status === 200 && res.body.people === 4, res.body);
+  res = await previewOf({ type: 'blocks', block_ids: [s4.blockIds.A, s4.blockIds.B] });
+  check('onizleme (iki blok): 9 kisi (iki blokta dairesi olan kisi TEK sayilir)', res.status === 200 && res.body.people === 9, res.body);
+  res = await previewOf({ type: 'apartments', apartment_ids: [A(1), B(1)] });
+  check('onizleme (A1 + B1): 3 kisi (A1: hesapli + hesapsiz, B1: iki daireli kisi)', res.status === 200 && res.body.people === 3 && res.body.apartments === 2, res.body);
+  res = await previewOf({ type: 'apartments', apartment_ids: [A(2), B(1)] });
+  check('onizleme (iki dairesi de secili kisi): TEK kisi', res.status === 200 && res.body.people === 1 && res.body.apartments === 2, res.body);
+  res = await previewOf({ type: 'apartments', apartment_ids: [A(4), A(5), A(7), B(5)] });
+  check('onizleme (gecmis iliski, pasif kisi, pasif daire, bos daire): 0 kisi', res.status === 200 && res.body.people === 0 && res.body.apartments === 0, res.body);
+  res = await previewOf({ type: 'site' }, { send_email: 'evet' });
+  check('onizleme: send_email boolean degilse 400 INVALID_BODY (Turkce etiket, alan adi yok)', res.status === 400 && res.body.code === 'INVALID_BODY' && !/send_email/.test(res.body.error), res.body);
+
+  // =============================================================================================================
+  // 4) OLUSTURMA / DOGRULAMA / ZAMANLAMA
+  // =============================================================================================================
+  console.log('--- olusturma ve dogrulama ---');
+  const invalidBodies = [
+    [{ title: '' }, 'bos baslik'],
+    [{ title: 'x'.repeat(121) }, '121 karakterlik baslik'],
+    [{ body: '   ' }, 'bos metin'],
+    [{ body: 'x'.repeat(5001) }, '5001 karakterlik metin'],
+    [{ importance: 'kritik' }, 'gecersiz onem'],
+    [{ send_email: 'evet' }, 'gecersiz e-posta secenegi'],
+    [{ publish: 'yarin' }, 'gecersiz yayin turu'],
+    [{ title: 5 }, 'baslik sayi'],
+  ];
+  for (const [body, label] of invalidBodies) {
+    res = await create(S4, MGR, body);
+    check(`dogrulama: ${label} -> 400 INVALID_BODY; mesaj Turkce etiketli (snake_case alan adi yok)`, res.status === 400 && res.body.code === 'INVALID_BODY' && !/title|body|importance|send_email|publish|target|block_ids|_/.test(res.body.error), res.body);
+  }
+  res = await create(S4, MGR, { title: `  ${'x'.repeat(120)}  `, body: `${'y'.repeat(5000)}\r\n\r\n`, importance: 'urgent', send_email: true });
+  check('sinir degerler: 120 karakter baslik / 5000 karakter metin kirpilarak kabul; acil + e-posta', res.status === 201 && res.body.title.length === 120 && res.body.body.length === 5000 && res.body.importance === 'urgent' && res.body.send_email === true, [res.status, res.body?.code]);
+  const boundaryId = res.body?.id;
+  res = await create(S4, MGR, { title: 'Baslik\r\nBcc: x@y.com\t gizli', body: 'Satir 1\r\nSatir 2<script>alert(1)</script>' + String.fromCharCode(7) + String.fromCodePoint(0x202e) });
+  check('baslik tek satira indirilir (CRLF/sekme), metin LF\'ye cevrilir, kontrol/yon karakterleri atilir; HTML duz metin olarak saklanir',
+    res.status === 201 && res.body.title === 'Baslik Bcc: x@y.com gizli' && res.body.body === 'Satir 1\nSatir 2<script>alert(1)</script>', [res.body?.title, res.body?.body]);
+
+  const inMs = (ms) => new Date(Date.now() + ms).toISOString();
+  const scheduleCases = [
+    [new Date(Date.now() - 60_000).toISOString(), 'gecmis zaman'],
+    [inMs(30_000), '30 sn sonrasi (< 1 dk)'],
+    [new Date(Date.now() + 366 * 24 * 3600_000).toISOString(), '1 yildan sonra'],
+    ['yarin 10:00', 'ISO degil'],
+    ['2026-02-30T10:00:00+03:00', 'olmayan tarih'],
+    [12345, 'sayi'],
+  ];
+  for (const [value, label] of scheduleCases) {
+    res = await create(S4, MGR, { publish: 'schedule', publish_at: value });
+    check(`zamanlama: ${label} -> 400 INVALID_SCHEDULE`, res.status === 400 && res.body.code === 'INVALID_SCHEDULE', res.body);
+  }
+  res = await create(S4, MGR, { publish: 'schedule' });
+  check('zamanlama: publish_at yok -> 400 INVALID_SCHEDULE', res.status === 400 && res.body.code === 'INVALID_SCHEDULE');
+  res = await create(S4, MGR, { publish: 'schedule', publish_at: inMs(2 * 60_000) });
+  check('zamanlama: 2 dk sonrasi kabul (201 scheduled, publish_at dolu, kitle henuz 0)', res.status === 201 && res.body.status === 'scheduled' && res.body.publish_at !== null && res.body.stats.recipients === 0, res.body);
+  const scheduledId = res.body.id;
+  res = await create(S4, MGR, { publish: 'schedule', publish_at: '2027-03-01T10:00:00' });
+  check('zamanlama: saat dilimi yoksa Turkiye saati (+03:00) sayilir', res.status === 201 && res.body.publish_at === '2027-03-01T07:00:00.000Z', res.body);
+  const tzScheduledId = res.body.id;
+
+  // NO_RECIPIENTS: kitle 0 ise 'now' reddedilir ve YAZMA KALMAZ
+  const countBefore = (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S4])).rows[0].n;
+  res = await create(S4, MGR, { publish: 'now', target: { type: 'apartments', apartment_ids: [B(5)] } });
+  check('yayin (now): kitle 0 -> 409 NO_RECIPIENTS; duyuru da alici da KALMAZ (transaction geri alindi)', res.status === 409 && res.body.code === 'NO_RECIPIENTS' && (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S4])).rows[0].n === countBefore, res.body);
+
+  // yayin: tum site
+  mails.length = 0;
+  res = await create(S4, MGR, { title: 'Su kesintisi', body: 'Yarin 10:00-14:00 arasi su yok.', publish: 'now' });
+  const mainId = res.body?.id;
+  check('yayin (now): 201 published, kitle 9 kisi, published_at dolu, okunmamis 9, e-posta istenmedi (hepsi none)',
+    res.status === 201 && res.body.status === 'published' && res.body.recipient_count === 9 && res.body.published_at !== null && res.body.stats.recipients === 9 && res.body.stats.unread === 9 && res.body.stats.email.requested === 0, res.body);
+  const mainRecipients = await recipientsOf(mainId);
+  check('alici anlik goruntusu: kisi basina TEK satir, kitle kurallarina uygun (hesapsizlar dahil; gecmis/pasif/pasif daire/iki daireli kisi tek)',
+    same(mainRecipients.map((r) => Number(r.person_id)), SITE_AUDIENCE) && mainRecipients.every((r) => r.email === null && r.email_status === 'none' && r.read_at === null && r.email_attempts === 0), mainRecipients.map((r) => r.person_id));
+  check('yayin audit: announcement.created + announcement.published (target_type announcement, site_code, target_id dolu); e-posta gonderilmedi', (await auditOf(mainId)).map((a) => a.action).join() === 'announcement.created,announcement.published' && (await auditOf(mainId)).every((a) => a.site_code !== null && a.target_type === 'announcement') && mails.length === 0);
+
+  // blok ve daire hedefleri yayin
+  res = await create(S4, MGR, { publish: 'now', target: { type: 'blocks', block_ids: [s4.blockIds.B] } });
+  check('yayin (B Blok): 4 kisi; hedef etiketi blok adi, block_ids dolu', res.status === 201 && res.body.recipient_count === 4 && same(res.body.target.labels, ['B Blok']) && same(res.body.target.block_ids, [s4.blockIds.B]), res.body);
+  res = await create(S4, MGR, { publish: 'now', target: { type: 'apartments', apartment_ids: [B(1), A(2), A(2)] } });
+  check('yayin (A2 + B1 + tekrarli kimlik): 1 kisi (iki daireli kisi TEK satir), tekrarlar tekillestirilir, etiketler blok-daire', res.status === 201 && res.body.recipient_count === 1 && res.body.target.apartment_ids.length === 2 && same(res.body.target.labels, ['A Blok - Daire 2', 'B Blok - Daire 1']), res.body);
+  const multiAnnId = res.body.id;
+
+  // yayin oncesi esitleme + anlik goruntu (ayri site: S4 kitlesi sabit kalir)
+  const S7 = 1000000007;
+  const s7 = await makeSite(S7, 'Esitleme Sitesi', { 'C Blok': [1, 2] });
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S7, MGR]);
+  const freshUser = await mkUser('Yeni Onayli Uye', 'yeni.onayli@example.com');
+  await addMembership(s7.aptIds.C1, freshUser);
+  check('on kosul: yeni onayli uye henuz CRM kisisi degil', (await personOfUser(S7, freshUser)) === undefined);
+  res = await create(S7, MGR, { publish: 'now' });
+  check('yayindan HEMEN once kisi esitlemesi (ayni islemde): yeni onaylanan uye kitleye girer (1 kisi), CRM kisisi olustu', res.status === 201 && res.body.recipient_count === 1 && (await personOfUser(S7, freshUser)) !== undefined, res.body);
+  const s7AnnId = res.body.id;
+  const lateUser = await mkUser('Sonradan Gelen', 'sonradan@example.com');
+  await addMembership(s7.aptIds.C2, lateUser);
+  await syncSitePeople(S7);
+  const freshPerson = Number((await personOfUser(S7, freshUser)).id);
+  await q(`UPDATE apartment_residencies SET is_current = FALSE, move_out_date = CURRENT_DATE WHERE person_id = $1`, [freshPerson]);
+  const s7Rows = await recipientsOf(s7AnnId);
+  check('anlik goruntu: sonradan gelen kisi EKLENMEZ, sonradan tasinan kisi CIKARILMAZ (alici kumesi yayin anindaki gibi)', s7Rows.length === 1 && Number(s7Rows[0].person_id) === freshPerson, s7Rows);
+
+  // =============================================================================================================
+  // 5) YAYIN YARISLARI: cift tik, zamanlayici x elle yayin (veri CIFTLENMEZ)
+  // =============================================================================================================
+  console.log('--- yayin yarislari ---');
+  res = await create(S4, MGR, { title: 'Yaris 1', body: 'cift tik' });
+  const raceId = res.body.id;
+  const doubles = await Promise.all([1, 2, 3, 4, 5, 6].map(() => call('POST', `${P(S4)}/${raceId}/publish`, MGR)));
+  check('cift tik: ES ZAMANLI 6 publish -> tam 1x200, 5x409 INVALID_STATE', doubles.filter((r) => r.status === 200).length === 1 && doubles.filter((r) => r.status === 409 && r.body.code === 'INVALID_STATE').length === 5, doubles.map((r) => [r.status, r.body?.code]));
+  const raceRecipients = await recipientsOf(raceId);
+  check('cift tik: alici satiri CIFTLENMEDI (9), recipient_count 9, tek announcement.published audit', raceRecipients.length === 9 && (await rowOf(raceId)).recipient_count === 9 && (await auditOf(raceId)).filter((a) => a.action === 'announcement.published').length === 1);
+  res = await call('POST', `${P(S4)}/${raceId}/publish`, MGR);
+  check('yayinlanmis duyuruyu tekrar yayinla -> 409 INVALID_STATE', res.status === 409 && res.body.code === 'INVALID_STATE');
+
+  const ROUNDS = Number(process.env.QA_ANNOUNCEMENT_ROUNDS || 12);
+  let raceBad = 0;
+  const raceLog = [];
+  for (let i = 0; i < ROUNDS; i += 1) {
+    const made = await create(S4, MGR, { title: `Zamanlayici yarisi ${i}`, body: 'x', publish: 'schedule', publish_at: inMs(5 * 60_000) });
+    const id = made.body.id;
+    await q(`UPDATE announcements SET publish_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [id]); // zamani gelmis (API gecmise zamanlamaya izin vermez)
+    const delays = [0, 1, 2].map(() => Math.floor(Math.random() * 5));
+    const settled = await Promise.allSettled([
+      (async () => { await sleep(delays[0]); return scheduler.runSchedulerTick(); })(),
+      (async () => { await sleep(delays[1]); return call('POST', `${P(S4)}/${id}/publish`, MGR); })(),
+      (async () => { await sleep(delays[2]); return call('POST', `${P(S4)}/${id}/publish`, MGR); })(),
+    ]);
+    const manual = settled.slice(1).map((s) => (s.status === 'fulfilled' ? s.value.status : 0));
+    const rows = await recipientsOf(id);
+    const published = (await auditOf(id)).filter((a) => a.action === 'announcement.published');
+    const tickPublished = settled[0].status === 'fulfilled' ? settled[0].value.published : 0;
+    // tam 1 yayin: ya zamanlayici (tick'te baska due kayit olabilir; bu duyurunun audit'i belirleyici) ya elle
+    const ok = rows.length === 9 && published.length === 1 && (await rowOf(id)).recipient_count === 9 && (await rowOf(id)).status === 'published' && manual.every((s) => s === 200 || s === 409) && manual.filter((s) => s === 200).length <= 1 && tickPublished >= 0;
+    if (!ok) {
+      raceBad += 1;
+      raceLog.push({ id, rows: rows.length, published: published.length, manual, settled: settled.map((s) => s.status) });
+    }
+  }
+  check(`zamanlayici x elle yayin x elle yayin: ${ROUNDS} tur eszamanli; her duyuru TAM BIR KEZ yayinlandi (9 alici, tek audit), cift satir/500 YOK`, raceBad === 0, raceLog.slice(0, 3));
+
+  // =============================================================================================================
+  // 6) YASAM DONGUSU VE DUZENLEME KURALLARI
+  // =============================================================================================================
+  console.log('--- yasam dongusu ---');
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, { title: 'Yeni baslik', body: 'Yeni metin', importance: 'urgent', send_email: true, target: { type: 'blocks', block_ids: [s4.blockIds.A] } });
+  check('taslak: tum alanlar duzenlenir (baslik, metin, onem, e-posta, hedef)', res.status === 200 && res.body.title === 'Yeni baslik' && res.body.importance === 'urgent' && res.body.send_email === true && res.body.target.type === 'blocks' && same(res.body.target.labels, ['A Blok']), res.body);
+  let audit = await auditOf(draftId);
+  const updatedAudit = audit.find((a) => a.action === 'announcement.updated');
+  check('audit announcement.updated: details yalniz alan adlari (baslik/metin DEGIL)', updatedAudit && same(updatedAudit.details.fields.sort(), ['body', 'importance', 'send_email', 'target', 'title'].sort()) && !JSON.stringify(updatedAudit.details).includes('Yeni baslik') && !JSON.stringify(updatedAudit.details).includes(SECRET_BODY), updatedAudit?.details);
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, { title: 'Yeni baslik' });
+  check('degisiklik yoksa audit yazilmaz (idempotent PATCH)', res.status === 200 && (await auditOf(draftId)).filter((a) => a.action === 'announcement.updated').length === 1);
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, {});
+  check('bos PATCH -> 400 INVALID_BODY', res.status === 400 && res.body.code === 'INVALID_BODY');
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, { publish_at: inMs(10 * 60_000) });
+  check('taslak + publish_at -> scheduled (announcement.scheduled audit)', res.status === 200 && res.body.status === 'scheduled' && res.body.publish_at !== null && (await auditOf(draftId)).some((a) => a.action === 'announcement.scheduled'), res.body);
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, { publish_at: null });
+  check('publish_at:null zamanlamayi kaldirir -> status draft\'a doner, publish_at NULL', res.status === 200 && res.body.status === 'draft' && res.body.publish_at === null && (await rowOf(draftId)).publish_at === null, res.body);
+  res = await call('PATCH', `${P(S4)}/${draftId}`, MGR, { publish_at: inMs(10_000) });
+  check('PATCH ile gecersiz zamanlama 400 INVALID_SCHEDULE', res.status === 400 && res.body.code === 'INVALID_SCHEDULE');
+  res = await call('PATCH', `${P(S4)}/${scheduledId}`, MGR, { publish: 'draft' });
+  check('publish:draft zamanlanmis kaydi taslaga cevirir', res.status === 200 && res.body.status === 'draft' && res.body.publish_at === null);
+  res = await call('PATCH', `${P(S4)}/${scheduledId}`, MGR, { publish: 'schedule' });
+  check('zaman yokken publish:schedule -> 400 INVALID_SCHEDULE', res.status === 400 && res.body.code === 'INVALID_SCHEDULE');
+  res = await call('PATCH', `${P(S4)}/${scheduledId}`, MGR, { publish: 'schedule', publish_at: inMs(3 * 60_000) });
+  check('publish:schedule + zaman -> yeniden zamanlanir', res.status === 200 && res.body.status === 'scheduled');
+
+  // yayinlanmis: yalniz baslik/metin; "duzenlendi" notu
+  res = await call('PATCH', `${P(S4)}/${mainId}`, MGR, { importance: 'urgent' });
+  check('yayinlanmis: onem degistirilemez -> 409 INVALID_STATE', res.status === 409 && res.body.code === 'INVALID_STATE');
+  res = await call('PATCH', `${P(S4)}/${mainId}`, MGR, { title: 'Su kesintisi (guncel)', target: { type: 'site' } });
+  check('yayinlanmis: baslik ile birlikte hedef gonderilirse 409 INVALID_STATE ve HICBIR alan degismez', res.status === 409 && (await rowOf(mainId)).title === 'Su kesintisi' && (await rowOf(mainId)).edit_count === 0);
+  mails.length = 0;
+  const recipientsBeforeEdit = JSON.stringify(await recipientsOf(mainId));
+  res = await call('PATCH', `${P(S4)}/${mainId}`, MGR, { title: 'Su kesintisi (guncel)', body: 'Yarin 09:00-13:00 arasi su yok.' });
+  check('yayinlanmis: baslik+metin duzenlenir; edited_at dolu, edit_count 1; kitle/okundu/e-posta DEGISMEZ (yeniden bildirim yok)',
+    res.status === 200 && res.body.title === 'Su kesintisi (guncel)' && res.body.edited_at !== null && res.body.stats.recipients === 9 && JSON.stringify(await recipientsOf(mainId)) === recipientsBeforeEdit && mails.length === 0 && (await rowOf(mainId)).edit_count === 1, res.body);
+  res = await call('PATCH', `${P(S4)}/${mainId}`, MGR, { body: 'Yarin 09:00-12:00 arasi su yok.' });
+  check('ikinci duzenleme edit_count 2; ayni degeri gondermek sayaci artirmaz', res.status === 200 && (await rowOf(mainId)).edit_count === 2 && (await call('PATCH', `${P(S4)}/${mainId}`, MGR, { body: 'Yarin 09:00-12:00 arasi su yok.' })).status === 200 && (await rowOf(mainId)).edit_count === 2);
+  check('duzenleme audit: details alan adlari + sayac, metin yok', (await auditOf(mainId)).filter((a) => a.action === 'announcement.updated').every((a) => Array.isArray(a.details.fields) && !JSON.stringify(a.details).includes('09:00')));
+
+  // geri cek
+  res = await call('POST', `${P(S4)}/${draftId}/withdraw`, MGR);
+  check('taslak geri cekilemez -> 409 INVALID_STATE', res.status === 409 && res.body.code === 'INVALID_STATE');
+  res = await call('POST', `${P(S4)}/${multiAnnId}/withdraw`, MGR);
+  check('geri cekme: published -> withdrawn (200), withdrawn durumu yonetici listesinde kalir', res.status === 200 && res.body.status === 'withdrawn' && (await call('GET', `${P(S4)}?status=withdrawn`, MGR)).body.items.some((i) => i.id === multiAnnId));
+  res = await call('POST', `${P(S4)}/${multiAnnId}/withdraw`, MGR);
+  check('ikinci geri cekme 409 INVALID_STATE (geri alinamaz)', res.status === 409 && res.body.code === 'INVALID_STATE');
+  res = await call('PATCH', `${P(S4)}/${multiAnnId}`, MGR, { title: 'x' });
+  check('geri cekilen duzenlenemez -> 409', res.status === 409 && res.body.code === 'INVALID_STATE');
+  res = await call('POST', `${P(S4)}/${multiAnnId}/publish`, MGR);
+  check('geri cekilen yeniden yayinlanamaz -> 409', res.status === 409 && res.body.code === 'INVALID_STATE');
+  check('withdrawn audit: announcement.withdrawn (sayilar)', (await auditOf(multiAnnId)).some((a) => a.action === 'announcement.withdrawn' && a.details.recipient_count === 1));
+
+  // sil
+  res = await call('DELETE', `${P(S4)}/${mainId}`, MGR);
+  check('yayinlanmis duyuru silinemez -> 409 INVALID_STATE', res.status === 409 && res.body.code === 'INVALID_STATE' && (await rowOf(mainId)) !== undefined);
+  res = await call('DELETE', `${P(S4)}/${multiAnnId}`, MGR);
+  check('geri cekilmis duyuru da silinemez -> 409', res.status === 409);
+  res = await call('DELETE', `${P(S4)}/${scheduledId}`, MGR);
+  check('zamanlanmis duyuru silinir ({ ok: true }), kayit kalmaz', res.status === 200 && res.body.ok === true && (await rowOf(scheduledId)) === undefined);
+  res = await call('DELETE', `${P(S4)}/${tzScheduledId}`, MGR);
+  const deleteAudit = (await q(`SELECT details FROM audit_log WHERE action = 'announcement.deleted' AND target_id = $1`, [String(scheduledId)])).rows[0];
+  check('silme audit: announcement.deleted (yalniz durum); ikinci silme 404', deleteAudit?.details?.status === 'scheduled' && res.status === 200 && (await call('DELETE', `${P(S4)}/${scheduledId}`, MGR)).status === 404);
+
+  // liste: siralama, suzgec, arama, sayfalama
+  console.log('--- liste ---');
+  res = await call('GET', `${P(S4)}?limit=100`, MGR);
+  const statuses = res.body.items.map((i) => (i.status === 'draft' || i.status === 'scheduled' ? 'A' : 'B'));
+  check('liste: taslak/zamanlanmis uste, sonra yayinlananlar (published_at DESC)', res.status === 200 && statuses.join('').replace(/A+/, '').indexOf('A') < 0, statuses.join(''));
+  const publishedOrder = res.body.items.filter((i) => i.published_at !== null).map((i) => Date.parse(i.published_at));
+  check('liste: yayinlananlar published_at azalan sirada', publishedOrder.every((t, index) => index === 0 || publishedOrder[index - 1] >= t));
+  const item = res.body.items.find((i) => i.id === mainId);
+  check('AnnouncementSummary alanlari (id, title, body_preview, importance, status, target_type, publish_at, published_at, edited_at, send_email, recipient_count, read_count, created_at, created_by_name)',
+    same(Object.keys(item).sort(), ['body_preview', 'created_at', 'created_by_name', 'edited_at', 'id', 'importance', 'published_at', 'publish_at', 'read_count', 'recipient_count', 'send_email', 'status', 'target_type', 'title'].sort()), Object.keys(item));
+  res = await call('GET', `${P(S4)}?status=published&limit=2&offset=0`, MGR);
+  const page2 = await call('GET', `${P(S4)}?status=published&limit=2&offset=2`, MGR);
+  check('suzgec + sayfalama: status=published, limit/offset; total sabit; sayfalar ayri', res.body.items.length === 2 && page2.body.items.length >= 1 && res.body.total === page2.body.total && !page2.body.items.some((i) => res.body.items.some((j) => j.id === i.id)) && res.body.items.every((i) => i.status === 'published'));
+  res = await call('GET', `${P(S4)}?q=${encodeURIComponent('SU KESİNTİSİ')}`, MGR);
+  check('arama: Turkce karakter / buyuk-kucuk harf duyarsiz (baslik)', res.body.items.some((i) => i.id === mainId));
+  res = await call('GET', `${P(S4)}?status=zz`, MGR);
+  check('gecersiz status suzgeci 400', res.status === 400);
+  const longBody = await call('GET', `${P(S4)}/${boundaryId}`, MGR);
+  const listed = (await call('GET', `${P(S4)}?q=${'x'.repeat(10)}`, MGR)).body.items.find((i) => i.id === boundaryId);
+  check('body_preview en fazla 160 karakter (tam metin yalniz ayrintida)', listed.body_preview.length <= 160 && longBody.body.body.length === 5000);
+
+  // =============================================================================================================
+  // 7) SAKIN: GELEN KUTUSU, OKUNDU, OZET, TERCIHLER (ayri siteler: S8 + S9; kullanici iki sitede)
+  // =============================================================================================================
+  console.log('--- sakin ---');
+  const S8 = 1000000008;
+  const S9 = 1000000009;
+  const s8 = await makeSite(S8, 'Gelen Kutusu Sitesi', { 'D Blok': [1, 2, 3] });
+  const s9 = await makeSite(S9, 'Ikinci Site', { 'E Blok': [1] });
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $3), ($2, $3)`, [S8, S9, MGR]);
+  const R1 = await mkUser('Sakin Bir', 'sakin1@example.com');
+  const R2 = await mkUser('Sakin Iki', 'sakin2@example.com');
+  const R3 = await mkUser('Sakin Uc', 'sakin3@example.com');
+  const R4 = await mkUser('Sonradan Sakin', 'sakin4@example.com');
+  await addMembership(s8.aptIds.D1, R1);
+  await addMembership(s8.aptIds.D2, R2);
+  await addMembership(s8.aptIds.D3, R3);
+  await addMembership(s9.aptIds.E1, R1);
+  await syncSitePeople(S8);
+  await syncSitePeople(S9);
+  const H1 = await addPerson(S8, { name: 'Hesapsiz Hatice', email: 'h1@example.com' });
+  await addResidency(S8, s8.aptIds.D1, H1);
+
+  const a1 = (await create(S8, MGR, { title: 'Acil toplanti', body: 'Bugun 20:00 toplanti.', importance: 'urgent', publish: 'now' })).body;
+  const a3Draft = (await create(S8, MGR, { title: 'Zamanli duyuru', body: 'Sonradan yayinlanir.', publish: 'schedule', publish_at: inMs(10 * 60_000) })).body;
+  const a2 = (await create(S8, MGR, { title: 'Asansor bakimi', body: 'Pazartesi asansor bakimda.', target: { type: 'blocks', block_ids: [s8.blockIds.D] }, publish: 'now' })).body;
+  check('inbox hazirlik: A1 (acil, 4 kisi: 3 hesapli + 1 hesapsiz), A2 (blok, 4 kisi), A3 zamanlanmis (id A1 ile A2 arasinda)', a1.recipient_count === 4 && a2.recipient_count === 4 && a3Draft.status === 'scheduled' && a1.id < a3Draft.id && a3Draft.id < a2.id, [a1.recipient_count, a2.recipient_count, a1.id, a3Draft.id, a2.id]);
+  await sleep(20);
+  await q(`UPDATE announcements SET publish_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [a3Draft.id]);
+  const tick = await scheduler.runSchedulerTick();
+  const a3 = await rowOf(a3Draft.id);
+  check('zamanlayici: zamani gelen duyuru yayinlandi (kitle 4), yayinlayan Sistem (audit actor_name Sistem, scheduled:true)', tick.published >= 1 && a3.status === 'published' && a3.recipient_count === 4 && (await auditOf(a3Draft.id)).some((a) => a.action === 'announcement.published' && a.actor_name === 'Sistem' && a.actor_role === 'system' && a.details.scheduled === true && a.actor_user_code === null), tick);
+  const b1 = (await create(S9, MGR, { title: 'Ikinci site duyurusu', body: 'S9 metni.', publish: 'now' })).body;
+
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients`, MGR);
+  const hesapsizHatice = res.body.items.find((i) => i.full_name === 'Hesapsiz Hatice');
+  check('alicilar: hesapsiz kisi listede (has_account false, daire etiketi)', hesapsizHatice && hesapsizHatice.has_account === false && same(hesapsizHatice.apartments, ['D Blok - Daire 1']) && hesapsizHatice.read_at === null, res.body.items);
+  res = await call('GET', '/app/announcements?limit=2', R1);
+  check('gelen kutusu sirasi: published_at DESC, id DESC (zamanlanmis ama SONRADAN yayinlanan, kucuk kimlikli duyuru B1\'den hemen sonra); alanlar; okunmamis',
+    res.status === 200 && res.body.items.length === 2 && res.body.items[0].id === b1.id && res.body.items[1].id === a3Draft.id && res.body.items[1].is_read === false && Number.isInteger(res.body.next_before_id) && res.body.next_before_id === a3Draft.id, res.body.items.map((i) => i.id));
+  const firstItem = res.body.items[1];
+  check('gelen kutusu satiri: { id, site_code, site_name, title, body_preview, importance, published_at, edited_at, is_read }',
+    same(Object.keys(firstItem).sort(), ['body_preview', 'edited_at', 'id', 'importance', 'is_read', 'published_at', 'site_code', 'site_name', 'title'].sort()) && firstItem.site_name === 'Gelen Kutusu Sitesi', Object.keys(firstItem));
+  const everything = [];
+  let cursor = null;
+  for (let pageNo = 0; pageNo < 10; pageNo += 1) {
+    const page = await call('GET', `/app/announcements?limit=1${cursor === null ? '' : `&before_id=${cursor}`}`, R1);
+    everything.push(...page.body.items.map((i) => i.id));
+    cursor = page.body.next_before_id;
+    if (cursor === null) break;
+  }
+  check('sayfa imleci (before_id): 4 duyuru (S8: A3, A2, A1 + S9: B1) kopya/atlama olmadan, yayin sirasiyla dolasilir', same(everything, [b1.id, a3Draft.id, a2.id, a1.id]), everything);
+  res = await call('GET', `/app/announcements?site_code=${S8}`, R1);
+  check('site_code suzgeci: yalniz o sitenin duyurulari', res.body.items.length === 3 && res.body.items.every((i) => i.site_code === S8) && res.body.next_before_id === null);
+  res = await call('GET', '/app/announcements?before_id=abc', R1);
+  check('gecersiz before_id 400', res.status === 400);
+
+  res = await call('GET', `/app/announcements/${a1.id}`, R1);
+  check('ayrinti: tam metin, edited_at null, OKUNDU YAZMAZ', res.status === 200 && res.body.body === 'Bugun 20:00 toplanti.' && res.body.is_read === false && res.body.edited_at === null && (await recipientsOf(a1.id)).every((r) => r.read_at === null));
+  res = await call('GET', '/app/notifications/summary', R1);
+  check('ozet: 4 okunmamis, 1 acil, en son yayin (B1), server_time dolu', res.status === 200 && res.body.unread_announcements === 4 && res.body.unread_urgent === 1 && res.body.latest_announcement_id === b1.id && typeof res.body.server_time === 'string' && typeof res.body.latest_published_at === 'string', res.body);
+  const readFirst = await call('POST', `/app/announcements/${a1.id}/read`, R1);
+  const readSecond = await call('POST', `/app/announcements/${a1.id}/read`, R1);
+  check('okundu: { ok, read_at }; idempotent (ikinci cagri ILK okuma zamanini korur)', readFirst.status === 200 && readFirst.body.ok === true && typeof readFirst.body.read_at === 'string' && readSecond.body.read_at === readFirst.body.read_at, [readFirst.body, readSecond.body]);
+  res = await call('GET', '/app/notifications/summary', R1);
+  check('ozet: okununca okunmamis 3, acil 0', res.body.unread_announcements === 3 && res.body.unread_urgent === 0, res.body);
+  res = await call('GET', `/app/announcements/${a1.id}`, R1);
+  check('ayrinti: is_read true', res.body.is_read === true);
+  res = await call('POST', '/app/announcements/read-all', R1, { site_code: S9 });
+  check('tumunu okundu yap (site_code=S9): yalniz o site isaretlenir (marked 1)', res.status === 200 && res.body.ok === true && res.body.marked === 1 && (await call('GET', '/app/notifications/summary', R1)).body.unread_announcements === 2);
+  res = await call('POST', '/app/announcements/read-all', R1, {});
+  check('tumunu okundu yap: kalanlar isaretlenir (marked 2), tekrar 0', res.body.marked === 2 && (await call('POST', '/app/announcements/read-all', R1, {})).body.marked === 0);
+  res = await call('POST', '/app/announcements/read-all', R1, { site_code: 'abc' });
+  check('read-all gecersiz site_code -> 400 INVALID_BODY', res.status === 400 && res.body.code === 'INVALID_BODY');
+  // okundu IDOR: baskasinin satirina dokunulamaz
+  res = await call('POST', `/app/announcements/${a1.id}/read`, R4);
+  check('alici olmayan kullanici: okundu 404, ayrinti 404, liste bos, ozet 0, read-all 0', res.status === 404 && (await call('GET', `/app/announcements/${a1.id}`, R4)).status === 404 && (await call('GET', '/app/announcements', R4)).body.items.length === 0 && (await call('GET', '/app/notifications/summary', R4)).body.unread_announcements === 0 && (await call('POST', '/app/announcements/read-all', R4, {})).body.marked === 0);
+  check('baskasinin okundu bilgisi degismedi (R2 hala okunmamis)', (await call('GET', '/app/notifications/summary', R2)).body.unread_announcements === 3);
+  res = await call('GET', '/app/notifications/summary', MGR);
+  check('hesabi olan ama alicisi olmayan: ozet { 0, 0, null }', res.body.unread_announcements === 0 && res.body.unread_urgent === 0 && res.body.latest_announcement_id === null, res.body);
+
+  // geri cekilen duyuru sakinde kaybolur
+  res = await call('POST', `${P(S8)}/${a2.id}/withdraw`, MGR);
+  check('geri cekme: yonetici listesinde withdrawn olarak kalir', res.status === 200 && (await call('GET', `${P(S8)}?status=withdrawn`, MGR)).body.items.some((i) => i.id === a2.id));
+  check('geri cekilen: sakinde ayrinti 404, okundu 404, listede ve ozette yok', (await call('GET', `/app/announcements/${a2.id}`, R2)).status === 404 && (await call('POST', `/app/announcements/${a2.id}/read`, R2)).status === 404 && !(await call('GET', '/app/announcements', R2)).body.items.some((i) => i.id === a2.id) && (await call('GET', '/app/notifications/summary', R2)).body.unread_announcements === 2);
+  // hesapsiz kisi sonradan hesaba baglanir: kayit person_id ile ona gorunur
+  const H1u = await mkUser('Hatice Hesap', 'h1@example.com');
+  await addMembership(s8.aptIds.D1, H1u);
+  await call('GET', `/manager/sites/${S8}/people`, MGR); // esitleme (okuma ucu) hesapsiz kisiyi ayni e-postayla baglar
+  const h1Person = (await q(`SELECT user_code FROM site_people WHERE id = $1`, [H1])).rows[0];
+  check('hazirlik: hesapsiz kisi e-posta eslemesiyle hesaba baglandi', Number(h1Person.user_code) === H1u, h1Person);
+  res = await call('GET', `/app/announcements/${a1.id}`, H1u);
+  check('hesapsiz alici sonradan hesaba baglaninca duyuru (person_id ile) ona gorunur', res.status === 200 && res.body.title === 'Acil toplanti' && res.body.is_read === false, res.body);
+  // yonetici alicilar
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients`, MGR);
+  check('alicilar (yonetici): ad, daire etiketleri, has_account, read_at, email_status; 4 kisi; okuyan R1 read_at dolu',
+    res.status === 200 && res.body.total === 4 && same(Object.keys(res.body.items[0]).sort(), ['apartments', 'email_status', 'full_name', 'has_account', 'person_id', 'read_at']) &&
+      res.body.items.find((i) => i.full_name === 'Sakin Bir').read_at !== null && res.body.items.find((i) => i.full_name === 'Sakin Bir').apartments[0] === 'D Blok - Daire 1' && res.body.items.find((i) => i.full_name === 'Hatice Hesap')?.has_account === true, res.body.items);
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients?read=false&limit=2&offset=0`, MGR);
+  const unreadPage2 = await call('GET', `${P(S8)}/${a1.id}/recipients?read=false&limit=2&offset=2`, MGR);
+  check('alicilar: read=false suzgeci + sayfalama (3 okumayan)', res.body.total === 3 && res.body.items.length === 2 && unreadPage2.body.items.length === 1 && res.body.items.every((i) => i.read_at === null));
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients?read=true`, MGR);
+  check('alicilar: read=true yalniz okuyan', res.body.total === 1 && res.body.items[0].full_name === 'Sakin Bir');
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients?q=${encodeURIComponent('SAKİN İKİ')}`, MGR);
+  check('alicilar: ad aramasi (Turkce/buyuk-kucuk duyarsiz)', res.body.total === 1 && res.body.items[0].full_name === 'Sakin Iki');
+  res = await call('GET', `${P(S8)}/${a1.id}/recipients?q=${encodeURIComponent('d blok - daire 3')}`, MGR);
+  check('alicilar: daire etiketi aramasi', res.body.total === 1 && res.body.items[0].full_name === 'Sakin Uc');
+  res = await call('GET', `${P(S8)}/${a1.id}?`, MGR);
+  check('ayrinti istatistigi: recipients 4, read 1, unread 3', res.body.stats.recipients === 4 && res.body.stats.read === 1 && res.body.stats.unread === 3 && res.body.read_count === 1, res.body.stats);
+
+  // tercihler
+  console.log('--- tercihler ---');
+  res = await call('GET', '/app/notification-preferences', R1);
+  check('tercih varsayilani: { email_announcements:true, push_announcements:true, push_available:false }', res.status === 200 && same(res.body, { email_announcements: true, push_announcements: true, push_available: false }), res.body);
+  res = await call('PUT', '/app/notification-preferences', R1, { email_announcements: false, push_announcements: false, baska: 1 });
+  check('PUT email_announcements:false; push_* ve bilinmeyen anahtarlar YOKSAYILIR (push degismez)', res.status === 200 && res.body.email_announcements === false && res.body.push_announcements === true && res.body.push_available === false, res.body);
+  res = await call('GET', '/app/notification-preferences', R1);
+  check('tercih kalici; baska kullaniciyi etkilemez', res.body.email_announcements === false && (await call('GET', '/app/notification-preferences', R2)).body.email_announcements === true);
+  res = await call('PUT', '/app/notification-preferences', R1, { email_announcements: 'hayir' });
+  check('PUT gecersiz deger -> 400 INVALID_BODY; eksik deger -> 400', res.status === 400 && res.body.code === 'INVALID_BODY' && (await call('PUT', '/app/notification-preferences', R1, {})).status === 400);
+  await call('PUT', '/app/notification-preferences', R1, { email_announcements: true });
+  check('tercih tekrar acilir', (await call('GET', '/app/notification-preferences', R1)).body.email_announcements === true);
+
+  // =============================================================================================================
+  // 8) E-POSTA KUYRUGU (SAHTE tasiyici): tercih, acil, adres yok, yinelenen adres, gunluk sinir, devam, 3 deneme, SMTP yok
+  // =============================================================================================================
+  console.log('--- e-posta kuyrugu ---');
+  const annSvcDetail = async (id, site = S4) => (await call('GET', `${P(site)}/${id}`, MGR)).body;
+  resetMail();
+  res = await create(S4, MGR, { title: 'E-posta 1', body: 'Merhaba <b>sakin</b>\r\nikinci satir', send_email: true, publish: 'now' });
+  const e1 = res.body;
+  check('e-posta durumlari (normal): 9 alici -> pending 5, duplicate 1 (ayni adres bir kez), no_address 2 (adres yok + @ahbu.local), skipped_pref 1 (tercihi kapali hesapli), capped 0',
+    res.status === 201 && same(e1.stats.email, { requested: 9, sent: 0, failed: 0, no_address: 2, skipped_pref: 1, capped: 0, duplicate: 1, pending: 5 }), e1.stats?.email);
+  const e1Rows = await recipientsOf(e1.id);
+  const pendingEmails = e1Rows.filter((r) => r.email_status === 'pending').map((r) => r.email).sort();
+  check('adres yalniz pending satirlarda, kucuk harfli ve tekil (iletisim8 bir kez); diger durumlarda email NULL; dahili @ahbu.local asla adres degil',
+    same(pendingEmails, ['iletisim8@example.com', 'p2@example.com', 'p7@example.com', 'u1@example.com', 'u3@example.com']) && e1Rows.filter((r) => r.email_status !== 'pending').every((r) => r.email === null) && !e1Rows.some((r) => String(r.email ?? '').endsWith('@ahbu.local')), e1Rows.map((r) => [r.person_id, r.email_status, r.email]));
+  const duplicateOf = e1Rows.filter((r) => r.email_status === 'duplicate').map((r) => Number(r.person_id));
+  check('yinelenen adreste ilk kisi (kucuk person_id) pending, digeri duplicate', duplicateOf.length === 1 && duplicateOf[0] === Math.max(pU8, pU8b) && e1Rows.find((r) => Number(r.person_id) === Math.min(pU8, pU8b)).email_status === 'pending', [pU8, pU8b, duplicateOf]);
+  const publishedAudit = (await auditOf(e1.id)).find((a) => a.action === 'announcement.published');
+  check('audit published: sayilar (pending/no_address/skipped_pref/capped/duplicate) var; adres, baslik, metin YOK', publishedAudit.details.email.pending === 5 && publishedAudit.details.email.duplicate === 1 && !JSON.stringify(publishedAudit.details).includes('@') && !JSON.stringify(publishedAudit.details).includes('E-posta 1') && publishedAudit.details.recipient_count === 9, publishedAudit.details);
+  check('yayin istegi e-postayi GONDERMEDI (kuyruk calistirilmadi: 0 e-posta)', mails.length === 0);
+
+  let summary = await queue.runEmailQueue();
+  check('kuyruk turu: 5 gonderildi, 1 grup; SMTP sahte tasiyici', summary.smtp === true && summary.sent === 5 && summary.batches === 1 && mails.length === 5, summary);
+  const e1After = await recipientsOf(e1.id);
+  check('gonderim sonrasi: durum sent, email NULL, email_attempts 1 (aday satirlar); kalan durumlar ayni', e1After.filter((r) => r.email_status === 'sent').length === 5 && e1After.filter((r) => r.email_status === 'sent').every((r) => r.email === null && r.email_attempts === 1) && e1After.filter((r) => r.email_status === 'pending').length === 0, e1After.map((r) => [r.email_status, r.email_attempts]));
+  check('gonderilen e-postalar: konu "[Duyuru Sitesi] E-posta 1", alici adresi tek tek (iletisim8 BIR kez), bilgi alt metni',
+    mails.every((m) => m.subject === '[Duyuru Sitesi] E-posta 1' && m.text.includes('Duyuru Sitesi yönetimi tarafından gönderildi. Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.')) && same(mails.map((m) => m.to).sort(), pendingEmails), mails.map((m) => [m.to, m.subject]));
+  check('HTML kacirilir (<b> -> &lt;b&gt;), satir sonlari <br /> ile korunur; duz metinde ham metin', mails.every((m) => m.html.includes('&lt;b&gt;sakin&lt;/b&gt;') && m.html.includes('<br />') && !m.html.includes('<b>sakin') && m.text.includes('Merhaba <b>sakin</b>\nikinci satir')));
+  const e1Detail = await annSvcDetail(e1.id);
+  check('ayrinti istatistigi: sent 5, pending 0', e1Detail.stats.email.sent === 5 && e1Detail.stats.email.pending === 0 && e1Detail.stats.email.requested === 9, e1Detail.stats.email);
+  summary = await queue.runEmailQueue();
+  check('kuyruk bos: ikinci tur 0 gonderim, e-posta tekrarlanmaz', summary.sent === 0 && summary.batches === 0 && mails.length === 5);
+
+  // acil: tercih yok sayilir
+  resetMail();
+  res = await create(S4, MGR, { title: 'Acil e-posta', body: 'Acil durum', importance: 'urgent', send_email: true, publish: 'now' });
+  check('ACIL duyuru tercihi yok sayar: skipped_pref 0, pending 6 (tercihi kapali hesapli dahil)', res.status === 201 && res.body.stats.email.skipped_pref === 0 && res.body.stats.email.pending === 6 && res.body.stats.email.duplicate === 1, res.body.stats?.email);
+  summary = await queue.runEmailQueue();
+  check('acil e-posta: 6 gonderildi; konu "ACIL: [Duyuru Sitesi] ..." onekli', summary.sent === 6 && mails.length === 6 && mails.every((m) => m.subject === 'ACİL: [Duyuru Sitesi] Acil e-posta') && mails.some((m) => m.to === 'u9@example.com'), mails.map((m) => m.subject));
+
+  // CRLF / HTML enjeksiyonu
+  resetMail();
+  res = await create(S4, MGR, { title: 'Konu\r\nBcc: kurban@example.com', body: '<img src=x onerror=alert(1)>\r\nBcc: baska@example.com', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [A(1)] } });
+  const crlfAnn = res.body;
+  await queue.runEmailQueue();
+  check('CRLF enjeksiyonu: konu tek satir (CR/LF yok), alici baslik/metinden eklenmez; HTML kacirilir', crlfAnn.stats.email.pending === 2 && mails.length === 2 && mails.every((m) => !/[\r\n]/.test(m.subject) && m.subject === '[Duyuru Sitesi] Konu Bcc: kurban@example.com' && !m.bcc && !m.cc && m.html.includes('&lt;img') && !m.html.includes('<img')), mails.map((m) => m.subject));
+
+  // geri cekilince bekleyen e-postalar iptal
+  resetMail();
+  res = await create(S4, MGR, { title: 'Hata duzeltildi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [A(1)] } });
+  const withdrawnMailAnn = res.body.id;
+  res = await call('POST', `${P(S4)}/${withdrawnMailAnn}/withdraw`, MGR);
+  const wRows = await recipientsOf(withdrawnMailAnn);
+  summary = await queue.runEmailQueue();
+  check('geri cekme: bekleyen e-postalar iptal (durum none, adres silindi); kuyruk hicbir sey gondermez', res.status === 200 && wRows.every((r) => r.email_status === 'none' && r.email === null) && summary.sent === 0 && mails.length === 0 && (await auditOf(withdrawnMailAnn)).some((a) => a.action === 'announcement.withdrawn' && a.details.email_cancelled === 2));
+
+  // sunucu yeniden baslarsa kaldigi yerden surer (durum DB'de): gecici SMTP hatasi + yarim kalmis talep
+  resetMail();
+  res = await create(S4, MGR, { title: 'Devam testi', body: 'x', send_email: true, publish: 'now' });
+  const resumeAnn = res.body.id;
+  mailState.failAfter = 2; // ilk 2 gonderim basarili, sonrasi SMTP hatasi
+  summary = await queue.runEmailQueue();
+  let resumeCounts = await statusCounts(resumeAnn);
+  const stuck = (await recipientsOf(resumeAnn)).filter((r) => r.email_status === 'pending');
+  check('gecici SMTP hatasi: 2 sent, 3 pending kalir (adres korunur, denemesi 1); kuyruk hata firlatmaz; ayni turda tekrar denenmez', summary.sent === 2 && summary.pendingRetry === 3 && resumeCounts.sent === 2 && resumeCounts.pending === 3 && stuck.every((r) => r.email !== null && r.email_attempts === 1), [summary, resumeCounts]);
+  // surec bir grubu talep edip OLDU (deneme artti, sonuc yazilmadi)
+  await q(`UPDATE announcement_recipients SET email_attempts = email_attempts + 1 WHERE announcement_id = $1 AND person_id = $2`, [resumeAnn, stuck[0].person_id]);
+  mailState.failAfter = null;
+  mailState.sent = 0;
+  summary = await queue.runEmailQueue();
+  resumeCounts = await statusCounts(resumeAnn);
+  check('yeniden baslama: kalan 3 satir (yarim kalmis talep dahil) yeni turda gonderilir; hicbir satir kaybolmaz, cift gonderim yok (toplam 5 benzersiz adres)', summary.sent === 3 && resumeCounts.sent === 5 && !resumeCounts.pending && new Set(mails.map((m) => m.to)).size === mails.length, [summary, resumeCounts, mails.length]);
+
+  // 3 denemede failed
+  resetMail();
+  res = await create(S4, MGR, { title: 'Hata testi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [A(1)] } });
+  const failAnn = res.body.id;
+  mailState.failAll = true;
+  const attemptsAfterRun = [];
+  for (let run = 1; run <= 3; run += 1) {
+    await queue.runEmailQueue();
+    const rows = await recipientsOf(failAnn);
+    attemptsAfterRun.push(rows.map((r) => [r.email_status, r.email_attempts, r.email === null]));
+  }
+  check('SMTP hep hatali: her turda satir BIR kez denenir (1, 2, 3); 3. denemede failed ve email NULL',
+    same(attemptsAfterRun[0], [['pending', 1, false], ['pending', 1, false]]) && same(attemptsAfterRun[1], [['pending', 2, false], ['pending', 2, false]]) && same(attemptsAfterRun[2], [['failed', 3, true], ['failed', 3, true]]), attemptsAfterRun);
+  summary = await queue.runEmailQueue();
+  check('failed satirlar yeniden denenmez; istatistikte gorunur (sessiz kayip yok)', summary.sent === 0 && mails.length === 0 && (await annSvcDetail(failAnn)).stats.email.failed === 2 && (await annSvcDetail(failAnn)).stats.email.pending === 0);
+  mailState.failAll = false;
+
+  // SMTP yapilandirilmamis -> failed
+  resetMail();
+  res = await create(S4, MGR, { title: 'SMTP yok', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [A(1)] } });
+  const noSmtpAnn = res.body.id;
+  const savedSmtp = process.env.SMTP_HOST;
+  delete process.env.SMTP_HOST;
+  summary = await queue.runEmailQueue();
+  process.env.SMTP_HOST = savedSmtp;
+  check('SMTP yapilandirilmamis: bekleyen satirlar failed olur (adres silinir), hicbir e-posta denenmez, sessiz kayip yok', summary.smtp === false && mails.length === 0 && (await annSvcDetail(noSmtpAnn)).stats.email.failed === 2 && (await recipientsOf(noSmtpAnn)).every((r) => r.email === null), summary);
+
+  // tek calisan kilidi
+  resetMail();
+  res = await create(S4, MGR, { title: 'Kilit testi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [A(1)] } });
+  const lockAnn = res.body.id;
+  const heldQueueLock = await lockMod.acquireSessionLock(queue.EMAIL_QUEUE_LOCK_KEY);
+  summary = await queue.runEmailQueue();
+  check('kuyruk kilidi baska yerdeyse tur ATLANIR ({skipped:locked}); e-posta gonderilmez', summary.skipped === 'locked' && mails.length === 0 && (await annSvcDetail(lockAnn)).stats.email.pending === 2);
+  await heldQueueLock.release();
+  summary = await queue.runEmailQueue();
+  check('kilit birakilinca tur calisir (2 gonderim)', summary.sent === 2 && mails.length === 2);
+  const lockAgain = await lockMod.acquireSessionLock(queue.EMAIL_QUEUE_LOCK_KEY);
+  check('kuyruk kilidi tur sonunda SERBEST (havuzda asili kilit yok)', lockAgain !== null);
+  await lockAgain.release();
+
+  // yavas SMTP yayin istegini bekletmez
+  resetMail();
+  mailState.delayMs = 1200;
+  routes.announcementRouteHooks.kickEmailQueue = () => queue.kickEmailQueue();
+  const slowStart = Date.now();
+  res = await create(S4, MGR, { title: 'Yavas SMTP', body: 'x', send_email: true, publish: 'now' });
+  const slowMs = Date.now() - slowStart;
+  const slowAnn = res.body.id;
+  const slowStats = await annSvcDetail(slowAnn);
+  check(`yavas SMTP (her gonderim 1,2 sn): yayin istegi ${slowMs} ms'de doner (e-postayi BEKLEMEZ); yayin aninda 5 pending, 0 gonderilmis`, res.status === 201 && slowMs < 900 && slowStats.stats.email.pending === 5 && slowStats.stats.email.sent === 0 && mails.length === 0, { slowMs, stats: slowStats.stats.email });
+  const slowRun = await queue.kickEmailQueue();
+  check('arka planda kuyruk turu tamamlandi: 5 gonderim (4 paralel)', slowRun.sent === 5 && mails.length === 5 && (await annSvcDetail(slowAnn)).stats.email.sent === 5, slowRun);
+  routes.announcementRouteHooks.kickEmailQueue = () => {};
+  resetMail();
+
+  // gunluk site siniri
+  const s6 = await makeSite(S6, 'Sinir Sitesi', { 'F Blok': [1, 2, 3, 4, 5, 6] });
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S6, MGR]);
+  for (let n = 1; n <= 6; n += 1) {
+    const person = await addPerson(S6, { name: `Sinir Kisi ${n}`, email: `sinir${n}@example.com` });
+    await addResidency(S6, s6.aptIds[`F${n}`], person);
+  }
+  process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE = '4';
+  res = await create(S6, MGR, { title: 'Sinir 1', body: 'x', send_email: true, publish: 'now' });
+  check('gunluk sinir (env 4): 6 adresten 4 pending, 2 capped (yayin ENGELLENMEZ), capped satirda adres yok', res.status === 201 && res.body.stats.email.pending === 4 && res.body.stats.email.capped === 2 && (await recipientsOf(res.body.id)).filter((r) => r.email_status === 'capped').every((r) => r.email === null), res.body.stats?.email);
+  const limitAnn1 = res.body.id;
+  summary = await queue.runEmailQueue();
+  res = await create(S6, MGR, { title: 'Sinir 2', body: 'x', send_email: true, publish: 'now' });
+  check('gunluk sinir: ayni gun ikinci yayinda kota dolu (4 gonderilmis sayilir) -> hepsi capped', summary.sent === 4 && res.status === 201 && res.body.stats.email.capped === 6 && res.body.stats.email.pending === 0, res.body.stats?.email);
+  process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE = '10';
+  res = await create(S6, MGR, { title: 'Sinir 3', body: 'x', send_email: true, publish: 'now' });
+  check('gunluk sinir env 10: kalan kota 6 -> 6 pending', res.status === 201 && res.body.stats.email.pending === 6 && res.body.stats.email.capped === 0, res.body.stats?.email);
+  process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE = 'abc';
+  res = await create(S6, MGR, { title: 'Sinir 4', body: 'x', send_email: true, publish: 'now' });
+  check('gecersiz env degeri varsayilana (500) doner: 6 pending', res.status === 201 && res.body.stats.email.pending === 6, res.body.stats?.email);
+  delete process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE;
+  check('sinir baska siteyi etkilemez (S4 duyurulari kota harcamadi: S6 kullanimi yalniz S6 duyurularindan)', (await recipientsMod.emailUsageToday(pool, S6)) === 4 + 0 + 6 + 6);
+  void limitAnn1;
+
+  // gunluk sinir YARISI: eszamanli yayinlar kotayi ASAMAZ (kisi kilidi altinda sirali okunur)
+  const S10 = 1000000010;
+  const s10 = await makeSite(S10, 'Kota Yarisi Sitesi', { 'G Blok': [1, 2, 3, 4, 5, 6] });
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S10, MGR]);
+  for (let n = 1; n <= 6; n += 1) {
+    const person = await addPerson(S10, { name: `Kota Kisi ${n}`, email: `kota${n}@example.com` });
+    await addResidency(S10, s10.aptIds[`G${n}`], person);
+  }
+  process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE = '4';
+  const quotaRace = await Promise.all([1, 2, 3, 4].map((n) => create(S10, MGR, { title: `Kota ${n}`, body: 'x', send_email: true, publish: 'now' })));
+  delete process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE;
+  const quotaTotals = (
+    await q(
+      `SELECT COUNT(*) FILTER (WHERE r.email_status = 'pending')::int AS pending, COUNT(*) FILTER (WHERE r.email_status = 'capped')::int AS capped
+       FROM announcement_recipients r INNER JOIN announcements a ON a.id = r.announcement_id WHERE a.site_code = $1`,
+      [S10],
+    )
+  ).rows[0];
+  check('gunluk sinir yarisi: 4 eszamanli yayin (her biri 6 adres, kota 4) toplam TAM 4 pending uretir (kota asilmaz), kalan 20 capped; hepsi 201', quotaRace.every((r) => r.status === 201) && quotaTotals.pending === 4 && quotaTotals.capped === 20, [quotaRace.map((r) => r.status), quotaTotals]);
+
+  // izlenebilirlik: log/audit'te kisisel veri yok
+  const personalData = serverErrors.filter((line) => /@example\.com|@ahbu\.local/i.test(line));
+  check('sunucu hata gunlugunde e-posta adresi YOK (kuyruk yalniz kod/sayi loglar)', personalData.length === 0, personalData.slice(0, 2));
+  const auditDump = JSON.stringify((await q(`SELECT details FROM audit_log WHERE action LIKE 'announcement.%'`)).rows);
+  check('tum announcement.* audit satirlarinda e-posta adresi, baslik veya metin YOK', !auditDump.includes('@') && !auditDump.includes(SECRET_TITLE) && !auditDump.includes(SECRET_BODY) && !auditDump.includes('Su kesintisi') && !auditDump.includes('Acil toplanti'));
+  const auditShape = (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action LIKE 'announcement.%' AND (site_code IS NULL OR target_id IS NULL OR target_type <> 'announcement')`)).rows[0].n;
+  check('tum announcement.* audit satirlarinda target_type/target_id/site_code dolu', auditShape === 0);
+  res = await call('GET', '/admin/audit-log?action=announcement.published&limit=5', SUPER);
+  check('super denetim kaydi announcement.* eylemlerini suzer', res.status === 200 && res.body.items.length > 0 && res.body.items.every((i) => i.action === 'announcement.published' && i.site_code !== null));
+
+  // =============================================================================================================
+  // 9) ZAMANLAYICI: kitle 0 yine yayinlanir, tik basina 20, hata sunucuyu dusurmez, tek calisan, sizinti yok
+  // =============================================================================================================
+  console.log('--- zamanlayici ---');
+  const dueIds = [];
+  for (let n = 0; n < 25; n += 1) {
+    const row = await q(
+      `INSERT INTO announcements (site_code, title, body, status, publish_at, target_type, target_apartment_ids)
+       VALUES ($1, $2, 'x', 'scheduled', NOW() - ($3 || ' seconds')::interval, 'apartments', ARRAY[$4::bigint]) RETURNING id`,
+      [S4, `Bos kitle ${n}`, String(100 - n), B(5)],
+    );
+    dueIds.push(Number(row.rows[0].id));
+  }
+  let tickSummary = await scheduler.runSchedulerTick();
+  check('tik: en cok 20 duyuru yayinlanir (25 hazir -> 20), kalan 5 sonraki tikte', tickSummary.published === 20 && tickSummary.failed === 0, tickSummary);
+  tickSummary = await scheduler.runSchedulerTick();
+  check('ikinci tik kalan 5 duyuruyu yayinlar; ucuncu tik bos', tickSummary.published === 5 && (await scheduler.runSchedulerTick()).published === 0);
+  const emptyAnn = await rowOf(dueIds[0]);
+  check('kitle 0 iken zamanlanmis duyuru yine published olur (recipient_count 0) ve audit\'e duser (Sistem)', emptyAnn.status === 'published' && emptyAnn.recipient_count === 0 && (await auditOf(dueIds[0])).some((a) => a.action === 'announcement.published' && a.actor_name === 'Sistem' && a.details.recipient_count === 0));
+  const notDue = (await create(S4, MGR, { title: 'Henuz degil', body: 'x', publish: 'schedule', publish_at: inMs(30 * 60_000) })).body;
+  tickSummary = await scheduler.runSchedulerTick();
+  check('zamani gelmemis duyuru yayinlanmaz', (await rowOf(notDue.id)).status === 'scheduled' && tickSummary.published === 0);
+  const skipResult = await annSvc.publishDueAnnouncement({ id: notDue.id, siteCode: S4 });
+  check('zamanlayici talebi yalniz hala zamanlanmis VE zamani gelmis kaydi yayinlar (araya giren yeniden zamanlama: skipped)', skipResult.skipped === true && (await rowOf(notDue.id)).status === 'scheduled');
+  const publishedElsewhere = await annSvc.publishDueAnnouncement({ id: mainId, siteCode: S4 });
+  check('baska yoldan yayinlanmis kayit icin zamanlayici talebi atlanir (skipped), veri ciftlenmez', publishedElsewhere.skipped === true && (await recipientsOf(mainId)).length === 9);
+  // hata sunucuyu dusurmez
+  const failingDue = await q(`INSERT INTO announcements (site_code, title, body, status, publish_at) VALUES ($1, 'Hatali', 'x', 'scheduled', NOW() - INTERVAL '1 minute') RETURNING id`, [S4]);
+  const goodDue = await q(`INSERT INTO announcements (site_code, title, body, status, publish_at, target_type, target_apartment_ids) VALUES ($1, 'Saglam', 'x', 'scheduled', NOW() - INTERVAL '30 seconds', 'apartments', ARRAY[$2::bigint]) RETURNING id`, [S4, B(5)]);
+  const realPublishDue = scheduler.schedulerHooks.publishDue;
+  scheduler.schedulerHooks.publishDue = async (args) => {
+    if (args.id === Number(failingDue.rows[0].id)) throw Object.assign(new Error('sahte hata'), { code: 'XX000' });
+    return realPublishDue(args);
+  };
+  tickSummary = await scheduler.runSchedulerTick();
+  scheduler.schedulerHooks.publishDue = realPublishDue;
+  check('bir duyurunun yayini hata verirse tik DUSMEZ: hata sayilir/loglanir, siradaki duyuru yayinlanir', tickSummary.failed === 1 && tickSummary.published === 1 && (await rowOf(goodDue.rows[0].id)).status === 'published' && (await rowOf(failingDue.rows[0].id)).status === 'scheduled', tickSummary);
+  await q(`DELETE FROM announcements WHERE id = $1`, [failingDue.rows[0].id]);
+  // tek calisan
+  const heldScheduler = await lockMod.acquireSessionLock(scheduler.SCHEDULER_LOCK_KEY);
+  const lockedDue = await q(`INSERT INTO announcements (site_code, title, body, status, publish_at, target_type, target_apartment_ids) VALUES ($1, 'Kilitli', 'x', 'scheduled', NOW() - INTERVAL '1 minute', 'apartments', ARRAY[$2::bigint]) RETURNING id`, [S4, B(5)]);
+  tickSummary = await scheduler.runSchedulerTick();
+  check('zamanlayici kilidi baska yerdeyse (ikinci sunucu) tik ATLANIR: hicbir sey yayinlanmaz', tickSummary.locked === true && (await rowOf(lockedDue.rows[0].id)).status === 'scheduled', tickSummary);
+  await heldScheduler.release();
+  tickSummary = await scheduler.runSchedulerTick();
+  const freeLock = tickSummary.published === 1 ? await lockMod.acquireSessionLock(scheduler.SCHEDULER_LOCK_KEY) : null;
+  check('kilit birakilinca tik yayinlar; kilit tik sonunda SERBEST', tickSummary.published === 1 && freeLock !== null);
+  if (freeLock) await freeLock.release();
+
+  // =============================================================================================================
+  // 10) BUYUK SITE: 3000 daire, 5500 kisi; yayin suresi makul; e-posta sinirlari; kuyruk gruplari
+  // =============================================================================================================
+  console.log('--- buyuk site ---');
+  scheduler.schedulerHooks.kickEmailQueue = () => {}; // tik, kuyrugu kendiliginden baslatmasin: kuyruk senaryolarda ACIKCA calistirilir
+  await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Buyuk Duyuru Sitesi', 'approved', NOW())`, [S5]);
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S5, MGR]);
+  await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, 'A Blok', 1), ($1, 'B Blok', 2), ($1, 'C Blok', 3)`, [S5]);
+  await q(
+    `INSERT INTO apartments (site_code, block_id, unit_label, sort_order)
+     SELECT $1::bigint, b.id, 'Daire ' || g::text, g FROM site_blocks b CROSS JOIN generate_series(1, 1000) g WHERE b.site_code = $1::bigint`,
+    [S5],
+  );
+  await q(
+    `INSERT INTO site_people (site_code, full_name, email)
+     SELECT $1::bigint, 'Toplu Kisi ' || a.id, CASE WHEN a.id % 3 <> 0 THEN 'toplu' || a.id || '@example.com' END FROM apartments a WHERE a.site_code = $1::bigint`,
+    [S5],
+  );
+  await q(
+    `INSERT INTO apartment_residencies (site_code, apartment_id, person_id)
+     SELECT a.site_code, a.id, sp.id FROM apartments a INNER JOIN site_people sp ON sp.site_code = a.site_code AND sp.full_name = 'Toplu Kisi ' || a.id WHERE a.site_code = $1::bigint`,
+    [S5],
+  );
+  await q(
+    `INSERT INTO site_people (site_code, full_name) SELECT $1::bigint, 'Ikinci Kisi ' || a.id FROM apartments a WHERE a.site_code = $1::bigint AND a.sort_order <= 500`,
+    [S5],
+  );
+  await q(
+    `INSERT INTO apartment_residencies (site_code, apartment_id, person_id)
+     SELECT a.site_code, a.id, sp.id FROM apartments a INNER JOIN site_people sp ON sp.site_code = a.site_code AND sp.full_name = 'Ikinci Kisi ' || a.id WHERE a.site_code = $1::bigint`,
+    [S5],
+  );
+  await q(
+    `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status)
+     SELECT 70000 + g, 'Hesapli Toplu ' || g, 'hesapli' || g || '@example.com', 'apartment_owner', 'x', TRUE, TRUE, 'approved' FROM generate_series(1, 1000) g`,
+  );
+  await q(
+    `INSERT INTO apartment_memberships (apartment_id, user_code, role)
+     SELECT a.id, 70000 + a.sort_order, 'FAMILY_MEMBER' FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id WHERE a.site_code = $1::bigint AND b.sort_order = 1`,
+    [S5],
+  );
+  await q('ANALYZE site_people');
+  await q('ANALYZE apartment_residencies');
+  await q('ANALYZE announcements');
+  await q('ANALYZE announcement_recipients');
+  const bigPreviewStart = Date.now();
+  res = await call('POST', `${P(S5)}/preview-audience`, MGR, { target: { type: 'site' }, send_email: true });
+  const bigPreviewMs = Date.now() - bigPreviewStart;
+  check(`3000 daireli site onizleme ${bigPreviewMs} ms: 5500 kisi (4500 hesapsiz + 1000 hesapli), 3000 daire`, res.status === 200 && res.body.people === 5500 && res.body.apartments === 3000 && res.body.with_account === 1000 && bigPreviewMs < 8000, res.body);
+  const bigPublishStart = Date.now();
+  res = await create(S5, MGR, { title: 'Buyuk duyuru', body: 'Tum siteye.', publish: 'now' });
+  const bigPublishMs = Date.now() - bigPublishStart;
+  console.log(`  bilgi: 3000 daireli sitede ilk yayin (esitleme + 5500 alici): ${bigPublishMs} ms`);
+  check(`3000 daireli sitede yayin ${bigPublishMs} ms (makul: < 15 sn): 5500 alici, her kisi tek satir`, res.status === 201 && res.body.recipient_count === 5500 && bigPublishMs < 15000 && (await recipientsOf(res.body.id)).length === 5500, [res.status, res.body?.recipient_count]);
+  const bigRepeatStart = Date.now();
+  res = await create(S5, MGR, { title: 'Buyuk duyuru 2', body: 'Tekrar.', publish: 'now' });
+  const bigRepeatMs = Date.now() - bigRepeatStart;
+  console.log(`  bilgi: ikinci yayin (esitleme no-op): ${bigRepeatMs} ms`);
+  check(`ikinci yayin ${bigRepeatMs} ms (esitleme no-op, kisi sayisi degismez)`, res.status === 201 && res.body.recipient_count === 5500 && bigRepeatMs < 10000);
+  const bigListStart = Date.now();
+  res = await call('GET', `${P(S5)}/${res.body.id}/recipients?limit=50&q=${encodeURIComponent('toplu kisi 1')}`, MGR);
+  check(`5500 alicili duyuruda alici listesi/arama hizli (${Date.now() - bigListStart} ms)`, res.status === 200 && res.body.total > 0 && Date.now() - bigListStart < 5000);
+  const emailLimitBefore = (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S5])).rows[0].n;
+  res = await create(S5, MGR, { title: 'Cok adresli', body: 'x', send_email: true, publish: 'now' });
+  check('yonetici yayininda e-posta alicisi > 1000: 400 ANNOUNCEMENT_EMAIL_LIMIT (bolmesi soylenir); duyuru ve alici satiri KALMAZ (geri alindi)',
+    res.status === 400 && res.body.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && /böl/i.test(res.body.error) && (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S5])).rows[0].n === emailLimitBefore, res.body);
+  const draftBig = (await create(S5, MGR, { title: 'Cok adresli taslak', body: 'x', send_email: true })).body;
+  res = await call('POST', `${P(S5)}/${draftBig.id}/publish`, MGR);
+  check('publish ucunda da ayni sinir 400 ANNOUNCEMENT_EMAIL_LIMIT; taslak taslak kalir', res.status === 400 && res.body.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && (await rowOf(draftBig.id)).status === 'draft' && (await recipientsOf(draftBig.id)).length === 0);
+  res = await create(S5, MGR, { title: 'Blok duyurusu', body: 'x', send_email: true, publish: 'now', target: { type: 'blocks', block_ids: [(await q(`SELECT id FROM site_blocks WHERE site_code = $1 AND sort_order = 2`, [S5])).rows[0].id] } });
+  check('bolunmus yayin: B Blok (1000 adresten az) e-postali yayinlanir (varsayilan gunluk sinir 500 -> 500 pending, kalani capped)', res.status === 201 && res.body.stats.email.pending === 500 && res.body.stats.email.capped > 0 && res.body.stats.email.pending + res.body.stats.email.capped + res.body.stats.email.no_address + res.body.stats.email.duplicate === res.body.stats.email.requested, res.body.stats?.email);
+  const bigBlockAnn = res.body.id;
+  // zamanlayici: sinir asilirsa engellenmez, fazlasi capped
+  const bigScheduled = (await create(S5, MGR, { title: 'Zamanlanmis cok adresli', body: 'x', send_email: true, publish: 'schedule', publish_at: inMs(10 * 60_000) })).body;
+  await q(`UPDATE announcements SET publish_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [bigScheduled.id]);
+  const bigTickStart = Date.now();
+  tickSummary = await scheduler.runSchedulerTick();
+  const bigTickMs = Date.now() - bigTickStart;
+  const bigScheduledState = await annSvcDetail(bigScheduled.id, S5);
+  check(`zamanlayici yayini sinir asilsa da ENGELLENMEZ (${bigTickMs} ms): 5500 alici, gunluk kota dolu oldugundan adreslerin hepsi capped, hicbiri pending`, tickSummary.published >= 1 && bigScheduledState.status === 'published' && bigScheduledState.recipient_count === 5500 && bigScheduledState.stats.email.pending === 0 && bigScheduledState.stats.email.capped > 1000, bigScheduledState.stats?.email);
+  // kuyruk: 20'lik gruplar, aralarinda >= 150 ms
+  const sleeps = [];
+  const savedSleep = queue.emailQueueHooks.sleep;
+  queue.emailQueueHooks.sleep = async (ms) => {
+    sleeps.push(ms);
+    await savedSleep(ms);
+  };
+  resetMail();
+  const drainStart = Date.now();
+  summary = await queue.runEmailQueue();
+  queue.emailQueueHooks.sleep = savedSleep;
+  console.log(`  bilgi: 500 e-posta kuyrugu: ${Date.now() - drainStart} ms, ${summary.batches} grup`);
+  check('kuyruk: 500 bekleyen -> 25 grup (20\'ser), gruplar arasi bekleme >= 150 ms; hepsi gonderildi', summary.sent === 500 && summary.batches === 25 && mails.length === 500 && sleeps.length === 25 && sleeps.every((ms) => ms >= 150), { summary, sleeps: sleeps.length });
+  check('gonderilen satirlarin adresi silindi (500 sent, email NULL), kuyrukta bekleyen kalmadi', (await statusCounts(bigBlockAnn)).sent === 500 && (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE email IS NOT NULL`)).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE email_status = 'pending'`)).rows[0].n === 0);
+
+  // =============================================================================================================
+  // 11) KILIT SIRASI TURLARI (Faz 2 sirasi: apartments -> users -> site_people... -> announcements): deadlock 40P01 OLMAMALI
+  // =============================================================================================================
+  console.log('--- kilit sirasi turlari ---');
+  const LOCK_ROUNDS = Number(process.env.QA_ANNOUNCEMENT_LOCK_ROUNDS || 15);
+  let raceSiteCode = 1000000200;
+  async function fixture() {
+    const code = raceSiteCode;
+    raceSiteCode += 1;
+    const made = await makeSite(code, 'Kilit Sitesi', { 'K Blok': [1, 2, 3] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [code, MGR]);
+    const users = [];
+    for (let i = 1; i <= 3; i += 1) {
+      const user = await mkUser(`Kilit Sakin ${i}`, `kilit${code}_${i}@example.com`);
+      await addMembership(made.aptIds[`K${i}`], user);
+      users.push(user);
+    }
+    await syncSitePeople(code);
+    const persons = [];
+    for (const user of users) persons.push(Number((await personOfUser(code, user)).id));
+    const first = (await create(code, MGR, { title: 'Kilit 1', body: 'x', send_email: true })).body.id;
+    const second = (await create(code, MGR, { title: 'Kilit 2', body: 'x' })).body.id;
+    return { code, made, users, persons, first, second };
+  }
+  const businessError = (error) => Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500;
+  async function raceRounds(label, makeOps, { verify = true } = {}) {
+    let unexpected = 0;
+    let broken = 0;
+    const log = [];
+    const deadlocksBefore = hooks.deadlocks;
+    for (let i = 0; i < LOCK_ROUNDS; i += 1) {
+      const fx = await fixture();
+      const ops = await makeOps(fx);
+      const delays = ops.map(() => Math.floor(Math.random() * 6));
+      const settled = await Promise.allSettled(ops.map(async (op, index) => {
+        await sleep(delays[index]);
+        return op();
+      }));
+      for (const result of settled) {
+        if (result.status === 'rejected' && !businessError(result.reason)) {
+          unexpected += 1;
+          log.push(`${result.reason?.code} ${String(result.reason?.message).slice(0, 120)}`);
+        } else if (result.status === 'fulfilled' && Number(result.value?.status) >= 500) {
+          unexpected += 1; // HTTP 500 (sunucu hatasi) beklenmez
+          log.push(`HTTP ${result.value.status}`);
+        }
+      }
+      if (verify) {
+        for (const id of [fx.first, fx.second]) {
+          const row = await rowOf(id);
+          if (row && row.status === 'published') {
+            const rows = await recipientsOf(id);
+            if (rows.length !== row.recipient_count || new Set(rows.map((r) => r.person_id)).size !== rows.length) broken += 1;
+          }
+        }
+      }
+      await q(`DELETE FROM sites WHERE site_code = $1`, [fx.code]).catch(() => {});
+    }
+    await sleep(30);
+    check(`${label}: ${LOCK_ROUNDS} eszamanli tur; 40P01 (deadlock) tespiti YOK, beklenmeyen hata YOK${verify ? ', yayinlananlarda alici sayisi tutarli' : ''}`, unexpected === 0 && broken === 0 && hooks.deadlocks === deadlocksBefore, { unexpected, broken, deadlocks: hooks.deadlocks - deadlocksBefore, log: log.slice(0, 3) });
+  }
+  const publishOf = (fx, id = fx.first) => () => call('POST', `${P(fx.code)}/${id}/publish`, MGR);
+  await raceRounds('yayin x CRM "Tasindi"/pasiflestirme (kisi guncelleme)', async (fx) => [
+    publishOf(fx),
+    () => peopleSvc.updatePerson({ siteCode: fx.code, personId: fx.persons[0], body: { is_active: false }, actor: superActor }),
+  ]);
+  await raceRounds('yayin x uye cikarma (removeApartmentMember)', async (fx) => [
+    publishOf(fx),
+    () => membershipSvc.removeApartmentMember({ apartmentId: fx.made.aptIds.K1, targetUserCode: fx.users[0], authUser: superActor }),
+  ]);
+  await raceRounds('yayin x hesap silme (users BEFORE DELETE tetikleyicisi)', async (fx) => [publishOf(fx), () => q(`DELETE FROM users WHERE user_code = $1`, [fx.users[0]])]);
+  await raceRounds('yayin x kisi esitlemesi (syncSitePeople, kilit bekler)', async (fx) => [publishOf(fx), () => syncSitePeople(fx.code), () => syncSitePeople(fx.code)]);
+  await raceRounds('yayin x yayin (ayni sitede iki duyuru)', async (fx) => [publishOf(fx, fx.first), publishOf(fx, fx.second), publishOf(fx, fx.second)]);
+  await raceRounds('yayin x geri cek / duzenle / sil (ayni sitenin baska duyurulari)', async (fx) => {
+    const other = (await create(fx.code, MGR, { title: 'Diger', body: 'x', publish: 'now' })).body.id;
+    const doomed = (await create(fx.code, MGR, { title: 'Silinecek', body: 'x' })).body.id;
+    return [
+      publishOf(fx),
+      () => call('POST', `${P(fx.code)}/${other}/withdraw`, MGR),
+      () => call('PATCH', `${P(fx.code)}/${fx.second}`, MGR, { title: 'Duzenlendi', importance: 'urgent' }),
+      () => call('DELETE', `${P(fx.code)}/${doomed}`, MGR),
+    ];
+  });
+  await raceRounds('yayin x site silme (sites FOR SHARE sirasi)', async (fx) => [publishOf(fx), () => q(`DELETE FROM sites WHERE site_code = $1`, [fx.code])], { verify: false });
+  await raceRounds('zamanlayici tiki x elle yayin x kisi guncelleme', async (fx) => {
+    await q(`UPDATE announcements SET status = 'scheduled', publish_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [fx.first]);
+    return [
+      () => scheduler.runSchedulerTick(),
+      publishOf(fx),
+      () => peopleSvc.updatePerson({ siteCode: fx.code, personId: fx.persons[1], body: { is_active: false }, actor: superActor }),
+    ];
+  });
+  // kontrol deneyi: kilit sirasi tersine cevrilirse harness deadlock'u GERCEKTEN yakalar
+  {
+    const fx = await fixture();
+    const a = await pool.connect();
+    const b = await pool.connect();
+    const errors = [];
+    try {
+      await a.query('BEGIN');
+      await b.query('BEGIN');
+      await a.query(`SELECT id FROM announcements WHERE id = $1 FOR UPDATE`, [fx.first]);
+      await b.query(`SELECT id FROM announcements WHERE id = $1 FOR UPDATE`, [fx.second]);
+      const aWait = a.query(`SELECT id FROM announcements WHERE id = $1 FOR UPDATE`, [fx.second]).catch((e) => errors.push(e.code));
+      await sleep(300);
+      const bWait = b.query(`SELECT id FROM announcements WHERE id = $1 FOR UPDATE`, [fx.first]).catch((e) => errors.push(e.code));
+      await Promise.all([aWait, bWait]);
+    } finally {
+      await a.query('ROLLBACK').catch(() => {});
+      await b.query('ROLLBACK').catch(() => {});
+      a.release();
+      b.release();
+    }
+    await q(`DELETE FROM sites WHERE site_code = $1`, [fx.code]);
+    check('KONTROL DENEYI: ters kilit sirasi (A->B, B->A) GERCEKTEN 40P01 verir ve sayac yakalar (turlarin "0 deadlock" sonucu anlamli)', errors.includes('40P01') && hooks.deadlocks > 0, { errors, deadlocks: hooks.deadlocks });
+  }
+
+  // =============================================================================================================
+  // 12) SILME / KASKAD / KULLANICI SILME, ZAMANLAYICI YASAM DONGUSU, SON TUTARLILIK
+  // =============================================================================================================
+  console.log('--- kaskad ve temizlik ---');
+  const tempManager = await mkUser('Gecici Yonetici', 'gecici.yonetici@example.com');
+  await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S9, tempManager]);
+  const tempAnn = (await create(S9, tempManager, { title: 'Gecici yonetici duyurusu', body: 'x', publish: 'now' })).body;
+  check('olusturan yonetici adi yonetici ayrintisinda gorunur', tempAnn.created_by_name === 'Gecici Yonetici');
+  await q(`DELETE FROM users WHERE user_code = $1`, [tempManager]);
+  const tempAfter = await annSvcDetail(tempAnn.id, S9);
+  check('olusturan kullanici silinince duyuru KALIR (created_by NULL -> created_by_name null), alicilar korunur', tempAfter.id === tempAnn.id && tempAfter.created_by_name === null && (await rowOf(tempAnn.id)).created_by === null && tempAfter.stats.recipients === tempAnn.stats.recipients);
+  const prefUser = await mkUser('Tercih Sahibi', 'tercih@example.com');
+  await call('PUT', '/app/notification-preferences', prefUser, { email_announcements: false });
+  check('tercih satiri olustu', (await q(`SELECT COUNT(*)::int AS n FROM notification_preferences WHERE user_code = $1`, [prefUser])).rows[0].n === 1);
+  await q(`DELETE FROM users WHERE user_code = $1`, [prefUser]);
+  check('kullanici silinince tercih satiri da silinir (CASCADE)', (await q(`SELECT COUNT(*)::int AS n FROM notification_preferences WHERE user_code = $1`, [prefUser])).rows[0].n === 0);
+  const r1Recipients = (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients r JOIN site_people sp ON sp.id = r.person_id WHERE sp.user_code = $1`, [R1])).rows[0].n;
+  await q(`DELETE FROM users WHERE user_code = $1`, [R1]);
+  check('alici hesabi silinince alici satirlari KALIR (kisi pasiflesir, gelen kutusu bos); hesap yok', r1Recipients >= 4 && (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients r JOIN site_people sp ON sp.id = r.person_id WHERE sp.user_code = $1`, [R1])).rows[0].n === 0);
+  const s8Ann = (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S8])).rows[0].n;
+  await q(`DELETE FROM sites WHERE site_code = $1`, [S8]);
+  check(`site silinince duyurular (${s8Ann}) ve alici satirlari CASCADE silinir`, s8Ann > 0 && (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S8])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE announcement_id = $1`, [a1.id])).rows[0].n === 0);
+
+  // zamanlayici yasam dongusu (sizinti yok / kapali / tek kopya) - EN SONDA: stop() zamanlayiciyi durdurur
+  console.log('--- zamanlayici yasam dongusu ---');
+  check('ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile baslatma null doner (zamanlayici kurulmaz)', scheduler.startAnnouncementScheduler({ env: { ANNOUNCEMENT_SCHEDULER_DISABLED: '1' } }) === null && scheduler.isSchedulerDisabled({ ANNOUNCEMENT_SCHEDULER_DISABLED: 'true' }) === true && scheduler.isSchedulerDisabled({}) === false);
+  let hookCalls = 0;
+  const savedHasPending = scheduler.schedulerHooks.hasPendingEmails;
+  scheduler.schedulerHooks.hasPendingEmails = async () => {
+    hookCalls += 1;
+    return false;
+  };
+  const timersBefore = process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length;
+  const handle = scheduler.startAnnouncementScheduler({ intervalMs: 40, env: {} });
+  const second = scheduler.startAnnouncementScheduler({ intervalMs: 40, env: {} });
+  await sleep(300);
+  const callsWhileRunning = hookCalls;
+  await handle.stop();
+  const callsAtStop = hookCalls;
+  await sleep(250);
+  check(`zamanlayici araligi calisir (${callsWhileRunning} tik; tekrar baslatma ikinci zamanlayici KURMAZ) ve stop() sonrasi DURUR (setInterval sizintisi yok: ${callsAtStop} -> ${hookCalls})`,
+    callsWhileRunning >= 1 && callsWhileRunning <= 12 && hookCalls === callsAtStop && second !== null);
+  scheduler.schedulerHooks.hasPendingEmails = savedHasPending;
+  const timersAfter = process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length;
+  check(`stop() sonrasi etkin zamanlayici kaynagi artmadi (Timeout: ${timersBefore} -> ${timersAfter})`, timersAfter <= timersBefore, [timersBefore, timersAfter]);
+
+  // son tutarlilik
+  console.log('--- tutarlilik ---');
+  const dupRecipients = (await q(`SELECT announcement_id, person_id FROM announcement_recipients GROUP BY 1, 2 HAVING COUNT(*) > 1`)).rows;
+  check('hicbir duyuruda ayni kisi iki kez alici degil (PK)', dupRecipients.length === 0);
+  const lingeringEmails = (await q(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE email IS NOT NULL AND email_status <> 'pending'`)).rows[0].n;
+  check('e-posta adresi yalniz pending satirlarda tutulur (gonderilmis/basarisiz/diger durumlarda NULL)', lingeringEmails === 0, lingeringEmails);
+  const inconsistent = (await q(`SELECT a.id FROM announcements a WHERE a.status IN ('published', 'withdrawn') AND a.recipient_count <> (SELECT COUNT(*) FROM announcement_recipients r WHERE r.announcement_id = a.id)`)).rows;
+  check('yayinlanmis / geri cekilmis her duyuruda recipient_count = alici satiri sayisi', inconsistent.length === 0, inconsistent.slice(0, 3));
+  const stateBad = (await q(`SELECT id FROM announcements WHERE (status = 'published' AND published_at IS NULL) OR (status = 'withdrawn' AND withdrawn_at IS NULL) OR (status = 'draft' AND (published_at IS NOT NULL OR publish_at IS NOT NULL)) OR (status = 'scheduled' AND publish_at IS NULL)`)).rows;
+  check('durum / zaman damgasi tutarliligi (published_at, withdrawn_at, publish_at)', stateBad.length === 0, stateBad.slice(0, 3));
+
+  const serverFailures = serverErrors.filter((line) => /errorId=/.test(line));
+  check('bolum boyunca sunucu 500 (errorId) hatasi YOK', serverFailures.length === 0, serverFailures.slice(0, 3));
+  await http.close();
+  await finishChild(pool);
+}
+
+// --------------------------------------------------------------------------------------------------------------
 
 const SECTIONS = {
   chain: sectionChain,
@@ -2322,6 +3507,7 @@ const SECTIONS = {
   platform: sectionPlatform,
   locks: sectionLocks,
   people: sectionPeople,
+  announcements: sectionAnnouncements,
 };
 
 if (SECTION === '') {

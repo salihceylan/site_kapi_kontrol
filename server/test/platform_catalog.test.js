@@ -40,7 +40,7 @@ describe('platform katalog: sozlesme tablosu', () => {
     assert.deepEqual(table, {
       door_control: [false, 'available'],
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
-      announcements: [true, 'coming_soon'],
+      announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
       finance: [false, 'coming_soon'],
       reservation: [false, 'coming_soon'],
       work_tracking: [false, 'coming_soon'],
@@ -107,7 +107,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment', 'announcements']) {
+    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
@@ -121,8 +121,16 @@ describe('platform katalog: enabled hesabi', () => {
     assert.equal(isToggleable(def('people')), false);
     assert.equal(computeEnabledMap([]).people, true);
     assert.equal(computeEnabledMap([{ module_code: 'people', enabled: false }]).people, true);
-    // duyuru hâlâ yakında (Faz 3)
-    assert.equal(computeEnabledMap([]).announcements, false);
+  });
+
+  it('announcements (Faz 3a): core + available -> HEP acik (satir olmasa da, satir false dese de) ve kapatilamaz', () => {
+    assert.equal(def('announcements').core, true);
+    assert.equal(def('announcements').status, 'available');
+    assert.equal(computeModuleEnabled(def('announcements'), undefined), true);
+    assert.equal(computeModuleEnabled(def('announcements'), { enabled: false }), true);
+    assert.equal(isToggleable(def('announcements')), false);
+    assert.equal(computeEnabledMap([]).announcements, true);
+    assert.equal(computeEnabledMap([{ module_code: 'announcements', enabled: false }]).announcements, true);
   });
 
   it('core + available ise her zaman true (sozlesme kurali sirasi: once status, sonra core)', () => {

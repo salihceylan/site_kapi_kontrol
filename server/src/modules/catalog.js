@@ -44,7 +44,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Duyuru ve Bildirim',
     description: 'Sakinlere duyuru ve bildirim gönderme.',
     core: true,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: true,
   }),
   defineModule({

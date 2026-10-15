@@ -9,7 +9,7 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı AÇIK; bu yüzden mevcut siteler, mevcut
    uygulamalar ve cihazlar hiçbir değişiklik görmez. Yeni modüller varsayılan KAPALI/"yakında".
 2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Bu fazda yalnız `apartment_site` seçilebilir; diğer dördü reddedilir ("Yakında…").
-3. **Çekirdek modüller** (`people`, `announcements`) her sitede hep açıktır ama ekranları Faz 2/3'te gelir; o zamana kadar `status: coming_soon`.
+3. **Çekirdek modüller** (`people`, `announcements`) her sitede hep açıktır. Ekranları Faz 2/3'te geldi: `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`.
 4. **Denetim kaydı** (`audit_log`) yalnız eklenir; API'de güncelleme/silme yoktur, bakım servisi temizlemez.
 5. **Ek roller:** `BOARD_MEMBER` (Yönetim Kurulu / Denetçi) ve `STAFF` (Görevli), `site_memberships.role` değerleridir. Kullanıcının genel rolü (`users.role`) DEĞİŞMEZ.
    Site yöneticisi isterse atar; atamazsa bu rollerin işi site yöneticisinde kalır. `requireSiteManager`/`hasSiteManagementAccess` bu rolleri YÖNETİCİ saymaz.
@@ -20,8 +20,8 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | code | Ad | core | status | Varsayılan (satır yoksa) |
 |---|---|---|---|---|
 | `door_control` | Geçiş Kontrol (AHBU) | hayır | `available` | AÇIK |
-| `people` | Kişi ve Daire Kayıtları | evet | `coming_soon` | — |
-| `announcements` | Duyuru ve Bildirim | evet | `coming_soon` | — |
+| `people` | Kişi ve Daire Kayıtları | evet | `available` (Faz 2a) | — (hep açık) |
+| `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
 | `finance` | Aidat ve Finans | hayır | `coming_soon` | KAPALI |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `coming_soon` | KAPALI |

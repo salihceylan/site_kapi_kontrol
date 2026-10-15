@@ -72,7 +72,7 @@ function personExists(personId) {
  * Kişi kaynağı: hesaplı kişide ad/telefon/e-posta users'tan okunur. Dahili (@ahbu.local) daire hesabında iletişim e-postası
  * GÜNCEL apartments.resident_email'dir (eski ekrandan değişse de bayatlamaz; CRM kopyası yedek).
  */
-const PERSON_FROM = `
+export const PERSON_FROM = `
   FROM site_people sp
   LEFT JOIN users u ON u.user_code = sp.user_code
   LEFT JOIN LATERAL (
@@ -88,7 +88,7 @@ const PERSON_FROM = `
 `;
 
 /** Kişinin görünen iletişim e-postası (SQL ifadesi; PERSON_FROM ile birlikte kullanılır). */
-const CONTACT_EMAIL_SQL = `(
+export const CONTACT_EMAIL_SQL = `(
   CASE
     WHEN u.user_code IS NULL THEN sp.email
     WHEN u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN u.email

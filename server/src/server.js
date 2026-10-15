@@ -22,6 +22,8 @@ import { membershipRouter } from './routes/membership_routes.js';
 import { moduleRouter } from './modules/module_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
+import { announcementRouter } from './modules/announcement_routes.js';
+import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
 import { validateEnv } from './config/env.js';
@@ -78,6 +80,7 @@ app.use(membershipRouter);
 app.use(moduleRouter);
 app.use(moduleRequestRouter);
 app.use(peopleRouter);
+app.use(announcementRouter);
 
 // Serve Flutter Web SPA if build/web exists
 if (fs.existsSync(webBuildPath)) {
@@ -147,6 +150,7 @@ async function shutdown(signal) {
         dropTimer.unref();
       });
     }
+    await stopAnnouncementScheduler();
     await stopMqttBridge();
     await pool.end();
   } catch (error) {
@@ -170,6 +174,8 @@ async function startServer() {
     checkEnvOrExit();
     await ensureDbSchema();
     startMqttBridge();
+    // Duyuru zamanlayicisi (zamani gelen duyurulari yayinlar, e-posta kuyrugunu surer); ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile kapali.
+    startAnnouncementScheduler();
     void runCleanupSafely();
     // Zamanlayıcı süreci açık tutmasın (düzgün kapanmayı engellemesin).
     setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();
