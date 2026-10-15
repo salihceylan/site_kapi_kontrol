@@ -1248,3 +1248,58 @@ Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yu
 - [ ] **58.6. Küçük Ekran ve Büyük Yazı:**
   - **Nasıl Test Edilir:** Yazı boyutunu en büyüğe alın, küçük telefonda ana ekranı ve çekmeceyi açın.
   - **Beklenen Sonuç:** Taşma olmaz; kapı adı/çipler kırpılmadan sarar, çekmece öğeleri kaydırılabilir.
+
+---
+
+## 59. 🧩 Platform Modül Sistemi — Faz 1: Modül Aç/Kapa, Yönetim Türü, Denetim Kaydı, Ek Roller (2026-10-15)
+
+Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (AHBU) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
+
+- [ ] **59.1. Eski ve Yeni Uygulama Sürümü: Kapı Açma Değişmez:**
+  - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle, sonra yeni sürümle giriş yapın; telefondan kapıyı açın, giriş QR kodu üretin, bir misafir bağlantısı oluşturup açın.
+  - **Beklenen Sonuç:** Üçü de her iki sürümde eskisi gibi çalışır, hata çıkmaz (Geçiş Kontrol modülü varsayılan olarak AÇIKTIR; mevcut siteler etkilenmez).
+- [ ] **59.2. Modüller Ekranı:**
+  - **Nasıl Test Edilir:** Site yöneticisi olarak çekmeceden "Modüller"i açın.
+  - **Beklenen Sonuç:** 8 kart görünür: "Geçiş Kontrol (AHBU)" Açık ve anahtarlı; "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsızdır. Çekip yenileme ve yenile düğmesi çalışır.
+- [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma:**
+  - **Nasıl Test Edilir:** Modüller ekranında Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın.
+  - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri kaybolur, Panel'de "Geçiş Kontrol modülü kapalı" kartı çıkar. Yeniden açınca her şey anında geri gelir.
+- [ ] **59.4. Kapalı Modülde Sakin Deneyimi:**
+  - **Nasıl Test Edilir:** Geçiş Kontrol kapalıyken (başka telefonda) sakin hesabıyla Panel'e bakın; telefon widget'ından kapıyı açmayı deneyin; hesapta sesle dinleme açıksa uygulamayı yeniden açın. Sonra yönetici modülü açsın.
+  - **Beklenen Sonuç:** Panel'de düğmesiz bilgi kartı görünür, "Eller Serbest" menüsü yoktur, widget o siteyi göstermez (eski kalmışsa "Geçiş kapalı ❌" der). "Tanımlı bir kapı bulunamadı." sesli uyarısı DUYULMAZ ve dinleme durur. Modül açılınca aşağı çekince ya da ~30 sn içinde kapı kartları geri gelir.
+- [ ] **59.5. Kapalı Modülde Misafir Bağlantısı ve QR Okuyucu:**
+  - **Nasıl Test Edilir:** Geçiş Kontrol kapalıyken bir misafir geçişi bağlantısını açın; kapıdaki QR okuyucuya bir QR gösterin. Sonra modülü açıp tekrar deneyin.
+  - **Beklenen Sonuç:** Misafir sayfası kibar bir "Geçiş şu anda kullanılamıyor" bilgisi verir, kapı açma düğmesi yoktur. Okuyucudan açma reddedilir (kapı açılmaz). Modül açılınca ikisi de eskisi gibi çalışır.
+- [ ] **59.6. Modül Kapatılınca Yerel (LAN) Anahtar Döner:**
+  - **Nasıl Test Edilir:** Cihazla aynı Wi-Fi'deyken uygulamada yerel açmanın çalıştığını doğrulayın; Geçiş Kontrol'ü kapatın; eski uygulama önbelleğiyle yerel açmayı deneyin; modülü yeniden açın ve uygulamayı yenileyin.
+  - **Beklenen Sonuç:** Kapatma sonrası eski anahtarla yerel (UDP) açma çalışmaz. Yeniden açıp yenileyince uygulama yeni anahtarı alır ve yerel açma yine çalışır. Cihaz çevrimiçi kalır. (Cihaz o sırada çevrimdışıysa yeni anahtar bağlanınca gider.)
+- [ ] **59.7. İki Siteli Yönetici:**
+  - **Nasıl Test Edilir:** İki siteyi yöneten hesapla birinde Geçiş Kontrol'ü kapatın; Panel'in site seçicisine ve Modüller ekranının site seçicisine bakın.
+  - **Beklenen Sonuç:** Panel'in site seçicisinde yalnız modülü açık site listelenir ve menüler durur. Modüller ekranında site değiştirince her sitenin durumu ayrı görünür; birinde kapalı olan diğerinde açık olabilir.
+- [ ] **59.8. Bireysel Kullanıcı ve Sakin Modundaki Yönetici (Kapalı Site):**
+  - **Nasıl Test Edilir:** Bireysel kullanıcı ya da Sakin Modu'ndaki yönetici olarak, Geçiş Kontrol'ü kapalı bir sitedeyken ana ekrana bakın.
+  - **Beklenen Sonuç:** "Kayıtlı Dairelerim", "Katılım Başvurularım" ve hızlı işlemler (Cihaz Ekle, Site Kur, Siteye Katıl) görünmeye devam eder; üstte tek satır "Geçiş Kontrol modülü kapalı…" notu vardır.
+- [ ] **59.9. Süper Kullanıcı: Modüller ve Panel:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla giriş yapın; çekmeceye bakın; Panel'de Geçiş Kontrol'ü kapalı bir siteyi seçin; Modüller'den açıp yenileyin.
+  - **Beklenen Sonuç:** Çekmecede "Modüller" ve "Denetim Kaydı" görünür. Kapalı sitede kapı kartları yerine bilgi kartı ("Modüller Ekranını Aç" düğmesiyle) çıkar, uzaktan açma "Bu özellik şu an kapalı…" der. Açınca kartlar geri gelir.
+- [ ] **59.10. Denetim Kaydı:**
+  - **Nasıl Test Edilir:** Süper kullanıcı olarak "Denetim Kaydı"nı açın; az önce yaptığınız modül ve rol işlemlerini bulun; "Site filtresi" ve "Eylem filtresi"ni (Tümü / Modül açıldı / Modül kapatıldı / Rol verildi / Rol kaldırıldı) kullanın; "Daha fazla yükle" ve çekip yenilemeyi deneyin. Site yöneticisi hesabıyla ekranı açmayı deneyin.
+  - **Beklenen Sonuç:** Kim, ne zaman, hangi siteye hangi işlemi yaptı satırları görünür; filtreler birlikte çalışır; yüklenirken yenile ya da filtre değiştirince düğme takılı kalmaz; ağ hatasında "kayıt yok" değil hata kartı çıkar. Yönetici hesabı bu ekranı göremez. Kayıtlar silinemez.
+- [ ] **59.11. Yönetim Türü Seçici:**
+  - **Nasıl Test Edilir:** Site Kur (site yöneticisi/bireysel) ve Süper kullanıcı Site Ekle ekranlarında "Yönetim Türü" alanına bakın; mevcut bir sitenin kartına ve Site Düzenle'ye bakın.
+  - **Beklenen Sonuç:** "Apartman ve Site" seçili gelir; Rezidans, İş Merkezi, Kooperatif ve Alışveriş Merkezi "Yakında…" etiketli ve seçilemez. Site kartında tür çipi vardır; mevcut siteler "Apartman ve Site" görünür; Site Düzenle'de tür salt okunurdur.
+- [ ] **59.12. Ek Roller: Yönetim Kurulu ve Görevli:**
+  - **Nasıl Test Edilir:** Modüller ekranı → "Ek roller": hesabı olan bir kişinin e-postasını "Yönetim Kurulu" rolüyle ekleyin; kayıtsız bir e-posta ve site yöneticisinin e-postasını deneyin; kişiyi kaldırın.
+  - **Beklenen Sonuç:** Eklenen kişi listede görünür. Kayıtsız e-posta "Bu e-posta ile kayıtlı hesap yok." der; site yöneticisi "Bu kişi zaten site yöneticisi." der. Kaldırmak onay ister ve kişiyi listeden çıkarır; kişinin hesabı ve dairesindeki kapı yetkisi bozulmaz. Denetim Kaydı'nda "Rol verildi/kaldırıldı" görünür.
+- [ ] **59.13. Yalnız Kurul/Görevli Rolü Olan Hesap:**
+  - **Nasıl Test Edilir:** Yalnızca Yönetim Kurulu ya da Görevli rolü olan (başka kapı erişimi olmayan) hesapla giriş yapın.
+  - **Beklenen Sonuç:** Menüler ve Panel değişmez; "Geçiş Kontrol kapalı" sayılmaz, kapı menüleri gizlenmez.
+- [ ] **59.14. Ağ Hatası ve Küçük Ekran:**
+  - **Nasıl Test Edilir:** İnterneti kapatıp Modüller ve Denetim Kaydı ekranlarını açın; telefonda yazı boyutunu en büyüğe alıp bu ekranları ve Ek Rol Ata / kapatma onayı pencerelerini açın.
+  - **Beklenen Sonuç:** Hata kartı ve "Tekrar Dene" görünür ("site yok" ya da "kayıt yok" yazmaz); menüler kaybolmaz. Taşma olmaz.
+- [ ] **59.15. (Geliştirici) Sunucu Kapı Koruması ve Hız Sınırları:**
+  - **Nasıl Test Edilir:** Geçiş Kontrol kapalı sitede POST /app/doors/:id/open, /qr-token ve POST /app/guest-passes çağırın; GET /app/my-doors'a bakın; PUT /manager/sites/:siteCode/modules/door_control {enabled:false} isteğini onaysız (confirm yok) gönderin; modül ve ek rol uçlarını art arda çağırın.
+  - **Beklenen Sonuç:** Kapı uçları 403 `{code:"MODULE_DISABLED", module:"door_control"}` döner; my-doors o sitenin kapılarını listelemez; onaysız kapatma 409 `MODULE_CONFIRM_REQUIRED` döner; modül ucu kullanıcı başına 60/saat, ek rol ucu 20/saat sonrası 429 (`Retry-After`) döner.
+- [ ] **59.16. (Operasyon) DNS ve MQTT Bağlantısı:**
+  - **Nasıl Test Edilir:** Cloudflare'de mqtt, api ve evotomasyon kayıtlarının "DNS only" (gri bulut) olduğunu doğrulayın; sunucuda `curl http://127.0.0.1:8080/health` çıktısına bakın.
+  - **Beklenen Sonuç:** Üç kayıt gri bulutta olmalıdır: turuncu bulut MQTT 8883/8884 portlarını taşımaz, cihazlar bağlanamaz. `/health` içinde `mqtt.connected:true` görünür (API köprüsü `MQTT_CONNECT_HOST=127.0.0.1` ile yerel brokera bağlanır; cihazlar yine genel adla bağlanır).

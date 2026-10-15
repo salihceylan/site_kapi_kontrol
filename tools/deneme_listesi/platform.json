@@ -1,12 +1,12 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0 ve Faz 1 yapım aşamasında (sunucu ve uygulama kodu yazılıyor). Faz 2 ve 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
+  "durum_metni": "Durum: Faz 0 ve Faz 1 canlıda ve denemeye hazır (15 Ekim). Android: yeni APK (build\\app\\outputs\\flutter-apk\\app-release.apk), web: api.gudeteknoloji.com.tr (Ctrl+F5 ile yenileyin), Windows: build\\windows\\x64\\runner\\Debug\\site_kapi_kontrol.exe. Faz 2 ve 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
   "bolumler": [
     {
       "id": "F0",
       "baslik": "Geçiş: mevcut sistem aynen çalışır",
-      "durum": "yapiliyor",
+      "durum": "hazir",
       "ozet": "Yeni yapıya geçerken bugün kullandığınız her şey eskisi gibi çalışmalı. Bu bölüm, güncelleme canlıya alındıktan hemen sonra denenir. Yeni modüller kapalı gelir, siz açana kadar kimse bir şey görmez.",
       "maddeler": [
         {
@@ -20,7 +20,7 @@
           "rol_notu": "Hepsi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.02",
@@ -33,7 +33,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.03",
@@ -47,7 +47,7 @@
           "rol_notu": "Daire sakini",
           "on_kosul": "Çevrimiçi bir kapı cihazı",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.04",
@@ -60,7 +60,7 @@
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.05",
@@ -73,20 +73,20 @@
           "rol_notu": "Hepsi",
           "on_kosul": "Güncellemeden önceki uygulama sürümü",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.06",
           "baslik": "Yeni modüller kapalı gelir",
           "adimlar": [
             "Güncellemeden sonra site yöneticisi olarak giriş yapın.",
-            "Menüleri gezin."
+            "Menüleri gezin, “Modüller”e girin."
           ],
-          "beklenen": "Menü bugünküyle aynıdır. Yeni modül menüsü yoktur; siz bir modülü açana kadar hiçbir şey değişmez.",
+          "beklenen": "Menü bugünküyle aynıdır; tek fark site yöneticisinde (ve süper kullanıcıda) yeni “Modüller” öğesidir. Orada Geçiş Kontrol açık, diğer modüller “Yakında…” ve kapalı görünür; siz bir şeyi açana kadar hiçbir özellik değişmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yapiliyor"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.07",
@@ -99,7 +99,7 @@
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.08",
@@ -112,7 +112,7 @@
           "rol_notu": "Hepsi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F0.09",
@@ -125,14 +125,14 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         }
       ]
     },
     {
       "id": "F1",
       "baslik": "Modül sistemi ve yönetim türü",
-      "durum": "yapiliyor",
+      "durum": "hazir",
       "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (AHBU) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
       "maddeler": [
         {
@@ -145,7 +145,7 @@
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.02",
@@ -158,7 +158,7 @@
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.03",
@@ -171,7 +171,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.04",
@@ -185,7 +185,7 @@
           "rol_notu": "Daire sakini",
           "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.05",
@@ -196,8 +196,8 @@
           "beklenen": "Geçiş Kontrol (AHBU) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yapiliyor"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.06",
@@ -212,7 +212,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.07",
@@ -225,7 +225,7 @@
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.08",
@@ -237,7 +237,7 @@
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.09",
@@ -249,7 +249,7 @@
           "rol_notu": "Hepsi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.10",
@@ -263,7 +263,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "İki sitesi olan bir yönetici hesabı",
           "yeni": false,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.11",
@@ -277,7 +277,7 @@
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "Hesabı olan bir kişi (e-posta)",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
         },
         {
           "id": "F1.12",
@@ -291,7 +291,57 @@
           "rol_notu": "Görevli",
           "on_kosul": "Hesabı olan bir kişi (e-posta)",
           "yeni": true,
-          "gelistirme": "yapiliyor"
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.13",
+          "baslik": "Bireysel kullanıcı ve sakin modundaki yönetici (kapalı site)",
+          "adimlar": [
+            "Geçiş Kontrol’ü kapalı bir sitede bireysel kullanıcı (ya da Sakin Modu’ndaki yönetici) olarak ana ekrana bakın."
+          ],
+          "beklenen": "“Kayıtlı Dairelerim”, “Katılım Başvurularım” ve hızlı işlemler (Cihaz Ekle, Site Kur, Siteye Katıl) görünmeye devam eder; üstte tek satır “Geçiş Kontrol modülü kapalı…” notu vardır. Sesle dinleme açıksa “Tanımlı bir kapı bulunamadı.” duyulmaz.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.14",
+          "baslik": "Modül kapatılınca yerel (LAN) anahtar döner",
+          "adimlar": [
+            "Cihazla aynı Wi-Fi’deyken uygulamada yerel açmanın çalıştığını görün.",
+            "Geçiş Kontrol’ü kapatın, sonra yeniden açıp uygulamayı yenileyin."
+          ],
+          "beklenen": "Kapatınca eski anahtarla yerel açma çalışmaz; yeniden açıp yenileyince uygulama yeni anahtarı alır ve yerel açma yine çalışır. Cihaz çevrimiçi kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Çevrimiçi bir kapı cihazı ve aynı Wi-Fi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.15",
+          "baslik": "Yalnız kurul/görevli rolü olan hesap",
+          "adimlar": [
+            "Yalnızca Yönetim Kurulu ya da Görevli rolü olan (başka kapı erişimi olmayan) hesapla giriş yapın."
+          ],
+          "beklenen": "Menüler ve Panel değişmez; kapı menüleri gizlenmez ve “Geçiş Kontrol kapalı” sayılmaz.",
+          "rol_notu": "Yönetim kurulu",
+          "on_kosul": "F1.11 ile eklenmiş bir hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.16",
+          "baslik": "Ağ hatası ve küçük ekran",
+          "adimlar": [
+            "İnterneti kapatıp Modüller ve Denetim Kaydı ekranlarını açın.",
+            "Yazı boyutunu en büyüğe alıp bu ekranları ve “Ek Rol Ata” ile kapatma onayı pencerelerini açın."
+          ],
+          "beklenen": "Hata kartı ve “Tekrar Dene” görünür (“site yok” ya da “kayıt yok” yazmaz); menüler kaybolmaz. Hiçbir ekranda taşma olmaz.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
