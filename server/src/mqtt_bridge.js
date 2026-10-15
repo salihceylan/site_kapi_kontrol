@@ -51,13 +51,24 @@ function envFlag(name, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(value);
 }
 
+/**
+ * Köprünün bağlanacağı adres ve TLS sunucu adı. Broker aynı makinede ise `MQTT_CONNECT_HOST` (örn. 127.0.0.1) verilerek
+ * bağlantı public DNS'ten (Cloudflare vekili vb.) bağımsız kurulur; sertifika doğrulaması ve SNI yine `MQTT_HOST` adına göre yapılır.
+ */
+export function resolveMqttConnectTarget(env = process.env) {
+  const host = String(env.MQTT_HOST || '').trim();
+  const port = Number(env.MQTT_PORT || 8883);
+  const connectHost = String(env.MQTT_CONNECT_HOST || '').trim() || host;
+  return { host, connectHost, port, url: `mqtts://${connectHost}:${port}`, servername: host };
+}
+
 function mqttConfig() {
-  const host = String(process.env.MQTT_HOST || '').trim();
-  const port = Number(process.env.MQTT_PORT || 8883);
+  const { host, connectHost, port } = resolveMqttConnectTarget();
   const username = String(process.env.MQTT_USER || '').trim();
   const password = String(process.env.MQTT_PASSWORD || '');
   return {
     host,
+    connectHost,
     port,
     username,
     password,
@@ -998,7 +1009,8 @@ export function startMqttBridge() {
     return;
   }
 
-  client = mqtt.connect(`mqtts://${config.host}:${config.port}`, {
+  client = mqtt.connect(`mqtts://${config.connectHost}:${config.port}`, {
+    servername: config.host,
     username: config.username,
     password: config.password,
     clientId: `kapi-api-${process.pid}-${Date.now()}`,

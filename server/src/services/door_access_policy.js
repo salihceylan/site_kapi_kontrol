@@ -14,9 +14,13 @@
  *      'local'  -> yerel ağ (UDP/HTTP) ile açma               (feature_local_udp_enabled)
  *  - super_user istisnası: 'remote', 'qr' ve 'local' kanallarında korunur (mevcut davranış).
  *    'guest' kanalında istisna YOKTUR (herkese açık link; site bayrağı herkes için geçerli).
+ *  - Platform modülü (kanal ayrımından ÖNCE): `door.module_door_control === false` (sitede Geçiş Kontrol
+ *    modülü kapalı) ise TÜM kanallar MODULE_DISABLED (403) ile reddedilir; süper kullanıcı dahil, çünkü kapı
+ *    açmayı durduran şey site yönetiminin kararıdır. Alan yoksa (eski testler/çağrılar) modül "açık" sayılır.
+ *    `checkModule: false` yalnız cihazın yaptığı açmanın BİLDİRİMİ için (local-open-notify) kullanılır.
  *
  * Hata kodları:
- *   REMOTE_OPEN_DISABLED, QR_DISABLED, QR_ENTRY_INACTIVE, GUEST_DISABLED, LOCAL_DISABLED,
+ *   MODULE_DISABLED, REMOTE_OPEN_DISABLED, QR_DISABLED, QR_ENTRY_INACTIVE, GUEST_DISABLED, LOCAL_DISABLED,
  *   DOOR_NOT_FOUND (door yok, 404), INVALID_DOOR_CHANNEL (programlama hatası, 500)
  *
  * Geofence burada DEĞİL (konum istekten gelir): bkz. geofence_service.js (C3).
@@ -24,13 +28,22 @@
 
 import crypto from 'node:crypto';
 import net from 'node:net';
+import { DOOR_CONTROL_MODULE } from '../modules/catalog.js';
+import {
+  isDoorModuleDisabled,
+  MODULE_DISABLED_CODE,
+  MODULE_DISABLED_MESSAGE,
+} from '../modules/door_guard.js';
 
 export const DOOR_CHANNELS = Object.freeze(['remote', 'qr', 'guest', 'local']);
 
-function policyError(code, message, statusCode = 403) {
+function policyError(code, message, statusCode = 403, moduleCode = null) {
   const error = new Error(message);
   error.statusCode = statusCode;
   error.code = code;
+  if (moduleCode) {
+    error.module = moduleCode;
+  }
   return error;
 }
 
@@ -41,7 +54,7 @@ function isSuperUser(authUser) {
 /**
  * Politikayı değerlendirir; izinliyse null, değilse { code, message, statusCode } döner.
  */
-export function evaluateDoorOpenPolicy({ door, channel, authUser } = {}) {
+export function evaluateDoorOpenPolicy({ door, channel, authUser, checkModule = true } = {}) {
   if (!DOOR_CHANNELS.includes(channel)) {
     return {
       code: 'INVALID_DOOR_CHANNEL',
@@ -54,6 +67,16 @@ export function evaluateDoorOpenPolicy({ door, channel, authUser } = {}) {
       code: 'DOOR_NOT_FOUND',
       message: 'Kapi bulunamadi.',
       statusCode: 404,
+    };
+  }
+
+  // Platform modülü: Geçiş Kontrol kapalıysa hiçbir kanal (uzaktan, karekod, misafir, yerel) kapı açamaz.
+  if (checkModule !== false && isDoorModuleDisabled(door)) {
+    return {
+      code: MODULE_DISABLED_CODE,
+      message: MODULE_DISABLED_MESSAGE,
+      statusCode: 403,
+      module: DOOR_CONTROL_MODULE,
     };
   }
 
@@ -119,16 +142,16 @@ export function evaluateDoorOpenPolicy({ door, channel, authUser } = {}) {
 /**
  * C2: İzin yoksa Error fırlatır (statusCode, code ile); izinliyse undefined döner.
  */
-export function assertDoorOpenAllowed({ door, channel, authUser } = {}) {
-  const violation = evaluateDoorOpenPolicy({ door, channel, authUser });
+export function assertDoorOpenAllowed({ door, channel, authUser, checkModule = true } = {}) {
+  const violation = evaluateDoorOpenPolicy({ door, channel, authUser, checkModule });
   if (violation) {
-    throw policyError(violation.code, violation.message, violation.statusCode);
+    throw policyError(violation.code, violation.message, violation.statusCode, violation.module ?? null);
   }
 }
 
 /** Fırlatmayan sürüm (UI/yanıt şekillendirme için). */
-export function isDoorChannelAllowed({ door, channel, authUser } = {}) {
-  return evaluateDoorOpenPolicy({ door, channel, authUser }) === null;
+export function isDoorChannelAllowed({ door, channel, authUser, checkModule = true } = {}) {
+  return evaluateDoorOpenPolicy({ door, channel, authUser, checkModule }) === null;
 }
 
 // ---------------------------------------------------------------------------

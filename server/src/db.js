@@ -956,6 +956,69 @@ export async function ensureDbSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_site_mgr_inv_email ON site_manager_invitations(LOWER(email));
       CREATE INDEX IF NOT EXISTS idx_site_mgr_inv_site ON site_manager_invitations(site_code);
+
+      -- 029: PLATFORM MODUL SISTEMI (Faz 1). db.js ile migrations/029_platform_modules.sql AYNI DDL; ekleyici ve idempotent.
+      -- Eski sitelere satir YAZILMAZ: modul satiri olmayan site katalog varsayilanina gore davranir (door_control ACIK).
+      ALTER TABLE sites ADD COLUMN IF NOT EXISTS management_type TEXT NOT NULL DEFAULT 'apartment_site';
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'sites_management_type_check' AND conrelid = 'sites'::regclass
+        ) THEN
+          ALTER TABLE sites ADD CONSTRAINT sites_management_type_check
+            CHECK (management_type IN ('apartment_site', 'residence', 'business_center', 'cooperative', 'shopping_mall'));
+        END IF;
+      END $$;
+
+      CREATE TABLE IF NOT EXISTS site_modules (
+        site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+        module_code TEXT NOT NULL,
+        enabled BOOLEAN NOT NULL,
+        updated_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (site_code, module_code)
+      );
+
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        actor_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        actor_name TEXT,
+        actor_role TEXT,
+        action TEXT NOT NULL,
+        site_code BIGINT,
+        target_type TEXT,
+        target_id TEXT,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_site_id ON audit_log (site_code, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_id ON audit_log (id DESC);
+
+      DO $$
+      DECLARE
+        old_check RECORD;
+      BEGIN
+        FOR old_check IN
+          SELECT c.conname
+          FROM pg_constraint c
+          WHERE c.conrelid = 'site_memberships'::regclass
+            AND c.contype = 'c'
+            AND pg_get_constraintdef(c.oid) LIKE '%SITE_OWNER%'
+            AND pg_get_constraintdef(c.oid) NOT LIKE '%BOARD_MEMBER%'
+        LOOP
+          EXECUTE format('ALTER TABLE site_memberships DROP CONSTRAINT %I', old_check.conname);
+        END LOOP;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'chk_site_membership_role' AND conrelid = 'site_memberships'::regclass
+        ) THEN
+          ALTER TABLE site_memberships ADD CONSTRAINT chk_site_membership_role
+            CHECK (role IN ('SITE_OWNER', 'SITE_ADMIN', 'RESIDENT', 'BOARD_MEMBER', 'STAFF'));
+        END IF;
+      END $$;
     `);
   } finally {
     client.release();

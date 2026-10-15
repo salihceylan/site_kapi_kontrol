@@ -244,6 +244,7 @@ export async function updateSiteByCode({
         block_apartment_counts,
         qr_totp_secret,
         qr_rotation_seconds,
+        management_type,
         created_at
     `,
     values,
@@ -524,6 +525,7 @@ export async function getSiteByCode(siteCode) {
         s.geofence_radius_meters,
         s.qr_totp_secret,
         s.qr_rotation_seconds,
+        s.management_type,
         sm.manager_user_code,
         manager.full_name AS manager_name,
         s.created_at
@@ -592,6 +594,7 @@ export async function listSitesForAuthUser({
           s.deletion_requested_by_name,
           s.deletion_requested_by_role,
           s.deletion_requested_at,
+          s.management_type,
           sm.manager_user_code,
           manager.full_name AS manager_name,
           s.created_at
@@ -670,6 +673,7 @@ export async function listSitesForAuthUser({
         s.deletion_requested_by_name,
         s.deletion_requested_by_role,
         s.deletion_requested_at,
+        s.management_type,
         COALESCE(sms.manager_user_code, sm.user_code) AS manager_user_code,
         COALESCE(manager.full_name, sm_user.full_name, 'Site Yöneticisi') AS manager_name,
         s.created_at
@@ -859,6 +863,8 @@ export async function createSiteWithStructure({
   geofenceLongitude = null,
   // Tek varsayılan sabit: 100 m (istemci + geofence_service.GEOFENCE_DEFAULT_RADIUS_METERS ile aynı).
   geofenceRadiusMeters = 100,
+  // Platform: yönetim türü (çağıran resolveManagementTypeInput ile doğrular; bu fazda yalnız apartment_site).
+  managementType = 'apartment_site',
 }) {
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
@@ -895,11 +901,12 @@ export async function createSiteWithStructure({
           require_geofence,
           geofence_latitude,
           geofence_longitude,
-          geofence_radius_meters
+          geofence_radius_meters,
+          management_type
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), $9, $10,
-          $11, $12, $13, $14, $15, $16, $17, $18, $19
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         )
         RETURNING
           site_code AS id,
@@ -922,6 +929,7 @@ export async function createSiteWithStructure({
           geofence_latitude,
           geofence_longitude,
           geofence_radius_meters,
+          management_type,
           created_at
       `,
       [
@@ -944,6 +952,7 @@ export async function createSiteWithStructure({
         geofenceLatitude,
         geofenceLongitude,
         geofenceRadiusMeters,
+        managementType,
       ],
     );
     const site = siteResult.rows[0];

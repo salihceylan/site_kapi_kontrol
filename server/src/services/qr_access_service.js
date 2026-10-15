@@ -4,6 +4,7 @@ import { getAccessibleDoorForUser, recordDoorAccessLog } from './door_service.js
 import { normalizeDeviceTopicUid, publishDoorPulse } from '../mqtt_bridge.js';
 import { validateGeofenceForDoorRequest } from './geofence_service.js';
 import { assertDoorOpenAllowed } from './door_access_policy.js';
+import { MODULE_DISABLED_CODE, MODULE_DISABLED_REASON } from '../modules/door_guard.js';
 
 function finiteOrNull(value) {
   if (value === undefined || value === null || value === '' || typeof value === 'boolean') {
@@ -333,7 +334,9 @@ export async function verifyQrTokenAndOpenDoor({ deviceUid, token }) {
     assertDoorOpenAllowed({ door: accessibleDoor, channel: 'qr', authUser: tokenUser });
   } catch (policyError) {
     console.warn(`[QR Dogrulama RED] Site politikasi engelledi (${policyError.code}). Cihaz: ${cleanUid}`);
-    return deny(policyError.code || 'POLICY_DENIED', 'Site Politikası Engeli');
+    // Geçiş Kontrol modülü kapalıysa okuyucuya giden red nedeni `module_disabled`; token'a yazılan kod politika kodudur.
+    const readerReason = policyError.code === MODULE_DISABLED_CODE ? MODULE_DISABLED_REASON : undefined;
+    return deny(policyError.code || 'POLICY_DENIED', 'Site Politikası Engeli', readerReason);
   }
 
   // Aşama 3: Atomik Tüketim & Yarış Durumu (Race Condition) Koruması

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { managementTypeLabel, normalizeManagementType } from '../modules/management_types.js';
 
 export const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner', 'individual']);
 export const validApprovalStatuses = new Set(['pending', 'approved', 'rejected']);
@@ -228,6 +229,9 @@ export function mapSiteRow(row) {
     deletion_requested_by_name: row.deletion_requested_by_name ?? null,
     deletion_requested_by_role: row.deletion_requested_by_role ?? null,
     deletion_requested_at: row.deletion_requested_at ?? null,
+    // Platform: yönetim türü (satırda yoksa / bilinmiyorsa apartment_site).
+    management_type: normalizeManagementType(row.management_type),
+    management_type_label: managementTypeLabel(row.management_type),
     created_at: row.created_at,
   };
 }

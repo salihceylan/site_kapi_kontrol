@@ -1,0 +1,1150 @@
+{
+  "baslik": "Platform Faz Kontrol Listesi",
+  "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
+  "durum_metni": "Durum: Faz 0 ve Faz 1 yapım aşamasında (sunucu ve uygulama kodu yazılıyor). Faz 2 ve 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
+  "bolumler": [
+    {
+      "id": "F0",
+      "baslik": "Geçiş: mevcut sistem aynen çalışır",
+      "durum": "yapiliyor",
+      "ozet": "Yeni yapıya geçerken bugün kullandığınız her şey eskisi gibi çalışmalı. Bu bölüm, güncelleme canlıya alındıktan hemen sonra denenir. Yeni modüller kapalı gelir, siz açana kadar kimse bir şey görmez.",
+      "maddeler": [
+        {
+          "id": "F0.01",
+          "baslik": "Mevcut hesaplarla giriş yapılır",
+          "adimlar": [
+            "Güncellemeden önce kullandığınız e-posta ve şifreyle giriş yapın.",
+            "Dört rolün her biri için tekrarlayın: süper kullanıcı, site yöneticisi, daire sakini, bireysel kullanıcı."
+          ],
+          "beklenen": "Giriş eskisi gibi çalışır, ek bir adım istenmez. Her rolün menüleri bugünkü gibi görünür.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.02",
+          "baslik": "Siteler, bloklar, daireler ve sakinler eksiksiz",
+          "adimlar": [
+            "Site Yönetimi ekranını açın.",
+            "Sitenizin bloklarını, dairelerini ve sakinlerini sayın."
+          ],
+          "beklenen": "Sayılar güncellemeden önceki ile aynıdır. Hiçbir kayıt kaybolmaz ya da çift görünmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.03",
+          "baslik": "Kapı açma üç yoldan da çalışır",
+          "adimlar": [
+            "Telefondan kapı açma düğmesine dokunun.",
+            "Giriş QR kodu üretip kapı okuyucuya gösterin.",
+            "Bir misafir geçişi oluşturup bağlantıyla kapıyı açın."
+          ],
+          "beklenen": "Üçü de eskisi gibi çalışır. Geçiş kayıtlarında üç işlem de görünür.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Çevrimiçi bir kapı cihazı",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.04",
+          "baslik": "Cihazlar bağlı kalır",
+          "adimlar": [
+            "Cihaz listesini açın.",
+            "Çevrimiçi ve çevrimdışı durumlarına bakın."
+          ],
+          "beklenen": "Güncellemeden önce çevrimiçi olan cihazlar kısa süre içinde yine çevrimiçi görünür. Kapı durumu güncellenmeye devam eder.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.05",
+          "baslik": "Eski uygulama sürümü çalışır",
+          "adimlar": [
+            "Güncellemeden önce kurduğunuz uygulama sürümüyle giriş yapın.",
+            "Kapı açmayı deneyin."
+          ],
+          "beklenen": "Giriş ve kapı açma çalışır. Yeni modül menüleri eski sürümde görünmez ve hata verilmez.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Güncellemeden önceki uygulama sürümü",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.06",
+          "baslik": "Yeni modüller kapalı gelir",
+          "adimlar": [
+            "Güncellemeden sonra site yöneticisi olarak giriş yapın.",
+            "Menüleri gezin."
+          ],
+          "beklenen": "Menü bugünküyle aynıdır. Yeni modül menüsü yoktur; siz bir modülü açana kadar hiçbir şey değişmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.07",
+          "baslik": "Kayıt ve e-posta doğrulama aynen çalışır",
+          "adimlar": [
+            "Yeni bir e-posta adresiyle kayıt olun.",
+            "E-postaya gelen 6 haneli kodu girin."
+          ],
+          "beklenen": "Hesap açılır ve giriş yapılır. Kod akışı bugünkü gibidir.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.08",
+          "baslik": "Şifre sıfırlama aynen çalışır",
+          "adimlar": [
+            "Giriş ekranında “Şifremi Unuttum”a dokunun.",
+            "E-postanıza gelen bilgiyle yeni şifre belirleyin."
+          ],
+          "beklenen": "Yeni şifreyle giriş yapılır.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F0.09",
+          "baslik": "Eski geçiş kayıtları durur",
+          "adimlar": [
+            "Kapı geçiş kayıtlarını açın.",
+            "Güncellemeden önceki bir günün kayıtlarına bakın."
+          ],
+          "beklenen": "Eski kayıtların hepsi yerinde ve doğru saatlerle görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        }
+      ]
+    },
+    {
+      "id": "F1",
+      "baslik": "Modül sistemi ve yönetim türü",
+      "durum": "yapiliyor",
+      "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (AHBU) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
+      "maddeler": [
+        {
+          "id": "F1.01",
+          "baslik": "Modül kataloğu",
+          "adimlar": [
+            "Menüden “Modüller” ekranını açın."
+          ],
+          "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (AHBU) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.02",
+          "baslik": "Bir siteye modül açıp kapatma",
+          "adimlar": [
+            "Modüller ekranında bir site seçin.",
+            "Geçiş Kontrol’ü kapatın (onay penceresini onaylayın), sonra yeniden açın."
+          ],
+          "beklenen": "Kapatınca o sitenin kapı menüleri ve kapı kartları kaybolur, açınca geri gelir (ekranı aşağı çekince ya da kısa süre içinde kendiliğinden).",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "Bir test sitesi (kapılar etkilenir)",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.03",
+          "baslik": "Site yöneticisi kendi modüllerini seçer",
+          "adimlar": [
+            "Site yöneticisi olarak “Modüller” ekranını açın.",
+            "Geçiş Kontrol’ü kapatıp açın."
+          ],
+          "beklenen": "Değişiklik hemen menüye yansır. “Yakında…” etiketli modüller açılamaz. Ücretli modüllerde onay ve ücret adımı sonraki aşamada eklenecektir (Yakında…).",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bir test sitesi (kapılar etkilenir)",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.04",
+          "baslik": "Kapalı modül hiçbir yerde görünmez",
+          "adimlar": [
+            "Geçiş Kontrol’ün kapalı olduğu sitede sakin hesabıyla giriş yapın.",
+            "Menüleri gezin.",
+            "Misafir geçişi bağlantısını açmayı deneyin."
+          ],
+          "beklenen": "Kapı menüleri ve kapı kartları görünmez. Panel’de “Geçiş Kontrol modülü kapalı” bilgisi çıkar. Kapı listesi ve telefon widget’ı o siteyi göstermez. Misafir bağlantısı kibar bir “modül kapalı” bilgisi verir, hata ekranı çıkmaz.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.05",
+          "baslik": "Mevcut sitelerde Geçiş Kontrol açık gelir",
+          "adimlar": [
+            "Kapıları zaten kullanan bir sitenin Modüller ekranına bakın."
+          ],
+          "beklenen": "Geçiş Kontrol (AHBU) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.06",
+          "baslik": "Geçiş Kontrol kapatılırsa ne olur",
+          "adimlar": [
+            "Geçiş Kontrol’ü kapatmayı deneyin.",
+            "Uyarıyı okuyup onaylayın.",
+            "Sakin hesabıyla kapı açmayı deneyin.",
+            "Modülü yeniden açın."
+          ],
+          "beklenen": "Kapatmadan önce “Telefondan kapı açma, QR ve misafir geçişi durur” uyarısı çıkar. Onaylanınca kapı menüleri gizlenir; telefondan açma, QR ve misafir geçişi (kapıdaki QR okuyucu dahil) “Geçiş Kontrol modülü kapalı” mesajıyla reddedilir. Cihazlar bağlı kalır. Yeniden açınca her şey eskisi gibi çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Bir test sitesi (kapılar etkilenir)",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.07",
+          "baslik": "Modül değişiklikleri kayıt defterine yazılır",
+          "adimlar": [
+            "Süper kullanıcı olarak “Denetim Kaydı” ekranını açın.",
+            "Az önce açıp kapattığınız modülü bulun."
+          ],
+          "beklenen": "Kim, ne zaman, hangi siteye hangi modülü açtı ya da kapattı (ve ek rol verme/kaldırma) satırı görünür. Site ve eylem süzgeci vardır, “Daha fazla yükle” ile eski kayıtlara inilir. Kayıt silinemez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.08",
+          "baslik": "Yönetim türü seçimi",
+          "adimlar": [
+            "Yeni site kurarken “Yönetim Türü” alanına bakın."
+          ],
+          "beklenen": "“Apartman ve Site” seçili gelir. Rezidans, İş Merkezi, Kooperatif ve Alışveriş Merkezi “Yakında…” etiketiyle görünür, seçilemez. Mevcut siteler otomatik “Apartman ve Site” olur.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.09",
+          "baslik": "Mevcut roller bugünkü yetkileriyle çalışır",
+          "adimlar": [
+            "Süper kullanıcı, site yöneticisi, daire sakini ve bireysel kullanıcı olarak sırayla menüleri gezin."
+          ],
+          "beklenen": "Her rol bugünkü menüleri ve yetkileri görür. Hiç kimse yetkisi olmayan bir ekranı açamaz.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.10",
+          "baslik": "Birden çok siteyi yöneten hesap",
+          "adimlar": [
+            "Birden çok siteyi yöneten bir hesapla giriş yapın.",
+            "Siteler arasında geçiş yapın.",
+            "Her sitede Modüller ekranına bakın."
+          ],
+          "beklenen": "Site değiştirme eskisi gibidir. Modül seçimi site bazlıdır: birinde açık olan modül diğerinde kapalı olabilir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki sitesi olan bir yönetici hesabı",
+          "yeni": false,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.11",
+          "baslik": "Yönetim Kurulu / Denetçi rolü",
+          "adimlar": [
+            "Site yöneticisi olarak Modüller ekranında “Ek roller” bölümüne girin.",
+            "Kayıtlı bir kişinin e-postasını yazıp “Yönetim Kurulu” rolüyle ekleyin.",
+            "Sonra kaldırın."
+          ],
+          "beklenen": "Kişi listede görünür, kaldırınca kaybolur; hesabı ve dairesindeki yetkiler bozulmaz. Kurul üyesinin duyuru, kişi listesi ve finans raporlarını görmesi ilgili modüller geldikçe (Faz 2–4) eklenecek. Rol açılmamışsa işi site yöneticisinde kalır.",
+          "rol_notu": "Yönetim kurulu",
+          "on_kosul": "Hesabı olan bir kişi (e-posta)",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        },
+        {
+          "id": "F1.12",
+          "baslik": "Görevli rolü (kapıcı, teknik, danışma)",
+          "adimlar": [
+            "Site yöneticisi olarak Modüller ekranında “Ek roller” bölümüne girin.",
+            "Kayıtlı bir kişinin e-postasını yazıp “Görevli” rolüyle ekleyin.",
+            "Sonra kaldırın."
+          ],
+          "beklenen": "Kişi listede görünür, kaldırınca kaybolur; hesabı ve dairesindeki yetkiler bozulmaz. Görevlinin menüleri ilgili modüller geldikçe eklenecek. Rol açılmamışsa işi site yöneticisinde kalır.",
+          "rol_notu": "Görevli",
+          "on_kosul": "Hesabı olan bir kişi (e-posta)",
+          "yeni": true,
+          "gelistirme": "yapiliyor"
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "baslik": "Kişi ve daire kayıtları (CRM)",
+      "durum": "planli",
+      "ozet": "Sitedeki herkesin ve her dairenin bilgisi tek yerde tutulur. Her modül aynı kayıtları kullanır, bilgi ikinci kez girilmez. Bugünkü sakin ve daire kayıtları bu yapıya aktarılır.",
+      "maddeler": [
+        {
+          "id": "F2.01",
+          "baslik": "Kişi listesi, arama ve süzme",
+          "adimlar": [
+            "Menüden “Kişiler” ekranını açın.",
+            "Ad, telefon, e-posta ya da daire numarasıyla arayın.",
+            "Role ve duruma göre süzün."
+          ],
+          "beklenen": "Sitedeki malik, kiracı, aile üyesi ve görevliler listelenir. Arama yazdıkça sonuçları daraltır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.02",
+          "baslik": "Kişi kartı",
+          "adimlar": [
+            "Listeden bir kişiye dokunun."
+          ],
+          "beklenen": "Ad soyad, telefon, e-posta, rolü (malik / kiracı / aile üyesi / görevli), bağlı daire(ler), araç plakaları, notlar ve kayıt tarihi tek kartta görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.03",
+          "baslik": "Kişi ekleme ve düzenleme",
+          "adimlar": [
+            "“Kişi Ekle”ye dokunun.",
+            "Ad, telefon, e-posta ve daire seçip ilişkiyi belirtin (malik, kiracı, aile üyesi).",
+            "Kaydettikten sonra kartı açıp bir bilgiyi değiştirin."
+          ],
+          "beklenen": "Kişi eklenir ve ilgili dairede görünür. E-posta varsa hesap oluşturması için davet gider. Değişiklik kartta hemen görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.04",
+          "baslik": "Daire kartı",
+          "adimlar": [
+            "Daireler ekranından bir daire açın."
+          ],
+          "beklenen": "Blok, kat, daire no, m², arsa payı, daire tipi/kategorisi, güncel malik ve kiracı, geçmiş sakinler görünür. Arsa payı ve tip bilgisi aidat dağıtımında kullanılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.05",
+          "baslik": "Malik ve kiracı ayrı tutulur",
+          "adimlar": [
+            "Bir daireye malik ve kiracı ekleyin.",
+            "“Borç ve bildirimler kime gitsin” ayarını değiştirin (malik / kiracı / ikisi)."
+          ],
+          "beklenen": "Dairede iki kişi ayrı rollerle görünür. Ayar, ileride aidat borcunun ve bildirimlerin kime gideceğini belirler.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.06",
+          "baslik": "Taşınma ve devir: geçmiş kaybolmaz",
+          "adimlar": [
+            "Bir kiracıyı “Taşındı” olarak işaretleyin.",
+            "Aynı daireye yeni kiracı ekleyin."
+          ],
+          "beklenen": "Eski kiracı pasife alınır ve dairenin geçmişinde kalır, silinmez. Yeni kiracı güncel sakin olur. Eski kiracının kapı yetkisi kapanır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.07",
+          "baslik": "Araç ve plaka kaydı",
+          "adimlar": [
+            "Bir kişinin kartına iki plaka ekleyin.",
+            "Kişiler ekranında plakayı arayın."
+          ],
+          "beklenen": "Plakalar kişiye bağlı görünür; plakayla arama kişiyi bulur. (Plaka tanıma ile otomatik geçiş Yakında…, burada yalnızca kayıt tutulur.)",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.08",
+          "baslik": "Excel’den toplu yükleme",
+          "adimlar": [
+            "“Toplu Yükle”ye dokunup örnek şablonu indirin.",
+            "Şablonu birkaç kişi ve daireyle doldurup yükleyin (bir satırı bilerek hatalı bırakın).",
+            "Önizlemeyi inceleyip onaylayın."
+          ],
+          "beklenen": "Yükleme önce önizleme gösterir. Hatalı satırlar sebebiyle ayrı listelenir. Onaylayınca yalnızca doğru satırlar kaydedilir ve mevcut kayıtlar bozulmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.09",
+          "baslik": "Excel’e aktarma",
+          "adimlar": [
+            "Kişiler ekranında “Dışa Aktar”a dokunun."
+          ],
+          "beklenen": "Süzülmüş liste Excel/CSV dosyası olarak indirilir. Sütunlar kişi kartındaki alanlarla aynıdır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.10",
+          "baslik": "Kim kimin bilgisini görür (KVKK)",
+          "adimlar": [
+            "Daire sakini olarak kişi bilgilerine bakın.",
+            "Başka bir sitenin yöneticisiyle aynı sitenin kişilerini görmeyi deneyin."
+          ],
+          "beklenen": "Sakin yalnızca kendi bilgisini görür. Yönetici yalnızca kendi sitesinin kişilerini görür. Başka sitenin hiçbir bilgisi görünmez.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "İki ayrı site",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.11",
+          "baslik": "Değişiklik geçmişi",
+          "adimlar": [
+            "Bir kişinin telefonunu değiştirin.",
+            "Kartın “Geçmiş” bölümünü açın."
+          ],
+          "beklenen": "Kim, ne zaman, neyi eski ve yeni değeriyle değiştirdi satırı görünür. Kayıt silinemez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F2.12",
+          "baslik": "Mevcut sakinler otomatik aktarılır",
+          "adimlar": [
+            "Güncellemeden sonra Kişiler ekranını açın.",
+            "Güncellemeden önce var olan bir sakini bulun."
+          ],
+          "beklenen": "Bugünkü sakinler kişi listesinde, bağlı oldukları daireyle görünür. Kapı yetkileri değişmez, kimse yeniden kaydolmak zorunda kalmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "baslik": "Duyuru ve bildirim",
+      "durum": "planli",
+      "ozet": "Yönetim sakinlere duyuru yapar. Duyuru uygulamada, e-postayla ve telefon bildirimiyle ulaşır. SMS ve WhatsApp sonraki aşamadadır (Yakında…). Her sitede hep açıktır.",
+      "maddeler": [
+        {
+          "id": "F3.01",
+          "baslik": "Duyuru oluşturma",
+          "adimlar": [
+            "Menüden “Duyurular” ekranını açıp “Yeni Duyuru”ya dokunun.",
+            "Başlık, metin ve önem derecesi (normal / acil) girip yayınlayın."
+          ],
+          "beklenen": "Duyuru listede görünür. Acil duyuru normal duyurudan ayrı işaretlenir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.02",
+          "baslik": "Kime gideceğini seçme",
+          "adimlar": [
+            "Yeni duyuruda hedefi seçin: tüm site, bir blok ya da seçili daireler.",
+            "Yayınlayıp farklı bloklardaki sakin hesaplarıyla bakın."
+          ],
+          "beklenen": "Duyuru yalnızca seçilen hedefteki kişilerde görünür. Yönetici, kaç kişiye gideceğini yayından önce görür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.03",
+          "baslik": "Sakin duyuruyu görür",
+          "adimlar": [
+            "Sakin hesabıyla uygulamayı açın.",
+            "“Duyurular”a girip bir duyuruyu açın."
+          ],
+          "beklenen": "Okunmamış duyurular rozetle işaretlidir. Açınca okundu olur ve rozet azalır.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.04",
+          "baslik": "Okundu bilgisi",
+          "adimlar": [
+            "Yönetici olarak yayınlanmış duyurunun ayrıntısını açın."
+          ],
+          "beklenen": "Kaç kişinin okuduğu ve kimlerin okumadığı görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.05",
+          "baslik": "Uygulama açıkken anında bildirim",
+          "adimlar": [
+            "Sakin hesabıyla uygulamayı açık bırakın.",
+            "Yönetici hesabıyla yeni duyuru yayınlayın."
+          ],
+          "beklenen": "Sakinin ekranında sayfayı yenilemeden bildirim ve rozet belirir.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.06",
+          "baslik": "E-posta ile de gönderme",
+          "adimlar": [
+            "Yeni duyuruda “E-posta da gönder”i işaretleyip yayınlayın."
+          ],
+          "beklenen": "E-postası kayıtlı hedef kişilere e-posta gider. Yönetici kaç e-posta gönderildiğini, kaç kişinin e-postası olmadığını görür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "E-postası kayıtlı birkaç sakin",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.07",
+          "baslik": "Uygulama kapalıyken telefon bildirimi",
+          "adimlar": [
+            "Sakin telefonunda uygulamayı tamamen kapatın.",
+            "Yönetici hesabıyla acil duyuru yayınlayın."
+          ],
+          "beklenen": "Telefonun bildirim alanına duyuru başlığı düşer, dokununca uygulama duyuruyu açar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "Telefon bildirim servisi (Google/Apple) kurulumu",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.08",
+          "baslik": "İleri tarihli yayın",
+          "adimlar": [
+            "Yeni duyuruda yayın zamanını birkaç dakika sonrasına ayarlayın.",
+            "Zamanı bekleyin."
+          ],
+          "beklenen": "Duyuru o zamana kadar yalnızca yöneticide “Zamanlanmış” görünür, zamanı gelince sakinlere ulaşır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.09",
+          "baslik": "Düzenleme ve geri çekme",
+          "adimlar": [
+            "Yayınlanmış bir duyurunun metnini düzeltin.",
+            "Başka bir duyuruyu geri çekin."
+          ],
+          "beklenen": "Düzeltme sakinde de güncellenir ve “düzenlendi” notu görünür. Geri çekilen duyuru sakinlerde kaybolur, yöneticide arşivde kalır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.10",
+          "baslik": "Bildirim tercihleri",
+          "adimlar": [
+            "Sakin hesabında “Bildirim Tercihleri”ni açın.",
+            "E-posta bildirimini kapatın."
+          ],
+          "beklenen": "Normal duyurular e-posta ile gelmez, uygulamada görünmeye devam eder. Acil duyurular tercih ne olursa olsun gider.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.11",
+          "baslik": "Belgeler",
+          "adimlar": [
+            "Yönetici “Belgeler”e bir PDF (ör. yönetim planı) yükler ve kimlerin göreceğini seçer.",
+            "Sakin hesabıyla belgeyi açın."
+          ],
+          "beklenen": "Belge, izin verilen kişilerde listelenir ve açılır. İzin verilmeyen kişi belgeyi göremez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F3.12",
+          "baslik": "SMS ile bildirim",
+          "adimlar": [],
+          "beklenen": "Yakında… Duyuruyla birlikte SMS gönderme. Mesaj ücretleri site başına kontörle takip edilecek.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F3.13",
+          "baslik": "WhatsApp ile bildirim",
+          "adimlar": [],
+          "beklenen": "Yakında… Duyuruyu WhatsApp’tan gönderme. Resmi iş hesabı onayı gerektirir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F4",
+      "baslik": "Aidat ve finans (temel)",
+      "durum": "planli",
+      "ozet": "Aidatın tanımlanması, otomatik borçlandırma, elle tahsilat kaydı, gelir-gider ve raporlar. Online kart ödemesi ve banka bağlantısı bu fazda YOK, Yakında… (F8). Bu modül siteye göre açılıp kapatılır.",
+      "maddeler": [
+        {
+          "id": "F4.01",
+          "baslik": "Aidat tanımı",
+          "adimlar": [
+            "Finans menüsünden “Aidat Tanımları”nı açın.",
+            "Yeni tanım ekleyin: ad (ör. Aylık aidat), tutar, dağıtım yöntemi, kimden alınacağı, başlangıç ayı."
+          ],
+          "beklenen": "Dağıtım yöntemi olarak eşit pay, daire tipine göre, arsa payına göre ve m²’ye göre seçilebilir. Tutarı kimin ödeyeceği (malik, kiracı) seçilir. Kaydedince önizlemede her dairenin payı görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Aidat ve Finans modülü açık",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.02",
+          "baslik": "Aylık otomatik borçlandırma",
+          "adimlar": [
+            "Tanımı kaydedin ve “Şimdi borçlandır”a dokunun (ya da ay başını bekleyin).",
+            "Önizleme listesini inceleyip onaylayın.",
+            "Daire borç listesine bakın."
+          ],
+          "beklenen": "Önizlemeyi onaylamadan hiçbir borç oluşmaz. Onaydan sonra her daireye o ayın aidatı borç olarak yazılır. Aynı ay ikinci kez borçlandırılamaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.03",
+          "baslik": "Tek seferlik ek borç",
+          "adimlar": [
+            "“Ek Borç Ekle”ye dokunun.",
+            "Ad (ör. Asansör bakımı), toplam tutar ve hedef (tüm site, blok, seçili daireler) girin."
+          ],
+          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır ve her dairenin hesabına ayrı satır olarak düşer.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.04",
+          "baslik": "Daire hesabı",
+          "adimlar": [
+            "Bir dairenin hesabını açın."
+          ],
+          "beklenen": "Borç veya alacak bakiyesi ve tarih sırasıyla tüm hareketler (borç, tahsilat, düzeltme) görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.05",
+          "baslik": "Sakin “Borcum” ekranı",
+          "adimlar": [
+            "Sakin hesabıyla “Borcum”u açın."
+          ],
+          "beklenen": "Toplam borç, vadesi gelen tutar ve ödeme geçmişi görünür. Sakin yalnızca kendi dairesini görür. Borcun kime yazılacağı F2.05’teki ayara uyar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.06",
+          "baslik": "Elle tahsilat kaydı",
+          "adimlar": [
+            "“Tahsilat Ekle”ye dokunun.",
+            "Daire, tutar, tarih, yöntem (nakit, havale, çek) ve açıklama girip kaydedin.",
+            "Sakin hesabıyla borcu kontrol edin."
+          ],
+          "beklenen": "Daire borcu düşer. Fazla ödeme alacak olarak görünür. Sakin ekranında yenileyince değişiklik görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.07",
+          "baslik": "Makbuz",
+          "adimlar": [
+            "Bir tahsilat kaydından “Makbuz”a dokunun."
+          ],
+          "beklenen": "Sıra numaralı makbuz PDF’i açılır. Sakin de kendi makbuzunu görüp paylaşabilir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.08",
+          "baslik": "Gecikme tazminatı",
+          "adimlar": [
+            "Finans ayarlarında gecikme oranını tanımlayın.",
+            "Vadesi geçmiş borcu olan bir dairenin hesabına bakın."
+          ],
+          "beklenen": "Vade sonrası gecikme tutarı otomatik hesaplanır ve hesabın nasıl yapıldığı ekranda yazar. Yönetici bir daire için gecikmeyi affedebilir; bu işlem kayıt defterinde görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.09",
+          "baslik": "Gider kaydı",
+          "adimlar": [
+            "“Gider Ekle”ye dokunun.",
+            "Kategori (elektrik, su, personel, bakım…), tutar, tarih ve ödeme yöntemi girin; faturanın fotoğrafını ekleyin."
+          ],
+          "beklenen": "Gider listede görünür, belgesiyle birlikte açılır ve ilgili hesabın bakiyesine yansır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.10",
+          "baslik": "Kasa ve banka hesapları",
+          "adimlar": [
+            "Bir kasa ve bir banka hesabı tanımlayın.",
+            "Hesaplar arasında aktarım yapın."
+          ],
+          "beklenen": "Her hesabın bakiyesi ayrı görünür. Tahsilat ve giderler seçilen hesaba işlenir. Aktarım iki hesapta da hareket olarak görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.11",
+          "baslik": "Raporlar",
+          "adimlar": [
+            "“Raporlar”ı açın.",
+            "Aylık gelir-gider özeti, borçlular listesi, tahsilat oranı ve bir daire ekstresine bakın.",
+            "Birini Excel ya da PDF olarak indirin."
+          ],
+          "beklenen": "Rakamlar daire hesapları ve gider kayıtlarıyla tutarlıdır. Dönem seçilebilir. Çıktı ekrandakiyle aynıdır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.12",
+          "baslik": "Yönetim kurulu yalnızca görür",
+          "adimlar": [
+            "Yönetim kurulu üyesi hesabıyla Finans menüsünü açın.",
+            "Tahsilat veya gider eklemeyi deneyin."
+          ],
+          "beklenen": "Raporlar ve hesaplar görünür; ekleme, düzeltme ve silme düğmeleri yoktur.",
+          "rol_notu": "Yönetim kurulu",
+          "on_kosul": "F1.11 onaylanırsa",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.13",
+          "baslik": "Silme yok, düzeltme var",
+          "adimlar": [
+            "Yanlış girilmiş bir tahsilatı “İptal et / Düzelt” ile düzeltin.",
+            "Daire hesabına ve denetim kaydına bakın."
+          ],
+          "beklenen": "Eski kayıt silinmez; ters bir kayıt oluşur ve bakiye düzelir. Kim, ne zaman düzeltti denetim kaydında görünür.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.14",
+          "baslik": "Borç hatırlatması",
+          "adimlar": [
+            "Vadesi geçmiş borcu olan dairelerde “Hatırlat”ı seçin."
+          ],
+          "beklenen": "Sakine uygulama bildirimi ve e-posta gider. Yönetici kaç kişiye gittiğini görür. Aynı gün ikinci kez toplu hatırlatma uyarı verir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F4.15",
+          "baslik": "Ay kapatma",
+          "adimlar": [
+            "Geçmiş bir ayı “Kapat” olarak işaretleyin.",
+            "O aya tahsilat eklemeyi deneyin."
+          ],
+          "beklenen": "Kapatılan ayın kayıtları değiştirilemez. Düzeltme gerekirse açık dönemde ters kayıtla yapılır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "planli"
+        }
+      ]
+    },
+    {
+      "id": "F5",
+      "baslik": "Rezervasyon ve konsiyerj",
+      "durum": "yakinda",
+      "ozet": "Yakında… Ortak alanların takibi ve rezervasyonu, danışma (konsiyerj) talepleri.",
+      "maddeler": [
+        {
+          "id": "F5.01",
+          "baslik": "Ortak alan tanımı ve rezervasyon takvimi",
+          "adimlar": [],
+          "beklenen": "Yakında… Yönetim havuz, spor salonu, toplantı odası gibi alanları tanımlar; sakinler takvimden saat seçer.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F5.02",
+          "baslik": "Rezervasyon onay akışı",
+          "adimlar": [],
+          "beklenen": "Yakında… Rezervasyon anında onaylanır ya da yöneticiye onaya düşer; sonuç sakine bildirilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F5.03",
+          "baslik": "Konsiyerj (danışma) talepleri",
+          "adimlar": [],
+          "beklenen": "Yakında… Sakin danışmadan hizmet ister (kargo teslimi, temizlik, araç vb.), görevli talebi takip eder.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F6",
+      "baslik": "İş takibi",
+      "durum": "yakinda",
+      "ozet": "Yakında… Arıza ve talep yönetimi, görev atama, performans.",
+      "maddeler": [
+        {
+          "id": "F6.01",
+          "baslik": "Arıza ve talep açma",
+          "adimlar": [],
+          "beklenen": "Yakında… Sakin fotoğraflı talep açar, durumunu takip eder.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F6.02",
+          "baslik": "Görev atama ve süre takibi",
+          "adimlar": [],
+          "beklenen": "Yakında… Yönetici talebi görevliye atar; süre ve durum izlenir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F6.03",
+          "baslik": "Personel performans raporu",
+          "adimlar": [],
+          "beklenen": "Yakında… Görevlilerin tamamladığı işler ve süreleri raporlanır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F7",
+      "baslik": "Sayaç okuma ve faturalandırma",
+      "durum": "yakinda",
+      "ozet": "Yakında… Su, ısı ve elektrik sayaçlarının okunması, tüketimin dairelere paylaştırılması.",
+      "maddeler": [
+        {
+          "id": "F7.01",
+          "baslik": "Sayaç tanımı ve okuma girişi",
+          "adimlar": [],
+          "beklenen": "Yakında… Önce görevli telefonla okuma girer ya da Excel yükler.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F7.02",
+          "baslik": "Tüketim paylaştırma ve fatura",
+          "adimlar": [],
+          "beklenen": "Yakında… Tüketim dairelere dağıtılır, borç olarak hesaplara yazılır ve sakine bildirilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F7.03",
+          "baslik": "Uzaktan okuyan sayaç bağlantısı",
+          "adimlar": [],
+          "beklenen": "Yakında… Okumalar sayaçtan otomatik gelir (cihaz alımı gerektirir).",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F8",
+      "baslik": "Online tahsilat ve banka bağlantısı",
+      "durum": "yakinda",
+      "ozet": "Yakında… Banka ve ödeme işleri ayrı bir fazda yapılacak. Lisanslı kuruluşlarla sözleşme gerektirir.",
+      "maddeler": [
+        {
+          "id": "F8.01",
+          "baslik": "Kredi kartıyla aidat ödemesi",
+          "adimlar": [],
+          "beklenen": "Yakında… Sakin borcunu uygulamadan kartla öder, makbuz otomatik oluşur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F8.02",
+          "baslik": "Banka ekstresi yükleme ve eşleştirme",
+          "adimlar": [],
+          "beklenen": "Yakında… Ekstre dosyası yüklenir, ödemeler dairelerle otomatik eşleşir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F8.03",
+          "baslik": "Daireye özel ödeme referansı",
+          "adimlar": [],
+          "beklenen": "Yakında… Her daireye özel referansla yapılan havale kendiliğinden eşleşir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F8.04",
+          "baslik": "Banka entegrasyonları",
+          "adimlar": [],
+          "beklenen": "Yakında… Ödemeler onay beklemeden hesaba geçer ve kişilerle eşleşir; önce en çok kullanılan bankalar, sonra diğerleri.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F9",
+      "baslik": "Yönetim türü paketleri",
+      "durum": "yakinda",
+      "ozet": "Yakında… Rezidans, İş Merkezi, Kooperatif ve Alışveriş Merkezi yönetimleri için hazır modül paketleri ve türe uygun kelimeler.",
+      "maddeler": [
+        {
+          "id": "F9.01",
+          "baslik": "Rezidans",
+          "adimlar": [],
+          "beklenen": "Yakında… Danışma, kargo, ortak alan hizmetleri ve rezidansa özel ayarlar.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F9.02",
+          "baslik": "İş Merkezi",
+          "adimlar": [],
+          "beklenen": "Yakında… Firma hesapları, KDV’li fatura, çalışan ve ziyaretçi girişi, mesai saatleri.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F9.03",
+          "baslik": "Kooperatif",
+          "adimlar": [],
+          "beklenen": "Yakında… Üye ve hisse kayıtları, üye aidatı, genel kurul ve denetim, inşaat dönemi ödemeleri.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F9.04",
+          "baslik": "Alışveriş Merkezi",
+          "adimlar": [],
+          "beklenen": "Yakında… Mağaza ve kiracı firma hesapları, kira, ortak gider, ciro kirası, sayaç ve enerji dağıtımı.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F10",
+      "baslik": "Geçiş kontrol genişlemesi",
+      "durum": "yakinda",
+      "ozet": "Yakında… Geçiş Kontrol (AHBU) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
+      "maddeler": [
+        {
+          "id": "F10.01",
+          "baslik": "Kartlı geçiş",
+          "adimlar": [],
+          "beklenen": "Yakında… Kartla kapı açma, kartın kişiye tanımlanması ve iptali.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F10.02",
+          "baslik": "Plaka tanıma",
+          "adimlar": [],
+          "beklenen": "Yakında… Kayıtlı plakalı araca otopark bariyeri otomatik açılır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F10.03",
+          "baslik": "HGS",
+          "adimlar": [],
+          "beklenen": "Yakında… HGS etiketli araçların geçiş sistemiyle birlikte çalışması.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F10.04",
+          "baslik": "Kamera (CCTV) bağlantısı",
+          "adimlar": [],
+          "beklenen": "Yakında… Geçiş kaydının yanında ilgili kamera görüntüsünü açma.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F11",
+      "baslik": "Diğer yaşam modülleri",
+      "durum": "yakinda",
+      "ozet": "Yakında… Yönetimi kolaylaştıran ek modüller ve yönetici paneli.",
+      "maddeler": [
+        {
+          "id": "F11.01",
+          "baslik": "Anket ve oylama",
+          "adimlar": [],
+          "beklenen": "Yakında… Yönetim sakinlere soru sorar, sonuç anında görünür.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F11.02",
+          "baslik": "E-genel kurul ve karar defteri",
+          "adimlar": [],
+          "beklenen": "Yakında… Toplantı daveti, çevrimiçi oylama ve karar kayıtları.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F11.03",
+          "baslik": "Ziyaretçi ve kargo takibi",
+          "adimlar": [],
+          "beklenen": "Yakında… Gelen ziyaretçi ve kargo kaydı, sakine bildirim.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F11.04",
+          "baslik": "Firma ve sözleşme takibi",
+          "adimlar": [],
+          "beklenen": "Yakında… Hizmet alınan firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        },
+        {
+          "id": "F11.05",
+          "baslik": "Yönetici paneli (web)",
+          "adimlar": [],
+          "beklenen": "Yakında… Yönetici işlerini bilgisayarda geniş ekranda yapma.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": false,
+          "gelistirme": "yakinda"
+        }
+      ]
+    }
+  ]
+}

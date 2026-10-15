@@ -10,6 +10,7 @@ import {
 import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.js';
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
+import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
 import {
   SQL_BULK_APARTMENT_USERS,
   SQL_BULK_BLOCK_USERS,
@@ -710,10 +711,19 @@ export async function setupSiteWithClaimedDevice({
   doors,
   doorCount = 1,
   deviceUid,
+  managementType: rawManagementType,
 }) {
   const code = parseUserCode(userCode);
   if (code === null) {
     throw httpError(401, 'Kullanıcı oturumu gereklidir.');
+  }
+
+  // Platform: yönetim türü (varsayılan apartment_site; bu fazda diğerleri 400 MANAGEMENT_TYPE_COMING_SOON).
+  const managementType = resolveManagementTypeInput(rawManagementType);
+  if (!managementType.ok) {
+    const typeError = httpError(managementType.statusCode, managementType.error);
+    typeError.code = managementType.code;
+    throw typeError;
   }
 
   // Blok/kapı listelerini doğrula, sınırla ve normalize et (parseInt güvenli, üst sınırlı)
@@ -792,11 +802,12 @@ export async function setupSiteWithClaimedDevice({
           feature_remote_open_enabled,
           feature_local_udp_enabled,
           feature_guest_pass_enabled,
-          qr_entry_active
+          qr_entry_active,
+          management_type
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), 'approved', NOW(),
-          TRUE, TRUE, TRUE, TRUE, TRUE
+          TRUE, TRUE, TRUE, TRUE, TRUE, $9
         )
         RETURNING
           site_code AS id,
@@ -810,6 +821,7 @@ export async function setupSiteWithClaimedDevice({
           approval_status,
           approved_at,
           mqtt_site_id,
+          management_type,
           created_at
       `,
       [
@@ -821,6 +833,7 @@ export async function setupSiteWithClaimedDevice({
         totalApartmentCount,
         totalDoorCount,
         blockApartmentCounts,
+        managementType.value,
       ],
     );
     const site = siteRes.rows[0];
@@ -930,6 +943,7 @@ export async function setupSiteWithClaimedDevice({
       message: `"${site.name}" sitesi, ${createdBlocks.length} blok ve ${totalApartmentCount} daire ile başarıyla kuruldu!`,
       site: {
         ...site,
+        management_type_label: managementTypeLabel(site.management_type),
         blocks: createdBlocks,
         doors: createdDoors,
         assignedDevice,

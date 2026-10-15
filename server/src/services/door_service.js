@@ -317,12 +317,14 @@ export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {
           s.geofence_longitude,
           s.geofence_radius_meters,
           s.qr_rotation_seconds,
+          COALESCE(smod.enabled, TRUE) AS module_door_control,
           d.created_at
         FROM site_doors d
         INNER JOIN sites s ON s.site_code = d.site_code
         LEFT JOIN site_blocks sb ON sb.id = d.block_id
         LEFT JOIN devices ON devices.id = d.assigned_device_id
         LEFT JOIN device_runtime_status rs ON rs.device_uid = devices.device_uid
+        LEFT JOIN site_modules smod ON smod.site_code = s.site_code AND smod.module_code = 'door_control'
         WHERE d.is_active = TRUE
           AND ($1::BIGINT IS NULL OR d.id = $1::BIGINT)
         ORDER BY s.name ASC, d.door_index ASC
@@ -369,12 +371,14 @@ export async function listAccessibleDoorsForUser(authUser, { doorId = null } = {
         s.geofence_longitude,
         s.geofence_radius_meters,
         s.qr_rotation_seconds,
+        COALESCE(smod.enabled, TRUE) AS module_door_control,
         d.created_at
       FROM site_doors d
       INNER JOIN sites s ON s.site_code = d.site_code
       LEFT JOIN site_blocks sb ON sb.id = d.block_id
       LEFT JOIN devices ON devices.id = d.assigned_device_id
       LEFT JOIN device_runtime_status rs ON rs.device_uid = devices.device_uid
+      LEFT JOIN site_modules smod ON smod.site_code = s.site_code AND smod.module_code = 'door_control'
       WHERE d.is_active = TRUE
         AND s.approval_status = 'approved'
         AND ($2::BIGINT IS NULL OR d.id = $2::BIGINT)

@@ -1,0 +1,359 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Yerlesim: ust bant (baslik + durum) -> ozet -> suzgec cubugu -> faz basina acilir bolumler -> madde kartlari; tek sutun, okunur genislik. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #eef1f5; --ink: #151a21; --muted: #5a6474; --line: #dce1e8;
+  --accent: __ACCENT__; --accent-ink: #ffffff; --accent-soft: __ACCENT_SOFT__;
+  --ok: #1d7f47; --ok-soft: #e3f4ea; --bad: #c0262d; --bad-soft: #fbe6e6; --warn: #a8650f; --warn-soft: #fbf0dc;
+  --info: #1f5fa8; --info-soft: #e4eefa;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1116; --surface: #161a21; --surface-2: #1d222b; --ink: #e7eaf0; --muted: #9aa4b4; --line: #2a313c;
+  --accent: __ACCENT_DARK__; --accent-ink: #0e1116; --accent-soft: __ACCENT_SOFT_DARK__;
+  --ok: #43b97b; --ok-soft: #15301f; --bad: #f06a6a; --bad-soft: #3a1a1c; --warn: #e3a64a; --warn-soft: #36290f;
+  --info: #6fa8ec; --info-soft: #152a42; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e1116; --surface: #161a21; --surface-2: #1d222b; --ink: #e7eaf0; --muted: #9aa4b4; --line: #2a313c;
+  --accent: __ACCENT_DARK__; --accent-ink: #0e1116; --accent-soft: __ACCENT_SOFT_DARK__;
+  --ok: #43b97b; --ok-soft: #15301f; --bad: #f06a6a; --bad-soft: #3a1a1c; --warn: #e3a64a; --warn-soft: #36290f;
+  --info: #6fa8ec; --info-soft: #152a42; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 64px; display: flex; flex-direction: column; gap: 18px }
+h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(26px, 5vw, 36px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.1 }
+.eyebrow { font: 600 12px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent) }
+.intro { color: var(--muted); max-width: 65ch; margin: 0 }
+.state-line { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: var(--surface); font-size: 14px; max-width: 70ch }
+
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px }
+.counts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-variant-numeric: tabular-nums }
+.count { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--muted) }
+.count b { font: 700 22px/1 var(--display); color: var(--ink) }
+.count.ok b { color: var(--ok) } .count.bad b { color: var(--bad) } .count.warn b { color: var(--warn) }
+.bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: var(--surface-2) }
+.bar span { display: block; height: 100% }
+.bar .s-ok { background: var(--ok) } .bar .s-bad { background: var(--bad) }
+.conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted) }
+.conn.live .dot { background: var(--ok) } .conn.off .dot { background: var(--bad) }
+.conn.off { color: var(--bad) }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 8px }
+.chip { font: 500 13px/1 var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 8px 12px; cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.chip:focus-visible, button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.search { flex: 1 1 180px; min-width: 0; font: 14px var(--body); padding: 8px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink) }
+
+details.section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius) }
+details.section > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px }
+details.section > summary::-webkit-details-marker { display: none }
+.sec-id { font: 600 13px/1 var(--mono); color: var(--accent); min-width: 2.6em }
+.sec-title { font: 700 18px/1.25 var(--display); flex: 1 1 220px; min-width: 0 }
+.sec-prog { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap }
+.chev { transition: transform .15s; color: var(--muted) }
+details[open] > summary .chev { transform: rotate(90deg) }
+.sec-ozet { margin: 0; padding: 12px 16px; color: var(--muted); font-size: 14px; max-width: 72ch; border-top: 1px solid var(--line) }
+.items { display: flex; flex-direction: column; border-top: 1px solid var(--line) }
+
+.item { padding: 16px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line) }
+.item:first-child { border-top: 0 }
+.item.st-ok { background: color-mix(in srgb, var(--ok-soft) 55%, transparent) }
+.item.st-bad { background: color-mix(in srgb, var(--bad-soft) 60%, transparent) }
+.item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px }
+.item-id { font: 600 14px/1 var(--mono); background: var(--accent-soft); color: var(--ink); border-radius: 6px; padding: 5px 7px }
+.item-title { font-weight: 600; font-size: 16px; flex: 1 1 260px; min-width: 0 }
+.pill { font: 600 11px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; border-radius: 99px; padding: 4px 8px; white-space: nowrap }
+.pill.new { background: var(--info-soft); color: var(--info) }
+.pill.ok { background: var(--ok-soft); color: var(--ok) } .pill.bad { background: var(--bad-soft); color: var(--bad) }
+.pill.warn { background: var(--warn-soft); color: var(--warn) } .pill.fixed { background: var(--info-soft); color: var(--info) }
+.pill.plan { background: var(--info-soft); color: var(--info) }
+.pill.doing { background: var(--warn-soft); color: var(--warn) }
+.pill.soon { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line) }
+.meta { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px }
+.meta strong { color: var(--ink); font-weight: 500 }
+ol.steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 2px; max-width: 70ch }
+.expect { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 14px; max-width: 70ch }
+.expect b { font-weight: 600 }
+.controls { display: flex; flex-wrap: wrap; gap: 8px }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
+.seg button { font: 500 14px/1 var(--body); background: var(--surface); color: var(--ink); border: 0; padding: 10px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"].b-ok { background: var(--ok); color: #fff }
+.seg button[aria-pressed="true"].b-bad { background: var(--bad); color: #fff }
+.seg button[aria-pressed="true"].b-want { background: var(--accent); color: var(--accent-ink) }
+.seg button[aria-pressed="true"].b-nowant { background: var(--warn); color: #fff }
+.seg button:disabled { opacity: .5; cursor: not-allowed }
+.note { display: flex; flex-direction: column; gap: 4px }
+.note label { font-size: 13px; color: var(--muted) }
+.note textarea { width: 100%; min-height: 64px; resize: vertical; font: 14px/1.45 var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px }
+.note.need textarea { border-color: var(--warn) }
+.saved { font: 500 12px/1 var(--mono); color: var(--muted); min-height: 1em }
+.reply { border: 1px solid var(--info); background: var(--info-soft); border-radius: 8px; padding: 10px 12px; font-size: 14px; display: flex; flex-direction: column; gap: 4px }
+.reply .who { font: 600 12px/1 var(--mono); color: var(--info); letter-spacing: .04em; text-transform: uppercase }
+.empty { color: var(--muted); padding: 16px; text-align: center }
+.foot { color: var(--muted); font-size: 13px }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none } }
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <span class="eyebrow">__EYEBROW__</span>
+    <h1 id="baslik">__TITLE__</h1>
+    <p class="intro" id="aciklama"></p>
+    <p class="state-line" id="durumMetni" hidden></p>
+  </header>
+
+  <section class="summary" aria-label="Özet">
+    <div class="counts" id="counts"></div>
+    <div class="bar" id="bar" aria-hidden="true"></div>
+    <div class="conn" id="conn"><span class="dot"></span><span id="connText">Kayıt bağlantısı kuruluyor…</span></div>
+  </section>
+
+  <div class="filters" role="toolbar" aria-label="Süzgeç">
+    <button class="chip" data-f="hepsi" aria-pressed="true" id="f-hepsi">Tümü</button>
+    <button class="chip" data-f="hazir" aria-pressed="false" id="f-hazir">Denemeye hazır</button>
+    <button class="chip" data-f="yapim" aria-pressed="false" id="f-yapim">Planlı / yapılıyor</button>
+    <button class="chip" data-f="yakinda" aria-pressed="false" id="f-yakinda">Yakında…</button>
+    <button class="chip" data-f="denenmedi" aria-pressed="false" id="f-denenmedi">Denenmedi</button>
+    <button class="chip" data-f="calismiyor" aria-pressed="false" id="f-calismiyor">Çalışmıyor</button>
+    <button class="chip" data-f="istemiyorum" aria-pressed="false" id="f-istemiyorum">İstemiyorum</button>
+    <button class="chip" data-f="notlu" aria-pressed="false" id="f-notlu">Notlu</button>
+    <button class="chip" data-f="yanitli" aria-pressed="false" id="f-yanitli">Claude yanıtladı</button>
+    <button class="chip" data-f="yeni" aria-pressed="false" id="f-yeni">Bugün değişen</button>
+    <input class="search" id="ara" type="search" placeholder="Ara (ör. F1.03, modül)" aria-label="Maddelerde ara">
+  </div>
+
+  <main id="liste"></main>
+  <p class="foot">İşaretleriniz ve notlarınız bu sayfaya kaydedilir; Claude da okuyabilir. “<span id="ornekId">F1.01</span>’e bak” demeniz yeter.</p>
+</div>
+
+<script id="veri" type="application/json">__DATA__</script>
+<script>
+(() => {
+  const V = JSON.parse(document.getElementById('veri').textContent);
+  const S = {};            // madde id -> {durum, istek, not, claude_yanit, claude_durum}
+  const exists = {};       // madde id -> belge var mi
+  const queue = {};        // madde id -> yazim zinciri
+  let db = null, filter = 'hepsi', query = '';
+  const ls = { get(k) { try { return localStorage.getItem(k) } catch (e) { return null } },
+               set(k, v) { try { localStorage.setItem(k, v) } catch (e) {} } };
+  const docId = (id) => id.replace(/\./g, '_');
+  const all = V.bolumler.flatMap(b => b.maddeler.map(m => ({ ...m, bolum: b.id })));
+  // gelistirme: hazir (denenebilir) | yapiliyor | planli | yakinda. Alan yoksa madde denenebilir sayilir.
+  const gel = (m) => m.gelistirme || 'hazir';
+  const DURUM_ROZET = { hazir: ['ok', 'Denemeye hazır'], yapiliyor: ['doing', 'Yapılıyor'], planli: ['plan', 'Planlı'], yakinda: ['soon', 'Yakında…'] };
+  document.getElementById('aciklama').textContent = V.aciklama || '';
+  if (V.durum_metni) { const dm = document.getElementById('durumMetni'); dm.textContent = V.durum_metni; dm.hidden = false; }
+  if (all[0]) document.getElementById('ornekId').textContent = all[2] ? all[2].id : all[0].id;
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  function stateOf(id) { return S[id] || {}; }
+  function matches(m) {
+    const s = stateOf(m.id); const g = gel(m);
+    if (query) {
+      const q = query.toLocaleLowerCase('tr');
+      const hay = (m.id + ' ' + m.baslik + ' ' + (m.adimlar || []).join(' ') + ' ' + (m.beklenen || '')).toLocaleLowerCase('tr');
+      if (!hay.includes(q)) return false;
+    }
+    switch (filter) {
+      case 'hazir': return g === 'hazir';
+      case 'yapim': return g === 'planli' || g === 'yapiliyor';
+      case 'yakinda': return g === 'yakinda';
+      case 'denenmedi': return g === 'hazir' && !s.durum;
+      case 'calismiyor': return s.durum === 'calismiyor';
+      case 'istemiyorum': return s.istek === 'istemiyorum';
+      case 'notlu': return !!(s.not && s.not.trim());
+      case 'yanitli': return !!(s.claude_yanit && s.claude_yanit.trim());
+      case 'yeni': return !!m.yeni;
+      default: return true;
+    }
+  }
+
+  function renderSummary() {
+    const n = all.length; let hazir = 0, ok = 0, bad = 0, yapim = 0, yakinda = 0, no = 0, notes = 0;
+    for (const m of all) {
+      const s = stateOf(m.id); const g = gel(m);
+      if (g === 'hazir') { hazir++; if (s.durum === 'calisiyor') ok++; else if (s.durum === 'calismiyor') bad++; }
+      else if (g === 'yakinda') yakinda++; else yapim++;
+      if (s.istek === 'istemiyorum') no++; if (s.not && s.not.trim()) notes++;
+    }
+    const c = document.getElementById('counts'); c.textContent = '';
+    const add = (cls, num, label) => { const d = el('div', 'count ' + cls); d.append(el('b', null, String(num)), el('span', null, label)); c.append(d); };
+    add('', n, 'madde'); add('', hazir, 'denemeye hazır'); add('ok', ok, 'çalışıyor'); add('bad', bad, 'çalışmıyor');
+    add('', hazir - ok - bad, 'denenmedi'); add('', yapim, 'planlı / yapılıyor'); add('', yakinda, 'yakında');
+    add('warn', no, 'istemiyorum'); add('', notes, 'notlu');
+    const bar = document.getElementById('bar'); bar.textContent = '';
+    const seg = (cls, v) => { if (!v || !hazir) return; const s = el('span', cls); s.style.width = (100 * v / hazir) + '%'; bar.append(s); };
+    seg('s-ok', ok); seg('s-bad', bad);
+    for (const b of V.bolumler) {
+      const p = document.getElementById('prog-' + b.id); if (!p) continue;
+      const test = b.maddeler.filter(m => gel(m) === 'hazir');
+      if (b.durum === 'yakinda') p.textContent = '';
+      else if (!test.length) p.textContent = b.maddeler.length + ' madde';
+      else p.textContent = test.filter(m => stateOf(m.id).durum).length + '/' + test.length;
+    }
+  }
+
+  function itemNode(m) {
+    const s = stateOf(m.id); const g = gel(m);
+    const box = el('article', 'item'); box.id = 'm-' + docId(m.id);
+    box.classList.toggle('st-ok', g === 'hazir' && s.durum === 'calisiyor'); box.classList.toggle('st-bad', g === 'hazir' && s.durum === 'calismiyor');
+    const head = el('div', 'item-head');
+    head.append(el('span', 'item-id', m.id), el('span', 'item-title', m.baslik));
+    if (g !== 'hazir') head.append(el('span', 'pill ' + DURUM_ROZET[g][0], DURUM_ROZET[g][1]));
+    if (m.yeni) head.append(el('span', 'pill new', 'Bugün değişti'));
+    if (s.claude_durum === 'duzeltildi') head.append(el('span', 'pill fixed', 'Düzeltildi · yeniden deneyin'));
+    else if (g === 'hazir' && s.durum === 'calisiyor') head.append(el('span', 'pill ok', 'Çalışıyor'));
+    else if (g === 'hazir' && s.durum === 'calismiyor') head.append(el('span', 'pill bad', 'Çalışmıyor'));
+    if (s.istek === 'istemiyorum') head.append(el('span', 'pill warn', 'Böyle istemiyorum'));
+    box.append(head);
+
+    const meta = el('div', 'meta');
+    if (m.rol_notu) { const r = el('span'); r.append('Kim: ', el('strong', null, m.rol_notu)); meta.append(r); }
+    if (m.on_kosul) { const r = el('span'); r.append('Gerekli: ', el('strong', null, m.on_kosul)); meta.append(r); }
+    if (meta.childNodes.length) box.append(meta);
+
+    if (m.adimlar && m.adimlar.length) { const ol = el('ol', 'steps'); for (const a of m.adimlar) ol.append(el('li', null, a)); box.append(ol); }
+    if (m.beklenen) { const ex = el('div', 'expect'); ex.append(el('b', null, g === 'hazir' ? 'Beklenen: ' : 'Planlanan: '), document.createTextNode(m.beklenen)); box.append(ex); }
+
+    const mk = (cls, label, field, value) => {
+      const b = el('button', cls, label); b.type = 'button'; b.id = 'b-' + field + '-' + docId(m.id) + '-' + value;
+      b.setAttribute('aria-pressed', String(s[field] === value)); b.disabled = !db;
+      b.addEventListener('click', () => save(m.id, { [field]: stateOf(m.id)[field] === value ? '' : value }));
+      return b;
+    };
+    if (g !== 'yakinda') {
+      const ctr = el('div', 'controls');
+      if (g === 'hazir') {
+        const g1 = el('div', 'seg'); g1.setAttribute('role', 'group'); g1.setAttribute('aria-label', 'Durum');
+        g1.append(mk('b-ok', '✓ Çalışıyor', 'durum', 'calisiyor'), mk('b-bad', '✗ Çalışmıyor', 'durum', 'calismiyor'));
+        ctr.append(g1);
+      }
+      const g2 = el('div', 'seg'); g2.setAttribute('role', 'group'); g2.setAttribute('aria-label', 'İstek');
+      g2.append(mk('b-want', 'Böyle istiyorum', 'istek', 'istiyorum'), mk('b-nowant', 'Böyle istemiyorum', 'istek', 'istemiyorum'));
+      ctr.append(g2); box.append(ctr);
+    }
+
+    const need = (g === 'hazir' && s.durum === 'calismiyor') || s.istek === 'istemiyorum';
+    const note = el('div', 'note' + (need ? ' need' : ''));
+    const tid = 'n-' + docId(m.id);
+    const lab = el('label', null, need ? 'Ne oldu? Nasıl olmasını istiyorsunuz? (sebebiyle)'
+      : (g === 'hazir' ? 'Not (isteğe bağlı)' : 'Değişiklik isteği veya not (isteğe bağlı)')); lab.htmlFor = tid;
+    const ta = el('textarea'); ta.id = tid; ta.value = s.not || ''; ta.disabled = !db;
+    ta.placeholder = need ? (s.durum === 'calismiyor' ? 'Ör. Modüller ekranında kapatma düğmesine basınca hata verdi.' : 'Ör. Bunun yerine şöyle olsun istiyorum, çünkü…') : '';
+    const saved = el('span', 'saved'); saved.id = 'sv-' + docId(m.id);
+    let t = null;
+    ta.addEventListener('input', () => { clearTimeout(t); (document.getElementById('sv-' + docId(m.id)) || saved).textContent = 'yazılıyor…'; t = setTimeout(() => save(m.id, { not: ta.value }), 900); });
+    ta.addEventListener('blur', () => { clearTimeout(t); if ((stateOf(m.id).not || '') !== ta.value) save(m.id, { not: ta.value }); });
+    note.append(lab, ta, saved); box.append(note);
+
+    if (s.claude_yanit && s.claude_yanit.trim()) {
+      const r = el('div', 'reply'); r.append(el('span', 'who', 'Claude' + (s.claude_tarih ? ' · ' + s.claude_tarih : '')), el('div', null, s.claude_yanit));
+      box.append(r);
+    }
+    return box;
+  }
+
+  function render() {
+    const root = document.getElementById('liste'); root.textContent = '';
+    const open = JSON.parse(ls.get('acik-' + V.rol) || 'null');
+    let shown = 0;
+    for (const b of V.bolumler) {
+      const ms = b.maddeler.filter(matches);
+      if (!ms.length) continue;
+      const d = el('details', 'section'); d.id = 'sec-' + b.id;
+      d.open = filter !== 'hepsi' || query ? true : (open ? open.includes(b.id) : b.durum !== 'yakinda');
+      d.addEventListener('toggle', () => {
+        if (filter !== 'hepsi' || query) return;
+        const cur = new Set(JSON.parse(ls.get('acik-' + V.rol) || 'null') || V.bolumler.filter(x => x.durum !== 'yakinda').map(x => x.id));
+        d.open ? cur.add(b.id) : cur.delete(b.id); ls.set('acik-' + V.rol, JSON.stringify([...cur]));
+      });
+      const sm = el('summary');
+      const chev = el('span', 'chev', '▸'); chev.setAttribute('aria-hidden', 'true');
+      const prog = el('span', 'sec-prog'); prog.id = 'prog-' + b.id;
+      sm.append(chev, el('span', 'sec-id', b.id), el('span', 'sec-title', b.baslik));
+      if (b.durum && DURUM_ROZET[b.durum]) sm.append(el('span', 'pill ' + DURUM_ROZET[b.durum][0], DURUM_ROZET[b.durum][1]));
+      sm.append(prog);
+      d.append(sm);
+      if (b.ozet) d.append(el('p', 'sec-ozet', b.ozet));
+      const list = el('div', 'items');
+      for (const m of ms) { list.append(itemNode(m)); shown++; }
+      d.append(list); root.append(d);
+    }
+    if (!shown) root.append(el('p', 'empty', 'Bu süzgece uyan madde yok.'));
+    renderSummary();
+  }
+
+  function refreshItem(id) {
+    const m = all.find(x => x.id === id); if (!m) return;
+    const old = document.getElementById('m-' + docId(id));
+    if (!old) { renderSummary(); return; }
+    const ta = old.querySelector('textarea');
+    if (ta && document.activeElement === ta) {
+      // yazarken kutuyu yeniden kurma: yalniz dugmeleri ve rozetleri tazele
+      const fresh = itemNode(m); const fta = fresh.querySelector('textarea');
+      fta.replaceWith(ta); old.replaceWith(fresh); ta.focus();
+    } else old.replaceWith(itemNode(m));
+    renderSummary();
+  }
+
+  function save(id, patch) {
+    if (!db) return;
+    S[id] = { ...stateOf(id), ...patch };
+    refreshItem(id);
+    const sv = () => document.getElementById('sv-' + docId(id));
+    const ref = db.collection('yanitlar').doc(docId(id));
+    const body = { ...patch, madde: id, guncellendi: new Date().toISOString() };
+    queue[id] = (queue[id] || Promise.resolve()).then(async () => {
+      try {
+        if (exists[id]) await ref.update(body);
+        else { const cur = stateOf(id); await ref.set({ madde: id, durum: cur.durum || '', istek: cur.istek || '', not: cur.not || '', ...body }); exists[id] = true; }
+        const e = sv(); if (e) e.textContent = 'kaydedildi ✓';
+      } catch (err) {
+        const e = sv(); if (e) e.textContent = 'kaydedilemedi: ' + ((err && err.message) || 'bilinmeyen hata');
+      }
+    });
+  }
+
+  document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    filter = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === c)));
+    ls.set('suzgec-' + V.rol, filter); render();
+  }));
+  let qt = null;
+  document.getElementById('ara').addEventListener('input', (e) => { clearTimeout(qt); qt = setTimeout(() => { query = e.target.value.trim(); render(); }, 200); });
+  const sf = ls.get('suzgec-' + V.rol);
+  if (sf && document.querySelector('.chip[data-f="' + sf + '"]')) { filter = sf; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.f === sf))); }
+  render();
+
+  const conn = document.getElementById('conn'), ct = document.getElementById('connText');
+  (async () => {
+    db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+    if (!db) { conn.className = 'conn off'; ct.textContent = 'Kayıt bağlantısı yok: işaretler kaydedilemiyor. Sayfayı claude.ai hesabınızla açın.'; render(); return; }
+    conn.className = 'conn live'; ct.textContent = 'Kayıt bağlı: işaretleriniz kendiliğinden kaydediliyor.';
+    let first = true;
+    db.collection('yanitlar').onSnapshot((snap) => {
+      for (const d of snap.docs) {
+        const x = d.data() || {}; const id = x.madde || d.id; exists[id] = true;
+        const prev = S[id] || {};
+        const ta = document.getElementById('n-' + docId(id));
+        const typing = ta && document.activeElement === ta;
+        S[id] = { durum: x.durum || '', istek: x.istek || '', not: typing ? prev.not : (x.not || ''),
+                  claude_yanit: x.claude_yanit || '', claude_durum: x.claude_durum || '', claude_tarih: x.claude_tarih || '' };
+      }
+      if (first) { first = false; render(); }
+      else for (const ch of snap.docChanges()) { const id = (ch.doc.data() || {}).madde || ch.doc.id; refreshItem(id); }
+    }, (e) => { conn.className = 'conn off'; ct.textContent = 'Kayıt bağlantısı koptu (' + ((e && e.code) || 'hata') + '). Sayfayı yenileyin.'; });
+  })();
+})();
+</script>

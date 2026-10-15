@@ -33,6 +33,7 @@ import {
   validateGeofenceForDoorRequest,
 } from '../services/geofence_service.js';
 import { auditLog, mapDoorRow } from '../utils/helpers.js';
+import { isDoorModuleDisabled, moduleFieldOf } from '../modules/door_guard.js';
 
 export const appDoorsRouter = express.Router();
 
@@ -51,7 +52,7 @@ function respondServerError(res, context, error, publicMessage, extra = {}) {
 /**
  * Bilinen (istemciye açıklanabilir) hataları yanıtlar; true dönerse işlenmiştir.
  *  - Geofence (C3): 403 + { error, code: 'GEOFENCE_...', distance_meters?, allowed_radius_meters?, missing_fields? }
- *  - Politika (C2): 403 + { error, code: 'REMOTE_OPEN_DISABLED' | 'QR_DISABLED' | ... }
+ *  - Politika (C2): 403 + { error, code: 'REMOTE_OPEN_DISABLED' | 'QR_DISABLED' | 'MODULE_DISABLED' (+ module) | ... }
  *  - MQTT köprüsü / cihaz çevrimdışı
  * Bilinmeyen hatalarda (DB vb.) error.message ASLA istemciye sızdırılmaz.
  */
@@ -74,6 +75,7 @@ function respondKnownError(res, error) {
     res.status(status).json({
       error: error.message,
       ...(typeof error.code === 'string' ? { code: error.code } : {}),
+      ...moduleFieldOf(error),
     });
     return true;
   }
@@ -101,11 +103,14 @@ async function apartmentLabelForUser(authUser, roles) {
 }
 
 // GET /app/my-doors
+// Platform modülü: Geçiş Kontrol modülü KAPALI sitelerin kapıları listelenmez (yerel kontrol anahtarı da
+// uygulamaya gitmez). Süzgeç yalnız bu uçta: kapı açma yolları kapıyı yine bulur ve MODULE_DISABLED döner;
+// kapı günlüğü okuma uçları etkilenmez.
 appDoorsRouter.get('/app/my-doors', authRequired, async (req, res) => {
   try {
     const doors = await listAccessibleDoorsForUser(req.authUser);
     return res.status(200).json({
-      doors: doors.map((row) => mapDoorRow(row)),
+      doors: doors.filter((row) => !isDoorModuleDisabled(row)).map((row) => mapDoorRow(row)),
     });
   } catch (error) {
     return respondServerError(res, 'my_doors', error, 'Kapilar yuklenemedi.');
@@ -426,8 +431,9 @@ appDoorsRouter.post('/app/doors/:id/local-open-notify', authRequired, doorComman
       return res.status(404).json({ error: 'Kapi bulunamadi.' });
     }
 
-    // C2: yerel açma kanalı kapalı olan sitede (feature_local_udp_enabled=false) yerel açma bildirimi kabul edilmez
-    assertDoorOpenAllowed({ door, channel: 'local', authUser: req.authUser });
+    // C2: yerel açma kanalı kapalı olan sitede (feature_local_udp_enabled=false) yerel açma bildirimi kabul edilmez.
+    // checkModule:false -> Geçiş Kontrol modülü kapalı olsa da cihazın ZATEN yaptığı açmanın bildirimi/kaydı reddedilmez.
+    assertDoorOpenAllowed({ door, channel: 'local', authUser: req.authUser, checkModule: false });
 
     const localIp = normalizeLocalIp(body.local_ip);
     auditLog('door_open_local_command', {
@@ -492,6 +498,7 @@ appDoorsRouter.post('/app/doors/:id/qr-token', authRequired, qrTokenRateLimiter,
       return res.status(statusCode).json({
         error: error.message,
         code: error.code || 'QR_TOKEN_ERROR',
+        ...moduleFieldOf(error),
       });
     }
     return respondServerError(res, 'qr_token', error, 'QR token olusturulamadi.', { code: 'QR_TOKEN_ERROR' });

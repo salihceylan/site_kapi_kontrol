@@ -37,6 +37,7 @@ import {
   handleDeviceMutationError,
 } from '../utils/validators.js';
 import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
+import { resolveManagementTypeInput } from '../modules/management_types.js';
 import {
   listSitesForAuthUser,
   getSiteByCode,
@@ -710,6 +711,12 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
     return res.status(400).json({ error: validationError });
   }
 
+  // Platform: yönetim türü (varsayılan apartment_site; bu fazda diğerleri 400 MANAGEMENT_TYPE_COMING_SOON).
+  const managementType = resolveManagementTypeInput(req.body.management_type);
+  if (!managementType.ok) {
+    return res.status(400).json({ error: managementType.error, code: managementType.code });
+  }
+
   try {
     if (managerUserCode != null && !(await siteManagerExists(managerUserCode))) {
       return res.status(404).json({ error: 'Site yoneticisi bulunamadi.' });
@@ -728,6 +735,7 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
       doorNames: req.body.door_names || req.body.doorNames,
       managerUserCode: managerUserCode ?? null,
       managerUser: managerUserInput?.value ?? null,
+      managementType: managementType.value,
     });
     return res.status(201).json({ site: mapSiteRow(site) });
   } catch (error) {
@@ -784,6 +792,7 @@ adminRouter.patch('/admin/sites/:id/approval', authRequired, requireSuperUser, a
           approval_status,
           approved_at,
           mqtt_site_id,
+          management_type,
           created_at
       `,
       [

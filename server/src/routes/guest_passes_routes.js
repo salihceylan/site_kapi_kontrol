@@ -7,11 +7,18 @@ import { publishDoorPulse } from '../mqtt_bridge.js';
 import { getAccessibleDoorForUser, recordDoorAccessLog } from '../services/door_service.js';
 import { assertDoorOpenAllowed } from '../services/door_access_policy.js';
 import { auditLog } from '../utils/helpers.js';
+import {
+  isDoorModuleDisabled,
+  MODULE_DISABLED_CODE,
+  moduleDisabledBody,
+  renderModuleDisabledGuestPage,
+} from '../modules/door_guard.js';
 import { parseId } from '../utils/ids.js';
 import {
   CLAIM_GUEST_PASS_SQL,
   GUEST_PASS_STATE_RESPONSES,
   RELEASE_GUEST_PASS_SQL,
+  escapeHtml,
   generateCspNonce,
   getGuestPassState,
   guestPageHeaders,
@@ -58,6 +65,11 @@ guestPassesRouter.post('/app/guest-passes', authRequired, async (req, res) => {
     });
     if (!door) {
       return res.status(404).json({ error: 'Kapi bulunamadi veya yetkiniz yok.' });
+    }
+
+    // Platform modulu: Gecis Kontrol kapaliysa kimse (super user dahil) misafir gecisi olusturamaz.
+    if (isDoorModuleDisabled(door)) {
+      return res.status(403).json(moduleDisabledBody());
     }
 
     // Politika kapaliysa kimse (super user dahil) gecis olusturamaz: acma yolunda (public open) misafir kanalinda
@@ -234,11 +246,13 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
           s.require_geofence,
           s.geofence_latitude,
           s.geofence_longitude,
-          s.geofence_radius_meters
+          s.geofence_radius_meters,
+          COALESCE(smod.enabled, TRUE) AS module_door_control
         FROM guest_passes gp
         JOIN site_doors d ON d.id = gp.door_id
         JOIN sites s ON s.site_code = gp.site_code
         LEFT JOIN devices dev ON dev.id = d.assigned_device_id
+        LEFT JOIN site_modules smod ON smod.site_code = s.site_code AND smod.module_code = 'door_control'
         WHERE gp.token = $1
         LIMIT 1
       `,
@@ -250,6 +264,11 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
     }
 
     const pass = result.rows[0];
+
+    // Platform modulu: Gecis Kontrol kapaliysa misafir linki kapiyi acamaz.
+    if (isDoorModuleDisabled(pass)) {
+      return res.status(403).json(moduleDisabledBody());
+    }
 
     if (pass.feature_guest_pass_enabled === false) {
       return res.status(403).json({
@@ -339,6 +358,7 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
           geofence_latitude: pass.geofence_latitude,
           geofence_longitude: pass.geofence_longitude,
           geofence_radius_meters: pass.geofence_radius_meters,
+          module_door_control: pass.module_door_control,
           ...accessibleDoor,
         },
         channel: 'guest',
@@ -347,6 +367,9 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
     } catch (policyError) {
       if (policyError?.statusCode === 403) {
         const code = typeof policyError.code === 'string' ? policyError.code : undefined;
+        if (code === MODULE_DISABLED_CODE) {
+          return res.status(403).json(moduleDisabledBody());
+        }
         return res.status(403).json({
           error: GUEST_POLICY_MESSAGES[code] || GUEST_POLICY_FALLBACK,
           ...(code ? { code } : {}),
@@ -470,10 +493,12 @@ guestPassesRouter.get('/guest/:token', async (req, res) => {
         SELECT
           gp.*,
           d.door_name,
-          s.name AS site_name
+          s.name AS site_name,
+          COALESCE(smod.enabled, TRUE) AS module_door_control
         FROM guest_passes gp
         JOIN site_doors d ON d.id = gp.door_id
         JOIN sites s ON s.site_code = gp.site_code
+        LEFT JOIN site_modules smod ON smod.site_code = s.site_code AND smod.module_code = 'door_control'
         WHERE gp.token = $1
         LIMIT 1
       `,
@@ -482,6 +507,14 @@ guestPassesRouter.get('/guest/:token', async (req, res) => {
 
     if (result.rowCount === 0) {
       return sendPage(404, renderInvalidGuestPassPage({ nonce }));
+    }
+
+    // Platform modulu: Gecis Kontrol kapaliysa kibar bilgi sayfasi (kapi acma dugmesi YOK).
+    if (isDoorModuleDisabled(result.rows[0])) {
+      return sendPage(
+        403,
+        renderModuleDisabledGuestPage({ nonce, siteName: result.rows[0].site_name, escapeHtml }),
+      );
     }
 
     return sendPage(200, renderGuestPassPage({ pass: result.rows[0], nonce }));

@@ -105,6 +105,9 @@ membershipRouter.get('/membership/my-devices', authRequired, async (req, res) =>
 membershipRouter.post('/membership/setup-site', authRequired, setupSiteLimiter, async (req, res) => {
   try {
     const { name, city, district, address, blocks, doors, doorCount, deviceUid } = req.body || {};
+    // Platform: isteğe bağlı yönetim türü (`management_type`; bu uçtaki diğer alanlar camelCase olduğu için
+    // `managementType` de kabul edilir). Gönderilmezse apartment_site.
+    const managementType = req.body?.management_type ?? req.body?.managementType;
 
     const result = await setupSiteWithClaimedDevice({
       userCode: sessionUserCode(req),
@@ -116,6 +119,7 @@ membershipRouter.post('/membership/setup-site', authRequired, setupSiteLimiter, 
       doors,
       doorCount,
       deviceUid,
+      managementType,
     });
 
     return res.status(201).json(result);
