@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/history_item.dart';
 
 /// Denetim kaydı satırı (`GET /admin/audit-log` -> `items[]`). Kayıtlar yalnız eklenir.
 @immutable
@@ -68,7 +69,7 @@ class AuditLogEntry {
       case 'module_request.cancelled':
         return 'Talep geri çekildi';
       default:
-        return action;
+        return peopleActionLabel(action) ?? action;
     }
   }
 
@@ -96,10 +97,21 @@ class AuditLogEntry {
             : 'Kullanıcı $targetId';
         if (who != null && roleName != null) return '$who • $roleName';
         return who ?? roleName;
+      case 'person':
+        return _numbered('Kişi');
+      case 'apartment':
+        return _numbered('Daire');
+      case 'vehicle':
+        return _numbered('Araç');
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;
     }
+  }
+
+  String? _numbered(String noun) {
+    final id = targetId;
+    return id == null || id.isEmpty ? null : '$noun #$id';
   }
 
   factory AuditLogEntry.fromJson(Map<String, dynamic> json) {

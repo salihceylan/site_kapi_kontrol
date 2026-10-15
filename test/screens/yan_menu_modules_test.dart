@@ -60,23 +60,26 @@ List<String> _titles(WidgetTester t) {
 
 void main() {
   group('yeni öğeler ve sayılar', () {
-    testWidgets('süper kullanıcı: 14 öğe + çıkış; Modüller Site Yönetimi\'nin, Modül Talepleri Modüller\'in hemen altında; Denetim Kaydı en sonda', (t) async {
+    testWidgets('süper kullanıcı: 15 öğe + çıkış; Kişiler Site Yönetimi\'nin, Modüller Kişiler\'in, Modül Talepleri Modüller\'in hemen altında; Denetim Kaydı en sonda', (t) async {
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final titles = _titles(t);
-      expect(titles, hasLength(15));
-      expect(titles.indexOf('Modüller'), titles.indexOf('Site Yönetimi') + 1);
+      expect(titles, hasLength(16));
+      expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
+      expect(titles.indexOf('Modüller'), titles.indexOf('Kişiler') + 1);
       expect(titles.indexOf('Modül Talepleri'), titles.indexOf('Modüller') + 1);
       expect(titles[titles.length - 2], 'Denetim Kaydı');
       expect(titles.last, 'Çıkış Yap');
     });
 
-    testWidgets('site yöneticisi (yönetici modu): 7 öğe, Modüller var; Denetim Kaydı ve Modül Talepleri YOK', (t) async {
+    testWidgets('site yöneticisi (yönetici modu): 8 öğe, Kişiler ve Modüller var; Denetim Kaydı ve Modül Talepleri YOK', (t) async {
       await _pumpMenu(t, UserRole.siteManager, toggle: true, height: 1200);
       final titles = _titles(t);
+      expect(titles, contains('Kişiler'));
+      expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
       expect(titles, contains('Modüller'));
       expect(titles, isNot(contains('Denetim Kaydı')));
       expect(titles, isNot(contains('Modül Talepleri')));
-      expect(titles, hasLength(1 + 7 + 1), reason: 'mod geçişi + 7 öğe + çıkış');
+      expect(titles, hasLength(1 + 8 + 1), reason: 'mod geçişi + 8 öğe + çıkış');
     });
 
     testWidgets('site yöneticisi sakin modu, daire kullanıcısı, bireysel: Modüller/Denetim Kaydı YOK', (t) async {
@@ -89,6 +92,7 @@ void main() {
         await _pumpMenu(t, role, resident: resident, toggle: toggle, height: 1200);
         final titles = _titles(t);
         expect(titles, isNot(contains('Modüller')), reason: '$role');
+        expect(titles, isNot(contains('Kişiler')), reason: '$role: yalnız additionalItems ile (kurul üyesi)');
         expect(titles, isNot(contains('Denetim Kaydı')), reason: '$role');
         expect(titles, isNot(contains('Modül Talepleri')), reason: '$role');
         expect(titles, hasLength(count + (toggle ? 1 : 0) + 1), reason: '$role');

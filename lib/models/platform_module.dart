@@ -236,6 +236,9 @@ class MySiteModules {
   /// Katalogdaki tüm kodlar için hesaplanmış açık/kapalı.
   final Map<String, bool> modules;
 
+  /// Kullanıcı bu sitede Yönetim Kurulu / Denetçi (salt okunur) mu?
+  bool get isBoardMember => role == 'board_member';
+
   /// Kod listede yoksa (eski sunucu / yeni modül) katalog varsayılanı.
   bool isEnabled(String code) =>
       modules[code] ?? PlatformModule.defaultEnabled(code);

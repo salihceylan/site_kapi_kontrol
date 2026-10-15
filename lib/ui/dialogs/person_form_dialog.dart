@@ -1,0 +1,382 @@
+import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/apartment_crm.dart';
+import 'package:site_kapi_kontrol/models/person_record.dart';
+import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmInt;
+import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/buttons.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
+import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
+
+/// "Kişi Ekle" ve "Düzenle" penceresi (Platform Faz 2a).
+///
+/// - Ekleme ([person] null): ad soyad, telefon (+90 hazır, 3-3-2-2), e-posta, isteğe bağlı daire +
+///   ilişki + giriş tarihi, not.
+/// - Düzenleme: yalnız DEĞİŞEN alanlar gönderilir. HESABI OLAN kişide ad / telefon / e-posta salt okunur
+///   görünür ("Kişinin kendi profilinden değişir") ve gönderilmez; yalnız not düzenlenir.
+///
+/// Sunucu reddi (aynı e-posta, dolu ilişki, ...) Türkçe mesajla pencerenin içinde gösterilir ve pencere
+/// AÇIK kalır. Başarıda sunucunun döndürdüğü [PersonDetail] ile kapanır (çağıran listeyi yeniler).
+class PersonFormDialog extends StatefulWidget {
+  const PersonFormDialog({super.key, required this.scope, this.person});
+
+  final PeopleScope scope;
+
+  /// Düzenlenen kişi; null ise yeni kişi.
+  final PersonDetail? person;
+
+  static const int maxNoteLength = 500;
+  static const int maxNameLength = 100;
+
+  static Future<PersonDetail?> show(
+    BuildContext context, {
+    required PeopleScope scope,
+    PersonDetail? person,
+  }) {
+    return showDialog<PersonDetail>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PersonFormDialog(scope: scope, person: person),
+    );
+  }
+
+  @override
+  State<PersonFormDialog> createState() => _PersonFormDialogState();
+}
+
+class _PersonFormDialogState extends State<PersonFormDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late final TextEditingController _name = TextEditingController(
+    text: widget.person?.fullName ?? '',
+  );
+  late final TextEditingController _phone = TextEditingController(
+    // Hesabı olan kişinin boş telefonu salt okunur alanda "+90 " öneki göstermesin.
+    text: _identityLocked && phoneToApi(widget.person?.phone) == null
+        ? ''
+        : formatPhoneField(widget.person?.phone),
+  );
+  late final TextEditingController _email = TextEditingController(
+    text: widget.person?.email ?? '',
+  );
+  late final TextEditingController _note = TextEditingController(
+    text: widget.person?.note ?? '',
+  );
+  final TextEditingController _moveIn = TextEditingController();
+
+  ApartmentSummary? _apartment;
+  ResidencyRelation _relation = ResidencyRelation.resident;
+  bool _submitting = false;
+  String? _error;
+
+  // PERSON_EXISTS yanıtındaki mevcut kişinin numarası (0 / eksik: "Kişiyi Aç" gösterilmez).
+  int _existingPersonId = 0;
+
+  static final RegExp _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+  bool get _editing => widget.person != null;
+
+  /// Hesabı olan kişide ad ve telefon CRM'den değişmez (kişinin kendi profilinden değişir).
+  bool get _identityLocked => widget.person?.hasAccount == true;
+
+  /// E-posta da kilitlidir; YALNIZ dahili (@ahbu.local) hesapta iletişim e-postası düzenlenebilir
+  /// (`account_kind: internal`). Alan yoksa (eski sunucu) hesabı olan kişide e-posta da salt okunurdur.
+  bool get _emailLocked =>
+      widget.person?.hasAccount == true && widget.person?.isInternalAccount != true;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _phone.dispose();
+    _email.dispose();
+    _note.dispose();
+    _moveIn.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickApartment() async {
+    final picked = await showApartmentPicker(context, widget.scope);
+    if (picked == null || !mounted) return;
+    setState(() => _apartment = picked);
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _submitting = true;
+      _error = null;
+      _existingPersonId = 0;
+    });
+    final auth = widget.scope.authService;
+    final siteCode = widget.scope.siteCode;
+    try {
+      final PersonDetail result;
+      if (_editing) {
+        final fields = _changedFields();
+        if (fields.isEmpty) {
+          // Değişiklik yok: sunucuya gitmeden kapanır.
+          Navigator.of(context).pop(widget.person);
+          return;
+        }
+        result = await auth.updatePerson(siteCode, widget.person!.id, fields);
+      } else {
+        final apartment = _apartment;
+        result = await auth.createPerson(
+          siteCode,
+          fullName: _name.text,
+          phone: phoneToApi(_phone.text),
+          email: _email.text,
+          note: _note.text,
+          apartmentId: apartment?.id,
+          relation: apartment == null ? null : _relation,
+          moveInDate: apartment == null ? null : parseDateField(_moveIn.text),
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = crmMessageOf(
+          e,
+          'Kişi kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+        _existingPersonId = e is ApiException && e.code == 'PERSON_EXISTS'
+            ? crmInt(e.payload?['person_id'])
+            : 0;
+        _submitting = false;
+      });
+    }
+  }
+
+  Future<void> _openExisting() async {
+    final id = _existingPersonId;
+    if (id <= 0) return;
+    await PersonCardDialog.show(
+      context,
+      scope: widget.scope,
+      personId: id,
+    );
+  }
+
+  /// Düzenlemede yalnız değişen alanlar (boşaltılan alan `null` gider; sunucu temizler). HESAPLI kişide
+  /// `full_name` / `phone` / `email` anahtarları HİÇ gönderilmez (değişmemiş değer dahil: sunucu 409
+  /// PERSON_HAS_ACCOUNT döner); dahili hesapta yalnız `email` serbesttir.
+  Map<String, Object?> _changedFields() {
+    final initial = widget.person!;
+    final fields = <String, Object?>{};
+    if (!_identityLocked) {
+      final name = _name.text.trim();
+      if (name != initial.fullName.trim()) fields['full_name'] = name;
+      final phone = phoneToApi(_phone.text);
+      if (phone != phoneToApi(initial.phone)) fields['phone'] = phone;
+    }
+    if (!_emailLocked) {
+      final email = _email.text.trim().toLowerCase();
+      if (email != (initial.email ?? '').trim().toLowerCase()) {
+        fields['email'] = email.isEmpty ? null : email;
+      }
+    }
+    final note = _note.text.trim();
+    if (note != (initial.note ?? '').trim()) {
+      fields['note'] = note.isEmpty ? null : note;
+    }
+    return fields;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    final internal = widget.person?.isInternalAccount == true;
+    return AppDialog(
+      title: _editing ? 'Kişiyi Düzenle' : 'Kişi Ekle',
+      subtitle: widget.scope.siteName.isEmpty ? null : widget.scope.siteName,
+      icon: _editing ? Icons.edit_rounded : Icons.person_add_alt_1_rounded,
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Vazgeç'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: Text(_submitting ? 'Kaydediliyor...' : 'Kaydet'),
+        ),
+      ],
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_error != null) ...[
+              InlineNotice(message: _error!),
+              if (_existingPersonId > 0) ...[
+                const SizedBox(height: AppSpace.sm),
+                PrimaryActionButton(
+                  label: 'Kişiyi Aç',
+                  icon: Icons.open_in_new_rounded,
+                  variant: AppButtonVariant.outline,
+                  onPressed: _openExisting,
+                ),
+              ],
+              const SizedBox(height: AppSpace.md),
+            ],
+            if (_identityLocked) ...[
+              InlineNotice(
+                tone: AppTone.info,
+                icon: Icons.lock_outline_rounded,
+                message: internal
+                    ? 'Bu kişinin hesabı var. Ad ve telefon kişinin kendi profilinden değişir; iletişim e-postası buradan düzenlenebilir.'
+                    : 'Bu kişinin hesabı var. Ad, telefon ve e-posta kişinin kendi profilinden değişir.',
+              ),
+              const SizedBox(height: AppSpace.md),
+            ],
+            TextFormField(
+              key: const ValueKey<String>('person_name'),
+              controller: _name,
+              enabled: !_submitting,
+              readOnly: _identityLocked,
+              textCapitalization: TextCapitalization.words,
+              maxLength: PersonFormDialog.maxNameLength,
+              decoration: InputDecoration(
+                labelText: 'Ad Soyad',
+                prefixIcon: const Icon(Icons.person_rounded),
+                helperText: _identityLocked ? 'Kişinin kendi profilinden değişir' : null,
+                helperMaxLines: 3,
+                counterText: '',
+              ),
+              validator: (value) {
+                if (_identityLocked) return null;
+                final length = (value ?? '').trim().length;
+                if (length < 2) return 'Ad soyad en az 2 karakter olmalı.';
+                if (length > PersonFormDialog.maxNameLength) {
+                  return 'Ad soyad en çok ${PersonFormDialog.maxNameLength} karakter olabilir.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              key: const ValueKey<String>('person_phone'),
+              controller: _phone,
+              enabled: !_submitting,
+              readOnly: _identityLocked,
+              keyboardType: TextInputType.phone,
+              inputFormatters: const [PhoneInputFormatter()],
+              decoration: InputDecoration(
+                labelText: 'Telefon (isteğe bağlı)',
+                prefixIcon: const Icon(Icons.phone_rounded),
+                helperText: _identityLocked ? 'Kişinin kendi profilinden değişir' : null,
+                helperMaxLines: 3,
+              ),
+              validator: (value) => _identityLocked ? null : validatePhoneField(value),
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              key: const ValueKey<String>('person_email'),
+              controller: _email,
+              enabled: !_submitting,
+              readOnly: _emailLocked,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'E-posta (isteğe bağlı)',
+                prefixIcon: const Icon(Icons.email_rounded),
+                // Hesap var / yok ima etmez: sunucu e-postayı kişi siteye katılınca hesapla eşleştirir.
+                helperText: _emailLocked
+                    ? 'Kişinin kendi profilinden değişir'
+                    : (_editing ? null : 'E-posta, kişi siteye katıldığında hesabıyla eşleştirilir.'),
+                helperMaxLines: 3,
+              ),
+              validator: (value) {
+                if (_emailLocked) return null;
+                final text = (value ?? '').trim();
+                if (text.isEmpty) return null;
+                return _emailPattern.hasMatch(text) ? null : 'Geçerli bir e-posta girin.';
+              },
+            ),
+            if (!_editing) ...[
+              const SizedBox(height: AppSpace.md),
+              CrmPickerField(
+                key: const ValueKey<String>('person_apartment'),
+                label: 'Daire (isteğe bağlı)',
+                icon: Icons.apartment_rounded,
+                value: _apartment?.fullLabel,
+                placeholder: 'Daire seçmek için dokunun',
+                enabled: !_submitting,
+                onTap: _pickApartment,
+                onClear: () => setState(() => _apartment = null),
+              ),
+              if (_apartment != null) ...[
+                const SizedBox(height: AppSpace.md),
+                DropdownButtonFormField<ResidencyRelation>(
+                  key: const ValueKey<String>('person_relation'),
+                  isExpanded: true,
+                  initialValue: _relation,
+                  dropdownColor: p.surface,
+                  style: th.bodyLarge?.copyWith(color: p.text),
+                  decoration: const InputDecoration(
+                    labelText: 'İlişki',
+                    prefixIcon: Icon(Icons.badge_rounded),
+                  ),
+                  items: [
+                    for (final relation in ResidencyRelation.values)
+                      DropdownMenuItem<ResidencyRelation>(
+                        value: relation,
+                        child: Text(
+                          relation.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (value) {
+                          if (value != null) setState(() => _relation = value);
+                        },
+                ),
+                const SizedBox(height: AppSpace.md),
+                TextFormField(
+                  key: const ValueKey<String>('person_move_in'),
+                  controller: _moveIn,
+                  enabled: !_submitting,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [DateInputFormatter()],
+                  decoration: const InputDecoration(
+                    labelText: 'Giriş tarihi (isteğe bağlı)',
+                    hintText: 'GG.AA.YYYY',
+                    prefixIcon: Icon(Icons.event_rounded),
+                  ),
+                  validator: validateDateField,
+                ),
+              ],
+            ],
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              key: const ValueKey<String>('person_note'),
+              controller: _note,
+              enabled: !_submitting,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: PersonFormDialog.maxNoteLength,
+              keyboardType: TextInputType.multiline,
+              decoration: const InputDecoration(
+                labelText: 'Not (isteğe bağlı)',
+                alignLabelWithHint: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

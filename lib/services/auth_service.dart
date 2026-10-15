@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
@@ -12,11 +13,15 @@ import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
+import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
+import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
+import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -1094,6 +1099,250 @@ class AuthService extends ChangeNotifier {
         note: note,
       ),
     );
+  }
+
+  // --- Kişi ve Daire Kayıtları (Faz 2a) -----------------------------------------------------
+  // Hata durumunda ApiException FIRLATIR (Türkçe mesajlı); oturum hatası [_runAuthorized] içinde işlenir.
+
+  /// Kişi listesi (`GET /manager/sites/:siteCode/people`). [status]: `active|inactive|all`.
+  Future<PersonPage> listPeople(
+    int siteCode, {
+    String? query,
+    ResidencyRelation? relation,
+    String? status,
+    int? apartmentId,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listPeople(
+        token: token,
+        siteCode: siteCode,
+        query: query,
+        relation: relation,
+        status: status,
+        apartmentId: apartmentId,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  Future<PersonDetail> getPerson(int siteCode, int personId) {
+    return _runAuthorized(
+      (token) => api.getPerson(token: token, siteCode: siteCode, personId: personId),
+    );
+  }
+
+  /// Kişi ekler; [apartmentId] verilirse [relation] ile o daireye bağlanır.
+  Future<PersonDetail> createPerson(
+    int siteCode, {
+    required String fullName,
+    String? phone,
+    String? email,
+    String? note,
+    int? apartmentId,
+    ResidencyRelation? relation,
+    DateTime? moveInDate,
+  }) {
+    return _runAuthorized(
+      (token) => api.createPerson(
+        token: token,
+        siteCode: siteCode,
+        fullName: fullName,
+        phone: phone,
+        email: email,
+        note: note,
+        apartmentId: apartmentId,
+        relation: relation,
+        moveInDate: moveInDate,
+      ),
+    );
+  }
+
+  /// Kişiyi günceller; yalnız [fields] içindeki alanlar gönderilir.
+  Future<PersonDetail> updatePerson(
+    int siteCode,
+    int personId,
+    Map<String, Object?> fields,
+  ) {
+    return _runAuthorized(
+      (token) => api.updatePerson(
+        token: token,
+        siteCode: siteCode,
+        personId: personId,
+        fields: fields,
+      ),
+    );
+  }
+
+  Future<PersonDetail> addResidency(
+    int siteCode,
+    int personId, {
+    required int apartmentId,
+    required ResidencyRelation relation,
+    DateTime? moveInDate,
+  }) {
+    return _runAuthorized(
+      (token) => api.addResidency(
+        token: token,
+        siteCode: siteCode,
+        personId: personId,
+        apartmentId: apartmentId,
+        relation: relation,
+        moveInDate: moveInDate,
+      ),
+    );
+  }
+
+  Future<PersonDetail> updateResidency(
+    int siteCode,
+    int residencyId, {
+    ResidencyRelation? relation,
+    DateTime? moveInDate,
+  }) {
+    return _runAuthorized(
+      (token) => api.updateResidency(
+        token: token,
+        siteCode: siteCode,
+        residencyId: residencyId,
+        relation: relation,
+        moveInDate: moveInDate,
+      ),
+    );
+  }
+
+  /// "Taşındı": ilişkiyi bitirir (kayıt silinmez); hesabı olan kişinin o dairedeki kapı yetkisi kapanır.
+  Future<PersonDetail> endResidency(
+    int siteCode,
+    int residencyId, {
+    DateTime? moveOutDate,
+  }) {
+    return _runAuthorized(
+      (token) => api.endResidency(
+        token: token,
+        siteCode: siteCode,
+        residencyId: residencyId,
+        moveOutDate: moveOutDate,
+      ),
+    );
+  }
+
+  Future<ApartmentPage> listApartments(
+    int siteCode, {
+    int? blockId,
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listApartments(
+        token: token,
+        siteCode: siteCode,
+        blockId: blockId,
+        query: query,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  Future<ApartmentDetail> getApartment(int siteCode, int apartmentId) {
+    return _runAuthorized(
+      (token) => api.getApartment(
+        token: token,
+        siteCode: siteCode,
+        apartmentId: apartmentId,
+      ),
+    );
+  }
+
+  /// Daire alanlarını günceller; yalnız [fields] içindeki alanlar gönderilir.
+  Future<ApartmentDetail> updateApartment(
+    int siteCode,
+    int apartmentId,
+    Map<String, Object?> fields,
+  ) {
+    return _runAuthorized(
+      (token) => api.updateApartment(
+        token: token,
+        siteCode: siteCode,
+        apartmentId: apartmentId,
+        fields: fields,
+      ),
+    );
+  }
+
+  Future<VehiclePage> listVehicles(
+    int siteCode, {
+    String? query,
+    int? personId,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listVehicles(
+        token: token,
+        siteCode: siteCode,
+        query: query,
+        personId: personId,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  Future<VehicleRecord> createVehicle(
+    int siteCode,
+    int personId,
+    String plate, {
+    String? note,
+  }) {
+    return _runAuthorized(
+      (token) => api.createVehicle(
+        token: token,
+        siteCode: siteCode,
+        personId: personId,
+        plate: plate,
+        note: note,
+      ),
+    );
+  }
+
+  Future<void> removeVehicle(int siteCode, int vehicleId) async {
+    await _runAuthorized(
+      (token) => api.removeVehicle(
+        token: token,
+        siteCode: siteCode,
+        vehicleId: vehicleId,
+      ),
+    );
+  }
+
+  /// Değişiklik geçmişi. [targetType]: `person|apartment|vehicle`; sonraki sayfa için
+  /// `HistoryPage.nextBeforeId` [beforeId] olarak verilir.
+  Future<HistoryPage> listHistory(
+    int siteCode, {
+    String? targetType,
+    int? targetId,
+    int limit = 50,
+    int? beforeId,
+  }) {
+    return _runAuthorized(
+      (token) => api.listHistory(
+        token: token,
+        siteCode: siteCode,
+        targetType: targetType,
+        targetId: targetId,
+        limit: limit,
+        beforeId: beforeId,
+      ),
+    );
+  }
+
+  /// Sakinin kendi güncel kayıtları (`GET /app/my-records`).
+  Future<List<MyRecord>> getMyRecords() {
+    return _runAuthorized((token) => api.getMyRecords(token: token));
   }
 
   Future<({bool deleted, bool pending, String? message, String? error})> deleteSite({

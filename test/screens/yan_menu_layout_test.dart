@@ -61,16 +61,17 @@ const String _longEmail =
 const List<_Cfg> _cfgs = <_Cfg>[
   // Platform modül sistemi: süper kullanıcıya "Modüller", "Modül Talepleri" (Faz 1.1) ve
   // "Denetim Kaydı", site yöneticisine (yönetici modunda) "Modüller" eklendi (11 -> 14, 6 -> 7).
+  // Platform Faz 2a: ikisine de "Kişiler" eklendi (14 -> 15, 7 -> 8).
   _Cfg(
-    'süper kullanıcı (14 öğe)',
+    'süper kullanıcı (15 öğe)',
     UserRole.superUser,
-    14,
+    15,
     selected: SirketMenuItem.siteler,
   ),
   _Cfg(
     'site yöneticisi + mod geçişi',
     UserRole.siteManager,
-    7,
+    8,
     selected: SirketMenuItem.siteler,
     toggle: true,
   ),
@@ -593,6 +594,7 @@ void main() {
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.kisiler,
         SirketMenuItem.moduller,
         SirketMenuItem.modulTalepleri,
         SirketMenuItem.katilimVeKurulum,
@@ -605,6 +607,7 @@ void main() {
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
+        SirketMenuItem.kisiler,
         SirketMenuItem.moduller,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.katilimVeKurulum,
@@ -769,6 +772,7 @@ void main() {
           'Panel',
           'Profilim',
           'Site Yönetimi',
+          'Kişiler',
           'Modüller',
           'Kayıtlı Cihazlar',
           'Daireye Katıl & Cihaz Ekle',
@@ -791,6 +795,7 @@ void main() {
           'Site Yöneticileri Yönetimi',
           'Daire Sakinleri',
           'Site Yönetimi',
+          'Kişiler',
           'Modüller',
           'Modül Talepleri',
           'Daireye Katıl & Cihaz Ekle',
@@ -1006,12 +1011,17 @@ void main() {
       );
 
       await t.tap(find.text('Profilim'));
+      // Menü uzadı (Kişiler eklendi): alttaki öğeye inilir.
+      await t.ensureVisible(find.text('Daireye Katıl & Cihaz Ekle'));
+      await t.pump();
       await t.tap(find.text('Daireye Katıl & Cihaz Ekle'));
       expect(selected, <SirketMenuItem>[
         SirketMenuItem.profilim,
         SirketMenuItem.katilimVeKurulum,
       ]);
 
+      await t.ensureVisible(find.text('Sakin Moduna Geç'));
+      await t.pump();
       await t.tap(find.text('Sakin Moduna Geç'));
       expect(toggles, 1);
 

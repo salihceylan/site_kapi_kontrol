@@ -14,7 +14,12 @@ import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/apartment_crm.dart';
+import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
+import 'package:site_kapi_kontrol/models/person_record.dart';
+import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -841,6 +846,339 @@ class AuthApi {
       'Modül talebi',
       () => ModuleRequest.fromJson(payload['request'] as Map<String, dynamic>),
     );
+  }
+
+  // --- Kişi ve Daire Kayıtları (Faz 2a) -----------------------------------------------------
+  // Hepsi `/manager/sites/:siteCode/...` altındadır (sözleşme: docs/PLATFORM_KISILER.md). Okuma
+  // yönetici / süper kullanıcı / kurul üyesine, yazma yalnız yönetici / süper kullanıcıya açıktır;
+  // yetki sunucuda doğrulanır (403 FORBIDDEN_ROLE / FORBIDDEN_SITE).
+
+  String _peoplePath(int siteCode, String tail, [Map<String, String>? query]) {
+    final path = '/manager/sites/$siteCode/$tail';
+    if (query == null || query.isEmpty) return path;
+    return Uri(path: path, queryParameters: query).toString();
+  }
+
+  /// Kişi listesi. [status]: `active|inactive|all` (sunucu varsayılanı `active`); [relation]: kişinin
+  /// GÜNCEL ilişkilerinden biri.
+  Future<PersonPage> listPeople({
+    required String token,
+    required int siteCode,
+    String? query,
+    ResidencyRelation? relation,
+    String? status,
+    int? apartmentId,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'people', {
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        if (relation != null) 'relation': relation.apiValue,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (apartmentId != null) 'apartment_id': '$apartmentId',
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişiler', () => PersonPage.fromJson(payload));
+  }
+
+  Future<PersonDetail> getPerson({
+    required String token,
+    required int siteCode,
+    required int personId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'people/$personId'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  /// Kişi ekler (201). [apartmentId] verilirse [relation] ile o daireye bağlanır; e-posta kayıtlı bir
+  /// hesaba aitse kişi o hesaba bağlanır (sunucu kararı).
+  Future<PersonDetail> createPerson({
+    required String token,
+    required int siteCode,
+    required String fullName,
+    String? phone,
+    String? email,
+    String? note,
+    int? apartmentId,
+    ResidencyRelation? relation,
+    DateTime? moveInDate,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _peoplePath(siteCode, 'people'),
+      token: token,
+      body: {
+        'full_name': fullName.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        'apartment_id': ?apartmentId,
+        if (apartmentId != null && relation != null) 'relation': relation.apiValue,
+        if (apartmentId != null && moveInDate != null)
+          'move_in_date': crmDateParam(moveInDate),
+      },
+    );
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  /// Kişiyi günceller: yalnız [fields] içindeki alanlar gönderilir (`full_name`, `phone`, `email`,
+  /// `note`, `is_active`). Hesabı olan kişide ad/telefon/e-posta gönderilirse sunucu 409
+  /// `PERSON_HAS_ACCOUNT` döner.
+  Future<PersonDetail> updatePerson({
+    required String token,
+    required int siteCode,
+    required int personId,
+    required Map<String, Object?> fields,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: _peoplePath(siteCode, 'people/$personId'),
+      token: token,
+      body: Map<String, dynamic>.of(fields),
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  /// Kişiye bir daire ilişkisi ekler (201).
+  Future<PersonDetail> addResidency({
+    required String token,
+    required int siteCode,
+    required int personId,
+    required int apartmentId,
+    required ResidencyRelation relation,
+    DateTime? moveInDate,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _peoplePath(siteCode, 'people/$personId/residencies'),
+      token: token,
+      body: {
+        'apartment_id': apartmentId,
+        'relation': relation.apiValue,
+        if (moveInDate != null) 'move_in_date': crmDateParam(moveInDate),
+      },
+    );
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  Future<PersonDetail> updateResidency({
+    required String token,
+    required int siteCode,
+    required int residencyId,
+    ResidencyRelation? relation,
+    DateTime? moveInDate,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: _peoplePath(siteCode, 'residencies/$residencyId'),
+      token: token,
+      body: {
+        if (relation != null) 'relation': relation.apiValue,
+        if (moveInDate != null) 'move_in_date': crmDateParam(moveInDate),
+      },
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  /// "Taşındı": ilişkiyi bitirir (kayıt silinmez). Kişinin hesabı varsa o dairedeki kapı yetkisi
+  /// sunucuda kapanır. [moveOutDate] verilmezse sunucu bugünü yazar.
+  Future<PersonDetail> endResidency({
+    required String token,
+    required int siteCode,
+    required int residencyId,
+    DateTime? moveOutDate,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _peoplePath(siteCode, 'residencies/$residencyId/end'),
+      token: token,
+      body: {if (moveOutDate != null) 'move_out_date': crmDateParam(moveOutDate)},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kişi', () => PersonDetail.fromJson(payload));
+  }
+
+  Future<ApartmentPage> listApartments({
+    required String token,
+    required int siteCode,
+    int? blockId,
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'apartments', {
+        if (blockId != null) 'block_id': '$blockId',
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Daireler', () => ApartmentPage.fromJson(payload));
+  }
+
+  Future<ApartmentDetail> getApartment({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'apartments/$apartmentId'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Daire', () => ApartmentDetail.fromJson(payload));
+  }
+
+  /// Daire alanlarını günceller: yalnız [fields] içindekiler gönderilir (`floor`, `gross_area_m2`,
+  /// `net_area_m2`, `land_share_numerator`, `land_share_denominator`, `category`,
+  /// `responsible_party`). Blok ve daire etiketi bu uçla DEĞİŞMEZ.
+  Future<ApartmentDetail> updateApartment({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required Map<String, Object?> fields,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: _peoplePath(siteCode, 'apartments/$apartmentId'),
+      token: token,
+      body: Map<String, dynamic>.of(fields),
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Daire', () => ApartmentDetail.fromJson(payload));
+  }
+
+  Future<VehiclePage> listVehicles({
+    required String token,
+    required int siteCode,
+    String? query,
+    int? personId,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'vehicles', {
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        if (personId != null) 'person_id': '$personId',
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Araçlar', () => VehiclePage.fromJson(payload));
+  }
+
+  /// Araç ekler (201). Plakayı sunucu normalize eder (`34 ABC 123` -> `34ABC123`).
+  Future<VehicleRecord> createVehicle({
+    required String token,
+    required int siteCode,
+    required int personId,
+    required String plate,
+    String? note,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _peoplePath(siteCode, 'vehicles'),
+      token: token,
+      body: {
+        'person_id': personId,
+        'plate': plate.trim(),
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      },
+    );
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Araç',
+      () => VehicleRecord.fromJson(payload['vehicle'] as Map<String, dynamic>),
+    );
+  }
+
+  /// Aracı kaldırır (kayıt pasifleşir, silinmez).
+  Future<void> removeVehicle({
+    required String token,
+    required int siteCode,
+    required int vehicleId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: _peoplePath(siteCode, 'vehicles/$vehicleId'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+  }
+
+  /// Değişiklik geçmişi (F2.11). [targetType]: `person|apartment|vehicle`; `id DESC`, sonraki sayfa
+  /// için önceki yanıttaki `next_before_id` [beforeId] olarak verilir.
+  Future<HistoryPage> listHistory({
+    required String token,
+    required int siteCode,
+    String? targetType,
+    int? targetId,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _peoplePath(siteCode, 'history', {
+        if (targetType != null && targetType.isNotEmpty) 'target_type': targetType,
+        if (targetId != null) 'target_id': '$targetId',
+        'limit': '$limit',
+        if (beforeId != null) 'before_id': '$beforeId',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Geçmiş', () => HistoryPage.fromJson(payload));
+  }
+
+  /// Sakinin KENDİ güncel kayıtları (daireler, ilişki, giriş tarihi, araçlar).
+  Future<List<MyRecord>> getMyRecords({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/my-records',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kayıtlarım', () => MyRecord.listFrom(payload['records']));
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -1823,6 +2161,7 @@ class AuthApi {
       statusCode: status,
       code: code,
       retryAfterSeconds: retryAfter,
+      payload: payload,
     );
   }
 
@@ -1911,6 +2250,21 @@ class AuthApi {
         return 'Gönderilen bilgiler geçersiz. Alanları kontrol edip tekrar deneyin.';
       case 'INVALID_QUERY':
         return 'Geçersiz sorgu. Süzgeçleri kontrol edip tekrar deneyin.';
+      // Kişi ve Daire Kayıtları (Faz 2a): sunucu `error` metni göndermezse genel Türkçe yedek mesajlar
+      // (metin gelirse sunucunun kendi mesajı önceliklidir).
+      case 'PERSON_NOT_FOUND':
+        return 'Kişi bulunamadı.';
+      case 'VEHICLE_NOT_FOUND':
+        return 'Araç bulunamadı.';
+      case 'RESIDENCY_NOT_FOUND':
+        return 'İlişki kaydı bulunamadı.';
+      case 'RESIDENCY_NOT_CURRENT':
+        return 'Bu ilişki artık güncel değil.';
+      case 'RESIDENCY_EXISTS':
+        return 'Kişi bu dairede zaten kayıtlı.';
+      case 'SITE_NOT_FOUND':
+      case 'INVALID_SITE_CODE':
+        return 'Site bulunamadı.';
     }
     return null;
   }
@@ -2051,6 +2405,21 @@ class AuthApi {
         return 'Talep bulunamadı.';
       case 'REQUEST_NOT_PENDING':
         return 'Bu talep artık bekleyen durumda değil.';
+      // Kişi ve Daire Kayıtları (Faz 2a).
+      case 'PERSON_EXISTS':
+        return 'Bu e-posta ile kayıtlı bir kişi zaten var.';
+      case 'PERSON_HAS_ACCOUNT':
+        return 'Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir.';
+      case 'RELATION_TAKEN':
+        return 'Bu dairede bu ilişki için aktif bir kişi zaten var.';
+      case 'APARTMENT_NOT_FOUND':
+        return 'Daire bulunamadı.';
+      case 'PLATE_INVALID':
+        return 'Plaka biçimi geçersiz.';
+      case 'PLATE_EXISTS':
+        return 'Bu plaka bu sitede zaten kayıtlı.';
+      case 'FORBIDDEN_ROLE':
+        return 'Bu işlem için yetkiniz yok.';
       default:
         return null;
     }

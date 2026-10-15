@@ -6,6 +6,7 @@ class ApiException implements Exception {
     this.retryAfterSeconds,
     bool? invalidatesSession,
     this.fromIntermediary = false,
+    this.payload,
   }) : _invalidatesSession = invalidatesSession;
 
   final String message;
@@ -24,6 +25,10 @@ class ApiException implements Exception {
   /// gövde JSON hata zarfı değil) geldi: geçici ağ hatasıdır, oturum sonu / hesap pasif sinyali
   /// DEĞİLDİR. true iken [isUnauthorized], [isForbidden] ve [invalidatesSession] false döner.
   final bool fromIntermediary;
+
+  /// Sunucunun hata gövdesi (JSON haritası); yoksa null. Koda özgü ek alanlar için (örn. `PERSON_EXISTS`
+  /// yanıtındaki `person_id`). Kullanıcıya gösterilecek metin her zaman [message]'dır.
+  final Map<String, dynamic>? payload;
 
   /// Bu hata oturumun geçersiz olduğu anlamına mı geliyor? Varsayılan: 401.
   /// Giriş / mevcut şifre doğrulama gibi kimlik bilgisi uçlarında 401 "hatalı bilgi"

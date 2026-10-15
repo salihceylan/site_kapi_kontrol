@@ -124,6 +124,8 @@ import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
 
 import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
+import 'package:site_kapi_kontrol/ui/views/people_view.dart';
+import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
 
@@ -187,6 +189,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<ModuleRequestsViewState> _moduleRequestsViewKey =
       GlobalKey<ModuleRequestsViewState>();
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
+  final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
   String _lastDoorModuleSignature = '';
   UserRole? _lastSeenRole;
 
@@ -595,6 +598,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Set<SirketMenuItem> _hiddenMenuItems(UserRole role) =>
       hiddenMenuItemsFor(role, _moduleAccess);
 
+  // --- Kişi ve Daire Kayıtları (Faz 2a) ---
+
+  /// Yönettiği (ya da süper kullanıcıda tüm) siteler için yazma yetkisi: süper kullanıcı ve site
+  /// yöneticisi (yönetici modunda).
+  bool _canManagePeople(UserRole role) =>
+      role == UserRole.superUser ||
+      (role == UserRole.siteManager && !_isResidentMode);
+
+  /// Kurul üyesi olunan siteler (salt okunur Kişiler erişimi).
+  List<PeopleSite> _boardPeopleSites() => <PeopleSite>[
+        for (final site in _moduleAccess.boardMemberSites)
+          PeopleSite(code: site.siteCode, name: site.siteName),
+      ];
+
+  /// Kişiler ekranına erişim: yönetim yetkisi ya da en az bir sitede kurul üyeliği. Görevli (STAFF) ve
+  /// sıradan sakin erişemez.
+  bool _canAccessPeople(UserRole role) =>
+      _canManagePeople(role) || _moduleAccess.boardMemberSites.isNotEmpty;
+
+  /// Rolün kendi menü listesinde olmayan ek öğeler: kurul üyesine "Kişiler".
+  Set<SirketMenuItem> _extraMenuItems(UserRole role) =>
+      _moduleAccess.boardMemberSites.isNotEmpty
+          ? const <SirketMenuItem>{SirketMenuItem.kisiler}
+          : const <SirketMenuItem>{};
+
   /// Panel'de seçilebilen siteler: yalnız Geçiş Kontrol modülü AÇIK olanlar.
   List<SiteRecord> _doorControlSelectableSites(List<SiteRecord> sites) {
     if (!_moduleAccess.isFiltering) return sites;
@@ -643,6 +671,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (item == SirketMenuItem.katilimVeKurulum) {
       return true;
+    }
+
+    // Kişiler: yönetim yetkisi ya da kurul üyeliği (salt okunur); görevli ve sakin için yok.
+    if (item == SirketMenuItem.kisiler) {
+      return _canAccessPeople(role);
     }
 
     switch (role) {
@@ -758,6 +791,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.modulTalepleri:
         return 'Modül Talepleri';
+
+      case SirketMenuItem.kisiler:
+        return 'Kişiler';
 
     }
 
@@ -3864,6 +3900,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.kisiler:
+        await _peopleViewKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -4082,7 +4121,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _titleForMenu(_selectedMenu),
+                        // Erişimi kalkan öğe (örn. kurul üyeliği biten "Kişiler") başlıkta bir kare bile
+                        // kalmaz: içerik gibi Panel'e düşer.
+                        _titleForMenu(
+                          _canAccessMenu(_selectedMenu, session.role)
+                              ? _selectedMenu
+                              : SirketMenuItem.dashboard,
+                        ),
                         style: TextStyle(
                           fontSize: 18,
                           height: 1.2,
@@ -4117,6 +4162,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         extraActions: _residentExtraActions(session),
 
         hiddenItems: _hiddenMenuItems(session.role),
+
+        additionalItems: _extraMenuItems(session.role),
 
         badgeCounts: <SirketMenuItem, int>{
           if (session.role == UserRole.superUser)
@@ -4334,7 +4381,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (session.role == UserRole.apartmentOwner) {
 
           // Sakin profilini güncelleyemez: boş sayfa yerine salt okunur hesap bilgileri.
-          return ResidentProfileView(session: session);
+          return ResidentProfileView(
+            session: session,
+            authService: widget.authService,
+          );
 
         }
 
@@ -4357,6 +4407,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           isSaving: _isSavingProfile,
 
           onSave: _saveProfile,
+
+          authService: widget.authService,
 
         );
 
@@ -4614,6 +4666,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
           // Karardan sonra çekmece rozeti (bekleyen sayı) sunucudan hemen yeniden okunur.
           onChanged: () => unawaited(_moduleAccess.refresh()),
+        );
+
+      case SirketMenuItem.kisiler:
+        return PeopleView(
+          key: _peopleViewKey,
+          authService: widget.authService,
+          manageSites: _canManagePeople(session.role),
+          readOnlySites: _boardPeopleSites(),
         );
 
       case SirketMenuItem.katilimVeKurulum:

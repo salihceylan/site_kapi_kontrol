@@ -13,11 +13,17 @@ AppTone auditToneOf(String action) {
     case 'module.enabled':
     case 'staff_role.assigned':
     case 'module_request.approved':
+    case 'person.created':
+    case 'residency.added':
+    case 'vehicle.added':
       return AppTone.success;
     case 'module.disabled':
+    case 'person.deactivated':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':
+    case 'residency.ended':
+    case 'vehicle.removed':
       return AppTone.neutral;
     case 'module_request.created':
       return AppTone.info;
@@ -39,6 +45,8 @@ String auditActorRoleLabel(String? role) {
       return 'Daire Sakini';
     case 'individual':
       return 'Bireysel Kullanıcı';
+    case 'system':
+      return 'Sistem';
     default:
       return role ?? '';
   }
@@ -60,7 +68,7 @@ class AuditLogCard extends StatelessWidget {
     final actorRole = auditActorRoleLabel(entry.actorRole);
     final who = actor.isEmpty
         ? (actorRole.isEmpty ? 'Sistem' : actorRole)
-        : (actorRole.isEmpty ? actor : '$actor • $actorRole');
+        : (actorRole.isEmpty || actorRole == actor ? actor : '$actor • $actorRole');
     final site = (entry.siteName ?? '').trim();
 
     return AppCard(

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/my_records_section.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({
@@ -18,6 +20,7 @@ class ProfileView extends StatelessWidget {
     required this.currentPasswordController,
     required this.isSaving,
     required this.onSave,
+    this.authService,
   });
 
   final UserSession session;
@@ -31,6 +34,9 @@ class ProfileView extends StatelessWidget {
   final TextEditingController currentPasswordController;
   final bool isSaving;
   final VoidCallback onSave;
+
+  /// Verilirse formun altında "Kayıtlarım" bölümü (kişi / daire kayıtlarım, salt okunur) gösterilir.
+  final AuthService? authService;
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +154,10 @@ class ProfileView extends StatelessWidget {
               ),
             ),
           ),
+          if (authService != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            MyRecordsSection(authService: authService!),
+          ],
         ],
       ),
     );
@@ -205,9 +215,12 @@ class _ProfileHero extends StatelessWidget {
 /// Daire sakini (apartment_owner) için salt okunur hesap bilgileri. Sakin hesapları yönetici tarafından
 /// yönetilir (kendi profilini güncelleyemez); "Profilim" menüsü boş sayfa yerine bu bilgileri gösterir.
 class ResidentProfileView extends StatelessWidget {
-  const ResidentProfileView({super.key, required this.session});
+  const ResidentProfileView({super.key, required this.session, this.authService});
 
   final UserSession session;
+
+  /// Verilirse hesap kartının altında "Kayıtlarım" bölümü (daire, ilişki, araç; salt okunur) gösterilir.
+  final AuthService? authService;
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +234,7 @@ class ResidentProfileView extends StatelessWidget {
       ('Hesap Türü', session.role.label, session.role.tone),
     ];
 
-    return SizedBox(
+    final card = SizedBox(
       width: double.infinity,
       child: AppCard(
         level: 2,
@@ -285,6 +298,16 @@ class ResidentProfileView extends StatelessWidget {
           ],
         ),
       ),
+    );
+    final service = authService;
+    if (service == null) return card;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        const SizedBox(height: AppSpace.lg),
+        MyRecordsSection(authService: service, showWhenEmpty: true),
+      ],
     );
   }
 }

@@ -1,0 +1,350 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
+import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/views/people_apartments_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/people_persons_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/people_vehicles_tab.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+
+/// "Kişiler" ekranı (Platform Faz 2a, çekirdek `people` modülü): site seçici + üç sekme
+/// (Kişiler | Daireler | Araçlar).
+///
+/// - [manageSites] true (site yöneticisi yönetici modunda / süper kullanıcı): yönettiği (ya da tüm)
+///   onaylı siteler listelenir ve yazma yetkisi vardır.
+/// - [readOnlySites]: kurul üyesi olunan siteler (`GET /app/my-modules` rolü `board_member`); bu
+///   sitelerde HİÇBİR yazma düğmesi çizilmez. Yönetilen bir site de listede varsa yazma yetkisi korunur.
+///
+/// Sekmeler tembel kurulur ve görünmediklerinde bile durumlarını korur. Bir sekmede yapılan değişiklik
+/// diğer sekmeleri "bayat" işaretler; o sekmeye geçilince veri yeniden çekilir. Site değişince tüm sekme
+/// durumları atılır (eski sitenin yanıtı yeni sitenin ekranına yazılamaz). Veriyi kendisi çeker;
+/// [PeopleViewState.reload] sayfa kabuğunun aşağı çekip yenilemesinden de çağrılır.
+class PeopleView extends StatefulWidget {
+  const PeopleView({
+    super.key,
+    required this.authService,
+    this.manageSites = true,
+    this.readOnlySites = const <PeopleSite>[],
+  });
+
+  final AuthService authService;
+  final bool manageSites;
+  final List<PeopleSite> readOnlySites;
+
+  @override
+  State<PeopleView> createState() => PeopleViewState();
+}
+
+class PeopleViewState extends State<PeopleView> {
+  static const List<(String, IconData)> _tabs = <(String, IconData)>[
+    ('Kişiler', Icons.groups_2_rounded),
+    ('Daireler', Icons.apartment_rounded),
+    ('Araçlar', Icons.directions_car_rounded),
+  ];
+
+  List<PeopleSite> _sites = const <PeopleSite>[];
+  int? _siteCode;
+  bool _loadingSites = false;
+  bool _sitesLoadedOnce = false;
+  String? _sitesError;
+  int _sitesToken = 0;
+
+  int _tab = 0;
+  final Set<int> _visited = <int>{0};
+  final Set<int> _dirty = <int>{};
+
+  // Site değişince yenilenir: eski sitenin sekme durumları (ve uçuştaki yanıtları) atılır.
+  GlobalKey<PeoplePersonsTabState> _personsKey = GlobalKey<PeoplePersonsTabState>();
+  GlobalKey<PeopleApartmentsTabState> _apartmentsKey =
+      GlobalKey<PeopleApartmentsTabState>();
+  GlobalKey<PeopleVehiclesTabState> _vehiclesKey = GlobalKey<PeopleVehiclesTabState>();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(reload());
+  }
+
+  @override
+  void didUpdateWidget(PeopleView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.manageSites != widget.manageSites ||
+        !listEquals(oldWidget.readOnlySites, widget.readOnlySites)) {
+      unawaited(reload());
+    }
+  }
+
+  @override
+  void dispose() {
+    ++_sitesToken;
+    super.dispose();
+  }
+
+  PeopleSite? get _site {
+    final code = _siteCode;
+    if (code == null) return null;
+    for (final site in _sites) {
+      if (site.code == code) return site;
+    }
+    return null;
+  }
+
+  /// Siteleri ve görünen sekmenin verisini yeniden çeker (mevcut ekran yenileme sürerken korunur).
+  Future<void> reload() async {
+    if (!mounted) return;
+    final token = ++_sitesToken;
+    setState(() {
+      _loadingSites = true;
+      _sitesError = null;
+    });
+    try {
+      final merged = <PeopleSite>[];
+      if (widget.manageSites) {
+        final page = await widget.authService.listSites(page: 1, pageSize: 100);
+        for (final site in page.sites) {
+          if (site.isApproved) {
+            merged.add(PeopleSite(code: site.id, name: site.name, canWrite: true));
+          }
+        }
+      }
+      for (final site in widget.readOnlySites) {
+        if (!merged.any((m) => m.code == site.code)) {
+          merged.add(PeopleSite(code: site.code, name: site.name));
+        }
+      }
+      if (!mounted || token != _sitesToken) return;
+      final keep = _siteCode != null && merged.any((s) => s.code == _siteCode);
+      final next = keep ? _siteCode : (merged.isEmpty ? null : merged.first.code);
+      final siteChanged = next != _siteCode;
+      final previous = _site;
+      setState(() {
+        _sites = merged;
+        _loadingSites = false;
+        _sitesLoadedOnce = true;
+        if (siteChanged) _resetTabs(next);
+      });
+      // Aynı site: ekrandaki sekme yeniden çekilir, diğerleri bayatlar. Yetki değiştiyse (ör. kurul
+      // üyeliği yönetime döndü) sekme durumu atılır.
+      final current = _site;
+      if (!siteChanged && current != null) {
+        if (previous != null && previous.canWrite != current.canWrite) {
+          setState(() => _resetTabs(current.code));
+        } else {
+          _reloadVisibleTab();
+          _markOthersDirty(_tab);
+        }
+      }
+    } catch (e) {
+      if (!mounted || token != _sitesToken) return;
+      setState(() {
+        _loadingSites = false;
+        _sitesError = crmMessageOf(
+          e,
+          'Siteler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      });
+    }
+  }
+
+  void _resetTabs(int? siteCode) {
+    _siteCode = siteCode;
+    _tab = 0;
+    _visited
+      ..clear()
+      ..add(0);
+    _dirty.clear();
+    _personsKey = GlobalKey<PeoplePersonsTabState>();
+    _apartmentsKey = GlobalKey<PeopleApartmentsTabState>();
+    _vehiclesKey = GlobalKey<PeopleVehiclesTabState>();
+  }
+
+  void _reloadVisibleTab() {
+    switch (_tab) {
+      case 0:
+        unawaited(_personsKey.currentState?.reload() ?? Future<void>.value());
+      case 1:
+        unawaited(_apartmentsKey.currentState?.reload() ?? Future<void>.value());
+      case 2:
+        unawaited(_vehiclesKey.currentState?.reload() ?? Future<void>.value());
+    }
+  }
+
+  void _markOthersDirty(int source) {
+    for (final index in _visited) {
+      if (index != source) _dirty.add(index);
+    }
+  }
+
+  void _selectTab(int index) {
+    if (index == _tab) return;
+    final stale = _dirty.remove(index);
+    setState(() {
+      _tab = index;
+      _visited.add(index);
+    });
+    if (stale) {
+      // Sekme zaten kurulu: veriyi çerçeveden sonra yeniden çeker.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tab == index) _reloadVisibleTab();
+      });
+    }
+  }
+
+  void _selectSite(int code) {
+    if (code == _siteCode) return;
+    setState(() => _resetTabs(code));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final site = _site;
+    final Widget content;
+    if (site == null) {
+      if (_loadingSites || (!_sitesLoadedOnce && _sitesError == null)) {
+        content = const ListSkeleton(rows: 2);
+      } else if (_sitesError != null) {
+        content = InlineNotice(message: _sitesError!, onRetry: reload);
+      } else {
+        content = const EmptyCard(
+          icon: Icons.apartment_rounded,
+          title: 'Kayıtlı site bulunamadı.',
+          message: 'Kişi ve daire kayıtları, bir siteye bağlı olduğunuzda burada görünür.',
+        );
+      }
+    } else {
+      content = _buildSite(context, site);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PageHeaderCard(title: 'Kişiler', icon: Icons.contacts_rounded),
+        const SizedBox(height: AppSpace.sm),
+        Text(
+          'Sitenizdeki kişileri, dairelerin malik ve kiracı bilgilerini ve araçları buradan yönetin.',
+          style: th.bodyMedium,
+        ),
+        const SizedBox(height: AppSpace.lg),
+        content,
+      ],
+    );
+  }
+
+  Widget _buildSite(BuildContext context, PeopleSite site) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final scope = PeopleScope(
+      authService: widget.authService,
+      siteCode: site.code,
+      siteName: site.name,
+      canWrite: site.canWrite,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_sitesError != null) ...[
+          InlineNotice(message: _sitesError!, onRetry: reload),
+          const SizedBox(height: AppSpace.md),
+        ],
+        if (_sites.length > 1)
+          AppCard(
+            child: DropdownButtonFormField<int>(
+              key: ValueKey<String>('people_site_${site.code}_${_sites.length}'),
+              isExpanded: true,
+              initialValue: site.code,
+              dropdownColor: p.surface,
+              style: th.bodyMedium?.copyWith(color: p.text),
+              decoration: const InputDecoration(
+                labelText: 'Site',
+                prefixIcon: Icon(Icons.apartment_rounded),
+              ),
+              items: [
+                for (final s in _sites)
+                  DropdownMenuItem<int>(
+                    value: s.code,
+                    child: Text(
+                      '${s.label} (${s.code})',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) _selectSite(value);
+              },
+            ),
+          )
+        else
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
+            children: [InfoChip(site.label)],
+          ),
+        const SizedBox(height: AppSpace.md),
+        if (!site.canWrite) ...[
+          const InlineNotice(
+            tone: AppTone.info,
+            icon: Icons.visibility_rounded,
+            message:
+                'Yönetim kurulu üyesi olarak kayıtları yalnızca görüntüleyebilirsiniz.',
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            for (var i = 0; i < _tabs.length; i++)
+              ChoiceChip(
+                key: ValueKey<String>('people_tab_$i'),
+                avatar: Icon(_tabs[i].$2, size: 18),
+                label: Text(_tabs[i].$1),
+                selected: _tab == i,
+                onSelected: (_) => _selectTab(i),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.md),
+        // Kurulu sekmeler durumunu korur; görünmeyenin animasyonları (iskelet) durur.
+        for (var i = 0; i < _tabs.length; i++)
+          if (_visited.contains(i))
+            Offstage(
+              offstage: _tab != i,
+              child: TickerMode(
+                enabled: _tab == i,
+                child: _buildTab(i, scope, site.code),
+              ),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildTab(int index, PeopleScope scope, int siteCode) {
+    void changed() => _markOthersDirty(index);
+    switch (index) {
+      case 0:
+        return PeoplePersonsTab(
+          key: _personsKey,
+          scope: scope,
+          onDataChanged: changed,
+        );
+      case 1:
+        return PeopleApartmentsTab(
+          key: _apartmentsKey,
+          scope: scope,
+          onDataChanged: changed,
+        );
+      default:
+        return PeopleVehiclesTab(
+          key: _vehiclesKey,
+          scope: scope,
+          onDataChanged: changed,
+        );
+    }
+  }
+}

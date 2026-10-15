@@ -46,6 +46,11 @@ enum SirketMenuItem {
   /// Platform modül sistemi Faz 1.1: site yöneticilerinin modül talepleri (yalnız süper kullanıcı;
   /// bekleyen sayısı rozetle gösterilir).
   modulTalepleri,
+
+  /// Platform Faz 2a: Kişi ve Daire Kayıtları (Kişiler | Daireler | Araçlar). Site yöneticisi (yönetici
+  /// modunda) ve süper kullanıcı için rol listesindedir; kurul üyesi için [YanMenu.additionalItems]
+  /// ile eklenir (salt okunur). Görevli (STAFF) için yoktur.
+  kisiler,
 }
 
 class YanMenu extends StatelessWidget {
@@ -63,6 +68,7 @@ class YanMenu extends StatelessWidget {
     this.extraActions = const <YanMenuAction>[],
     this.hiddenItems = const <SirketMenuItem>{},
     this.badgeCounts = const <SirketMenuItem, int>{},
+    this.additionalItems = const <SirketMenuItem>{},
   });
 
   final String fullName;
@@ -86,6 +92,10 @@ class YanMenu extends StatelessWidget {
   /// Öğe başına sayı rozeti (örn. bekleyen modül talebi sayısı). 0 ya da yok = rozet yok.
   final Map<SirketMenuItem, int> badgeCounts;
 
+  /// Rolün kendi listesinde olmayan ama kullanıcıya açık ek öğeler (varsayılan boş: menü eskisi gibidir).
+  /// Örn. yalnız kurul üyesi olan bir sakine "Kişiler" eklenir; rol listesinde zaten varsa tekrarlanmaz.
+  final Set<SirketMenuItem> additionalItems;
+
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
   /// (en büyük yazıda 56 dp'ye düşerdi) ve Column ekran yüksekliğini aşıp taşabilirdi.
@@ -96,11 +106,16 @@ class YanMenu extends StatelessWidget {
     final p = context.palette;
     final tone = role.tone;
     final compact = MediaQuery.sizeOf(context).height < _compactHeight;
-    final items = _itemsForRole(
+    final roleItems = _itemsForRole(
       role,
       isResidentMode: isResidentMode,
       canToggleMode: canToggleMode,
-    ).where((item) => !hiddenItems.contains(item)).toList(growable: false);
+    );
+    final items = <SirketMenuItem>[
+      ...roleItems,
+      for (final extra in additionalItems)
+        if (!roleItems.contains(extra)) extra,
+    ].where((item) => !hiddenItems.contains(item)).toList(growable: false);
     final showToggle = canToggleMode && onToggleMode != null;
     // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
     final firstItemIndex = showToggle ? 1 : 0;
@@ -360,6 +375,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.kisiler,
         SirketMenuItem.moduller,
         SirketMenuItem.modulTalepleri,
         SirketMenuItem.katilimVeKurulum,
@@ -381,6 +397,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
+        SirketMenuItem.kisiler,
         SirketMenuItem.moduller,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.katilimVeKurulum,
@@ -441,6 +458,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Denetim Kaydı';
     case SirketMenuItem.modulTalepleri:
       return 'Modül Talepleri';
+    case SirketMenuItem.kisiler:
+      return 'Kişiler';
   }
 }
 
@@ -480,6 +499,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.fact_check_rounded;
     case SirketMenuItem.modulTalepleri:
       return Icons.inbox_rounded;
+    case SirketMenuItem.kisiler:
+      return Icons.contacts_rounded;
   }
 }
 

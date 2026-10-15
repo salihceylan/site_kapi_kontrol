@@ -85,6 +85,14 @@ class ModuleAccess extends ChangeNotifier {
     return _result!.sites.any((s) => s.isEnabled(code));
   }
 
+  /// Kullanıcının Yönetim Kurulu / Denetçi üyesi olduğu siteler (`role == board_member`; sunucu rol
+  /// önceliği: yönetici > kurul > görevli > sakin). Süper kullanıcıda ve veri yokken boş liste döner.
+  /// Kişi ve Daire Kayıtları ekranına salt okunur erişim buradan açılır (Faz 2a).
+  List<MySiteModules> get boardMemberSites {
+    if (!isFiltering) return const <MySiteModules>[];
+    return _result!.sites.where((s) => s.isBoardMember).toList(growable: false);
+  }
+
   /// [code] modülünün açık olduğu siteler (süper kullanıcıda ya da veri yokken boş liste döner:
   /// bu durumda süzgeç yoktur, tüm siteler için [isEnabled] true'dur).
   List<MySiteModules> sitesWith(String code) {

@@ -341,8 +341,12 @@ void main() {
           ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
       ];
       expect(
-        titles.indexOf('Modüller'),
+        titles.indexOf('Kişiler'),
         titles.indexOf('Site Yönetimi') + 1,
+      );
+      expect(
+        titles.indexOf('Modüller'),
+        titles.indexOf('Kişiler') + 1,
       );
       await _disposeHome(t);
     });
