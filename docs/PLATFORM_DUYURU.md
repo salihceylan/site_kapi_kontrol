@@ -1,0 +1,87 @@
+# Platform — Duyuru ve Bildirim (Faz 3a) sözleşmesi
+
+Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül belgeler: `docs/PLATFORM_MODUL_SISTEMI.md` (modül kataloğu, hata biçimi), `docs/PLATFORM_KISILER.md` (kişi/daire kayıtları, **özellikle sondaki "Faz 2a inceleme kararları"**). Faz 2'deki kalıplar (yetki yardımcıları, hata sınıfı, audit, kilit sırası, strict-mock testleri, gerçek-PG betiği) aynen örnek alınır.
+
+## Kapsam
+
+**Faz 3a (bu belge):** duyuru oluşturma/taslak/zamanlama/yayınlama/düzenleme/geri çekme, hedefleme (tüm site / bloklar / seçili daireler), yayın öncesi kitle önizlemesi, okundu bilgisi, uygulama içi bildirim (rozet + açıkken anlık gösterim), e-posta ile gönderme, bildirim tercihleri.
+**Faz 3b (sonra, bu belgede YOK):** Belgeler (PDF yükleme; `file_picker` bağımlılığı Faz 2b ile birlikte) ve uygulama kapalıyken telefon bildirimi (Firebase/FCM kurulumu kullanıcıdan gerekir). **SMS ve WhatsApp "Yakında…"** (F3.12/F3.13): arayüzde pasif etiket, sunucuda hiçbir şey.
+
+## İlkeler
+
+1. Eklemeli şema; `migrations/032_announcements.sql` ile `ensureDbSchema` (server/src/db.js) AYNI idempotent DDL (Faz 2 kuralı; prod'da yalnız ensureDbSchema çalışır, DDL hatası = sunucu açılmaz). Mevcut tabloya/akışa dokunulmaz (yalnız modül kataloğunda `announcements` → `available`).
+2. `announcements` çekirdek modüldür: her sitede hep açık, `MODULE_DISABLED` yok. Yetki ve hata biçimi Faz 2 ile aynı: `{ error, code }`, Türkçe mesaj, başka sitenin kaydı 404, IDOR yok (her sorguda `site_code`).
+3. Kişisel veri en aza indirilir: duyuru metni plain text (HTML kabul edilmez, e-postada kaçışlanır); e-posta adresi alıcı satırında yalnız gönderilene kadar tutulur, sonra NULL.
+4. Doğrudan canlı yayın: deneme ortamı yok → yedek, strict testler, gerçek PG betiği, ikili bağımsız inceleme (Faz 2 süreci).
+
+## Veritabanı (migration `032_announcements.sql`)
+
+- `announcements(id BIGSERIAL PK, site_code BIGINT NOT NULL REFERENCES sites ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL, importance TEXT NOT NULL DEFAULT 'normal' CHECK (normal|urgent), status TEXT NOT NULL DEFAULT 'draft' CHECK (draft|scheduled|published|withdrawn), target_type TEXT NOT NULL DEFAULT 'site' CHECK (site|blocks|apartments), target_block_ids BIGINT[] NOT NULL DEFAULT '{}', target_apartment_ids BIGINT[] NOT NULL DEFAULT '{}', send_email BOOLEAN NOT NULL DEFAULT FALSE, publish_at TIMESTAMPTZ NULL, published_at TIMESTAMPTZ NULL, withdrawn_at TIMESTAMPTZ NULL, edited_at TIMESTAMPTZ NULL, edit_count INTEGER NOT NULL DEFAULT 0, recipient_count INTEGER NOT NULL DEFAULT 0, created_by INTEGER NULL REFERENCES users ON DELETE SET NULL, created_at, updated_at)`. Uzunluk kısıtları CHECK + servis doğrulaması: `title` 1–120, `body` 1–5000 karakter (kırpılmış). `status='scheduled'` ise `publish_at` DOLU (CHECK). İndeksler: `(site_code, status, published_at DESC, id DESC)`, `(publish_at) WHERE status='scheduled'`.
+- `announcement_recipients(announcement_id BIGINT NOT NULL REFERENCES announcements ON DELETE CASCADE, person_id BIGINT NOT NULL REFERENCES site_people ON DELETE CASCADE, email TEXT NULL, email_status TEXT NOT NULL DEFAULT 'none' CHECK (none|pending|sent|failed|no_address|skipped_pref|capped|duplicate), email_attempts INTEGER NOT NULL DEFAULT 0, read_at TIMESTAMPTZ NULL, PRIMARY KEY (announcement_id, person_id))`. İndeksler: `(person_id, announcement_id DESC)`, `(announcement_id) WHERE read_at IS NULL`, `(email_status) WHERE email_status='pending'`.
+- `notification_preferences(user_code INTEGER PRIMARY KEY REFERENCES users ON DELETE CASCADE, email_announcements BOOLEAN NOT NULL DEFAULT TRUE, push_announcements BOOLEAN NOT NULL DEFAULT TRUE, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` (`push_announcements` Faz 3b için saklanır; bugün etkisizdir ve API'de salt okunurdur).
+- Kilit sırası Faz 2 kuralı: apartments (id sırasıyla) → users → site_people/apartment_residencies/vehicles → announcements/announcement_recipients. Yayınlama işlemi yeni kilit çatışması yaratmamalı.
+
+## Kitle (alıcı) kuralı
+
+Yayın anında anlık görüntü alınır (`announcement_recipients`): hedef dairelerdeki (aktif daire) **güncel** (`is_current`) ilişkilere sahip **aktif** `site_people` kişileri, kişi başına TEK satır (birden çok dairesi olsa da). Hedef: `site` → sitenin tüm aktif daireleri; `blocks` → verilen blokların daireleri; `apartments` → verilen daireler (id'ler o siteye ait olmalı: değilse 400 `INVALID_TARGET`; en çok 500 id). Yayından hemen önce, aynı işlemde, o sitenin kişi eşitlemesi yazma yolundaki gibi çalıştırılır (yeni onaylanan üyeler kitleye girsin). Sonradan taşınan/gelen kişiler eski duyuruya eklenmez/çıkarılmaz (anlık görüntü). Gelen kutusu: `announcement_recipients.person_id → site_people.user_code = çağıran`. Hesapsız kişi kitleye girer (e-posta alabilir) ama gelen kutusu yoktur; sonradan hesaba bağlanırsa kayıt `person_id` ile ona görünür.
+`E-posta adresi`: Faz 2'deki "etkin iletişim e-postası" mantığı (dahili `@ahbu.local` hesapta `apartments.resident_email`; kayıtlı hesapta `users.email`; hesapsızda `site_people.email`); `@ahbu.local` hiçbir zaman adres sayılmaz; aynı adres bir duyuruda TEK kez gönderilir (ilk kişi `pending` alır, aynı adresli diğer kişiler `duplicate` olur).
+
+## Yaşam döngüsü
+
+`draft` → (`publish` ya da `schedule`) → `scheduled` → (zamanı gelince sunucu) → `published` → `withdrawn`. Geçerli geçişler dışında 409 `INVALID_STATE`.
+- **Oluştur:** `publish: 'draft'|'now'|'schedule'`. `now`: kitle 0 ise 409 `NO_RECIPIENTS`. `schedule`: `publish_at` bugünden ≥ 1 dk, ≤ 1 yıl sonra, ISO 8601 (İstanbul gösterimi istemcide).
+- **Düzenle (`PATCH`):** `draft`/`scheduled`: tüm alanlar (zamanlamayı kaldırmak için `publish_at:null` + `status` draft'a döner). `published`: YALNIZ `title`/`body` (sakine "düzenlendi" notu: `edited_at`, `edit_count+1`; yeniden bildirim/e-posta YOK). `withdrawn`: 409.
+- **Geri çek (`withdraw`):** yalnız `published`; sakinlerde kaybolur (detay 404), yönetici listesinde "Geri çekildi" olarak kalır; geri alınamaz.
+- **Sil (`DELETE`):** yalnız `draft`/`scheduled`. Yayınlanmış kayıt silinmez.
+- **Yayınlama atomik ve idempotenttir:** `UPDATE … WHERE id=$1 AND status IN ('draft','scheduled') RETURNING` + kitle ekleme tek işlemde; çift tıklama/zamanlayıcı yarışında ikinci istek 409 `INVALID_STATE` (veri çiftlenmez). Tüm yazmalarda `apartments`/CRM kilit sırası korunur, 40P01'de CRM yazma yolundaki gibi tek yeniden deneme.
+
+## Yönetici uçları (`/manager/sites/:siteCode/announcements…`)
+
+Yetki: yazma = yönetici/süper (`hasSiteManagementAccess`); okuma = yönetici/süper + `BOARD_MEMBER` (kurul YALNIZ sayıları ve duyuru içeriğini görür, **alıcı adlarını görmez**); `STAFF`/sakin 403 `FORBIDDEN_ROLE`; başka site 403 `FORBIDDEN_SITE`.
+- `GET …?status=draft|scheduled|published|withdrawn|all&q=&limit=30&offset=0` → `{ items: [AnnouncementSummary], total }`. `AnnouncementSummary`: `{ id, title, body_preview (≤160), importance, status, target_type, publish_at, published_at, edited_at, send_email, recipient_count, read_count, created_at, created_by_name }`. Varsayılan sıra: taslak/zamanlanmış üstte, sonra `published_at DESC`.
+- `GET …/:id` → `AnnouncementDetail`: Summary + `body`, `target: { type, block_ids, apartment_ids, labels: [string] }`, `stats: { recipients, read, unread, email: { requested, sent, failed, no_address, skipped_pref, capped, duplicate, pending } }`.
+- `GET …/:id/recipients?read=all|true|false&q=&limit=50&offset=0` → `{ items: [{ person_id, full_name, apartments: [label], has_account, read_at, email_status }], total }` (kurula 403).
+- `POST …/preview-audience` gövde `{ target: {type, block_ids?, apartment_ids?}, send_email? }` → `{ people, apartments, with_account, with_email, without_email }` (yazmaz; kurula açık değil → 403).
+- `POST …` gövde `{ title, body, importance?, target, send_email?, publish: 'draft'|'now'|'schedule', publish_at? }` → 201 `AnnouncementDetail`.
+- `PATCH …/:id` gövde yukarıdaki düzenleme kuralıyla → `AnnouncementDetail`. `POST …/:id/publish` (draft/scheduled → şimdi) → `AnnouncementDetail`. `POST …/:id/withdraw` → `AnnouncementDetail`. `DELETE …/:id` → `{ ok: true }`.
+- Hata kodları (yeni): `ANNOUNCEMENT_NOT_FOUND` (404), `INVALID_STATE` (409), `NO_RECIPIENTS` (409), `INVALID_TARGET` (400), `INVALID_BODY` (400, alan adıyla DEĞİL Türkçe etiketle), `INVALID_SCHEDULE` (400), `ANNOUNCEMENT_EMAIL_LIMIT` (409: kitle > 1000 e-posta ya da günlük site sınırı aşılıyor — yayın engellenmez, fazlası `capped` olur; bu kod yalnız `send_email` istenip kitle e-postası tek yayında > 1000 ise 400 olarak döner ve yöneticiye bölmesini söyler).
+
+## Sakin uçları (`authRequired`)
+
+- `GET /app/announcements?limit=30&before_id=&site_code=` → `{ items: [{ id, site_code, site_name, title, body_preview, importance, published_at, edited_at, is_read }], next_before_id }` (yalnız `published` ve çağıranın kişisi alıcı olanlar; `published_at DESC, id DESC`).
+- `GET /app/announcements/:id` → tam kayıt (`body` dahil, `edited_at`); alıcı değil/yayında değil → 404 `ANNOUNCEMENT_NOT_FOUND`. OKUNDU YAZMAZ.
+- `POST /app/announcements/:id/read` → `{ ok: true, read_at }` (idempotent; ilk okuma zamanı korunur). `POST /app/announcements/read-all` gövde `{ site_code? }` → `{ ok: true, marked }`.
+- `GET /app/notifications/summary` → `{ unread_announcements, unread_urgent, latest_announcement_id, server_time }` (uygulama bunu yoklar; hafif tek sorgu; hesabı olan ama alıcısı olmayan 0 döner).
+- `GET /app/notification-preferences` → `{ email_announcements, push_announcements, push_available: false }`; `PUT` gövde `{ email_announcements: bool }` (diğer anahtarlar 400/yoksayılır; `push_*` şimdilik değişmez).
+- Hız sınırları: yazma uçları kullanıcı başına ~120/saat; `summary` 600/saat; liste/detay 1200/saat; yönetici okuma 1200/saat.
+
+## E-posta
+
+- `send_email=true` ve yayın anında: her alıcı için `email_status` belirlenir: adres yok → `no_address`; hesabı var ve `email_announcements=false` ve duyuru `normal` → `skipped_pref` (**`urgent` tercihi yok sayar**); site günlük sınırı (env `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE`, varsayılan 500) aşılırsa → `capped`; aksi `pending` + adres satıra yazılır.
+- Gönderim: kalıcı kuyruk işçisi (`pending` satırlar, `FOR UPDATE SKIP LOCKED`, 20'lik gruplar, aralarında ≥150 ms) — yayından sonra tetiklenir, zamanlayıcı tikinde de bekleyen varsa sürer (sunucu yeniden başlarsa kaldığı yerden). Başarı → `sent`; hata → `email_attempts+1`, 3 denemede `failed`; son durumda `email` NULL'lanır. SMTP yapılandırılmamışsa satırlar `failed` olur (sessiz kayıp yok, istatistikte görünür).
+- Yeni `mailer.js` işlevi `sendAnnouncementEmail({ to, siteName, title, body, importance })`: konu `[Site Adı] Başlık` (acil: `ACİL: ` öneki), gövde plain + HTML (kaçışlı, satır sonları korunur), altbilgi "Bu e-posta {site adı} yönetimi tarafından gönderildi. Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz." Başlık/gövde satır başı enjeksiyonuna (CRLF) karşı temizlenir (mevcut `singleLine`).
+
+## Zamanlayıcı
+
+`server/src/modules/announcement_scheduler.js`: `startAnnouncementScheduler()` sunucu açılışında (server.js) başlar, 30 sn'de bir; `pg_try_advisory_lock` ile tek çalışan; zamanı gelen `scheduled` kayıtları (en çok 20/tik) yayınlar (yayınlayan "Sistem"); ardından e-posta kuyruğunu sürer; hatalar yakalanır/loglanır, sunucuyu düşürmez; `ANNOUNCEMENT_SCHEDULER_DISABLED=1` ile testlerde kapatılır; kapanışta temiz durur. Zamanı gelince kitle 0 ise duyuru yine `published` olur (`recipient_count: 0`), audit'e düşer.
+
+## Audit
+
+`announcement.created`, `announcement.updated`, `announcement.scheduled`, `announcement.published`, `announcement.withdrawn`, `announcement.deleted` (`target_type: 'announcement'`, `target_id`, `site_code` dolu; `details`: sayılar/alan adları — **başlık/gövde değil**, e-posta adresi hiçbir zaman). Zamanlayıcı yayını `actor: Sistem`. Süper kullanıcı denetim ekranına etiketler eklenir.
+
+## Uygulama (Flutter) — bu fazın arayüzü
+
+Yeni bağımlılık YOK. Mevcut tasarım sistemi (`lib/ui/design/*`), Faz 2 diyalog/liste/yardımcı kalıpları (`paged_loader`, `dialog_guard`, `CrmFormError`, `phone/date_input`, `people_scope`) ve test kalıpları (sahte sunucu, 320×640 × 2,0, açık/koyu, strict) yeniden kullanılır.
+1. **Yönetici — "Duyurular" (çekmece öğesi, `SirketMenuItem`)**: durum süzgeci (Hepsi/Taslak/Zamanlanmış/Yayında/Geri çekildi) + arama; kart: başlık, önizleme, durum rozeti (renk + etiket + ikon), acil işareti, hedef özeti, okunma "12/48"; "Yeni Duyuru"; detay penceresi: tam metin, hedef, okundu istatistiği, e-posta özeti ("32 gönderildi, 4 e-postası yok…"), alıcılar sekmesi (Okumayanlar/Okuyanlar, arama), eylemler: Düzenle, Şimdi Yayınla, Geri Çek (onaylı), Sil (taslak/zamanlanmış, onaylı). Kurul üyesi: yalnız okur (yazma düğmesi yok, alıcı adları yok). Çok sitede site seçici (Faz 2 `people_scope`).
+2. **Duyuru formu**: başlık (≤120), metin (≤5000, sayaç), önem (Normal/Acil), hedef (Tüm site / Bloklar / Daireler; blok ve daire seçiciler Faz 2 `crm_pickers` üzerinden), "E-posta da gönder" (acil seçilince varsayılan açık), yayın: Taslak / Şimdi / Zamanla (tarih GG.AA.YYYY + saat SS:DD İstanbul), **yayından önce kitle önizlemesi** ("N kişiye ulaşır, M kişinin e-postası var") ve yayın onayı; "SMS" ve "WhatsApp" seçenekleri **"Yakında…" etiketli pasif**; yayınlanmış duyuruda yalnız başlık/metin düzenlenir (diğer alanlar kilitli ve açıklamalı). Çift gönderim koruması, `PopScope`, hata görünürlüğü (Faz 2 düzeltmeleri).
+3. **Sakin — "Duyurular" (çekmece)**: kronolojik liste, okunmamış nokta/kalın başlık, acil rozet, aşağı çek yenile, sonsuz sayfalama; duyuruyu açınca tam metin + `POST …/read` (başarısızsa görünür kalır, sessiz yutulmaz), "düzenlendi" notu; "Tümünü okundu yap". Çekmece öğesinde okunmamış rozeti. Menü yalnız alıcısı olabilecek roller için (daire sakini, yönetici; yalnız-görevli hesapta yok).
+4. **Anlık bildirim (uygulama açıkken)**: `GET /app/notifications/summary` `AdaptivePoller` ile (ön planda ~20 sn, arka planda durur, hata geri çekilmesi); yeni duyuru (en son id arttı) → uygulama içi şerit/SnackBar ("Yeni duyuru: …") ve rozet; **okunmamış acil** duyuru Panel'in üstünde kalıcı kırmızı şerit (dokununca duyuruyu açar, okununca kalkar). Sayfa yenilemeden çalışır. Bu bir "anlık itme" DEĞİL, ≤ ~20 sn yoklamadır (kullanıcıya böyle anlatılır).
+5. **Profil → "Bildirim Tercihleri"**: "E-posta ile duyuru al" anahtarı (kapalıyken normal duyurular e-posta gelmez; **acil duyurular her zaman gider** açıklaması), "Telefon bildirimi — Yakında…" pasif. 
+6. **Hata/boş durumlar**: yükleniyor/boş/hata dürüst (hata asla "duyuru yok" demez), sunucu kodlarına Türkçe mesaj, bilinmeyen kodda genel mesaj; teknik ifade/alan adı sızmaz (Faz 2 `sanitizeServerMessage`).
+7. **Modül kartı**: `announcements` `status: available` → "Her sitede açık".
+
+## Doğrulama (kabul)
+
+- Sunucu: `npm test` + `npm run lint` yeşil; strict sahte-DB birim testleri; **gerçek PG** (`server/scripts/qa_platform_pg.mjs`, yeni `announcements` bölümü): migrate zinciri = `ensureDbSchema` (CHECK/indeks dahil); kitle kuralları (blok/daire/site, çoklu daire tek satır, pasif/geçmiş ilişki dışarıda, hesapsız dahil); yayın yarışı (çift `publish`, zamanlayıcı × elle yayın) çiftlenmez; okundu idempotent; başka siteye IDOR; kurul alıcı adı görmez; STAFF/sakin 403; geri çekilen sakinde 404; düzenleme yalnız başlık/gövde; e-posta kuyruğu (tercih, acil bypass, adres yok, günlük sınır, yeniden başlama devamı, SMTP yok → failed) sahte taşıyıcı ile; 3000 daireli sitede yayın süresi makul; kilit sırası turları.
+- Uygulama: `flutter analyze` temiz, `flutter test` yeşil; yeni testler: modeller, API, ekranlar (yönetici/kurul/sakin), form+önizleme+zamanlama, poller/rozet/acil şerit, tercihler, dar ekran + büyük yazı + klavye + ekran okuyucu etiketleri.
+- Süreç: Faz 2'deki gibi en az iki bağımsız inceleme turu (gizlilik/yetki, veri/yarış), düzeltmeler, ardından canlıya alma (yedek + şema provası + doğrulama).
