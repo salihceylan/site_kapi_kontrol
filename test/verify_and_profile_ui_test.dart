@@ -205,6 +205,9 @@ void main() {
       final fields = find.byType(TextFormField);
       await tester.enterText(fields.at(0), 'ali@example.com');
       await tester.enterText(fields.at(1), 'parola123');
+      // Giriş başlığı artık platform adı (daha uzun, sarar): düğme ilk ekranın altına inebilir.
+      await tester.ensureVisible(find.text('Giriş Yap'));
+      await tester.pump();
       await tester.tap(find.text('Giriş Yap'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));

@@ -41,7 +41,7 @@ void main() {
     // 82 dp x 3.0 = 246 px -> ~240 KB (RGBA); tam çözünürlük 1024x1024 = 4096 KB.
     expect(image.image, isA<ResizeImage>(), reason: 'logo görüntü boyutuna göre küçük çözülmeli');
     expect(bytes, lessThan(1024 * 1024), reason: 'tam çözünürlüklü (4 MB) bitmap önbellekte tutulmamalı');
-    expect(find.text('AHBU Giriş'), findsOneWidget);
+    expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

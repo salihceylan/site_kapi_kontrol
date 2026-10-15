@@ -15,6 +15,7 @@ import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -1024,6 +1025,73 @@ class AuthService extends ChangeNotifier {
         token: token,
         siteCode: siteCode,
         userCode: userCode,
+      ),
+    );
+  }
+
+  // --- Modül talebi (Faz 1.1) ---------------------------------------------------------------
+
+  /// Site yöneticisi: [moduleCode] modülü için süper kullanıcıya talep gönderir.
+  Future<ModuleRequest> createModuleRequest(
+    int siteCode,
+    String moduleCode, {
+    String? note,
+  }) {
+    return _runAuthorized(
+      (token) => api.createModuleRequest(
+        token: token,
+        siteCode: siteCode,
+        moduleCode: moduleCode,
+        note: note,
+      ),
+    );
+  }
+
+  Future<List<ModuleRequest>> listModuleRequests(int siteCode) {
+    return _runAuthorized(
+      (token) => api.listModuleRequests(token: token, siteCode: siteCode),
+    );
+  }
+
+  /// Bekleyen talebi geri çeker.
+  Future<ModuleRequest> cancelModuleRequest(int siteCode, int requestId) {
+    return _runAuthorized(
+      (token) => api.cancelModuleRequest(
+        token: token,
+        siteCode: siteCode,
+        requestId: requestId,
+      ),
+    );
+  }
+
+  /// Süper kullanıcı: talepler ([status]: `pending|approved|rejected|cancelled|all`) ve bekleyen sayısı.
+  Future<ModuleRequestPage> listAdminModuleRequests({
+    String? status,
+    int limit = 50,
+    int? beforeId,
+  }) {
+    return _runAuthorized(
+      (token) => api.listAdminModuleRequests(
+        token: token,
+        status: status,
+        limit: limit,
+        beforeId: beforeId,
+      ),
+    );
+  }
+
+  /// Süper kullanıcı: talebi onaylar ([approve] true) ya da reddeder; [note] isteğe bağlı gerekçe.
+  Future<ModuleRequest> decideModuleRequest(
+    int requestId,
+    bool approve, {
+    String? note,
+  }) {
+    return _runAuthorized(
+      (token) => api.decideModuleRequest(
+        token: token,
+        requestId: requestId,
+        approve: approve,
+        note: note,
       ),
     );
   }

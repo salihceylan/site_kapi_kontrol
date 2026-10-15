@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:site_kapi_kontrol/models/audit_log.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -27,6 +28,12 @@ SiteModulesState mdState(
   String siteName, {
   bool door = true,
   String typeLabel = 'Apartman ve Site',
+
+  /// false: site yöneticisi görünümü (Faz 1.1): hiçbir modül `can_toggle` değildir.
+  bool superView = true,
+
+  /// modül kodu -> `request_status` (örn. `{'finance': 'pending'}`).
+  Map<String, String> requests = const <String, String>{},
 }) {
   Map<String, dynamic> m(
     String code,
@@ -44,6 +51,8 @@ SiteModulesState mdState(
     'status': status,
     'enabled': enabled,
     'toggleable': toggleable,
+    'can_toggle': toggleable && superView,
+    'request_status': requests[code],
     'updated_at': null,
     'updated_by': null,
   };
@@ -149,11 +158,12 @@ const UserSession mdSuperSession = UserSession(
 );
 
 /// Modül sistemi uçları için sahte servis: her çağrı kaydedilir; yanıtlar testten sürülür.
-class ModulesFakeAuth extends AuthService {
+class ModulesFakeAuth extends AuthService with ModuleRequestFixtures {
   ModulesFakeAuth({
     List<SiteRecord>? sites,
     Map<int, SiteModulesState>? states,
     Map<int, List<StaffRoleRecord>>? roles,
+    this.fixtureRole = UserRole.superUser,
   }) : sites = sites ?? <SiteRecord>[mdSite(11, 'Gül Sitesi'), mdSite(12, 'Mavi Park')],
        states = states ??
            <int, SiteModulesState>{
@@ -166,6 +176,47 @@ class ModulesFakeAuth extends AuthService {
   List<SiteRecord> sites;
   final Map<int, SiteModulesState> states;
   final Map<int, List<StaffRoleRecord>> roles;
+
+  /// Oturumun rolü (Modüller ekranı: süper kullanıcıda anahtar, yöneticide talep akışı).
+  UserRole fixtureRole;
+
+  // Modül talebi: oluşturma / geri çekme sunucuda modülün `request_status` alanını da değiştirir.
+  @override
+  Future<ModuleRequest> createModuleRequest(
+    int siteCode,
+    String moduleCode, {
+    String? note,
+  }) async {
+    final request = await super.createModuleRequest(siteCode, moduleCode, note: note);
+    _setRequestStatus(siteCode, moduleCode, 'pending');
+    return request;
+  }
+
+  @override
+  Future<ModuleRequest> cancelModuleRequest(int siteCode, int requestId) async {
+    final request = await super.cancelModuleRequest(siteCode, requestId);
+    _setRequestStatus(siteCode, request.moduleCode, null);
+    return request;
+  }
+
+  void _setRequestStatus(int siteCode, String moduleCode, String? status) {
+    final current = states[siteCode];
+    if (current == null) return;
+    states[siteCode] = SiteModulesState(
+      siteCode: current.siteCode,
+      siteName: current.siteName,
+      managementType: current.managementType,
+      managementTypeLabel: current.managementTypeLabel,
+      modules: <PlatformModule>[
+        for (final m in current.modules)
+          m.code != moduleCode
+              ? m
+              : (status == null
+                    ? m.copyWith(clearRequestStatus: true)
+                    : m.copyWith(requestStatus: status)),
+      ],
+    );
+  }
 
   // Çağrı kayıtları.
   int listSitesCalls = 0;
@@ -197,7 +248,17 @@ class ModulesFakeAuth extends AuthService {
   bool demandConfirm = false;
 
   @override
-  UserSession? get session => mdSuperSession;
+  UserSession? get session => fixtureRole == UserRole.superUser
+      ? mdSuperSession
+      : UserSession(
+          id: 5,
+          fullName: 'Site Yöneticisi',
+          email: 'yonetici@e2e.local',
+          loginName: null,
+          role: fixtureRole,
+          isActive: true,
+          token: 'tok',
+        );
 
   @override
   bool get isLoggedIn => true;
@@ -320,5 +381,182 @@ class ModulesFakeAuth extends AuthService {
     final error = auditError;
     if (error != null) throw error;
     return auditPages[index.clamp(0, auditPages.length - 1)];
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Modül talebi (Faz 1.1)
+// ---------------------------------------------------------------------------------------------
+
+ModuleRequest mdRequest(
+  int id, {
+  int siteCode = 11,
+  String siteName = 'Gül Sitesi',
+  String moduleCode = 'finance',
+  String moduleName = 'Aidat ve Finans',
+  String status = 'pending',
+  String? note = 'Aidat takibi için gerekli',
+  String requestedBy = 'Ayşe Yılmaz',
+  String? decidedBy,
+  String? decisionNote,
+}) => ModuleRequest(
+  id: id,
+  siteCode: siteCode,
+  siteName: siteName,
+  moduleCode: moduleCode,
+  moduleName: moduleName,
+  status: status,
+  note: note,
+  requestedByName: requestedBy,
+  createdAt: DateTime(2026, 10, 15, 9, 30),
+  decidedByName: decidedBy,
+  decidedAt: decidedBy == null ? null : DateTime(2026, 10, 16, 10, 5),
+  decisionNote: decisionNote,
+);
+
+/// Modül talebi uçları için ek davranışlar (süper kullanıcı listesi + yönetici akışı). Yanıtlar
+/// çağrı anındaki anlık görüntüden üretilir; kapılar (`adminGateQueue`) eşzamanlı çağrıların
+/// tamamlanma sırasını sürer.
+mixin ModuleRequestFixtures on AuthService {
+  // Yönetici tarafı.
+  final Map<int, List<ModuleRequest>> siteRequests = <int, List<ModuleRequest>>{};
+  final List<({int site, String code, String? note})> createCalls =
+      <({int site, String code, String? note})>[];
+  final List<({int site, int id})> cancelCalls = <({int site, int id})>[];
+  final List<int> listRequestCalls = <int>[];
+  Object? createError;
+  Object? cancelError;
+  Object? requestsError;
+  Completer<void>? requestsGate;
+
+  // Süper kullanıcı tarafı.
+  List<ModuleRequest> adminRequests = <ModuleRequest>[];
+  final List<({String? status, int limit, int? before})> adminCalls =
+      <({String? status, int limit, int? before})>[];
+  final List<({int id, bool approve, String? note})> decideCalls =
+      <({int id, bool approve, String? note})>[];
+  Object? adminError;
+  Object? decideError;
+  Completer<void>? adminGate;
+  Completer<void>? decideGate;
+  final List<Completer<void>> adminGateQueue = <Completer<void>>[];
+
+  @override
+  Future<ModuleRequest> createModuleRequest(
+    int siteCode,
+    String moduleCode, {
+    String? note,
+  }) async {
+    createCalls.add((site: siteCode, code: moduleCode, note: note));
+    final error = createError;
+    if (error != null) throw error;
+    final request = mdRequest(
+      900 + createCalls.length,
+      siteCode: siteCode,
+      moduleCode: moduleCode,
+      note: note,
+    );
+    siteRequests.putIfAbsent(siteCode, () => <ModuleRequest>[]).insert(0, request);
+    return request;
+  }
+
+  @override
+  Future<List<ModuleRequest>> listModuleRequests(int siteCode) async {
+    listRequestCalls.add(siteCode);
+    final gate = requestsGate;
+    if (gate != null) await gate.future;
+    final error = requestsError;
+    if (error != null) throw error;
+    return List<ModuleRequest>.of(siteRequests[siteCode] ?? const <ModuleRequest>[]);
+  }
+
+  @override
+  Future<ModuleRequest> cancelModuleRequest(int siteCode, int requestId) async {
+    cancelCalls.add((site: siteCode, id: requestId));
+    final error = cancelError;
+    if (error != null) throw error;
+    final list = siteRequests[siteCode] ?? <ModuleRequest>[];
+    final index = list.indexWhere((r) => r.id == requestId);
+    if (index < 0) {
+      throw ApiException('Talep bulunamadı.', statusCode: 404, code: 'REQUEST_NOT_FOUND');
+    }
+    final old = list[index];
+    final cancelled = ModuleRequest(
+      id: old.id,
+      siteCode: old.siteCode,
+      siteName: old.siteName,
+      moduleCode: old.moduleCode,
+      moduleName: old.moduleName,
+      status: ModuleRequestStatus.cancelled,
+      note: old.note,
+      requestedByName: old.requestedByName,
+      createdAt: old.createdAt,
+    );
+    list[index] = cancelled;
+    return cancelled;
+  }
+
+  @override
+  Future<ModuleRequestPage> listAdminModuleRequests({
+    String? status,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    adminCalls.add((status: status, limit: limit, before: beforeId));
+    // Anlık görüntü çağrı anında alınır (sonradan gelen karar eski yanıtı değiştirmez).
+    final all = (status == null || status == 'all')
+        ? List<ModuleRequest>.of(adminRequests)
+        : adminRequests.where((r) => r.status == status).toList();
+    all.sort((a, b) => b.id.compareTo(a.id));
+    final afterCursor = beforeId == null ? all : all.where((r) => r.id < beforeId).toList();
+    final items = afterCursor.take(limit).toList();
+    final next = afterCursor.length > limit ? items.last.id : null;
+    final pending = adminRequests.where((r) => r.isPending).length;
+    final queued = adminGateQueue.isEmpty ? null : adminGateQueue.removeAt(0);
+    if (queued != null) await queued.future;
+    final gate = adminGate;
+    if (gate != null) await gate.future;
+    final error = adminError;
+    if (error != null) throw error;
+    return ModuleRequestPage(items: items, nextBeforeId: next, pendingCount: pending);
+  }
+
+  @override
+  Future<ModuleRequest> decideModuleRequest(
+    int requestId,
+    bool approve, {
+    String? note,
+  }) async {
+    decideCalls.add((id: requestId, approve: approve, note: note));
+    final gate = decideGate;
+    if (gate != null) await gate.future;
+    final error = decideError;
+    if (error != null) throw error;
+    final index = adminRequests.indexWhere((r) => r.id == requestId);
+    if (index < 0) {
+      throw ApiException('Talep bulunamadı.', statusCode: 404, code: 'REQUEST_NOT_FOUND');
+    }
+    final old = adminRequests[index];
+    if (!old.isPending) {
+      throw ApiException(
+        'Bu talep artık bekleyen durumda değil.',
+        statusCode: 409,
+        code: 'REQUEST_NOT_PENDING',
+      );
+    }
+    final decided = mdRequest(
+      old.id,
+      siteCode: old.siteCode,
+      siteName: old.siteName,
+      moduleCode: old.moduleCode,
+      moduleName: old.moduleName,
+      status: approve ? ModuleRequestStatus.approved : ModuleRequestStatus.rejected,
+      note: old.note,
+      requestedBy: old.requestedByName ?? '',
+      decidedBy: 'Süper Yönetici',
+      decisionNote: note,
+    );
+    adminRequests[index] = decided;
+    return decided;
   }
 }

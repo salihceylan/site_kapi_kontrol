@@ -36,9 +36,11 @@ class PlatformModule {
     this.status = 'available',
     this.enabled = false,
     this.toggleable = false,
+    bool? canToggle,
+    this.requestStatus,
     this.updatedAt,
     this.updatedBy,
-  });
+  }) : canToggle = canToggle ?? toggleable;
 
   final String code;
   final String name;
@@ -53,8 +55,18 @@ class PlatformModule {
   /// Bu sitede hesaplanmış açık/kapalı durumu.
   final bool enabled;
 
-  /// Anahtarla açılıp kapatılabilir mi (`!core && status == available`).
+  /// Katalog özelliği: açılıp kapatılabilir bir modül mü (`!core && status == available`).
   final bool toggleable;
+
+  /// ÇAĞIRAN bu modülü şimdi anahtarla açıp kapatabilir mi? Faz 1.1: yalnız süper kullanıcı VE modül
+  /// [toggleable] ise true (site yöneticisi modül TALEP eder). Eski sunucuda alan yoksa [toggleable].
+  final bool canToggle;
+
+  /// O siteye ait bekleyen modül talebi varsa `"pending"`, yoksa null (eski sunucuda alan yok = null).
+  final String? requestStatus;
+
+  /// Bu modül için bekleyen bir talep var mı?
+  bool get hasPendingRequest => requestStatus == 'pending';
 
   final DateTime? updatedAt;
   final String? updatedBy;
@@ -79,6 +91,9 @@ class PlatformModule {
     final code = json['code']?.toString() ?? '';
     final core = json['core'] == true;
     final status = json['status']?.toString() ?? 'available';
+    final toggleable = json['toggleable'] is bool
+        ? json['toggleable'] as bool
+        : (!core && status == 'available');
     return PlatformModule(
       code: code,
       name: json['name']?.toString() ?? code,
@@ -88,15 +103,22 @@ class PlatformModule {
       enabled: json['enabled'] is bool
           ? json['enabled'] as bool
           : defaultEnabled(code, core: core, status: status),
-      toggleable: json['toggleable'] is bool
-          ? json['toggleable'] as bool
-          : (!core && status == 'available'),
+      toggleable: toggleable,
+      canToggle: json['can_toggle'] is bool ? json['can_toggle'] as bool : toggleable,
+      requestStatus: json['request_status'] is String &&
+              (json['request_status'] as String).trim().isNotEmpty
+          ? (json['request_status'] as String).trim()
+          : null,
       updatedAt: _parseDate(json['updated_at']),
       updatedBy: json['updated_by']?.toString(),
     );
   }
 
-  PlatformModule copyWith({bool? enabled}) {
+  PlatformModule copyWith({
+    bool? enabled,
+    String? requestStatus,
+    bool clearRequestStatus = false,
+  }) {
     return PlatformModule(
       code: code,
       name: name,
@@ -105,6 +127,8 @@ class PlatformModule {
       status: status,
       enabled: enabled ?? this.enabled,
       toggleable: toggleable,
+      canToggle: canToggle,
+      requestStatus: clearRequestStatus ? null : (requestStatus ?? this.requestStatus),
       updatedAt: updatedAt,
       updatedBy: updatedBy,
     );
@@ -120,6 +144,8 @@ class PlatformModule {
       other.status == status &&
       other.enabled == enabled &&
       other.toggleable == toggleable &&
+      other.canToggle == canToggle &&
+      other.requestStatus == requestStatus &&
       other.updatedAt == updatedAt &&
       other.updatedBy == updatedBy;
 
@@ -132,6 +158,8 @@ class PlatformModule {
         status,
         enabled,
         toggleable,
+        canToggle,
+        requestStatus,
         updatedAt,
         updatedBy,
       );

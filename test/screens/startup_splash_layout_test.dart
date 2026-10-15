@@ -52,9 +52,9 @@ void main() {
           expect(find.byType(CircularProgressIndicator), findsOneWidget);
           expect(find.byType(Image), findsOneWidget);
           // Yalnız logo: başlık / alt başlık yok (giriş ekranına özgü).
-          expect(find.text('AHBU Giriş'), findsNothing);
+          expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsNothing);
           expect(
-            find.text('Akıllı Kapı & Site Otomasyon Paneli'),
+            find.text('Yönetici ve sakin girişi'),
             findsNothing,
           );
           expect(t.takeException(), isNull);
@@ -150,7 +150,7 @@ void main() {
 
         await t.pumpAndSettle();
         expect(find.byType(StartupSplash), findsNothing);
-        expect(find.text('AHBU Giriş'), findsOneWidget);
+        expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
         expect(find.text('Giriş Yap'), findsOneWidget);
         expect(t.takeException(), isNull);
       },

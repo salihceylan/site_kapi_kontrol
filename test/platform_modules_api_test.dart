@@ -315,6 +315,275 @@ void main() {
     });
   });
 
+  group('Modül talebi uçları (Faz 1.1)', () {
+    Map<String, dynamic> requestBody({String status = 'pending'}) => <String, dynamic>{
+      'id': 31,
+      'site_code': 1234567890,
+      'site_name': 'Gül Sitesi',
+      'module_code': 'finance',
+      'module_name': 'Aidat ve Finans',
+      'status': status,
+      'note': 'Aidat takibi için gerekli',
+      'requested_by_name': 'Ayşe Yılmaz',
+      'created_at': '2026-10-15T09:30:00Z',
+      'decided_by_name': null,
+      'decided_at': null,
+      'decision_note': null,
+    };
+
+    test('createModuleRequest: POST /manager/sites/:siteCode/module-requests, gövde {module_code, note}, 201', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json({'request': requestBody()}, 201));
+
+      final created = await api.createModuleRequest(
+        token: 'tok',
+        siteCode: 1234567890,
+        moduleCode: 'finance',
+        note: '  Aidat takibi için gerekli  ',
+      );
+      expect(rec.last.method, 'POST');
+      expect(rec.last.url.path, '/manager/sites/1234567890/module-requests');
+      expect(rec.last.headers['Authorization'], 'Bearer tok');
+      expect(rec.lastBody, <String, dynamic>{
+        'module_code': 'finance',
+        'note': 'Aidat takibi için gerekli',
+      });
+      expect(created.id, 31);
+      expect(created.isPending, isTrue);
+      expect(created.moduleLabel, 'Aidat ve Finans');
+
+      // Not yoksa ya da boşsa alan hiç gönderilmez.
+      await api.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance');
+      expect(rec.lastBody, <String, dynamic>{'module_code': 'finance'});
+      await api.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance', note: '   ');
+      expect(rec.lastBody, <String, dynamic>{'module_code': 'finance'});
+    });
+
+    test('listModuleRequests: GET /manager/sites/:siteCode/module-requests -> items', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json({
+        'items': <Map<String, dynamic>>[requestBody(), <String, dynamic>{...requestBody(), 'id': 30}],
+      }));
+      final list = await api.listModuleRequests(token: 'tok', siteCode: 5);
+      expect(rec.last.method, 'GET');
+      expect(rec.last.url.path, '/manager/sites/5/module-requests');
+      expect(list.map((r) => r.id), <int>[31, 30]);
+    });
+
+    test('cancelModuleRequest: DELETE /manager/sites/:siteCode/module-requests/:id -> request (cancelled)', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json({'request': requestBody(status: 'cancelled')}));
+      final cancelled = await api.cancelModuleRequest(token: 'tok', siteCode: 5, requestId: 31);
+      expect(rec.last.method, 'DELETE');
+      expect(rec.last.url.path, '/manager/sites/5/module-requests/31');
+      expect(cancelled.status, 'cancelled');
+      expect(cancelled.statusLabel, 'Geri çekildi');
+    });
+
+    test('listAdminModuleRequests: GET /admin/module-requests sorgu parametreleri ve pending_count', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json({
+        'items': <Map<String, dynamic>>[requestBody()],
+        'next_before_id': 31,
+        'pending_count': 6,
+      }));
+
+      final page = await api.listAdminModuleRequests(
+        token: 'tok',
+        status: 'approved',
+        limit: 25,
+        beforeId: 99,
+      );
+      expect(rec.last.method, 'GET');
+      expect(rec.last.url.path, '/admin/module-requests');
+      expect(rec.last.url.queryParameters, <String, String>{
+        'status': 'approved',
+        'limit': '25',
+        'before_id': '99',
+      });
+      expect(page.items.single.id, 31);
+      expect(page.nextBeforeId, 31);
+      expect(page.pendingCount, 6);
+
+      await api.listAdminModuleRequests(token: 'tok');
+      expect(rec.last.url.queryParameters, <String, String>{'limit': '50'},
+          reason: 'status ve before_id verilmezse hiç gönderilmez (sunucu varsayılanı pending)');
+      await api.listAdminModuleRequests(token: 'tok', status: 'all');
+      expect(rec.last.url.queryParameters['status'], 'all');
+    });
+
+    test('decideModuleRequest: PUT /admin/module-requests/:id gövde {decision, note}', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json({'request': requestBody(status: 'approved')}));
+
+      final approved = await api.decideModuleRequest(token: 'tok', requestId: 31, approve: true);
+      expect(rec.last.method, 'PUT');
+      expect(rec.last.url.path, '/admin/module-requests/31');
+      expect(rec.lastBody, <String, dynamic>{'decision': 'approve'});
+      expect(approved.status, 'approved');
+
+      await api.decideModuleRequest(
+        token: 'tok',
+        requestId: 31,
+        approve: false,
+        note: '  Paket kapsamında değil ',
+      );
+      expect(rec.lastBody, <String, dynamic>{
+        'decision': 'reject',
+        'note': 'Paket kapsamında değil',
+      });
+    });
+
+    test('bozuk gövde ApiException olur (TypeError sızmaz)', () async {
+      final api = _api(_Recorder(), (r) => _json({'request': 'metin'}, 201));
+      await expectLater(
+        api.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance'),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test('sunucu hataları Türkçe eşlemeyle ApiException (kod korunur)', () async {
+      const cases = <(int, String, String)>[
+        (403, 'MODULE_ADMIN_ONLY',
+            'Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.'),
+        (409, 'MODULE_ALREADY_ENABLED', 'Bu modül zaten açık.'),
+        (409, 'MODULE_REQUEST_PENDING', 'Bu modül için bekleyen bir talebiniz var.'),
+        (404, 'REQUEST_NOT_FOUND', 'Talep bulunamadı.'),
+        (409, 'REQUEST_NOT_PENDING', 'Bu talep artık bekleyen durumda değil.'),
+      ];
+      for (final (status, code, message) in cases) {
+        final api = _api(_Recorder(), (r) => _json({'error': 'sunucu metni', 'code': code}, status));
+        await expectLater(
+          api.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance'),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.statusCode, 'status', status)
+                .having((e) => e.code, 'code', code)
+                .having((e) => e.message, 'message', message),
+          ),
+          reason: code,
+        );
+      }
+    });
+
+    test('429 hız sınırı: code YOK; sunucu metni + bekleme ipucu; metin yoksa genel Türkçe mesaj', () async {
+      http.Response limited(Object body) => http.Response(
+        jsonEncode(body),
+        429,
+        headers: {'content-type': 'application/json; charset=utf-8', 'retry-after': '120'},
+      );
+
+      final withText = _api(
+        _Recorder(),
+        (r) => limited({'error': 'Çok fazla modül talebi gönderdiniz.', 'retry_after_seconds': 120}),
+      );
+      await expectLater(
+        withText.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'status', 429)
+              .having((e) => e.code, 'code', isNull)
+              .having((e) => e.retryAfterSeconds, 'retryAfter', 120)
+              .having(
+                (e) => e.message,
+                'message',
+                'Çok fazla modül talebi gönderdiniz. Lütfen 2 dakika sonra tekrar deneyin.',
+              ),
+        ),
+      );
+
+      final noText = _api(_Recorder(), (r) => limited({'retry_after_seconds': 45}));
+      await expectLater(
+        noText.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            'Çok fazla istek gönderildi. Lütfen 45 saniye sonra tekrar deneyin.',
+          ),
+        ),
+      );
+
+      // Yalnız Retry-After başlığı olsa da (gövdede alan yok) bekleme süresi gösterilir.
+      final headerOnly = _api(_Recorder(), (r) => limited(<String, dynamic>{}));
+      await expectLater(
+        headerOnly.listAdminModuleRequests(token: 'tok'),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.message,
+            'message',
+            'Çok fazla istek gönderildi. Lütfen 2 dakika sonra tekrar deneyin.',
+          ),
+        ),
+      );
+    });
+
+    test('400 INVALID_BODY / INVALID_QUERY: sunucu metni varsa o; yoksa genel Türkçe mesaj', () async {
+      for (final (code, generic) in const <(String, String)>[
+        ('INVALID_BODY', 'Gönderilen bilgiler geçersiz. Alanları kontrol edip tekrar deneyin.'),
+        ('INVALID_QUERY', 'Geçersiz sorgu. Süzgeçleri kontrol edip tekrar deneyin.'),
+      ]) {
+        final noText = _api(_Recorder(), (r) => _json({'code': code}, 400));
+        await expectLater(
+          noText.listAdminModuleRequests(token: 'tok', status: 'x'),
+          throwsA(isA<ApiException>().having((e) => e.message, 'message', generic)),
+          reason: code,
+        );
+        final withText = _api(
+          _Recorder(),
+          (r) => _json({'error': 'Not en çok 500 karakter olabilir.', 'code': code}, 400),
+        );
+        await expectLater(
+          withText.createModuleRequest(token: 'tok', siteCode: 1, moduleCode: 'finance'),
+          throwsA(
+            isA<ApiException>().having((e) => e.message, 'message', 'Not en çok 500 karakter olabilir.'),
+          ),
+          reason: code,
+        );
+      }
+      expect(AuthApi.genericMessageForStatus(500), isNull);
+      expect(AuthApi.genericMessageForStatus(400, code: 'OTHER'), isNull);
+      // Kodu olmayan hata zarfı eskisi gibi "İşlem başarısız (N)".
+      final plain = _api(_Recorder(), (r) => _json(<String, dynamic>{}, 400));
+      await expectLater(
+        plain.listAdminModuleRequests(token: 'tok'),
+        throwsA(isA<ApiException>().having((e) => e.message, 'message', 'İşlem başarısız (400)')),
+      );
+    });
+
+    test('yönetici olmayanın code\'suz 403\'ü sunucu metniyle gösterilir ve oturumu kapatmaz', () async {
+      final api = _api(
+        _Recorder(),
+        (r) => _json({'error': 'Bu işlem için site yöneticisi yetkisi gerekir.'}, 403),
+      );
+      await expectLater(
+        api.listModuleRequests(token: 'tok', siteCode: 1),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'status', 403)
+              .having((e) => e.code, 'code', isNull)
+              .having((e) => e.invalidatesSession, 'invalidatesSession', isFalse)
+              .having((e) => e.message, 'message', 'Bu işlem için site yöneticisi yetkisi gerekir.'),
+        ),
+      );
+    });
+
+    test('site yöneticisi PUT /modules 403 MODULE_ADMIN_ONLY: oturumu KAPATMAZ', () async {
+      final api = _api(
+        _Recorder(),
+        (r) => _json({'error': 'x', 'code': 'MODULE_ADMIN_ONLY'}, 403),
+      );
+      await expectLater(
+        api.setSiteModule(token: 'tok', siteCode: 1, moduleCode: 'finance', enabled: true),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.invalidatesSession, 'invalidatesSession', isFalse)
+              .having((e) => e.code, 'code', 'MODULE_ADMIN_ONLY'),
+        ),
+      );
+    });
+  });
+
   group('Hata kodu -> Türkçe mesaj (modül sistemi)', () {
     const expected = <String, String>{
       'MODULE_DISABLED':
@@ -329,9 +598,16 @@ void main() {
       'ALREADY_SITE_MANAGER': 'Bu kişi zaten site yöneticisi.',
       'ROLE_INVALID': 'Geçersiz rol.',
       'ROLE_NOT_FOUND': 'Bu kişide kurul veya görevli rolü yok.',
+      // Faz 1.1: modül talebi.
+      'MODULE_ADMIN_ONLY':
+          'Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.',
+      'MODULE_ALREADY_ENABLED': 'Bu modül zaten açık.',
+      'MODULE_REQUEST_PENDING': 'Bu modül için bekleyen bir talebiniz var.',
+      'REQUEST_NOT_FOUND': 'Talep bulunamadı.',
+      'REQUEST_NOT_PENDING': 'Bu talep artık bekleyen durumda değil.',
     };
 
-    test('sözleşmedeki 11 kodun metni birebir ve kısa', () {
+    test('sözleşmedeki 16 kodun metni birebir ve kısa (11 Faz 1 + 5 Faz 1.1)', () {
       for (final entry in expected.entries) {
         final message = AuthApi.messageForErrorCode(entry.key);
         expect(message, entry.value, reason: entry.key);
@@ -470,6 +746,18 @@ void main() {
   });
 
   group('AuthService: modül sarmalayıcıları', () {
+    Map<String, dynamic> requestJson({String status = 'pending'}) => <String, dynamic>{
+      'id': 31,
+      'site_code': 7,
+      'site_name': 'Gül Sitesi',
+      'module_code': 'finance',
+      'module_name': 'Aidat ve Finans',
+      'status': status,
+      'note': null,
+      'requested_by_name': 'Ayşe Yılmaz',
+      'created_at': '2026-10-15T09:30:00Z',
+    };
+
     UserSession session0({UserRole role = UserRole.siteManager}) => UserSession(
       id: 5,
       fullName: 'Ali Veli',
@@ -526,6 +814,46 @@ void main() {
       expect(h.rec.last.headers['Authorization'], 'Bearer tok-A');
       expect(h.rec.last.url.path, '/app/my-modules');
       h.service.dispose();
+    });
+
+    test('modül talebi sarmalayıcıları sözleşmedeki yollara gider', () async {
+      final h = await makeService((r) {
+        if (r.url.path == '/admin/module-requests' && r.method == 'GET') {
+          return _json({'items': <dynamic>[], 'next_before_id': null, 'pending_count': 3});
+        }
+        if (r.url.path.startsWith('/admin/module-requests/')) {
+          return _json({'request': requestJson(status: 'rejected')});
+        }
+        if (r.method == 'POST') return _json({'request': requestJson()}, 201);
+        if (r.method == 'DELETE') return _json({'request': requestJson(status: 'cancelled')});
+        return _json({'items': <dynamic>[requestJson()]});
+      });
+      final s = h.service;
+
+      final created = await s.createModuleRequest(7, 'finance', note: 'lazım');
+      expect(h.rec.last.method, 'POST');
+      expect(h.rec.last.url.path, '/manager/sites/7/module-requests');
+      expect(h.rec.lastBody, <String, dynamic>{'module_code': 'finance', 'note': 'lazım'});
+      expect(created.id, 31);
+
+      expect(await s.listModuleRequests(7), hasLength(1));
+      expect(h.rec.last.url.path, '/manager/sites/7/module-requests');
+
+      final cancelled = await s.cancelModuleRequest(7, 31);
+      expect(h.rec.last.method, 'DELETE');
+      expect(h.rec.last.url.path, '/manager/sites/7/module-requests/31');
+      expect(cancelled.status, 'cancelled');
+
+      final page = await s.listAdminModuleRequests(status: 'pending', limit: 1);
+      expect(h.rec.last.url.queryParameters, <String, String>{'status': 'pending', 'limit': '1'});
+      expect(page.pendingCount, 3);
+
+      final rejected = await s.decideModuleRequest(31, false, note: 'olmaz');
+      expect(h.rec.last.method, 'PUT');
+      expect(h.rec.last.url.path, '/admin/module-requests/31');
+      expect(h.rec.lastBody, <String, dynamic>{'decision': 'reject', 'note': 'olmaz'});
+      expect(rejected.status, 'rejected');
+      s.dispose();
     });
 
     test('tüm sarmalayıcılar sözleşmedeki yollara gider', () async {

@@ -3,7 +3,7 @@ const String _defaultApiBaseUrl = 'https://api.gudeteknoloji.com.tr';
 class AppConfig {
   AppConfig._();
 
-  static const String appName = 'Site Kapı Kontrol';
+  static const String appName = 'Site ve Toplu Yaşam Yönetim Sistemi';
   static const String appVersion = '1.0.0';
   static const int buildNumber = 1;
 

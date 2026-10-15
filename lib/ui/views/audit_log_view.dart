@@ -33,6 +33,10 @@ class AuditLogView extends StatefulWidget {
     ('module.disabled', 'Modül kapatıldı'),
     ('staff_role.assigned', 'Rol verildi'),
     ('staff_role.removed', 'Rol kaldırıldı'),
+    ('module_request.created', 'Talep oluşturuldu'),
+    ('module_request.approved', 'Talep onaylandı'),
+    ('module_request.rejected', 'Talep reddedildi'),
+    ('module_request.cancelled', 'Talep geri çekildi'),
   ];
 
   @override

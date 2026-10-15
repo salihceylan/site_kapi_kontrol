@@ -27,7 +27,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"site_kapi_kontrol", origin, size)) {
+  if (!window.Create(L"Site ve Toplu Ya\u015Fam Y\u00F6netim Sistemi", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

@@ -7,6 +7,8 @@ import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 /// Kullanıcının bağlı olduğu sitelerde hangi modüllerin açık olduğunu tutar (menü ve ekran
 /// süzgeçleri bunu okur). Platform modül sistemi Faz 1.
 ///
+/// - SÜPER KULLANICIDA ayrıca bekleyen modül talebi sayısı ([pendingRequestCount]; çekmece rozeti)
+///   aynı yoklamayla tazelenir ([fetchPendingCount] verilmişse); modül süzgeci yine yoktur.
 /// - Veri `GET /app/my-modules` ile ([fetch]) çekilir: girişten sonra, her genel yenilemede
 ///   ([refresh]) ve [AdaptivePoller] ile kısa aralıklı ([start]/[stop]; uygulama arka plandayken ya
 ///   da sayfa görünür değilken [isActive] false döner ve ağ isteği yapılmaz).
@@ -21,10 +23,12 @@ class ModuleAccess extends ChangeNotifier {
     required Future<MyModulesResult> Function() fetch,
     bool Function()? isSuperUser,
     bool Function()? isActive,
+    Future<int> Function()? fetchPendingCount,
     Duration interval = const Duration(seconds: 30),
     Duration maxDelay = const Duration(minutes: 5),
   }) : _fetch = fetch,
-       _isSuperUser = isSuperUser {
+       _isSuperUser = isSuperUser,
+       _fetchPendingCount = fetchPendingCount {
     _poller = AdaptivePoller(
       interval: interval,
       maxDelay: maxDelay,
@@ -35,9 +39,11 @@ class ModuleAccess extends ChangeNotifier {
 
   final Future<MyModulesResult> Function() _fetch;
   final bool Function()? _isSuperUser;
+  final Future<int> Function()? _fetchPendingCount;
   late final AdaptivePoller _poller;
 
   MyModulesResult? _result;
+  int? _pendingRequestCount;
   Future<bool?>? _inFlight;
   bool _rerun = false;
   bool _disposed = false;
@@ -45,6 +51,10 @@ class ModuleAccess extends ChangeNotifier {
 
   /// Son başarılı yanıt; hiç alınmadıysa null.
   MyModulesResult? get result => _result;
+
+  /// Süper kullanıcı için bekleyen modül talebi sayısı; henüz alınmadıysa (ya da süper kullanıcı
+  /// değilse) null. Çağrı hatasında son değer korunur.
+  int? get pendingRequestCount => _pendingRequestCount;
 
   /// En az bir yanıt başarıyla alındı mı? (false iken fail-open: her şey açık.)
   bool get isLoaded => _result != null;
@@ -126,7 +136,11 @@ class ModuleAccess extends ChangeNotifier {
   }
 
   Future<bool?> _fetchOnce() async {
-    if (_isSuperUser?.call() ?? false) return null;
+    if (_isSuperUser?.call() ?? false) {
+      // Süper kullanıcıda modül süzgeci yok; yalnız bekleyen talep sayısı (rozet) tazelenir.
+      final pending = _fetchPendingCount;
+      return pending == null ? null : _fetchPendingOnce(pending);
+    }
     final generation = _generation;
     try {
       final next = await _fetch();
@@ -138,6 +152,22 @@ class ModuleAccess extends ChangeNotifier {
       return true;
     } catch (_) {
       // Mevcut değer korunur (ya da hiç yoksa fail-open sürer).
+      if (_disposed || generation != _generation) return null;
+      return false;
+    }
+  }
+
+  Future<bool?> _fetchPendingOnce(Future<int> Function() fetchPending) async {
+    final generation = _generation;
+    try {
+      final count = await fetchPending();
+      if (_disposed || generation != _generation) return null;
+      if (_pendingRequestCount != count) {
+        _pendingRequestCount = count;
+        notifyListeners();
+      }
+      return true;
+    } catch (_) {
       if (_disposed || generation != _generation) return null;
       return false;
     }
@@ -159,8 +189,9 @@ class ModuleAccess extends ChangeNotifier {
   /// modülleri sızmaz). Uçuştaki eski yanıt yok sayılır.
   void clear() {
     _generation++;
-    if (_result != null) {
+    if (_result != null || _pendingRequestCount != null) {
       _result = null;
+      _pendingRequestCount = null;
       if (!_disposed) notifyListeners();
     }
   }

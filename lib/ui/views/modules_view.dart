@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -12,9 +14,11 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/module_request_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/staff_role_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/staff_role_card.dart';
 
 /// Geçiş Kontrol kapatılırken gösterilen uyarı (sunucunun `MODULE_CONFIRM_REQUIRED` metniyle aynı).
@@ -23,6 +27,10 @@ const String doorControlOffWarning =
 
 /// "Modüller" ekranı (Platform modül sistemi Faz 1): site seçici, modül kartları (anahtar), Geçiş
 /// Kontrol kapatılırken onay penceresi ve "Ek roller" bölümü (listele / ekle / kaldır).
+///
+/// Faz 1.1: ANAHTAR yalnız süper kullanıcıdadır. Site yöneticisi modülü kendi açıp kapatmaz; kartlarda
+/// durum çipi ("Tanımlı" / "Tanımlı değil" / "Talep gönderildi"), "Modül Talep Et" (not alanlı pencere)
+/// ve "Talebi Geri Çek" vardır; altında "Modül Taleplerim" listesi gösterilir.
 ///
 /// Süper kullanıcıda tüm siteler, site yöneticisinde yönettiği siteler listelenir (yalnız onaylı
 /// siteler: modül onaysız sitede anlamsızdır). Veriyi kendisi çeker; [ModulesViewState.reload]
@@ -58,6 +66,11 @@ class ModulesViewState extends State<ModulesView> {
   bool _loadingRoles = false;
   String? _rolesError;
 
+  // Site yöneticisinin modül talepleri (süper kullanıcıda yüklenmez).
+  List<ModuleRequest>? _requests;
+  bool _loadingRequests = false;
+  String? _requestsError;
+
   final Set<String> _busyModules = <String>{};
   final Set<int> _busyRoles = <int>{};
 
@@ -65,6 +78,13 @@ class ModulesViewState extends State<ModulesView> {
   int _sitesToken = 0;
   int _modulesToken = 0;
   int _rolesToken = 0;
+  int _requestsToken = 0;
+
+  /// Anahtar yalnız süper kullanıcıdadır; site yöneticisi talep eder (Faz 1.1).
+  bool get _isSuper => widget.authService.session?.role == UserRole.superUser;
+
+  /// Son gösterilen en çok bu kadar talep listelenir.
+  static const int _maxListedRequests = 10;
 
   @override
   void initState() {
@@ -101,6 +121,7 @@ class ModulesViewState extends State<ModulesView> {
         if (next == null) {
           _state = null;
           _roles = null;
+          _requests = null;
         }
       });
       if (next != null) await _loadSiteData(next);
@@ -122,8 +143,10 @@ class ModulesViewState extends State<ModulesView> {
       _siteCode = siteCode;
       _state = null;
       _roles = null;
+      _requests = null;
       _stateError = null;
       _rolesError = null;
+      _requestsError = null;
     });
     await _loadSiteData(siteCode);
   }
@@ -134,12 +157,45 @@ class ModulesViewState extends State<ModulesView> {
     int siteCode, {
     bool modules = true,
     bool roles = true,
+    bool requests = true,
     bool silent = false,
   }) async {
     await Future.wait(<Future<void>>[
       if (modules) _loadModules(siteCode, silent: silent),
       if (roles) _loadRoles(siteCode, silent: silent),
+      if (requests && !_isSuper) _loadRequests(siteCode, silent: silent),
     ]);
+  }
+
+  Future<void> _loadRequests(int siteCode, {bool silent = false}) async {
+    if (!mounted || _siteCode != siteCode) return;
+    final token = ++_requestsToken;
+    if (!silent) {
+      setState(() {
+        _loadingRequests = true;
+        _requestsError = null;
+      });
+    }
+    try {
+      final next = await widget.authService.listModuleRequests(siteCode);
+      if (!mounted || token != _requestsToken || _siteCode != siteCode) return;
+      setState(() {
+        _requests = next;
+        _loadingRequests = false;
+        _requestsError = null;
+      });
+    } catch (e) {
+      if (!mounted || token != _requestsToken || _siteCode != siteCode) return;
+      setState(() {
+        _loadingRequests = false;
+        if (!silent) {
+          _requestsError = _messageOf(
+            e,
+            'Modül talepleri yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+          );
+        }
+      });
+    }
   }
 
   Future<void> _loadModules(int siteCode, {bool silent = false}) async {
@@ -316,6 +372,82 @@ class ModulesViewState extends State<ModulesView> {
     }
   }
 
+  // --- Modül talebi (site yöneticisi) -------------------------------------------------------
+
+  Future<void> _requestModule(PlatformModule module) async {
+    final code = _siteCode;
+    if (code == null || _busyModules.contains(module.code)) return;
+    final site = _sites.where((s) => s.id == code).firstOrNull;
+    final sent = await ModuleRequestDialog.show(
+      context,
+      authService: widget.authService,
+      siteCode: code,
+      moduleCode: module.code,
+      moduleName: module.name,
+      siteName: site?.name,
+    );
+    if (!mounted) return;
+    if (sent == true) {
+      AppSnack.show(context, 'Modül talebiniz gönderildi.', kind: AppSnackKind.success);
+    }
+    // Gönderilse de reddedilse de (örn. aynı anda başkası talep etmiş) durum sunucudan okunur.
+    if (_siteCode == code) {
+      unawaited(_loadSiteData(code, roles: false, silent: true));
+    }
+  }
+
+  Future<void> _cancelRequest(PlatformModule module) async {
+    final code = _siteCode;
+    if (code == null || _busyModules.contains(module.code)) return;
+    final ok = await _confirm(
+      title: 'Talep Geri Çekilsin mi?',
+      message: '"${module.name}" modülü için gönderdiğiniz talep geri çekilecek.',
+      confirmLabel: 'Geri Çek',
+      icon: Icons.undo_rounded,
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busyModules.add(module.code));
+    try {
+      var pending = _pendingRequestFor(module.code);
+      if (pending == null) {
+        // Liste henüz yüklenmediyse ya da bayatsa sunucudan okunur.
+        final fresh = await widget.authService.listModuleRequests(code);
+        if (!mounted) return;
+        if (_siteCode == code) setState(() => _requests = fresh);
+        pending = _pendingRequestFor(module.code);
+      }
+      if (pending == null) {
+        AppSnack.show(context, 'Talep bulunamadı.', kind: AppSnackKind.error);
+      } else {
+        await widget.authService.cancelModuleRequest(code, pending.id);
+        if (!mounted) return;
+        AppSnack.show(context, 'Talep geri çekildi.', kind: AppSnackKind.success);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      AppSnack.show(
+        context,
+        _messageOf(e, 'Talep geri çekilemedi. Sunucuya bağlanılamadı.'),
+        kind: AppSnackKind.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyModules.remove(module.code));
+        // Sonuç ne olursa olsun (örn. 409 REQUEST_NOT_PENDING) durum yeniden okunur.
+        if (_siteCode == code) {
+          unawaited(_loadSiteData(code, roles: false, silent: true));
+        }
+      }
+    }
+  }
+
+  ModuleRequest? _pendingRequestFor(String moduleCode) {
+    for (final r in _requests ?? const <ModuleRequest>[]) {
+      if (r.isPending && r.moduleCode == moduleCode) return r;
+    }
+    return null;
+  }
+
   // --- Ek roller ---------------------------------------------------------------------------
 
   Future<void> _addRole() async {
@@ -394,6 +526,10 @@ class ModulesViewState extends State<ModulesView> {
           _buildSiteSelector(context),
           const SizedBox(height: AppSpace.lg),
           ..._buildModulesSection(context, code!),
+          if (!_isSuper) ...[
+            const SizedBox(height: AppSpace.xl),
+            ..._buildRequestsSection(context, code),
+          ],
           const SizedBox(height: AppSpace.xl),
           ..._buildRolesSection(context, code),
         ],
@@ -406,8 +542,11 @@ class ModulesViewState extends State<ModulesView> {
         const PageHeaderCard(title: 'Modüller', icon: Icons.extension_rounded),
         const SizedBox(height: AppSpace.sm),
         Text(
-          'Sitenizde kullanacağınız modülleri açıp kapatabilirsiniz. '
-          'Kapalı bir modülün ekranları ve işlemleri o sitede çalışmaz.',
+          _isSuper
+              ? 'Sitenizde kullanacağınız modülleri açıp kapatabilirsiniz. '
+                  'Kapalı bir modülün ekranları ve işlemleri o sitede çalışmaz.'
+              : 'Sitenizde tanımlı modüller aşağıda görünür. Tanımlı olmayan bir modülü kullanmak '
+                  'için talep gönderebilirsiniz; talebiniz sistem yöneticisine iletilir.',
           style: th.bodyMedium,
         ),
         const SizedBox(height: AppSpace.lg),
@@ -501,12 +640,52 @@ class ModulesViewState extends State<ModulesView> {
                 child: ModuleCard(
                   module: state.modules[i],
                   busy: _busyModules.contains(state.modules[i].code),
+                  requestMode: !_isSuper,
                   onToggle: _busyModules.contains(state.modules[i].code)
                       ? null
                       : (value) => unawaited(_toggle(state.modules[i], value)),
+                  onRequest: () => unawaited(_requestModule(state.modules[i])),
+                  onCancelRequest: () => unawaited(_cancelRequest(state.modules[i])),
                 ),
               ),
             ),
+      ],
+    ];
+  }
+
+  /// "Modül Taleplerim" (site yöneticisi): son talepler, durumları ve kararın gerekçesi.
+  List<Widget> _buildRequestsSection(BuildContext context, int siteCode) {
+    final requests = _requests;
+    final shown = (requests ?? const <ModuleRequest>[])
+        .take(_maxListedRequests)
+        .toList(growable: false);
+    return [
+      const SectionHeader(title: 'Modül Taleplerim'),
+      const SizedBox(height: AppSpace.md),
+      if (_loadingRequests && requests == null)
+        const ListSkeleton(rows: 2)
+      else ...[
+        if (_requestsError != null) ...[
+          InlineNotice(
+            message: _requestsError!,
+            onRetry: () => unawaited(_loadRequests(siteCode)),
+          ),
+          if (shown.isNotEmpty) const SizedBox(height: AppSpace.md),
+        ],
+        if (requests != null && requests.isEmpty && _requestsError == null)
+          const EmptyCard(
+            icon: Icons.inbox_rounded,
+            title: 'Henüz modül talebiniz yok.',
+            message: 'Tanımlı olmayan bir modül için "Modül Talep Et" düğmesini kullanın.',
+          ),
+        for (var i = 0; i < shown.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.md),
+            child: StaggeredEntry(
+              index: i,
+              child: ModuleRequestCard(request: shown[i]),
+            ),
+          ),
       ],
     ];
   }

@@ -23,7 +23,7 @@
           yerel geliştirme sunucusu için src/debug/AndroidManifest.xml ile cleartext'e izin verir.
     -->
     <application
-        android:label="Site Kapı Kontrol"
+        android:label="Site ve Toplu Yaşam Yönetim Sistemi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

@@ -131,7 +131,7 @@ void main() {
     );
 
     expect(find.byTooltip('Koyu temaya geç'), findsOneWidget);
-    expect(find.text('AHBU Giriş'), findsOneWidget);
+    expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
 
     await t.ensureVisible(find.byTooltip('Koyu temaya geç'));
     await t.tap(find.byTooltip('Koyu temaya geç'));

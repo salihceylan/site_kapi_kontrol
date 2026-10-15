@@ -259,6 +259,137 @@ void main() {
     });
   });
 
+  group('Süper kullanıcı: bekleyen modül talebi sayısı (çekmece rozeti, Faz 1.1)', () {
+    test('süper kullanıcıda sayı çekilir; my-modules çekilmez; değişmeyen sayı dinleyicileri uyarmaz', () async {
+      final fetcher = _Fetcher();
+      var pending = 3;
+      var pendingCalls = 0;
+      final access = ModuleAccess(
+        fetch: fetcher.call,
+        isSuperUser: () => true,
+        fetchPendingCount: () async {
+          pendingCalls++;
+          return pending;
+        },
+      );
+      var notified = 0;
+      access.addListener(() => notified++);
+      expect(access.pendingRequestCount, isNull, reason: 'henüz alınmadı');
+
+      expect(await access.refresh(), isTrue);
+      expect(access.pendingRequestCount, 3);
+      expect(notified, 1);
+      expect(fetcher.calls, 0, reason: 'süper kullanıcı için my-modules çekilmez');
+      expect(access.isSuper, isTrue);
+      expect(access.isFiltering, isFalse);
+
+      await access.refresh();
+      expect(notified, 1, reason: 'sayı aynı: yeniden kurma yok');
+
+      pending = 0;
+      await access.refresh();
+      expect(access.pendingRequestCount, 0);
+      expect(notified, 2);
+      expect(pendingCalls, 3);
+      access.dispose();
+    });
+
+    test('hata: son sayı korunur ve false döner; ilk hata null bırakır', () async {
+      var fail = true;
+      var pending = 5;
+      final access = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        fetchPendingCount: () async {
+          if (fail) throw Exception('ağ yok');
+          return pending;
+        },
+      );
+      expect(await access.refresh(), isFalse);
+      expect(access.pendingRequestCount, isNull);
+
+      fail = false;
+      await access.refresh();
+      expect(access.pendingRequestCount, 5);
+
+      fail = true;
+      pending = 9;
+      expect(await access.refresh(), isFalse);
+      expect(access.pendingRequestCount, 5, reason: 'ağ hatası rozeti sıfırlamaz');
+      access.dispose();
+    });
+
+    test('süper kullanıcı değilse sayı hiç çekilmez (yönetici / sakin)', () async {
+      var pendingCalls = 0;
+      final access = ModuleAccess(
+        fetch: (_Fetcher()..next = _result(<MySiteModules>[_site(1)])).call,
+        fetchPendingCount: () async {
+          pendingCalls++;
+          return 4;
+        },
+      );
+      await access.refresh();
+      expect(pendingCalls, 0);
+      expect(access.pendingRequestCount, isNull);
+      expect(access.isLoaded, isTrue);
+      access.dispose();
+    });
+
+    test('fetchPendingCount yoksa süper kullanıcıda refresh eskisi gibi null (atlandı)', () async {
+      final access = ModuleAccess(fetch: _Fetcher().call, isSuperUser: () => true);
+      expect(await access.refresh(), isNull);
+      expect(access.pendingRequestCount, isNull);
+      access.dispose();
+    });
+
+    test('clear: sayıyı sıfırlar (yeni kullanıcıya eski rozet sızmaz) ve dinleyicileri uyarır', () async {
+      final access = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        fetchPendingCount: () async => 2,
+      );
+      await access.refresh();
+      var notified = 0;
+      access.addListener(() => notified++);
+      access.clear();
+      expect(access.pendingRequestCount, isNull);
+      expect(notified, 1);
+      access.dispose();
+    });
+
+    testWidgets('AdaptivePoller sayıyı arka planda tazeler; görünür değilken istek yok', (tester) async {
+      var pending = 1;
+      var calls = 0;
+      var active = true;
+      final access = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        isActive: () => active,
+        interval: const Duration(seconds: 30),
+        fetchPendingCount: () async {
+          calls++;
+          return pending;
+        },
+      );
+      access.start();
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump();
+      expect(access.pendingRequestCount, 1);
+
+      pending = 4;
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump();
+      expect(access.pendingRequestCount, 4);
+      final before = calls;
+
+      active = false;
+      await tester.pump(const Duration(seconds: 60));
+      await tester.pump();
+      expect(calls, before, reason: 'uygulama arka plandayken istek yok');
+      access.dispose();
+    });
+  });
+
   group('AdaptivePoller ile kısa aralıklı tazeleme', () {
     testWidgets('aralıkla yoklar; isActive false iken ağ isteği yok; stop durdurur', (tester) async {
       final fetcher = _Fetcher()..next = _result(<MySiteModules>[_site(1)]);

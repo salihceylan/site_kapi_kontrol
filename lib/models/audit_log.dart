@@ -59,6 +59,14 @@ class AuditLogEntry {
         return 'Ek rol atandı';
       case 'staff_role.removed':
         return 'Ek rol kaldırıldı';
+      case 'module_request.created':
+        return 'Talep oluşturuldu';
+      case 'module_request.approved':
+        return 'Talep onaylandı';
+      case 'module_request.rejected':
+        return 'Talep reddedildi';
+      case 'module_request.cancelled':
+        return 'Talep geri çekildi';
       default:
         return action;
     }
@@ -71,6 +79,15 @@ class AuditLogEntry {
         final code = targetId;
         if (code == null || code.isEmpty) return null;
         return _moduleNames[code] ?? code;
+      case 'module_request':
+        // Hedef talep numarasıdır; modül adı ayrıntıdan (`details.module_code`) okunur.
+        final moduleCode = details['module_code']?.toString();
+        final moduleName = (moduleCode == null || moduleCode.isEmpty)
+            ? null
+            : (_moduleNames[moduleCode] ?? moduleCode);
+        final request = targetId == null || targetId!.isEmpty ? null : 'Talep #$targetId';
+        if (moduleName != null && request != null) return '$moduleName • $request';
+        return moduleName ?? request;
       case 'user':
         final role = details['role']?.toString();
         final roleName = role == null ? null : (_staffRoleNames[role] ?? role);

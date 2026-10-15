@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
@@ -727,6 +728,119 @@ class AuthApi {
       token: token,
     );
     _ensureStatus(response, 200);
+  }
+
+  // --- Modül talebi (Faz 1.1) ---------------------------------------------------------------
+  // Site yöneticisi modülü kendi açmaz, TALEP eder (`/manager/sites/:siteCode/module-requests`);
+  // süper kullanıcı talepleri `/admin/module-requests` ucundan listeler ve karara bağlar.
+
+  /// Modül talebi oluşturur (201). [note] en çok 500 karakter, isteğe bağlı.
+  Future<ModuleRequest> createModuleRequest({
+    required String token,
+    required int siteCode,
+    required String moduleCode,
+    String? note,
+  }) async {
+    final trimmed = note?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/manager/sites/$siteCode/module-requests',
+      token: token,
+      body: {
+        'module_code': moduleCode,
+        if (trimmed != null && trimmed.isNotEmpty) 'note': trimmed,
+      },
+    );
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Modül talebi',
+      () => ModuleRequest.fromJson(payload['request'] as Map<String, dynamic>),
+    );
+  }
+
+  /// Sitenin son modül talepleri (en çok 50, `id DESC`).
+  Future<List<ModuleRequest>> listModuleRequests({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/module-requests',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Modül talepleri',
+      () => (payload['items'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => ModuleRequest.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// Bekleyen talebi geri çeker (`cancelled`).
+  Future<ModuleRequest> cancelModuleRequest({
+    required String token,
+    required int siteCode,
+    required int requestId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/manager/sites/$siteCode/module-requests/$requestId',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Modül talebi',
+      () => ModuleRequest.fromJson(payload['request'] as Map<String, dynamic>),
+    );
+  }
+
+  /// Süper kullanıcı: talepler. [status] `pending|approved|rejected|cancelled|all` (sunucu varsayılanı
+  /// `pending`). Sonraki sayfa için önceki yanıttaki `next_before_id` [beforeId] olarak verilir.
+  Future<ModuleRequestPage> listAdminModuleRequests({
+    required String token,
+    String? status,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    final query = <String, String>{
+      if (status != null && status.isNotEmpty) 'status': status,
+      'limit': '$limit',
+      if (beforeId != null) 'before_id': '$beforeId',
+    };
+    final path = Uri(path: '/admin/module-requests', queryParameters: query).toString();
+    final response = await _authorizedRequest(method: 'GET', path: path, token: token);
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Modül talepleri', () => ModuleRequestPage.fromJson(payload));
+  }
+
+  /// Süper kullanıcı: talebi onaylar (`approve`) ya da reddeder (`reject`); [note] isteğe bağlı gerekçe.
+  Future<ModuleRequest> decideModuleRequest({
+    required String token,
+    required int requestId,
+    required bool approve,
+    String? note,
+  }) async {
+    final trimmed = note?.trim();
+    final response = await _authorizedRequest(
+      method: 'PUT',
+      path: '/admin/module-requests/$requestId',
+      token: token,
+      body: {
+        'decision': approve ? 'approve' : 'reject',
+        if (trimmed != null && trimmed.isNotEmpty) 'note': trimmed,
+      },
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Modül talebi',
+      () => ModuleRequest.fromJson(payload['request'] as Map<String, dynamic>),
+    );
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -1687,7 +1801,10 @@ class AuthApi {
 
     final mappedMessage =
         messageForErrorCode(code, retryAfterSeconds: retryAfter, payload: payload);
-    var message = mappedMessage ?? errorMsg ?? 'İşlem başarısız ($status)';
+    var message = mappedMessage ??
+        errorMsg ??
+        genericMessageForStatus(status, code: code) ??
+        'İşlem başarısız ($status)';
 
     if (status == 429 && mappedMessage == null) {
       // Genel hız sınırı: bekleme süresini kullanıcıya göster (kapı açma dahil).
@@ -1782,6 +1899,20 @@ class AuthApi {
     if (base.toLowerCase().contains('sonra')) return base;
     final trimmed = base.endsWith('.') ? base : '$base.';
     return '$trimmed Lütfen ${formatWait(retryAfter)} sonra tekrar deneyin.';
+  }
+
+  /// Sunucu `error` metni göndermediğinde durum koduna / genel koda göre Türkçe yedek mesaj
+  /// (429 hız sınırı: gövdede `code` yoktur; 400 `INVALID_BODY` / `INVALID_QUERY`). Metin gelirse
+  /// sunucunun kendi mesajı önceliklidir; bilinmiyorsa null.
+  static String? genericMessageForStatus(int status, {String? code}) {
+    if (status == 429) return 'Çok fazla istek gönderildi.';
+    switch (code) {
+      case 'INVALID_BODY':
+        return 'Gönderilen bilgiler geçersiz. Alanları kontrol edip tekrar deneyin.';
+      case 'INVALID_QUERY':
+        return 'Geçersiz sorgu. Süzgeçleri kontrol edip tekrar deneyin.';
+    }
+    return null;
   }
 
   /// Bilinen sunucu hata kodları için anlaşılır (kısa, taşmayan) Türkçe metin;
@@ -1909,6 +2040,17 @@ class AuthApi {
         return 'Geçersiz rol.';
       case 'ROLE_NOT_FOUND':
         return 'Bu kişide kurul veya görevli rolü yok.';
+      // Modül talebi (Faz 1.1).
+      case 'MODULE_ADMIN_ONLY':
+        return 'Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.';
+      case 'MODULE_ALREADY_ENABLED':
+        return 'Bu modül zaten açık.';
+      case 'MODULE_REQUEST_PENDING':
+        return 'Bu modül için bekleyen bir talebiniz var.';
+      case 'REQUEST_NOT_FOUND':
+        return 'Talep bulunamadı.';
+      case 'REQUEST_NOT_PENDING':
+        return 'Bu talep artık bekleyen durumda değil.';
       default:
         return null;
     }

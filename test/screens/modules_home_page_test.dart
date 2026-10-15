@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
@@ -30,8 +31,11 @@ import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
 import 'package:site_kapi_kontrol/ui/views/dashboard_view.dart';
 import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
+import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
 import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
+import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'modules_fixtures.dart';
@@ -538,8 +542,8 @@ void main() {
       await _disposeHome(t);
     });
 
-    testWidgets('Modüller ekranında Geçiş Kontrol kapatılınca menü hemen güncellenir', (t) async {
-      // Gerçek ModuleAccess, sahte sunucu durumunu okur: setSiteModule -> states güncellenir.
+    testWidgets('site yöneticisi Modüller ekranında anahtar görmez (Faz 1.1); süper kullanıcı kapatınca menü yöneticide sunucudan okunur', (t) async {
+      // Gerçek ModuleAccess, sahte sunucu durumunu okur: süper kullanıcı kapatınca states güncellenir.
       late final _HomeModAuth auth;
       auth = _HomeModAuth(sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')]);
       final access = ModuleAccess(
@@ -556,6 +560,76 @@ void main() {
       await _closeDrawer(t);
 
       await _tapMenu(t, 'Modüller');
+      expect(find.byType(Switch), findsNothing, reason: 'site yöneticisi modülü kendi kapatamaz');
+      expect(auth.setCalls, isEmpty);
+
+      // Süper kullanıcı başka yerden kapattı: yönetici yenileyince menü güncellenir.
+      auth.states[11] = mdState(11, 'Gül Sitesi', door: false, superView: false);
+      await t.tap(_inAppBar(find.byTooltip('Yenile')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 800));
+      await _openDrawer(t);
+      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing,
+          reason: 'kapıyla ilgili öğeler genel yenilemeyle gizlenir');
+      expect(_tileTitle('Modüller'), findsOneWidget);
+      await _closeDrawer(t);
+      expect(find.text('Modül Talep Et'), findsOneWidget);
+      await _disposeHome(t);
+    });
+  });
+
+  group('Modül Talepleri (süper kullanıcı, Faz 1.1)', () {
+    _HomeModAuth superAuth({int pending = 2}) {
+      final auth = _HomeModAuth(role: UserRole.superUser, sites: <SiteRecord>[mdSite(11, 'Gül Sitesi')]);
+      auth.adminRequests = <ModuleRequest>[
+        for (var i = 1; i <= pending; i++) mdRequest(i),
+        mdRequest(50, status: 'approved', decidedBy: 'Süper Yönetici'),
+      ];
+      return auth;
+    }
+
+    final badge = find.byKey(const ValueKey<String>('yan_menu_rozet'));
+
+    testWidgets('çekmecede yalnız süper kullanıcıda; Modüller\'in altında, bekleyen sayısı rozetle (pending_count)', (t) async {
+      final auth = superAuth(pending: 2);
+      await _pumpHome(t, auth);
+
+      await _openDrawer(t);
+      expect(_tileTitle('Modül Talepleri'), findsOneWidget);
+      expect(badge, findsOneWidget);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('2')),
+        findsOneWidget,
+      );
+      // Sayı pending_count ile çekilir (limit 1: yalnız sayaç için).
+      expect(auth.adminCalls.first.status, 'pending');
+      expect(auth.adminCalls.first.limit, 1);
+      final tiles = find.descendant(of: find.byType(Drawer), matching: find.byType(ListTile));
+      final titles = <String>[
+        for (var i = 0; i < tiles.evaluate().length; i++)
+          ((t.widget<ListTile>(tiles.at(i))).title! as Text).data!,
+      ];
+      expect(titles.indexOf('Modül Talepleri'), titles.indexOf('Modüller') + 1);
+      await _disposeHome(t);
+    });
+
+    testWidgets('Modüller ekranında anahtar işleminden sonra rozet de tazelenir (sunucu bekleyen talebi otomatik onayladı)', (t) async {
+      final auth = superAuth(pending: 2);
+      await _pumpHome(t, auth);
+      await _openDrawer(t);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('2')),
+        findsOneWidget,
+      );
+      await _closeDrawer(t);
+
+      await _tapMenu(t, 'Modüller');
+      final callsBefore = auth.adminCalls.length;
+      // Süper kullanıcı modülü doğrudan açınca sunucu o sitedeki bekleyen talebi "onaylandı"ya çevirir.
+      auth.adminRequests = <ModuleRequest>[
+        mdRequest(1),
+        mdRequest(2, status: 'approved', decidedBy: 'Süper Yönetici'),
+      ];
       await t.ensureVisible(find.byType(Switch));
       await t.tap(find.byType(Switch));
       await t.pump();
@@ -564,12 +638,147 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 800));
 
-      expect(auth.setCalls.single.confirm, isTrue);
+      expect(auth.setCalls, hasLength(1));
+      expect(auth.adminCalls.length, greaterThan(callsBefore),
+          reason: 'anahtar işleminden sonra bekleyen talep sayısı yeniden çekilir');
       await _openDrawer(t);
-      expect(_tileTitle('Kayıtlı Cihazlar'), findsNothing,
-          reason: 'kapatma sonrası kapıyla ilgili öğeler hemen gizlenir');
-      expect(_tileTitle('Modüller'), findsOneWidget);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
+        findsOneWidget,
+      );
       await _disposeHome(t);
+    });
+
+    testWidgets('bekleyen yoksa rozet yok; site yöneticisinde öğe hiç yok', (t) async {
+      final none = superAuth(pending: 0);
+      await _pumpHome(t, none);
+      await _openDrawer(t);
+      expect(_tileTitle('Modül Talepleri'), findsOneWidget);
+      expect(badge, findsNothing);
+      await _disposeHome(t);
+
+      final manager = _HomeModAuth();
+      await _pumpHome(t, manager);
+      await _openDrawer(t);
+      expect(_tileTitle('Modül Talepleri'), findsNothing);
+      expect(manager.adminCalls, isEmpty, reason: 'yönetici için talep sayacı çekilmez');
+      await _disposeHome(t);
+    });
+
+    testWidgets('öğeye dokununca ekran açılır; AppBar başlığı; Onayla -> liste ve ROZET hemen güncellenir', (t) async {
+      final auth = superAuth(pending: 2);
+      await _pumpHome(t, auth);
+
+      await _tapMenu(t, 'Modül Talepleri');
+      expect(find.byType(ModuleRequestsView), findsOneWidget);
+      expect(_inAppBar(find.text('Modül Talepleri')), findsOneWidget);
+      expect(find.byType(ModuleRequestCard), findsNWidgets(2));
+
+      await t.ensureVisible(find.text('Onayla').first);
+      await t.tap(find.text('Onayla').first);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 450));
+      await t.tap(find.descendant(of: find.byType(AppDialog), matching: find.text('Onayla')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 800));
+      expect(auth.decideCalls.single.approve, isTrue);
+      expect(find.byType(ModuleRequestCard), findsNWidgets(1));
+
+      await _openDrawer(t);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
+        findsOneWidget,
+        reason: 'karardan sonra çekmece rozeti sunucudan hemen yeniden okunur',
+      );
+      await _disposeHome(t);
+    });
+
+    testWidgets('genel yenileme (AppBar Yenile) listeyi ve rozeti tazeler', (t) async {
+      final auth = superAuth(pending: 1);
+      await _pumpHome(t, auth);
+      await _tapMenu(t, 'Modül Talepleri');
+      final before = auth.adminCalls.length;
+
+      auth.adminRequests = <ModuleRequest>[mdRequest(1), mdRequest(2), mdRequest(3)];
+      await t.tap(_inAppBar(find.byTooltip('Yenile')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 800));
+      expect(auth.adminCalls.length, greaterThan(before));
+      expect(find.byType(ModuleRequestCard), findsNWidgets(3));
+      await _openDrawer(t);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('3')),
+        findsOneWidget,
+      );
+      await _disposeHome(t);
+    });
+
+    testWidgets('rozet arka planda AdaptivePoller ile tazelenir (yeni talep gelir)', (t) async {
+      final auth = superAuth(pending: 1);
+      await _pumpHome(t, auth);
+      await _openDrawer(t);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('1')),
+        findsOneWidget,
+      );
+      await _closeDrawer(t);
+
+      auth.adminRequests = <ModuleRequest>[mdRequest(1), mdRequest(2), mdRequest(3), mdRequest(4)];
+      await t.pump(const Duration(seconds: 31));
+      await t.pump();
+      await _openDrawer(t);
+      expect(
+        find.descendant(of: find.widgetWithText(ListTile, 'Modül Talepleri'), matching: find.text('4')),
+        findsOneWidget,
+      );
+      await _disposeHome(t);
+    });
+
+    testWidgets('talep sayacı çekilemezse rozet gösterilmez ve menü/Panel bozulmaz', (t) async {
+      final auth = superAuth(pending: 3)..adminError = ApiException('Sunucuya ulaşılamadı.');
+      await _pumpHome(t, auth);
+      expect(find.byType(DashboardView), findsOneWidget);
+      await _openDrawer(t);
+      expect(_tileTitle('Modül Talepleri'), findsOneWidget);
+      expect(badge, findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('çıkışta rozet sayısı temizlenir (yeni kullanıcıya sızmaz)', (t) async {
+      final auth = superAuth(pending: 2);
+      late ModuleAccess access;
+      access = ModuleAccess(
+        fetch: () => auth.getMyModules(),
+        isSuperUser: () => auth.session?.role == UserRole.superUser,
+        fetchPendingCount: () async =>
+            (await auth.listAdminModuleRequests(status: 'pending', limit: 1)).pendingCount,
+      );
+      addTearDown(access.dispose);
+      t.view.physicalSize = const Size(400, 900);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: AnimatedBuilder(
+            animation: auth,
+            builder: (context, _) => auth.session == null
+                ? const Scaffold(body: Text('Giriş Ekranı'))
+                : HomePage(authService: auth, moduleAccess: access),
+          ),
+        ),
+      );
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(access.pendingRequestCount, 2);
+
+      auth.changeSession(loggedIn: false);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.text('Giriş Ekranı'), findsOneWidget);
+      expect(access.pendingRequestCount, isNull);
+      await t.pumpWidget(const SizedBox());
+      await t.pump();
     });
   });
 

@@ -59,12 +59,12 @@ const String _longEmail =
     'muhammet.alperen.yildirim.kaya@ornek-alan-adi.com.tr';
 
 const List<_Cfg> _cfgs = <_Cfg>[
-  // Platform modül sistemi: süper kullanıcıya "Modüller" ve "Denetim Kaydı", site yöneticisine
-  // (yönetici modunda) "Modüller" eklendi (11 -> 13, 6 -> 7).
+  // Platform modül sistemi: süper kullanıcıya "Modüller", "Modül Talepleri" (Faz 1.1) ve
+  // "Denetim Kaydı", site yöneticisine (yönetici modunda) "Modüller" eklendi (11 -> 14, 6 -> 7).
   _Cfg(
-    'süper kullanıcı (13 öğe)',
+    'süper kullanıcı (14 öğe)',
     UserRole.superUser,
-    13,
+    14,
     selected: SirketMenuItem.siteler,
   ),
   _Cfg(
@@ -594,6 +594,7 @@ void main() {
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
         SirketMenuItem.moduller,
+        SirketMenuItem.modulTalepleri,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
@@ -791,6 +792,7 @@ void main() {
           'Daire Sakinleri',
           'Site Yönetimi',
           'Modüller',
+          'Modül Talepleri',
           'Daireye Katıl & Cihaz Ekle',
           'Şirket Cihazı Kaydet',
           'Şirket Cihaz Envanteri',

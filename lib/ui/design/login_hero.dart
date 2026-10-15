@@ -14,9 +14,11 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 /// Gradyan halkalı logo + başlık + alt başlık.
 ///
-/// - Giriş: `LoginHero(title: 'AHBU Giriş', subtitle: 'Akıllı Kapı & Site Otomasyon Paneli')`.
+/// - Giriş: `LoginHero(title: 'Site ve Toplu Yaşam Yönetim Sistemi', subtitle: 'Yönetici ve sakin girişi')`.
+///   (Platformun adı budur; AHBU yalnız kapı modülünün adıdır.)
 /// - Açılış/ara ekran: `LoginHero()` (yalnız logo).
-/// - Taşma: başlık ve alt başlık ortalanır, sabit yükseklik yoktur (büyük yazıda satır sarar).
+/// - Taşma: başlık ve alt başlık ortalanır, sabit yükseklik yoktur (uzun başlık ve büyük yazıda
+///   satır sarar; kısıtlı genişlikte kelime ortasından da bölünür).
 /// - Erişilebilirlik: başlık `Semantics(header)`; logo ve süsler dekoratiftir (anlamsal ağaçta yok).
 /// - Hareket: 320 ms solma + 12 dp yukarı kayma, yalnız ilk kurulumda. Hareket azaltma açıkken yok.
 /// - Aura: halkanın [auraReach] dp dışına taşan BOYAMA'dır (düzen boyutu halka kadar kalır); üst

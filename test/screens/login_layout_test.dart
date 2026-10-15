@@ -163,9 +163,9 @@ void main() {
             dark: dark,
           );
 
-          expect(find.text('AHBU Giriş'), findsOneWidget);
+          expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
           expect(
-            find.text('Akıllı Kapı & Site Otomasyon Paneli'),
+            find.text('Yönetici ve sakin girişi'),
             findsOneWidget,
           );
           expect(find.text('E-posta veya Kullanıcı Adı'), findsOneWidget);
@@ -495,7 +495,7 @@ void main() {
           final palette = dark ? AppPalette.dark : AppPalette.light;
           final surface = palette.surfaceAt(2);
           for (final text in <String>[
-            'Akıllı Kapı & Site Otomasyon Paneli',
+            'Yönetici ve sakin girişi',
             'Hesabınız yok mu? ',
             'Beni Hatırla (Kullanıcı adını kaydet)',
             AppConfig.versionDisplay,
@@ -515,7 +515,7 @@ void main() {
       t,
     ) async {
       await _pumpLogin(t, _FakeAuth(), width: 320, scale: 2.0, reduce: true);
-      expect(find.text('AHBU Giriş'), findsOneWidget);
+      expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
       expect(find.text('Giriş Yap'), findsOneWidget);
       expect(t.takeException(), isNull);
     });

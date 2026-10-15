@@ -45,7 +45,7 @@ class PdfCredentialsService {
     final companyName = job.companyName;
     final pdf = pw.Document(
       title: '${structure.site.name} - Kullanıcı Giriş Bilgileri',
-      author: companyName ?? 'AHBU Akıllı Kapı Sistemleri',
+      author: companyName ?? 'Site ve Toplu Yaşam Yönetim Sistemi',
     );
 
     final site = structure.site;
@@ -107,7 +107,7 @@ class PdfCredentialsService {
     final companyName = job.companyName;
     final pdf = pw.Document(
       title: 'Toplu Site Kullanıcı Giriş Bilgileri Raporu',
-      author: companyName ?? 'AHBU Akıllı Kapı Sistemleri',
+      author: companyName ?? 'Site ve Toplu Yaşam Yönetim Sistemi',
     );
 
     final fonts = job.fonts.resolve();
@@ -209,7 +209,7 @@ class PdfCredentialsService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'AHBU AKILLI KAPI SİSTEMİ',
+                'Site ve Toplu Yaşam Yönetim Sistemi',
                 style: pw.TextStyle(
                   font: fontBold,
                   fontSize: 16,

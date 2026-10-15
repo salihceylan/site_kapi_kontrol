@@ -7,15 +7,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
+import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/staff_role_card.dart';
 
 import 'dialog_layout_harness.dart' show settleFor;
@@ -55,7 +58,299 @@ ModulesFakeAuth _fullAuth() => ModulesFakeAuth(
   },
 );
 
+/// Site yöneticisi oturumu: modüller `can_toggle: false`, bekleyen talepler [pendingDoor] ile.
+ModulesFakeAuth _managerAuth({
+  bool door = false,
+  bool pendingDoor = false,
+  List<ModuleRequest>? requests,
+}) {
+  final auth = ModulesFakeAuth(
+    fixtureRole: UserRole.siteManager,
+    states: <int, SiteModulesState>{
+      11: mdState(
+        11,
+        'Gül Sitesi',
+        door: door,
+        superView: false,
+        requests: <String, String>{if (pendingDoor) 'door_control': 'pending'},
+      ),
+      12: mdState(12, 'Mavi Park', superView: false),
+    },
+  );
+  auth.siteRequests[11] =
+      requests ??
+      <ModuleRequest>[
+        if (pendingDoor)
+          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (AHBU)'),
+      ];
+  return auth;
+}
+
+/// Modül kartı başlığını içeren kartın düğmesi (kartlar arasında karışmasın).
+Finder _inDialog(Finder f) => find.descendant(of: find.byType(AppDialog), matching: f);
+
 void main() {
+  group('site yöneticisi görünümü: anahtar YOK, talep akışı (Faz 1.1)', () {
+    listMatrix('talepli görünüm: durum çipleri, düğmeler, Modül Taleplerim', (t, w, h, s, dark) async {
+      final auth = _managerAuth(
+        door: false,
+        pendingDoor: true,
+        requests: <ModuleRequest>[
+          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (AHBU)'),
+          mdRequest(
+            30,
+            status: 'rejected',
+            decidedBy: 'Çok Uzun Adlı Süper Yönetici Hesabı Sahibi',
+            decisionNote: 'Paket kapsamında değil; lütfen satış temsilcinizle görüşün.',
+          ),
+          mdRequest(29, status: 'approved', decidedBy: 'Süper Yönetici', note: null),
+        ],
+      );
+      await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
+
+      expect(find.byType(Switch), findsNothing, reason: 'site yöneticisinde anahtar yok');
+      expect(find.widgetWithText(StatusChip, 'Talep gönderildi'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(5));
+      expect(find.widgetWithText(StatusChip, 'Her sitede açık'), findsNWidgets(2));
+      expect(find.text('Talebi Geri Çek'), findsOneWidget);
+      expect(find.text('Modül Talep Et'), findsNothing);
+      expect(find.text('Modül Taleplerim'), findsOneWidget);
+      expect(find.byType(ModuleRequestCard), findsNWidgets(3));
+      expect(find.widgetWithText(StatusChip, 'Bekliyor'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Reddedildi'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Onaylandı'), findsOneWidget);
+      expect(find.textContaining('Gerekçe: Paket kapsamında değil'), findsOneWidget);
+    });
+
+    listMatrix('talepsiz görünüm: "Tanımlı değil" + Modül Talep Et; boş talep listesi', (t, w, h, s, dark) async {
+      await _pump(t, _managerAuth(door: false), width: w, height: h, scale: s, dark: dark);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.widgetWithText(StatusChip, 'Tanımlı değil'), findsOneWidget);
+      expect(find.text('Modül Talep Et'), findsOneWidget);
+      expect(find.text('Talebi Geri Çek'), findsNothing);
+      expect(find.text('Henüz modül talebiniz yok.'), findsOneWidget);
+    });
+
+    testWidgets('Geçiş Kontrol tanımlıysa çip "Tanımlı"; kapatma/talep düğmesi yok', (t) async {
+      await _pump(t, _managerAuth(door: true));
+      expect(find.widgetWithText(StatusChip, 'Tanımlı'), findsOneWidget);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.text('Modül Talep Et'), findsNothing);
+      expect(find.text('Talebi Geri Çek'), findsNothing);
+      expect(find.widgetWithText(StatusChip, 'Açık'), findsNothing,
+          reason: 'yönetici "Açık/Kapalı" değil "Tanımlı" görür');
+    });
+
+    testWidgets('eski sunucu (can_toggle yok, toggleable true) olsa da yönetici anahtar görmez; talepler istenmez süper kullanıcıda', (t) async {
+      // mdState superView:true -> can_toggle: true (yönetici oturumunda bile anahtar çıkmamalı).
+      final auth = ModulesFakeAuth(fixtureRole: UserRole.siteManager);
+      await _pump(t, auth);
+      expect(find.byType(Switch), findsNothing);
+
+      final superAuth = ModulesFakeAuth();
+      await _pump(t, superAuth);
+      expect(find.byType(Switch), findsOneWidget);
+      expect(superAuth.listRequestCalls, isEmpty, reason: 'süper kullanıcı için talep listesi çekilmez');
+      expect(find.text('Modül Taleplerim'), findsNothing);
+      expect(find.text('Modül Talep Et'), findsNothing);
+    });
+
+    testWidgets('süper kullanıcı: bekleyen talebi olan modülde "Bekleyen talep var" çipi; anahtar korunur', (t) async {
+      final auth = ModulesFakeAuth(
+        states: <int, SiteModulesState>{
+          11: mdState(11, 'Gül Sitesi', door: false, requests: <String, String>{'door_control': 'pending'}),
+        },
+      );
+      await _pump(t, auth);
+      expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Bekleyen talep var'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+    });
+
+    testWidgets('enabled, request_status\'tan ÖNCELİKLİDİR: açık modülde "Talep gönderildi" / düğme gösterilmez', (t) async {
+      final auth = ModulesFakeAuth(
+        fixtureRole: UserRole.siteManager,
+        states: <int, SiteModulesState>{
+          // Süper kullanıcı doğrudan açtı; bekleyen talep sunucuda henüz kapanmadı.
+          11: mdState(
+            11,
+            'Gül Sitesi',
+            door: true,
+            superView: false,
+            requests: <String, String>{'door_control': 'pending'},
+          ),
+        },
+      );
+      await _pump(t, auth);
+      expect(find.widgetWithText(StatusChip, 'Tanımlı'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Talep gönderildi'), findsNothing);
+      expect(find.text('Talebi Geri Çek'), findsNothing);
+      expect(find.text('Modül Talep Et'), findsNothing);
+    });
+
+    testWidgets('talep düğmesi yalnız toggleable modülde: yakında / çekirdek modüllerde hiç çıkmaz (tek düğme)', (t) async {
+      await _pump(t, _managerAuth(door: false));
+      expect(find.text('Modül Talep Et'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(5));
+    });
+
+    testWidgets('süper kullanıcı kapalı modülde KENDİNE talep açmaz: düğme yok, anahtar var', (t) async {
+      final auth = ModulesFakeAuth(
+        states: <int, SiteModulesState>{11: mdState(11, 'Gül Sitesi', door: false)},
+      );
+      await _pump(t, auth);
+      expect(find.text('Modül Talep Et'), findsNothing);
+      expect(find.text('Talebi Geri Çek'), findsNothing);
+      expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+    });
+
+    testWidgets('Modül Talep Et: not alanlı pencere -> talep gider (not kırpılır) -> çip ve liste güncellenir', (t) async {
+      final auth = _managerAuth(door: false);
+      await _pump(t, auth);
+      final readsBefore = auth.getModulesCalls.length;
+
+      await tapText(t, 'Modül Talep Et');
+      expect(find.byType(AppDialog), findsOneWidget);
+      expect(_inDialog(find.text('Modül Talep Et')), findsOneWidget);
+      expect(_inDialog(find.byType(TextField)), findsOneWidget);
+      expect(find.text('Not (isteğe bağlı)'), findsOneWidget);
+
+      await t.enterText(find.byType(TextField), '  Kapı sistemi için gerekli  ');
+      await tapText(t, 'Talep Gönder');
+      await settleFor(t);
+
+      expect(auth.createCalls, hasLength(1));
+      expect(auth.createCalls.single.site, 11);
+      expect(auth.createCalls.single.code, 'door_control');
+      expect(auth.createCalls.single.note, '  Kapı sistemi için gerekli  ',
+          reason: 'kırpma AuthApi katmanında yapılır; istemci notu olduğu gibi iletir');
+      expect(find.byType(AppDialog), findsNothing);
+      expect(find.text('Modül talebiniz gönderildi.'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Talep gönderildi'), findsOneWidget);
+      expect(find.text('Talebi Geri Çek'), findsOneWidget);
+      expect(find.byType(ModuleRequestCard), findsOneWidget);
+      expect(auth.getModulesCalls.length, greaterThan(readsBefore),
+          reason: 'işlem sonrası modül durumu otomatik yeniden çekilir');
+      expect(auth.listRequestCalls.length, greaterThan(1));
+    });
+
+    testWidgets('notsuz talep de gider; İptal talep göndermez', (t) async {
+      final auth = _managerAuth(door: false);
+      await _pump(t, auth);
+      await tapText(t, 'Modül Talep Et');
+      await tapText(t, 'İptal');
+      expect(find.byType(AppDialog), findsNothing);
+      expect(auth.createCalls, isEmpty);
+
+      await tapText(t, 'Modül Talep Et');
+      await tapText(t, 'Talep Gönder');
+      await settleFor(t);
+      expect(auth.createCalls.single.note, '');
+    });
+
+    testWidgets('sunucu reddi (MODULE_REQUEST_PENDING): pencerede Türkçe hata, açık kalır; kapatınca durum yeniden okunur', (t) async {
+      final auth = _managerAuth(door: false)
+        ..createError = ApiException(
+          'Bu modül için bekleyen bir talebiniz var.',
+          statusCode: 409,
+          code: 'MODULE_REQUEST_PENDING',
+        );
+      await _pump(t, auth);
+      final readsBefore = auth.getModulesCalls.length;
+
+      await tapText(t, 'Modül Talep Et');
+      await tapText(t, 'Talep Gönder');
+      await settleFor(t);
+      expect(find.byType(AppDialog), findsOneWidget);
+      expect(find.byType(InlineNotice), findsOneWidget);
+      expect(find.text('Bu modül için bekleyen bir talebiniz var.'), findsOneWidget);
+
+      await tapText(t, 'İptal');
+      await settleFor(t);
+      expect(find.byType(AppDialog), findsNothing);
+      expect(auth.getModulesCalls.length, greaterThan(readsBefore));
+    });
+
+    testWidgets('Talebi Geri Çek: onay -> istek -> çip "Tanımlı değil", talep "Geri çekildi"; Vazgeç istek yapmaz', (t) async {
+      final auth = _managerAuth(door: false, pendingDoor: true);
+      await _pump(t, auth);
+
+      await tapText(t, 'Talebi Geri Çek');
+      expect(find.text('Talep Geri Çekilsin mi?'), findsOneWidget);
+      await tapText(t, 'Vazgeç');
+      expect(auth.cancelCalls, isEmpty);
+
+      await tapText(t, 'Talebi Geri Çek');
+      await tapText(t, 'Geri Çek');
+      await settleFor(t);
+      expect(auth.cancelCalls.single, (site: 11, id: 31));
+      expect(find.text('Talep geri çekildi.'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Tanımlı değil'), findsOneWidget);
+      expect(find.text('Modül Talep Et'), findsOneWidget);
+      expect(find.widgetWithText(StatusChip, 'Geri çekildi'), findsOneWidget);
+    });
+
+    testWidgets('geri çekme hatası (REQUEST_NOT_PENDING): mesaj gösterilir, durum yeniden okunur', (t) async {
+      final auth = _managerAuth(door: false, pendingDoor: true)
+        ..cancelError = ApiException(
+          'Bu talep artık bekleyen durumda değil.',
+          statusCode: 409,
+          code: 'REQUEST_NOT_PENDING',
+        );
+      await _pump(t, auth);
+      final readsBefore = auth.getModulesCalls.length;
+      await tapText(t, 'Talebi Geri Çek');
+      await tapText(t, 'Geri Çek');
+      await settleFor(t);
+      expect(find.text('Bu talep artık bekleyen durumda değil.'), findsOneWidget);
+      expect(auth.getModulesCalls.length, greaterThan(readsBefore));
+    });
+
+    testWidgets('liste bayatsa (talep listede yok) geri çekilmez: "Talep bulunamadı." ve yeniden okuma', (t) async {
+      final auth = _managerAuth(door: false, pendingDoor: true, requests: <ModuleRequest>[]);
+      await _pump(t, auth);
+      await tapText(t, 'Talebi Geri Çek');
+      await tapText(t, 'Geri Çek');
+      await settleFor(t);
+      expect(auth.cancelCalls, isEmpty);
+      expect(find.text('Talep bulunamadı.'), findsOneWidget);
+    });
+
+    testWidgets('talep listesi hatası: InlineNotice + Tekrar Dene; modül kartları etkilenmez', (t) async {
+      final auth = _managerAuth(door: false)
+        ..requestsError = ApiException('Modül talepleri yüklenemedi (500).');
+      await _pump(t, auth);
+      expect(find.text('Modül talepleri yüklenemedi (500).'), findsOneWidget);
+      expect(find.text('Modül Talep Et'), findsOneWidget);
+      expect(find.text('Henüz modül talebiniz yok.'), findsNothing);
+
+      auth.requestsError = null;
+      await tapText(t, 'Tekrar Dene');
+      await settleFor(t);
+      expect(find.text('Modül talepleri yüklenemedi (500).'), findsNothing);
+      expect(find.text('Henüz modül talebiniz yok.'), findsOneWidget);
+    });
+
+    testWidgets('yalnız son 10 talep listelenir', (t) async {
+      final auth = _managerAuth(
+        door: false,
+        requests: <ModuleRequest>[
+          for (var i = 20; i > 0; i--) mdRequest(i, status: 'cancelled'),
+        ],
+      );
+      await _pump(t, auth);
+      expect(find.byType(ModuleRequestCard), findsNWidgets(10));
+    });
+
+    testWidgets('yönetici açıklama metni ve süper kullanıcı açıklama metni', (t) async {
+      await _pump(t, _managerAuth());
+      expect(find.textContaining('talep gönderebilirsiniz'), findsOneWidget);
+      await _pump(t, ModulesFakeAuth());
+      expect(find.textContaining('açıp kapatabilirsiniz'), findsOneWidget);
+    });
+  });
+
   group('taşma matrisi', () {
     listMatrix('dolu görünüm (8 modül + 2 ek rol)', (t, w, h, s, dark) async {
       await _pump(t, _fullAuth(), width: w, height: h, scale: s, dark: dark);

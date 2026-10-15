@@ -12,11 +12,17 @@ AppTone auditToneOf(String action) {
   switch (action) {
     case 'module.enabled':
     case 'staff_role.assigned':
+    case 'module_request.approved':
       return AppTone.success;
     case 'module.disabled':
       return AppTone.warning;
     case 'staff_role.removed':
+    case 'module_request.cancelled':
       return AppTone.neutral;
+    case 'module_request.created':
+      return AppTone.info;
+    case 'module_request.rejected':
+      return AppTone.danger;
     default:
       return AppTone.info;
   }

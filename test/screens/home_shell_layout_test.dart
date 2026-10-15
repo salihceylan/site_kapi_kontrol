@@ -274,7 +274,7 @@ void _expectAppBarFits(
   required bool widgetAction,
   required bool dual,
   bool resident = false,
-  String title = 'AHBU Panel',
+  String title = 'Panel',
   bool themeToggle = false,
   bool dark = false,
 }) {

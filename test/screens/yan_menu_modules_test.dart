@@ -17,6 +17,7 @@ Future<void> _pumpMenu(
   WidgetTester t,
   UserRole role, {
   Set<SirketMenuItem> hidden = const <SirketMenuItem>{},
+  Map<SirketMenuItem, int> badges = const <SirketMenuItem, int>{},
   bool resident = false,
   bool toggle = false,
   double width = 360,
@@ -37,6 +38,7 @@ Future<void> _pumpMenu(
         canToggleMode: toggle,
         onToggleMode: toggle ? () {} : null,
         hiddenItems: hidden,
+        badgeCounts: badges,
         onSelect: (_) {},
         onLogout: () {},
       ),
@@ -58,20 +60,22 @@ List<String> _titles(WidgetTester t) {
 
 void main() {
   group('yeni öğeler ve sayılar', () {
-    testWidgets('süper kullanıcı: 13 öğe + çıkış; Modüller siteler\'in, Denetim Kaydı en sonun yanında', (t) async {
+    testWidgets('süper kullanıcı: 14 öğe + çıkış; Modüller Site Yönetimi\'nin, Modül Talepleri Modüller\'in hemen altında; Denetim Kaydı en sonda', (t) async {
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final titles = _titles(t);
-      expect(titles, hasLength(14));
+      expect(titles, hasLength(15));
       expect(titles.indexOf('Modüller'), titles.indexOf('Site Yönetimi') + 1);
+      expect(titles.indexOf('Modül Talepleri'), titles.indexOf('Modüller') + 1);
       expect(titles[titles.length - 2], 'Denetim Kaydı');
       expect(titles.last, 'Çıkış Yap');
     });
 
-    testWidgets('site yöneticisi (yönetici modu): 7 öğe, Modüller var; Denetim Kaydı YOK', (t) async {
+    testWidgets('site yöneticisi (yönetici modu): 7 öğe, Modüller var; Denetim Kaydı ve Modül Talepleri YOK', (t) async {
       await _pumpMenu(t, UserRole.siteManager, toggle: true, height: 1200);
       final titles = _titles(t);
       expect(titles, contains('Modüller'));
       expect(titles, isNot(contains('Denetim Kaydı')));
+      expect(titles, isNot(contains('Modül Talepleri')));
       expect(titles, hasLength(1 + 7 + 1), reason: 'mod geçişi + 7 öğe + çıkış');
     });
 
@@ -86,9 +90,84 @@ void main() {
         final titles = _titles(t);
         expect(titles, isNot(contains('Modüller')), reason: '$role');
         expect(titles, isNot(contains('Denetim Kaydı')), reason: '$role');
+        expect(titles, isNot(contains('Modül Talepleri')), reason: '$role');
         expect(titles, hasLength(count + (toggle ? 1 : 0) + 1), reason: '$role');
       }
     });
+  });
+
+  group('sayı rozeti (Modül Talepleri: bekleyen talep sayısı)', () {
+    final badgeFinder = find.byKey(const ValueKey<String>('yan_menu_rozet'));
+
+    testWidgets('sayı > 0 ise yalnız o öğede rozet; 0 ya da yoksa rozet yok; 99 üstü "99+"', (t) async {
+      await _pumpMenu(
+        t,
+        UserRole.superUser,
+        height: 1400,
+        badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 3},
+      );
+      expect(badgeFinder, findsOneWidget);
+      final tile = find.widgetWithText(ListTile, 'Modül Talepleri');
+      expect(find.descendant(of: tile, matching: find.text('3')), findsOneWidget);
+      expect(find.descendant(of: tile, matching: badgeFinder), findsOneWidget);
+
+      await _pumpMenu(
+        t,
+        UserRole.superUser,
+        height: 1400,
+        badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 0},
+      );
+      expect(badgeFinder, findsNothing);
+
+      await _pumpMenu(t, UserRole.superUser, height: 1400);
+      expect(badgeFinder, findsNothing);
+
+      await _pumpMenu(
+        t,
+        UserRole.superUser,
+        height: 1400,
+        badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 150},
+      );
+      expect(find.text('99+'), findsOneWidget);
+    });
+
+    testWidgets('rozet beyaz metin / tehlike tonu zemini >= 4,5:1 ve ekran okuyucuya "N bekleyen" der', (t) async {
+      final handle = t.ensureSemantics();
+      await _pumpMenu(
+        t,
+        UserRole.superUser,
+        height: 1400,
+        badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 7},
+      );
+      final box = t.widget<DecoratedBox>(badgeFinder);
+      final fill = (box.decoration as BoxDecoration).color!;
+      expect(contrastRatio(Colors.white, fill), greaterThanOrEqualTo(4.5));
+      // ListTile anlamsal düğümüne birleşir: "Modül Talepleri ... 7 bekleyen".
+      expect(find.bySemanticsLabel(RegExp(r'Modül Talepleri[\s\S]*7 bekleyen')), findsOneWidget);
+      handle.dispose();
+    });
+
+    for (final (w, h, s) in const <(double, double, double)>[(320, 640, 2.0), (360, 640, 1.5)]) {
+      for (final dark in const <bool>[false, true]) {
+        testWidgets('rozetli çekmece taşmaz: ${w.toInt()}x${h.toInt()} x$s ${dark ? 'koyu' : 'açık'}', (t) async {
+          await _pumpMenu(
+            t,
+            UserRole.superUser,
+            width: w,
+            height: h,
+            scale: s,
+            dark: dark,
+            badges: const <SirketMenuItem, int>{SirketMenuItem.modulTalepleri: 128},
+          );
+          expect(badgeFinder, findsOneWidget);
+          await t.ensureVisible(find.text('Modül Talepleri'));
+          await t.pump();
+          expect(t.takeException(), isNull);
+          // Başlık kırpılmadan (en çok 3 satır) görünür.
+          expect(find.text('Modül Talepleri'), findsOneWidget);
+        });
+      }
+    }
   });
 
   group('hiddenItems', () {

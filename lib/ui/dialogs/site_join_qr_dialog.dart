@@ -147,7 +147,7 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
     final textToCopy =
         '${widget.site.name} Site Katılım Bilgisi:\n'
         'Katılım Kodu: ${_tokenRecord!.qrPayload}\n\n'
-        'Site sakinleri AHBU Site Kapı Kontrol uygulamasından "Siteye Katıl" seçeneğiyle '
+        'Site sakinleri Site ve Toplu Yaşam Yönetim Sistemi uygulamasından "Siteye Katıl" seçeneğiyle '
         'bu kodu tarayabilir veya doğrudan girebilir.';
 
     Clipboard.setData(ClipboardData(text: textToCopy));
@@ -164,10 +164,10 @@ class _SiteJoinQrDialogState extends State<SiteJoinQrDialog> {
         '🏢 ${widget.site.name} - Site Katılım Bilgisi\n\n'
         'Değerli Sakinimiz,\n'
         'Sitemize ve dairenize katılım başvurusu yapmak için aşağıdaki katılım kodunu kullanabilir '
-        'veya ekteki QR kodu AHBU Kapı Kontrol uygulamasından okutabilirsiniz.\n\n'
+        'veya ekteki QR kodu Site ve Toplu Yaşam Yönetim Sistemi uygulamasından okutabilirsiniz.\n\n'
         '🔑 Katılım Kodu: ${_tokenRecord!.qrPayload}\n\n'
         'Nasıl Katılabilirsiniz?\n'
-        '1. AHBU Kapı Kontrol uygulamasını açın.\n'
+        '1. Site ve Toplu Yaşam Yönetim Sistemi uygulamasını açın.\n'
         '2. "Siteye Katıl" seçeneğine dokunun.\n'
         '3. Bu QR kodu tarayın veya katılım kodunu girin.\n'
         '4. Blok ve dairenizi seçerek başvurunuzu gönderin.';

@@ -265,8 +265,8 @@ class _LoginPageState extends State<LoginPage> {
 
                       // Logo + başlık
                       const LoginHero(
-                        title: 'AHBU Giriş',
-                        subtitle: 'Akıllı Kapı & Site Otomasyon Paneli',
+                        title: 'Site ve Toplu Yaşam Yönetim Sistemi',
+                        subtitle: 'Yönetici ve sakin girişi',
                       ),
                       const SizedBox(height: AppSpace.xl),
 

@@ -121,6 +121,8 @@ import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
 
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
 
+import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
+
 import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
@@ -176,8 +178,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         fetch: () => widget.authService.getMyModules(),
         isSuperUser: () => widget.authService.session?.role == UserRole.superUser,
         isActive: _isModulePollingActive,
+        // Süper kullanıcı: çekmecedeki "Modül Talepleri" rozeti için bekleyen sayı aynı yoklamayla.
+        fetchPendingCount: () async => (await widget.authService
+                .listAdminModuleRequests(status: 'pending', limit: 1))
+            .pendingCount,
       );
   final GlobalKey<ModulesViewState> _modulesViewKey = GlobalKey<ModulesViewState>();
+  final GlobalKey<ModuleRequestsViewState> _moduleRequestsViewKey =
+      GlobalKey<ModuleRequestsViewState>();
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
   String _lastDoorModuleSignature = '';
   UserRole? _lastSeenRole;
@@ -686,7 +694,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.dashboard:
 
-        return 'AHBU Panel';
+        return 'Panel';
 
       case SirketMenuItem.profilim:
 
@@ -747,6 +755,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.denetimKaydi:
         return 'Denetim Kaydı';
+
+      case SirketMenuItem.modulTalepleri:
+        return 'Modül Talepleri';
 
     }
 
@@ -3850,6 +3861,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.denetimKaydi:
         await _auditLogViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.modulTalepleri:
+        await _moduleRequestsViewKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -4103,6 +4117,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         extraActions: _residentExtraActions(session),
 
         hiddenItems: _hiddenMenuItems(session.role),
+
+        badgeCounts: <SirketMenuItem, int>{
+          if (session.role == UserRole.superUser)
+            SirketMenuItem.modulTalepleri: _moduleAccess.pendingRequestCount ?? 0,
+        },
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,
@@ -4587,6 +4606,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return AuditLogView(
           key: _auditLogViewKey,
           authService: widget.authService,
+        );
+
+      case SirketMenuItem.modulTalepleri:
+        return ModuleRequestsView(
+          key: _moduleRequestsViewKey,
+          authService: widget.authService,
+          // Karardan sonra çekmece rozeti (bekleyen sayı) sunucudan hemen yeniden okunur.
+          onChanged: () => unawaited(_moduleAccess.refresh()),
         );
 
       case SirketMenuItem.katilimVeKurulum:

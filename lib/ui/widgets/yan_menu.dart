@@ -42,6 +42,10 @@ enum SirketMenuItem {
 
   /// Platform modül sistemi: denetim kaydı (yalnız süper kullanıcı).
   denetimKaydi,
+
+  /// Platform modül sistemi Faz 1.1: site yöneticilerinin modül talepleri (yalnız süper kullanıcı;
+  /// bekleyen sayısı rozetle gösterilir).
+  modulTalepleri,
 }
 
 class YanMenu extends StatelessWidget {
@@ -58,6 +62,7 @@ class YanMenu extends StatelessWidget {
     this.canToggleMode = false,
     this.extraActions = const <YanMenuAction>[],
     this.hiddenItems = const <SirketMenuItem>{},
+    this.badgeCounts = const <SirketMenuItem, int>{},
   });
 
   final String fullName;
@@ -77,6 +82,9 @@ class YanMenu extends StatelessWidget {
   /// Geçiş Kontrol modülü kapalıyken kapıyla ilgili öğeler burada verilir. `HomePage._canAccessMenu`
   /// aynı kümeyi uygular.
   final Set<SirketMenuItem> hiddenItems;
+
+  /// Öğe başına sayı rozeti (örn. bekleyen modül talebi sayısı). 0 ya da yok = rozet yok.
+  final Map<SirketMenuItem, int> badgeCounts;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
@@ -134,6 +142,7 @@ class YanMenu extends StatelessWidget {
               title: _titleForItem(items[i], role),
               selected: selectedItem == items[i],
               tone: tone,
+              badge: badgeCounts[items[i]] ?? 0,
               onTap: () => onSelect(items[i]),
             ),
           ),
@@ -352,6 +361,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
         SirketMenuItem.moduller,
+        SirketMenuItem.modulTalepleri,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
@@ -429,6 +439,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Modüller';
     case SirketMenuItem.denetimKaydi:
       return 'Denetim Kaydı';
+    case SirketMenuItem.modulTalepleri:
+      return 'Modül Talepleri';
   }
 }
 
@@ -466,6 +478,47 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.extension_rounded;
     case SirketMenuItem.denetimKaydi:
       return Icons.fact_check_rounded;
+    case SirketMenuItem.modulTalepleri:
+      return Icons.inbox_rounded;
+  }
+}
+
+/// Menü öğesinin sağındaki sayı rozeti (örn. bekleyen modül talebi): tehlike tonunun koyu ucu üstünde
+/// beyaz sayı (>= 4,5:1). 99'dan büyük sayılar "99+" yazılır. Ekran okuyucuya tek ifade olarak okunur.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count > 99 ? '99+' : '$count';
+    return Semantics(
+      label: '$count bekleyen',
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          key: const ValueKey<String>('yan_menu_rozet'),
+          decoration: BoxDecoration(
+            color: AppTone.danger.a,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.sm,
+              vertical: AppSpace.xs / 2,
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -502,6 +555,7 @@ class _MenuTile extends StatelessWidget {
     required this.selected,
     required this.tone,
     required this.onTap,
+    this.badge = 0,
   });
 
   final IconData icon;
@@ -509,6 +563,9 @@ class _MenuTile extends StatelessWidget {
   final bool selected;
   final AppTone tone;
   final VoidCallback onTap;
+
+  /// Sağda gösterilen sayı rozeti (0 = yok).
+  final int badge;
 
   /// Seçili çubuğun anahtarı (her öğede bir tane; yalnız seçilide yükseklik 22).
   static const Key selectedBarKey = ValueKey<String>('yan_menu_secili_cubuk');
@@ -559,6 +616,9 @@ class _MenuTile extends StatelessWidget {
                     color: selected ? p.text : p.textSecondary,
                   ),
                 ),
+                // Rozetli öğede (en çok bir tane) trailing kullanılır; rozetsiz öğeler başlığa tam
+                // genişlik verir (bkz. alttaki çubuk açıklaması).
+                trailing: badge > 0 ? _CountBadge(count: badge) : null,
               ),
               // Çubuk ListTile.trailing yerine üstte çizilir: trailing en az 32 dp yer ayırır ve
               // başlığın genişliğini her öğede daraltırdı (uzun başlıklar gereksiz sarardı).

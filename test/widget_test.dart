@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(const MyApp(networkCheckEnabled: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('AHBU Giriş'), findsOneWidget);
+    expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
     expect(find.text('Giriş Yap'), findsOneWidget);
     expect(find.text('Şifremi Unuttum?'), findsOneWidget);
 

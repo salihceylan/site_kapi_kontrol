@@ -487,6 +487,12 @@ void main() {
       'ALREADY_SITE_MANAGER',
       'ROLE_INVALID',
       'ROLE_NOT_FOUND',
+      // Faz 1.1: modül talebi.
+      'MODULE_ADMIN_ONLY',
+      'MODULE_ALREADY_ENABLED',
+      'MODULE_REQUEST_PENDING',
+      'REQUEST_NOT_FOUND',
+      'REQUEST_NOT_PENDING',
     ];
 
     test('tüm bilinen kodların anlaşılır, kısa Türkçe metni vardır', () {

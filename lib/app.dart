@@ -345,7 +345,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget _buildMaterialApp() {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Site Kapi Kontrol',
+      title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

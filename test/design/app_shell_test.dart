@@ -32,7 +32,7 @@ Future<void> _pumpApp(
 }
 
 double _scaled(WidgetTester t) =>
-    MediaQuery.textScalerOf(t.element(find.text('AHBU Giriş'))).scale(10);
+    MediaQuery.textScalerOf(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).scale(10);
 
 Finder _glow(Gradient gradient) => find.byWidgetPredicate(
   (w) =>
@@ -73,7 +73,7 @@ void main() {
       'giriş ekranı 2,0 ölçekte taşmadan kurulur (mevcut mantık korunur)',
       (t) async {
         await _pumpApp(t, textScale: 3.0);
-        expect(find.text('AHBU Giriş'), findsOneWidget);
+        expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
         expect(find.text('Giriş Yap'), findsOneWidget);
         expect(find.text('Şifremi Unuttum?'), findsOneWidget);
         expect(t.takeException(), isNull);
@@ -89,15 +89,15 @@ void main() {
         brightness: Brightness.light,
         savedTheme: 'dark',
       );
-      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
       expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
     });
 
     testWidgets('kayıtlı tercih yoksa sistem teması izlenir (varsayılan davranış)', (t) async {
       await _pumpApp(t, textScale: 1.0, brightness: Brightness.dark);
-      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
       await _pumpApp(t, textScale: 1.0, brightness: Brightness.light);
-      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.light);
+      expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.light);
     });
 
     testWidgets('giriş ekranındaki düğme temayı değiştirir, zemin güncellenir ve tercih saklanır', (t) async {
@@ -107,7 +107,7 @@ void main() {
       await t.tap(find.byTooltip('Koyu temaya geç'));
       await t.pumpAndSettle();
 
-      expect(Theme.of(t.element(find.text('AHBU Giriş'))).brightness, Brightness.dark);
+      expect(Theme.of(t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi'))).brightness, Brightness.dark);
       expect(_glow(AppGradients.pageGlowDark), findsOneWidget);
       expect(_glow(AppGradients.pageGlowLight), findsNothing);
       expect(find.byTooltip('Aydınlık temaya geç'), findsOneWidget);
@@ -144,7 +144,7 @@ void main() {
       expect(
         find.descendant(
           of: _glow(AppGradients.pageGlowLight),
-          matching: find.text('AHBU Giriş'),
+          matching: find.text('Site ve Toplu Yaşam Yönetim Sistemi'),
         ),
         findsOneWidget,
       );
@@ -192,7 +192,7 @@ void main() {
       t,
     ) async {
       await _pumpApp(t, textScale: 1.0);
-      final palette = t.element(find.text('AHBU Giriş')).palette;
+      final palette = t.element(find.text('Site ve Toplu Yaşam Yönetim Sistemi')).palette;
       expect(palette, same(AppPalette.light));
     });
   });
