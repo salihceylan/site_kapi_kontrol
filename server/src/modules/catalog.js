@@ -36,7 +36,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Kişi ve Daire Kayıtları',
     description: 'Blok, daire, sakin ve görevli kayıtlarının tutulması.',
     core: true,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: true,
   }),
   defineModule({

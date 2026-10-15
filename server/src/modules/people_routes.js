@@ -1,0 +1,259 @@
+// Kişi ve Daire Kayıtları (CRM) uçları (Faz 2a).
+//
+//   Kişiler    GET/POST   /manager/sites/:siteCode/people            GET/PATCH /people/:personId
+//   İlişkiler  POST       /manager/sites/:siteCode/people/:personId/residencies
+//              PATCH      /manager/sites/:siteCode/residencies/:residencyId
+//              POST       /manager/sites/:siteCode/residencies/:residencyId/end
+//   Daireler   GET        /manager/sites/:siteCode/apartments        GET/PATCH /apartments/:apartmentId
+//   Araçlar    GET/POST   /manager/sites/:siteCode/vehicles          DELETE    /vehicles/:vehicleId
+//   Geçmiş     GET        /manager/sites/:siteCode/history
+//   Sakin      GET        /app/my-records
+//
+// Yetki (people_access.js): yazma = yönetici/süper; okuma = yönetici/süper + BOARD_MEMBER; STAFF/sakin 403 FORBIDDEN_ROLE;
+// başka sitenin yöneticisi 403 FORBIDDEN_SITE. Sözleşme: docs/PLATFORM_KISILER.md. Hata gövdesi: { error, code }.
+
+import express from 'express';
+import { authRequired } from '../middlewares/auth_middleware.js';
+import { createRuleLimiter } from '../middlewares/rate_limiters.js';
+import { getApartmentDetail, listApartments, updateApartment } from './apartment_records_service.js';
+import { resolvePeopleAccess } from './people_access.js';
+import { listMyRecords, listPeopleHistory } from './people_history_service.js';
+import {
+  addResidency,
+  createPerson,
+  endResidency,
+  getPersonDetail,
+  listPeople,
+  parsePersonCreateInput,
+  updatePerson,
+  updateResidency,
+} from './people_service.js';
+import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
+import { createVehicle, listVehicles, removeVehicle } from './vehicle_service.js';
+
+export const peopleRouter = express.Router();
+
+// Yazma uçları: kullanıcı başına 120/saat (sözleşme). IP kuralı NAT arkasındaki birçok yöneticiyi toplu kilitlemesin diye geniştir.
+export const peopleWriteLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 120, key: userKey },
+    { windowMs: HOUR_MS, max: 1200, key: ipKey },
+  ],
+  message: 'Çok fazla kayıt işlemi. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+// Arama/liste uçları: kullanıcı başına 600/saat (sözleşme: "makul").
+export const peopleReadLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR_MS, max: 600, key: userKey },
+    { windowMs: HOUR_MS, max: 6000, key: ipKey },
+  ],
+  message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+const canSeeUserCode = (access) => access.kind === 'super' || access.kind === 'manager';
+
+/**
+ * Ortak sarmalayıcı: yetki + site doğrulaması -> iş -> JSON. `run({ req, access })` { status?, body } döndürür.
+ */
+function handler({ context, fallback, write = false }, run) {
+  return async (req, res) => {
+    try {
+      const access = await resolvePeopleAccess(req, res, { write });
+      if (!access) {
+        return undefined;
+      }
+      const { status = 200, body } = await run({ req, access });
+      return res.status(status).json(body);
+    } catch (error) {
+      return respondError(res, context, error, fallback);
+    }
+  };
+}
+
+const bodyOf = (req) => (req.body && typeof req.body === 'object' ? req.body : {});
+
+// --- Kişiler ----------------------------------------------------------------------------------------------
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/people',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'people_list', fallback: 'Kişiler yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listPeople(access.siteCode, req.query),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_create', fallback: 'Kişi kaydedilemedi.', write: true }, async ({ req, access }) => ({
+    status: 201,
+    body: await createPerson({
+      siteCode: access.siteCode,
+      input: parsePersonCreateInput(bodyOf(req)),
+      actor: req.authUser,
+      includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/people/:personId',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'people_get', fallback: 'Kişi yüklenemedi.' }, async ({ req, access }) => ({
+    body: await getPersonDetail(access.siteCode, req.params.personId, { includeUserCode: canSeeUserCode(access) }),
+  })),
+);
+
+peopleRouter.patch(
+  '/manager/sites/:siteCode/people/:personId',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'people_update', fallback: 'Kişi güncellenemedi.', write: true }, async ({ req, access }) => ({
+    body: await updatePerson({
+      siteCode: access.siteCode,
+      personId: req.params.personId,
+      body: bodyOf(req),
+      actor: req.authUser,
+      includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+// --- İlişkiler --------------------------------------------------------------------------------------------
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/people/:personId/residencies',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'residency_add', fallback: 'İlişki eklenemedi.', write: true }, async ({ req, access }) => ({
+    status: 201,
+    body: await addResidency({
+      siteCode: access.siteCode,
+      personId: req.params.personId,
+      body: bodyOf(req),
+      actor: req.authUser,
+      includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+peopleRouter.patch(
+  '/manager/sites/:siteCode/residencies/:residencyId',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'residency_update', fallback: 'İlişki güncellenemedi.', write: true }, async ({ req, access }) => ({
+    body: await updateResidency({
+      siteCode: access.siteCode,
+      residencyId: req.params.residencyId,
+      body: bodyOf(req),
+      actor: req.authUser,
+      includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/residencies/:residencyId/end',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'residency_end', fallback: 'Taşınma kaydedilemedi.', write: true }, async ({ req, access }) => ({
+    body: await endResidency({
+      siteCode: access.siteCode,
+      residencyId: req.params.residencyId,
+      body: bodyOf(req),
+      actor: req.authUser,
+      includeUserCode: canSeeUserCode(access),
+    }),
+  })),
+);
+
+// --- Daireler ---------------------------------------------------------------------------------------------
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/apartments',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'apartments_list', fallback: 'Daireler yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listApartments(access.siteCode, req.query),
+  })),
+);
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/apartments/:apartmentId',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'apartment_get', fallback: 'Daire yüklenemedi.' }, async ({ req, access }) => ({
+    body: await getApartmentDetail(access.siteCode, req.params.apartmentId),
+  })),
+);
+
+peopleRouter.patch(
+  '/manager/sites/:siteCode/apartments/:apartmentId',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'apartment_update', fallback: 'Daire güncellenemedi.', write: true }, async ({ req, access }) => ({
+    body: await updateApartment({
+      siteCode: access.siteCode,
+      apartmentId: req.params.apartmentId,
+      body: bodyOf(req),
+      actor: req.authUser,
+    }),
+  })),
+);
+
+// --- Araçlar ----------------------------------------------------------------------------------------------
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/vehicles',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'vehicles_list', fallback: 'Araçlar yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listVehicles(access.siteCode, req.query),
+  })),
+);
+
+peopleRouter.post(
+  '/manager/sites/:siteCode/vehicles',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'vehicle_add', fallback: 'Araç eklenemedi.', write: true }, async ({ req, access }) => ({
+    status: 201,
+    body: { vehicle: await createVehicle({ siteCode: access.siteCode, body: bodyOf(req), actor: req.authUser }) },
+  })),
+);
+
+peopleRouter.delete(
+  '/manager/sites/:siteCode/vehicles/:vehicleId',
+  authRequired,
+  peopleWriteLimiter,
+  handler({ context: 'vehicle_remove', fallback: 'Araç kaldırılamadı.', write: true }, async ({ req, access }) => ({
+    body: await removeVehicle({ siteCode: access.siteCode, vehicleId: req.params.vehicleId, actor: req.authUser }),
+  })),
+);
+
+// --- Geçmiş -----------------------------------------------------------------------------------------------
+
+peopleRouter.get(
+  '/manager/sites/:siteCode/history',
+  authRequired,
+  peopleReadLimiter,
+  handler({ context: 'people_history', fallback: 'Geçmiş yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listPeopleHistory(access.siteCode, req.query),
+  })),
+);
+
+// --- Sakin: kendi kayıtları -------------------------------------------------------------------------------
+
+peopleRouter.get('/app/my-records', authRequired, async (req, res) => {
+  try {
+    return res.status(200).json(await listMyRecords(req.authUser));
+  } catch (error) {
+    return respondError(res, 'my_records', error, 'Kayıtlarınız yüklenemedi.');
+  }
+});

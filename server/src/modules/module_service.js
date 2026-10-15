@@ -154,9 +154,8 @@ export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, conf
   let changed = false;
   try {
     await client.query('BEGIN');
-    // Eşzamanlı aynı site+modül değişiklikleri sıraya girer (satır henüz yokken de çalışır).
-    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`site_module:${code}:${moduleCode}`]);
-
+    // KİLİT SIRASI (talep akışıyla ortak, deadlock olmasın): 1) site satırı (FOR SHARE; site silme ile sıraya girer),
+    // 2) site+modül advisory kilidi (eşzamanlı değişiklik/talep/onay; satır henüz yokken de çalışır), 3) talep satırı.
     const siteResult = await client.query(
       `SELECT site_code FROM sites WHERE site_code = $1 FOR SHARE`,
       [code],
@@ -164,6 +163,7 @@ export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, conf
     if (!siteResult.rows?.[0]) {
       throw new PlatformError(404, 'SITE_NOT_FOUND', 'Site bulunamadı.');
     }
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [moduleLockKey(code, moduleCode)]);
 
     const currentResult = await client.query(
       `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = $2 LIMIT 1`,
@@ -194,6 +194,9 @@ export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, conf
         },
         { inTransaction: true },
       );
+      if (enabled) {
+        await approvePendingRequestsOnDirectEnable(client, { siteCode: code, moduleCode, actorInfo });
+      }
     }
 
     await client.query('COMMIT');
@@ -216,6 +219,43 @@ export async function setSiteModuleEnabled({ siteCode, moduleCode, enabled, conf
   }
   return { changed };
 }
+
+/** Site+modül advisory kilit anahtarı: modül aç/kapa, talep oluşturma ve onay AYNI anahtarı kullanır. */
+export function moduleLockKey(siteCode, moduleCode) {
+  return `site_module:${siteCode}:${moduleCode}`;
+}
+
+/**
+ * Süper kullanıcı modülü DOĞRUDAN açtığında o (site, modül) için BEKLEYEN talep aynı transaction'da onaylanır
+ * (sahipsiz "bekleyen talep" rozeti kalmaz). Talep yoksa hiçbir şey yazılmaz.
+ */
+async function approvePendingRequestsOnDirectEnable(client, { siteCode, moduleCode, actorInfo }) {
+  const approved = await client.query(
+    `
+      UPDATE module_requests
+      SET status = 'approved', decided_by = $3, decided_by_name = $4, decision_note = $5, decided_at = NOW()
+      WHERE site_code = $1 AND module_code = $2 AND status = 'pending'
+      RETURNING id
+    `,
+    [siteCode, moduleCode, actorInfo.userCode, actorInfo.name, DIRECT_ENABLE_DECISION_NOTE],
+  );
+  for (const row of approved.rows ?? []) {
+    await recordAudit(
+      client,
+      {
+        actor: actorInfo,
+        action: 'module_request.approved',
+        siteCode,
+        targetType: 'module_request',
+        targetId: String(row.id),
+        details: { module_code: moduleCode, via: 'toggle' },
+      },
+      { inTransaction: true },
+    );
+  }
+}
+
+export const DIRECT_ENABLE_DECISION_NOTE = 'Modül doğrudan açıldı.';
 
 /**
  * Geçiş Kontrol kapandıktan sonra sitedeki cihazların yerel kontrol anahtarını döndürür. ASLA fırlatmaz:

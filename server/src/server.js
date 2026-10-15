@@ -21,6 +21,7 @@ import { doorLogRouter } from './routes/door_log_routes.js';
 import { membershipRouter } from './routes/membership_routes.js';
 import { moduleRouter } from './modules/module_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
+import { peopleRouter } from './modules/people_routes.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
 import { validateEnv } from './config/env.js';
@@ -76,6 +77,7 @@ app.use(doorLogRouter);
 app.use(membershipRouter);
 app.use(moduleRouter);
 app.use(moduleRequestRouter);
+app.use(peopleRouter);
 
 // Serve Flutter Web SPA if build/web exists
 if (fs.existsSync(webBuildPath)) {

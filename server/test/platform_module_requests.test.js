@@ -8,6 +8,7 @@ import { pool } from '../src/db.js';
 import { authRequired, requireSiteManager, requireSuperUser } from '../src/middlewares/auth_middleware.js';
 import { MODULE_REQUEST_EMAIL_SUBJECT } from '../src/mailer.js';
 import { moduleRequestHooks, notifySuperUsersOfRequest, normalizeRequestNote } from '../src/modules/module_request_service.js';
+import { moduleLockKey } from '../src/modules/module_service.js';
 import { moduleRequestLimiter, moduleRequestRouter } from '../src/modules/module_request_routes.js';
 
 const SITE_1 = 1000000001;
@@ -52,6 +53,7 @@ function makeState() {
     auditSeq: 0,
     forceUniqueViolation: false,
     failUpdate: false,
+    locks: [],
     log: [],
   };
 }
@@ -113,7 +115,10 @@ function handle(sql, params, tx) {
     return ok();
   }
   if (/^(SAVEPOINT|ROLLBACK TO SAVEPOINT|RELEASE SAVEPOINT) /.test(sql)) return ok();
-  if (/^SELECT pg_advisory_xact_lock/.test(sql)) return ok();
+  if (/^SELECT pg_advisory_xact_lock/.test(sql)) {
+    state.locks.push(params[0]);
+    return ok();
+  }
 
   // --- yetki ---
   if (/^SELECT 1 FROM site_manager_sites WHERE manager_user_code = \$1 LIMIT 1$/.test(sql)) {
@@ -200,6 +205,10 @@ function handle(sql, params, tx) {
   if (/^SELECT id, site_code, module_code, status FROM module_requests WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/.test(sql)) {
     const row = state.requests.find((r) => r.id === Number(params[0]) && r.site_code === Number(params[1]));
     return ok(row ? [{ id: String(row.id), site_code: String(row.site_code), module_code: row.module_code, status: row.status }] : []);
+  }
+  if (/^SELECT site_code, module_code FROM module_requests WHERE id = \$1$/.test(sql)) {
+    const row = state.requests.find((r) => r.id === Number(params[0]));
+    return ok(row ? [{ site_code: String(row.site_code), module_code: row.module_code }] : []);
   }
   if (/^SELECT id, site_code, module_code, status FROM module_requests WHERE id = \$1 FOR UPDATE$/.test(sql)) {
     const row = state.requests.find((r) => r.id === Number(params[0]));
@@ -633,6 +642,59 @@ describe('POST module-requests', () => {
     assert.equal(typeof res.body.errorId, 'string');
     assert.equal(JSON.stringify(res.body).includes('SECRET_DB_DETAIL'), false);
     assert.equal(state.requests.length, 0);
+  });
+});
+
+describe('advisory kilit anahtari ve kilit sirasi (site -> advisory -> talep satiri)', () => {
+  const indexOfSql = (matcher) => state.log.findIndex((q) => matcher.test(q.sql));
+
+  it('talep olusturma modul ac/kapa ile AYNI anahtari kullanir: site_module:<site>:<modul>', async () => {
+    await post({ module_code: 'door_control' });
+    assert.deepEqual(state.locks, [`site_module:${SITE_1}:door_control`]);
+    assert.equal(state.locks[0], moduleLockKey(SITE_1, 'door_control'));
+    assert.equal(moduleLockKey(SITE_1, 'door_control'), 'site_module:1000000001:door_control');
+  });
+
+  it('onay (approve) ve ret (reject) de AYNI anahtari alir', async () => {
+    const first = seedRequest();
+    await call('PUT', `/admin/module-requests/${first.id}`, { user: users.superUser, body: { decision: 'approve' } });
+    assert.deepEqual(state.locks, [moduleLockKey(SITE_1, 'door_control')]);
+    state.locks.length = 0;
+    state.siteModules.set(`${SITE_1}:door_control`, { enabled: false });
+    const second = seedRequest();
+    await call('PUT', `/admin/module-requests/${second.id}`, { user: users.superUser, body: { decision: 'reject' } });
+    assert.deepEqual(state.locks, [moduleLockKey(SITE_1, 'door_control')]);
+  });
+
+  it('create: sites FOR SHARE ONCE, sonra advisory kilit (deadlock onleme sirasi)', async () => {
+    await post({ module_code: 'door_control' });
+    const siteLock = indexOfSql(/^SELECT site_code FROM sites WHERE site_code = \$1 FOR SHARE$/);
+    const advisory = indexOfSql(/^SELECT pg_advisory_xact_lock/);
+    assert.ok(siteLock >= 0 && advisory > siteLock, JSON.stringify(state.log.map((q) => q.sql.slice(0, 40))));
+  });
+
+  it('onay: talep satiri kilitsiz okunur -> sites FOR SHARE -> advisory -> talep FOR UPDATE (site silme ile ters sira yok)', async () => {
+    const created = seedRequest();
+    await call('PUT', `/admin/module-requests/${created.id}`, { user: users.superUser, body: { decision: 'approve' } });
+    const peek = indexOfSql(/^SELECT site_code, module_code FROM module_requests WHERE id = \$1$/);
+    const siteLock = indexOfSql(/^SELECT site_code FROM sites WHERE site_code = \$1 FOR SHARE$/);
+    const advisory = indexOfSql(/^SELECT pg_advisory_xact_lock/);
+    const rowLock = indexOfSql(/FROM module_requests WHERE id = \$1 FOR UPDATE$/);
+    const upsert = indexOfSql(/^INSERT INTO site_modules/);
+    assert.ok(peek >= 0 && peek < siteLock && siteLock < advisory && advisory < rowLock && rowLock < upsert, JSON.stringify([peek, siteLock, advisory, rowLock, upsert]));
+    // peek kilitsizdir
+    assert.equal(/FOR (UPDATE|SHARE)/.test(state.log[peek].sql), false);
+  });
+
+  it('onay sirasinda site artik yoksa (silindi) 404 REQUEST_NOT_FOUND; talep satiri kilitlenmez', async () => {
+    const created = seedRequest();
+    state.sites.delete(SITE_1);
+    const res = await call('PUT', `/admin/module-requests/${created.id}`, { user: users.superUser, body: { decision: 'approve' } });
+    assert.equal(res.status, 404);
+    assert.equal(res.body.code, 'REQUEST_NOT_FOUND');
+    assert.equal(indexOfSql(/FROM module_requests WHERE id = \$1 FOR UPDATE$/), -1);
+    assert.equal(state.locks.length, 0);
+    assert.ok(state.log.some((q) => q.sql === 'ROLLBACK'));
   });
 });
 

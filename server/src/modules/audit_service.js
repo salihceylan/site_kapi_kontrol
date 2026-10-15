@@ -121,7 +121,7 @@ function toIso(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function mapAuditRow(row) {
+export function mapAuditRow(row) {
   let details = row.details;
   if (typeof details === 'string') {
     try {

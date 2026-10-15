@@ -12,6 +12,7 @@ import { sendModuleRequestNotificationEmail } from '../mailer.js';
 import { actorFromAuthUser, clampAuditLimit, recordAudit } from './audit_service.js';
 import { computeModuleEnabled, getModuleDefinition, MODULE_STATUS_COMING_SOON } from './catalog.js';
 import { PlatformError } from './errors.js';
+import { moduleLockKey } from './module_service.js';
 
 export const MODULE_REQUEST_NOTE_MAX = 500;
 export const MODULE_REQUEST_STATUSES = Object.freeze(['pending', 'approved', 'rejected', 'cancelled']);
@@ -207,13 +208,13 @@ export async function createModuleRequest({ siteCode, moduleCode, note, actor })
   let requestId;
   try {
     await client.query('BEGIN');
-    // Modül aç/kapa ve onay ile AYNI anahtar: eşzamanlı talep/onay/toggle sıraya girer.
-    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`site_module:${site}:${code}`]);
-
+    // KİLİT SIRASI (modül aç/kapa ve onayla ortak): 1) site satırı FOR SHARE, 2) site+modül advisory kilidi (aç/kapa
+    // ile AYNI anahtar: eşzamanlı talep/onay/toggle sıraya girer), 3) talep satırı.
     const siteResult = await client.query(`SELECT site_code FROM sites WHERE site_code = $1 FOR SHARE`, [site]);
     if (!siteResult.rows?.[0]) {
       throw new PlatformError(404, 'SITE_NOT_FOUND', 'Site bulunamadı.');
     }
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [moduleLockKey(site, code)]);
 
     const currentResult = await client.query(
       `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = $2 LIMIT 1`,
@@ -425,6 +426,23 @@ export async function decideModuleRequest({ requestId, decision, note, actor }) 
   let committed = false;
   try {
     await client.query('BEGIN');
+    // KİLİT SIRASI (create ve modül aç/kapa ile aynı): site -> advisory -> talep satırı. Talep satırını kilitlemeden ÖNCE
+    // site_code kilitsiz okunur; site silme (sites satırı -> CASCADE ile talep satırı) ile ters sıra deadlock'u olmaz.
+    const peek = await client.query(
+      `SELECT site_code, module_code FROM module_requests WHERE id = $1`,
+      [id],
+    );
+    const peeked = peek.rows?.[0];
+    if (!peeked) {
+      throw new PlatformError(404, 'REQUEST_NOT_FOUND', 'Talep bulunamadı.');
+    }
+    const siteCode = Number(peeked.site_code);
+    const moduleCode = peeked.module_code;
+    const siteLock = await client.query(`SELECT site_code FROM sites WHERE site_code = $1 FOR SHARE`, [siteCode]);
+    if (!siteLock.rows?.[0]) {
+      throw new PlatformError(404, 'REQUEST_NOT_FOUND', 'Talep bulunamadı.');
+    }
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [moduleLockKey(siteCode, moduleCode)]);
     const found = await client.query(
       `SELECT id, site_code, module_code, status FROM module_requests WHERE id = $1 FOR UPDATE`,
       [id],
@@ -436,8 +454,6 @@ export async function decideModuleRequest({ requestId, decision, note, actor }) 
     if (row.status !== 'pending') {
       throw new PlatformError(409, 'REQUEST_NOT_PENDING', 'Bu talep artık bekleyen durumda değil.');
     }
-    const siteCode = Number(row.site_code);
-    const moduleCode = row.module_code;
 
     if (decision === 'approve') {
       const definition = getModuleDefinition(moduleCode);
@@ -447,8 +463,6 @@ export async function decideModuleRequest({ requestId, decision, note, actor }) 
       if (definition.status === MODULE_STATUS_COMING_SOON) {
         throw new PlatformError(409, 'MODULE_COMING_SOON', 'Bu modül yakında.');
       }
-      // Modül aç/kapa ve talep oluşturma ile aynı anahtar
-      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`site_module:${siteCode}:${moduleCode}`]);
       const currentResult = await client.query(
         `SELECT enabled FROM site_modules WHERE site_code = $1 AND module_code = $2 LIMIT 1`,
         [siteCode, moduleCode],

@@ -20,7 +20,7 @@ export const SITE_NOT_FOUND_BODY = Object.freeze({ error: 'Site bulunamadı.', c
  */
 export function respondError(res, context, error, fallbackMessage) {
   if (isPlatformError(error)) {
-    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    return res.status(error.statusCode).json({ error: error.message, code: error.code, ...(error.extra ?? {}) });
   }
   const errorId = newErrorId();
   console.error(`[modules] ${context} (errorId=${errorId})`, error?.stack || error?.message || error);

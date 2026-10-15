@@ -39,7 +39,7 @@ describe('platform katalog: sozlesme tablosu', () => {
     const table = Object.fromEntries(MODULE_CATALOG.map((m) => [m.code, [m.core, m.status]]));
     assert.deepEqual(table, {
       door_control: [false, 'available'],
-      people: [true, 'coming_soon'],
+      people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'coming_soon'],
       finance: [false, 'coming_soon'],
       reservation: [false, 'coming_soon'],
@@ -107,10 +107,22 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment', 'people', 'announcements']) {
+    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment', 'announcements']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
+  });
+
+  it('people (Faz 2a): core + available -> HEP acik (satir olmasa da, satir false dese de) ve kapatilamaz', () => {
+    assert.equal(def('people').core, true);
+    assert.equal(def('people').status, 'available');
+    assert.equal(computeModuleEnabled(def('people'), undefined), true);
+    assert.equal(computeModuleEnabled(def('people'), { enabled: false }), true);
+    assert.equal(isToggleable(def('people')), false);
+    assert.equal(computeEnabledMap([]).people, true);
+    assert.equal(computeEnabledMap([{ module_code: 'people', enabled: false }]).people, true);
+    // duyuru hâlâ yakında (Faz 3)
+    assert.equal(computeEnabledMap([]).announcements, false);
   });
 
   it('core + available ise her zaman true (sozlesme kurali sirasi: once status, sonra core)', () => {
@@ -161,7 +173,8 @@ describe('platform katalog: enabled hesabi', () => {
       updated_by: 'Ali Veli',
     });
     const people = list.find((m) => m.code === 'people');
-    assert.equal(people.enabled, false);
+    assert.equal(people.enabled, true, 'people çekirdek + available: her sitede açık');
+    assert.equal(people.status, 'available');
     assert.equal(people.toggleable, false);
     assert.equal(people.updated_at, null);
     assert.equal(people.updated_by, null);

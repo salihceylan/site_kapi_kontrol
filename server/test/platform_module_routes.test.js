@@ -81,6 +81,7 @@ function makeState() {
     failModuleUpsert: false,
     // site -> cihaz idleri (yerel kontrol anahtari donmesi icin); rotations: UPDATE devices kayitlari
     moduleRequests: [],
+    locks: [],
     siteDeviceIds: new Map([[SITE_1, [501, 502]]]),
     rotations: [],
     failDeviceQuery: false,
@@ -118,7 +119,10 @@ function handle(sql, params, tx) {
     return ok();
   }
   if (/^(SAVEPOINT|ROLLBACK TO SAVEPOINT|RELEASE SAVEPOINT) /.test(sql)) return ok();
-  if (/^SELECT pg_advisory_xact_lock/.test(sql)) return ok();
+  if (/^SELECT pg_advisory_xact_lock/.test(sql)) {
+    state.locks.push(params[0]);
+    return ok();
+  }
 
   // --- yetki sorgulari (requireSiteManager / hasSiteManagementAccess) ---
   if (/^SELECT 1 FROM site_manager_sites WHERE manager_user_code = \$1 LIMIT 1$/.test(sql)) {
@@ -183,6 +187,18 @@ function handle(sql, params, tx) {
         .filter((r) => r.site_code === Number(params[0]) && r.status === 'pending')
         .map((r) => ({ module_code: r.module_code })),
     );
+  }
+  if (/^UPDATE module_requests SET status = 'approved', decided_by = \$3, decided_by_name = \$4, decision_note = \$5, decided_at = NOW\(\) WHERE site_code = \$1 AND module_code = \$2 AND status = 'pending' RETURNING id$/.test(sql)) {
+    const [siteCode, moduleCode, decidedBy, decidedByName, decisionNote] = params;
+    const hits = state.moduleRequests.filter(
+      (r) => r.site_code === Number(siteCode) && r.module_code === moduleCode && r.status === 'pending',
+    );
+    write(() => {
+      for (const r of hits) {
+        Object.assign(r, { status: 'approved', decided_by: decidedBy, decided_by_name: decidedByName, decision_note: decisionNote });
+      }
+    });
+    return ok(hits.map((r) => ({ id: String(r.id) })));
   }
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
     const row = state.siteModules.get(`${params[0]}:${params[1]}`);
@@ -807,6 +823,78 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } }); // zaten acik: degisiklik yok
     await call('PUT', moduleUrl(SITE_1), { user: users.superUser, body: { enabled: true } }); // kapali -> acik (upsert patlar)
     assert.equal(released.length, 4);
+  });
+});
+
+describe('PUT modul: super kullanici modulu DOGRUDAN acarsa bekleyen talep onaylanir', () => {
+  const open = (body = { enabled: true }, site = SITE_1, code = 'door_control') =>
+    call('PUT', moduleUrl(site, code), { user: users.superUser, body });
+
+  beforeEach(() => {
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: false });
+  });
+
+  it('bekleyen talep ayni transaction\'da approved olur; karar veren super, gerekce "Modül doğrudan açıldı."; GET gorunumu temiz', async () => {
+    state.moduleRequests = [{ id: 7, site_code: SITE_1, module_code: 'door_control', status: 'pending' }];
+    const res = await open();
+    assert.equal(res.status, 200);
+    const door = doorOf(res.body);
+    assert.equal(door.enabled, true);
+    assert.equal(door.request_status, null, 'enabled:true + request_status:pending (sahipsiz rozet) OLMAZ');
+    assert.deepEqual(
+      { status: state.moduleRequests[0].status, by: state.moduleRequests[0].decided_by, name: state.moduleRequests[0].decided_by_name, note: state.moduleRequests[0].decision_note },
+      { status: 'approved', by: 1, name: 'Süper Kullanıcı', note: 'Modül doğrudan açıldı.' },
+    );
+    assert.deepEqual(
+      state.audit.map((a) => [a.action, a.target_type, a.target_id, a.details, a.site_code]),
+      [
+        ['module.enabled', 'module', 'door_control', { enabled: true }, SITE_1],
+        ['module_request.approved', 'module_request', '7', { module_code: 'door_control', via: 'toggle' }, SITE_1],
+      ],
+    );
+    // hepsi BEGIN..COMMIT arasinda
+    const sqls = state.log.map((q) => q.sql);
+    const begin = sqls.indexOf('BEGIN');
+    const commit = sqls.indexOf('COMMIT');
+    const update = sqls.findIndex((s) => s.startsWith('UPDATE module_requests'));
+    assert.ok(begin >= 0 && begin < update && update < commit);
+  });
+
+  it('talep yoksa hicbir sey olmaz (module_requests UPDATE sonucu bos, ek audit yok)', async () => {
+    const res = await open();
+    assert.equal(res.status, 200);
+    assert.deepEqual(state.audit.map((a) => a.action), ['module.enabled']);
+  });
+
+  it('baska modul / baska site / sonuclanmis talepler dokunulmaz', async () => {
+    state.moduleRequests = [
+      { id: 1, site_code: SITE_1, module_code: 'finance', status: 'pending' },
+      { id: 2, site_code: SITE_2, module_code: 'door_control', status: 'pending' },
+      { id: 3, site_code: SITE_1, module_code: 'door_control', status: 'rejected' },
+    ];
+    await open();
+    assert.deepEqual(state.moduleRequests.map((r) => r.status), ['pending', 'pending', 'rejected']);
+    assert.deepEqual(state.audit.map((a) => a.action), ['module.enabled']);
+  });
+
+  it('KAPATMA talepleri etkilemez; degisiklik olmayan acma da etkilemez', async () => {
+    state.moduleRequests = [{ id: 5, site_code: SITE_1, module_code: 'door_control', status: 'pending' }];
+    state.siteModules.set(`${SITE_1}:door_control`, { site_code: SITE_1, module_code: 'door_control', enabled: true });
+    await open({ enabled: true }); // zaten acik: degisiklik yok
+    assert.equal(state.moduleRequests[0].status, 'pending');
+    assert.equal(state.audit.length, 0);
+    await open({ enabled: false, confirm: true }); // kapatma
+    assert.equal(state.moduleRequests[0].status, 'pending');
+    assert.deepEqual(state.audit.map((a) => a.action), ['module.disabled']);
+  });
+
+  it('aç/kapa AYNI advisory anahtarini kullanir ve sites FOR SHARE ondan ONCE alinir', async () => {
+    await open();
+    assert.deepEqual(state.locks, [`site_module:${SITE_1}:door_control`]);
+    const sqls = state.log.map((q) => q.sql);
+    const siteLock = sqls.findIndex((s) => /^SELECT site_code FROM sites WHERE site_code = \$1 FOR SHARE$/.test(s));
+    const advisory = sqls.findIndex((s) => s.startsWith('SELECT pg_advisory_xact_lock'));
+    assert.ok(siteLock >= 0 && advisory > siteLock);
   });
 });
 
