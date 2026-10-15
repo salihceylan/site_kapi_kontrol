@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/turkey_cities_districts.dart';
+import '../../models/management_type.dart';
 import '../../services/api_exception.dart';
 import '../../services/auth_service.dart';
 import '../design/app_card.dart';
@@ -8,6 +9,7 @@ import '../design/buttons.dart';
 import '../design/icon_orb.dart';
 import '../design/motion_widgets.dart';
 import '../design/tokens.dart';
+import '../widgets/management_type_selector.dart';
 import 'large_dialog_parts.dart';
 
 class _BlockDraft {
@@ -74,6 +76,9 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
 
   String? _selectedCity;
   String? _selectedDistrict;
+
+  // Yönetim türü (Faz 1: yalnız Apartman ve Site seçilebilir; sunucuya management_type olarak gider).
+  ManagementType _managementType = ManagementType.apartmentSite;
 
   final List<_BlockDraft> _blocks = [];
   final List<_DoorDraft> _doors = [];
@@ -192,6 +197,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         doors: doorsPayload,
         doorCount: doorsPayload.length,
         deviceUid: widget.deviceUid,
+        managementType: _managementType.apiValue,
       );
 
       if (!mounted) return;
@@ -301,6 +307,13 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: AppSpace.md),
+
+                      // Yönetim Türü (Site Adı ile İl arasında)
+                      ManagementTypeSelector(
+                        value: _managementType,
+                        onChanged: (type) => setState(() => _managementType = type),
                       ),
                       const SizedBox(height: AppSpace.md),
 

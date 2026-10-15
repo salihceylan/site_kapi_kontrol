@@ -475,6 +475,18 @@ void main() {
       'GEOFENCE_OUT_OF_RANGE',
       'GEOFENCE_SITE_MISCONFIGURED',
       'USE_PROFILE_PASSWORD_CHANGE',
+      // Platform modül sistemi Faz 1 (MODULE_CONFIRM_REQUIRED bilerek yok: sunucu metni kullanılır).
+      'MODULE_DISABLED',
+      'MODULE_COMING_SOON',
+      'MODULE_NOT_TOGGLEABLE',
+      'MODULE_NOT_FOUND',
+      'MANAGEMENT_TYPE_COMING_SOON',
+      'MANAGEMENT_TYPE_INVALID',
+      'USER_NOT_FOUND',
+      'USER_NOT_ACTIVE',
+      'ALREADY_SITE_MANAGER',
+      'ROLE_INVALID',
+      'ROLE_NOT_FOUND',
     ];
 
     test('tüm bilinen kodların anlaşılır, kısa Türkçe metni vardır', () {

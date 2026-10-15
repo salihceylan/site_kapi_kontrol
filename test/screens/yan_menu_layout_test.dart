@@ -59,16 +59,18 @@ const String _longEmail =
     'muhammet.alperen.yildirim.kaya@ornek-alan-adi.com.tr';
 
 const List<_Cfg> _cfgs = <_Cfg>[
+  // Platform modül sistemi: süper kullanıcıya "Modüller" ve "Denetim Kaydı", site yöneticisine
+  // (yönetici modunda) "Modüller" eklendi (11 -> 13, 6 -> 7).
   _Cfg(
-    'süper kullanıcı (11 öğe)',
+    'süper kullanıcı (13 öğe)',
     UserRole.superUser,
-    11,
+    13,
     selected: SirketMenuItem.siteler,
   ),
   _Cfg(
     'site yöneticisi + mod geçişi',
     UserRole.siteManager,
-    6,
+    7,
     selected: SirketMenuItem.siteler,
     toggle: true,
   ),
@@ -591,15 +593,18 @@ void main() {
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.moduller,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
+        SirketMenuItem.denetimKaydi,
       ],
       _cfgs[1]: const [
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
+        SirketMenuItem.moduller,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.bluetoothWifiKur,
@@ -763,6 +768,7 @@ void main() {
           'Panel',
           'Profilim',
           'Site Yönetimi',
+          'Modüller',
           'Kayıtlı Cihazlar',
           'Daireye Katıl & Cihaz Ekle',
           'Bluetooth ile Wi-Fi Kur',
@@ -784,10 +790,12 @@ void main() {
           'Site Yöneticileri Yönetimi',
           'Daire Sakinleri',
           'Site Yönetimi',
+          'Modüller',
           'Daireye Katıl & Cihaz Ekle',
           'Şirket Cihazı Kaydet',
           'Şirket Cihaz Envanteri',
           'Bluetooth ile Wi-Fi Kur',
+          'Denetim Kaydı',
           'Çıkış Yap',
         ]) {
           expect(find.text(title), findsOneWidget, reason: title);

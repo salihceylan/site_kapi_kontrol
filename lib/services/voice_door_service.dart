@@ -234,6 +234,13 @@ class VoiceDoorService extends ChangeNotifier {
     return _isSpeechAvailable;
   }
 
+  /// Sesli komutun eşleştireceği aday kapı listesini günceller; DİNLEMEYİ BAŞLATMAZ. Boş liste (ya da
+  /// null) eski listeyi temizler: Geçiş Kontrol modülü kapanınca önbellekteki kapılarla komut
+  /// işlenmesin ([startListening] boş aday listesini yok sayar, bu yüzden ayrı bir yol gerekir).
+  void updateCandidateDoors(List<DoorRecord>? doors) {
+    _lastCandidateDoors = doors == null ? null : List<DoorRecord>.of(doors);
+  }
+
   Future<void> startListening({List<DoorRecord>? candidateDoors}) async {
     if (candidateDoors != null && candidateDoors.isNotEmpty) {
       _lastCandidateDoors = candidateDoors;

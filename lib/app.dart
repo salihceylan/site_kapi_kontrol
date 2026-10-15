@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
+import 'package:site_kapi_kontrol/services/door_module_gate.dart';
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
 import 'package:site_kapi_kontrol/services/network_service.dart';
@@ -150,8 +151,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             currentRole != UserRole.individual) {
           return;
         }
+        // Geçiş Kontrol modülü kapalıysa sesle açma anlamsızdır: nedenini söyle (önbellekten, ağsız).
+        final closedMessage = await doorControlClosedMessage(_authService);
+        if (closedMessage != null) {
+          await _voiceDoorService.speak(closedMessage);
+          _showFeedback(closedMessage);
+          return;
+        }
         final context = _navigatorKey.currentContext;
-        if (context != null) {
+        if (context != null && context.mounted) {
           VoiceControlModal.show(context, voiceService: _voiceDoorService);
         } else {
           await _voiceDoorService.startListening();
@@ -184,8 +192,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final resolution = DeepLinkDoorResolver.resolve(action, doors);
     final target = resolution.door;
     if (resolution.status != DeepLinkDoorStatus.found || target == null) {
-      await _voiceDoorService.speak('Kapı bulunamadı.');
-      _showFeedback('Kapı bulunamadı.');
+      // Kapalı Geçiş Kontrol modülünde kapı listesi boştur: "Kapı bulunamadı." yerine asıl neden.
+      final message =
+          await doorControlClosedMessage(_authService, fetch: true) ??
+          'Kapı bulunamadı.';
+      await _voiceDoorService.speak(message);
+      _showFeedback(message);
       return;
     }
     final context = _navigatorKey.currentContext;
@@ -225,7 +237,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
 
     if (candidates.isEmpty) {
-      const message = 'Kapı bulunamadı.';
+      // Kapalı Geçiş Kontrol modülünde kapı listesi boştur: "Kapı bulunamadı." yerine asıl neden.
+      final message =
+          await doorControlClosedMessage(_authService, fetch: true) ??
+          'Kapı bulunamadı.';
       await _voiceDoorService.speak(message);
       _showFeedback(message);
       return;

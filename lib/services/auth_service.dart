@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
@@ -14,6 +15,8 @@ import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/platform_module.dart';
+import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
@@ -355,6 +358,7 @@ class AuthService extends ChangeNotifier {
     List<Map<String, dynamic>>? doors,
     int doorCount = 1,
     String? deviceUid,
+    String? managementType,
   }) async {
     final res = await _runAuthorized(
       (token) => api.setupSite(
@@ -367,6 +371,7 @@ class AuthService extends ChangeNotifier {
         doors: doors,
         doorCount: doorCount,
         deviceUid: deviceUid,
+        managementType: managementType,
       ),
     );
     // Site kurulumunda sunucu rolü site_manager yapar; /me ile eşitle (C11).
@@ -523,6 +528,8 @@ class AuthService extends ChangeNotifier {
     _session = null;
     _lastSessionCheckAt = null;
     _lastMyDoors = null;
+    _lastMyModules = null;
+    _doorControlClosedSites.clear();
     _localDoorCache.clear();
     _doorStatusCloudDown.clear();
     // Arayüz hemen giriş ekranına dönsün; temizlik arka planda tamamlanır.
@@ -746,6 +753,7 @@ class AuthService extends ChangeNotifier {
     required int doorCount,
     int? managerUserCode,
     Map<String, dynamic>? managerUser,
+    String? managementType,
   }) async {
     final active = _safeRequireSuperUserSession();
     if (active == null) {
@@ -764,6 +772,7 @@ class AuthService extends ChangeNotifier {
         doorCount: doorCount,
         managerUserCode: managerUserCode,
         managerUser: managerUser,
+        managementType: managementType,
       );
       return (site, null);
     } on ApiException catch (e) {
@@ -883,6 +892,140 @@ class AuthService extends ChangeNotifier {
     } catch (_) {
       return 'Sunucuya baglanilamadi.';
     }
+  }
+
+  // --- Platform modül sistemi (Faz 1) -------------------------------------------------------
+  // Okuma ve yazma çağrıları hata durumunda ApiException FIRLATIR (listSites gibi); oturum hatası
+  // merkezi olarak [_runAuthorized] içinde işlenir. Hata kodları AuthApi.messageForErrorCode ile
+  // Türkçeye çevrilmiş olarak `ApiException.message` içinde gelir.
+
+  /// Modül kataloğu (`GET /app/modules/catalog`).
+  Future<List<PlatformModule>> getModuleCatalog() {
+    return _runAuthorized((token) => api.getModuleCatalog(token: token));
+  }
+
+  /// Kullanıcının bağlı olduğu sitelerde modül durumları (`GET /app/my-modules`).
+  Future<MyModulesResult> getMyModules() {
+    return _runAuthorized((token) async {
+      final result = await api.getMyModules(token: token);
+      // Son başarılı yanıt önbelleğe alınır (kısayol / derin bağlantı mesajları ağ isteği yapmadan
+      // modül durumunu okuyabilsin); oturum bu arada değiştiyse eski kullanıcının verisi saklanmaz.
+      if (_session?.token == token) {
+        _lastMyModules = result;
+        // Kapı erişimi olan siteler için Geçiş Kontrol durumu; süper kullanıcı (`scope: all`) yanıtında
+        // site yoktur, bilinen siteler (getSiteModules ile) korunur.
+        if (!result.isAll) {
+          _doorControlClosedSites
+            ..clear()
+            ..addAll(
+              result.doorAccessSites
+                  .where((s) => !s.isEnabled(PlatformModuleCodes.doorControl))
+                  .map((s) => s.siteCode),
+            );
+        }
+      }
+      return result;
+    });
+  }
+
+  /// Geçiş Kontrol modülünün KAPALI olduğu bilinen sitelerin kodları. [openDoor] bu sitelerde yerel
+  /// ağ (LAN) kısayolunu denemez: yerel açma cihaz üzerinde yapıldığından sunucunun modül koruması
+  /// devreye girmez; uzak yol sunucuya gider ve karar (MODULE_DISABLED) orada verilir.
+  final Set<int> _doorControlClosedSites = <int>{};
+
+  void _noteSiteModules(SiteModulesState state) {
+    final door = state.module(PlatformModuleCodes.doorControl);
+    if (door == null) return;
+    if (door.enabled) {
+      _doorControlClosedSites.remove(state.siteCode);
+    } else {
+      _doorControlClosedSites.add(state.siteCode);
+    }
+  }
+
+  MyModulesResult? _lastMyModules;
+
+  /// Son başarılı `getMyModules` yanıtı; hiç alınmadıysa ya da çıkıştan sonra null.
+  MyModulesResult? get cachedMyModules => _lastMyModules;
+
+  /// Bir sitenin modül durumu (site yöneticisi / süper kullanıcı).
+  Future<SiteModulesState> getSiteModules(int siteCode) {
+    return _runAuthorized((token) async {
+      final state = await api.getSiteModules(token: token, siteCode: siteCode);
+      if (_session?.token == token) _noteSiteModules(state);
+      return state;
+    });
+  }
+
+  /// Modülü açar/kapatır; Geçiş Kontrol KAPATILIRKEN [confirm] true verilmelidir.
+  Future<SiteModulesState> setSiteModule(
+    int siteCode,
+    String moduleCode,
+    bool enabled, {
+    bool confirm = false,
+  }) async {
+    return _runAuthorized((token) async {
+      final state = await api.setSiteModule(
+        token: token,
+        siteCode: siteCode,
+        moduleCode: moduleCode,
+        enabled: enabled,
+        confirm: confirm,
+      );
+      if (_session?.token == token) _noteSiteModules(state);
+      return state;
+    });
+  }
+
+  /// Denetim kaydı sayfası (yalnız süper kullanıcı; sunucu doğrular).
+  Future<AuditLogPage> listAuditLog({
+    int? siteCode,
+    int limit = 50,
+    int? beforeId,
+    String? action,
+  }) {
+    return _runAuthorized(
+      (token) => api.listAuditLog(
+        token: token,
+        siteCode: siteCode,
+        limit: limit,
+        beforeId: beforeId,
+        action: action,
+      ),
+    );
+  }
+
+  Future<List<StaffRoleRecord>> listStaffRoles(int siteCode) {
+    return _runAuthorized(
+      (token) => api.listStaffRoles(token: token, siteCode: siteCode),
+    );
+  }
+
+  /// [role]: `BOARD_MEMBER` ya da `STAFF`.
+  Future<StaffRoleRecord> assignStaffRole(
+    int siteCode,
+    String email,
+    String role,
+  ) async {
+    final res = await _runAuthorized(
+      (token) => api.assignStaffRole(
+        token: token,
+        siteCode: siteCode,
+        email: email,
+        role: role,
+      ),
+    );
+    return res;
+  }
+
+  Future<void> removeStaffRole(int siteCode, int userCode) async {
+    await _runAuthorized(
+      (token) => api.removeStaffRole(
+        token: token,
+        siteCode: siteCode,
+        userCode: userCode,
+      ),
+    );
   }
 
   Future<({bool deleted, bool pending, String? message, String? error})> deleteSite({
@@ -1589,9 +1732,16 @@ class AuthService extends ChangeNotifier {
     // istemci de aynı istisnayı uygular (aksi halde istek hiç gönderilmeden reddedilirdi).
     final isSuper = active.role == UserRole.superUser;
     final allowRemote = door == null || door.canOpenRemote || isSuper;
-    final allowLocal = door != null && (door.canOpenLocalUdp || isSuper);
+    // Geçiş Kontrol modülü o sitede kapalıysa yerel (LAN) kısayol denenmez (bkz. alan açıklaması).
+    final moduleClosed = door != null && _doorControlClosedSites.contains(door.siteCode);
+    final allowLocal = door != null && (door.canOpenLocalUdp || isSuper) && !moduleClosed;
     if (!allowRemote && !allowLocal) {
-      return (null, 'Bu kapı için uygulamadan açma kapalı.');
+      return (
+        null,
+        moduleClosed
+            ? AuthApi.messageForErrorCode('MODULE_DISABLED')
+            : 'Bu kapı için uygulamadan açma kapalı.',
+      );
     }
 
     // YEREL AĞ YALNIZCA cihaz canlı beacon gönderiyorsa, kapı yerel açmaya izin veriyorsa
@@ -1606,7 +1756,9 @@ class AuthService extends ChangeNotifier {
     if (!allowRemote) {
       return (
         null,
-        'Bu kapıda uzaktan açma kapalı. Cihaza yerel ağdan ulaşılamadı; telefonu cihazla aynı Wi-Fi ağına bağlayıp tekrar deneyin.',
+        moduleClosed
+            ? AuthApi.messageForErrorCode('MODULE_DISABLED')
+            : 'Bu kapıda uzaktan açma kapalı. Cihaza yerel ağdan ulaşılamadı; telefonu cihazla aynı Wi-Fi ağına bağlayıp tekrar deneyin.',
       );
     }
 

@@ -1,3 +1,5 @@
+import 'package:site_kapi_kontrol/models/management_type.dart';
+
 class SiteRecord {
   const SiteRecord({
     required this.id,
@@ -30,6 +32,8 @@ class SiteRecord {
     this.deletionRequestedByRole,
     this.deletionRequestedAt,
     required this.createdAt,
+    this.managementType = ManagementType.apartmentSite,
+    this.managementTypeLabel = 'Apartman ve Site',
   });
 
   final int id;
@@ -62,6 +66,12 @@ class SiteRecord {
   final String? deletionRequestedByRole;
   final DateTime? deletionRequestedAt;
   final DateTime? createdAt;
+
+  /// Yönetim türü (`management_type`); alan yoksa `apartment_site` (geriye dönük uyum).
+  final ManagementType managementType;
+
+  /// Türün Türkçe etiketi (`management_type_label`); sunucu göndermezse türün kendi etiketi.
+  final String managementTypeLabel;
 
   bool get isApproved => approvalStatus == 'approved';
 
@@ -127,6 +137,8 @@ class SiteRecord {
     String? deletionRequestedByRole,
     DateTime? deletionRequestedAt,
     DateTime? createdAt,
+    ManagementType? managementType,
+    String? managementTypeLabel,
   }) {
     return SiteRecord(
       id: id ?? this.id,
@@ -159,6 +171,8 @@ class SiteRecord {
       deletionRequestedByRole: deletionRequestedByRole ?? this.deletionRequestedByRole,
       deletionRequestedAt: deletionRequestedAt ?? this.deletionRequestedAt,
       createdAt: createdAt ?? this.createdAt,
+      managementType: managementType ?? this.managementType,
+      managementTypeLabel: managementTypeLabel ?? this.managementTypeLabel,
     );
   }
 
@@ -172,6 +186,8 @@ class SiteRecord {
     }
 
     final rawId = json['id'] ?? json['site_code'];
+    final type = ManagementType.fromApi(json['management_type']);
+    final rawTypeLabel = json['management_type_label'];
     return SiteRecord(
       id: (rawId is num
           ? rawId.toInt()
@@ -213,6 +229,11 @@ class SiteRecord {
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'].toString()),
+      managementType: type,
+      managementTypeLabel:
+          rawTypeLabel is String && rawTypeLabel.trim().isNotEmpty
+              ? rawTypeLabel.trim()
+              : type.label,
     );
   }
 }

@@ -113,6 +113,18 @@ import 'package:site_kapi_kontrol/ui/widgets/site_security_policy_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
+import 'package:site_kapi_kontrol/models/platform_module.dart';
+
+import 'package:site_kapi_kontrol/services/module_access.dart';
+
+import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
+
+import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
+
+import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
+
+import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
+
 
 
 class HomePage extends StatefulWidget {
@@ -127,6 +139,8 @@ class HomePage extends StatefulWidget {
 
     this.voiceDoorService,
 
+    this.moduleAccess,
+
   });
 
 
@@ -136,6 +150,10 @@ class HomePage extends StatefulWidget {
   final QuickActionsService? quickActionsService;
 
   final VoiceDoorService? voiceDoorService;
+
+  /// Platform modül sistemi: hangi modüllerin açık olduğu. Verilmezse sayfa kendi örneğini kurar
+  /// (`getMyModules`; süper kullanıcıda her şey açık) ve sayfayla birlikte kapatır. Testler için.
+  final ModuleAccess? moduleAccess;
 
 
 
@@ -150,6 +168,19 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   SirketMenuItem _selectedMenu = SirketMenuItem.dashboard;
+
+  // Platform modül sistemi (Faz 1): menü/panel süzgeci. Girişten sonra, genel yenilemede ve kısa
+  // aralıklı (AdaptivePoller) `getMyModules` ile tazelenir; hata/ilk yüklemede her şey açık sayılır.
+  late final ModuleAccess _moduleAccess = widget.moduleAccess ??
+      ModuleAccess(
+        fetch: () => widget.authService.getMyModules(),
+        isSuperUser: () => widget.authService.session?.role == UserRole.superUser,
+        isActive: _isModulePollingActive,
+      );
+  final GlobalKey<ModulesViewState> _modulesViewKey = GlobalKey<ModulesViewState>();
+  final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
+  String _lastDoorModuleSignature = '';
+  UserRole? _lastSeenRole;
 
   // Kapı durumu yoklaması (3 sn): yalnız kapı paneli görünürken ve uygulama ön plandayken ağ
   // isteği yapar; ardışık hatada üstel geri çekilir (tavan 30 sn), başarıda 3 sn'ye döner.
@@ -336,6 +367,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _profileCurrentPasswordController = TextEditingController();
 
+    _initModuleAccess();
+
 
 
     _loadInitialData();
@@ -353,6 +386,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
 
     _statusPoller.dispose();
+
+    _disposeModuleAccess();
 
     _doorPanelRevision.dispose();
 
@@ -377,6 +412,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // C11: hesap pasifleştirilmiş/rolü değişmiş olabilir; sunucudaki /me ile eşitle.
       unawaited(widget.authService.refreshSession());
+      // Arka plandayken modül değişmiş olabilir (yönetici kapattı/açtı): ön plana dönüşte hemen çek.
+      _moduleAccess.resetBackoff();
+      unawaited(_moduleAccess.refresh());
+      unawaited(_loadSuperDoorModule());
       _startStatusAutoRefreshTimer();
       if (_doorControlDoor != null) {
         _loadDoorRuntimeStatus(_doorControlDoor!.id, isBackgroundRefresh: true);
@@ -430,6 +469,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (menu != SirketMenuItem.dashboard && menu != SirketMenuItem.ellerSerbest) {
       return false;
     }
+    // Geçiş Kontrol kapalıyken Panel'de kapı kartı yoktur: durum yoklaması da gerekmez.
+    if (!_showsIndividualHome(session) && _isDoorControlClosed(session)) {
+      return false;
+    }
     return !_showsIndividualHome(session);
   }
 
@@ -472,9 +515,124 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+  // --- Platform modül sistemi ---
+
+  /// Modül yoklaması şu an gerekli mi? Uygulama ön planda ve bu sayfa opak bir sayfanın altında değil.
+  bool _isModulePollingActive() {
+    if (!mounted) return false;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return false;
+    return TickerMode.getValuesNotifier(context).value.enabled;
+  }
+
+  void _initModuleAccess() {
+    _moduleAccess.addListener(_onModulesChanged);
+    widget.authService.addListener(_onAuthChanged);
+    _lastDoorModuleSignature = _doorModuleSignature();
+    _lastSeenRole = widget.authService.session?.role;
+    unawaited(_moduleAccess.refresh());
+    _moduleAccess.start();
+  }
+
+  void _disposeModuleAccess() {
+    _moduleAccess.removeListener(_onModulesChanged);
+    widget.authService.removeListener(_onAuthChanged);
+    if (widget.moduleAccess == null) {
+      _moduleAccess.dispose();
+    } else {
+      _moduleAccess.stop();
+    }
+  }
+
+  /// Oturum değişimi: çıkışta modül durumu temizlenir, rol değişince (örn. cihaz sahiplenip site
+  /// yöneticisi olma) yeniden çekilir.
+  void _onAuthChanged() {
+    final session = widget.authService.session;
+    if (session == null) {
+      _lastSeenRole = null;
+      _moduleAccess.clear();
+      return;
+    }
+    if (_lastSeenRole != session.role) {
+      _lastSeenRole = session.role;
+      unawaited(_moduleAccess.refresh());
+    }
+  }
+
+  /// Modül durumu değişti: menü/panel yeniden kurulur; kapıyla ilgili site kümesi değiştiyse Panel
+  /// verisi (site listesi ve seçili site) yeniden çekilir.
+  void _onModulesChanged() {
+    if (!mounted || widget.authService.session == null) return;
+    setState(() {});
+    final signature = _doorModuleSignature();
+    if (signature != _lastDoorModuleSignature) {
+      _lastDoorModuleSignature = signature;
+      unawaited(_loadDoorControlSites());
+    }
+  }
+
+  /// Geçiş Kontrol'ü KAPALI sitelerin kodları (sıralı, virgüllü); süzgeç yoksa boş.
+  String _doorModuleSignature() {
+    final result = _moduleAccess.isFiltering ? _moduleAccess.result : null;
+    if (result == null) return '';
+    final off = result.doorAccessSites
+        .where((s) => !s.isEnabled(PlatformModuleCodes.doorControl))
+        .map((s) => s.siteCode)
+        .toList()
+      ..sort();
+    return off.join(',');
+  }
+
+  /// Menüden gizlenecek öğeler (Geçiş Kontrol bağlı olunan TÜM sitelerde kapalıyken kapı öğeleri).
+  Set<SirketMenuItem> _hiddenMenuItems(UserRole role) =>
+      hiddenMenuItemsFor(role, _moduleAccess);
+
+  /// Panel'de seçilebilen siteler: yalnız Geçiş Kontrol modülü AÇIK olanlar.
+  List<SiteRecord> _doorControlSelectableSites(List<SiteRecord> sites) {
+    if (!_moduleAccess.isFiltering) return sites;
+    return sites
+        .where((s) => _moduleAccess.isEnabled(s.id, PlatformModuleCodes.doorControl))
+        .toList(growable: false);
+  }
+
+  /// Süper kullanıcının Panel'de gördüğü sitelerin Geçiş Kontrol durumu (site kodu -> açık mı).
+  /// Yalnız bilinen siteler vardır; bilinmeyen site "açık" sayılır (fail-open).
+  final Map<int, bool> _superDoorEnabled = <int, bool>{};
+
+  /// Süper kullanıcı için seçili (ya da [siteId]) sitenin Geçiş Kontrol durumunu çeker.
+  Future<void> _loadSuperDoorModule([int? siteId]) async {
+    if (widget.authService.session?.role != UserRole.superUser) return;
+    final id = siteId ?? _doorControlSite?.id;
+    if (id == null) return;
+    try {
+      final state = await widget.authService.getSiteModules(id);
+      if (!mounted) return;
+      final enabled = state.module(PlatformModuleCodes.doorControl)?.enabled;
+      if (enabled != null && _superDoorEnabled[id] != enabled) {
+        setState(() => _superDoorEnabled[id] = enabled);
+      }
+    } catch (_) {
+      // Durum öğrenilemedi: kapı kartları gösterilmeye devam eder (sunucu zaten reddeder).
+    }
+  }
+
+  /// Geçiş Kontrol kapalı mı? Süper olmayan kullanıcıda: bağlı olduğu ve gerçek kapı erişimi olan
+  /// TÜM sitelerde kapalı. Süper kullanıcıda: Panel'de seçili sitede kapalı.
+  bool _isDoorControlClosed(UserSession session) {
+    if (session.role == UserRole.superUser) {
+      final site = _doorControlSite;
+      return site != null && _superDoorEnabled[site.id] == false;
+    }
+    return _moduleAccess.isDisabledEverywhere(PlatformModuleCodes.doorControl);
+  }
+
   // --- Navigasyon & Menü ---
 
   bool _canAccessMenu(SirketMenuItem item, UserRole role) {
+    // Modül süzgeci: Geçiş Kontrol kapalıyken kapıyla ilgili öğeler menüde de erişimde de yoktur.
+    if (_hiddenMenuItems(role).contains(item)) {
+      return false;
+    }
     if (item == SirketMenuItem.katilimVeKurulum) {
       return true;
     }
@@ -496,6 +654,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             item == SirketMenuItem.profilim ||
 
             item == SirketMenuItem.siteler ||
+
+            (item == SirketMenuItem.moduller && !_isResidentMode) ||
 
             item == SirketMenuItem.kayitliCihazlar ||
 
@@ -582,6 +742,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         return 'Bluetooth ile Wi-Fi Kurulumu';
 
+      case SirketMenuItem.moduller:
+        return 'Modüller';
+
+      case SirketMenuItem.denetimKaydi:
+        return 'Denetim Kaydı';
+
     }
 
   }
@@ -600,6 +766,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// kart düğmeleriyle AYNI mantığı çalıştırır ([ResidentDoorActions]).
   List<YanMenuAction> _residentExtraActions(UserSession session) {
     if (session.role != UserRole.apartmentOwner || _showsIndividualHome(session)) {
+      return const <YanMenuAction>[];
+    }
+    // Geçiş Kontrol modülü kapalıyken kapı komutları (QR, misafir geçişi, sesli açma) da yoktur.
+    if (_isDoorControlClosed(session)) {
       return const <YanMenuAction>[];
     }
     final door = _doorControlDoor;
@@ -963,12 +1133,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _isLoadingDoorControlSites = false;
         _doorControlSitesPage = data;
 
-        if (data.sites.isNotEmpty) {
+        // Yalnız Geçiş Kontrol modülü AÇIK siteler Panel'de seçilebilir (kapalı site listede yoktur).
+        final selectable = _doorControlSelectableSites(data.sites);
+        if (selectable.isNotEmpty) {
           siteToSelect = preferredSiteId ??
               (_doorControlSite != null &&
-                      data.sites.any((s) => s.id == _doorControlSite!.id)
+                      selectable.any((s) => s.id == _doorControlSite!.id)
                   ? _doorControlSite!.id
-                  : data.sites.first.id);
+                  : selectable.first.id);
         } else {
           _doorControlSite = null;
           _doorControlStructure = null;
@@ -993,8 +1165,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _selectDoorControlSite(int siteId) async {
     if (!mounted) return;
-    final sites = _doorControlSitesPage?.sites;
-    if (sites == null || sites.isEmpty) return;
+    final sites = _doorControlSelectableSites(
+      _doorControlSitesPage?.sites ?? const <SiteRecord>[],
+    );
+    if (sites.isEmpty) return;
 
     final site = sites.firstWhere(
       (s) => s.id == siteId,
@@ -1010,6 +1184,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _doorRuntimeStatus = null;
       _isLoadingDoorControlStructure = true;
     });
+
+    // Süper kullanıcıda modül durumu my-modules'tan gelmez: seçili sitenin Geçiş Kontrol durumu çekilir.
+    unawaited(_loadSuperDoorModule(site.id));
 
     final (structure, _) = await widget.authService.getSiteStructure(
       siteCode: site.id,
@@ -1053,12 +1230,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
+    // Geçiş Kontrol modülü kapalıysa kapı listesi sunucuda boşaltılır: "Tanımlı bir kapı bulunamadı."
+    // diye her Panel açılışında konuşmak yanıltıcıdır. Sessizce dön, sürmekte olan dinlemeyi durdur
+    // ve eski kapı listesini sesli komut servisinden temizle.
+    if (_isDoorControlClosed(session)) {
+      await _silenceVoiceForClosedModule();
+      return;
+    }
+
     // Kullanıcı Eller Serbest ayarlarında otomatik dinlemeyi kapattıysa hiçbir şey yapma.
     if (!widget.voiceDoorService!.handsFreeAutoListen) {
       return;
     }
 
     if (doors.isEmpty) {
+      // Modül durumu henüz gelmediyse (açılış yarışı) önce onu bekle: kapalıysa konuşma.
+      if (!_moduleAccess.isLoaded) {
+        await _moduleAccess.refresh();
+        if (!mounted) return;
+        if (_isDoorControlClosed(session)) {
+          await _silenceVoiceForClosedModule();
+          return;
+        }
+      }
       await widget.voiceDoorService!.speak('Tanımlı bir kapı bulunamadı.');
       return;
     }
@@ -1078,6 +1272,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Cihaz atanmış ve kapı hazır: otomatik dinlemeyi başlat
     if (!widget.voiceDoorService!.isListening) {
       await widget.voiceDoorService!.startListening(candidateDoors: doors);
+    }
+  }
+
+  Future<void> _silenceVoiceForClosedModule() async {
+    final voice = widget.voiceDoorService;
+    if (voice == null) return;
+    voice.updateCandidateDoors(const <DoorRecord>[]);
+    if (voice.isListening) {
+      await voice.stopListening();
     }
   }
 
@@ -1566,6 +1769,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       if (created == true) {
         await _loadSites(force: true);
+        // Yeni sitenin modül durumu (varsayılanlar) hemen alınır.
+        unawaited(_moduleAccess.refresh());
       }
       return;
     }
@@ -1604,6 +1809,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
         managerUser: result.managerUser,
 
+        managementType: result.managementType.apiValue,
+
       );
 
       if (error != null) {
@@ -1617,6 +1824,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await _loadSites(force: true, preferredSiteId: createdSite?.id);
 
         await _loadDoorControlSites(preferredSiteId: createdSite?.id);
+
+        unawaited(_moduleAccess.refresh());
 
       }
 
@@ -3592,6 +3801,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final session = widget.authService.session;
     if (session == null) return;
 
+    // Modül durumu her genel yenilemede tazelenir (menü/panel süzgeci güncel kalır).
+    final modulesRefresh = _moduleAccess.refresh();
+
     switch (_selectedMenu) {
       case SirketMenuItem.dashboard:
       case SirketMenuItem.ellerSerbest:
@@ -3632,12 +3844,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.siteOnayTalepleri:
         await _loadPendingSiteApprovals(force: true);
         break;
+      case SirketMenuItem.moduller:
+        await _modulesViewKey.currentState?.reload();
+        break;
+      case SirketMenuItem.denetimKaydi:
+        await _auditLogViewKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
       case SirketMenuItem.profilim:
         break;
     }
+    // Modül isteği çekip yenilemeyi BEKLETMEZ: arka planda biter (yavaş ağda gösterge takılmaz);
+    // sonuç gelince ModuleAccess dinleyicileri menüyü/paneli tazeler.
+    unawaited(modulesRefresh);
   }
 
   /// AppBar eylem düğmesi: 44 dp dokunma hedefi. `visualDensity` açıkça standart: masaüstünde varsayılan
@@ -3880,6 +4101,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       drawer: YanMenu(
         extraActions: _residentExtraActions(session),
+
+        hiddenItems: _hiddenMenuItems(session.role),
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,
@@ -3965,11 +4188,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.dashboard:
       case SirketMenuItem.ellerSerbest:
         if (_showsIndividualHome(session)) {
-          return IndividualHomeView(
+          final individualHome = IndividualHomeView(
             key: _individualHomeKey,
             session: session,
             authService: widget.authService,
             onRefreshAll: _loadInitialData,
+          );
+          // Geçiş Kontrol kapalıyken bireysel ana ekranın kapı dışı bölümleri (dairelerim, katılım
+          // talepleri, cihazlar, hızlı işlemler) ERİŞİLEBİLİR kalır; en üste kısa bir bilgi eklenir.
+          if (_isDoorControlClosed(session)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const DoorControlDisabledCard(compact: true),
+                const SizedBox(height: AppSpace.lg),
+                individualHome,
+              ],
+            );
+          }
+          return individualHome;
+        }
+        // Geçiş Kontrol modülü kapalı (bağlı olunan tüm sitelerde; süper kullanıcıda seçili sitede):
+        // kapı kartları yerine bilgi kartı.
+        if (_isDoorControlClosed(session)) {
+          final canManage =
+              session.role == UserRole.superUser ||
+              (session.role == UserRole.siteManager && !_isResidentMode);
+          return DoorControlDisabledCard(
+            onOpenModules: canManage
+                ? () => setState(() => _selectedMenu = SirketMenuItem.moduller)
+                : null,
           );
         }
         _renderedDoorPanel = _DoorPanelSnapshot.of(this);
@@ -3977,7 +4225,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           session: session,
 
-          sites: _doorControlSitesPage?.sites ?? const <SiteRecord>[],
+          sites: _doorControlSelectableSites(
+            _doorControlSitesPage?.sites ?? const <SiteRecord>[],
+          ),
 
           doors: _doorControlStructure?.doors ?? const <DoorRecord>[],
 
@@ -4321,6 +4571,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
               _deleteManagedUser(role: UserRole.siteManager, user: user),
 
+        );
+
+      case SirketMenuItem.moduller:
+        return ModulesView(
+          key: _modulesViewKey,
+          authService: widget.authService,
+          onModulesChanged: () {
+            unawaited(_moduleAccess.refresh());
+            unawaited(_loadSuperDoorModule());
+          },
+        );
+
+      case SirketMenuItem.denetimKaydi:
+        return AuditLogView(
+          key: _auditLogViewKey,
+          authService: widget.authService,
         );
 
       case SirketMenuItem.katilimVeKurulum:

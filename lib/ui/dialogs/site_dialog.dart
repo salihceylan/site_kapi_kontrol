@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../data/turkey_cities_districts.dart';
 import '../../models/managed_user_account.dart';
+import '../../models/management_type.dart';
 import '../../models/site_record.dart';
 import '../../models/site_structure_record.dart';
 import '../../models/user_role.dart';
@@ -12,6 +13,7 @@ import '../design/motion_widgets.dart';
 import '../design/tokens.dart';
 import '../helpers/ui_helpers.dart';
 import '../pages/site_manager_picker_page.dart';
+import '../widgets/management_type_selector.dart';
 import 'large_dialog_parts.dart';
 
 class SiteFormResult {
@@ -24,6 +26,7 @@ class SiteFormResult {
     required this.doorCount,
     required this.managerUserCode,
     this.managerUser,
+    this.managementType = ManagementType.apartmentSite,
   });
 
   final String name;
@@ -34,6 +37,9 @@ class SiteFormResult {
   final int doorCount;
   final int? managerUserCode;
   final Map<String, dynamic>? managerUser;
+
+  /// Seçilen yönetim türü (yalnız yeni sitede anlamlıdır; mevcut sitede tür değiştirilemez).
+  final ManagementType managementType;
 }
 
 /// Sitenin gerçek blok başına daire sayıları (sunucunun "değişiklik yok" kabul ettiği değerler):
@@ -91,6 +97,9 @@ class _SiteDialogState extends State<SiteDialog> {
   String? _selectedCity;
   String? _selectedDistrict;
 
+  // Yönetim türü: yeni sitede seçilebilir (Faz 1: yalnız Apartman ve Site); düzenlemede salt okunur.
+  ManagementType _managementType = ManagementType.apartmentSite;
+
   final List<TextEditingController> _blockApartmentControllers = [];
   int? _selectedManagerUserCode;
   ManagedUserAccount? _selectedManager;
@@ -111,6 +120,7 @@ class _SiteDialogState extends State<SiteDialog> {
   void initState() {
     super.initState();
     final site = widget.site;
+    _managementType = site?.managementType ?? ManagementType.apartmentSite;
     _nameController = TextEditingController(text: site?.name ?? '');
     _addressController = TextEditingController(text: site?.address ?? '');
     final initialCity = (site?.city ?? '').trim();
@@ -291,6 +301,7 @@ class _SiteDialogState extends State<SiteDialog> {
         doorCount: doorCount,
         managerUserCode: _selectedManagerUserCode,
         managerUser: null,
+        managementType: _managementType,
       ),
     );
   }
@@ -324,6 +335,14 @@ class _SiteDialogState extends State<SiteDialog> {
               validator: (value) => (value ?? '').trim().length < 2
                   ? 'Site adı en az 2 karakter olmalı.'
                   : null,
+            ),
+            const SizedBox(height: AppSpace.md),
+            // Yönetim Türü (Site Adı ile İl arasında): düzenlemede salt okunur.
+            ManagementTypeSelector(
+              value: _managementType,
+              onChanged: _isEditing
+                  ? null
+                  : (type) => setState(() => _managementType = type),
             ),
             const SizedBox(height: AppSpace.md),
             TextFormField(

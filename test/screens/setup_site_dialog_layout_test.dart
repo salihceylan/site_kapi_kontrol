@@ -23,6 +23,9 @@ class _FakeAuth extends AuthService {
   final String? failWith;
   final List<String> setups = [];
 
+  /// setupSite'a iletilen yönetim türleri (Platform modül sistemi Faz 1).
+  final List<String?> types = [];
+
   @override
   Future<Map<String, dynamic>> setupSite({
     required String name,
@@ -33,8 +36,10 @@ class _FakeAuth extends AuthService {
     List<Map<String, dynamic>>? doors,
     int doorCount = 1,
     String? deviceUid,
+    String? managementType,
   }) async {
     setups.add('$name|${blocks.length}|${doors?.length}|$deviceUid');
+    types.add(managementType);
     if (failWith != null) throw ApiException(failWith!);
     return <String, dynamic>{};
   }

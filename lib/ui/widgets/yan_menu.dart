@@ -36,6 +36,12 @@ enum SirketMenuItem {
   cihazEkle,
   kayitliCihazlar,
   bluetoothWifiKur,
+
+  /// Platform modül sistemi: site başına modül açma/kapama (süper kullanıcı + site yöneticisi).
+  moduller,
+
+  /// Platform modül sistemi: denetim kaydı (yalnız süper kullanıcı).
+  denetimKaydi,
 }
 
 class YanMenu extends StatelessWidget {
@@ -51,6 +57,7 @@ class YanMenu extends StatelessWidget {
     this.onToggleMode,
     this.canToggleMode = false,
     this.extraActions = const <YanMenuAction>[],
+    this.hiddenItems = const <SirketMenuItem>{},
   });
 
   final String fullName;
@@ -66,6 +73,11 @@ class YanMenu extends StatelessWidget {
   /// "Panel"den hemen sonra gösterilen ek eylemler (varsayılan boş: menü eskisi gibidir).
   final List<YanMenuAction> extraActions;
 
+  /// Menüden gizlenecek öğeler (varsayılan boş: menü eskisi gibidir). Platform modül sistemi:
+  /// Geçiş Kontrol modülü kapalıyken kapıyla ilgili öğeler burada verilir. `HomePage._canAccessMenu`
+  /// aynı kümeyi uygular.
+  final Set<SirketMenuItem> hiddenItems;
+
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
   /// (en büyük yazıda 56 dp'ye düşerdi) ve Column ekran yüksekliğini aşıp taşabilirdi.
@@ -80,7 +92,7 @@ class YanMenu extends StatelessWidget {
       role,
       isResidentMode: isResidentMode,
       canToggleMode: canToggleMode,
-    );
+    ).where((item) => !hiddenItems.contains(item)).toList(growable: false);
     final showToggle = canToggleMode && onToggleMode != null;
     // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
     final firstItemIndex = showToggle ? 1 : 0;
@@ -339,10 +351,12 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.siteYoneticileriYonetimi,
         SirketMenuItem.daireKullanicilariYonetimi,
         SirketMenuItem.siteler,
+        SirketMenuItem.moduller,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
+        SirketMenuItem.denetimKaydi,
       ];
     case UserRole.siteManager:
       if (isResidentMode) {
@@ -357,6 +371,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.dashboard,
         SirketMenuItem.profilim,
         SirketMenuItem.siteler,
+        SirketMenuItem.moduller,
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.bluetoothWifiKur,
@@ -410,6 +425,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Kayıtlı Cihazlar';
     case SirketMenuItem.bluetoothWifiKur:
       return 'Bluetooth ile Wi-Fi Kur';
+    case SirketMenuItem.moduller:
+      return 'Modüller';
+    case SirketMenuItem.denetimKaydi:
+      return 'Denetim Kaydı';
   }
 }
 
@@ -443,6 +462,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.devices_other_rounded;
     case SirketMenuItem.bluetoothWifiKur:
       return Icons.bluetooth_searching_rounded;
+    case SirketMenuItem.moduller:
+      return Icons.extension_rounded;
+    case SirketMenuItem.denetimKaydi:
+      return Icons.fact_check_rounded;
   }
 }
 

@@ -169,6 +169,10 @@ DoorWidgetOpenOutcome mapDoorOpenResponse(int statusCode, String body) {
       if (code == 'REMOTE_OPEN_DISABLED') {
         return const DoorWidgetOpenOutcome('Uzaktan açma kapalı ❌');
       }
+      // Platform modül sistemi: Geçiş Kontrol modülü sitede kapalı.
+      if (code == 'MODULE_DISABLED') {
+        return const DoorWidgetOpenOutcome('Geçiş kapalı ❌');
+      }
       return const DoorWidgetOpenOutcome('Yetkiniz yok ❌');
     case 404:
       return const DoorWidgetOpenOutcome('Kapı bulunamadı ❌');

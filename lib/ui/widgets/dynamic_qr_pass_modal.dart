@@ -52,6 +52,16 @@ QrDenialInfo? qrDenialInfoFor(String? reason) {
         speech: 'Bu kapı için geçiş yetkiniz bulunmuyor.',
         permanent: true,
       );
+    // Platform modül sistemi: okuyucu `module_disabled` (MQTT qr_verify) ya da API kodu MODULE_DISABLED.
+    case 'module_disabled':
+    case 'MODULE_DISABLED':
+      return const QrDenialInfo(
+        title: 'Geçiş Kontrol Kapalı',
+        message:
+            'Geçiş Kontrol modülü kapalı. Site yöneticisi Modüller ekranından açabilir.',
+        speech: 'Geçiş Kontrol modülü kapalı.',
+        permanent: true,
+      );
     case 'QR_DISABLED':
       return QrDenialInfo(
         title: 'Karekod Girişi Kapalı',

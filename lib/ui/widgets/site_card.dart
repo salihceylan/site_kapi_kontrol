@@ -113,6 +113,12 @@ class _SiteCardState extends State<SiteCard> {
                             label: 'Onay Bekliyor',
                             tone: AppTone.warning,
                           ),
+                        // Yönetim türü (Apartman ve Site, ...): sarabilen başlık akışında, tek satır + elips.
+                        StatusChip(
+                          label: site.managementTypeLabel,
+                          tone: AppTone.info,
+                          icon: Icons.category_rounded,
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppSpace.xs),

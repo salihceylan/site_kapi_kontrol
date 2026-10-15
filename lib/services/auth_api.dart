@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
 import 'package:site_kapi_kontrol/models/device_page.dart';
 import 'package:site_kapi_kontrol/models/device_record.dart';
@@ -13,6 +14,8 @@ import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/platform_module.dart';
+import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
@@ -405,6 +408,7 @@ class AuthApi {
     required int doorCount,
     int? managerUserCode,
     Map<String, dynamic>? managerUser,
+    String? managementType,
   }) async {
     final totalApartments = blockApartmentCounts.fold<int>(
       0,
@@ -425,6 +429,9 @@ class AuthApi {
         'door_count': doorCount,
         'manager_user_code': managerUserCode,
         'manager_user': managerUser,
+        // Yönetim türü (Faz 1: yalnız apartment_site); verilmezse alan hiç gönderilmez.
+        if (managementType != null && managementType.isNotEmpty)
+          'management_type': managementType,
       },
     );
 
@@ -569,6 +576,157 @@ class AuthApi {
       'Site yapisi',
       () => SiteStructureRecord.fromJson(payload),
     );
+  }
+
+  // --- Platform modül sistemi (Faz 1) -------------------------------------------------------
+  // Modül ve ek rol uçları site yönetimi yolundadır (`/manager/...`): süper kullanıcı da aynı
+  // uçlarla çalışır (sunucu `hasSiteManagementAccess` ile geçirir); denetim kaydı yalnız süper
+  // kullanıcıya açık `/admin/audit-log` ucundadır.
+
+  Future<List<PlatformModule>> getModuleCatalog({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/modules/catalog',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Modül kataloğu',
+      () => (payload['modules'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => PlatformModule.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<MyModulesResult> getMyModules({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/my-modules',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Modül durumu', () => MyModulesResult.fromJson(payload));
+  }
+
+  Future<SiteModulesState> getSiteModules({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/modules',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Site modülleri',
+      () => SiteModulesState.fromJson(payload),
+    );
+  }
+
+  /// Modülü açar/kapatır. Geçiş Kontrol KAPATILIRKEN [confirm] true olmalıdır (aksi halde sunucu
+  /// 409 `MODULE_CONFIRM_REQUIRED` döner); uygulama onay penceresini önceden gösterir.
+  Future<SiteModulesState> setSiteModule({
+    required String token,
+    required int siteCode,
+    required String moduleCode,
+    required bool enabled,
+    bool confirm = false,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PUT',
+      path: '/manager/sites/$siteCode/modules/${Uri.encodeComponent(moduleCode)}',
+      token: token,
+      body: {'enabled': enabled, 'confirm': confirm},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Site modülleri',
+      () => SiteModulesState.fromJson(payload),
+    );
+  }
+
+  /// Denetim kaydı (yalnız süper kullanıcı). `id DESC`; sonraki sayfa için önceki yanıttaki
+  /// `next_before_id` [beforeId] olarak verilir.
+  Future<AuditLogPage> listAuditLog({
+    required String token,
+    int? siteCode,
+    int limit = 50,
+    int? beforeId,
+    String? action,
+  }) async {
+    final query = <String, String>{
+      if (siteCode != null) 'site_code': '$siteCode',
+      if (action != null && action.isNotEmpty) 'action': action,
+      'limit': '$limit',
+      if (beforeId != null) 'before_id': '$beforeId',
+    };
+    final path = Uri(path: '/admin/audit-log', queryParameters: query).toString();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: path,
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Denetim kaydı', () => AuditLogPage.fromJson(payload));
+  }
+
+  Future<List<StaffRoleRecord>> listStaffRoles({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/manager/sites/$siteCode/staff-roles',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Ek roller',
+      () => (payload['items'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => StaffRoleRecord.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// E-postası verilen mevcut hesaba ek rol (`BOARD_MEMBER` ya da `STAFF`) atar.
+  Future<StaffRoleRecord> assignStaffRole({
+    required String token,
+    required int siteCode,
+    required String email,
+    required String role,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PUT',
+      path: '/manager/sites/$siteCode/staff-roles',
+      token: token,
+      body: {'email': email, 'role': role},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Ek rol',
+      () => StaffRoleRecord.fromJson(payload['item'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> removeStaffRole({
+    required String token,
+    required int siteCode,
+    required int userCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: '/manager/sites/$siteCode/staff-roles/$userCode',
+      token: token,
+    );
+    _ensureStatus(response, 200);
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -1726,6 +1884,31 @@ class AuthApi {
         return 'Bu cihaz arızalı olarak işaretlenmiş.';
       case 'DEVICE_NOT_FOUND':
         return 'Cihaz bulunamadı.';
+
+      // --- Platform modül sistemi (Faz 1). MODULE_CONFIRM_REQUIRED bilerek yok: sunucunun kendi
+      // metni ("Geçiş Kontrol kapatılırsa ... Onaylıyor musunuz?") kullanılır.
+      case 'MODULE_DISABLED':
+        return 'Bu özellik şu an kapalı. Site yöneticisi Modüller ekranından açabilir.';
+      case 'MODULE_COMING_SOON':
+        return 'Bu modül yakında.';
+      case 'MODULE_NOT_TOGGLEABLE':
+        return 'Bu modül kapatılamaz.';
+      case 'MODULE_NOT_FOUND':
+        return 'Modül bulunamadı.';
+      case 'MANAGEMENT_TYPE_COMING_SOON':
+        return 'Bu yönetim türü yakında.';
+      case 'MANAGEMENT_TYPE_INVALID':
+        return 'Geçersiz yönetim türü.';
+      case 'USER_NOT_FOUND':
+        return 'Bu e-posta ile kayıtlı hesap yok.';
+      case 'USER_NOT_ACTIVE':
+        return 'Bu hesap henüz etkin değil.';
+      case 'ALREADY_SITE_MANAGER':
+        return 'Bu kişi zaten site yöneticisi.';
+      case 'ROLE_INVALID':
+        return 'Geçersiz rol.';
+      case 'ROLE_NOT_FOUND':
+        return 'Bu kişide kurul veya görevli rolü yok.';
       default:
         return null;
     }
@@ -1925,6 +2108,7 @@ class AuthApi {
     List<Map<String, dynamic>>? doors,
     int doorCount = 1,
     String? deviceUid,
+    String? managementType,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -1939,6 +2123,9 @@ class AuthApi {
         if (doors != null && doors.isNotEmpty) 'doors': doors,
         'doorCount': doors != null && doors.isNotEmpty ? doors.length : doorCount,
         if (deviceUid != null && deviceUid.isNotEmpty) 'deviceUid': deviceUid,
+        // Yönetim türü (Faz 1: yalnız apartment_site); verilmezse alan hiç gönderilmez.
+        if (managementType != null && managementType.isNotEmpty)
+          'management_type': managementType,
       },
     );
 
