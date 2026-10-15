@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1 ve Faz 1.1 (modül talebi + yeni ürün adı) canlıda ve denemeye hazır. Faz 2 (Kişi ve Daire Kayıtları) yapım aşamasında. Faz 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1 ve Faz 2a (Kişi ve Daire Kayıtları) canlıda ve denemeye hazır. Faz 2'nin Excel'den toplu yükleme ve dışa aktarma maddeleri (F2.08, F2.09) sıradaki adım. Faz 3 (duyuru ve bildirim) sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
   "bolumler": [
     {
       "id": "F0",
@@ -404,22 +404,22 @@
     {
       "id": "F2",
       "baslik": "Kişi ve daire kayıtları (CRM)",
-      "durum": "planli",
-      "ozet": "Sitedeki herkesin ve her dairenin bilgisi tek yerde tutulur. Her modül aynı kayıtları kullanır, bilgi ikinci kez girilmez. Bugünkü sakin ve daire kayıtları bu yapıya aktarılır.",
+      "durum": "hazir",
+      "ozet": "Sitedeki herkesin ve her dairenin bilgisi tek yerde tutulur. Bugünkü sakin ve daire kayıtları bu yapıya otomatik aktarıldı; kapı yetkileri değişmedi. Excel'den toplu yükleme ve dışa aktarma bir sonraki adımda gelecek.",
       "maddeler": [
         {
           "id": "F2.01",
           "baslik": "Kişi listesi, arama ve süzme",
           "adimlar": [
-            "Menüden “Kişiler” ekranını açın.",
+            "Menüden “Kişiler” ekranını açın (çok siteniz varsa üstten siteyi seçin).",
             "Ad, telefon, e-posta ya da daire numarasıyla arayın.",
-            "Role ve duruma göre süzün."
+            "İlişkiye (malik, kiracı, aile üyesi) ve duruma (aktif / eski sakin) göre süzün."
           ],
           "beklenen": "Sitedeki malik, kiracı, aile üyesi ve görevliler listelenir. Arama yazdıkça sonuçları daraltır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.02",
@@ -431,21 +431,22 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.03",
           "baslik": "Kişi ekleme ve düzenleme",
           "adimlar": [
             "“Kişi Ekle”ye dokunun.",
-            "Ad, telefon, e-posta ve daire seçip ilişkiyi belirtin (malik, kiracı, aile üyesi).",
-            "Kaydettikten sonra kartı açıp bir bilgiyi değiştirin."
+            "Ad, telefon (5551234567 yazın, alan +90 555 123 45 67 olur), e-posta ve daire seçip ilişkiyi belirtin.",
+            "Kaydettikten sonra kartı açıp “Düzenle” ile notu ya da telefonu değiştirin.",
+            "Aynı e-postayla ikinci kez kişi eklemeyi deneyin."
           ],
-          "beklenen": "Kişi eklenir ve ilgili dairede görünür. E-posta varsa hesap oluşturması için davet gider. Değişiklik kartta hemen görünür.",
+          "beklenen": "Kişi eklenir ve ilgili dairede görünür. Boş bir daireye e-postalı kişi eklerseniz o kişiye giriş bilgileri e-postayla gider; dolu daireye eklerken hesap açılmaz (yalnız kayıt tutulur). Aynı e-posta ikinci kez eklenirse uyarı çıkar ve var olan kişiyi açabilirsiniz. Hesabı olan kişinin ad, telefon ve e-postası burada değişmez (kişinin kendi profilinden değişir); notu değişir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.04",
@@ -457,7 +458,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.05",
@@ -470,7 +471,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.06",
@@ -479,11 +480,11 @@
             "Bir kiracıyı “Taşındı” olarak işaretleyin.",
             "Aynı daireye yeni kiracı ekleyin."
           ],
-          "beklenen": "Eski kiracı pasife alınır ve dairenin geçmişinde kalır, silinmez. Yeni kiracı güncel sakin olur. Eski kiracının kapı yetkisi kapanır.",
+          "beklenen": "Eski kiracı “Eski sakin” olur ve dairenin geçmişinde kalır, silinmez. Yeni kiracı güncel sakin olur. Eski kiracının bu daireye kapı yetkisi kapanır; başka dairedeki yetkisi etkilenmez. Yarın gibi gelecekte bir tarih yazarsanız “bugünden ileri olamaz” uyarısı çıkar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.07",
@@ -496,7 +497,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.08",
@@ -528,27 +529,27 @@
           "id": "F2.10",
           "baslik": "Kim kimin bilgisini görür (KVKK)",
           "adimlar": [
-            "Daire sakini olarak kişi bilgilerine bakın.",
-            "Başka bir sitenin yöneticisiyle aynı sitenin kişilerini görmeyi deneyin."
+            "Daire sakini olarak Profilim → “Kayıtlarım”ı açın.",
+            "Başka bir sitenin yöneticisi hesabıyla ilk sitenin kişilerini açmayı deneyin."
           ],
-          "beklenen": "Sakin yalnızca kendi bilgisini görür. Yönetici yalnızca kendi sitesinin kişilerini görür. Başka sitenin hiçbir bilgisi görünmez.",
+          "beklenen": "Sakin yalnız kendi dairesini, ilişkisini, giriş tarihini ve kendi plakalarını görür (yönetici notları görünmez). Yönetici yalnız kendi sitesinin kişilerini görür. Başka sitenin hiçbir bilgisi görünmez.",
           "rol_notu": "Hepsi",
           "on_kosul": "İki ayrı site",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.11",
           "baslik": "Değişiklik geçmişi",
           "adimlar": [
-            "Bir kişinin telefonunu değiştirin.",
+            "Bir kişinin adını, ilişkisini ya da bir dairenin m² bilgisini değiştirin; ayrıca telefonunu da değiştirin.",
             "Kartın “Geçmiş” bölümünü açın."
           ],
-          "beklenen": "Kim, ne zaman, neyi eski ve yeni değeriyle değiştirdi satırı görünür. Kayıt silinemez.",
+          "beklenen": "Kim, ne zaman, neyi değiştirdi satırı görünür. Ad, ilişki ve m² gibi alanlarda eski ve yeni değer yazar. Telefon, e-posta ve not değiştiğinde yalnız “Telefon güncellendi” yazar (kişisel veri geçmişte saklanmaz). Sistemin kendi yaptığı değişiklikler “Sistem tarafından” diye görünür. Kayıt silinemez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F2.12",
@@ -557,11 +558,78 @@
             "Güncellemeden sonra Kişiler ekranını açın.",
             "Güncellemeden önce var olan bir sakini bulun."
           ],
-          "beklenen": "Bugünkü sakinler kişi listesinde, bağlı oldukları daireyle görünür. Kapı yetkileri değişmez, kimse yeniden kaydolmak zorunda kalmaz.",
+          "beklenen": "Bugünkü sakinler kişi listesinde, bağlı oldukları daireyle görünür (ilişkileri “Sakin”; malik/kiracı olduğunu siz işaretlersiniz). Kapı yetkileri değişmez, kimse yeniden kaydolmak zorunda kalmaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F2.13",
+          "baslik": "Hesap silinince “Silinmiş hesap” kalıntısı kalmaz",
+          "adimlar": [
+            "Bir dairede “Daire sakinini sıfırla”yı çalıştırın (ya da süper kullanıcıyla bir sakinin hesabını silin).",
+            "Kişiler ekranını yenileyin; eski sakini “Eski sakin” filtresinde arayın."
+          ],
+          "beklenen": "İşlem hata vermez. Kişiler listesinde “Silinmiş hesap” adlı aktif kayıt kalmaz; kişi eski sakin olarak adıyla geçmişte durur.",
+          "rol_notu": "Site yöneticisi / süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F2.14",
+          "baslik": "Taşındı, kapıyı gerçekten kapatır",
+          "adimlar": [
+            "Eski usul (hesaplı, özel kapı izni verilmiş) bir sakini ya da dahili hesaplı bir sakini seçip “Taşındı” yapın.",
+            "O sakinin hesabıyla (ya da PIN'iyle) kapıyı açmayı deneyin.",
+            "Dairenin yöneticisi olan kişiyi “Taşındı” yapın; dairede başka bir sakin varsa onun girişini kontrol edin."
+          ],
+          "beklenen": "Taşınan kişi o daire için kapıyı açamaz. Daire yöneticisi taşınırsa yönetim dairedeki başka bir sakine devredilir; dairede kalan diğer sakinin kapı erişimi ve PIN'i bozulmaz.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Özel kapı izni olan bir sakin",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F2.15",
+          "baslik": "Yönetim kurulu üyesi yalnız okur",
+          "adimlar": [
+            "Yönetim kurulu üyesi hesabıyla girip menüden “Kişiler”i açın.",
+            "Kişi, daire ve araç kartlarına bakın."
+          ],
+          "beklenen": "Hiçbir ekleme, düzenleme, taşındı ya da silme düğmesi yoktur; “yalnızca görüntüleyebilirsiniz” notu görünür. Kişi ve araç notları kurul üyesine gösterilmez. Görevli hesabında “Kişiler” menüsü yoktur.",
+          "rol_notu": "Yönetim kurulu üyesi / görevli",
+          "on_kosul": "Yönetim kurulu üyesi tanımlı bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F2.16",
+          "baslik": "Başka sitenin kullanıcısına bağlanmaz",
+          "adimlar": [
+            "Başka bir sitede kayıtlı birinin e-postasıyla, bu sitede “Kişi Ekle” yapın (daire seçerek).",
+            "O kişinin başka sitedeki hesabına bu sitede kapı yetkisi geldi mi kontrol edin."
+          ],
+          "beklenen": "Kişi hesapsız olarak kaydedilir; başka sitedeki ad, telefon ya da hesap bilgisi görünmez ve ona bu sitede kapı yetkisi açılmaz. Kişi siteye katılım akışıyla üye olursa eşleşme sonra kurulur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "İki ayrı site ve ikisinde de kayıtlı bir kullanıcı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F2.17",
+          "baslik": "Telefon, tarih ve plaka girişleri",
+          "adimlar": [
+            "Telefon alanına “+905321234567”, sonra “05321234567” yapıştırın.",
+            "Giriş tarihine 05032024 yazın; “5.3.2024” yapıştırın.",
+            "Plakaya “34 abc 123” yazın."
+          ],
+          "beklenen": "Telefon her seferinde tek ve doğru numara olur (+90 532 123 45 67). Tarih 05.03.2024 biçimine döner. Plaka büyük harfe çevrilir ve boşluksuz kaydolur. Geçersiz değerde açık Türkçe uyarı çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

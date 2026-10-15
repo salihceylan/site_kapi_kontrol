@@ -1312,3 +1312,64 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
 - [ ] **59.19. Ürün Adı: "Site ve Toplu Yaşam Yönetim Sistemi":**
   - **Nasıl Test Edilir:** Giriş ekranına, Panel başlığına, web sekme başlığına, Android/Windows uygulama adına, doğrulama kodu ve şifre sıfırlama e-postalarına ve şifre sıfırlama sayfasına bakın; kapı kartında etiketi okuyun.
   - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). "AHBU" yalnızca kapı modülünde kalır: kapı kartı etiketleri ("AHBU AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (AHBU)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.
+
+---
+
+## 60. 👥 Kişi ve Daire Kayıtları (CRM) — Faz 2a: Kişiler, Daireler, Araçlar, Geçmiş (2026-10-16)
+
+Sitedeki herkesin, her dairenin ve her aracın tek yerde tutulduğu çekirdek kayıt. Sözleşme: `docs/PLATFORM_KISILER.md` (sonundaki "Faz 2a inceleme kararları" öncelikli). Toplu Excel yükleme ve dışa aktarma Faz 2b'dedir (henüz yok). Mevcut sakinler ilk açılışta otomatik aktarıldı; kapı yetkileri değişmedi.
+
+- [ ] **60.1. Mevcut Sakinler Otomatik Aktarıldı:**
+  - **Nasıl Test Edilir:** Güncellemeden sonra site yöneticisi olarak çekmeceden "Kişiler"i açın; güncellemeden önce var olan bir sakini bulun. Sakin hesabıyla kapıyı açın.
+  - **Beklenen Sonuç:** Bugünkü sakinler Kişiler listesinde bağlı oldukları daireyle (ilişki "Sakin") görünür. Kapı açma ve kapı yetkileri eskisi gibidir; kimse yeniden kaydolmadı.
+- [ ] **60.2. Kişiler, Daireler ve Araçlar Sekmeleri:**
+  - **Nasıl Test Edilir:** Kişiler ekranında üç sekmeyi gezin; arama kutusuna ad, telefon, e-posta, daire etiketi, plaka yazın; ilişki ve durum süzgeçlerini kullanın; aşağı çekip yenileyin. İki siteli yöneticide üstteki site seçicisini değiştirin.
+  - **Beklenen Sonuç:** Her sekme yüklenirken, boş ve hatalıyken doğru durumu gösterir ("kayıt yok" yalnız gerçekten boşken). Arama yazdıkça daralır, hızlı yazarken eski sonuç yenisini ezmez. Site değişince liste o sitenin kayıtlarına döner.
+- [ ] **60.3. Kişi Ekle ve Telefon Girişi:**
+  - **Nasıl Test Edilir:** Kişi Ekle: ad, telefon alanına 5551234567 yazın, ardından +905321234567 ve 05321234567 yapıştırın; daire ve ilişki seçin; giriş tarihine 05032024 yazın; kaydedin. Aynı e-postayla bir kez daha ekleyin.
+  - **Beklenen Sonuç:** Telefon her seferinde tek ve doğru "+90 555 123 45 67" biçimi olur (yapıştırma çift ülke kodu üretmez). Tarih 05.03.2024 olur. Kişi listede ve dairesinde görünür. İkinci eklemede "Bu e-posta ile kayıtlı bir kişi zaten var." ve "Kişiyi Aç" çıkar.
+- [ ] **60.4. Boş Daireye E-postalı Kişi: Giriş Bilgisi:**
+  - **Nasıl Test Edilir:** Boş bir daireye gerçek e-postalı bir kişi ekleyin. Dolu bir daireye de e-postalı kişi ekleyin.
+  - **Beklenen Sonuç:** Boş dairede o kişiye hesap açılır ve giriş bilgileri e-postayla gider ("Giriş bilgileri e-postayla gönderildi." ya da gönderilemediyse uyarı). Dolu dairede hesap AÇILMAZ, yalnız kayıt tutulur.
+- [ ] **60.5. Hesaplı Kişide Alanlar Kilitli:**
+  - **Nasıl Test Edilir:** Hesabı olan bir kişinin kartında "Düzenle"yi açın.
+  - **Beklenen Sonuç:** Ad, telefon ve e-posta salt okunurdur (kişinin kendi profilinden değişir); yalnız not düzenlenir. Dahili (daire) hesabında e-posta düzenlenebilir.
+- [ ] **60.6. Taşındı: Eski Sakin ve Kapı Yetkisi:**
+  - **Nasıl Test Edilir:** Bir kişinin kartında "Taşındı"yı seçin (onay penceresini okuyun); yarın gibi gelecek tarih yazmayı deneyin; sonra o kişinin hesabıyla o dairenin kapısını açmayı deneyin. Aynı daireye yeni kiracı ekleyin.
+  - **Beklenen Sonuç:** Kişi "Eski sakin" olur ve dairenin geçmişinde kalır. Gelecek tarih "Taşınma tarihi bugünden ileri olamaz." diye reddedilir. Taşınan kişi o daire için kapıyı AÇAMAZ; başka dairedeki yetkisi etkilenmez. Yeni kiracı güncel sakin olur.
+- [ ] **60.7. Taşındı: Yönetici ve Özel Kapı İzni:**
+  - **Nasıl Test Edilir:** Dairenin APARTMENT_ADMIN sakinini "Taşındı" yapın (dairede başka sakin varsa onun girişini deneyin). Özel kapı izni verilmiş eski usul bir sakini taşındı yapın.
+  - **Beklenen Sonuç:** Dairede kalan diğer sakinin kapı erişimi ve PIN'i bozulmaz; yönetici rolü başka bir sakine devredilir. Özel izinli taşınan sakinin kapısı da kapanır.
+- [ ] **60.8. Eski Ekranlardan Çıkarma CRM'e Yansır:**
+  - **Nasıl Test Edilir:** Daireler/Sakinler ekranında bir sakin için "Daireden çıkar" ve başka birinde "Sakini Daireden Sil" yapın; Kişiler'e dönüp yenileyin. Sonra aynı dairede malik eklemeyi deneyin.
+  - **Beklenen Sonuç:** Çıkarılan kişinin o daireyle ilişkisi biter ("Eski sakin"). Elle malik girilmişse bile "bu dairede malik zaten var" hatası çıkmaz. Geçici "Pasife al/Aktif et" ise ilişkiyi BİTİRMEZ.
+- [ ] **60.9. Hesap Silme ve Daire Sıfırlama:**
+  - **Nasıl Test Edilir:** Bir dairede "Daire sakinini sıfırla"yı çalıştırın; süper kullanıcıyla bir test hesabını silin; Kişiler'i yenileyin.
+  - **Beklenen Sonuç:** İşlemler hata vermez. "Silinmiş hesap" adında aktif kayıt kalmaz; kişi eski sakin olarak adıyla geçmişte durur.
+- [ ] **60.10. Daireler: Alanlar, Arsa Payı, Muhatap:**
+  - **Nasıl Test Edilir:** Bir dairenin kartında "Düzenle": kat, brüt/net m², arsa payı 35/1000, daire tipi ve "Borç ve bildirimler kime gitsin" seçin; yalnız pay girip payda boş bırakın; m² alanına 1e3 yazın. Aynı dairede ikinci malik eklemeyi deneyin.
+  - **Beklenen Sonuç:** Geçerli değerler kaydolur. Tek başına pay ve "1e3" reddedilir. İkinci malik "Bu dairede bu ilişki için aktif bir kişi zaten var." der. Daire arama kutusu blok-daire etiketi ve sakin adıyla bulur.
+- [ ] **60.11. Araç ve Plaka:**
+  - **Nasıl Test Edilir:** Araçlar sekmesinde bir kişiye "34 abc 123" plakası ekleyin; aynı plakayı tekrar ekleyin; plakayla arayın; aracı kaldırın (onay), kaldırma düğmesinin okunuşuna bakın.
+  - **Beklenen Sonuç:** Plaka büyük harf ve boşluksuz kaydolur; ikinci kez "Bu plaka bu sitede zaten kayıtlı." der; arama kişiyi bulur; kaldırma onay ister ve kaydı silmez, pasifleştirir. Düğme "34ABC123 plakalı aracı kaldır" diye okunur.
+- [ ] **60.12. Geçmiş (Denetim) ve Kişisel Veri:**
+  - **Nasıl Test Edilir:** Bir kişinin adını, bir dairenin m²'sini ve bir kişinin telefonunu değiştirin; kişi ve daire kartlarında "Geçmiş"i açın.
+  - **Beklenen Sonuç:** Satırlar kim/ne zaman/ne değişti gösterir; ad ve m² için eski → yeni görünür. Telefon, e-posta ve not için yalnız "Telefon güncellendi" yazar (eski/yeni değer saklanmaz). Otomatik işlemler "Sistem tarafından" diye görünür.
+- [ ] **60.13. Yönetim Kurulu Üyesi: Salt Okunur:**
+  - **Nasıl Test Edilir:** Yönetim kurulu üyesi hesabıyla "Kişiler"i açın; görevli (STAFF) hesabıyla menüye bakın.
+  - **Beklenen Sonuç:** Kurul üyesinde hiçbir ekle/düzenle/taşındı/kaldır düğmesi yoktur ("yalnızca görüntüleyebilirsiniz" notu); kişi ve araç notları görünmez. Görevlide "Kişiler" menüsü yoktur.
+- [ ] **60.14. Başka Sitenin Kullanıcısına Bağlanmaz:**
+  - **Nasıl Test Edilir:** Başka bir sitede (ya da yalnızca "Görevli/Kurul" rolüyle bu sitede) kayıtlı birinin e-postasıyla bu sitede kişi ekleyin (daire seçerek).
+  - **Beklenen Sonuç:** Kişi hesapsız kaydolur; başka sitedeki ad/telefon görünmez; o kişiye bu sitede kapı yetkisi AÇILMAZ. Kişi siteye katılım akışıyla üye olunca eşleşme sonradan kurulur.
+- [ ] **60.15. Sakin: Kayıtlarım:**
+  - **Nasıl Test Edilir:** Sakin hesabıyla Profilim ekranında "Kayıtlarım"a bakın; başka bir sitede kaydı olmayan hesapla da bakın.
+  - **Beklenen Sonuç:** Yalnız kendi dairen, ilişkin, giriş tarihin ve kendi plakaların görünür; yönetici notları ve başkasının bilgisi görünmez. Kaydı olmayan hesapta bölüm gizlidir ya da açıklama yazar; hata "kayıt yok" diye gösterilmez.
+- [ ] **60.16. Küçük Ekran, Klavye ve Ekran Okuyucu:**
+  - **Nasıl Test Edilir:** Telefonda yazı boyutunu en büyüğe alıp Kişi Ekle, İlişki, Taşındı, Araç ve Daire düzenleme pencerelerini açın; sunucudan hata aldırın (aynı e-posta); gönderirken geri tuşuna basın; ekran okuyucuyla daire seçicisini ve temizle düğmesini dolaşın.
+  - **Beklenen Sonuç:** Taşma yoktur; hata uyarısı kaydet düğmesinin yanında görünür. Gönderim sürerken geri tuşu pencereyi kapatmaz. Seçici hata metni ve "Seçimi temizle" ekran okuyucuya okunur.
+- [ ] **60.17. (Geliştirici) Gerçek Veritabanı Doğrulaması:**
+  - **Nasıl Test Edilir:** server klasöründe `node scripts/qa_platform_pg.mjs` komutunu `QA_CONFIRM_DISPOSABLE_DB=yes` ile çalıştırın (geçici yerel PostgreSQL).
+  - **Beklenen Sonuç:** Altı bölüm yeşil (≈407 kontrol): migrate zinciri = ensureDbSchema (tetikleyici dahil), yetim/silme senaryoları, taşındı kapı kapanışı, kilit yarışları (Taşındı × kullanıcı silme / sıfırlama / daire azaltma), başka site bağı.
+- [ ] **60.18. (Operasyon) Canlı Dağıtım Doğrulaması:**
+  - **Nasıl Test Edilir:** Sunucuda: `SELECT code FROM platform_backfills;` ve `SELECT tgname FROM pg_trigger WHERE tgname='trg_users_preserve_site_people';` ve `pm2 logs kapi-api --lines 60 --nostream`.
+  - **Beklenen Sonuç:** Biri `people_v1`, diğeri tetikleyici adını döndürür; günlükte "people_v1 aktarimi basarisiz" yoktur; `/health` içinde `mqtt.connected:true`. (Provada 3 aktif üyelik = 3 kişi + 3 ilişki; kapı üyelik sayısı değişmedi.)
