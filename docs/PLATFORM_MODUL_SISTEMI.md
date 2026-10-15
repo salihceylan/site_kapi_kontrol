@@ -128,3 +128,32 @@ Hata: HTTP 403 `{ "error": "Geçiş Kontrol modülü kapalı.", "code": "MODULE_
 
 - Sunucu: `npm test` + `npm run lint` yeşil; yeni testler (katalog hesabı, uçlar ve yetki, onay zorunluluğu, audit yazımı, kapı koruması, `my-doors` süzgeci, site oluşturma türü, rol atama) mevcut hiçbir testi gevşetmeden.
 - Uygulama: `flutter analyze` temiz, `flutter test` yeşil; yeni testler (modeller, servis, Modüller/Denetim/Ek roller görünümleri 320x640 ×2,0, çekmece öğe sayıları, kapalı modül görünümü).
+
+## Faz 1.1 — Modül talebi ve ürün adı (2026-10-15, kullanıcı notu F0.06)
+
+Karar: site yöneticisi modülü KENDİ açıp kapatmaz. Menüsünde yalnız kendisine TANIMLANAN (satın aldığı) modülleri görür; her yöneticinin Panel'i bu yüzden farklıdır.
+Satın alma sistemi yapılana kadar yönetici modül TALEP EDER, talep süper kullanıcıya iletilir, süper kullanıcı onaylarsa modül siteye tanımlanır (satın alma gelince bu akış otomatikleşecek).
+
+### Ürün adı
+Platformun görünen adı **"Site ve Toplu Yaşam Yönetim Sistemi"**dir. **AHBU artık yalnızca Geçiş Kontrol (kapı açma) modülünün adıdır.**
+DEĞİŞİR (platform düzeyi): uygulama/web/pencere başlığı, giriş ekranı başlığı, Panel başlığı, e-posta konu/başlık/imzaları, parola sıfırlama sayfası başlıkları, "uygulamayı açın" gibi uygulama adı geçen metinler, daire giriş bilgileri PDF'i.
+KALIR (kapı modülü): kapı kartı etiketleri ("AHBU AKILLI GEÇİŞ", "AHBU YEREL AĞ GEÇİŞ"), katalogdaki "Geçiş Kontrol (AHBU)", cihaz/BLE ad önekleri, `X-AHBU-Device-UID` başlığı, kapı günlüğü ve cihaz/firmware PDF raporları, firmware ve şirket aracı.
+
+### Veritabanı (029'a EK, ayrı migration `030_module_requests.sql` + db.js'te aynı DDL)
+`module_requests(id BIGSERIAL PK, site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE, module_code TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK (pending|approved|rejected|cancelled), requested_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, requested_by_name TEXT, note TEXT, decided_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, decided_by_name TEXT, decision_note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), decided_at TIMESTAMPTZ NULL)`; aynı (site, modül) için tek bekleyen talep: kısmi tekil indeks `WHERE status='pending'`; indeks `(status, id DESC)`.
+
+### Uçlar (hata gövdesi `{error, code}`)
+- **Değişen:** `PUT /manager/sites/:siteCode/modules/:moduleCode` YALNIZ süper kullanıcıya açıktır; site yöneticisi 403 `MODULE_ADMIN_ONLY` ("Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz."). `GET .../modules` yanıtına EKLEYİCİ alanlar: her modülde `can_toggle` (boolean: çağıran süper kullanıcı VE modül `toggleable` ise true) ve `request_status` (`"pending"|null`: o siteye ait bekleyen talep). `toggleable` bugünkü anlamıyla kalır (katalog özelliği). Eski istemciler `toggleable`'a baktığı için PUT'ta 403 mesajını görür.
+- `POST /manager/sites/:siteCode/module-requests` gövde `{module_code, note?}` (note ≤ 500 karakter) → 201 `{request}`; yetki requireSiteManager + hasSiteManagementAccess; hız sınırı kullanıcı başına 10/saat. Hatalar: 404 `MODULE_NOT_FOUND`; 400 `MODULE_NOT_TOGGLEABLE` (core); 409 `MODULE_COMING_SOON`; 409 `MODULE_ALREADY_ENABLED`; 409 `MODULE_REQUEST_PENDING` (aynı modül için bekleyen talep var); 400 `INVALID_BODY`.
+- `GET /manager/sites/:siteCode/module-requests` → `{ "items": [ request ] }` (son 50, `id DESC`).
+- `DELETE /manager/sites/:siteCode/module-requests/:id` → bekleyen talebi geri çeker (`cancelled`), `{request}`; başka sitenin talebi 404 `REQUEST_NOT_FOUND`; bekleyen değilse 409 `REQUEST_NOT_PENDING`.
+- `GET /admin/module-requests?status=pending|approved|rejected|cancelled|all&limit=50&before_id=` (yalnız süper kullanıcı; varsayılan `pending`) → `{ "items": [ request ], "next_before_id": N|null, "pending_count": N }` (`pending_count` süzgeçten bağımsız toplam bekleyen sayısı).
+- `PUT /admin/module-requests/:id` gövde `{decision: "approve"|"reject", note?}` → `{request}`. `approve`: aynı transaction'da `site_modules` upsert `enabled=true` (+ `module.enabled` audit satırı, `details: {"via":"request","request_id":N}`) ve talep `approved`; `reject`: talep `rejected`. Bekleyen değilse 409 `REQUEST_NOT_PENDING`; yok 404 `REQUEST_NOT_FOUND`; onay anında modül artık `coming_soon` ya da zaten açıksa 409 (`MODULE_COMING_SOON`/`MODULE_ALREADY_ENABLED`, talep bekleyen kalır). Süper kullanıcı e-posta/Panel dışında bildirim almaz (F3'te bildirim merkezi gelecek).
+- `request` nesnesi: `{ id, site_code, site_name, module_code, module_name, status, note, requested_by_name, created_at, decided_by_name, decided_at, decision_note }`.
+- Audit eylemleri: `module_request.created`, `module_request.approved`, `module_request.rejected`, `module_request.cancelled` (`target_type:'module_request'`, `target_id:<id>`, `details:{module_code, ...}`); `GET /admin/audit-log?action=` bu değerleri de süzer.
+- Yeni talepte tüm AKTİF süper kullanıcılara e-posta (konu: "Site ve Toplu Yaşam Yönetim Sistemi - Yeni Modül Talebi"; site, modül, isteyen, not); gönderim hatası talebi bozmaz (fire-and-forget).
+
+### Flutter
+- **Modüller (site yöneticisi):** kartta anahtar YOKTUR. Durum çipleri: "Tanımlı" (açık), "Tanımlı değil" + "Modül Talep Et" düğmesi (not alanlı pencere → talep gider), "Talep gönderildi" + "Talebi Geri Çek", "Yakında…", "Her sitede açık". Çekmeceden "Modüller" yönetici menüsünde kalır. Süper kullanıcıda anahtarlar (mevcut) kalır.
+- **Modül Talepleri (süper kullanıcı):** yeni çekmece öğesi, bekleyen sayısı rozetiyle; süzgeç (Bekleyen / Onaylanan / Reddedilen / Tümü); kart: site, modül, isteyen, not, tarih; "Onayla" ve "Reddet" (reddetmede isteğe bağlı gerekçe) — onay penceresi; işlem sonrası otomatik yenileme, çekip yenileme, "Daha fazla yükle". Rozet sayısı `pending_count` ile (ModuleAccess yoklamasıyla birlikte, yalnız süper kullanıcıda, arka planda durur).
+- Hata kodu eşlemeleri (<140 karakter, '_' yok): `MODULE_ADMIN_ONLY` "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz." · `MODULE_ALREADY_ENABLED` "Bu modül zaten açık." · `MODULE_REQUEST_PENDING` "Bu modül için bekleyen bir talebiniz var." · `REQUEST_NOT_FOUND` "Talep bulunamadı." · `REQUEST_NOT_PENDING` "Bu talep artık bekleyen durumda değil."

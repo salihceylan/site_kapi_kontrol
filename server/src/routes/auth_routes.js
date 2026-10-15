@@ -108,7 +108,7 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
       <html lang="tr">
       <head>
         <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Şifre Sıfırlama Hatası | AHBU</title>
+        <title>Şifre Sıfırlama Hatası | Site ve Toplu Yaşam Yönetim Sistemi</title>
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
@@ -140,7 +140,7 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
     <html lang="tr">
     <head>
       <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Yeni Şifre Belirleme | AHBU</title>
+      <title>Yeni Şifre Belirleme | Site ve Toplu Yaşam Yönetim Sistemi</title>
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
@@ -203,7 +203,7 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
           <div class="success-icon">✓</div>
           <h2 style="color: #10b981;">Şifreniz Güncellendi!</h2>
           <p style="color: #94a3b8; font-size: 15px; margin: 12px 0 28px 0; line-height: 1.6;">
-            Yeni şifreniz başarıyla kaydedildi. Artık yeni şifrenizle AHBU Kapı Kontrol uygulamasına giriş yapabilirsiniz.
+            Yeni şifreniz başarıyla kaydedildi. Artık yeni şifrenizle Site ve Toplu Yaşam Yönetim Sistemi uygulamasına giriş yapabilirsiniz.
           </p>
           <a href="sitekapi://door_control" class="btn-submit" style="display:inline-block; text-decoration: none;">Uygulamayı Aç</a>
         </div>

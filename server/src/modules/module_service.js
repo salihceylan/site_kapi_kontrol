@@ -42,10 +42,24 @@ async function loadModuleRows(siteCode, db) {
   return result.rows ?? [];
 }
 
+/** Bu siteye ait BEKLEYEN modül talepleri (module_code kümesi). */
+async function loadPendingRequestCodes(siteCode, db) {
+  const result = await db.query(
+    `SELECT module_code FROM module_requests WHERE site_code = $1 AND status = 'pending'`,
+    [siteCode],
+  );
+  return new Set((result.rows ?? []).map((row) => row.module_code));
+}
+
 /**
  * GET /manager/sites/:siteCode/modules gövdesi; site yoksa null.
+ *
+ * Faz 1.1 (EKLEYİCİ alanlar): her modülde `can_toggle` (çağıran süper kullanıcı VE modül `toggleable` ise true;
+ * `toggleable` katalog özelliği olarak aynı kalır) ve `request_status` (`"pending"` | null: bu siteye ait bekleyen talep).
+ *
+ * @param {{ canToggle?: boolean }} [options]  canToggle: çağıranın modül açıp kapatma yetkisi (süper kullanıcı)
  */
-export async function getSiteModulesView(siteCode, db = pool) {
+export async function getSiteModulesView(siteCode, db = pool, { canToggle = false } = {}) {
   const code = toPositiveInt(siteCode);
   if (code === null) {
     return null;
@@ -59,13 +73,18 @@ export async function getSiteModulesView(siteCode, db = pool) {
     return null;
   }
   const rows = await loadModuleRows(code, db);
+  const pendingCodes = await loadPendingRequestCodes(code, db);
   const managementType = normalizeManagementType(site.management_type);
   return {
     site_code: Number(site.site_code),
     site_name: site.name,
     management_type: managementType,
     management_type_label: managementTypeLabel(managementType),
-    modules: computeSiteModuleList(rows),
+    modules: computeSiteModuleList(rows).map((entry) => ({
+      ...entry,
+      can_toggle: canToggle === true && entry.toggleable === true,
+      request_status: pendingCodes.has(entry.code) ? 'pending' : null,
+    })),
   };
 }
 

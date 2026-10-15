@@ -106,16 +106,16 @@ export async function sendIndividualVerificationEmail({
   await transporter.sendMail({
     from,
     to,
-    subject: 'AHBU e-posta doğrulama kodunuz',
-    text: `Merhaba ${fullName}, AHBU doğrulama kodunuz: ${code}. ${validityNote}`,
+    subject: 'Site ve Toplu Yaşam Yönetim Sistemi - E-posta doğrulama kodunuz',
+    text: `Merhaba ${fullName}, Site ve Toplu Yaşam Yönetim Sistemi doğrulama kodunuz: ${code}. ${validityNote}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 20px;">
-          <h2 style="color: #111827; margin: 0;">AHBU Kapı Kontrol</h2>
+          <h2 style="color: #111827; margin: 0;">Site ve Toplu Yaşam Yönetim Sistemi</h2>
           <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Hesap Doğrulama</p>
         </div>
         <p style="color: #374151; font-size: 16px;">Merhaba <strong>${safeFullName}</strong>,</p>
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.5;">AHBU hesabınızı aktif hale getirmek ve site/kapı işlemlerinize başlayabilmek için doğrulama kodunuz:</p>
+        <p style="color: #4b5563; font-size: 15px; line-height: 1.5;">Hesabınızı aktif hale getirmek ve site/kapı işlemlerinize başlayabilmek için doğrulama kodunuz:</p>
         <div style="text-align: center; margin: 28px 0;">
           <span style="display: inline-block; padding: 14px 28px; font-size: 32px; font-weight: 700; letter-spacing: 10px; color: #1e40af; background-color: #eff6ff; border: 2px dashed #3b82f6; border-radius: 8px;">${safeCode}</span>
         </div>
@@ -144,12 +144,12 @@ export async function sendSiteManagerVerificationEmail({
   await transporter.sendMail({
     from,
     to,
-    subject: 'AHBU e-posta dogrulama kodunuz',
-    text: `Merhaba ${fullName}, AHBU dogrulama kodunuz: ${code}`,
+    subject: 'Site ve Toplu Yaşam Yönetim Sistemi - E-posta dogrulama kodunuz',
+    text: `Merhaba ${fullName}, Site ve Toplu Yaşam Yönetim Sistemi dogrulama kodunuz: ${code}`,
     html: `
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
         <p>Merhaba <strong>${safeFullName}</strong>,</p>
-        <p>AHBU kaydinizi tamamlamak icin dogrulama kodunuz:</p>
+        <p>Site ve Toplu Yaşam Yönetim Sistemi kaydinizi tamamlamak icin dogrulama kodunuz:</p>
         <p style="font-size:28px;font-weight:700;letter-spacing:8px">${safeCode}</p>
         <p>Bu kod 10 dakika boyunca gecerlidir.</p>
       </div>
@@ -179,12 +179,12 @@ export async function sendApartmentCredentialsEmail({
   await transporter.sendMail({
     from,
     to,
-    subject: 'AHBU daire giris bilgileriniz',
+    subject: 'Site ve Toplu Yaşam Yönetim Sistemi - Daire giris bilgileriniz',
     text: `Merhaba ${residentName}, ${siteName} icindeki ${apartmentLabel} icin giris bilgileriniz: kullanici adi ${loginName}, PIN ${pinCode}`,
     html: `
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
         <p>Merhaba <strong>${safeResidentName}</strong>,</p>
-        <p><strong>${safeSiteName}</strong> icindeki <strong>${safeApartmentLabel}</strong> icin AHBU giris bilgileriniz asagidadir:</p>
+        <p><strong>${safeSiteName}</strong> icindeki <strong>${safeApartmentLabel}</strong> icin giris bilgileriniz asagidadir:</p>
         <p><strong>Kullanici adi:</strong> ${safeLoginName}</p>
         <p><strong>PIN:</strong> ${safePinCode}</p>
         <p>Giris yaptiktan sonra gerekirse site yoneticinizden yeni sifre talep edebilirsiniz.</p>
@@ -217,7 +217,7 @@ export async function sendSuperUserSiteDeletionEmail({
       <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 2px solid #ef4444; border-radius: 12px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h2 style="color: #dc2626; margin: 0;">⚠️ SİTE KALICI SİLME İŞLEMİ</h2>
-          <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">AHBU Güvenlik Doğrulaması</p>
+          <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Site ve Toplu Yaşam Yönetim Sistemi Güvenlik Doğrulaması</p>
         </div>
         <p style="color: #374151; font-size: 16px;">Merhaba <strong>${safeFullName}</strong>,</p>
         <p style="color: #b91c1c; font-size: 15px; line-height: 1.5; font-weight: bold;">
@@ -254,15 +254,15 @@ export async function sendSiteManagerInvitationEmail({
   const safeSiteName = escapeHtml(siteName);
   const safeInviterName = escapeHtml(inviterName || 'Site Yönetimi');
 
-  const subject = singleLine(`AHBU - ${withSitesi(siteName)} Yönetici Daveti`);
+  const subject = singleLine(`Site ve Toplu Yaşam Yönetim Sistemi - ${withSitesi(siteName)} Yönetici Daveti`);
   const text = isExistingUser
-    ? `Merhaba ${fullName || ''}, ${inviterName} sizi '${siteName}' sitesine Site Yöneticisi olarak ekledi. AHBU Kapı Kontrol uygulamasını açarak siteyi yönetmeye başlayabilirsiniz.`
-    : `Merhaba ${fullName || ''}, ${inviterName} sizi '${siteName}' sitesine Site Yöneticisi olarak davet etti. AHBU Kapı Kontrol uygulamasını indirip bu e-posta adresiyle (${to}) kayıt olduğunuzda site yöneticiliği yetkiniz otomatik olarak tanımlanacaktır.`;
+    ? `Merhaba ${fullName || ''}, ${inviterName} sizi '${siteName}' sitesine Site Yöneticisi olarak ekledi. Site ve Toplu Yaşam Yönetim Sistemi uygulamasını açarak siteyi yönetmeye başlayabilirsiniz.`
+    : `Merhaba ${fullName || ''}, ${inviterName} sizi '${siteName}' sitesine Site Yöneticisi olarak davet etti. Site ve Toplu Yaşam Yönetim Sistemi uygulamasını indirip bu e-posta adresiyle (${to}) kayıt olduğunuzda site yöneticiliği yetkiniz otomatik olarak tanımlanacaktır.`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: #111827; margin: 0;">🏢 AHBU Kapı Kontrol</h2>
+        <h2 style="color: #111827; margin: 0;">🏢 Site ve Toplu Yaşam Yönetim Sistemi</h2>
         <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Site Yöneticisi Daveti</p>
       </div>
       <p style="color: #374151; font-size: 16px;">Merhaba <strong>${safeFullName}</strong>,</p>
@@ -276,7 +276,7 @@ export async function sendSiteManagerInvitationEmail({
             ✓ Hesabınız zaten mevcut olduğu için yöneticilik yetkiniz anında tanımlandı!
           </p>
           <p style="color: #15803d; margin: 6px 0 0 0; font-size: 13.5px;">
-            AHBU Kapı Kontrol uygulamasını açarak siteyi, blokları, daireleri ve kapıları hemen yönetmeye başlayabilirsiniz.
+            Site ve Toplu Yaşam Yönetim Sistemi uygulamasını açarak siteyi, blokları, daireleri ve kapıları hemen yönetmeye başlayabilirsiniz.
           </p>
         </div>
         `
@@ -286,7 +286,7 @@ export async function sendSiteManagerInvitationEmail({
             📌 Nasıl Başlayabilirsiniz?
           </p>
           <p style="color: #1d4ed8; margin: 6px 0 0 0; font-size: 13.5px;">
-            AHBU Kapı Kontrol uygulamasını açıp <strong>${escapeHtml(to)}</strong> e-posta adresiyle ücretsiz hesap oluşturup e-postanızı doğruladığınızda, '<strong>${safeSiteName}</strong>' sitesinin yöneticiliği otomatik olarak hesabınıza tanımlanacaktır.
+            Site ve Toplu Yaşam Yönetim Sistemi uygulamasını açıp <strong>${escapeHtml(to)}</strong> e-posta adresiyle ücretsiz hesap oluşturup e-postanızı doğruladığınızda, '<strong>${safeSiteName}</strong>' sitesinin yöneticiliği otomatik olarak hesabınıza tanımlanacaktır.
           </p>
         </div>
         `
@@ -331,13 +331,13 @@ export async function sendJoinRequestNotificationEmail({
   // targetFlat HTML'e girer (kacirilmis), plainTargetFlat konu/duz metinde kullanilir (cift kacirma olmasin).
   const plainTargetFlat = `${blockPart}Daire ${unitLabel ?? ''}`.trim();
   const targetFlat = escapeHtml(plainTargetFlat);
-  const subject = singleLine(`AHBU - Yeni Daire Katılım Başvurusu (${siteName} - ${plainTargetFlat})`);
-  const text = `Merhaba ${managerName || 'Site Yöneticisi'}, '${siteName}' sitesi ${plainTargetFlat} için yeni bir katılım başvurusu yapıldı. Başvuran: ${applicantName} (${applicantEmail}). AHBU Kapı Kontrol uygulamasından başvuruyu onaylayabilir veya reddedebilirsiniz.`;
+  const subject = singleLine(`Site ve Toplu Yaşam Yönetim Sistemi - Yeni Daire Katılım Başvurusu (${siteName} - ${plainTargetFlat})`);
+  const text = `Merhaba ${managerName || 'Site Yöneticisi'}, '${siteName}' sitesi ${plainTargetFlat} için yeni bir katılım başvurusu yapıldı. Başvuran: ${applicantName} (${applicantEmail}). Site ve Toplu Yaşam Yönetim Sistemi uygulamasından başvuruyu onaylayabilir veya reddedebilirsiniz.`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <h2 style="color: #111827; margin: 0;">🏢 AHBU Kapı Kontrol</h2>
+        <h2 style="color: #111827; margin: 0;">🏢 Site ve Toplu Yaşam Yönetim Sistemi</h2>
         <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Yeni Sakin Katılım Başvurusu</p>
       </div>
       <p style="color: #374151; font-size: 16px;">Merhaba <strong>${safeManagerName}</strong>,</p>
@@ -353,11 +353,11 @@ export async function sendJoinRequestNotificationEmail({
       <div style="padding: 14px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; margin: 20px 0;">
         <p style="color: #166534; margin: 0; font-size: 13.5px;">
           ✓ <strong>Ne Yapmalısınız?</strong><br/>
-          AHBU Kapı Kontrol mobil uygulamasını açarak ilgili sitenizin <strong>Katılım Başvuruları</strong> veya <strong>Sakin Listesi</strong> ekranından başvuruyu inceleyip tek tıkla onaylayabilir veya reddedebilirsiniz.
+          Site ve Toplu Yaşam Yönetim Sistemi mobil uygulamasını açarak ilgili sitenizin <strong>Katılım Başvuruları</strong> veya <strong>Sakin Listesi</strong> ekranından başvuruyu inceleyip tek tıkla onaylayabilir veya reddedebilirsiniz.
         </p>
       </div>
       <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
-      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası AHBU Kapı Kontrol Otomasyon Sistemi tarafından otomatik olarak gönderilmiştir.</p>
+      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası Site ve Toplu Yaşam Yönetim Sistemi tarafından otomatik olarak gönderilmiştir.</p>
     </div>
   `;
 
@@ -384,18 +384,18 @@ export async function sendPasswordResetEmail({
   const safeFullName = escapeHtml(fullName || 'Kullanıcı');
   const safeResetUrl = escapeHtml(safeHttpUrl(resetUrl));
 
-  const subject = 'AHBU - Şifre Sıfırlama Bağlantısı';
-  const text = `Merhaba ${fullName || 'Kullanıcı'}, AHBU hesabınız için şifre sıfırlama talebinde bulundunuz. Şifrenizi sıfırlamak için bağlantı: ${resetUrl} (Bu bağlantı 30 dakika boyunca geçerlidir.)`;
+  const subject = 'Site ve Toplu Yaşam Yönetim Sistemi - Şifre Sıfırlama Bağlantısı';
+  const text = `Merhaba ${fullName || 'Kullanıcı'}, hesabınız için şifre sıfırlama talebinde bulundunuz. Şifrenizi sıfırlamak için bağlantı: ${resetUrl} (Bu bağlantı 30 dakika boyunca geçerlidir.)`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 14px; background-color: #ffffff;">
       <div style="text-align: center; margin-bottom: 24px;">
-        <h2 style="color: #0f172a; margin: 0; font-size: 22px;">🔐 AHBU Kapı Kontrol</h2>
+        <h2 style="color: #0f172a; margin: 0; font-size: 22px;">🔐 Site ve Toplu Yaşam Yönetim Sistemi</h2>
         <p style="color: #64748b; font-size: 14px; margin-top: 6px;">Şifre Sıfırlama Talebi</p>
       </div>
       <p style="color: #334155; font-size: 16px;">Merhaba <strong>${safeFullName}</strong>,</p>
       <p style="color: #475569; font-size: 15px; line-height: 1.6;">
-        AHBU Kapı Kontrol hesabınız için bir şifre sıfırlama talebinde bulundunuz. Yeni bir şifre belirlemek için aşağıdaki butona tıklayınız:
+        Site ve Toplu Yaşam Yönetim Sistemi hesabınız için bir şifre sıfırlama talebinde bulundunuz. Yeni bir şifre belirlemek için aşağıdaki butona tıklayınız:
       </p>
       <div style="text-align: center; margin: 32px 0;">
         <a href="${safeResetUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: bold; color: #ffffff; background: linear-gradient(135deg, #2563eb, #1d4ed8); text-decoration: none; border-radius: 10px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);">
@@ -429,4 +429,67 @@ export async function sendPasswordResetEmail({
   });
 }
 
+/**
+ * Yeni modül talebi bildirimi (site yöneticisi -> sistem yöneticisi/süper kullanıcı).
+ * Konu SABİTTİR (kullanıcı verisi içermez); site, modül, isteyen ve not gövdeye yazılır (HTML'de kaçırılır).
+ */
+export const MODULE_REQUEST_EMAIL_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Yeni Modül Talebi';
 
+export async function sendModuleRequestNotificationEmail({
+  to,
+  fullName,
+  siteName,
+  moduleName,
+  requesterName,
+  note,
+}) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+
+  const transporter = createTransporter();
+  const safeFullName = escapeHtml(fullName || 'Sistem Yöneticisi');
+  const safeSiteName = escapeHtml(siteName);
+  const safeModuleName = escapeHtml(moduleName);
+  const safeRequesterName = escapeHtml(requesterName || 'Site Yöneticisi');
+  const noteText = String(note ?? '').trim();
+  const safeNote = noteText ? escapeHtml(noteText) : null;
+
+  const text =
+    `Merhaba ${fullName || 'Sistem Yöneticisi'}, '${siteName}' sitesinin yöneticisi ${requesterName || 'Site Yöneticisi'} ` +
+    `"${moduleName}" modülünü talep etti.${noteText ? ` Not: ${noteText}` : ''} ` +
+    'Talebi uygulamadaki Modül Talepleri ekranından onaylayabilir veya reddedebilirsiniz.';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #111827; margin: 0;">🧩 Site ve Toplu Yaşam Yönetim Sistemi</h2>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Yeni Modül Talebi</p>
+      </div>
+      <p style="color: #374151; font-size: 16px;">Merhaba <strong>${safeFullName}</strong>,</p>
+      <p style="color: #4b5563; font-size: 15px; line-height: 1.5;">
+        '<strong>${safeSiteName}</strong>' sitesinin yöneticisi için yeni bir modül talebi oluşturuldu.
+      </p>
+      <div style="padding: 16px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 20px 0;">
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>Site:</strong> ${safeSiteName}</p>
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>Modül:</strong> ${safeModuleName}</p>
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>İsteyen:</strong> ${safeRequesterName}</p>
+        ${safeNote ? `<p style="color: #334155; margin: 0; font-size: 14px;"><strong>Not:</strong> <em>"${safeNote}"</em></p>` : ''}
+      </div>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.5;">
+        Talebi uygulamadaki <strong>Modül Talepleri</strong> ekranından onaylayabilir veya reddedebilirsiniz.
+      </p>
+      <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası Site ve Toplu Yaşam Yönetim Sistemi tarafından otomatik olarak gönderilmiştir.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: MODULE_REQUEST_EMAIL_SUBJECT,
+    text,
+    html,
+  });
+}

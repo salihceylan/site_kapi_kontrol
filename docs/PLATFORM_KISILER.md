@@ -1,0 +1,80 @@
+# Platform çekirdeği — Kişi ve Daire Kayıtları (CRM), Faz 2 sözleşmesi
+
+Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Üst sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md` (modül kataloğu, yetki, audit, `door_access`).
+Deneme listesi: `tools/deneme_listesi/platform.json` bölüm **F2** (F2.01–F2.12). Kurallar: `AGENTS.md` (2 geriye dönük uyum, 6 taşma yok, 7 canlı yenileme).
+Faz 2a: F2.01–F2.07, F2.10–F2.12. Faz 2b: F2.08 (toplu yükleme) ve F2.09 (dışa aktarma).
+
+## Temel kararlar
+
+1. **Erişim yetkisinin tek kaynağı `apartment_memberships` kalır** (kapı yetkisi, uygulama üyeliği). CRM kayıtları bunun üstüne eklenen bir KAYIT katmanıdır: ilişki türü (malik/kiracı…), tarihler, notlar, hesabı olmayan kişiler, araçlar. Mevcut katılım/onay/daire-sakini akışları (join_requests, `PATCH /manager/apartments/:id/resident`, davetler) AYNEN çalışır ve CRM'e yansır.
+2. **Kişi bilgisinin tek kaynağı:** hesabı olan kişide ad/telefon/e-posta `users` tablosundan okunur (kopyalanmaz, sapma olmaz) ve CRM'den DEĞİŞTİRİLEMEZ (e-posta zaten kilitli, bkz. commit c8a8541). Hesabı olmayan kişide bu alanlar `site_people`'da tutulur ve CRM'den düzenlenir.
+3. **Kayıtlar silinmez:** taşınan kişi "pasif/eski sakin" olur ve dairenin geçmişinde kalır. Her değişiklik `audit_log`'a yazılır (F2.11 geçmişi buradan okunur).
+4. **Site izolasyonu (KVKK, F2.10):** yönetici yalnız kendi sitesinin kayıtlarını görür; sakin yalnız kendi kayıtlarını; başka sitenin hiçbir bilgisi dönmez. Kurul üyesi (`BOARD_MEMBER`) yalnız OKUR; görevli (`STAFF`) kişi listesini GÖREMEZ (403 `FORBIDDEN_ROLE`).
+5. **Modül:** `people` çekirdek modüldür; katalogda `status: available` olur (hep açık, kapatılamaz). `GET /app/my-modules` ve katalog buna göre `enabled: true` döner.
+6. **Doğrudan canlı:** şema ekleyicidir, `ensureDbSchema` ile `migrations/03x_*.sql` aynı DDL'dir; mevcut sakinlerin CRM'e aktarımı (backfill) TEK SEFERLİK ve idempotent çalışır (`platform_backfills(code PRIMARY KEY, done_at)` tablosu ile korunur); mevcut hiçbir kapı yetkisi değişmez.
+
+## Veritabanı (migration `031_people_and_apartments.sql`; 030 modül talepleri içindir)
+
+- `site_people(id BIGSERIAL PK, site_code BIGINT NOT NULL REFERENCES sites ON DELETE CASCADE, user_code INTEGER NULL REFERENCES users ON DELETE SET NULL, full_name TEXT, phone TEXT, email TEXT, note TEXT, is_active BOOLEAN NOT NULL DEFAULT TRUE, created_by INTEGER NULL REFERENCES users ON DELETE SET NULL, created_at, updated_at)`. `user_code` doluysa `full_name/phone/email` sütunları BOŞ bırakılır (okuma `users`'tan). Kısmi tekil indeksler: `(site_code, user_code) WHERE user_code IS NOT NULL`; `(site_code, lower(email)) WHERE user_code IS NULL AND email IS NOT NULL AND is_active`. Telefon normalize: `+90` + 10 hane (`+905551234567`).
+- `apartment_residencies(id BIGSERIAL PK, site_code BIGINT NOT NULL, apartment_id INTEGER/BIGINT NOT NULL REFERENCES apartments ON DELETE CASCADE, person_id BIGINT NOT NULL REFERENCES site_people ON DELETE CASCADE, relation TEXT NOT NULL DEFAULT 'resident' CHECK (owner|tenant|family_member|resident), is_current BOOLEAN NOT NULL DEFAULT TRUE, move_in_date DATE NULL, move_out_date DATE NULL, created_at, updated_at)`. `resident` = ilişki belirtilmemiş (mevcut sakinler bununla aktarılır; malik/kiracı olduğunu yönetici sonradan işaretler). Kısmi tekil: `(apartment_id, person_id) WHERE is_current`. Bir dairede aynı anda en çok BİR güncel `owner` ve BİR güncel `tenant` olabilir (ikinci için 409 `RELATION_TAKEN`; `family_member`/`resident` çok olabilir).
+- `apartments` EKLEMELİ kolonlar: `floor INTEGER NULL`, `gross_area_m2 NUMERIC(8,2) NULL`, `net_area_m2 NUMERIC(8,2) NULL`, `land_share_numerator INTEGER NULL`, `land_share_denominator INTEGER NULL` (arsa payı kesri, ör. 35/1000; ikisi birlikte dolu ya da boş; payda > 0, pay ≤ payda), `category TEXT NULL` (daire tipi/kategorisi, ör. "3+1", "Dükkan"; ≤ 40 karakter), `responsible_party TEXT NOT NULL DEFAULT 'both' CHECK (owner|tenant|both)` ("borç ve bildirimler kime gitsin"; borç tarafını Faz 4 kullanır).
+- `vehicles(id BIGSERIAL PK, site_code BIGINT NOT NULL REFERENCES sites ON DELETE CASCADE, person_id BIGINT NULL REFERENCES site_people ON DELETE SET NULL, apartment_id NULL, plate TEXT NOT NULL (normalize: büyük harf, boşluksuz), plate_display TEXT, note TEXT, is_active BOOLEAN NOT NULL DEFAULT TRUE, created_at)`; kısmi tekil `(site_code, plate) WHERE is_active`.
+- `platform_backfills(code TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`.
+- **Backfill `people_v1`** (ensureDbSchema içinde, tek sefer): her site için aktif `apartment_memberships` (aktif dairede) ve eski `apartments.resident_user_code` sakinleri → `site_people(user_code)` + `apartment_residencies(relation 'resident', is_current true, move_in_date = membership.created_at::date)`; aynı kişi birden çok dairede olabilir. Hiçbir `apartment_memberships`/kapı yetkisi satırına DOKUNMAZ. Sonrasında yeni üyelikler OKUMA/YAZMA anında `syncSitePeople(siteCode)` ile idempotent yansıtılır (listeleme ve kart uçları çağırır; mevcut katılım akışlarına kanca eklenmez). `syncSitePeople` hesapsız bir kişiyle aynı e-postaya sahip bir kullanıcı bulursa yinelenen kayıt açmak yerine o kişiye `user_code` bağlar (alanları `users`'a taşır).
+
+## Sunucu uçları (hepsi `/manager/sites/:siteCode/...`, `requireSiteManager`'dan FARKLI olarak okuma `BOARD_MEMBER`'a da açık)
+
+Yetki: yazma = yönetici/süper kullanıcı (`hasSiteManagementAccess`); okuma = yönetici/süper + `BOARD_MEMBER`; `STAFF` ve sakin 403 `FORBIDDEN_ROLE`; başka sitenin yöneticisi 403 `FORBIDDEN_SITE`. Hata gövdesi `{error, code}`. Tüm yazmalar audit'e yazılır (sonda eylem adları).
+
+**Kişiler**
+- `GET .../people?q=&relation=&status=active|inactive|all&apartment_id=&limit=50&offset=0` → `{ "items": [PersonSummary], "total": N }`. `q`: ad, telefon, e-posta, daire etiketi (büyük/küçük harf ve Türkçe karakter duyarsız). `relation`: kişinin GÜNCEL ilişkilerinden biri.
+  `PersonSummary`: `{ id, full_name, phone, email, has_account, is_active, relations: ["owner"…], apartments: [{ apartment_id, label, block_name, relation }], vehicle_count }`.
+- `GET .../people/:personId` → `PersonDetail`: Summary alanları + `note`, `created_at`, `residencies: [{ id, apartment_id, label, block_name, relation, is_current, move_in_date, move_out_date }]` (geçmiş dahil), `vehicles: [Vehicle]`, `user_code` (yalnız yönetici/süper için).
+- `POST .../people` gövde `{ full_name, phone?, email?, note?, apartment_id?, relation?, move_in_date? }` → 201 `PersonDetail`. `full_name` zorunlu (2–100 karakter); e-posta/telefon doğrulanır. Aynı e-posta (aynı sitede aktif) → 409 `PERSON_EXISTS` (+ var olan `person_id`). **Hesap bağlama:** e-posta verilmişse ve bu e-posta kayıtlı bir kullanıcıya aitse kişi o kullanıcıya bağlanır (`has_account: true`) ve `apartment_id` varsa `apartment_memberships` kaydı (yoksa) oluşturulur/yeniden etkinleştirilir (roller: `FAMILY_MEMBER`, yönetici onayı gerekmez çünkü yönetici ekliyor); hesap YOKSA ve `apartment_id` + e-posta varsa mevcut "daire sakini hesabı oluştur ve e-posta gönder" akışı (apartment_service / `PATCH /manager/apartments/:id/resident` mantığı) YENİDEN KULLANILIR — yeni bir davet/e-posta mekanizması icat edilmez; e-posta yoksa yalnız kayıt tutulur (`has_account: false`).
+- `PATCH .../people/:personId` gövde `{ full_name?, phone?, email?, note?, is_active? }`. Hesabı olan kişide `full_name/phone/email` gönderilirse 409 `PERSON_HAS_ACCOUNT` ("Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir."); `note` ve `is_active` her zaman. `is_active:false` → tüm güncel ilişkileri bitirir (aşağıdaki "taşınma" kuralları).
+- **İlişkiler:** `POST .../people/:personId/residencies` `{ apartment_id, relation, move_in_date? }` → 201 `PersonDetail`; `PATCH .../residencies/:residencyId` `{ relation?, move_in_date? }`; `POST .../residencies/:residencyId/end` `{ move_out_date? }` ("Taşındı": `is_current=false`, tarih = verilen ya da bugün; kişinin hesabı varsa o dairedeki `apartment_memberships` satırı `is_active=false` yapılır → kapı yetkisi KAPANIR; başka dairedeki üyelikleri etkilenmez; satır silinmez). Başka sitenin dairesi 404 `APARTMENT_NOT_FOUND`.
+
+**Daireler**
+- `GET .../apartments?block_id=&q=&limit=&offset=` → `{ "items": [ApartmentSummary], "total": N }`: `{ id, label, block_id, block_name, floor, category, gross_area_m2, net_area_m2, land_share:{numerator,denominator}|null, responsible_party, owner:{person_id,full_name}|null, tenant:{…}|null, resident_count }`.
+- `GET .../apartments/:apartmentId` → `ApartmentDetail`: Summary + `current_residents: [{ residency_id, person_id, full_name, relation, move_in_date, has_account }]`, `past_residents: [{ …, move_out_date }]`.
+- `PATCH .../apartments/:apartmentId` gövde `{ floor?, gross_area_m2?, net_area_m2?, land_share_numerator?, land_share_denominator?, category?, responsible_party? }` → `ApartmentDetail`. Mevcut `unit_label`/blok yapısı bu uçla DEĞİŞMEZ. Geçersiz değer 400 `INVALID_BODY` (alan adıyla).
+
+**Araçlar**
+- `GET .../vehicles?q=&person_id=&limit=&offset=` → `{ "items": [Vehicle], "total": N }`; `Vehicle`: `{ id, plate, plate_display, note, person_id, person_name, apartment_label, is_active }`.
+- `POST .../vehicles` `{ person_id, plate, note? }` → 201 `{vehicle}`; plaka normalize edilir (`34 ABC 123` → `34ABC123`; yalnız `A-Z0-9`, 5–10 karakter, aksi 400 `PLATE_INVALID`); aynı sitede aktif aynı plaka 409 `PLATE_EXISTS`. `DELETE .../vehicles/:vehicleId` → `is_active=false` (kayıt kalır), `{ "ok": true }`.
+
+**Geçmiş (F2.11)**
+- `GET .../history?target_type=person|apartment|vehicle&target_id=&limit=50&before_id=` → `{ "items": [AuditItem], "next_before_id": N|null }`; yalnız O SİTENİN kayıtları (`audit_log.site_code`); `AuditItem` süper kullanıcı denetim kaydıyla aynı biçim (+ `details.changes: [{ "field": "phone", "from": "…", "to": "…" }]` değişen alanlar için). Yönetici ve kurul üyesi okur.
+
+**Sakin (kendi kayıtları, F2.10)**
+- `GET /app/my-records` (authRequired) → `{ "records": [ { site_code, site_name, apartment_id, label, block_name, relation, move_in_date, vehicles: [Vehicle] } ] }`: yalnız çağıranın kendi güncel kayıtları; başkasının bilgisi asla.
+
+**Audit eylemleri** (`target_type`/`target_id`): `person.created`, `person.updated` (details.changes), `person.deactivated`, `residency.added`, `residency.updated`, `residency.ended`, `apartment.updated`, `vehicle.added`, `vehicle.removed`; hepsinde `site_code` dolu. `GET /admin/audit-log?action=` bunları da süzer.
+
+**Hız sınırları:** yazma uçları kullanıcı başına ~120/saat; arama/liste uçlarında makul (örn. 600/saat).
+
+## Faz 2b — toplu yükleme ve dışa aktarma (F2.08, F2.09)
+
+- `GET .../people/import/template` → `{ "columns": ["ad_soyad","telefon","e_posta","blok","daire_no","iliski","giris_tarihi","plaka","not"], "example_rows": [[…]] }` (iliski: malik|kiraci|aile|sakin).
+- `POST .../people/import/preview` gövde `{ rows: [ { … sütunlar … } ] }` (en çok 1000 satır) → `{ "total": N, "valid": N, "invalid": N, "rows": [ { "index": 0, "status": "ok|error|warning", "errors": ["…"], "warnings": ["…"], "normalized": {…} } ] }`; VERİTABANINA YAZMAZ. Doğrulamalar: zorunlu ad, telefon/e-posta biçimi, blok+daire_no sitede bulunur, ilişki değeri, tarih biçimi (GG.AA.YYYY veya YYYY-AA-GG), plaka biçimi, dosya içinde yinelenen e-posta/plaka, veritabanında mevcut aynı e-posta/plaka (uyarı: "mevcut kişiye bağlanır").
+- `POST .../people/import/commit` aynı gövde → `{ "created": N, "linked": N, "skipped": N, "errors": [ { "index", "errors" } ] }`; SATIR başına doğrulanır, yalnız geçerli satırlar tek transaction'da yazılır (hatalı satır tüm yüklemeyi bozmaz, `errors`'a düşer), mevcut kayıtlar BOZULMAZ (aynı e-postalı kişi varsa bağlanır, alanları ezilmez), `import.committed` audit (details: sayılar). Hesap/davet e-postası TOPLU YÜKLEMEDE GÖNDERİLMEZ (yalnız kayıt; davet sonra tek tek).
+- `GET .../people/export?status=&relation=` → `{ "filename": "kisiler_<site>_<tarih>.csv", "content": "<UTF-8 BOM + CSV>" }` (sütunlar kişi kartıyla aynı; `;` ayırıcı Excel Türkçe uyumlu); uygulama dosyayı kaydeder/paylaşır. Dışa aktarma `export` audit eylemi yazar (kim, hangi süzgeç, kaç satır).
+
+## Flutter
+
+- **Modeller** (`lib/models/`): `PersonSummary`/`PersonDetail`, `Residency`, `ApartmentSummary`/`ApartmentDetail`, `VehicleRecord`, `HistoryItem` (audit), `MyRecord`; ilişki enum'u (`owner/tenant/family_member/resident` + Türkçe etiketler: Malik, Kiracı, Aile Üyesi, Sakin); alan yoksa güvenli varsayılan.
+- **AuthApi/AuthService:** sözleşmedeki tüm uçlar (hata kodları `<140` karakter, `_` yok): `PERSON_EXISTS` "Bu e-posta ile kayıtlı bir kişi zaten var." · `PERSON_HAS_ACCOUNT` "Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir." · `RELATION_TAKEN` "Bu dairede bu ilişki için aktif bir kişi zaten var." · `APARTMENT_NOT_FOUND` "Daire bulunamadı." · `PLATE_INVALID` "Plaka biçimi geçersiz." · `PLATE_EXISTS` "Bu plaka bu sitede zaten kayıtlı." · `FORBIDDEN_ROLE` "Bu işlem için yetkiniz yok."
+- **Menü:** yeni `SirketMenuItem.kisiler` ("Kişiler"): site yöneticisi (yönetici modunda), süper kullanıcı (site seçerek) ve kurul üyesi (salt okunur; `ModuleAccess.result.sites[].role == board_member`); `STAFF`'ta YOK. Ekranda üç sekme: **Kişiler | Daireler | Araçlar**; site seçici (çok siteli yönetici/süper).
+  - Kişiler: arama + süzgeçler (İlişki, Durum), liste kartları (ad, ilişki çipleri, daire etiketleri, hesap rozeti), "Kişi Ekle" (AppDialog: ad, telefon, e-posta, daire seçici, ilişki, giriş tarihi), kişi kartı (alt sayfa/diyalog: bilgiler, ilişki geçmişi, araçlar, notlar, "Düzenle", "Taşındı", "İlişki Ekle", "Araç Ekle", "Geçmiş").
+  - Daireler: liste (blok süzgeci, arama), daire kartı (alanlar, güncel malik/kiracı, geçmiş sakinler, "Düzenle": kat, m², arsa payı pay/payda, kategori, "Borç ve bildirimler kime gitsin": Malik/Kiracı/İkisi).
+  - Araçlar: liste + arama (plaka/kişi), ekle/kaldır.
+  - Kurul üyesi için tüm yazma düğmeleri GİZLİ. Telefon girişinde `+90` hazır, 3-3-2-2 gruplama (mevcut kayıt sayfasındaki telefon alanı deseni yeniden kullanılsın).
+  - Hesabı olan kişide ad/telefon/e-posta alanları salt okunur görünür (yardım metni: "Kişinin kendi profilinden değişir").
+- **Sakin:** `ProfileView` altına "Kayıtlarım" bölümü (`GET /app/my-records`: dairelerim, ilişki, giriş tarihi, araçlarım; salt okunur).
+- Taşma yok (320x640 ×2,0), iskelet/boş/hata durumları, çekip yenileme + işlem sonrası otomatik yenileme, tasarım sistemi bileşenleri; her uzun liste sayfalı ("Daha fazla yükle"). Hızlı art arda aramada eski yanıt yenisini ezmez (jeton).
+- **Faz 2b (Flutter):** "Toplu Yükle" (dosya seç: CSV ve — uygun paket güvenle eklenebiliyorsa — XLSX; web/Android/Windows'ta çalışmalı; şablon indirme/paylaşma; önizleme tablosu: geçerli/hatalı/uyarı sayıları ve hatalı satır nedenleri; onay → commit; sonuç özeti) ve "Dışa Aktar" (CSV kaydet/paylaş: `share_plus` mevcut). Yeni bağımlılık eklenirse (file_picker, csv/excel) gerekçesi raporlanır ve `flutter build web` + `flutter analyze` ile doğrulanır.
+
+## Kabul ölçütleri (özet)
+
+- Sunucu: `npm test` + `npm run lint` yeşil; gerçek PostgreSQL ile: boş DB'de migrate zinciri ve `ensureDbSchema` eşitliği; canlıya benzer senaryoda (mevcut siteler, sakinler, üyelikler, eski `resident_user_code`) backfill sonrası: her aktif üyelik bir kişi+ilişki üretir, `apartment_memberships` satırları ve `my-doors` sonuçları AYNI kalır, ikinci çalıştırma no-op; yetki matrisi (yönetici/kurul/görevli/sakin/başka site/süper); taşınma → kapı yetkisi kapanır; aynı e-posta yinelenmez.
+- Uygulama: `flutter analyze` temiz, `flutter test` yeşil (taban 2911+); yeni testler (modeller, servis, Kişiler/Daireler/Araçlar görünümleri ve diyalogları 320x640 ×2,0, kurul üyesi salt okunur, hesaplı kişide salt okunur alanlar, çekmece öğe sayıları).

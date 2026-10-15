@@ -3,7 +3,9 @@
 //   GET    /app/modules/catalog                              (authRequired)
 //   GET    /app/my-modules                                   (authRequired)
 //   GET    /manager/sites/:siteCode/modules                  (requireSiteManager + hasSiteManagementAccess)
-//   PUT    /manager/sites/:siteCode/modules/:moduleCode      (aynı yetki; confirm/enabled kuralları)
+//   PUT    /manager/sites/:siteCode/modules/:moduleCode      (YALNIZ süper kullanıcı: yönetici 403 MODULE_ADMIN_ONLY;
+//                                                              yönetici modül açıp kapatmaz, modül TALEP eder:
+//                                                              module_request_routes.js)
 //   GET    /manager/sites/:siteCode/staff-roles              (aynı yetki)
 //   PUT    /manager/sites/:siteCode/staff-roles              (aynı yetki)
 //   DELETE /manager/sites/:siteCode/staff-roles/:userCode    (aynı yetki)
@@ -13,21 +15,27 @@
 
 import express from 'express';
 import { authRequired, requireSiteManager, requireSuperUser } from '../middlewares/auth_middleware.js';
-import { newErrorId } from '../middlewares/error_handler.js';
-import { authUserKeyOf, clientIp, createRuleLimiter } from '../middlewares/rate_limiters.js';
-import { hasSiteManagementAccess } from '../services/site_service.js';
+import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { INT32_MAX, parseId } from '../utils/ids.js';
 import { clampAuditLimit, listAuditLog } from './audit_service.js';
 import { publicCatalog } from './catalog.js';
-import { isPlatformError } from './errors.js';
 import { getSiteModulesView, listMySiteModules, setSiteModuleEnabled } from './module_service.js';
+import {
+  HOUR_MS,
+  SITE_NOT_FOUND_BODY,
+  ipKey,
+  resolveManagedSite,
+  respondError,
+  userKey,
+} from './route_helpers.js';
 import { assignStaffRole, listStaffRoles, removeStaffRole } from './staff_role_service.js';
 
 export const moduleRouter = express.Router();
 
-const HOUR_MS = 60 * 60 * 1000;
-const userKey = (req) => `u:${authUserKeyOf(req) ?? clientIp(req)}`;
-const ipKey = (req) => `ip:${clientIp(req)}`;
+export const MODULE_ADMIN_ONLY_BODY = Object.freeze({
+  error: 'Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.',
+  code: 'MODULE_ADMIN_ONLY',
+});
 
 // PUT staff-roles: yanıt semantiği sözleşme gereği (404 USER_NOT_FOUND / 409 USER_NOT_ACTIVE / ALREADY_SITE_MANAGER +
 // kişi adı) bir "bu e-posta kayıtlı mı / kim" oracle'ıdır. Deneme sayısı site yöneticisi davet limitleyicisiyle
@@ -54,36 +62,6 @@ export const moduleToggleLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
-function respondError(res, context, error, fallbackMessage) {
-  if (isPlatformError(error)) {
-    return res.status(error.statusCode).json({ error: error.message, code: error.code });
-  }
-  const errorId = newErrorId();
-  console.error(`[modules] ${context} (errorId=${errorId})`, error?.stack || error?.message || error);
-  return res.status(500).json({ error: fallbackMessage, errorId });
-}
-
-/**
- * :siteCode parametresini doğrular ve yönetim yetkisini denetler.
- * Hata yanıtını kendisi yazar ve null döner; başarıda site kodunu (sayı) döndürür.
- * Sıra: biçim (400) -> yetki (403 FORBIDDEN_SITE); site varlığı (404) yetkiden SONRA kontrol edilir.
- */
-async function resolveManagedSite(req, res) {
-  const siteCode = parseId(req.params.siteCode);
-  if (siteCode === null) {
-    res.status(400).json({ error: 'Geçersiz site kodu.', code: 'INVALID_SITE_CODE' });
-    return null;
-  }
-  if (!(await hasSiteManagementAccess(req.authUser, siteCode))) {
-    res
-      .status(403)
-      .json({ error: 'Bu site üzerinde yönetim yetkiniz bulunmuyor.', code: 'FORBIDDEN_SITE' });
-    return null;
-  }
-  return siteCode;
-}
-
-const SITE_NOT_FOUND_BODY = { error: 'Site bulunamadı.', code: 'SITE_NOT_FOUND' };
 
 // ---------------------------------------------------------------------------
 // Katalog ve "benim modüllerim"
@@ -111,7 +89,8 @@ moduleRouter.get('/manager/sites/:siteCode/modules', authRequired, requireSiteMa
     if (siteCode === null) {
       return undefined;
     }
-    const view = await getSiteModulesView(siteCode);
+    // can_toggle: yalnız süper kullanıcı için (ve katalogda açılıp kapanabilen modüllerde) true
+    const view = await getSiteModulesView(siteCode, undefined, { canToggle: req.authUser?.role === 'super_user' });
     if (!view) {
       return res.status(404).json(SITE_NOT_FOUND_BODY);
     }
@@ -128,6 +107,10 @@ moduleRouter.put(
   moduleToggleLimiter,
   async (req, res) => {
     try {
+      // Faz 1.1: site yöneticisi modül açıp kapatmaz (satın alma/tanımlama sistem yöneticisindedir); talep eder.
+      if (req.authUser?.role !== 'super_user') {
+        return res.status(403).json(MODULE_ADMIN_ONLY_BODY);
+      }
       const siteCode = await resolveManagedSite(req, res);
       if (siteCode === null) {
         return undefined;
@@ -140,7 +123,7 @@ moduleRouter.put(
         confirm: body.confirm === true,
         actor: req.authUser,
       });
-      const view = await getSiteModulesView(siteCode);
+      const view = await getSiteModulesView(siteCode, undefined, { canToggle: true });
       if (!view) {
         return res.status(404).json(SITE_NOT_FOUND_BODY);
       }

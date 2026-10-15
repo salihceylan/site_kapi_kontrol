@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.join(here, '..', 'src');
 const read = (relative) => readFileSync(path.join(srcRoot, relative), 'utf8').replace(/\r\n/g, '\n');
 const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '029_platform_modules.sql'), 'utf8').replace(/\r\n/g, '\n');
+const MIGRATION_030 = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '030_module_requests.sql'), 'utf8').replace(/\r\n/g, '\n');
 const DB_SOURCE = read('db.js');
 
 // SQL yorumlarini at, bosluklari tek bosluga indir.
@@ -129,6 +130,80 @@ describe('platform sema: migration 029', () => {
   });
 });
 
+describe('platform sema: migration 030 (modul talebi, Faz 1.1)', () => {
+  it('030 var, 30. siradadir (numaralar ardisik) ve calistirici icin guvenli (ust duzey BEGIN/COMMIT yok)', () => {
+    const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
+    assert.ok(list.length >= 30, `en az 30 migration beklenir: ${list.length}`);
+    const entry = list.find((m) => m.number === 30);
+    assert.ok(entry, '030 numarali migration yok');
+    assert.equal(entry.file, '030_module_requests.sql');
+    assert.equal(entry.version, '030_module_requests');
+    assert.equal(list[29], entry, 'sirali listede 30. eleman');
+    assert.deepEqual(findUnsafeStatements(MIGRATION_030), []);
+  });
+
+  it('basliginda db.js ile ayni DDL oldugu ve ekleyici/idempotent oldugu belirtilir', () => {
+    const header = MIGRATION_030.split('\n').slice(0, 6).join('\n');
+    assert.match(header, /db\.js/);
+    assert.match(header, /ekleyici/i);
+    assert.match(header, /idempotent/i);
+  });
+
+  it('db.js ensureDbSchema ayni DDL\'i icerir (yorumlar ve bosluklar disinda birebir); 029\'dan SONRA gelir', () => {
+    const normalizedDb = normalizeSql(DB_SOURCE);
+    const migration030 = normalizeSql(MIGRATION_030);
+    assert.ok(migration030.length > 500, '030 DDL\'i beklenenden kisa');
+    assert.ok(normalizedDb.includes(migration030), 'migrations/030_module_requests.sql ile db.js ayni DDL degil');
+    // 029 DDL'i de yerinde ve 030'dan once
+    assert.ok(normalizedDb.indexOf(normalizeSql(MIGRATION)) < normalizedDb.indexOf(migration030));
+  });
+
+  it('module_requests: sozlesmedeki alanlar, FK davranislari, status CHECK ve varsayilanlar', () => {
+    const sql = normalizeSql(MIGRATION_030);
+    const table = /CREATE TABLE IF NOT EXISTS module_requests \(([\s\S]*?)\);/.exec(sql);
+    assert.ok(table, 'module_requests tablosu bulunamadi');
+    const body = table[1];
+    assert.match(body, /id BIGSERIAL PRIMARY KEY/);
+    assert.match(body, /site_code BIGINT NOT NULL REFERENCES sites\(site_code\) ON DELETE CASCADE/);
+    assert.match(body, /module_code TEXT NOT NULL/);
+    assert.match(body, /status TEXT NOT NULL DEFAULT 'pending'/);
+    assert.match(body, /requested_by INTEGER REFERENCES users\(user_code\) ON DELETE SET NULL/);
+    assert.match(body, /requested_by_name TEXT/);
+    assert.match(body, /note TEXT/);
+    assert.match(body, /decided_by INTEGER REFERENCES users\(user_code\) ON DELETE SET NULL/);
+    assert.match(body, /decided_by_name TEXT/);
+    assert.match(body, /decision_note TEXT/);
+    assert.match(body, /created_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\)/);
+    assert.match(body, /decided_at TIMESTAMPTZ(,| \))/);
+    assert.match(body, /CHECK \(status IN \('pending', 'approved', 'rejected', 'cancelled'\)\)/);
+  });
+
+  it('ayni (site, modul) icin TEK bekleyen talep: kismi tekil indeks; ayrica (status, id DESC) ve (site_code, id DESC) indeksleri', () => {
+    const sql = normalizeSql(MIGRATION_030);
+    assert.match(
+      sql,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_module_requests_pending ON module_requests \(site_code, module_code\) WHERE status = 'pending'/,
+    );
+    assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_module_requests_status_id ON module_requests \(status, id DESC\)/);
+    assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_module_requests_site_id ON module_requests \(site_code, id DESC\)/);
+  });
+
+  it('ekleyici: yalniz CREATE TABLE/INDEX IF NOT EXISTS; mevcut tablo/veriye dokunmaz', () => {
+    const sql = normalizeSql(MIGRATION_030);
+    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO|ALTER\s+TABLE/i.test(sql), false);
+    assert.deepEqual(sql.match(/CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)\s+(?!IF NOT EXISTS)/gi) || [], []);
+    assert.equal((sql.match(/CREATE TABLE IF NOT EXISTS/g) || []).length, 1);
+  });
+
+  it('hicbir kaynak dosyasi module_requests satirlarini silmez (talepler denetim izidir); bakim servisi dokunmaz', () => {
+    for (const file of listSourceFiles(srcRoot)) {
+      const text = readFileSync(file, 'utf8');
+      assert.equal(/DELETE\s+FROM\s+module_requests\b|TRUNCATE\s+(TABLE\s+)?module_requests\b|DROP\s+TABLE\s+(IF EXISTS\s+)?module_requests\b/i.test(text), false, file);
+    }
+    assert.equal(/module_requests/.test(read('services/maintenance_service.js')), false);
+  });
+});
+
 describe('platform denetim kaydi: yalnizca eklenir', () => {
   it('hicbir kaynak dosyasi audit_log\'u guncellemez/silmez (bakim servisi dahil)', () => {
     for (const file of listSourceFiles(srcRoot)) {
@@ -154,6 +229,14 @@ describe('platform: sunucuya baglanti', () => {
     assert.ok(mount < server.indexOf('webBuildPath, { maxAge'), 'moduleRouter SPA statik servisinden once baglanmali');
   });
 
+  it('server.js moduleRequestRouter\'i da kaydeder (moduleRouter\'dan sonra, SPA statik servisinden once)', () => {
+    const server = read('server.js');
+    assert.match(server, /import \{ moduleRequestRouter \} from '\.\/modules\/module_request_routes\.js';/);
+    const mount = server.indexOf('app.use(moduleRequestRouter);');
+    assert.ok(mount > server.indexOf('app.use(moduleRouter);'));
+    assert.ok(mount < server.indexOf('webBuildPath, { maxAge'));
+  });
+
   it('yeni dosyalar src/modules altindadir (moduler yapi)', () => {
     const files = readdirSync(path.join(srcRoot, 'modules')).sort();
     for (const expected of [
@@ -162,8 +245,11 @@ describe('platform: sunucuya baglanti', () => {
       'door_guard.js',
       'errors.js',
       'management_types.js',
+      'module_request_routes.js',
+      'module_request_service.js',
       'module_routes.js',
       'module_service.js',
+      'route_helpers.js',
       'staff_role_service.js',
     ]) {
       assert.ok(files.includes(expected), expected);
