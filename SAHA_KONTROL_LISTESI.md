@@ -1259,11 +1259,11 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
   - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle, sonra yeni sürümle giriş yapın; telefondan kapıyı açın, giriş QR kodu üretin, bir misafir bağlantısı oluşturup açın.
   - **Beklenen Sonuç:** Üçü de her iki sürümde eskisi gibi çalışır, hata çıkmaz (Geçiş Kontrol modülü varsayılan olarak AÇIKTIR; mevcut siteler etkilenmez).
 - [ ] **59.2. Modüller Ekranı:**
-  - **Nasıl Test Edilir:** Site yöneticisi olarak çekmeceden "Modüller"i açın.
-  - **Beklenen Sonuç:** 8 kart görünür: "Geçiş Kontrol (AHBU)" Açık ve anahtarlı; "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsızdır. Çekip yenileme ve yenile düğmesi çalışır.
-- [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma:**
-  - **Nasıl Test Edilir:** Modüller ekranında Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın.
-  - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri kaybolur, Panel'de "Geçiş Kontrol modülü kapalı" kartı çıkar. Yeniden açınca her şey anında geri gelir.
+  - **Nasıl Test Edilir:** Site yöneticisi olarak ve ayrıca süper kullanıcı olarak çekmeceden "Modüller"i açın.
+  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (AHBU)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
+- [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma (süper kullanıcı):**
+  - **Nasıl Test Edilir:** Süper kullanıcı olarak Modüller ekranında bir sitenin Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın. Site yöneticisi hesabıyla aynı siteye bakın.
+  - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri kaybolur, Panel'de "Geçiş Kontrol modülü kapalı" kartı çıkar. Yeniden açınca her şey anında geri gelir. Site yöneticisi kendisi açıp kapatamaz (anahtarı yoktur; API ile denerse 403 "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.").
 - [ ] **59.4. Kapalı Modülde Sakin Deneyimi:**
   - **Nasıl Test Edilir:** Geçiş Kontrol kapalıyken (başka telefonda) sakin hesabıyla Panel'e bakın; telefon widget'ından kapıyı açmayı deneyin; hesapta sesle dinleme açıksa uygulamayı yeniden açın. Sonra yönetici modülü açsın.
   - **Beklenen Sonuç:** Panel'de düğmesiz bilgi kartı görünür, "Eller Serbest" menüsü yoktur, widget o siteyi göstermez (eski kalmışsa "Geçiş kapalı ❌" der). "Tanımlı bir kapı bulunamadı." sesli uyarısı DUYULMAZ ve dinleme durur. Modül açılınca aşağı çekince ya da ~30 sn içinde kapı kartları geri gelir.
@@ -1271,7 +1271,7 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
   - **Nasıl Test Edilir:** Geçiş Kontrol kapalıyken bir misafir geçişi bağlantısını açın; kapıdaki QR okuyucuya bir QR gösterin. Sonra modülü açıp tekrar deneyin.
   - **Beklenen Sonuç:** Misafir sayfası kibar bir "Geçiş şu anda kullanılamıyor" bilgisi verir, kapı açma düğmesi yoktur. Okuyucudan açma reddedilir (kapı açılmaz). Modül açılınca ikisi de eskisi gibi çalışır.
 - [ ] **59.6. Modül Kapatılınca Yerel (LAN) Anahtar Döner:**
-  - **Nasıl Test Edilir:** Cihazla aynı Wi-Fi'deyken uygulamada yerel açmanın çalıştığını doğrulayın; Geçiş Kontrol'ü kapatın; eski uygulama önbelleğiyle yerel açmayı deneyin; modülü yeniden açın ve uygulamayı yenileyin.
+  - **Nasıl Test Edilir:** Cihazla aynı Wi-Fi'deyken uygulamada yerel açmanın çalıştığını doğrulayın; (süper kullanıcıyla) Geçiş Kontrol'ü kapatın; eski uygulama önbelleğiyle yerel açmayı deneyin; modülü yeniden açın ve uygulamayı yenileyin.
   - **Beklenen Sonuç:** Kapatma sonrası eski anahtarla yerel (UDP) açma çalışmaz. Yeniden açıp yenileyince uygulama yeni anahtarı alır ve yerel açma yine çalışır. Cihaz çevrimiçi kalır. (Cihaz o sırada çevrimdışıysa yeni anahtar bağlanınca gider.)
 - [ ] **59.7. İki Siteli Yönetici:**
   - **Nasıl Test Edilir:** İki siteyi yöneten hesapla birinde Geçiş Kontrol'ü kapatın; Panel'in site seçicisine ve Modüller ekranının site seçicisine bakın.
@@ -1303,3 +1303,12 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
 - [ ] **59.16. (Operasyon) DNS ve MQTT Bağlantısı:**
   - **Nasıl Test Edilir:** Cloudflare'de mqtt, api ve evotomasyon kayıtlarının "DNS only" (gri bulut) olduğunu doğrulayın; sunucuda `curl http://127.0.0.1:8080/health` çıktısına bakın.
   - **Beklenen Sonuç:** Üç kayıt gri bulutta olmalıdır: turuncu bulut MQTT 8883/8884 portlarını taşımaz, cihazlar bağlanamaz. `/health` içinde `mqtt.connected:true` görünür (API köprüsü `MQTT_CONNECT_HOST=127.0.0.1` ile yerel brokera bağlanır; cihazlar yine genel adla bağlanır).
+- [ ] **59.17. Modül Talebi (Site Yöneticisi → Süper Kullanıcı):**
+  - **Nasıl Test Edilir:** Süper kullanıcı bir sitede Geçiş Kontrol'ü kapatsın. Site yöneticisi olarak Modüller ekranında "Modül Talep Et"e dokunup not yazın ve gönderin; aynı modül için ikinci talep göndermeyi deneyin; "Talebi Geri Çek"i deneyip yeniden talep edin.
+  - **Beklenen Sonuç:** Talepten sonra çip "Talep gönderildi" olur ve "Modül Taleplerim"de "Bekliyor" görünür; ikinci talep "Bu modül için bekleyen bir talebiniz var." diye reddedilir; geri çekince çip "Tanımlı değil"e döner. Tüm aktif süper kullanıcılara "Site ve Toplu Yaşam Yönetim Sistemi - Yeni Modül Talebi" e-postası gider. "Yakında…" modüller için talep düğmesi yoktur; süper kullanıcıda "Modül Talep Et" düğmesi çıkmaz.
+- [ ] **59.18. Modül Talepleri (Süper Kullanıcı Onayı):**
+  - **Nasıl Test Edilir:** Süper kullanıcı olarak çekmecede "Modül Talepleri"ni açın; süzgeçleri (Bekleyen / Onaylanan / Reddedilen / Tümü) deneyin; bir talebi onaylayın, bir başkasını gerekçeyle reddedin. İkinci cihazdan aynı talebi tekrar onaylamayı deneyin.
+  - **Beklenen Sonuç:** Çekmece öğesinde bekleyen sayısı rozeti görünür ve onay/ret sonrası düşer. Onayda modül siteye tanımlanır; site yöneticisi yenileyince "Tanımlı" görür ve modülün menüleri gelir. Retta yönetici gerekçeyi "Modül Taleplerim"de görür, modül kapalı kalır. İkinci onay "Bu talep artık bekleyen durumda değil." der. Süper kullanıcı modülü Modüller anahtarıyla doğrudan açarsa o modülün bekleyen talebi otomatik "onaylandı" olur. Denetim Kaydı'nda `module_request.*` ve `module.enabled` satırları görünür.
+- [ ] **59.19. Ürün Adı: "Site ve Toplu Yaşam Yönetim Sistemi":**
+  - **Nasıl Test Edilir:** Giriş ekranına, Panel başlığına, web sekme başlığına, Android/Windows uygulama adına, doğrulama kodu ve şifre sıfırlama e-postalarına ve şifre sıfırlama sayfasına bakın; kapı kartında etiketi okuyun.
+  - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). "AHBU" yalnızca kapı modülünde kalır: kapı kartı etiketleri ("AHBU AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (AHBU)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.

@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0 ve Faz 1 canlıda ve denemeye hazır (15 Ekim). Android: yeni APK (build\\app\\outputs\\flutter-apk\\app-release.apk), web: api.gudeteknoloji.com.tr (Ctrl+F5 ile yenileyin), Windows: build\\windows\\x64\\runner\\Debug\\site_kapi_kontrol.exe. Faz 2 ve 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
+  "durum_metni": "Durum: Faz 0, Faz 1 ve Faz 1.1 (modül talebi + yeni ürün adı) canlıda ve denemeye hazır. Faz 2 (Kişi ve Daire Kayıtları) yapım aşamasında. Faz 3 sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında…”.",
   "bolumler": [
     {
       "id": "F0",
@@ -162,12 +162,13 @@
         },
         {
           "id": "F1.03",
-          "baslik": "Site yöneticisi kendi modüllerini seçer",
+          "baslik": "Site yöneticisi modül talep eder",
           "adimlar": [
-            "Site yöneticisi olarak “Modüller” ekranını açın.",
-            "Geçiş Kontrol’ü kapatıp açın."
+            "Süper kullanıcı bir sitede Geçiş Kontrol’ü kapatsın.",
+            "Site yöneticisi olarak “Modüller” ekranını açın; “Modül Talep Et”e dokunup not yazın ve gönderin.",
+            "İsterseniz “Talebi Geri Çek”i deneyin."
           ],
-          "beklenen": "Değişiklik hemen menüye yansır. “Yakında…” etiketli modüller açılamaz. Ücretli modüllerde onay ve ücret adımı sonraki aşamada eklenecektir (Yakında…).",
+          "beklenen": "Yöneticide anahtar yoktur: açık modül “Tanımlı”, kapalı modül “Tanımlı değil” görünür. Talepten sonra çip “Talep gönderildi” olur; aynı modül için ikinci talep gönderilemez. Süper kullanıcıya e-posta gider. “Yakında…” etiketli modüller talep edilemez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
           "yeni": true,
@@ -203,13 +204,13 @@
           "id": "F1.06",
           "baslik": "Geçiş Kontrol kapatılırsa ne olur",
           "adimlar": [
-            "Geçiş Kontrol’ü kapatmayı deneyin.",
+            "Süper kullanıcı olarak Geçiş Kontrol’ü kapatmayı deneyin.",
             "Uyarıyı okuyup onaylayın.",
             "Sakin hesabıyla kapı açmayı deneyin.",
             "Modülü yeniden açın."
           ],
           "beklenen": "Kapatmadan önce “Telefondan kapı açma, QR ve misafir geçişi durur” uyarısı çıkar. Onaylanınca kapı menüleri gizlenir; telefondan açma, QR ve misafir geçişi (kapıdaki QR okuyucu dahil) “Geçiş Kontrol modülü kapalı” mesajıyla reddedilir. Cihazlar bağlı kalır. Yeniden açınca her şey eskisi gibi çalışır.",
-          "rol_notu": "Site yöneticisi",
+          "rol_notu": "Süper kullanıcı",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
           "yeni": true,
           "gelistirme": "hazir"
@@ -259,10 +260,10 @@
             "Siteler arasında geçiş yapın.",
             "Her sitede Modüller ekranına bakın."
           ],
-          "beklenen": "Site değiştirme eskisi gibidir. Modül seçimi site bazlıdır: birinde açık olan modül diğerinde kapalı olabilir.",
+          "beklenen": "Site değiştirme eskisi gibidir. Modül durumu site bazlıdır: birinde açık olan modül diğerinde kapalı olabilir (yönetici durumu görür, değiştiremez; süper kullanıcı değiştirir).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "İki sitesi olan bir yönetici hesabı",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "hazir"
         },
         {
@@ -340,6 +341,61 @@
           "beklenen": "Hata kartı ve “Tekrar Dene” görünür (“site yok” ya da “kayıt yok” yazmaz); menüler kaybolmaz. Hiçbir ekranda taşma olmaz.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.17",
+          "baslik": "Modül Talepleri: süper kullanıcı onayı",
+          "adimlar": [
+            "Süper kullanıcı olarak çekmeceden “Modül Talepleri”ni açın.",
+            "Süzgeçleri (Bekleyen / Onaylanan / Reddedilen / Tümü) deneyin.",
+            "Bir talebi onaylayın.",
+            "Site yöneticisi hesabında Modüller ekranını yenileyin."
+          ],
+          "beklenen": "Çekmece öğesinde bekleyen sayısı rozeti görünür ve onaydan sonra düşer. Onayda modül siteye tanımlanır; yönetici yenileyince “Tanımlı” görür ve modülün menüleri gelir. Süper kullanıcı modülü Modüller anahtarıyla doğrudan açarsa o modülün bekleyen talebi otomatik “onaylandı” olur. Denetim Kaydı’nda talep ve modül satırları görünür.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "F1.03 ile gönderilmiş bir talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.18",
+          "baslik": "Talebi reddetme ve gerekçe",
+          "adimlar": [
+            "Süper kullanıcı bir talebi “Reddet”, isteğe bağlı gerekçe yazarak onaylasın.",
+            "Site yöneticisi hesabında “Modül Taleplerim” bölümüne bakın.",
+            "Aynı talebi ikinci bir cihazdan tekrar onaylamayı deneyin."
+          ],
+          "beklenen": "Talep “Reddedilen”e geçer, modül kapalı kalır, yönetici gerekçeyi “Modül Taleplerim”de görür. Zaten karara bağlanmış talebi ikinci kez onaylamak “Bu talep artık bekleyen durumda değil.” der ve liste yenilenir.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "Bekleyen bir talep",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.19",
+          "baslik": "Ürün adı: Site ve Toplu Yaşam Yönetim Sistemi",
+          "adimlar": [
+            "Giriş ekranına, Panel başlığına, web sekme başlığına ve Android/Windows uygulama adına bakın.",
+            "Doğrulama kodu ya da şifre sıfırlama e-postasını ve şifre sıfırlama sayfasını açın.",
+            "Kapı kartındaki etiketi okuyun."
+          ],
+          "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. “AHBU” yalnızca kapı modülünde kalır: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (AHBU)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Yeni APK / web / e-posta",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.20",
+          "baslik": "Yönetici modülü kendisi açıp kapatamaz (geliştirici)",
+          "adimlar": [
+            "Site yöneticisi hesabıyla PUT /manager/sites/:siteCode/modules/door_control isteği gönderin."
+          ],
+          "beklenen": "403 “Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.” (kod MODULE_ADMIN_ONLY). Süper kullanıcıda aynı istek çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "API aracı",
           "yeni": true,
           "gelistirme": "hazir"
         }
