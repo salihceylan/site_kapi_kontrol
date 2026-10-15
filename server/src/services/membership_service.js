@@ -1964,6 +1964,10 @@ export async function deleteApartmentMember({ apartmentId, targetUserCode, authU
       await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy });
     }
 
+    // CRM (Kişi ve Daire Kayıtları): "Sakini Daireden Sil" de kalıcı bir çıkarmadır -> o (kullanıcı, daire) için güncel ilişkiler (origin manual dahil)
+    // biter; böylece elle girilmiş malik güncel kalıp yeni malik eklemeyi 409 yapmaz. Hata silme işlemini bozmaz (SAVEPOINT).
+    await endResidenciesForMemberRemoval(client, { apartmentId: apt.id, userCode: tUserCode, actor: authUser, reason: 'member_deleted' });
+
     await client.query('COMMIT');
     committed = true;
   } catch (error) {

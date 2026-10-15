@@ -221,8 +221,9 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       assert.deepEqual(lookup.params, ['ali@example.com', SITE]);
       assert.match(lookup.sql, /u\.email NOT LIKE '%@ahbu\.local'/);
       assert.match(lookup.sql, /u\.is_active = TRUE/, 'pasif hesaba baglanmaz');
-      assert.match(lookup.sql, /FROM apartment_memberships tie_am INNER JOIN apartments tie_a ON tie_a\.id = tie_am\.apartment_id WHERE tie_a\.site_code = \$2 AND tie_am\.user_code = u\.user_code AND tie_am\.is_active = TRUE AND tie_a\.is_active = TRUE/);
-      assert.match(lookup.sql, /FROM apartments tie_r WHERE tie_r\.site_code = \$2 AND tie_r\.resident_user_code = u\.user_code AND tie_r\.is_active = TRUE/);
+      assert.match(lookup.sql, /SELECT tie_a\.site_code FROM apartment_memberships tie_am INNER JOIN apartments tie_a ON tie_a\.id = tie_am\.apartment_id WHERE tie_am\.user_code = u\.user_code AND tie_am\.is_active = TRUE AND tie_a\.is_active = TRUE/);
+      assert.match(lookup.sql, /SELECT tie_r\.site_code FROM apartments tie_r WHERE tie_r\.resident_user_code = u\.user_code AND tie_r\.is_active = TRUE/);
+      assert.match(lookup.sql, /EXISTS \(SELECT 1 FROM users tie_u WHERE tie_u\.user_code = u\.user_code AND tie_u\.is_active = TRUE\) AND \$2 IN \(/);
       assert.equal(/site_memberships|site_manager_sites/.test(lookup.sql), false, 'site_memberships (STAFF/BOARD_MEMBER/RESIDENT) ve yoneticilik TEK BASINA bag degildir');
       // eslemedeki LINK adimi AYNI yardimciyi kullanir (tek tanim)
       const link = SYNC_STEPS.find((step) => step.name === 'link_accountless').sql.replace(/\s+/g, ' ');
@@ -545,7 +546,7 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
 // ---------------------------------------------------------------------------
 
 describe('updatePerson', () => {
-  const lock = /^SELECT sp\.id, sp\.user_code, sp\.full_name, sp\.phone, sp\.email, sp\.note, sp\.is_active, u\.email AS account_email FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 AND sp\.site_code = \$2 FOR UPDATE OF sp$/;
+  const lock = /^SELECT sp\.id, sp\.user_code, sp\.full_name, sp\.phone, sp\.email, sp\.note, sp\.is_active, u\.email AS account_email, u\.is_active AS account_is_active, u\.full_name AS account_name, u\.phone_number AS account_phone FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 AND sp\.site_code = \$2 FOR UPDATE OF sp$/;
   const accountRow = (extra = {}) => ({ id: '5', user_code: 30001, full_name: null, phone: null, email: null, note: null, is_active: true, account_email: 'ali@example.com', ...extra });
   const accountlessRow = (extra = {}) => ({ id: '5', user_code: null, full_name: 'Ali Veli', phone: '+905551112233', email: null, note: null, is_active: true, account_email: null, ...extra });
 
@@ -596,6 +597,40 @@ describe('updatePerson', () => {
       () => updatePerson({ siteCode: SITE, personId: 5, body: { email: 'baska@example.com' }, actor }),
       (error) => error.code === 'PERSON_EXISTS' && error.extra?.person_id === 9,
     );
+  });
+
+  it('T4: PASIF dahili (@ahbu.local) hesapli kisi HESAPSIZ davranir: once hesaptan koparilir (users ad/telefon + guncel iletisim e-postasi anlik kopyalanir), sonra ad/telefon duzenlenebilir (409 yok)', async () => {
+    const dead = () => accountRow({ account_email: 'a-blok-2@ahbu.local', account_is_active: false, account_name: 'Ayse Sakin', account_phone: '+905551112233', email: 'eski@example.com' });
+    const DETACH = /^UPDATE site_people SET user_code = NULL, full_name = \$2, phone = \$3, email = \$4, updated_at = NOW\(\) WHERE id = \$1$/;
+    handlers.push(
+      [lock, () => ok([dead()])],
+      [/^SELECT resident_email FROM apartments WHERE resident_user_code = \$1 AND site_code = \$2 ORDER BY id LIMIT 1$/, () => ok([{ resident_email: 'guncel@example.com' }])],
+      [DETACH, () => ok()],
+      [/^UPDATE site_people SET full_name = \$1, phone = \$2, updated_at = NOW\(\) WHERE id = \$3 AND site_code = \$4$/, () => ok()],
+      ...detailHandlers(),
+    );
+    await updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Yeni Ad', phone: '0532 111 22 33' }, actor });
+    assert.deepEqual(find(DETACH).params, ['5', 'Ayse Sakin', '+905551112233', 'guncel@example.com'], 'anlik kopya users + guncel iletisim e-postasi');
+    assert.ok(indexOfQuery(DETACH) < indexOfQuery(/^UPDATE site_people SET full_name = \$1/), 'once koparma, sonra duzenleme');
+    assert.deepEqual(auditDetails('person.updated').changes, [
+      { field: 'full_name', from: 'Ayse Sakin', to: 'Yeni Ad' },
+      { field: 'phone', changed: true },
+    ]);
+    assert.equal(has(/^UPDATE apartments SET resident_email/), false, 'hesapsiz kisi: iletisim e-postasi apartments uzerinden degil CRM kaydindan');
+
+    // pasif GERCEK (e-postayla kayitli) hesap hesapsiz SAYILMAZ: hesabin kendisi sahip, 409
+    install();
+    handlers.length = 0;
+    handlers.push([lock, () => ok([accountRow({ account_email: 'ali@example.com', account_is_active: false })])]);
+    await assert.rejects(() => updatePerson({ siteCode: SITE, personId: 5, body: { full_name: 'Yeni Ad' }, actor }), (e) => e.code === 'PERSON_HAS_ACCOUNT');
+    assert.equal(has(/^UPDATE site_people SET user_code = NULL/), false);
+
+    // AKTIF dahili hesap hesapli kalir (ad/telefon 409)
+    install();
+    handlers.length = 0;
+    handlers.push([lock, () => ok([accountRow({ account_email: 'a-blok-2@ahbu.local', account_is_active: true })])]);
+    await assert.rejects(() => updatePerson({ siteCode: SITE, personId: 5, body: { phone: '0532 111 22 33' }, actor }), (e) => e.code === 'PERSON_HAS_ACCOUNT');
+    assert.equal(has(/^UPDATE site_people SET user_code = NULL/), false);
   });
 
   it('HESAPLI kisi: note ve is_active her zaman degisir; audit person.updated details.changes (not icin yalniz changed:true, DEGER yok)', async () => {
@@ -768,6 +803,28 @@ describe('iliskiler: ekle / guncelle', () => {
     handlers.push([APARTMENT_LOOKUP, () => ok()]);
     await assert.rejects(() => addResidency({ siteCode: SITE, personId: 5, body: { apartment_id: 77 }, actor }), (e) => e.code === 'APARTMENT_NOT_FOUND');
     assert.equal(has(/^BEGIN/), false, 'baska sitenin dairesi islem acmadan 404');
+  });
+
+  it('T7: addResidency kisi yok / baska sitenin kisisi / gecersiz id -> 404 PERSON_NOT_FOUND (daire kilidi sonrasi site kapsamli kisi kilidi; yazma yok)', async () => {
+    handlers.push(...apartmentHandlers(), [personLock, () => ok()]);
+    await assert.rejects(
+      () => addResidency({ siteCode: SITE, personId: 5, body: { apartment_id: 9, relation: 'tenant' }, actor }),
+      (e) => e.code === 'PERSON_NOT_FOUND' && e.statusCode === 404,
+    );
+    assert.deepEqual(find(personLock).params, [5, SITE], 'kisi YALNIZ bu sitenin kapsaminda aranir');
+    assert.ok(indexOfQuery(APARTMENT_LOCKED) < indexOfQuery(personLock), 'apartments -> site_people kilit sirasi');
+    assert.equal(has(/^INSERT INTO apartment_residencies/), false);
+    assert.equal(has(/^INSERT INTO audit_log/), false);
+    assert.equal(has(/^COMMIT/), false, 'hata varken islem onaylanmaz');
+
+    // gecersiz kisi kimligi islem/sorgu acmadan 404
+    install();
+    handlers.length = 0;
+    await assert.rejects(
+      () => addResidency({ siteCode: SITE, personId: 'abc', body: { apartment_id: 9 }, actor }),
+      (e) => e.code === 'PERSON_NOT_FOUND' && e.statusCode === 404,
+    );
+    assert.equal(has(/^BEGIN/), false);
   });
 
   it('updateResidency: relation degisimi RELATION_TAKEN kontrolunde KENDISINI haric tutar; audit residency.updated changes', async () => {

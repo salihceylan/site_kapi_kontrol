@@ -2,7 +2,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ACCOUNT_KIND_SQL,
+  DEAD_INTERNAL_ACCOUNT_SQL,
+  HAS_ACCOUNT_SQL,
   RELATIONS,
+  accountKindOf,
   apartmentLabel,
   dateToIso,
   escapeLike,
@@ -334,5 +338,28 @@ describe('redactForReadOnlyRole (S9: kurul uyesi icin not + kullanici kodu temiz
     assert.deepEqual(redacted.items[0].details.changes, [{ field: 'note', changed: true }]);
     assert.equal(body.user_code, 30001, 'girdi degismez');
     assert.equal(body.items[0].actor_user_code, 20001);
+  });
+});
+
+describe('people_common: hesap durumu TEK tanim (SQL ve JS birebir)', () => {
+  it('accountKindOf: hesapsiz / pasif dahili hesap = none; aktif dahili = internal; e-postayla kayitli (aktif ya da pasif) = registered', () => {
+    assert.equal(accountKindOf({ userCode: null, accountEmail: null, accountIsActive: null }), 'none');
+    assert.equal(accountKindOf({ userCode: undefined }), 'none');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'a-blok-2@ahbu.local', accountIsActive: false }), 'none', 'pasif dahili hesap hesapsiz davranir');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'A-BLOK-2@AHBU.LOCAL', accountIsActive: false }), 'none', 'buyuk/kucuk harf farki yok');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'a-blok-2@ahbu.local', accountIsActive: true }), 'internal');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'a-blok-2@ahbu.local' }), 'internal', 'durum bilinmiyorsa (undefined) aktif varsayilir');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'ali@example.com', accountIsActive: true }), 'registered');
+    assert.equal(accountKindOf({ userCode: 30001, accountEmail: 'ali@example.com', accountIsActive: false }), 'registered', 'pasif GERCEK hesap hesapsiz sayilmaz');
+  });
+
+  it('SQL parcalari ayni kurali tasir: DEAD_INTERNAL -> HAS_ACCOUNT ve ACCOUNT_KIND bu parcayi KULLANIR (iki ayri tanim yok)', () => {
+    const flat = (text) => text.replace(/\s+/g, ' ').trim();
+    assert.equal(DEAD_INTERNAL_ACCOUNT_SQL, "(u.user_code IS NOT NULL AND u.email LIKE '%@ahbu.local' AND u.is_active = FALSE)");
+    assert.equal(HAS_ACCOUNT_SQL, `(u.user_code IS NOT NULL AND NOT ${DEAD_INTERNAL_ACCOUNT_SQL})`);
+    assert.equal(
+      flat(ACCOUNT_KIND_SQL),
+      `( CASE WHEN u.user_code IS NULL OR ${DEAD_INTERNAL_ACCOUNT_SQL} THEN 'none' WHEN u.email LIKE '%@ahbu.local' THEN 'internal' ELSE 'registered' END )`,
+    );
   });
 });

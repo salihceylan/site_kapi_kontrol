@@ -4,7 +4,7 @@
 // Kilit sırası (genel): apartments (id sırasıyla) -> users -> site_people / apartment_residencies / vehicles.
 
 import { recordAudit } from './audit_service.js';
-import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { todayIso } from './people_common.js';
 
 async function audit(client, actor, action, siteCode, targetType, targetId, details) {
@@ -86,14 +86,36 @@ export async function deactivatePersonRecord(client, { siteCode, personId, actor
   return deactivated;
 }
 
+/** Kullanıcının bu sitede AKTİF bağı sürüyor mu (siteTiePredicate: aktif hesap + aktif dairede aktif üyelik / sakin göstergesi). */
+export async function userHasActiveSiteTie(client, siteCode, userCode) {
+  const result = await client.query(`SELECT 1 AS tied WHERE ${siteTiePredicate('$1::INTEGER', '$2::BIGINT')}`, [Number(userCode), Number(siteCode)]);
+  return Boolean(result.rows?.[0]);
+}
+
 /**
- * Mevcut "Daireden çıkar" (membership_service.removeApartmentMember) akışının CRM'e yansıması - AYNI transaction'da çağrılır:
+ * Son ilişki bittiğinde kararı verir: kullanıcının bu sitede AKTİF bağı sürüyorsa (ör. başka dairede yeni onaylanmış ama CRM'e henüz
+ * yansımamış üyelik) kişi AKTİF ve hesaba BAĞLI kalır, araçları açık kalır; kullanıcının üyelikleri aynı transaction'da eşitlenir (yeni
+ * ilişki hemen oluşur) ve eski satırın notu/aracı/geçmişi yeni bir satıra bölünmez. Bağ yoksa kişi pasifleşir ve hesaptan kopar.
+ * @returns {Promise<{ kept: boolean, deactivated: boolean }>}
+ */
+export async function deactivatePersonUnlessTied(client, { siteCode, personId, userCode = null, actor, reason, contactEmail = null }) {
+  if (userCode !== null && userCode !== undefined && (await userHasActiveSiteTie(client, siteCode, userCode))) {
+    await runSyncSteps(client, { siteCode, userCode: Number(userCode) });
+    return { kept: true, deactivated: false };
+  }
+  const deactivated = await deactivatePersonRecord(client, { siteCode, personId, actor, reason, contactEmail });
+  return { kept: false, deactivated };
+}
+
+/**
+ * Mevcut "Daireden çıkar" / "Sakini Daireden Sil" (membership_service.removeApartmentMember / deleteApartmentMember) akışlarının CRM'e yansıması -
+ * AYNI transaction'da çağrılır:
  * o (kullanıcı, daire) için GÜNCEL ilişkiler (her iki origin) "Taşındı" gibi biter; kişinin başka güncel ilişkisi kalmazsa pasifleşir
  * (hesaptan kopar, araçları pasifleşir). Geçici pasife alma (toggleApartmentMemberStatus) buna DAHİL DEĞİLDİR.
  * Güvenli: SAVEPOINT içinde çalışır; hata daireden çıkarma işlemini BOZMAZ (loglanır).
  * @returns {Promise<number>} biten ilişki sayısı
  */
-export async function endResidenciesForMemberRemoval(client, { apartmentId, userCode, actor = null }) {
+export async function endResidenciesForMemberRemoval(client, { apartmentId, userCode, actor = null, reason = 'member_removed' }) {
   const savepoint = 'crm_member_removal';
   try {
     await client.query(`SAVEPOINT ${savepoint}`);
@@ -124,7 +146,7 @@ export async function endResidenciesForMemberRemoval(client, { apartmentId, user
         apartment_id: Number(apartmentId),
         relation: residency.relation,
         move_out_date: moveOutDate,
-        reason: 'member_removed',
+        reason,
       });
       ended += 1;
       const remaining = await client.query(
@@ -132,9 +154,11 @@ export async function endResidenciesForMemberRemoval(client, { apartmentId, user
         [residency.person_id],
       );
       if (!remaining.rows?.[0]) {
-        await deactivatePersonRecord(client, {
+        // Kullanıcının sitede başka AKTİF bağı sürüyorsa kişi kopmaz / pasifleşmez (bkz. deactivatePersonUnlessTied)
+        await deactivatePersonUnlessTied(client, {
           siteCode: residency.site_code,
           personId: residency.person_id,
+          userCode,
           actor,
           reason: 'residency_ended',
         });

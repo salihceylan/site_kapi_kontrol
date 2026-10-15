@@ -2,6 +2,7 @@
 //
 // Sözleşme: docs/PLATFORM_KISILER.md.
 
+import { DEAD_INTERNAL_ACCOUNT_SQL, INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 import { PlatformError } from './errors.js';
 import { normalizeRequestNote } from './module_request_service.js';
 
@@ -351,4 +352,37 @@ export function redactForReadOnlyRole(value) {
     return out;
   }
   return value;
+}
+
+// --- Hesap durumu: TEK tanım (kişi kartı/listesi, PATCH kuralı ve daire kartı aynı kaynaktan) -----------------------------------
+
+// PASİF dahili (@ahbu.local) daire hesabı "hesapsız" davranır (dürüst gösterim, ad/telefon/e-posta CRM'den düzenlenebilir). Tanım eşitleme
+// SQL'iyle PAYLAŞILIR (people_sync_sql.js: eşitleme ona yeni kişi açmaz); burada yeniden dışa aktarılır.
+export { DEAD_INTERNAL_ACCOUNT_SQL };
+
+/** "Hesaplı" mı: hesap var ve pasif dahili hesap değil. */
+export const HAS_ACCOUNT_SQL = `(u.user_code IS NOT NULL AND NOT ${DEAD_INTERNAL_ACCOUNT_SQL})`;
+
+/** Hesap türü: 'none' (hesapsız / pasif dahili hesap) | 'internal' (dahili daire hesabı) | 'registered' (e-postayla kayıtlı gerçek hesap). */
+export const ACCOUNT_KIND_SQL = `(
+  CASE
+    WHEN u.user_code IS NULL OR ${DEAD_INTERNAL_ACCOUNT_SQL} THEN 'none'
+    WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN 'internal'
+    ELSE 'registered'
+  END
+)`;
+
+/**
+ * Aynı tanımın JS karşılığı (SQL ifadeleriyle birebir): PATCH kuralı gibi JS kararlarında kullanılır.
+ * @returns {'none'|'internal'|'registered'}
+ */
+export function accountKindOf({ userCode, accountEmail, accountIsActive }) {
+  if (userCode === null || userCode === undefined) {
+    return 'none';
+  }
+  const internal = String(accountEmail ?? '').toLowerCase().endsWith(INTERNAL_EMAIL_SUFFIX);
+  if (internal && accountIsActive === false) {
+    return 'none';
+  }
+  return internal ? 'internal' : 'registered';
 }

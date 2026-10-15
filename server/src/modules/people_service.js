@@ -14,7 +14,10 @@ import { generateApartmentPin } from '../utils/helpers.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import {
+  ACCOUNT_KIND_SQL,
+  HAS_ACCOUNT_SQL,
   RELATION_ORDER,
+  accountKindOf,
   apartmentLabel,
   dateToIso,
   escapeLike,
@@ -36,7 +39,7 @@ import {
   todayIso,
   toIso,
 } from './people_common.js';
-import { deactivatePersonRecord } from './people_records.js';
+import { deactivatePersonRecord, deactivatePersonUnlessTied } from './people_records.js';
 import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 
@@ -93,18 +96,6 @@ const CONTACT_EMAIL_SQL = `(
   END
 )`;
 
-/** PASİF dahili daire hesabı (taşınan sakinin hesabı kapatıldı): giriş/kapı kapalı olduğundan "hesaplı" sayılmaz (dürüst gösterim). */
-const DEAD_INTERNAL_ACCOUNT_SQL = `(u.user_code IS NOT NULL AND u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' AND u.is_active = FALSE)`;
-
-/** Hesap türü: 'none' (hesapsız / pasif dahili hesap) | 'internal' (dahili daire hesabı) | 'registered' (e-postayla kayıtlı gerçek hesap). */
-const ACCOUNT_KIND_SQL = `(
-  CASE
-    WHEN u.user_code IS NULL OR ${DEAD_INTERNAL_ACCOUNT_SQL} THEN 'none'
-    WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN 'internal'
-    ELSE 'registered'
-  END
-)`;
-
 const PERSON_SELECT = `
   SELECT
     sp.id,
@@ -115,7 +106,7 @@ const PERSON_SELECT = `
     COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS full_name,
     COALESCE(NULLIF(u.phone_number, ''), sp.phone) AS phone,
     ${CONTACT_EMAIL_SQL} AS email,
-    (u.user_code IS NOT NULL AND NOT ${DEAD_INTERNAL_ACCOUNT_SQL}) AS has_account,
+    ${HAS_ACCOUNT_SQL} AS has_account,
     ${ACCOUNT_KIND_SQL} AS account_kind
   ${PERSON_FROM}
 `;
@@ -647,9 +638,11 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
   if (!remaining.rows?.[0]) {
     // Son ilişki bitti: kişi pasifleşir ve HESAPTAN KOPAR (ad/telefon/e-posta anlık kopyası kişi satırına yazılır, user_code NULL),
     // araçları pasifleşir. Dahili hesapta güncel iletişim e-postası daire satırından alınır (gösterge henüz temizlenmeden okundu).
-    await deactivatePersonRecord(client, {
+    // Kullanıcının sitede başka AKTİF bağı sürüyorsa (yansımamış yeni üyelik) kişi kopmaz/pasifleşmez; yoksa kopar.
+    await deactivatePersonUnlessTied(client, {
       siteCode,
       personId: residency.person_id,
+      userCode: userCode ?? null,
       actor,
       reason: 'residency_ended',
       contactEmail: contactEmailBeforeRevoke,
@@ -1015,7 +1008,8 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
     }
     const found = await client.query(
       `
-        SELECT sp.id, sp.user_code, sp.full_name, sp.phone, sp.email, sp.note, sp.is_active, u.email AS account_email
+        SELECT sp.id, sp.user_code, sp.full_name, sp.phone, sp.email, sp.note, sp.is_active, u.email AS account_email,
+               u.is_active AS account_is_active, u.full_name AS account_name, u.phone_number AS account_phone
         FROM site_people sp
         LEFT JOIN users u ON u.user_code = sp.user_code
         WHERE sp.id = $1 AND sp.site_code = $2
@@ -1023,12 +1017,32 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
       `,
       [id, siteCode],
     );
-    const row = found.rows?.[0];
+    let row = found.rows?.[0];
     if (!row) {
       throw PERSON_NOT_FOUND();
     }
-    const hasAccount = row.user_code !== null && row.user_code !== undefined;
-    const isInternalAccount = hasAccount && String(row.account_email ?? '').toLowerCase().endsWith(INTERNAL_EMAIL_SUFFIX);
+    // Hesap durumu TEK tanımdan (kart/liste/daire kartı ile aynı): PASİF dahili daire hesabı "hesapsız" davranır. Böyle bir kişi önce
+    // hesaptan KOPARILIR (users'taki ad/telefon + güncel iletişim e-postası anlık kopyalanır), sonra hesapsız kişi gibi düzenlenir.
+    let accountKind = accountKindOf({ userCode: row.user_code, accountEmail: row.account_email, accountIsActive: row.account_is_active });
+    if (accountKind === 'none' && row.user_code !== null && row.user_code !== undefined) {
+      const contact = await client.query(
+        `SELECT resident_email FROM apartments WHERE resident_user_code = $1 AND site_code = $2 ORDER BY id LIMIT 1`,
+        [row.user_code, siteCode],
+      );
+      const snapshot = {
+        full_name: (typeof row.account_name === 'string' && row.account_name.trim() !== '' ? row.account_name : null) ?? row.full_name ?? null,
+        phone: (typeof row.account_phone === 'string' && row.account_phone.trim() !== '' ? row.account_phone : null) ?? row.phone ?? null,
+        email: contact.rows?.[0]?.resident_email ?? row.email ?? null,
+      };
+      await client.query(
+        `UPDATE site_people SET user_code = NULL, full_name = $2, phone = $3, email = $4, updated_at = NOW() WHERE id = $1`,
+        [row.id, snapshot.full_name, snapshot.phone, snapshot.email],
+      );
+      row = { ...row, user_code: null, account_email: null, ...snapshot };
+      accountKind = 'none';
+    }
+    const hasAccount = accountKind !== 'none';
+    const isInternalAccount = accountKind === 'internal';
     if (hasAccount && (has('full_name') || has('phone') || (has('email') && !isInternalAccount))) {
       throw PERSON_HAS_ACCOUNT();
     }

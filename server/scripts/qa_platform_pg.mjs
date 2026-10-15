@@ -20,6 +20,9 @@
 //             RESIDENT rolu ve yoneticilik "bag" degildir (yetki asimi tuzagi), pasiflesen kisi hesaptan kopar (anlik kopya),
 //             yonetici devri baskasinin gostergesine/PIN'ine dokunmaz, "Daireden cikar" CRM'e yansir, kilit sirasi (apartments ->
 //             users -> kisi) kontrol deneyi + Tasindi/pasiflestirme x (admin kullanici silme | reset | daire azaltma) yarislari.
+//             T1-T6: yansimamis ikinci uyelik varken "Daireden cikar"/"Tasindi" kisiyi koparmaz, "Sakini Daireden Sil" CRM'e yansir,
+//             admin silme adim 0 daire kilidi tetikleyiciyle ayni kume (CRM-yalniz daire dahil), pasif dahili hesap hesapsiz davranir
+//             (hayalet kisi yok), pasif hesap baglanmaz, kullanici bazli LINK planinda SEQ SCAN yok (EXPLAIN, 90000+ satir).
 //   locks     onay/ac-kapa/talep ile site silme ESZAMANLI yarislari (kilit sirasi: sites FOR SHARE -> advisory -> talep
 //             FOR UPDATE; deadlock 40P01 OLMAMALI) + eski sirayla deadlock'u kanitlayan kontrol deneyi.
 //
@@ -1661,8 +1664,9 @@ async function sectionPeople() {
     const manualPerson = await personOfUser(10047);
     const manualResidency = (await detailOf(manualPerson.id)).residencies[0];
     await call('PATCH', `${P(S1)}/residencies/${manualResidency.id}`, MGR, { relation: 'tenant' });
-    await membershipSvc.deleteApartmentMember({ apartmentId: aSync, targetUserCode: 10046, authUser: superActor });
-    await membershipSvc.deleteApartmentMember({ apartmentId: aManual, targetUserCode: 10047, authUser: superActor });
+    // Esitleme (CRM kancasi OLMAYAN yollar: ham SQL / baska kod) tarafindan gorulen "uyelik satiri GERCEKTEN silindi" durumu. (T2: servis uclari
+    // deleteApartmentMember/removeApartmentMember artik CRM kancasini calistirir; onlar asagidaki T1/T2 senaryolarinda sinanir.)
+    await q(`DELETE FROM apartment_memberships WHERE (apartment_id = $1 AND user_code = 10046) OR (apartment_id = $2 AND user_code = 10047)`, [aSync, aManual]);
     await call('GET', `${P(S1)}/people`, MGR);
     check('H4: uyelik satiri GERCEKTEN silinince esitleme kaynakli iliski biter (Sistem), elle duzenlenen (manual) iliski KORUNUR', (await currentCount(syncPerson.id)) === 0 && (await currentCount(manualPerson.id)) === 1 && (await auditOf('residency.ended', syncPerson.id)).some((r) => r.actor_name === 'Sistem'));
 
@@ -1921,6 +1925,56 @@ async function sectionPeople() {
     const outRow = await personRowById(outPerson.id);
     check('S6: son iliski "Daireden cikar" ile bitince kisi pasif + hesaptan kopuk + arac pasif', outRow.is_active === false && outRow.user_code === null && outRow.full_name === 'Cikarilan Iki Daireli' && (await currentCount(outPerson.id)) === 0);
 
+    // --- T1: kullanicinin sitede HALA aktif bagi varken (yeni onaylanmis, henuz YANSIMAMIS ikinci uyelik) "Daireden cikar" / "Tasindi" kisiyi
+    //     ERKEN KOPARMAZ (kisi aktif + hesapli + araclar acik + tek satir); sonra ikinci daire yansiyinca AYNI kisiye iliski eklenir
+    const t1Scenario = async (user, label, end) => {
+      await mkUser(user, `T1 ${label}`, `t1_${user}@example.com`);
+      const aFrom = await newApt();
+      const aTo = await newApt();
+      await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, $2, 'FAMILY_MEMBER')`, [aFrom, user]);
+      await call('GET', `${P(S1)}/people`, MGR); // aFrom yansidi
+      const person = await personOfUser(user);
+      const plate = `34TIA${user % 1000}`;
+      const vehicleRes = await call('POST', `${P(S1)}/vehicles`, MGR, { person_id: Number(person.id), plate });
+      await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, $2, 'FAMILY_MEMBER')`, [aTo, user]); // YENI onay: YANSIMADI
+      const unreflected = (await q(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE person_id = $1 AND apartment_id = $2`, [person.id, aTo])).rows[0].n === 0;
+      await end(aFrom, person);
+      const row = await personRowById(person.id);
+      const vehicles = (await q(`SELECT is_active FROM vehicles WHERE person_id = $1`, [person.id])).rows;
+      const rows = (await q(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND user_code = $2`, [S1, user])).rows[0].n;
+      const fromResidency = (await q(`SELECT is_current FROM apartment_residencies WHERE person_id = $1 AND apartment_id = $2`, [person.id, aFrom])).rows;
+      check(`T1 (${label}): yansimamis ikinci uyelik varken cikarilan dairedeki iliski biter ama kisi AKTIF + hesapli, araclar ACIK, tek satir (erken koparma yok)`,
+        vehicleRes.status === 201 && unreflected && row.is_active === true && Number(row.user_code) === user && vehicles.length === 1 && vehicles.every((v) => v.is_active === true) && rows === 1
+          && fromResidency.length === 1 && fromResidency[0].is_current === false && (await auditOf('person.deactivated', person.id)).length === 0, { row, vehicles, rows, fromResidency });
+      await call('GET', `${P(S1)}/people`, MGR); // ikinci uyelik yansir
+      const after = await detailOf(person.id);
+      const rowsAfter = (await q(`SELECT COUNT(*)::int AS n FROM site_people WHERE site_code = $1 AND user_code = $2`, [S1, user])).rows[0].n;
+      check(`T1 (${label}): ikinci daire yansiyinca AYNI kisiye guncel iliski eklenir (yeni kisi satiri acilmaz), arac hala aktif`,
+        rowsAfter === 1 && Number(after.id) === Number(person.id) && after.is_active === true && after.has_account === true && after.residencies.filter((r) => r.is_current).length === 1
+          && after.residencies.some((r) => r.is_current && r.apartment_id === aTo) && after.vehicles.length === 1, after.residencies);
+      return { person, aFrom, aTo };
+    };
+    await t1Scenario(10201, 'Daireden cikar', async (apartmentId) => {
+      await membershipSvc.removeApartmentMember({ apartmentId, targetUserCode: 10201, authUser: superActor });
+    });
+    await t1Scenario(10202, 'Tasindi', async (apartmentId, person) => {
+      const residency = (await detailOf(person.id)).residencies.find((r) => r.apartment_id === apartmentId);
+      const ended = await call('POST', `${P(S1)}/residencies/${residency.id}/end`, MGR, {});
+      check('T1 (Tasindi): iliski bitirme istegi 200', ended.status === 200, ended.body);
+    });
+    // olumsuz kontrol: ikinci uyelik var ama hesap PASIF (T5: pasif hesap bag degildir) -> kisi yine kopar
+    await mkUser(10203, 'T1 Pasif Hesap', 't1_10203@example.com');
+    const aT1From = await newApt();
+    const aT1To = await newApt();
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10203, 'FAMILY_MEMBER')`, [aT1From]);
+    await call('GET', `${P(S1)}/people`, MGR);
+    const t1Dead = await personOfUser(10203);
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10203, 'FAMILY_MEMBER')`, [aT1To]);
+    await q(`UPDATE users SET is_active = FALSE WHERE user_code = 10203`);
+    await membershipSvc.removeApartmentMember({ apartmentId: aT1From, targetUserCode: 10203, authUser: superActor });
+    const t1DeadRow = await personRowById(t1Dead.id);
+    check('T1 (olumsuz kontrol): hesap PASIFSE ikinci uyelik bag sayilmaz -> kisi pasif + hesaptan kopuk (S6 davranisi)', t1DeadRow.is_active === false && t1DeadRow.user_code === null, t1DeadRow);
+
     // --- S7: pasif dahili hesap "hesapli" gosterilmez; tasinan dahili kisi yeniden eklenince dürüst durum
     res = await call('POST', `${P(S1)}/people/${internalPerson.body.id}/residencies`, MGR, { apartment_id: aInternal, relation: 'family_member' });
     check('S7: tasinan (koparilmis) dahili hesap kisisi yeniden eklenirse HESAPSIZ kayit olur (account_kind none), eski pasif hesap yeniden etkinlestirilmez, daire sakini hesabina dokunulmaz',
@@ -1968,6 +2022,67 @@ async function sectionPeople() {
     const s11Active = await personOfUser(10064);
     await q(`DELETE FROM users WHERE user_code = 10064`);
     check('S11: aktif kisi icin ise TAM bir person.deactivated (Sistem, account_deleted) yazilir', (await auditOf('person.deactivated', s11Active.id)).filter((r) => r.actor_name === 'Sistem' && r.details.reason === 'account_deleted').length === 1);
+
+    // --- T2: "Sakini Daireden Sil" (deleteApartmentMember) de CRM'e yansir (ayni islem, yapan yonetici adina, dogru legacy bayragi)
+    await mkUser(10211, 'T2 Elle Malik', 't2_10211@example.com');
+    const aT2 = await newApt();
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10211, 'FAMILY_MEMBER')`, [aT2]);
+    await call('GET', `${P(S1)}/people`, MGR);
+    const t2Person = await personOfUser(10211);
+    const t2Residency = (await detailOf(t2Person.id)).residencies.find((r) => r.apartment_id === aT2);
+    res = await call('PATCH', `${P(S1)}/residencies/${t2Residency.id}`, MGR, { relation: 'owner' }); // elle duzenlendi -> origin manual
+    const t2Taken = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T2 Yeni Malik', apartment_id: aT2, relation: 'owner' });
+    check('T2 hazirlik: elle girilmis malik guncelken ikinci malik eklenemez (409 RELATION_TAKEN)', res.status === 200 && t2Taken.status === 409 && t2Taken.body.code === 'RELATION_TAKEN', t2Taken.body);
+    await membershipSvc.deleteApartmentMember({ apartmentId: aT2, targetUserCode: 10211, authUser: superActor });
+    const t2After = await personRowById(t2Person.id);
+    const t2Audit = (await q(`SELECT actor_name, details->>'reason' AS reason FROM audit_log WHERE action = 'residency.ended' AND target_id = $1 ORDER BY id DESC LIMIT 1`, [String(t2Person.id)])).rows[0];
+    check('T2: "Sakini Daireden Sil" o (kullanici, daire) iliskisini (origin manual dahil) bitirir; baska bagi yoksa kisi pasif + hesaptan kopuk; audit reason member_deleted, yapan yonetici adina',
+      (await currentCount(t2Person.id)) === 0 && t2After.is_active === false && t2After.user_code === null && t2Audit?.reason === 'member_deleted' && t2Audit.actor_name === superActor.full_name, { t2After, t2Audit });
+    const t2New = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T2 Yeni Malik', apartment_id: aT2, relation: 'owner' });
+    check('T2: silinen malikin yerine yeni malik eklenebilir (409 RELATION_TAKEN yok)', t2New.status === 201 && t2New.body.relations.includes('owner'), t2New.body);
+    // dahili daire hesabi + gosterge (legacy bayragi): hesapsiz kisi daire sakini olarak eklenmisti
+    const aT2b = await newApt();
+    const t2bPerson = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T2 Dahili Malik', email: 't2b@example.com', apartment_id: aT2b, relation: 'owner' });
+    const t2bUser = Number((await residentOf(aT2b)).resident_user_code);
+    await membershipSvc.deleteApartmentMember({ apartmentId: aT2b, targetUserCode: t2bUser, authUser: superActor });
+    const t2bRow = await personRowById(t2bPerson.body.id);
+    check('T2 (dahili daire hesabi / gosterge): silinince iliski biter, kisi pasif; sonradan yeni malik eklenebilir', (await currentCount(t2bPerson.body.id)) === 0 && t2bRow.is_active === false
+      && (await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T2b Yeni Malik', email: 't2b.yeni@example.com', apartment_id: aT2b, relation: 'owner' })).status === 201, t2bRow);
+
+    // --- T4: PASIF dahili hesapli kisi HESAPSIZ davranir: kart, liste, daire karti ve PATCH kurali AYNI tanimdan
+    const aT4 = await newApt();
+    const t4 = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T4 Pasif Dahili', email: 't4.pasif@example.com', apartment_id: aT4 });
+    const t4Account = Number((await residentOf(aT4)).resident_user_code);
+    await q(`UPDATE users SET is_active = FALSE WHERE user_code = $1`, [t4Account]);
+    const t4AptBefore = (await call('GET', `${P(S1)}/apartments/${aT4}`, MGR)).body;
+    check('T4: daire kartinda pasif dahili hesapli sakin has_account false (kisi kartiyla ayni)', t4AptBefore.current_residents?.find((r) => Number(r.person_id) === Number(t4.body.id))?.has_account === false && (await detailOf(t4.body.id)).has_account === false, t4AptBefore.current_residents);
+    res = await call('PATCH', `${P(S1)}/people/${t4.body.id}`, MGR, { full_name: 'T4 Yeni Ad', phone: '0532 111 22 33' });
+    const t4Row = await personRowById(t4.body.id);
+    check('T4: pasif dahili hesapli kisinin ad/telefonu duzenlenebilir (409 PERSON_HAS_ACCOUNT degil); once hesaptan koparilir', res.status === 200 && res.body.full_name === 'T4 Yeni Ad' && res.body.has_account === false && res.body.account_kind === 'none'
+      && t4Row.user_code === null && t4Row.full_name === 'T4 Yeni Ad' && t4Row.phone === '+905321112233', { body: res.body, t4Row });
+    await call('GET', `${P(S1)}/people`, MGR);
+    const t4Apt = (await call('GET', `${P(S1)}/apartments/${aT4}`, MGR)).body;
+    check('T4: sonraki esitlemeden sonra da ayni kisi tek (hayalet kisi satiri yok); daire kartinda duzenlenen ad + has_account false',
+      t4Apt.current_residents.length === 1 && Number(t4Apt.current_residents[0].person_id) === Number(t4.body.id) && t4Apt.current_residents[0].full_name === 'T4 Yeni Ad' && t4Apt.current_residents[0].has_account === false, t4Apt.current_residents);
+    // ayni dairede AKTIF dahili hesap hesapli kalir: ad/telefon 409
+    const aT4b = await newApt();
+    const t4b = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'T4 Aktif Dahili', email: 't4.aktif@example.com', apartment_id: aT4b });
+    res = await call('PATCH', `${P(S1)}/people/${t4b.body.id}`, MGR, { full_name: 'Baska Ad' });
+    check('T4 (kontrol): AKTIF dahili hesapli kisinin adi hala 409 PERSON_HAS_ACCOUNT', res.status === 409 && res.body.code === 'PERSON_HAS_ACCOUNT', res.body);
+
+    // --- T5: sync LINK pasif hesabi baglamaz (aktif hesap AYNI kosulda baglanir)
+    await mkUser(10231, 'T5 Pasif', 't5pasif@example.com');
+    await mkUser(10232, 'T5 Aktif', 't5aktif@example.com');
+    const aT5a = await newApt();
+    const aT5b = await newApt();
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10231, 'FAMILY_MEMBER'), ($2, 10232, 'FAMILY_MEMBER')`, [aT5a, aT5b]);
+    await q(`UPDATE users SET is_active = FALSE WHERE user_code = 10231`);
+    const t5Dead = Number((await q(`INSERT INTO site_people (site_code, full_name, email) VALUES ($1, 'T5 Hesapsiz Pasif', 't5pasif@example.com') RETURNING id`, [S1])).rows[0].id);
+    const t5Live = Number((await q(`INSERT INTO site_people (site_code, full_name, email) VALUES ($1, 'T5 Hesapsiz Aktif', 't5aktif@example.com') RETURNING id`, [S1])).rows[0].id);
+    await call('GET', `${P(S1)}/people`, MGR);
+    const t5DeadRow = await personRowById(t5Dead);
+    const t5LiveRow = await personRowById(t5Live);
+    check('T5: PASIF hesap (aktif uyelik olsa bile) hesapsiz kisiye BAGLANMAZ; ayni durumda AKTIF hesap baglanir', t5DeadRow.user_code === null && t5DeadRow.email === 't5pasif@example.com' && t5LiveRow.user_code === 10232 && t5LiveRow.email === null, { t5DeadRow, t5LiveRow });
 
     // --- S4: kilit sirasi (apartments -> users -> kisi/iliski/arac). Deterministik kontrol deneyi + eszamanli yarislar
     {
@@ -2020,6 +2135,35 @@ async function sectionPeople() {
       const newErrors = await orderExperiment('yeni', false);
       check('S4: YENI sira (daire -> kisi) ayni kesisimde deadlock VERMEZ; kullanici silme bekleyip tamamlanir', newErrors.length === 0, newErrors);
 
+      // --- T3: admin kullanici silme adim 0, tetikleyiciyle AYNI daire kumesini kilitler: yalniz CRM iliskisi olan daire (uyelik/gosterge YOK) dahil.
+      //     Deterministik: bu dairenin satir kilidi baska islemde tutulurken silme istegi DAHA ILK adimda (adim 0 kilit sorgusu) bekler;
+      //     hicbir uyelik/kullanici silme sorgusuna ILERLEMEZ (aksi halde tetikleyicide, kullanici satiri silinmisken beklerdi -> deadlock penceresi).
+      await mkUser(10221, 'T3 CRM Iliskili', 't3_10221@example.com');
+      const aT3Member = await newApt();
+      const aT3Crm = await newApt(); // yalniz CRM iliskisi (uyelik / gosterge yok)
+      await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10221, 'FAMILY_MEMBER')`, [aT3Member]);
+      await call('GET', `${P(S1)}/people`, MGR);
+      const t3Person = await personOfUser(10221);
+      await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, origin) VALUES ($1, $2, $3, 'resident', 'manual')`, [S1, aT3Crm, t3Person.id]);
+      const t3Holder = await connectRaw();
+      let t3Waiting = [];
+      let t3Delete;
+      try {
+        await t3Holder.query('BEGIN');
+        await t3Holder.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [aT3Crm]);
+        t3Delete = call('DELETE', '/admin/users/10221', SUPER);
+        await sleep(700);
+        t3Waiting = (await q(`SELECT query FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`)).rows.map((r) => r.query.replace(/\s+/g, ' '));
+      } finally {
+        await t3Holder.query('ROLLBACK').catch(() => {});
+        t3Holder.release();
+      }
+      const t3Response = await t3Delete;
+      check('T3: CRM-yalniz iliski dairesinin kilidi tutulurken kullanici silme ADIM 0 kilit sorgusunda bekler (uyelik/kullanici silmeye ilerlemez)',
+        t3Waiting.length === 1 && /^SELECT a\.id FROM apartments a WHERE a\.resident_user_code = \$1 OR a\.id IN \(SELECT am\.apartment_id FROM apartment_memberships am .*apartment_residencies r .*ORDER BY a\.id FOR UPDATE$/.test(t3Waiting[0]), t3Waiting);
+      check('T3: kilit birakilinca silme tamamlanir (200/204), kullanici silinmis, kisi pasif + iliskileri bitmis', [200, 204].includes(t3Response.status)
+        && (await q(`SELECT 1 FROM users WHERE user_code = 10221`)).rowCount === 0 && (await personRowById(t3Person.id)).is_active === false && (await currentCount(t3Person.id)) === 0, t3Response.body);
+
       let raceBad = 0;
       const raceLog = [];
       const judge = (label, results, okStatuses) => {
@@ -2066,6 +2210,17 @@ async function sectionPeople() {
         await call('GET', `${P(S1)}/people`, MGR);
         const person4 = await personOfUser(u4);
         judge('pasiflestirme x admin silme', await Promise.allSettled([call('PATCH', `${P(S1)}/people/${person4.id}`, MGR, { is_active: false }), call('DELETE', `/admin/users/${u4}`, SUPER)]), [200, 204, 404, 409]);
+
+        // (5) T3: yalniz CRM iliskisi olan daire (uyelik/gosterge yok) icin Tasindi x admin kullanici silme
+        const u5 = 10140 + i;
+        await mkUser(u5, `Yaris CRM ${i}`, `yariscrm${i}@example.com`);
+        const a5Member = await newApt();
+        const a5Crm = await newApt();
+        await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, $2, 'FAMILY_MEMBER')`, [a5Member, u5]);
+        await call('GET', `${P(S1)}/people`, MGR);
+        const person5 = await personOfUser(u5);
+        const residency5 = Number((await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, origin) VALUES ($1, $2, $3, 'resident', 'manual') RETURNING id`, [S1, a5Crm, person5.id])).rows[0].id);
+        judge('CRM-yalniz daire x admin silme', await Promise.allSettled([call('POST', `${P(S1)}/residencies/${residency5}/end`, MGR, {}), call('DELETE', `/admin/users/${u5}`, SUPER)]), [200, 204, 404, 409]);
       }
       check(`S4: Tasindi/pasiflestirme x (admin kullanici silme | resetApartmentResident | daire azaltma) ${ROUNDS} tur eszamanli: deadlock/500 YOK (tek yeniden denemeyle gecenler dahil)`, raceBad === 0, raceLog.slice(0, 4));
     }
@@ -2120,6 +2275,38 @@ async function sectionPeople() {
   const listStart = Date.now();
   res = await call('GET', `${P(BIG)}/people?q=toplu%20sakin%2015&limit=20`, SUPER);
   check(`buyuk site arama/liste hizli (${Date.now() - listStart} ms)`, res.status === 200 && res.body.total >= 1);
+
+  // 11b) T6: kullanici bazli esitleme LINK sorgusu site_people tablosunu TAMAMEN taramaz (sp.site_code kullanicinin bag sitelerine sinirli)
+  console.log('--- T6: LINK sorgu plani (buyuk site_people) ---');
+  const { SYNC_STEPS, siteTieSitesSql } = await import('../src/modules/people_sync_sql.js');
+  const linkSql = SYNC_STEPS.find((step) => step.name === 'link_accountless').sql;
+  await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) SELECT 1000002000 + g, 'Dolgu Site ' || g, 'approved', NOW() FROM generate_series(1, 300) g`);
+  await q(
+    `INSERT INTO site_people (site_code, full_name, email)
+     SELECT 1000002000 + (g % 300) + 1, 'Dolgu ' || g, 'dolgu' || g || '@example.com' FROM generate_series(1, 90000) g`,
+  );
+  await q('ANALYZE site_people');
+  await q('ANALYZE users');
+  await q('ANALYZE apartment_memberships');
+  await q('ANALYZE apartments');
+  const planNodes = (node, out = []) => {
+    out.push(node);
+    for (const child of node.Plans ?? []) planNodes(child, out);
+    return out;
+  };
+  const explainLink = async (sql, userCode) => {
+    const rows = (await q(`EXPLAIN (FORMAT JSON) ${sql}`, [null, userCode])).rows;
+    const plan = rows[0]['QUERY PLAN'][0].Plan;
+    return planNodes(plan).filter((node) => node['Relation Name'] === 'site_people').map((node) => (node['Index Name'] ? `${node['Node Type']} (${node['Index Name']})` : node['Node Type']));
+  };
+  const tieSitesRestriction = `AND ($2::INTEGER IS NULL OR sp.site_code IN (${siteTieSitesSql('$2::INTEGER')}))`;
+  check('T6 hazirlik: LINK sorgusu kullanici bazli site sinirini iceriyor (kontrol deneyi icin cikarilabilir)', linkSql.includes(tieSitesRestriction), linkSql.slice(0, 300));
+  const bigUser = Number((await q(`SELECT user_code FROM users WHERE email = 'toplu15@example.com'`)).rows[0].user_code);
+  const scansWith = await explainLink(linkSql, bigUser);
+  console.log(`  bilgi: site_people erisimi (T6 sinirli): ${scansWith.join(', ')}`);
+  check('T6: kullanici bazli LINK planinda site_people icin SEQ SCAN yok (indeksli erisim; 90000+ satirlik tabloda)', scansWith.length > 0 && scansWith.every((type) => !/^Seq Scan/.test(type)), scansWith);
+  const scansWithout = await explainLink(linkSql.replace(tieSitesRestriction, ''), bigUser);
+  console.log(`  bilgi: site_people erisimi (siniri OLMAYAN eski sorgu): ${scansWithout.join(', ')}`);
 
   const serverFailures = serverErrors.filter((line) => /errorId=/.test(line));
   check('bolum boyunca sunucu 500 (errorId) hatasi YOK', serverFailures.length === 0, serverFailures.slice(0, 3));

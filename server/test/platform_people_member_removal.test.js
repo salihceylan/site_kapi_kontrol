@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
 import { endResidenciesForMemberRemoval } from '../src/modules/people_records.js';
 import {
+  deleteApartmentMember,
   handOverApartmentResident,
   removeApartmentMember,
   toggleApartmentMemberStatus,
@@ -46,6 +47,7 @@ describe('S6: endResidenciesForMemberRemoval (people_records)', () => {
   const RESIDENCIES = /^SELECT r\.id, r\.site_code, r\.person_id, r\.relation FROM apartment_residencies r INNER JOIN site_people sp ON sp\.id = r\.person_id WHERE r\.apartment_id = \$1 AND sp\.user_code = \$2 AND r\.is_current = TRUE ORDER BY r\.id FOR UPDATE OF r$/;
   const END = /^UPDATE apartment_residencies SET is_current = FALSE, move_out_date = \$2, updated_at = NOW\(\) WHERE id = \$1$/;
   const REMAINING = /^SELECT 1 FROM apartment_residencies WHERE person_id = \$1 AND is_current = TRUE LIMIT 1$/;
+  const TIE = /^SELECT 1 AS tied WHERE \(/;
   const SNAPSHOT = /^SELECT sp\.id, sp\.user_code, sp\.is_active, sp\.full_name/;
   const PERSON_OFF = /^UPDATE site_people SET is_active = FALSE, user_code = NULL/;
   const VEHICLES_OFF = /^UPDATE vehicles SET is_active = FALSE WHERE person_id = \$1 AND is_active = TRUE RETURNING id, plate$/;
@@ -59,6 +61,7 @@ describe('S6: endResidenciesForMemberRemoval (people_records)', () => {
         [RESIDENCIES, ok([{ id: '31', site_code: '1000000001', person_id: '5', relation: 'owner' }])],
         [END, ok()],
         [REMAINING, ok()],
+        [TIE, ok()],
         [SNAPSHOT, ok([snapshotRow])],
         [PERSON_OFF, ok([{ id: '5' }])],
         [VEHICLES_OFF, ok([{ id: '4', plate: '34ABC123' }])],
@@ -78,6 +81,23 @@ describe('S6: endResidenciesForMemberRemoval (people_records)', () => {
     assert.equal(client.log[0].sql, 'SAVEPOINT crm_member_removal');
     assert.equal(client.log[client.log.length - 1].sql, 'RELEASE SAVEPOINT crm_member_removal');
     assert.deepEqual([Number(find(client.log, PERSON_OFF).params[0]), ...find(client.log, PERSON_OFF).params.slice(1)], [5, 'Ali', null, 'ali@example.com']);
+  });
+
+  it('T1: son iliski bitse de kullanicinin sitede AKTIF bagi suruyorsa (yansimamis yeni uyelik) kisi kopmaz/pasiflesmez, araclar acik kalir; uyelikler eslenir', async () => {
+    const client = scripted(
+      [
+        [RESIDENCIES, ok([{ id: '31', site_code: '1000000001', person_id: '5', relation: 'resident' }])],
+        [END, ok()],
+        [REMAINING, ok()],
+        [TIE, ok([{ tied: 1 }])],
+      ],
+      { strict: false },
+    );
+    assert.equal(await endResidenciesForMemberRemoval(client, { apartmentId: 9, userCode: 30001, actor: manager }), 1);
+    assert.deepEqual(find(client.log, TIE).params, [30001, 1000000001]);
+    assert.equal(has(client.log, SNAPSHOT) || has(client.log, PERSON_OFF) || has(client.log, VEHICLES_OFF), false);
+    const stepWith = client.log.find((q) => /^WITH desired AS/.test(q.sql));
+    assert.deepEqual(stepWith.params, ['1000000001', 30001], 'yeni uyelik ayni transaction\'da yansitilir (kullanici bazli adimlar)');
   });
 
   it('kisinin baska guncel iliskisi kaliyorsa kisi aktif kalir (kopmaz, araclar pasiflesmez)', async () => {
@@ -146,6 +166,31 @@ describe('S6: removeApartmentMember CRM kancasini AYNI transaction\'da cagirir; 
     const audit = clientLog.find((q) => /^INSERT INTO audit_log/.test(q.sql));
     assert.equal(audit.params[3], 'residency.ended');
     assert.equal(audit.params[0], 1);
+  });
+
+  it('T2: deleteApartmentMember ("Sakini Daireden Sil") de CRM kancasini AYNI transaction\'da cagirir (reason member_deleted); legacy bayragi gostergeye gore gecer', async () => {
+    const aptRowForDelete = aptRow(40000); // gosterge BASKA kisinin (40000); silinen 20000 aile reisi
+    const poolScript = scripted([[/^SELECT a\.id, a\.site_code, a\.block_id/, ok([aptRowForDelete])]]);
+    const clientScript = scripted([
+      [/^SELECT id, site_code, resident_user_code FROM apartments/, ok([aptRowForDelete])],
+      [/^DELETE FROM apartment_memberships WHERE apartment_id = \$1 AND user_code = \$2 RETURNING role/, ok([{ role: 'APARTMENT_ADMIN' }])],
+      [/AND is_active = TRUE AND role = 'APARTMENT_ADMIN'/, ok([{ user_code: 20001 }])],
+      [/^SELECT r\.id, r\.site_code, r\.person_id, r\.relation FROM apartment_residencies r/, ok([{ id: '31', site_code: '101', person_id: '5', relation: 'owner' }])],
+      [/^SELECT 1 FROM apartment_residencies WHERE person_id/, ok([{ x: 1 }])],
+    ]);
+    pool.query = poolScript.query;
+    pool.connect = async () => ({ query: clientScript.query, release() {} });
+    await deleteApartmentMember({ apartmentId: 3, targetUserCode: 20000, authUser: superUser });
+    const log = clientScript.log;
+    const hook = indexOf(log, /^SELECT r\.id, r\.site_code, r\.person_id, r\.relation FROM apartment_residencies r/);
+    assert.ok(hook > indexOf(log, /^DELETE FROM apartment_memberships/), 'uyelik silindikten sonra');
+    assert.ok(hook > indexOf(log, /^DELETE FROM door_access_overrides/), 'kapi izinleri temizlendikten sonra');
+    assert.ok(hook < indexOf(log, /^COMMIT$/), 'ayni transaction icinde');
+    const ended = log.find((q) => /^INSERT INTO audit_log/.test(q.sql));
+    assert.equal(ended.params[3], 'residency.ended');
+    assert.equal(JSON.parse(ended.params[7]).reason, 'member_deleted');
+    assert.equal(ended.params[0], 1, 'audit yapan yonetici adina');
+    assert.equal(has(log, /^UPDATE apartments SET resident_user_code/), false, 'gosterge baska kisiye ait: silme onu bozmaz (legacy=false)');
   });
 
   it('toggleApartmentMemberStatus (geçici pasife alma): CRM iliskilerine DOKUNMAZ', async () => {

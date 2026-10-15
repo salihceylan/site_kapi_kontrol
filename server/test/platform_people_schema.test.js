@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, blankSqlNoise, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
 import { PEOPLE_BACKFILL_CODE, runPeopleBackfill } from '../src/modules/people_backfill.js';
-import { SYNC_STEPS, runSyncSteps, siteTiePredicate } from '../src/modules/people_sync_sql.js';
+import { DEAD_INTERNAL_ACCOUNT_SQL, SYNC_STEPS, runSyncSteps, siteTiePredicate, siteTieSitesSql } from '../src/modules/people_sync_sql.js';
+import { DEAD_INTERNAL_ACCOUNT_SQL as DEAD_INTERNAL_FROM_COMMON } from '../src/modules/people_common.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (relative) => readFileSync(path.join(here, '..', 'src', relative), 'utf8').replace(/\r\n/g, '\n');
@@ -146,6 +147,21 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     assert.ok(lockAt < auditAt && auditAt < updateAt, 'sira: daire kilidi -> audit (henuz aktif olanlar) -> guncellemeler');
     assert.match(body, /FROM site_people sp WHERE sp\.user_code = OLD\.user_code AND sp\.is_active;/, 'zaten pasif kisiler icin yeni audit satiri yazilmaz');
   });
+
+  it('T3: admin kullanici silme adim 0 daire kilidi, tetikleyiciyle AYNI kumeyi kilitler (uyelik + sakin gostergesi + guncel CRM iliskisi, id sirasi, FOR UPDATE)', () => {
+    const fn = /CREATE OR REPLACE FUNCTION trg_users_preserve_site_people\(\) RETURNS trigger AS \$\$([\s\S]*?)\$\$ LANGUAGE plpgsql;/.exec(MIGRATION)?.[1];
+    const trigger = /PERFORM a\.id (FROM apartments a WHERE .*?ORDER BY a\.id FOR UPDATE;)/.exec(fn.replace(/--.*$/gm, ' ').replace(/\s+/g, ' '))?.[1];
+    assert.ok(trigger, 'tetikleyici kilit sorgusu bulundu');
+    const route = read('routes/admin_routes.js');
+    const at = route.indexOf('// 0. Kilit sirasi (apartments');
+    assert.ok(at >= 0, 'adim 0 yorumu bulundu');
+    const routeSql = /`(SELECT a\.id FROM apartments a[\s\S]*?ORDER BY a\.id FOR UPDATE)`/.exec(route.slice(at))?.[1];
+    assert.ok(routeSql, 'adim 0 kilit sorgusu bulundu');
+    // $1 <-> OLD.user_code disinda iki sorgu BIREBIR ayni olmali (bosluk farklari haric)
+    const flatRoute = routeSql.replace(/\$1/g, 'OLD.user_code').replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')');
+    const flatTrigger = trigger.replace(/;$/, '').replace(/\( /g, '(').replace(/ \)/g, ')');
+    assert.equal(flatRoute.replace(/^SELECT a\.id /, ''), flatTrigger);
+  });
 });
 
 describe('people_v1 aktarimi (ensureDbSchema)', () => {
@@ -281,16 +297,38 @@ describe('esitleme SQL\'i (people_sync_sql)', () => {
     assert.match(sql, /NOT EXISTS \( SELECT 1 FROM site_people x WHERE x\.site_code = sp\.site_code AND x\.user_code = u\.user_code \)/);
   });
 
+  it('T5: sync LINK pasif hesabi baglamaz (users.is_active ortak siteTiePredicate icinde, tek tanim); T6: kullanici bazli LINK sp.site_code\'u kullanicinin bag sitelerine siniriyor (siteTieSitesSql, indeks dostu)', () => {
+    const sql = allSql[0];
+    assert.ok(sql.includes('EXISTS (SELECT 1 FROM users tie_u WHERE tie_u.user_code = u.user_code AND tie_u.is_active = TRUE)'), 'pasif hesap baglanmaz');
+    // T6: yalniz kullanici filtresi VARKEN ($2) site_code, kullanicinin bag sitelerinin kumesiyle sinirlanir (tum site_people taranmaz)
+    const restriction = normalizeSql(`AND ($2::INTEGER IS NULL OR sp.site_code IN (${siteTieSitesSql('$2::INTEGER')}))`);
+    assert.ok(sql.includes(restriction), 'kullanici bazli site siniri');
+    assert.ok(sql.indexOf(restriction) < sql.indexOf('EXISTS (SELECT 1 FROM users tie_u'), 'site siniri, ortak yuklemden once');
+    // kapsamli (site/kullanici) sorgu parametreleri degismedi: [$1 site, $2 kullanici]
+    assert.equal(/\$3/.test(sql), false);
+  });
+
   it('S1: siteTiePredicate YALNIZ aktif daire uyeligi ve resident_user_code gostergesidir; site_memberships (STAFF/BOARD_MEMBER/RESIDENT) ve yoneticilik bag degildir', () => {
     const predicate = normalizeSql(siteTiePredicate('X.user', 'Y.site'));
-    assert.match(predicate, /apartment_memberships tie_am INNER JOIN apartments tie_a ON tie_a\.id = tie_am\.apartment_id WHERE tie_a\.site_code = Y\.site AND tie_am\.user_code = X\.user AND tie_am\.is_active = TRUE AND tie_a\.is_active = TRUE/);
-    assert.match(predicate, /apartments tie_r WHERE tie_r\.site_code = Y\.site AND tie_r\.resident_user_code = X\.user AND tie_r\.is_active = TRUE/);
+    assert.match(predicate, /EXISTS \(SELECT 1 FROM users tie_u WHERE tie_u\.user_code = X\.user AND tie_u\.is_active = TRUE\) AND Y\.site IN \(/, 'pasif hesap bag sayilmaz (T5)');
+    assert.match(predicate, /SELECT tie_a\.site_code FROM apartment_memberships tie_am INNER JOIN apartments tie_a ON tie_a\.id = tie_am\.apartment_id WHERE tie_am\.user_code = X\.user AND tie_am\.is_active = TRUE AND tie_a\.is_active = TRUE UNION/);
+    assert.match(predicate, /SELECT tie_r\.site_code FROM apartments tie_r WHERE tie_r\.resident_user_code = X\.user AND tie_r\.is_active = TRUE/);
     assert.equal(/site_memberships|site_manager_sites|role/i.test(predicate), false);
   });
 
 
   it('dahili (@ahbu.local) daire hesabinda iletisim e-postasi apartments.resident_email\'den kisi kaydina yazilir', () => {
     assert.match(allSql[1], /CASE WHEN u\.email LIKE '%@ahbu\.local' THEN MAX\(d\.contact_email\) ELSE NULL END/);
+  });
+
+  it('T4: PASIF dahili daire hesabina esitleme YENI kisi acmaz (CRM\'den hesaptan koparilip duzenlenen kisinin yerine hayalet satir dogmaz); tanim people_common ile ORTAK', () => {
+    assert.ok(allSql[1].includes(`WHERE NOT ${DEAD_INTERNAL_ACCOUNT_SQL} GROUP BY`), 'INSERT adimi pasif dahili hesabi disarida birakir');
+    assert.equal(DEAD_INTERNAL_ACCOUNT_SQL, "(u.user_code IS NOT NULL AND u.email LIKE '%@ahbu.local' AND u.is_active = FALSE)");
+    assert.equal(DEAD_INTERNAL_ACCOUNT_SQL, DEAD_INTERNAL_FROM_COMMON, 'tek tanim: people_common ayni sabiti yeniden dis aktarir');
+    // diger adimlar (kisi OLUSTURMAYAN) bu kosulu tasimaz: yalniz INSERT adimi
+    for (const index of [0, 2, 3, 4, 5]) {
+      assert.equal(allSql[index].includes('NOT (u.user_code IS NOT NULL AND u.email LIKE'), false, `adim ${index}`);
+    }
   });
 
   it('otomatik biten iliski sistem adina audit yazar; son iliskisi biten kisi pasif olur (araclari da)', () => {

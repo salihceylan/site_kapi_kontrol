@@ -36,31 +36,49 @@ const DESIRED_CTE = `
 export const INTERNAL_EMAIL_SUFFIX = '@ahbu.local';
 
 /**
- * "Sitede bağ" tanımının TEK kaynağı (eşitleme LINK adımı, createPerson/addResidency hesap bağlama ve erişim verme kararı bunu kullanır):
- * kullanıcının O SİTENİN aktif dairesinde aktif apartment_memberships satırı VEYA o dairede apartments.resident_user_code göstergesi
- * (yukarıdaki `desired` kümesiyle AYNI). Yalnız site_memberships (STAFF / BOARD_MEMBER / RESIDENT) ya da yöneticilik TEK BAŞINA bağ
- * SAYILMAZ: yönetici başkasının hesabına ek rol vererek o hesabı "bağlı" yapıp kişi kaydına bağlayamaz.
+ * PASİF dahili (@ahbu.local) daire hesabı: taşınan sakinin hesabı kapatıldı, giriş/kapı kapalı -> kişi kartında "hesapsız" davranır
+ * (people_common: HAS_ACCOUNT_SQL / ACCOUNT_KIND_SQL / accountKindOf bunu kullanır) ve eşitleme ona YENİ kişi kaydı AÇMAZ: CRM'den hesaptan
+ * koparılıp düzenlenmiş kişinin yerine, eski göstergeye bağlı ikinci ("hayalet") bir kişi satırı doğmasın. SQL ifadesi `users` tablosunu `u`
+ * takma adıyla bekler.
+ */
+export const DEAD_INTERNAL_ACCOUNT_SQL = `(u.user_code IS NOT NULL AND u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' AND u.is_active = FALSE)`;
+
+/**
+ * "Sitede bağ" tanımının TEK kaynağı (eşitleme LINK adımı, createPerson/addResidency hesap bağlama, erişim verme ve "kişiyi hesaptan
+ * kopar / aktif kalsın" kararları bunu kullanır). Kullanıcının bağı olan siteler: aktif dairede aktif apartment_memberships satırı VEYA o
+ * dairede apartments.resident_user_code göstergesi (yukarıdaki `desired` kümesiyle AYNI). Yalnız site_memberships (STAFF / BOARD_MEMBER /
+ * RESIDENT) ya da yöneticilik TEK BAŞINA bağ SAYILMAZ: yönetici başkasının hesabına ek rol vererek o hesabı "bağlı" yapıp kişi kaydına
+ * bağlayamaz.
+ * @param {string} userExpr kullanıcı kodu SQL ifadesi (ör. 'u.user_code', '$1::INTEGER')
+ */
+export function siteTieSitesSql(userExpr) {
+  return `
+      SELECT tie_a.site_code FROM apartment_memberships tie_am
+      INNER JOIN apartments tie_a ON tie_a.id = tie_am.apartment_id
+      WHERE tie_am.user_code = ${userExpr} AND tie_am.is_active = TRUE AND tie_a.is_active = TRUE
+      UNION
+      SELECT tie_r.site_code FROM apartments tie_r
+      WHERE tie_r.resident_user_code = ${userExpr} AND tie_r.is_active = TRUE
+    `;
+}
+
+/**
+ * Kullanıcının bu sitede bağı var mı: hesap AKTİF (pasif hesap bağlanmaz / bağlı sayılmaz) ve site, siteTieSitesSql kümesinde.
  * @param {string} userExpr kullanıcı kodu SQL ifadesi (ör. 'u.user_code', '$1')
  * @param {string} siteExpr site kodu SQL ifadesi (ör. 'sp.site_code', '$2')
  */
 export function siteTiePredicate(userExpr, siteExpr) {
   return `(
-    EXISTS (
-      SELECT 1 FROM apartment_memberships tie_am
-      INNER JOIN apartments tie_a ON tie_a.id = tie_am.apartment_id
-      WHERE tie_a.site_code = ${siteExpr} AND tie_am.user_code = ${userExpr} AND tie_am.is_active = TRUE AND tie_a.is_active = TRUE
-    )
-    OR EXISTS (
-      SELECT 1 FROM apartments tie_r
-      WHERE tie_r.site_code = ${siteExpr} AND tie_r.resident_user_code = ${userExpr} AND tie_r.is_active = TRUE
-    )
+    EXISTS (SELECT 1 FROM users tie_u WHERE tie_u.user_code = ${userExpr} AND tie_u.is_active = TRUE)
+    AND ${siteExpr} IN (${siteTieSitesSql(userExpr)})
   )`;
 }
 
 /**
  * 1) Aynı e-postaya sahip hesapsız kişi varsa yinelenen kayıt açmak yerine o kişiye user_code bağlanır. Bağlanınca ad/telefon/e-posta
  * alanları BOŞALTILIR (hesaplı kişide okuma users'tan; hesap silinirse users BEFORE DELETE tetikleyicisi ad/telefonu yedekler).
- * Güvenlik: bağlama yalnız o sitede ZATEN erişimi (aktif üyelik / eski sakin göstergesi) olan hesaplarla yapılır (desired).
+ * Güvenlik: bağlama yalnız o sitede ZATEN erişimi (aktif üyelik / eski sakin göstergesi) olan AKTİF hesaplarla yapılır (siteTiePredicate).
+ * Kullanıcıya özgü eşitlemede ($2) site_code, kullanıcının bağı olan sitelerle sınırlanır: site_people tamamı taranmaz (indeks: uq_site_people_email).
  * Elle girilmiş (origin='manual') ilişkiler bağlanınca korunur.
  */
 const LINK_ACCOUNTLESS_SQL = `
@@ -74,13 +92,17 @@ const LINK_ACCOUNTLESS_SQL = `
     AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
     AND ($1::BIGINT IS NULL OR sp.site_code = $1::BIGINT)
     AND ($2::INTEGER IS NULL OR u.user_code = $2::INTEGER)
+    AND ($2::INTEGER IS NULL OR sp.site_code IN (${siteTieSitesSql('$2::INTEGER')}))
     AND ${siteTiePredicate('u.user_code', 'sp.site_code')}
     AND NOT EXISTS (
       SELECT 1 FROM site_people x WHERE x.site_code = sp.site_code AND x.user_code = u.user_code
     )
 `;
 
-/** 2) Aktif erişimi olan her hesap için (site, kullanıcı) kişi kaydı; yoksa eklenir. Dahili hesapta iletişim e-postası saklanır. */
+/**
+ * 2) Aktif erişimi olan her hesap için (site, kullanıcı) kişi kaydı; yoksa eklenir. Dahili hesapta iletişim e-postası saklanır.
+ * PASİF dahili daire hesabına (DEAD_INTERNAL_ACCOUNT_SQL) yeni kişi açılmaz; mevcut kişi kayıtları etkilenmez.
+ */
 const INSERT_PEOPLE_SQL = `
   WITH ${DESIRED_CTE}
   INSERT INTO site_people (site_code, user_code, email)
@@ -90,6 +112,7 @@ const INSERT_PEOPLE_SQL = `
     CASE WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN MAX(d.contact_email) ELSE NULL END
   FROM desired d
   INNER JOIN users u ON u.user_code = d.user_code
+  WHERE NOT ${DEAD_INTERNAL_ACCOUNT_SQL}
   GROUP BY d.site_code, d.user_code, u.email
   ON CONFLICT (site_code, user_code) WHERE user_code IS NOT NULL DO NOTHING
 `;

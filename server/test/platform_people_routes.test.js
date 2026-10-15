@@ -643,6 +643,7 @@ describe('yazma uclari: girdi dogrulama (400, DB yazmasi yok)', () => {
   it('POST residencies: apartment_id zorunlu; relation gecersiz 400; yok / baska sitenin dairesi 404 (daire kilitsiz on dogrulanir; kisi yok 404 service testinde)', async () => {
     assert.equal((await call('POST', `${base()}/people/5/residencies`, { body: {} })).body.code, 'INVALID_BODY');
     assert.equal((await call('POST', `${base()}/people/5/residencies`, { body: { apartment_id: 9, relation: 'x' } })).body.code, 'INVALID_BODY');
+    // Kisi yok (PERSON_NOT_FOUND, 404) durumu daire kilidinden sonra gelir: platform_people_service.test.js "T7: addResidency kisi yok ..." testinde.
     const missing = await call('POST', `${base()}/people/5/residencies`, { body: { apartment_id: 9 } });
     assert.equal(missing.status, 404);
     assert.equal(missing.body.code, 'APARTMENT_NOT_FOUND');
@@ -729,6 +730,10 @@ describe('GET apartments / vehicles / history / my-records', () => {
     assert.equal(count.params[0], SITE_1);
     assert.ok(count.params.includes(3));
     assert.ok(count.params.includes('%daire%'));
+    // T4: daire kartindaki has_account da kisi kartiyla AYNI tanimdan (pasif dahili hesap "hesapsiz")
+    const residents = state.log.find((q) => /AS has_account FROM apartment_residencies r/.test(q.sql));
+    assert.ok(residents, 'sakin yukleme sorgusu bulundu');
+    assert.match(residents.sql, /\(u\.user_code IS NOT NULL AND NOT \(u\.user_code IS NOT NULL AND u\.email LIKE '%@ahbu\.local' AND u\.is_active = FALSE\)\) AS has_account/);
   });
 
   it('daire karti: sakinler guncel/gecmis ayrilir; yok / baska sitenin dairesi 404 APARTMENT_NOT_FOUND', async () => {

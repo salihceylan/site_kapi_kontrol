@@ -7,6 +7,7 @@ import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import {
   CATEGORY_MAX,
+  HAS_ACCOUNT_SQL,
   RELATION_ORDER,
   RESPONSIBLE_PARTIES,
   apartmentLabel,
@@ -72,7 +73,7 @@ async function loadResidents(db, apartmentIds, { currentOnly }) {
         r.move_in_date,
         r.move_out_date,
         COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS full_name,
-        (u.user_code IS NOT NULL) AS has_account
+        ${HAS_ACCOUNT_SQL} AS has_account
       FROM apartment_residencies r
       INNER JOIN site_people sp ON sp.id = r.person_id
       LEFT JOIN users u ON u.user_code = sp.user_code

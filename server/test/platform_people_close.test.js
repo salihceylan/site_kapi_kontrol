@@ -60,6 +60,7 @@ const INDICATOR_CLEAR = /^UPDATE apartments SET resident_user_code = NULL, resid
 const INTERNAL_OFF = /^UPDATE users SET is_active = FALSE WHERE user_code = \$1 AND email LIKE '%@ahbu\.local'/;
 const OVERRIDE_CLEANUP = /^DELETE FROM door_access_overrides dao WHERE dao\.site_code = \$1 AND dao\.user_code = \$2/;
 const REMAINING_RESIDENCY = /^SELECT 1 FROM apartment_residencies WHERE person_id = \$1 AND is_current = TRUE LIMIT 1$/;
+const TIE_CHECK = /^SELECT 1 AS tied WHERE \(/;
 const SNAPSHOT_SELECT = /^SELECT sp\.id, sp\.user_code, sp\.is_active, sp\.full_name, sp\.phone, sp\.email, u\.full_name AS account_name, u\.phone_number AS account_phone, u\.email AS account_email FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 FOR UPDATE OF sp$/;
 const PERSON_OFF = /^UPDATE site_people SET is_active = FALSE, user_code = NULL, full_name = \$2, phone = \$3, email = \$4, updated_at = NOW\(\) WHERE id = \$1 AND is_active = TRUE RETURNING id$/;
 const VEHICLES_OFF = /^UPDATE vehicles SET is_active = FALSE WHERE person_id = \$1 AND is_active = TRUE RETURNING id, plate$/;
@@ -96,6 +97,7 @@ function closeHandlers({
   remainingMember = false,
   internalOff = false,
   remaining = false,
+  tied = false,
   vehicles = [],
   snapshot = { id: '5', user_code: 30001, is_active: true, full_name: null, phone: null, email: null, account_name: 'Ali Hesap', account_phone: '+905551112233', account_email: 'ali@example.com' },
 } = {}) {
@@ -115,6 +117,7 @@ function closeHandlers({
     [INTERNAL_OFF, () => (internalOff ? ok([{ user_code: 30001 }]) : ok())],
     [OVERRIDE_CLEANUP, () => ok()],
     [REMAINING_RESIDENCY, () => (remaining ? ok([{ x: 1 }]) : ok())],
+    [TIE_CHECK, () => (tied ? ok([{ tied: 1 }]) : ok())],
     [SNAPSHOT_SELECT, () => ok([snapshot])],
     [PERSON_OFF, () => ok([{ id: '5' }])],
     [VEHICLES_OFF, () => ok(vehicles)],
@@ -284,6 +287,36 @@ describe('H3/S4: "Tasindi" mevcut uye cikarma akisinin yan etkilerini uygular; k
     assert.deepEqual([Number(find(PERSON_OFF).params[0]), ...find(PERSON_OFF).params.slice(1)], [5, 'Hesapsiz Ali', '+905321112233', 'h@example.com']);
   });
 
+  it('T1: son CRM iliskisi bitse de kullanicinin sitede AKTIF bagi suruyorsa (yansimamis yeni uyelik) kisi AKTIF + BAGLI kalir, araclar ACIK; kullanicinin uyelikleri ayni transaction\'da eslenir', async () => {
+    closeHandlers({ tied: true });
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    const tie = find(TIE_CHECK);
+    assert.deepEqual(tie.params, [30001, SITE], 'bag kontrolu bu kullanici + bu site icin');
+    assert.match(tie.sql, /tie_u\.is_active = TRUE/, 'aktif hesap sarti');
+    assert.equal(has(SNAPSHOT_SELECT) || has(PERSON_OFF) || has(VEHICLES_OFF), false, 'kopma/pasiflestirme/arac kapatma YOK');
+    const steps = log.filter((q) => STEP_SQLS.has(q.sql));
+    assert.equal(steps.length, SYNC_STEPS.length, 'yeni uyelik hemen yansitilir (kullanici bazli esitleme adimlari)');
+    assert.deepEqual(steps[0].params, [SITE, 30001]);
+    assert.ok(steps.every((q) => q.inTx));
+    assert.deepEqual(auditActions(), ['residency.ended']);
+  });
+
+  it('T1: kullanicinin sitede AKTIF bagi yoksa son iliski bitince kopma/pasiflestirme calisir (bag kontrolu sonrasi)', async () => {
+    closeHandlers({ tied: false });
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    assert.ok(has(TIE_CHECK) && has(PERSON_OFF));
+    assert.ok(at(TIE_CHECK) < at(SNAPSHOT_SELECT));
+    assert.equal(log.some((q) => STEP_SQLS.has(q.sql)), false, 'esitleme calismadi');
+  });
+
+  it('T1: hesapsiz kisi icin bag kontrolu yapilmaz (dogrudan pasiflesir)', async () => {
+    closeHandlers({ snapshot: { id: '5', user_code: null, is_active: true, full_name: 'Hesapsiz', phone: null, email: null, account_name: null, account_phone: null, account_email: null } });
+    handlers.unshift([RESIDENCY_LOOKUP, () => ok([residencyRow({ user_code: null })])]);
+    await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
+    assert.equal(has(TIE_CHECK), false);
+    assert.ok(has(PERSON_OFF));
+  });
+
   it('baska guncel iliskisi kalan kisi aktif kalir (kopyalanmaz/kopmaz), araclari pasiflesmez', async () => {
     closeHandlers({ remaining: true });
     await endResidency({ siteCode: SITE, residencyId: 31, body: {}, actor });
@@ -356,7 +389,7 @@ describe('H3/S4: "Tasindi" mevcut uye cikarma akisinin yan etkilerini uygular; k
 });
 
 describe('H10/S4: kisiyi pasiflestirme once site\'i esitler, bilinen daireleri id sirasiyla kilitler, tum daireleri kapatir, araclari pasiflestirir', () => {
-  const lock = /^SELECT sp\.id, sp\.user_code, sp\.full_name, sp\.phone, sp\.email, sp\.note, sp\.is_active, u\.email AS account_email FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 AND sp\.site_code = \$2 FOR UPDATE OF sp$/;
+  const lock = /^SELECT sp\.id, sp\.user_code, sp\.full_name, sp\.phone, sp\.email, sp\.note, sp\.is_active, u\.email AS account_email, u\.is_active AS account_is_active, u\.full_name AS account_name, u\.phone_number AS account_phone FROM site_people sp LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE sp\.id = \$1 AND sp\.site_code = \$2 FOR UPDATE OF sp$/;
   const CURRENT = /^SELECT r\.id, r\.apartment_id, r\.person_id, r\.relation FROM apartment_residencies r WHERE r\.person_id = \$1 AND r\.is_current = TRUE ORDER BY r\.id FOR UPDATE$/;
   const KNOWN = /^SELECT DISTINCT r\.apartment_id FROM apartment_residencies r INNER JOIN site_people sp ON sp\.id = r\.person_id WHERE r\.person_id = \$1 AND sp\.site_code = \$2 AND r\.is_current = TRUE ORDER BY r\.apartment_id$/;
   const KNOWN_LOCK = /^SELECT id FROM apartments WHERE id = ANY\(\$1::BIGINT\[\]\) ORDER BY id FOR UPDATE$/;

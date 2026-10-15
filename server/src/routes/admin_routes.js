@@ -455,13 +455,20 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
     await client.query('BEGIN');
 
-    // 0. Kilit sirasi (apartments -> users -> CRM kisi kayitlari): kullanicinin daireleri (uye oldugu + sakin gostergesi) id sirasiyla
-    //    DAHA ILK adimda kilitlenir. users silme tetikleyicisi ve CRM ("Tasindi"/pasiflestirme) yazmalari ayni sirayi izler; aksi halde
-    //    uyelik satirlarini once silip sonra daire kilidini beklemek 40P01 (deadlock) uretirdi.
+    // 0. Kilit sirasi (apartments -> users -> CRM kisi kayitlari): kullanicinin daireleri DAHA ILK adimda, id sirasiyla kilitlenir.
+    //    Kume, users silme tetikleyicisiyle AYNIDIR: uyelik + sakin gostergesi + CRM'deki guncel iliski daireleri. Tetikleyici ve CRM
+    //    ("Tasindi"/pasiflestirme) yazmalari ayni sirayi izler; aksi halde uyelik satirlarini once silip sonra daire kilidini beklemek
+    //    40P01 (deadlock) uretirdi.
     await runOptionalStep(
       client,
       `SELECT a.id FROM apartments a
-       WHERE a.resident_user_code = $1 OR a.id IN (SELECT am.apartment_id FROM apartment_memberships am WHERE am.user_code = $1)
+       WHERE a.resident_user_code = $1
+          OR a.id IN (SELECT am.apartment_id FROM apartment_memberships am WHERE am.user_code = $1)
+          OR a.id IN (
+            SELECT r.apartment_id FROM apartment_residencies r
+            INNER JOIN site_people sp ON sp.id = r.person_id
+            WHERE sp.user_code = $1 AND r.is_current
+          )
        ORDER BY a.id FOR UPDATE`,
       [targetCode],
     );
