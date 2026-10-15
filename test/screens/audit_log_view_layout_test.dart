@@ -134,8 +134,9 @@ void main() {
       expect(find.byType(AuditLogCard), findsNWidgets(5),
           reason: '3 + (3 - 1 yinelenen)');
       expect(find.text('Ek rol kaldırıldı'), findsOneWidget);
-      expect(find.text('site.archived'), findsOneWidget,
-          reason: 'bilinmeyen eylem ham adıyla görünür');
+      expect(find.text('Diğer işlem'), findsOneWidget,
+          reason: 'bilinmeyen eylem ham kodla değil "Diğer işlem" olarak görünür');
+      expect(find.text('site.archived'), findsNothing);
       expect(find.text('Daha fazla yükle'), findsNothing);
     });
 

@@ -126,8 +126,11 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
   /// Sunucudan dönen güncel kişiyi uygular ve listeye haber verir.
   void _apply(PersonDetail detail, String message) {
     if (!mounted) return;
+    // Uçuştaki eski bir yükleme (yazmadan ÖNCE başlamış) bu yeni sonucu ezemesin.
+    ++_token;
     setState(() {
       _detail = detail;
+      _loading = false;
       _actionError = null;
     });
     widget.onChanged?.call();
@@ -141,6 +144,7 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
       context,
       scope: widget.scope,
       person: detail,
+      onChanged: widget.onChanged,
     );
     if (result == null || !mounted) return;
     // Değişiklik yoksa (aynı nesne) mesaj gösterilmez.
@@ -328,13 +332,21 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                 label: 'E-posta',
                 value: (detail.email ?? '').isEmpty ? 'Kayıtlı değil' : detail.email!,
               ),
-              if ((detail.note ?? '').isNotEmpty) ...[
+              // Notlar yönetime özeldir: salt okunur kurul üyesi görmez (sunucu da göndermez; savunmacı).
+              if (_canWrite && (detail.note ?? '').isNotEmpty) ...[
                 const SizedBox(height: AppSpace.sm),
                 CrmInfoLine(label: 'Not', value: detail.note!),
               ],
               if (detail.hasAccount) ...[
                 const SizedBox(height: AppSpace.sm),
-                Text('Kişinin kendi profilinden değişir', style: th.bodySmall),
+                Text(
+                  detail.isInternalAccount
+                      ? (_canWrite
+                            ? 'Ad ve telefon kişinin kendi profilinden değişir. İletişim e-postası Düzenle ile değiştirilebilir.'
+                            : 'Ad ve telefon kişinin kendi profilinden değişir.')
+                      : 'Kişinin kendi profilinden değişir',
+                  style: th.bodySmall,
+                ),
               ],
               if (_canWrite) ...[
                 const SizedBox(height: AppSpace.md),
@@ -403,7 +415,7 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(vehicle.displayPlate, style: th.titleSmall),
-                          if ((vehicle.note ?? '').isNotEmpty)
+                          if (_canWrite && (vehicle.note ?? '').isNotEmpty)
                             Text(vehicle.note!, style: th.bodySmall),
                         ],
                       ),
@@ -419,8 +431,8 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
                               ),
                             )
                           : IconButton(
-                              tooltip: 'Aracı kaldır',
-                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                              tooltip: '${vehicle.displayPlate} plakalı aracı kaldır',
+                              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                               icon: const Icon(Icons.delete_outline_rounded),
                               onPressed: () => _removeVehicle(vehicle),
                             ),

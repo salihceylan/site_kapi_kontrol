@@ -19,6 +19,7 @@ AppTone auditToneOf(String action) {
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
+    case 'apartment.deleted':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':

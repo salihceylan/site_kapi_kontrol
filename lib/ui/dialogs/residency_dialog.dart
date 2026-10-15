@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
-import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 
 /// "İlişki Ekle" (kişiyi bir daireye bağla) ve ilişki düzenleme penceresi (Platform Faz 2a).
 ///
@@ -17,8 +18,11 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 /// - Düzenleme: daire sabittir; yalnız ilişki türü ve giriş tarihi değişir.
 ///
 /// Bir dairede aynı anda en çok BİR malik ve BİR kiracı olabilir; ikincisinde sunucu 409
-/// `RELATION_TAKEN` döner ve mesaj pencerenin içinde gösterilir (pencere açık kalır). Başarıda
-/// güncel [PersonDetail] ile kapanır.
+/// `RELATION_TAKEN` döner ve mesaj pencerenin içinde gösterilir (görünür konuma kaydırılır; pencere açık
+/// kalır). Düzenlemede yalnız DEĞİŞEN alanlar gider: ilişki yalnız değiştiyse, giriş tarihi yalnız
+/// değiştiyse; tarih silindiyse sunucuya açıkça `move_in_date: null` gönderilir. Hiçbir şey değişmediyse
+/// sunucuya gidilmeden kapanır (null döner: çağıran "güncellendi" demez). Gönderim sürerken geri tuşu
+/// pencereyi kapatmaz. Başarıda güncel [PersonDetail] ile kapanır.
 class ResidencyDialog extends StatefulWidget {
   const ResidencyDialog({
     super.key,
@@ -106,11 +110,22 @@ class _ResidencyDialogState extends State<ResidencyDialog> {
     try {
       final PersonDetail result;
       if (_editing) {
+        final initial = widget.residency!;
+        final relationChanged = _relation != initial.relation;
+        final dateChanged = moveIn != null && moveIn != initial.moveInDate;
+        final clearDate =
+            _moveIn.text.trim().isEmpty && initial.moveInDate != null;
+        if (!relationChanged && !dateChanged && !clearDate) {
+          // Değişiklik yok: sunucuya gitmeden kapanır.
+          popIfCurrent(context);
+          return;
+        }
         result = await auth.updateResidency(
           siteCode,
-          widget.residency!.id,
-          relation: _relation,
-          moveInDate: moveIn,
+          initial.id,
+          relation: relationChanged ? _relation : null,
+          moveInDate: dateChanged ? moveIn : null,
+          clearMoveInDate: clearDate,
         );
       } else {
         result = await auth.addResidency(
@@ -122,7 +137,7 @@ class _ResidencyDialogState extends State<ResidencyDialog> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop(result);
+      popIfCurrent(context, result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -140,88 +155,88 @@ class _ResidencyDialogState extends State<ResidencyDialog> {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
     final residency = widget.residency;
-    return AppDialog(
-      title: _editing ? 'İlişkiyi Düzenle' : 'İlişki Ekle',
-      subtitle: widget.personName.isEmpty ? null : widget.personName,
-      icon: Icons.link_rounded,
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Vazgeç'),
-        ),
-        ElevatedButton(
-          onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? 'Kaydediliyor...' : 'Kaydet'),
-        ),
-      ],
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null) ...[
-              InlineNotice(message: _error!),
+    return PopScope(
+      canPop: !_submitting,
+      child: AppDialog(
+        title: _editing ? 'İlişkiyi Düzenle' : 'İlişki Ekle',
+        subtitle: widget.personName.isEmpty ? null : widget.personName,
+        icon: Icons.link_rounded,
+        actions: [
+          TextButton(
+            onPressed: _submitting ? null : () => popIfCurrent(context),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            onPressed: _submitting ? null : _submit,
+            child: Text(_submitting ? 'Kaydediliyor...' : 'Kaydet'),
+          ),
+        ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null) CrmFormError(message: _error!),
+              if (_editing)
+                DialogPanel(
+                  child: Text(residency!.fullLabel, style: th.titleSmall),
+                )
+              else
+                CrmPickerField(
+                  key: const ValueKey<String>('residency_apartment'),
+                  label: 'Daire',
+                  icon: Icons.apartment_rounded,
+                  value: _apartment?.fullLabel,
+                  placeholder: 'Daire seçmek için dokunun',
+                  errorText: _apartmentError,
+                  enabled: !_submitting,
+                  onTap: _pickApartment,
+                ),
               const SizedBox(height: AppSpace.md),
-            ],
-            if (_editing)
-              DialogPanel(
-                child: Text(residency!.fullLabel, style: th.titleSmall),
-              )
-            else
-              CrmPickerField(
-                key: const ValueKey<String>('residency_apartment'),
-                label: 'Daire',
-                icon: Icons.apartment_rounded,
-                value: _apartment?.fullLabel,
-                placeholder: 'Daire seçmek için dokunun',
-                errorText: _apartmentError,
-                enabled: !_submitting,
-                onTap: _pickApartment,
-              ),
-            const SizedBox(height: AppSpace.md),
-            DropdownButtonFormField<ResidencyRelation>(
-              key: const ValueKey<String>('residency_relation'),
-              isExpanded: true,
-              initialValue: _relation,
-              dropdownColor: p.surface,
-              style: th.bodyLarge?.copyWith(color: p.text),
-              decoration: const InputDecoration(
-                labelText: 'İlişki',
-                prefixIcon: Icon(Icons.badge_rounded),
-              ),
-              items: [
-                for (final relation in ResidencyRelation.values)
-                  DropdownMenuItem<ResidencyRelation>(
-                    value: relation,
-                    child: Text(
-                      relation.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              DropdownButtonFormField<ResidencyRelation>(
+                key: const ValueKey<String>('residency_relation'),
+                isExpanded: true,
+                initialValue: _relation,
+                dropdownColor: p.surface,
+                style: th.bodyLarge?.copyWith(color: p.text),
+                decoration: const InputDecoration(
+                  labelText: 'İlişki',
+                  prefixIcon: Icon(Icons.badge_rounded),
+                ),
+                items: [
+                  for (final relation in ResidencyRelation.values)
+                    DropdownMenuItem<ResidencyRelation>(
+                      value: relation,
+                      child: Text(
+                        relation.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-              ],
-              onChanged: _submitting
-                  ? null
-                  : (value) {
-                      if (value != null) setState(() => _relation = value);
-                    },
-            ),
-            const SizedBox(height: AppSpace.md),
-            TextFormField(
-              key: const ValueKey<String>('residency_move_in'),
-              controller: _moveIn,
-              enabled: !_submitting,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [DateInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Giriş tarihi (isteğe bağlı)',
-                hintText: 'GG.AA.YYYY',
-                prefixIcon: Icon(Icons.event_rounded),
+                ],
+                onChanged: _submitting
+                    ? null
+                    : (value) {
+                        if (value != null) setState(() => _relation = value);
+                      },
               ),
-              validator: validateDateField,
-            ),
-          ],
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const ValueKey<String>('residency_move_in'),
+                controller: _moveIn,
+                enabled: !_submitting,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [DateInputFormatter()],
+                decoration: const InputDecoration(
+                  labelText: 'Giriş tarihi (isteğe bağlı)',
+                  hintText: 'GG.AA.YYYY',
+                  prefixIcon: Icon(Icons.event_rounded),
+                ),
+                validator: validateDateField,
+              ),
+            ],
+          ),
         ),
       ),
     );

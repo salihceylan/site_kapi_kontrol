@@ -4,8 +4,10 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// "Taşındı" onay penceresi (Platform Faz 2a): kişinin bir dairedeki güncel ilişkisini bitirir.
@@ -79,7 +81,7 @@ class _EndResidencyDialogState extends State<EndResidencyDialog> {
         moveOutDate: parseDateField(_date.text),
       );
       if (!mounted) return;
-      Navigator.of(context).pop(result);
+      popIfCurrent(context, result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -95,66 +97,71 @@ class _EndResidencyDialogState extends State<EndResidencyDialog> {
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
-    final name = widget.personName.trim().isEmpty ? 'Bu kişi' : widget.personName.trim();
-    return AppDialog(
-      title: 'Taşındı',
-      subtitle: widget.residency.fullLabel,
-      icon: Icons.logout_rounded,
-      tone: AppTone.warning,
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Vazgeç'),
-        ),
-        ElevatedButton(
-          style: filledToneStyle(context, tone: AppTone.warning),
-          onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? 'Kaydediliyor...' : 'Taşındı Olarak İşaretle'),
-        ),
-      ],
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null) ...[
-              InlineNotice(message: _error!),
-              const SizedBox(height: AppSpace.md),
-            ],
-            Text(
-              '$name bu daireden taşındı olarak işaretlensin mi? Kayıt silinmez; kişi dairenin geçmişinde kalır.',
-              style: th.bodyMedium,
+    final name = widget.personName.trim().isEmpty
+        ? 'Bu kişi'
+        : widget.personName.trim();
+    return PopScope(
+      canPop: !_submitting,
+      child: AppDialog(
+        title: 'Taşındı',
+        subtitle: widget.residency.fullLabel,
+        icon: Icons.logout_rounded,
+        tone: AppTone.warning,
+        actions: [
+          TextButton(
+            onPressed: _submitting ? null : () => popIfCurrent(context),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            style: filledToneStyle(context, tone: AppTone.warning),
+            onPressed: _submitting ? null : _submit,
+            child: Text(
+              _submitting ? 'Kaydediliyor...' : 'Taşındı Olarak İşaretle',
             ),
-            if (widget.hasAccount) ...[
+          ),
+        ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null) CrmFormError(message: _error!),
+              Text(
+                '$name bu daireden taşındı olarak işaretlensin mi? Kayıt silinmez; kişi dairenin geçmişinde kalır.',
+                style: th.bodyMedium,
+              ),
+              if (widget.hasAccount) ...[
+                const SizedBox(height: AppSpace.md),
+                const InlineNotice(
+                  tone: AppTone.warning,
+                  message:
+                      'Kişinin hesabı var: bu dairedeki kapı yetkisi kapanır. Başka dairelerdeki yetkileri etkilenmez.',
+                ),
+              ],
               const SizedBox(height: AppSpace.md),
-              const InlineNotice(
-                tone: AppTone.warning,
-                message:
-                    'Kişinin hesabı var: bu dairedeki kapı yetkisi kapanır. Başka dairelerdeki yetkileri etkilenmez.',
+              TextFormField(
+                key: const ValueKey<String>('end_residency_date'),
+                controller: _date,
+                enabled: !_submitting,
+                keyboardType: TextInputType.number,
+                inputFormatters: const [DateInputFormatter()],
+                decoration: const InputDecoration(
+                  labelText: 'Taşınma tarihi',
+                  hintText: 'GG.AA.YYYY',
+                  prefixIcon: Icon(Icons.event_rounded),
+                ),
+                validator: _validateMoveOut,
               ),
             ],
-            const SizedBox(height: AppSpace.md),
-            TextFormField(
-              key: const ValueKey<String>('end_residency_date'),
-              controller: _date,
-              enabled: !_submitting,
-              keyboardType: TextInputType.number,
-              inputFormatters: const [DateInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Taşınma tarihi',
-                hintText: 'GG.AA.YYYY',
-                prefixIcon: Icon(Icons.event_rounded),
-              ),
-              validator: _validateMoveOut,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  /// Sunucu gelecek tarihli taşınmayı kabul etmez: bugünden ilerisi reddedilir.
+  /// Sunucu gelecek tarihli taşınmayı kabul etmez (bugünden ilerisi reddedilir; "bugün" yerel saate
+  /// göredir) ve giriş tarihinden ÖNCEKİ taşınma tarihi tutarsızdır.
   String? _validateMoveOut(String? value) {
     final error = validateDateField(value);
     if (error != null) return error;
@@ -163,6 +170,11 @@ class _EndResidencyDialogState extends State<EndResidencyDialog> {
     final now = DateTime.now();
     if (date.isAfter(DateTime(now.year, now.month, now.day))) {
       return 'Taşınma tarihi bugünden ileri olamaz.';
+    }
+    final moveIn = widget.residency.moveInDate;
+    if (moveIn != null &&
+        date.isBefore(DateTime(moveIn.year, moveIn.month, moveIn.day))) {
+      return 'Taşınma tarihi giriş tarihinden önce olamaz.';
     }
     return null;
   }

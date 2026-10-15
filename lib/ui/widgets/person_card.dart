@@ -10,7 +10,8 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 /// Kişi listesi kartı (Platform Faz 2a): ad, hesap / eski sakin rozeti, telefon, e-posta, ilişki
 /// çipleri, daire etiketleri ve araç sayısı. Dokununca kişi kartı açılır ([onTap]).
 ///
-/// Taşma: tüm metinler sarar (kırpılmaz); çipler `Wrap` içindedir; büyük yazıda avatar gizlenir.
+/// Taşma: tüm metinler sarar (kırpılmaz); çipler `Wrap` içindedir. Büyük yazıda (>= 1,75x) avatar
+/// `InitialAvatar` tarafından kendiliğinden gizlenir (kod koşulsuz çizer, gizlemeyi bileşen yapar).
 class PersonCard extends StatelessWidget {
   const PersonCard({super.key, required this.person, required this.onTap});
 

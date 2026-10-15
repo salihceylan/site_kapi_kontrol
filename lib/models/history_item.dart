@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 
-/// Kişi / daire / araç eylemlerinin kısa Türkçe başlığı (Faz 2a); bilinmeyen eylemde null (çağıran ham
-/// adı gösterir, kayıt kaybolmaz).
+/// Kişi / daire / araç eylemlerinin kısa Türkçe başlığı (Faz 2a); bilinmeyen eylemde null (çağıran
+/// "Diğer işlem" yazar: ham kod kullanıcıya gösterilmez, kayıt yine listelenir).
 String? peopleActionLabel(String action) {
   switch (action) {
     case 'person.created':
@@ -23,6 +24,8 @@ String? peopleActionLabel(String action) {
       return 'Araç eklendi';
     case 'vehicle.removed':
       return 'Araç kaldırıldı';
+    case 'apartment.deleted':
+      return 'Daire silindi';
     case 'import.committed':
       return 'Toplu yükleme';
     case 'export':
@@ -41,8 +44,8 @@ class FieldChange {
   final String? from;
   final String? to;
 
-  /// Alan adının Türkçe karşılığı; bilinmeyen alan ham adıyla görünür (kayıt kaybolmaz).
-  String get fieldLabel => _fieldLabels[field] ?? field;
+  /// Alan adının Türkçe karşılığı; bilinmeyen alan için "Diğer alan" (ham alan adı gösterilmez).
+  String get fieldLabel => _fieldLabels[field] ?? 'Diğer alan';
 
   static const Map<String, String> _fieldLabels = <String, String>{
     'full_name': 'Ad Soyad',
@@ -64,16 +67,48 @@ class FieldChange {
     'plate': 'Plaka',
   };
 
-  /// Eski / yeni değer var mı? Telefon, e-posta ve not değişikliklerinde sunucu değer GÖNDERMEZ
-  /// (`{field, changed: true}`); ad ve sayısal / kategori alanlarında gelebilir.
-  bool get hasValues => from != null || to != null;
+  /// Değeri geçmişte ASLA gösterilmeyen alanlar: telefon, e-posta ve not (kişisel veri). Sunucu bu
+  /// alanlarda zaten değer göndermez (`{field, changed: true}`); gelse bile (savunmacı) gizlenir.
+  static const Set<String> _valueHiddenFields = <String>{'phone', 'email', 'note'};
 
-  /// Değer varsa "Alan: eski → yeni" (boş taraf "-" yazılır), yoksa "Alan güncellendi".
+  /// Gösterilebilir eski / yeni değer var mı? Gizli alanlarda her zaman false.
+  bool get hasValues =>
+      !_valueHiddenFields.contains(field) && (from != null || to != null);
+
+  /// Değer varsa "Alan: eski → yeni" (boş taraf "-" yazılır; değerler Türkçe biçimlenir), yoksa
+  /// "Alan güncellendi".
   String get summary =>
       hasValues ? '$fieldLabel: ${_show(from)} → ${_show(to)}' : '$fieldLabel güncellendi';
 
-  static String _show(String? value) =>
-      value == null || value.isEmpty ? '-' : value;
+  /// Ham API değerini Türkçe gösterime çevirir: ilişki (owner -> Malik), durum (true -> Aktif),
+  /// borç muhatabı (both -> Malik ve kiracı), tarih (GG.AA.YYYY), alan (m², Türkçe ondalık).
+  String _show(String? value) {
+    if (value == null || value.trim().isEmpty) return '-';
+    switch (field) {
+      case 'relation':
+        return ResidencyRelation.tryParse(value)?.label ?? value;
+      case 'is_active':
+        return value == 'true' ? 'Aktif' : (value == 'false' ? 'Pasif' : value);
+      case 'responsible_party':
+        return _partyLabels[value] ?? value;
+      case 'move_in_date':
+      case 'move_out_date':
+        final date = crmDate(value);
+        return date == null ? value : crmFormatDate(date);
+      case 'gross_area_m2':
+      case 'net_area_m2':
+        final area = crmDoubleOrNull(value);
+        return area == null ? value : '${crmFormatNumber(area)} m²';
+      default:
+        return value;
+    }
+  }
+
+  static const Map<String, String> _partyLabels = <String, String>{
+    'owner': 'Malik',
+    'tenant': 'Kiracı',
+    'both': 'Malik ve kiracı',
+  };
 
   static List<FieldChange> listFrom(Object? raw) {
     if (raw is! List) return const <FieldChange>[];
@@ -125,7 +160,7 @@ class HistoryItem {
   bool get isAutomatic => actorRole == 'system' || details['auto'] == true;
 
   /// "Ne yapıldı" kısa başlığı; bilinmeyen eylem ham adıyla görünür.
-  String get actionLabel => peopleActionLabel(action) ?? action;
+  String get actionLabel => peopleActionLabel(action) ?? 'Diğer işlem';
 
   factory HistoryItem.fromJson(Map<String, dynamic> json) {
     final rawDetails = json['details'];

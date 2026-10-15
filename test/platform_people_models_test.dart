@@ -2,6 +2,7 @@
 //
 // Alan yok / bozuk ise güvenli varsayılan; DATE alanı saat dilimi kaymasından etkilenmez; telefon,
 // tarih ve plaka girişi sunucu kurallarıyla aynıdır.
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
@@ -312,7 +313,7 @@ void main() {
           hasLength(1), reason: 'Map olmayan öğe atılır');
     });
 
-    test('HistoryItem: eylem etiketi, değişen alanlar ve bilinmeyen eylem ham adıyla', () {
+    test('HistoryItem: eylem etiketi, değişen alanlar; bilinmeyen eylem "Diğer işlem", bilinmeyen alan "Diğer alan"', () {
       final item = HistoryItem.fromJson(const <String, dynamic>{
         'id': 7,
         'action': 'person.updated',
@@ -331,10 +332,12 @@ void main() {
       });
       expect(item.actionLabel, 'Kişi bilgisi güncellendi');
       expect(item.changes, hasLength(2), reason: 'alan adsız satır atılır');
-      expect(item.changes.first.summary, 'Telefon: - → +905324445566');
-      expect(item.changes.first.hasValues, isTrue);
-      expect(item.changes.last.fieldLabel, 'ozel_alan', reason: 'bilinmeyen alan ham adıyla');
-      expect(HistoryItem.fromJson(const <String, dynamic>{'id': 1, 'action': 'x.y'}).actionLabel, 'x.y');
+      // Telefon / e-posta / not: sunucu değer göndermese de göndermese de DEĞER GÖSTERİLMEZ (savunmacı).
+      expect(item.changes.first.summary, 'Telefon güncellendi');
+      expect(item.changes.first.hasValues, isFalse);
+      expect(item.changes.last.fieldLabel, 'Diğer alan', reason: 'ham alan adı (ozel_alan) gösterilmez');
+      expect(item.changes.last.summary, 'Diğer alan: a → b');
+      expect(HistoryItem.fromJson(const <String, dynamic>{'id': 1, 'action': 'x.y'}).actionLabel, 'Diğer işlem');
     });
 
     test('peopleActionLabel: tüm Faz 2a eylemleri Türkçe; denetim kaydı da aynı etiketi kullanır', () {
@@ -348,6 +351,7 @@ void main() {
         'apartment.updated': 'Daire bilgisi güncellendi',
         'vehicle.added': 'Araç eklendi',
         'vehicle.removed': 'Araç kaldırıldı',
+        'apartment.deleted': 'Daire silindi',
       };
       actions.forEach((action, label) {
         expect(peopleActionLabel(action), label, reason: action);
@@ -404,10 +408,45 @@ void main() {
       }
     });
 
-    test('fazla hane kesilir; yazarken öneki silmek öneki geri getirir', () {
-      expect(formatPhoneField('555123456789'), '+90 555 123 45 67');
+    test('yazarken öneki silmek öneki geri getirir; fazla hane görünür kalır (sessiz kırpma yok)', () {
+      expect(formatPhoneField('555123456789'), '+90 555 123 45 67 89');
       expect(formatPhoneField('+90'), '+90 ');
       expect(formatPhoneField('+90 55'), '+90 55');
+    });
+
+    test('ülke kodu YALNIZ BİR KEZ ve baştan soyulur; baştaki tek 0 da; son hane kaybolmaz', () {
+      for (final input in const <String>[
+        '+905321234567',
+        '05321234567',
+        '5321234567',
+        '00905321234567',
+        '905321234567',
+        '+90 0532 123 45 67',
+        '+90 532 123 45 67',
+        '0 (532) 123-45-67',
+        '0090 532 123 45 67',
+      ]) {
+        expect(phoneLocalDigits(input), '5321234567', reason: input);
+        expect(phoneToApi(input), '+905321234567', reason: input);
+        expect(validatePhoneField(input), isNull, reason: input);
+      }
+      expect(formatPhoneField('05321234567'), '+90 532 123 45 67', reason: '0532... yazınca son hane kaybolmaz');
+    });
+
+    test('çift ülke kodu / 11+ hane sessizce düzeltilmez: doğrulama hatası verir', () {
+      for (final input in const <String>[
+        '90905321234567',
+        '+90905321234567',
+        '+90 +905321234567',
+        '53212345678',
+        '+90 532 123 45 67 8',
+        '+90 5321234567890',
+      ]) {
+        expect(validatePhoneField(input), 'Telefon +90 ile 10 haneli olmalı (örn. 555 123 45 67).', reason: input);
+      }
+      // Ülke kodu bir kez soyulduktan sonra kalan hane aynen korunur (kırpılmaz).
+      expect(phoneLocalDigits('+90905321234567'), '905321234567');
+      expect(phoneLocalDigits('+90 +905321234567'), '905321234567');
     });
 
     test('phoneToApi: boş alan null; validatePhoneField', () {
@@ -433,6 +472,95 @@ void main() {
       v = f.formatEditUpdate(v, const TextEditingValue(text: '+90 5551'));
       expect(v.text, '+90 555 1');
       expect(v.selection.baseOffset, v.text.length);
+    });
+
+    TextEditingValue paste(String current, String pasted, {int? at}) {
+      const f = PhoneInputFormatter();
+      final position = at ?? current.length;
+      final text = current.substring(0, position) + pasted + current.substring(position);
+      return f.formatEditUpdate(
+        TextEditingValue(text: current, selection: TextSelection.collapsed(offset: position)),
+        TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: position + pasted.length),
+        ),
+      );
+    }
+
+    test('yapıştırma: "+90 " alanına tam numara yapıştırmak yanlış numara üretmez', () {
+      for (final pasted in const <String>[
+        '+905321234567',
+        '05321234567',
+        '5321234567',
+        '00905321234567',
+        '905321234567',
+        '+90 532 123 45 67',
+      ]) {
+        final v = paste('+90 ', pasted);
+        expect(v.text, '+90 532 123 45 67', reason: pasted);
+        expect(v.selection.baseOffset, v.text.length, reason: pasted);
+        expect(phoneToApi(v.text), '+905321234567', reason: pasted);
+      }
+    });
+
+    test('çift yapıştırma: aynı numarayı iki kez yapıştırmak tek numara bırakır', () {
+      var v = paste('+90 ', '+905321234567');
+      v = paste(v.text, '+905321234567');
+      expect(v.text, '+90 532 123 45 67');
+      v = paste(v.text, '05321234567');
+      expect(v.text, '+90 532 123 45 67');
+    });
+
+    test('yapıştırma: öneksiz 11+ hane kırpılmaz, görünür kalır (doğrulama yakalar); 15 haneden fazlası girişte reddedilir', () {
+      final v = paste('+90 ', '53212345678');
+      expect(v.text, '+90 532 123 45 67 8');
+      expect(validatePhoneField(v.text), isNotNull);
+
+      const f = PhoneInputFormatter();
+      final full = f.formatEditUpdate(
+        TextEditingValue.empty,
+        const TextEditingValue(text: '+90 532123456789012'),
+      );
+      expect(full.text, '+90 532 123 45 67 89012');
+      final rejected = f.formatEditUpdate(
+        full,
+        TextEditingValue(text: '${full.text}9'),
+      );
+      expect(rejected.text, full.text, reason: '16. hane girişte reddedilir');
+    });
+
+    test('silme ve imleç: ortadan düzeltmede imleç sona atlamaz', () {
+      const f = PhoneInputFormatter();
+      // Sondan sil.
+      var v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 532 123 45 67', selection: TextSelection.collapsed(offset: 17)),
+        const TextEditingValue(text: '+90 532 123 45 6', selection: TextSelection.collapsed(offset: 16)),
+      );
+      expect(v.text, '+90 532 123 45 6');
+      expect(v.selection.baseOffset, v.text.length);
+
+      // Önek silinmeye çalışılırsa geri gelir.
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 5', selection: TextSelection.collapsed(offset: 5)),
+        const TextEditingValue(text: '+90', selection: TextSelection.collapsed(offset: 3)),
+      );
+      expect(v.text, '+90 ');
+
+      // Ortaya hane yaz: imleç yazılan haneden hemen sonra kalır.
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 532 123 45 67', selection: TextSelection.collapsed(offset: 7)),
+        const TextEditingValue(text: '+90 5329 123 45 67', selection: TextSelection.collapsed(offset: 8)),
+      );
+      expect(v.text, '+90 532 912 34 56 7');
+      expect(v.text.substring(0, v.selection.baseOffset).replaceAll(RegExp(r'\D'), ''), '905329');
+
+      // Ortadan hane sil: imleç silinen yerde kalır.
+      v = f.formatEditUpdate(
+        const TextEditingValue(text: '+90 532 123 45 67', selection: TextSelection.collapsed(offset: 9)),
+        const TextEditingValue(text: '+90 532 23 45 67', selection: TextSelection.collapsed(offset: 8)),
+      );
+      expect(v.text, '+90 532 234 56 7');
+      expect(v.text.substring(0, v.selection.baseOffset).replaceAll(RegExp(r'\D'), ''), '90532');
     });
   });
 
@@ -471,11 +599,67 @@ void main() {
       expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '050')).text, '05.0');
       expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '05032024')).text,
           '05.03.2024');
-      expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '050320249999')).text,
-          '05.03.2024');
+      // 8 rakamdan fazlası SESSİZCE KIRPILMAZ: giriş reddedilir, eski değer kalır.
+      expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '050320249999')).text, '');
       expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '05.03.2024')).text,
           '05.03.2024');
       expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '12.')).text, '12');
+    });
+
+    test('DateInputFormatter: ayırıcılı yapıştırma GG.AA.YYYY biçimine normalize olur (tek haneli gün ve ay 0 alır)', () {
+      const f = DateInputFormatter();
+      for (final pasted in const <String>['5.3.2024', '5/3/2024', '5-3-2024', '05.03.2024', ' 5.03.2024 ', '5.3.2024']) {
+        final v = f.formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: pasted));
+        expect(v.text, '05.03.2024', reason: pasted);
+        expect(v.selection.baseOffset, 10, reason: pasted);
+      }
+      expect(parseDateField(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '5.3.2024')).text),
+          DateTime(2024, 3, 5));
+      // Harfli / alakasız yapıştırma güvenli: rakam yoksa boş.
+      expect(f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: 'abc')).text, '');
+    });
+
+    test('DateInputFormatter: yazarken ayırıcı tek haneyi tamamlar ("5." -> "05.", "05.3." -> "05.03.")', () {
+      const f = DateInputFormatter();
+      var v = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '5'));
+      expect(v.text, '5');
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '5.'));
+      expect(v.text, '05.');
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '05.3'));
+      expect(v.text, '05.3');
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '05.3.'));
+      expect(v.text, '05.03.');
+      v = f.formatEditUpdate(v, const TextEditingValue(text: '05.03.2'));
+      expect(v.text, '05.03.2');
+    });
+
+    test('DateInputFormatter: dolu alanın ortasına rakam yazmak son rakamı sessizce silmez (reddedilir)', () {
+      const f = DateInputFormatter();
+      const old = TextEditingValue(text: '05.03.2024', selection: TextSelection.collapsed(offset: 4));
+      final v = f.formatEditUpdate(
+        old,
+        const TextEditingValue(text: '05.093.2024', selection: TextSelection.collapsed(offset: 5)),
+      );
+      expect(v.text, '05.03.2024');
+    });
+
+    test('DateInputFormatter: imleç ortadan düzeltmede sona atlamaz', () {
+      const f = DateInputFormatter();
+      // "05.03.2024" içinde 4. konumdaki "3" silinir: imleç silinen yerde kalır, sonraki haneler kayar.
+      final v = f.formatEditUpdate(
+        const TextEditingValue(text: '05.03.2024', selection: TextSelection.collapsed(offset: 5)),
+        const TextEditingValue(text: '05.0.2024', selection: TextSelection.collapsed(offset: 4)),
+      );
+      expect(v.text, '05.02.024');
+      expect(v.text.substring(0, v.selection.baseOffset).replaceAll(RegExp(r'\D'), ''), '050');
+      expect(v.selection.baseOffset, lessThan(v.text.length));
+
+      // Sona yazma: imleç sonda.
+      final end = f.formatEditUpdate(
+        const TextEditingValue(text: '05.03.202', selection: TextSelection.collapsed(offset: 9)),
+        const TextEditingValue(text: '05.03.2024', selection: TextSelection.collapsed(offset: 10)),
+      );
+      expect(end.selection.baseOffset, 10);
     });
   });
 

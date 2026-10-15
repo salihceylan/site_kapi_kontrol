@@ -34,6 +34,13 @@ import 'dialog_layout_harness.dart';
 import 'list_fixtures.dart' show tapFinder, tapText;
 import 'people_fixtures.dart';
 
+
+/// Araç kaldırma düğmeleri: "{plaka} plakalı aracı kaldır" ipucu/anlamı.
+final Finder _removeButtons = find.byWidgetPredicate(
+  (w) => w is IconButton && (w.tooltip ?? '').endsWith('plakalı aracı kaldır'),
+);
+Finder _removeFor(String plate) => find.byTooltip('$plate plakalı aracı kaldır');
+
 PeopleScope _scope(PeopleFakeAuth auth, {bool canWrite = true}) => PeopleScope(
   authService: auth,
   siteCode: 11,
@@ -138,7 +145,8 @@ void main() {
       ]) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
-      expect(find.byTooltip('Aracı kaldır'), findsOneWidget);
+      expect(_removeFor('34 ABC 123'), findsOneWidget);
+      expect(_removeButtons, findsOneWidget);
     });
 
     layoutMatrix('hesabı olan kişi: rozet, yardım metni, eski ilişkiler', (t, w, h, s, dark) async {
@@ -180,7 +188,7 @@ void main() {
       ]) {
         expect(find.text(label), findsNothing, reason: label);
       }
-      expect(find.byTooltip('Aracı kaldır'), findsNothing);
+      expect(_removeButtons, findsNothing);
       expect(find.text('Geçmiş'), findsOneWidget);
     });
 
@@ -328,7 +336,8 @@ void main() {
       await _tapButton(t, 'Kaydet');
       await settleFor(t);
       expect(auth.updateResidencyCalls.single.relation, ResidencyRelation.tenant);
-      expect(auth.updateResidencyCalls.single.date, DateTime(2024, 3, 5));
+      expect(auth.updateResidencyCalls.single.date, isNull, reason: 'tarih değişmedi: gönderilmez');
+      expect(auth.updateResidencyCalls.single.clear, isFalse);
     });
 
     testWidgets('Araç Ekle: araç sahibi sabit; geçersiz plaka sunucuya gitmez; kayıtlı plaka PLATE_EXISTS; yeni plaka kartı günceller', (t) async {
@@ -362,7 +371,7 @@ void main() {
       expect(auth.createVehicleCalls.last.note, 'Mavi araç');
       expect(changed, 1);
       expect(find.text('06 DEF 456'), findsOneWidget, reason: 'kart yeniden çekildi');
-      expect(find.byTooltip('Aracı kaldır'), findsNWidgets(2));
+      expect(_removeButtons, findsNWidgets(2));
     });
 
     testWidgets('araç kaldırma: onay sorulur; onaylanınca kaldırılır ve kart güncellenir', (t) async {
@@ -372,12 +381,12 @@ void main() {
         t,
         (c) => PersonCardDialog.show(c, scope: _scope(auth), personId: 1, onChanged: () => changed++),
       );
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeFor('34 ABC 123'));
       expect(find.text('34 ABC 123 plakalı araç kaldırılsın mı? Kayıt silinmez, pasifleşir.'), findsOneWidget);
       await tapText(t, 'Vazgeç');
       expect(auth.removeVehicleCalls, isEmpty);
 
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeFor('34 ABC 123'));
       await tapText(t, 'Kaldır');
       await settleFor(t);
       expect(auth.removeVehicleCalls, <int>[1]);
@@ -389,7 +398,7 @@ void main() {
       final auth = PeopleFakeAuth.seeded();
       await _open(t, (c) => PersonCardDialog.show(c, scope: _scope(auth), personId: 1));
       auth.writeError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeFor('34 ABC 123'));
       await tapText(t, 'Kaldır');
       await settleFor(t);
       expect(find.text('Bu işlem için yetkiniz yok.'), findsOneWidget);
@@ -466,7 +475,10 @@ void main() {
         dark: dark,
       );
       expect(find.text('Kişiyi Düzenle'), findsOneWidget);
-      expect(find.text('Kişinin kendi profilinden değişir'), findsNWidgets(3));
+      expect(find.text('Kişinin kendi profilinden değişir'), findsNothing,
+          reason: 'alanlarda yardım metni tekrarlanmaz');
+      expect(find.text('Bu kişinin hesabı var. Ad, telefon ve e-posta kişinin kendi profilinden değişir.'),
+          findsOneWidget, reason: 'tek bilgilendirme bandı');
       expect(find.textContaining('Bu kişinin hesabı var.'), findsOneWidget);
       expect(find.text('Daire (isteğe bağlı)'), findsNothing, reason: 'düzenlemede daire yok');
     });
@@ -990,7 +1002,7 @@ void main() {
       expect(_readOnly(t, 'person_phone'), isTrue);
       expect(_readOnly(t, 'person_email'), isFalse);
       expect(find.textContaining('iletişim e-postası buradan düzenlenebilir'), findsOneWidget);
-      expect(find.text('Kişinin kendi profilinden değişir'), findsNWidgets(2), reason: 'ad ve telefon');
+      expect(find.text('Kişinin kendi profilinden değişir'), findsNothing);
 
       await _enter(t, 'person_email', 'yeni@example.com');
       await _tapButton(t, 'Kaydet');

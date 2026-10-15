@@ -6,7 +6,6 @@ import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
-import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
@@ -232,8 +231,10 @@ class _HistoryRow extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: StatusChip(
-              label: item.actionLabel,
+            // DialogMetaPill sarar (StatusChip tek satır + elips: 320 dp x 2,0'da "Daire bilgisi
+            // güncellendi" kırpılıyordu).
+            child: DialogMetaPill(
+              item.actionLabel,
               tone: auditToneOf(item.action),
               icon: Icons.history_rounded,
             ),

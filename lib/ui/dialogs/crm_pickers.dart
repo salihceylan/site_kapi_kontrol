@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -98,7 +99,7 @@ class _CrmPickerDialogState<T> extends State<CrmPickerDialog<T>> {
       icon: widget.icon,
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => popIfCurrent(context),
           child: const Text('Vazgeç'),
         ),
       ],
@@ -138,7 +139,8 @@ class _CrmPickerDialogState<T> extends State<CrmPickerDialog<T>> {
               final subtitle = widget.subtitleOf?.call(item);
               return AppCard(
                 padding: const EdgeInsets.all(AppSpace.md),
-                onTap: () => Navigator.of(context).pop(item),
+                // Çift dokunuş ikinci `pop` ile üstteki formu da kapatmasın: yol artık güncel değilse yok sayılır.
+                onTap: () => popIfCurrent(context, item),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -185,8 +187,8 @@ Future<ApartmentSummary?> showApartmentPicker(
       titleOf: (a) => a.fullLabel,
       subtitleOf: (a) {
         final parts = <String>[
-          if (a.owner != null) 'Malik: ${a.owner!.fullName}',
-          if (a.tenant != null) 'Kiracı: ${a.tenant!.fullName}',
+          if (a.owner != null) 'Malik: ${crmPersonName(a.owner!.fullName)}',
+          if (a.tenant != null) 'Kiracı: ${crmPersonName(a.tenant!.fullName)}',
         ];
         return parts.isEmpty ? null : parts.join(' • ');
       },
@@ -218,7 +220,7 @@ Future<PersonSummary?> showPersonPicker(
         return (items: page.items, total: page.total);
       },
       keyOf: (p) => p.id,
-      titleOf: (p) => p.fullName.trim().isEmpty ? 'İsimsiz kişi' : p.fullName.trim(),
+      titleOf: (p) => crmPersonName(p.fullName),
       subtitleOf: (p) {
         final parts = <String>[
           for (final a in p.apartments) a.fullLabel,
@@ -259,12 +261,12 @@ class CrmPickerField extends StatelessWidget {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final hasValue = value != null && value!.isNotEmpty;
+    // Anlamsal ağaç AÇIK bırakılır (excludeSemantics YOK): etiket, seçili değer / yer tutucu, hata metni
+    // (InputDecorator errorText) ve "Seçimi temizle" düğmesi ekran okuyucuya ulaşır; temizle düğmesi kendi
+    // dokunma eylemiyle ayrı bir düğümdür.
     return Semantics(
       button: true,
       enabled: enabled,
-      label: hasValue ? '$label: $value' : '$label: $placeholder',
-      excludeSemantics: true,
-      onTap: enabled ? onTap : null,
       child: InkWell(
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(AppRadius.md),

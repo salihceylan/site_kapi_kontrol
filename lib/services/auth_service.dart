@@ -1200,6 +1200,7 @@ class AuthService extends ChangeNotifier {
     int residencyId, {
     ResidencyRelation? relation,
     DateTime? moveInDate,
+    bool clearMoveInDate = false,
   }) {
     return _runAuthorized(
       (token) => api.updateResidency(
@@ -1208,6 +1209,7 @@ class AuthService extends ChangeNotifier {
         residencyId: residencyId,
         relation: relation,
         moveInDate: moveInDate,
+        clearMoveInDate: clearMoveInDate,
       ),
     );
   }

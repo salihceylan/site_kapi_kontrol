@@ -93,7 +93,8 @@ class YanMenu extends StatelessWidget {
   final Map<SirketMenuItem, int> badgeCounts;
 
   /// Rolün kendi listesinde olmayan ama kullanıcıya açık ek öğeler (varsayılan boş: menü eskisi gibidir).
-  /// Örn. yalnız kurul üyesi olan bir sakine "Kişiler" eklenir; rol listesinde zaten varsa tekrarlanmaz.
+  /// Örn. yalnız kurul üyesi olan bir sakine "Kişiler" eklenir ("Site Yönetimi"nin, o yoksa "Panel"in
+  /// altına); rol listesinde zaten varsa tekrarlanmaz.
   final Set<SirketMenuItem> additionalItems;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
@@ -111,11 +112,9 @@ class YanMenu extends StatelessWidget {
       isResidentMode: isResidentMode,
       canToggleMode: canToggleMode,
     );
-    final items = <SirketMenuItem>[
-      ...roleItems,
-      for (final extra in additionalItems)
-        if (!roleItems.contains(extra)) extra,
-    ].where((item) => !hiddenItems.contains(item)).toList(growable: false);
+    final items = _withExtras(roleItems, additionalItems)
+        .where((item) => !hiddenItems.contains(item))
+        .toList(growable: false);
     final showToggle = canToggleMode && onToggleMode != null;
     // Çekmece açılışında ilk 8 öğe sırayla belirir (StaggeredEntry): sıra ekrandaki sıradır.
     final firstItemIndex = showToggle ? 1 : 0;
@@ -348,6 +347,27 @@ class _DrawerHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Ek öğeleri rol listesine yerleştirir: "Site Yönetimi" varsa hemen altına (yönetici sırasıyla tutarlı),
+/// yoksa "Panel"in hemen altına; ikisi de yoksa sona. Rol listesinde zaten olan öğe tekrarlanmaz.
+List<SirketMenuItem> _withExtras(
+  List<SirketMenuItem> roleItems,
+  Set<SirketMenuItem> extras,
+) {
+  final missing = <SirketMenuItem>[
+    for (final extra in extras)
+      if (!roleItems.contains(extra)) extra,
+  ];
+  if (missing.isEmpty) return roleItems;
+  var anchor = roleItems.indexOf(SirketMenuItem.siteler);
+  if (anchor < 0) anchor = roleItems.indexOf(SirketMenuItem.dashboard);
+  final at = anchor < 0 ? roleItems.length : anchor + 1;
+  return <SirketMenuItem>[
+    ...roleItems.take(at),
+    ...missing,
+    ...roleItems.skip(at),
+  ];
 }
 
 List<SirketMenuItem> _itemsForRole(

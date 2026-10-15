@@ -24,6 +24,12 @@ import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart';
 import 'people_fixtures.dart';
 
+/// Araç kaldırma düğmeleri: "{plaka} plakalı aracı kaldır" ipucu/anlamı.
+final Finder _removeButtons = find.byWidgetPredicate(
+  (w) => w is IconButton && (w.tooltip ?? '').endsWith('plakalı aracı kaldır'),
+);
+Finder _removeFor(String plate) => find.byTooltip('$plate plakalı aracı kaldır');
+
 const List<PeopleSite> _board = <PeopleSite>[PeopleSite(code: 12, name: 'Mavi Park')];
 
 Future<GlobalKey<PeopleViewState>> _pump(
@@ -177,7 +183,8 @@ void main() {
       expect(find.text('34 ABC 123'), findsOneWidget);
       expect(find.text('06 XYZ 789'), findsOneWidget);
       expect(find.text('Araç Ekle'), findsOneWidget);
-      expect(find.byTooltip('Aracı kaldır'), findsNWidgets(2));
+      expect(_removeButtons, findsNWidgets(2));
+      expect(_removeFor('34 ABC 123'), findsOneWidget);
       expect(find.text('Araç ara'), findsOneWidget);
     });
 
@@ -202,7 +209,7 @@ void main() {
       await _openTab(t, 2);
       expect(find.byType(VehicleCard), findsNWidgets(2));
       expect(find.text('Araç Ekle'), findsNothing);
-      expect(find.byTooltip('Aracı kaldır'), findsNothing);
+      expect(_removeButtons, findsNothing);
       expect(auth.listSitesCalls, 0, reason: 'kurul üyesi yönetim site listesini çağırmaz');
     });
   });
@@ -671,12 +678,12 @@ void main() {
       expect(find.byType(VehicleCard), findsOneWidget);
       expect(find.text('06 XYZ 789'), findsOneWidget);
 
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeButtons);
       expect(find.text('06 XYZ 789 plakalı araç kaldırılsın mı? Kayıt silinmez, pasifleşir.'), findsOneWidget);
       await tapText(t, 'Vazgeç');
       expect(auth.removeVehicleCalls, isEmpty, reason: 'vazgeçilince kaldırılmaz');
 
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeButtons);
       await tapText(t, 'Kaldır');
       await settleFor(t);
       expect(auth.removeVehicleCalls, <int>[2]);
@@ -689,7 +696,7 @@ void main() {
       await _pump(t, auth);
       await _openTab(t, 2);
       auth.writeError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
-      await tapFinder(t, find.byTooltip('Aracı kaldır'));
+      await tapFinder(t, _removeButtons);
       await tapText(t, 'Kaldır');
       await settleFor(t);
       expect(find.text('Bu işlem için yetkiniz yok.'), findsOneWidget);
@@ -716,7 +723,7 @@ void main() {
       await _openTab(t, 2);
       final peopleBefore = auth.peopleCalls.length;
 
-      await tapFinder(t, find.byTooltip('Aracı kaldır').first);
+      await tapFinder(t, _removeButtons.first);
       await tapText(t, 'Kaldır');
       await settleFor(t);
       expect(auth.removeVehicleCalls, isNotEmpty);

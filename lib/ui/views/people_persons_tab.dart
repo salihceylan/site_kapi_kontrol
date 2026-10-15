@@ -110,7 +110,12 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
   }
 
   Future<void> _add() async {
-    final created = await PersonFormDialog.show(context, scope: widget.scope);
+    // "Kişiyi Aç" ile açılan mevcut kişinin kartında yapılan değişiklik de listeyi tazeler.
+    final created = await PersonFormDialog.show(
+      context,
+      scope: widget.scope,
+      onChanged: _afterChange,
+    );
     if (created == null || !mounted) return;
     // Boş daireye dahili hesap açıldıysa giriş bilgisi e-postasının sonucu (`credentials_sent`): alan
     // yoksa (null) ek mesaj gösterilmez.

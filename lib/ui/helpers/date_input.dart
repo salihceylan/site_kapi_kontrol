@@ -48,26 +48,87 @@ String? validateDateField(String? text) {
       : null;
 }
 
-/// Yazarken yalnız rakamları alır ve noktaları kendisi koyar: "05032024" -> "05.03.2024".
+/// Yazarken noktaları kendisi koyar: "05032024" -> "05.03.2024".
+///
+/// - Yapıştırma: ayırıcılı tam tarih ("5.3.2024", "5/3/2024", "5-3-2024") `GG.AA.YYYY`'ye normalize edilir
+///   (tek haneli gün / ay başına 0 eklenir).
+/// - Yazarken ayırıcı: "5." -> "05.", "05.3." -> "05.03.".
+/// - Diğer girişler rakam dizisi olarak yeniden dizilir. 8 rakamdan FAZLASI sessizce kırpılmaz: giriş
+///   (yapıştırma ya da dolu alanın ortasına rakam yazma) REDDEDİLİR, eski değer kalır.
+/// - İmleç: kendisinden SONRAKİ rakam sayısı korunur (ortadan düzeltmede imleç sona atlamaz).
 class DateInputFormatter extends TextInputFormatter {
   const DateInputFormatter();
+
+  static String _mask(String digits) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i == 2 || i == 4) buffer.write('.');
+      buffer.write(digits[i]);
+    }
+    return buffer.toString();
+  }
+
+  static TextEditingValue _atEnd(String text) =>
+      TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
 
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length > 8) digits = digits.substring(0, 8);
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i == 2 || i == 4) buffer.write('.');
-      buffer.write(digits[i]);
+    final text = newValue.text;
+    if (text == oldValue.text) return newValue;
+
+    // Yapıştırılan ayırıcılı tam tarih. Yalnız EKLENEN parça (uzun) tam tarihse: ortadan rakam silmek
+    // ya da tek tek yazmak bu dala girmez (imleç sona atlamasın, haneler kendi kaymasıyla kalsın).
+    final oldText = oldValue.text;
+    var prefix = 0;
+    while (prefix < oldText.length &&
+        prefix < text.length &&
+        oldText.codeUnitAt(prefix) == text.codeUnitAt(prefix)) {
+      prefix++;
     }
-    final text = buffer.toString();
+    var suffix = 0;
+    while (suffix < oldText.length - prefix &&
+        suffix < text.length - prefix &&
+        oldText.codeUnitAt(oldText.length - 1 - suffix) ==
+            text.codeUnitAt(text.length - 1 - suffix)) {
+      suffix++;
+    }
+    final insertedLength = text.length - prefix - suffix;
+    final full = insertedLength >= 6
+        ? RegExp(r'^\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\s*$').firstMatch(text)
+        : null;
+    if (full != null) {
+      return _atEnd('${full.group(1)!.padLeft(2, '0')}.${full.group(2)!.padLeft(2, '0')}.${full.group(3)}');
+    }
+    // Yazarken ayırıcı: tek haneli gün / ay tamamlanır.
+    final day = RegExp(r'^(\d)[./\-]$').firstMatch(text);
+    if (day != null) return _atEnd('0${day.group(1)}.');
+    final month = RegExp(r'^(\d{2})\.(\d)[./\-]$').firstMatch(text);
+    if (month != null) return _atEnd('${month.group(1)}.0${month.group(2)}.');
+
+    final digits = text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 8) return oldValue;
+    final masked = _mask(digits);
+
+    final caret = newValue.selection.isValid
+        ? newValue.selection.end.clamp(0, text.length)
+        : text.length;
+    final digitsAfter = RegExp(r'\d').allMatches(text.substring(caret)).length;
     return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      text: masked,
+      selection: TextSelection.collapsed(offset: _caretFor(masked, digitsAfter)),
     );
+  }
+
+  /// [masked] içinde kendisinden sonra [digitsAfter] rakam kalan konum.
+  static int _caretFor(String masked, int digitsAfter) {
+    var remaining = digitsAfter;
+    for (var i = masked.length; i > 0; i--) {
+      if (remaining == 0) return i;
+      if (RegExp(r'\d').hasMatch(masked[i - 1])) remaining--;
+    }
+    return 0;
   }
 }

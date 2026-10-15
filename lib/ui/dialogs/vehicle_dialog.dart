@@ -1,21 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
-import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 
 /// Plaka biçimi (sunucu ile aynı): büyük harf, boşluk / tire / nokta atılır; yalnız A-Z ve 0-9, 5-10
 /// karakter. Geçerliyse normalize plaka, değilse null.
 String? normalizePlateInput(String? text) {
-  final display = (text ?? '').replaceAll(RegExp(r'\s+'), ' ').trim().toUpperCase();
+  final display = (text ?? '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .toUpperCase();
   if (display.length > 20) return null;
   final plate = display.replaceAll(RegExp(r'[\s\-.]'), '');
   return RegExp(r'^[A-Z0-9]{5,10}$').hasMatch(plate) ? plate : null;
+}
+
+/// Plaka alanını yazarken BÜYÜK harfe çevirir (web / masaüstünde klavye `TextCapitalization` desteği
+/// yoktur). Türkçe `i` -> `I` (ASCII) olur: plaka yalnız A-Z ve 0-9 kabul eder.
+class UpperCaseFormatter extends TextInputFormatter {
+  const UpperCaseFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final upper = newValue.text.toUpperCase();
+    if (upper == newValue.text) return newValue;
+    return newValue.copyWith(text: upper);
+  }
 }
 
 /// "Araç Ekle" penceresi (Platform Faz 2a): plaka ve isteğe bağlı not. [person] verilirse araç o kişiye
@@ -97,7 +118,7 @@ class _VehicleDialogState extends State<VehicleDialog> {
         note: _note.text,
       );
       if (!mounted) return;
-      Navigator.of(context).pop(vehicle);
+      popIfCurrent(context, vehicle);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -114,76 +135,79 @@ class _VehicleDialogState extends State<VehicleDialog> {
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final fixed = widget.person;
-    return AppDialog(
-      title: 'Araç Ekle',
-      subtitle: widget.scope.siteName.isEmpty ? null : widget.scope.siteName,
-      icon: Icons.directions_car_rounded,
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Vazgeç'),
-        ),
-        ElevatedButton(
-          onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? 'Ekleniyor...' : 'Ekle'),
-        ),
-      ],
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null) ...[
-              InlineNotice(message: _error!),
-              const SizedBox(height: AppSpace.md),
-            ],
-            if (fixed != null)
-              DialogPanel(
-                child: Text(
-                  'Araç sahibi: ${fixed.fullName}',
-                  style: th.titleSmall,
+    return PopScope(
+      canPop: !_submitting,
+      child: AppDialog(
+        title: 'Araç Ekle',
+        subtitle: widget.scope.siteName.isEmpty ? null : widget.scope.siteName,
+        icon: Icons.directions_car_rounded,
+        actions: [
+          TextButton(
+            onPressed: _submitting ? null : () => popIfCurrent(context),
+            child: const Text('Vazgeç'),
+          ),
+          ElevatedButton(
+            onPressed: _submitting ? null : _submit,
+            child: Text(_submitting ? 'Ekleniyor...' : 'Ekle'),
+          ),
+        ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null) CrmFormError(message: _error!),
+              if (fixed != null)
+                DialogPanel(
+                  child: Text(
+                    'Araç sahibi: ${fixed.fullName}',
+                    style: th.titleSmall,
+                  ),
+                )
+              else
+                CrmPickerField(
+                  key: const ValueKey<String>('vehicle_person'),
+                  label: 'Araç sahibi',
+                  icon: Icons.person_rounded,
+                  value: _person?.fullName,
+                  placeholder: 'Kişi seçmek için dokunun',
+                  errorText: _personError,
+                  enabled: !_submitting,
+                  onTap: _pickPerson,
                 ),
-              )
-            else
-              CrmPickerField(
-                key: const ValueKey<String>('vehicle_person'),
-                label: 'Araç sahibi',
-                icon: Icons.person_rounded,
-                value: _person?.fullName,
-                placeholder: 'Kişi seçmek için dokunun',
-                errorText: _personError,
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const ValueKey<String>('vehicle_plate'),
+                controller: _plate,
                 enabled: !_submitting,
-                onTap: _pickPerson,
+                inputFormatters: const [UpperCaseFormatter()],
+                autocorrect: false,
+                enableSuggestions: false,
+                maxLength: 20,
+                decoration: const InputDecoration(
+                  labelText: 'Plaka',
+                  hintText: '34 ABC 123',
+                  prefixIcon: Icon(Icons.pin_rounded),
+                  counterText: '',
+                ),
+                validator: (value) => normalizePlateInput(value) == null
+                    ? 'Plaka biçimi geçersiz.'
+                    : null,
               ),
-            const SizedBox(height: AppSpace.md),
-            TextFormField(
-              key: const ValueKey<String>('vehicle_plate'),
-              controller: _plate,
-              enabled: !_submitting,
-              textCapitalization: TextCapitalization.characters,
-              maxLength: 20,
-              decoration: const InputDecoration(
-                labelText: 'Plaka',
-                hintText: '34 ABC 123',
-                prefixIcon: Icon(Icons.pin_rounded),
-                counterText: '',
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const ValueKey<String>('vehicle_note'),
+                controller: _note,
+                enabled: !_submitting,
+                maxLength: VehicleDialog.maxNoteLength,
+                decoration: const InputDecoration(
+                  labelText: 'Not (isteğe bağlı)',
+                  prefixIcon: Icon(Icons.notes_rounded),
+                ),
               ),
-              validator: (value) =>
-                  normalizePlateInput(value) == null ? 'Plaka biçimi geçersiz.' : null,
-            ),
-            const SizedBox(height: AppSpace.md),
-            TextFormField(
-              key: const ValueKey<String>('vehicle_note'),
-              controller: _note,
-              enabled: !_submitting,
-              maxLength: VehicleDialog.maxNoteLength,
-              decoration: const InputDecoration(
-                labelText: 'Not (isteğe bağlı)',
-                prefixIcon: Icon(Icons.notes_rounded),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

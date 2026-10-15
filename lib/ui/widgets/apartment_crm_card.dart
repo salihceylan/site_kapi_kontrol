@@ -19,7 +19,8 @@ List<String> apartmentFactLabels(ApartmentSummary apartment) {
 /// Daire listesi kartı (Platform Faz 2a): daire etiketi, alan çipleri, güncel malik ve kiracı, sakin
 /// sayısı. Dokununca daire kartı açılır ([onTap]).
 ///
-/// Taşma: tüm metinler sarar; çipler `Wrap` içindedir; büyük yazıda ikon karosu gizlenir.
+/// Taşma: tüm metinler sarar; çipler `Wrap` içindedir. Büyük yazıda (>= 1,75x) ikon karosu `IconTile`
+/// tarafından kendiliğinden gizlenir (kod koşulsuz çizer, gizlemeyi bileşen yapar).
 class ApartmentCrmCard extends StatelessWidget {
   const ApartmentCrmCard({super.key, required this.apartment, required this.onTap});
 
@@ -58,11 +59,15 @@ class ApartmentCrmCard extends StatelessWidget {
                 ],
                 const SizedBox(height: AppSpace.sm),
                 Text(
-                  owner == null ? 'Malik: kayıtlı değil' : 'Malik: ${owner.fullName}',
+                  owner == null
+                      ? 'Malik: kayıtlı değil'
+                      : 'Malik: ${crmPersonName(owner.fullName)}',
                   style: secondary,
                 ),
                 Text(
-                  tenant == null ? 'Kiracı: kayıtlı değil' : 'Kiracı: ${tenant.fullName}',
+                  tenant == null
+                      ? 'Kiracı: kayıtlı değil'
+                      : 'Kiracı: ${crmPersonName(tenant.fullName)}',
                   style: secondary,
                 ),
                 Text('${apartment.residentCount} güncel sakin', style: secondary),

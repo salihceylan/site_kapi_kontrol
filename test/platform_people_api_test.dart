@@ -567,6 +567,56 @@ void main() {
       expect(created.credentialsSent, isFalse);
     });
 
+    test('F4: sunucu metninde alan adı jargonu varsa kullanıcıya genel Türkçe mesaj gösterilir', () async {
+      const jargon = <String>[
+        'gross_area_m2 alanı geçersiz (0\'dan büyük sayı).',
+        'move_in_date alanı geçersiz tarih (YYYY-AA-GG).',
+        'land_share alanı geçersiz: pay ve payda birlikte dolu olmalı.',
+        'Tarih biçimi YYYY-AA-GG olmalı.',
+        'full_name zorunludur (2-100 karakter).',
+      ];
+      for (final text in jargon) {
+        for (final code in const <String>['INVALID_BODY', 'SOMETHING_ELSE']) {
+          final api = _api(_Recorder(), (r) => _json({'error': text, 'code': code}, 400));
+          await expectLater(
+            api.updateApartment(token: 'tok', siteCode: 7, apartmentId: 1, fields: <String, Object?>{'floor': 1}),
+            throwsA(isA<ApiException>()
+                .having((e) => e.message, 'message', AuthApi.jargonFallbackMessage)
+                .having((e) => e.code, 'code', code)),
+            reason: '$code / $text',
+          );
+        }
+      }
+      expect(AuthApi.jargonFallbackMessage,
+          'Girilen bilgilerde hata var. Alanları kontrol edip tekrar deneyin.');
+      // Temiz Türkçe metin olduğu gibi kalır (tek sözcüklü alan adı "floor" jargon sayılmaz).
+      for (final clean in const <String>[
+        'floor alanı geçersiz (-20 ile 500 arasında tam sayı).',
+        'Bu e-posta ile kayıtlı bir kişi zaten var.',
+        'Geçiş Kontrol kapatılırsa telefondan kapı açma durur. Onaylıyor musunuz?',
+      ]) {
+        expect(AuthApi.sanitizeServerMessage(clean), clean);
+      }
+      expect(AuthApi.sanitizeServerMessage(null), isNull);
+    });
+
+    test('F16: updateResidency yalnız değişen alanı gönderir; tarih açıkça temizlenebilir', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json(_personBody()));
+      await api.updateResidency(token: 'tok', siteCode: 7, residencyId: 5, clearMoveInDate: true);
+      expect(rec.lastBody, <String, dynamic>{'move_in_date': null});
+      await api.updateResidency(
+        token: 'tok',
+        siteCode: 7,
+        residencyId: 5,
+        moveInDate: DateTime(2024, 1, 2),
+        clearMoveInDate: true,
+      );
+      expect(rec.lastBody, <String, dynamic>{'move_in_date': '2024-01-02'}, reason: 'tarih varsa temizleme yok');
+      await api.updateResidency(token: 'tok', siteCode: 7, residencyId: 5, relation: ResidencyRelation.owner);
+      expect(rec.lastBody, <String, dynamic>{'relation': 'owner'}, reason: 'tarih anahtarı hiç gitmez');
+    });
+
     test('beklenmeyen gövde (vehicle yok) anlaşılır hata olur, ham TypeError sızmaz', () async {
       final api = _api(_Recorder(), (r) => _json(<String, dynamic>{}, 201));
       await expectLater(

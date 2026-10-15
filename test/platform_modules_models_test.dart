@@ -618,7 +618,7 @@ void main() {
       );
     });
 
-    test('bilinmeyen eylem ham adıyla görünür (kayıt kaybolmaz); eksik alanlar null', () {
+    test('bilinmeyen eylem "Diğer işlem" olarak görünür (ham kod gösterilmez, kayıt kaybolmaz); eksik alanlar null', () {
       final e = AuditLogEntry.fromJson(<String, dynamic>{
         'id': '11',
         'action': 'site.archived',
@@ -627,7 +627,8 @@ void main() {
         'details': 'metin',
       });
       expect(e.id, 11);
-      expect(e.actionLabel, 'site.archived');
+      expect(e.actionLabel, 'Diğer işlem');
+      expect(e.action, 'site.archived', reason: 'ham kod modelde durur');
       expect(e.createdAt, isNull);
       expect(e.siteCode, isNull);
       expect(e.details, isEmpty);

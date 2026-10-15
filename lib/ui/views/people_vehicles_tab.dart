@@ -203,6 +203,7 @@ class PeopleVehiclesTabState extends State<PeopleVehiclesTab> {
           itemBuilder: (context, vehicle) => VehicleCard(
             vehicle: vehicle,
             busy: _busy.contains(vehicle.id),
+            showNote: widget.scope.canWrite,
             onRemove: widget.scope.canWrite ? () => _remove(vehicle) : null,
           ),
         ),

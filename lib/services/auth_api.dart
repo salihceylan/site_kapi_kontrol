@@ -987,6 +987,9 @@ class AuthApi {
     required int residencyId,
     ResidencyRelation? relation,
     DateTime? moveInDate,
+
+    /// true ve [moveInDate] null: giriş tarihi AÇIKÇA temizlenir (`move_in_date: null`).
+    bool clearMoveInDate = false,
   }) async {
     final response = await _authorizedRequest(
       method: 'PATCH',
@@ -994,7 +997,10 @@ class AuthApi {
       token: token,
       body: {
         if (relation != null) 'relation': relation.apiValue,
-        if (moveInDate != null) 'move_in_date': crmDateParam(moveInDate),
+        if (moveInDate != null)
+          'move_in_date': crmDateParam(moveInDate)
+        else if (clearMoveInDate)
+          'move_in_date': null,
       },
     );
     _ensureStatus(response, 200);
@@ -2116,7 +2122,7 @@ class AuthApi {
     final payload = _decodePayload(response);
     final rawError = payload['error'];
     final errorMsg = rawError is String && rawError.trim().isNotEmpty
-        ? rawError.trim()
+        ? sanitizeServerMessage(rawError.trim())
         : null;
     final rawCode = payload['code'];
     final code = rawCode is String && rawCode.trim().isNotEmpty
@@ -2239,6 +2245,20 @@ class AuthApi {
     final trimmed = base.endsWith('.') ? base : '$base.';
     return '$trimmed Lütfen ${formatWait(retryAfter)} sonra tekrar deneyin.';
   }
+
+  /// Sunucu hata metninde alan adı jargonu (`gross_area_m2`, `YYYY-AA-GG` gibi) varsa kullanıcıya
+  /// gösterilmez; yerine [jargonFallbackMessage] gelir. Temiz metin olduğu gibi döner.
+  static String? sanitizeServerMessage(String? message) {
+    if (message == null) return null;
+    final jargon = RegExp(r'[a-z][a-z0-9]*(?:_[a-z0-9]+)+').hasMatch(message) ||
+        message.contains('YYYY-AA-GG') ||
+        message.contains('YYYY-MM-DD');
+    return jargon ? jargonFallbackMessage : message;
+  }
+
+  /// Jargonlu sunucu metni yerine gösterilen genel Türkçe mesaj.
+  static const String jargonFallbackMessage =
+      'Girilen bilgilerde hata var. Alanları kontrol edip tekrar deneyin.';
 
   /// Sunucu `error` metni göndermediğinde durum koduna / genel koda göre Türkçe yedek mesaj
   /// (429 hız sınırı: gövdede `code` yoktur; 400 `INVALID_BODY` / `INVALID_QUERY`). Metin gelirse

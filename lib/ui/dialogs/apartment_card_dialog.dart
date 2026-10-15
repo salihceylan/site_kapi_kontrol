@@ -115,7 +115,12 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
       apartment: detail,
     );
     if (result == null || !mounted || identical(result, detail)) return;
-    setState(() => _detail = result);
+    // Uçuştaki eski bir yükleme (yazmadan ÖNCE başlamış) bu yeni sonucu ezemesin.
+    ++_token;
+    setState(() {
+      _detail = result;
+      _loading = false;
+    });
     widget.onChanged?.call();
     AppSnack.show(context, 'Daire bilgileri güncellendi.', kind: AppSnackKind.success);
   }
@@ -230,12 +235,16 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
               const SizedBox(height: AppSpace.md),
               CrmInfoLine(
                 label: 'Malik',
-                value: detail.owner == null ? 'Kayıtlı değil' : detail.owner!.fullName,
+                value: detail.owner == null
+                    ? 'Kayıtlı değil'
+                    : crmPersonName(detail.owner!.fullName),
               ),
               const SizedBox(height: AppSpace.sm),
               CrmInfoLine(
                 label: 'Kiracı',
-                value: detail.tenant == null ? 'Kayıtlı değil' : detail.tenant!.fullName,
+                value: detail.tenant == null
+                    ? 'Kayıtlı değil'
+                    : crmPersonName(detail.tenant!.fullName),
               ),
               const SizedBox(height: AppSpace.md),
               if (detail.currentResidents.isEmpty)
@@ -284,7 +293,7 @@ class _ApartmentCardDialogState extends State<ApartmentCardDialog> {
     required bool past,
   }) {
     final th = Theme.of(context).textTheme;
-    final name = resident.fullName.trim().isEmpty ? 'İsimsiz kişi' : resident.fullName.trim();
+    final name = crmPersonName(resident.fullName);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

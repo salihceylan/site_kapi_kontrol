@@ -45,6 +45,21 @@ DateTime? crmTimestamp(Object? raw) {
   return DateTime.tryParse(raw.toString())?.toLocal();
 }
 
+/// Ekranda gösterilen tarih: "05.03.2024".
+String crmFormatDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  return '$day.$month.${date.year.toString().padLeft(4, '0')}';
+}
+
+/// Ekranda gösterilen sayı: tam sayıysa "120", küsuratlıysa "120,5" (Türkçe ondalık virgül).
+String crmFormatNumber(double value) {
+  if (value == value.roundToDouble()) return value.toInt().toString();
+  var text = value.toStringAsFixed(2);
+  if (text.endsWith('0')) text = text.substring(0, text.length - 1);
+  return text.replaceAll('.', ',');
+}
+
 /// Sunucuya giden `YYYY-AA-GG` biçimi.
 String crmDateParam(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');

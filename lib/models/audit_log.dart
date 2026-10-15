@@ -49,7 +49,8 @@ class AuditLogEntry {
     'STAFF': 'Görevli',
   };
 
-  /// "Ne yapıldı" kısa başlığı. Bilinmeyen eylemde ham eylem adı gösterilir (kayıt kaybolmasın).
+  /// "Ne yapıldı" kısa başlığı. Bilinmeyen eylemde "Diğer işlem" yazılır (ham kod gösterilmez; kayıt
+  /// yine listelenir).
   String get actionLabel {
     switch (action) {
       case 'module.enabled':
@@ -69,7 +70,7 @@ class AuditLogEntry {
       case 'module_request.cancelled':
         return 'Talep geri çekildi';
       default:
-        return peopleActionLabel(action) ?? action;
+        return peopleActionLabel(action) ?? 'Diğer işlem';
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
+import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmFormatNumber;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -30,6 +31,54 @@ class RelationChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       InfoChip(relation.label, tone: relationTone(relation));
+}
+
+/// Pencere / form içindeki hata bildirimi: ekrana gelince (ya da mesajı değişince) kaydırılabilir üst
+/// öğe içinde GÖRÜNÜR konuma getirilir. Hata, kaydırılmış uzun bir formun üstünde kalıp kullanıcıdan
+/// gizli kalmasın (320 dp x 2,0 yazıda Kaydet'e basınca hata ekran dışında kalıyordu). [action] hatanın
+/// hemen altına konan isteğe bağlı eylemdir (örn. "Kişiyi Aç").
+class CrmFormError extends StatefulWidget {
+  const CrmFormError({super.key, required this.message, this.action});
+
+  final String message;
+  final Widget? action;
+
+  @override
+  State<CrmFormError> createState() => _CrmFormErrorState();
+}
+
+class _CrmFormErrorState extends State<CrmFormError> {
+  @override
+  void initState() {
+    super.initState();
+    _reveal();
+  }
+
+  @override
+  void didUpdateWidget(CrmFormError oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message != widget.message) _reveal();
+  }
+
+  void _reveal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(context, duration: Duration.zero, alignment: 0.0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final action = widget.action;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InlineNotice(message: widget.message),
+        if (action != null) ...[const SizedBox(height: AppSpace.sm), action],
+        const SizedBox(height: AppSpace.md),
+      ],
+    );
+  }
 }
 
 /// Üstte küçük etiket, altında değer: kart ve pencere satırları için. Değer sarar (kırpılmaz).
@@ -133,9 +182,10 @@ class CrmListBody<T> extends StatelessWidget {
 }
 
 /// Alan değeri: tam sayıysa "120", küsuratlıysa "120,5" (Türkçe ondalık virgül).
-String formatNumber(double value) {
-  if (value == value.roundToDouble()) return value.toInt().toString();
-  var text = value.toStringAsFixed(2);
-  if (text.endsWith('0')) text = text.substring(0, text.length - 1);
-  return text.replaceAll('.', ',');
+String formatNumber(double value) => crmFormatNumber(value);
+
+/// Kişi adı; sunucu boş ad (silinmiş hesap, eksik kayıt) gönderirse boş görünmez.
+String crmPersonName(String? name) {
+  final trimmed = (name ?? '').trim();
+  return trimmed.isEmpty ? 'İsimsiz kişi' : trimmed;
 }

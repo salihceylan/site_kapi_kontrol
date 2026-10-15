@@ -46,6 +46,7 @@ class AuditLogView extends StatefulWidget {
     ('apartment.updated', 'Daire güncellendi'),
     ('vehicle.added', 'Araç eklendi'),
     ('vehicle.removed', 'Araç kaldırıldı'),
+    ('apartment.deleted', 'Daire silindi'),
   ];
 
   @override

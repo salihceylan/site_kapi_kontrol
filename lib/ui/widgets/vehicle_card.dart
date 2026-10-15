@@ -4,14 +4,24 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// Araç satırı (Platform Faz 2a): plaka, sahibi, dairesi ve not. [onRemove] verilirse (yalnız yazma
-/// yetkisi olanda) sağda "Aracı kaldır" düğmesi çıkar; salt okunur kurul üyesinde düğme yoktur.
+/// Araç satırı (Platform Faz 2a): plaka, sahibi, dairesi ve (yalnız [showNote] iken) not. [onRemove]
+/// verilirse (yalnız yazma yetkisi olanda) sağda "{plaka} plakalı aracı kaldır" düğmesi çıkar; salt
+/// okunur kurul üyesinde düğme ve not yoktur.
 ///
-/// Taşma: tüm metinler sarar; düğme 44 dp, metin kalan genişliği alır.
+/// Taşma: tüm metinler sarar; düğme 48 dp, metin kalan genişliği alır.
 class VehicleCard extends StatelessWidget {
-  const VehicleCard({super.key, required this.vehicle, this.onRemove, this.busy = false});
+  const VehicleCard({
+    super.key,
+    required this.vehicle,
+    this.onRemove,
+    this.busy = false,
+    this.showNote = false,
+  });
 
   final VehicleRecord vehicle;
+
+  /// Araç notu yönetime özeldir: yalnız yazma yetkisi olanda true (kurul üyesi notu görmez).
+  final bool showNote;
   final VoidCallback? onRemove;
   final bool busy;
 
@@ -22,7 +32,7 @@ class VehicleCard extends StatelessWidget {
     final secondary = th.bodyMedium?.copyWith(color: p.textSecondary);
     final person = vehicle.personName ?? '';
     final apartment = vehicle.apartmentLabel ?? '';
-    final note = vehicle.note ?? '';
+    final note = showNote ? (vehicle.note ?? '') : '';
 
     return AppCard(
       padding: listCardPadding(context),
@@ -57,8 +67,8 @@ class VehicleCard extends StatelessWidget {
                   )
                 : IconButton(
                     onPressed: onRemove,
-                    tooltip: 'Aracı kaldır',
-                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                    tooltip: '${vehicle.displayPlate} plakalı aracı kaldır',
+                    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                     icon: const Icon(Icons.delete_outline_rounded),
                   ),
         ],

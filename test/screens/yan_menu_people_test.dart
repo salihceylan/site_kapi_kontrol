@@ -69,16 +69,27 @@ void main() {
         additional: const <SirketMenuItem>{SirketMenuItem.kisiler},
         onSelect: selected.add,
       );
+      // "Site Yönetimi" olmayan rolde "Panel"in hemen altı (listenin sonu DEĞİL).
       expect(titles, <String>[
         'Panel',
+        'Kişiler',
         'Daireye Katıl & Cihaz Ekle',
         'Eller Serbest & Kestirmeler',
         'Profilim',
-        'Kişiler',
         'Çıkış Yap',
       ]);
       await t.tap(find.text('Kişiler'));
       expect(selected, <SirketMenuItem>[SirketMenuItem.kisiler]);
+    });
+
+    testWidgets('rol listesinde "Site Yönetimi" varsa "Kişiler" onun hemen altındadır (yönetici sırasıyla tutarlı)', (t) async {
+      final titles = await _pumpMenu(
+        t,
+        UserRole.individual,
+        toggle: true,
+        additional: const <SirketMenuItem>{SirketMenuItem.kisiler},
+      );
+      expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
     });
 
     testWidgets('rol listesinde zaten varsa tekrarlanmaz (site yöneticisi hem yönetici hem kurul üyesi)', (t) async {

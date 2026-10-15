@@ -105,11 +105,25 @@ class PeopleViewState extends State<PeopleView> {
     try {
       final merged = <PeopleSite>[];
       if (widget.manageSites) {
-        final page = await widget.authService.listSites(page: 1, pageSize: 100);
-        for (final site in page.sites) {
-          if (site.isApproved) {
-            merged.add(PeopleSite(code: site.id, name: site.name, canWrite: true));
+        // Süper kullanıcıda site sayısı 100'ü aşabilir: onaylı siteler sayfa sayfa toplanır (üst sınır 50
+        // sayfa), seçici ilk 100 siteyle sınırlı kalmaz.
+        var pageNo = 1;
+        var fetched = 0;
+        while (true) {
+          final page = await widget.authService.listSites(
+            page: pageNo,
+            pageSize: 100,
+            approvalStatus: 'approved',
+          );
+          for (final site in page.sites) {
+            if (site.isApproved && !merged.any((m) => m.code == site.id)) {
+              merged.add(PeopleSite(code: site.id, name: site.name, canWrite: true));
+            }
           }
+          fetched += page.sites.length;
+          if (page.sites.isEmpty || fetched >= page.total || pageNo >= 50) break;
+          if (!mounted || token != _sitesToken) return;
+          pageNo++;
         }
       }
       for (final site in widget.readOnlySites) {

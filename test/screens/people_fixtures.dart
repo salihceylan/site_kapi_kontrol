@@ -328,8 +328,9 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
       <({int id, Map<String, Object?> fields})>[];
   final List<({int person, int apartment, ResidencyRelation relation, DateTime? date})> addResidencyCalls =
       <({int person, int apartment, ResidencyRelation relation, DateTime? date})>[];
-  final List<({int residency, ResidencyRelation? relation, DateTime? date})> updateResidencyCalls =
-      <({int residency, ResidencyRelation? relation, DateTime? date})>[];
+  final List<({int residency, ResidencyRelation? relation, DateTime? date, bool clear})>
+  updateResidencyCalls =
+      <({int residency, ResidencyRelation? relation, DateTime? date, bool clear})>[];
   final List<({int residency, DateTime? date})> endResidencyCalls =
       <({int residency, DateTime? date})>[];
   final List<({int id, Map<String, Object?> fields})> updateApartmentCalls =
@@ -340,6 +341,8 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   final List<({int site, String? type, int? id, int? before})> historyCalls =
       <({int site, String? type, int? id, int? before})>[];
   int listSitesCalls = 0;
+  final List<({int page, int pageSize, String? approval})> listSitesArgs =
+      <({int page, int pageSize, String? approval})>[];
   int myRecordsCalls = 0;
   int structureCalls = 0;
 
@@ -350,6 +353,9 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   Object? personError;
   Object? apartmentError;
   Object? writeError;
+
+  /// null değilse her yazma çağrısı (kaydı yaptıktan sonra) bu kapıyı bekler: gönderim sürerken davranış.
+  Completer<void>? writeGate;
   Object? historyError;
   Object? myRecordsError;
   Object? listSitesError;
@@ -375,6 +381,11 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   @override
   bool get isLoggedIn => true;
 
+  Future<void> _writeWait() async {
+    final gate = writeGate;
+    if (gate != null) await gate.future;
+  }
+
   Future<void> _gate(List<Completer<void>> queue) async {
     if (queue.isEmpty) return;
     await queue.removeAt(0).future;
@@ -391,11 +402,17 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     String? approvalStatus,
   }) async {
     listSitesCalls++;
+    listSitesArgs.add((page: page, pageSize: pageSize, approval: approvalStatus));
     final gate = sitesGate;
     if (gate != null) await gate.future;
     final error = listSitesError;
     if (error != null) throw error;
-    return SitePage(sites: sites, total: sites.length, page: 1, pageSize: pageSize);
+    final filtered = approvalStatus == 'approved'
+        ? sites.where((s) => s.isApproved).toList()
+        : sites;
+    final start = (page - 1) * pageSize;
+    final items = filtered.skip(start).take(pageSize).toList();
+    return SitePage(sites: items, total: filtered.length, page: page, pageSize: pageSize);
   }
 
   @override
@@ -475,15 +492,17 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   @override
   Future<PersonDetail> getPerson(int siteCode, int personId) async {
     getPersonCalls.add(personId);
+    // Yanıt çağrı ANINDA hesaplanır (sunucu gibi); kapı açılınca teslim edilir: bayat yanıt testleri.
+    final json = peopleJson[personId];
+    final snapshot = json == null ? null : PersonDetail.fromJson(json);
     final gate = personGate;
     if (gate != null) await gate.future;
     final error = personError;
     if (error != null) throw error;
-    final json = peopleJson[personId];
-    if (json == null) {
+    if (snapshot == null) {
       throw ApiException('Kişi bulunamadı.', statusCode: 404, code: 'PERSON_NOT_FOUND');
     }
-    return PersonDetail.fromJson(json);
+    return snapshot;
   }
 
   ApiException _coded(String code, int status, {Map<String, dynamic>? payload}) => ApiException(
@@ -513,6 +532,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
       'relation': relation,
       'move_in_date': moveInDate,
     });
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final mail = (email ?? '').trim().toLowerCase();
@@ -549,6 +569,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     Map<String, Object?> fields,
   ) async {
     updatePersonCalls.add((id: personId, fields: Map<String, Object?>.of(fields)));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final json = peopleJson[personId]!;
@@ -587,6 +608,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     DateTime? moveInDate,
   }) async {
     addResidencyCalls.add((person: personId, apartment: apartmentId, relation: relation, date: moveInDate));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     if (relation.isExclusive && _currentHolder(apartmentId, relation) != null) {
@@ -631,8 +653,15 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     int residencyId, {
     ResidencyRelation? relation,
     DateTime? moveInDate,
+    bool clearMoveInDate = false,
   }) async {
-    updateResidencyCalls.add((residency: residencyId, relation: relation, date: moveInDate));
+    updateResidencyCalls.add((
+      residency: residencyId,
+      relation: relation,
+      date: moveInDate,
+      clear: clearMoveInDate,
+    ));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final json = _residencyOwner(residencyId)!;
@@ -644,7 +673,11 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
       }
       row['relation'] = relation.apiValue;
     }
-    if (moveInDate != null) row['move_in_date'] = crmDateParam(moveInDate);
+    if (moveInDate != null) {
+      row['move_in_date'] = crmDateParam(moveInDate);
+    } else if (clearMoveInDate) {
+      row['move_in_date'] = null;
+    }
     _refreshDerived(json);
     return PersonDetail.fromJson(json);
   }
@@ -656,6 +689,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     DateTime? moveOutDate,
   }) async {
     endResidencyCalls.add((residency: residencyId, date: moveOutDate));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final json = _residencyOwner(residencyId)!;
@@ -700,9 +734,9 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     final rows = apartmentsJson.values.where((json) {
       if (blockId != null && json['block_id'] != blockId) return false;
       if (q.isEmpty) return true;
+      // Sunucu: q = blok-daire etiketi VE güncel sakin adları.
       return _has(json['label'], q) ||
-          _has((json['owner'] as Map?)?['full_name'], q) ||
-          _has((json['tenant'] as Map?)?['full_name'], q);
+          (json['current_residents'] as List).any((r) => _has((r as Map)['full_name'], q));
     }).toList();
     final page = rows.skip(offset).take(_limit(limit)).toList();
     final result = ApartmentPage(
@@ -734,6 +768,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     Map<String, Object?> fields,
   ) async {
     updateApartmentCalls.add((id: apartmentId, fields: Map<String, Object?>.of(fields)));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final json = apartmentsJson[apartmentId]!;
@@ -786,6 +821,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     String? note,
   }) async {
     createVehicleCalls.add((person: personId, plate: plate, note: note));
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     final normalized = plate.replaceAll(RegExp(r'[\s\-.]'), '').toUpperCase();
@@ -809,6 +845,7 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
   @override
   Future<void> removeVehicle(int siteCode, int vehicleId) async {
     removeVehicleCalls.add(vehicleId);
+    await _writeWait();
     final error = writeError;
     if (error != null) throw error;
     vehiclesJson.removeWhere((v) => v['id'] == vehicleId);
