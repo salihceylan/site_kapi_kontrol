@@ -17,6 +17,7 @@ import { authRequired } from '../middlewares/auth_middleware.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { getApartmentDetail, listApartments, updateApartment } from './apartment_records_service.js';
 import { resolvePeopleAccess } from './people_access.js';
+import { redactManagerNotes } from './people_common.js';
 import { listMyRecords, listPeopleHistory } from './people_history_service.js';
 import {
   addResidency,
@@ -43,17 +44,20 @@ export const peopleWriteLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
-// Arama/liste uçları: kullanıcı başına 600/saat (sözleşme: "makul").
+// Arama/liste uçları (ve /app/my-records): kullanıcı başına 1200/saat (≈ dakikada 20; istemci arama kutusunda debounce kullanır).
 export const peopleReadLimiter = createRuleLimiter({
   rules: [
-    { windowMs: HOUR_MS, max: 600, key: userKey },
-    { windowMs: HOUR_MS, max: 6000, key: ipKey },
+    { windowMs: HOUR_MS, max: 1200, key: userKey },
+    { windowMs: HOUR_MS, max: 12000, key: ipKey },
   ],
   message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
 });
 
 const canSeeUserCode = (access) => access.kind === 'super' || access.kind === 'manager';
+
+// Kurul üyesi (salt okuma) yönetici iç notlarını (kişi/araç note) GÖRMEZ: sunucu veriyi hiç vermez (null).
+const redactFor = (access, body) => (canSeeUserCode(access) ? body : redactManagerNotes(body));
 
 /**
  * Ortak sarmalayıcı: yetki + site doğrulaması -> iş -> JSON. `run({ req, access })` { status?, body } döndürür.
@@ -66,7 +70,7 @@ function handler({ context, fallback, write = false }, run) {
         return undefined;
       }
       const { status = 200, body } = await run({ req, access });
-      return res.status(status).json(body);
+      return res.status(status).json(redactFor(access, body));
     } catch (error) {
       return respondError(res, context, error, fallback);
     }
@@ -250,7 +254,7 @@ peopleRouter.get(
 
 // --- Sakin: kendi kayıtları -------------------------------------------------------------------------------
 
-peopleRouter.get('/app/my-records', authRequired, async (req, res) => {
+peopleRouter.get('/app/my-records', authRequired, peopleReadLimiter, async (req, res) => {
   try {
     return res.status(200).json(await listMyRecords(req.authUser));
   } catch (error) {

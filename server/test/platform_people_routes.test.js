@@ -6,6 +6,10 @@ import express from 'express';
 import { pool } from '../src/db.js';
 import { authRequired } from '../src/middlewares/auth_middleware.js';
 import { peopleReadLimiter, peopleRouter, peopleWriteLimiter } from '../src/modules/people_routes.js';
+import { SYNC_STEPS } from '../src/modules/people_sync_sql.js';
+
+// Bellek ici esitleme kisitlamasi (H7) testlerde kapali: her okuma esitleme transaction'ini calistirir (kisitlama ayri testte sinanir).
+process.env.PEOPLE_SYNC_MIN_INTERVAL_MS = '0';
 
 const SITE_1 = 1000000001;
 const SITE_2 = 1000000002;
@@ -93,8 +97,13 @@ function handle(sql, params) {
   }
   // liste / kart varsayilanlari
   if (/^SELECT COUNT\(\*\)::INTEGER AS total FROM/.test(sql)) return ok([{ total: 0 }]);
+  // Okuma sorgulari icin bos sonuc makul varsayilandir; YAZMA sorgusu tanimsizsa sessizce basarili sayilmaz.
+  if (/^(INSERT|UPDATE|DELETE)\b/.test(sql)) throw new Error(`BEKLENMEYEN yazma SQL (sahte DB kati): ${sql.slice(0, 200)}`);
   return ok();
 }
+
+const STEP_SQLS = new Set(SYNC_STEPS.map((step) => norm(step.sql)));
+const CLIENT_INFRA = [/^BEGIN$/, /^COMMIT$/, /^ROLLBACK$/, /^SELECT pg_advisory_xact_lock/];
 
 function installFakeDb() {
   pool.query = async (text, params) => handle(norm(text), params ?? []);
@@ -102,7 +111,12 @@ function installFakeDb() {
     async query(text, params) {
       const sql = norm(text);
       state.clientLog.push({ sql, params });
-      return ok();
+      if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return ok([{ locked: true }]);
+      // transaction icinde yalniz altyapi ve esitleme adimlari beklenir (yazma akislari service testlerinde sinanir)
+      if (CLIENT_INFRA.some((pattern) => pattern.test(sql)) || STEP_SQLS.has(sql)) return ok();
+      // satir kilidi sorgusu (FOR UPDATE) bos = "kayit yok" (404 senaryolari); baska hicbir transaction sorgusu sessizce gecmez
+      if (/^SELECT\b[\s\S]*\bFOR UPDATE\b/.test(sql)) return ok();
+      throw new Error(`BEKLENMEYEN transaction SQL (sahte DB kati): ${sql.slice(0, 200)}`);
     },
     release() {},
   });
@@ -127,7 +141,7 @@ before(async () => {
       next();
     };
     // hiz sinirlayicilar rota testlerinde atlanir (dogrudan ayri testte sinanir)
-    if (layer.route.stack.length > 2 && layer.route.path.startsWith('/manager/')) {
+    if (layer.route.stack.length > 2) {
       layer.route.stack[1].handle = (_req, _res, next) => next();
     }
   }
@@ -183,7 +197,7 @@ const base = (site = SITE_1) => `/manager/sites/${site}`;
 // ---------------------------------------------------------------------------
 
 describe('people rotalari: zincir', () => {
-  it('15 rota; hepsi authRequired ile baslar; /manager uclari hiz sinirli (okuma 600/saat, yazma 120/saat)', () => {
+  it('15 rota; hepsi authRequired ile baslar; /manager uclari ve my-records hiz sinirli (okuma 1200/saat, yazma 120/saat)', () => {
     const summary = ORIGINAL_ROUTES.map((r) => `${r.method.toUpperCase()} ${r.path}`).sort();
     assert.deepEqual(summary, [
       'DELETE /manager/sites/:siteCode/vehicles/:vehicleId',
@@ -207,10 +221,13 @@ describe('people rotalari: zincir', () => {
       if (route.path.startsWith('/manager/')) {
         assert.equal(route.handlers[1], route.method === 'get' ? peopleReadLimiter : peopleWriteLimiter, `${route.method} ${route.path}`);
       }
+      if (route.path === '/app/my-records') {
+        assert.equal(route.handlers[1], peopleReadLimiter, '/app/my-records da hiz sinirli (H7)');
+      }
     }
   });
 
-  it('hiz sinirlari: yazma kullanici basina 120/saat, okuma 600/saat; 429 + Retry-After', () => {
+  it('hiz sinirlari: yazma kullanici basina 120/saat, okuma 1200/saat; 429 + Retry-After', () => {
     const run = (limiter, code) => {
       const res = {
         statusCode: 200,
@@ -239,7 +256,7 @@ describe('people rotalari: zincir', () => {
     assert.ok(Number(blockedWrite.res.headers['Retry-After']) > 0);
     assert.ok(blockedWrite.res.body.retry_after_seconds > 0);
     assert.equal(run(peopleWriteLimiter, 8).passed, true);
-    for (let i = 0; i < 600; i += 1) assert.equal(run(peopleReadLimiter, 7).passed, true, String(i));
+    for (let i = 0; i < 1200; i += 1) assert.equal(run(peopleReadLimiter, 7).passed, true, String(i));
     assert.equal(run(peopleReadLimiter, 7).res.statusCode, 429);
   });
 });
@@ -372,6 +389,7 @@ describe('GET people: sorgu, sayfalama, sabit sorgu sayisi', () => {
       phone: '+905551234567',
       email: 'ali@example.com',
       has_account: true,
+      account_kind: 'registered',
       is_active: true,
       relations: ['owner', 'resident'],
       apartments: [
@@ -386,6 +404,7 @@ describe('GET people: sorgu, sayfalama, sabit sorgu sayisi', () => {
       phone: null,
       email: null,
       has_account: false,
+      account_kind: 'none',
       is_active: true,
       relations: [],
       apartments: [],
@@ -404,11 +423,11 @@ describe('GET people: sorgu, sayfalama, sabit sorgu sayisi', () => {
     await call('GET', `${base()}/people?limit=30`);
     const dataQueries = state.log.filter((q) => /site_people|apartment_residencies|vehicles/.test(q.sql));
     assert.equal(dataQueries.length, 4, dataQueries.map((q) => q.sql.slice(0, 50)).join(' | '));
-    // esitleme: BEGIN + kilit + 5 adim + COMMIT = 8 (site basina sabit)
-    assert.equal(state.clientLog.length, 8);
-    assert.equal(state.clientLog.filter((q) => /^WITH desired AS/.test(q.sql)).length, 5);
+    // esitleme: BEGIN + kilit (BEKLEMEZ: try-lock) + 6 adim + COMMIT (site basina sabit)
+    assert.equal(state.clientLog.length, 2 + SYNC_STEPS.length + 1);
+    assert.equal(state.clientLog.filter((q) => /^WITH desired AS/.test(q.sql)).length, 4);
     assert.deepEqual(state.clientLog[0].sql, 'BEGIN');
-    assert.match(state.clientLog[1].sql, /^SELECT pg_advisory_xact_lock/);
+    assert.match(state.clientLog[1].sql, /^SELECT pg_try_advisory_xact_lock/);
     assert.equal(state.clientLog[1].params[0], `people_sync:${SITE_1}`);
   });
 
@@ -489,6 +508,7 @@ describe('GET people/:personId: PersonDetail', () => {
       phone: '+905551234567',
       email: 'ali@example.com',
       has_account: true,
+      account_kind: 'registered',
       is_active: true,
       relations: ['owner'],
       apartments: [{ apartment_id: 9, label: 'A Blok - Daire 2', block_name: 'A Blok', relation: 'owner' }],
@@ -512,6 +532,30 @@ describe('GET people/:personId: PersonDetail', () => {
     assert.equal(res.body.full_name, 'Ali Veli');
   });
 
+  it('H14: kurul uyesine yonetici ic notlari VERILMEZ (kisi note ve arac note null); yonetici/super icin aynen', async () => {
+    const withVehicleNote = () => {
+      cardOverrides();
+      overrides.unshift([
+        /FROM vehicles v LEFT JOIN site_people sp ON sp\.id = v\.person_id[\s\S]*WHERE v\.person_id = \$1 AND v\.is_active = TRUE ORDER BY v\.id$/,
+        () => ok([{ id: '4', plate: '34ABC123', plate_display: '34 ABC 123', note: 'yonetici arac notu', person_id: '5', is_active: true, person_name: 'Ali Veli', block_name: 'A Blok', unit_label: 'Daire 2' }]),
+      ]);
+    };
+    withVehicleNote();
+    const boardRes = await call('GET', `${base()}/people/5`, { user: users.board });
+    assert.equal(boardRes.status, 200);
+    assert.equal(boardRes.body.note, null, 'kisi notu kurula verilmez');
+    assert.equal(boardRes.body.vehicles[0].note, null, 'arac notu kurula verilmez');
+    assert.equal(JSON.stringify(boardRes.body).includes('yonetici arac notu'), false);
+    assert.equal(JSON.stringify(boardRes.body).includes('"not"'), false);
+    for (const user of [users.mgrA, users.superUser, users.ownerC]) {
+      overrides = [];
+      withVehicleNote();
+      const res = await call('GET', `${base()}/people/5`, { user });
+      assert.equal(res.body.note, 'not', `${user.role}: kisi notu aynen`);
+      assert.equal(res.body.vehicles[0].note, 'yonetici arac notu', `${user.role}: arac notu aynen`);
+    }
+  });
+
   it('kisi yok / baska sitenin kisisi / gecersiz id -> 404 PERSON_NOT_FOUND (site kapsamli sorgu)', async () => {
     for (const id of ['999', 'abc', '0']) {
       const res = await call('GET', `${base()}/people/${id}`);
@@ -528,7 +572,10 @@ describe('GET people/:personId: PersonDetail', () => {
     const sql = state.log.find((q) => /WHERE sp\.site_code = \$1 AND sp\.id = \$2/.test(q.sql)).sql;
     assert.match(sql, /COALESCE\(NULLIF\(u\.full_name, ''\), sp\.full_name\) AS full_name/);
     assert.match(sql, /COALESCE\(NULLIF\(u\.phone_number, ''\), sp\.phone\) AS phone/);
-    assert.match(sql, /WHEN u\.user_code IS NOT NULL AND u\.email NOT LIKE '%@ahbu\.local' THEN u\.email ELSE sp\.email END AS email/);
+    // gercek hesap: users.email; dahili hesap: GUNCEL apartments.resident_email (yedek sp.email); hesapsiz: sp.email
+    assert.match(sql, /WHEN u\.user_code IS NULL THEN sp\.email WHEN u\.email NOT LIKE '%@ahbu\.local' THEN u\.email ELSE COALESCE\(ia\.resident_email, sp\.email\) END \) AS email/);
+    assert.match(sql, /LEFT JOIN LATERAL \( SELECT a\.resident_email FROM apartments a WHERE u\.email LIKE '%@ahbu\.local' AND a\.resident_user_code = sp\.user_code AND a\.site_code = sp\.site_code/);
+    assert.match(sql, /WHEN u\.user_code IS NULL THEN 'none' WHEN u\.email LIKE '%@ahbu\.local' THEN 'internal' ELSE 'registered' END \) AS account_kind/);
   });
 });
 
@@ -736,6 +783,33 @@ describe('GET apartments / vehicles / history / my-records', () => {
     assert.match(count.sql, /v\.is_active = TRUE/);
   });
 
+  it('H14: arac listesinde kurul uyesi icin arac notu null; yonetici icin aynen', async () => {
+    overrides.push(
+      [/^SELECT COUNT\(\*\)::INTEGER AS total FROM vehicles v/, () => ok([{ total: 1 }])],
+      [
+        /^SELECT v\.id, v\.plate, v\.plate_display, v\.note, v\.person_id, v\.is_active/,
+        () => ok([{ id: '4', plate: '34ABC123', plate_display: '34 ABC 123', note: 'ic not', person_id: '5', is_active: true, person_name: 'Ali Veli', block_name: null, unit_label: null }]),
+      ],
+    );
+    const board = await call('GET', `${base()}/vehicles`, { user: users.board });
+    assert.equal(board.status, 200);
+    assert.equal(board.body.items[0].note, null);
+    assert.equal(JSON.stringify(board.body).includes('ic not'), false);
+    const manager = await call('GET', `${base()}/vehicles`, { user: users.mgrA });
+    assert.equal(manager.body.items[0].note, 'ic not');
+  });
+
+  it('H13: daire aramasi (q) etiketin yani sira dairenin GUNCEL sakinlerinin adinda da eslesir (Turkce/harf duyarsiz, kisi aramasiyla ayni normalize)', async () => {
+    await call('GET', `${base()}/apartments?q=${encodeURIComponent('ÇAĞLAR')}`);
+    const count = state.log.find((q) => /^SELECT COUNT\(\*\)::INTEGER AS total FROM apartments/.test(q.sql));
+    assert.ok(count);
+    assert.ok(count.params.includes('%caglar%'), JSON.stringify(count.params));
+    assert.equal(count.params.filter((p) => p === '%caglar%').length, 1, 'tek parametre iki kosulda yeniden kullanilir');
+    assert.match(count.sql, /LIKE \$\d+ ESCAPE '\\' OR EXISTS \( SELECT 1 FROM apartment_residencies r INNER JOIN site_people sp ON sp\.id = r\.person_id LEFT JOIN users u ON u\.user_code = sp\.user_code WHERE r\.apartment_id = a\.id AND r\.is_current = TRUE AND .*COALESCE\(NULLIF\(u\.full_name, ''\), sp\.full_name\).* LIKE \$\d+ ESCAPE '\\' \)/);
+    // ayni normalize: kisi aramasindaki foldSql ifadesi (translate + lower)
+    assert.match(count.sql, /translate\(/);
+  });
+
   it('gecmis: yalniz bu sitenin kayitlari; hedef suzgeci; gecersiz parametre 400', async () => {
     overrides.push([
       /^SELECT a\.id, a\.created_at, a\.actor_user_code[\s\S]*FROM audit_log a/,
@@ -796,7 +870,8 @@ describe('GET apartments / vehicles / history / my-records', () => {
           block_name: 'A Blok',
           relation: 'resident',
           move_in_date: '2025-01-02',
-          vehicles: [{ id: 4, plate: '34ABC123', plate_display: '34 ABC 123', note: null, person_id: 5, person_name: 'Deniz Sakin', apartment_label: 'A Blok - Daire 2', is_active: true }],
+          // yonetici ic notu (note) sakine DONMEZ (H11)
+          vehicles: [{ id: 4, plate: '34ABC123', plate_display: '34 ABC 123', person_id: 5, person_name: 'Deniz Sakin', apartment_label: 'A Blok - Daire 2', is_active: true }],
         },
       ],
     });

@@ -20,6 +20,7 @@ import {
   parseRelationInput,
   parseSearchTerm,
   parseStatusFilter,
+  redactManagerNotes,
   todayIso,
 } from '../src/modules/people_common.js';
 import { mergeLandShare, parseApartmentPatch } from '../src/modules/apartment_records_service.js';
@@ -283,5 +284,35 @@ describe('PATCH apartments girdi ayristirma ve arsa payi', () => {
       assert.equal(result?.code, 'INVALID_BODY', JSON.stringify(patch));
       assert.match(result.message, /land_share/);
     }
+  });
+});
+
+describe('redactManagerNotes (H14: kurul uyesine yonetici ic notu verilmez)', () => {
+  it('kisi ve arac note alanlari null olur; anahtar ve diger alanlar korunur; girdi degismez', () => {
+    const body = {
+      id: 5,
+      full_name: 'Ali Veli',
+      note: 'ic not',
+      vehicles: [{ id: 4, plate: '34ABC123', note: 'arac ic notu' }],
+      items: [{ id: 1, note: 'x', details: { changes: [{ field: 'note', changed: true }] } }],
+    };
+    const redacted = redactManagerNotes(body);
+    assert.equal(redacted.note, null);
+    assert.equal(redacted.vehicles[0].note, null);
+    assert.equal(redacted.items[0].note, null);
+    assert.equal(redacted.full_name, 'Ali Veli');
+    assert.equal(redacted.vehicles[0].plate, '34ABC123');
+    assert.deepEqual(redacted.items[0].details.changes, [{ field: 'note', changed: true }], 'field:note alan ADI kalir (deger yok)');
+    assert.equal(body.note, 'ic not', 'girdi degismez');
+    assert.equal(JSON.stringify(redacted).includes('ic not'), false);
+    assert.equal(JSON.stringify(redacted).includes('arac ic notu'), false);
+  });
+
+  it('ilkel degerler, null ve tarih nesneleri aynen doner', () => {
+    const date = new Date('2026-10-14T08:00:00.000Z');
+    assert.equal(redactManagerNotes(null), null);
+    assert.equal(redactManagerNotes('x'), 'x');
+    assert.equal(redactManagerNotes(date), date);
+    assert.deepEqual(redactManagerNotes([1, { note: 2 }]), [1, { note: null }]);
   });
 });

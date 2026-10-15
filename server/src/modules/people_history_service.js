@@ -5,7 +5,7 @@
 import { pool } from '../db.js';
 import { mapAuditRow } from './audit_service.js';
 import { PlatformError } from './errors.js';
-import { VEHICLE_SELECT, mapVehicleRow } from './people_service.js';
+import { SENSITIVE_CHANGE_FIELDS, VEHICLE_SELECT, mapVehicleRow } from './people_service.js';
 import {
   apartmentLabel,
   dateToIso,
@@ -48,6 +48,26 @@ export function parseHistoryQuery(query = {}) {
 
 // Kişi/daire/araç ile ilgili eylemler (toplu yükleme/dışa aktarma Faz 2b için de hazır)
 const PEOPLE_ACTIONS_SQL = `(a.action ~ '^(person|residency|apartment|vehicle|import)[.]' OR a.action = 'export')`;
+
+/**
+ * KVKK: telefon/e-posta/not değişikliklerinde eski/yeni DEĞER dönmez (yazılırken de saklanmaz; eski sürümlerden kalan satırlar için
+ * burada da temizlenir): yalnız { field, changed: true }.
+ */
+export function scrubSensitiveChanges(item) {
+  const changes = item?.details?.changes;
+  if (!Array.isArray(changes)) {
+    return item;
+  }
+  return {
+    ...item,
+    details: {
+      ...item.details,
+      changes: changes.map((change) =>
+        SENSITIVE_CHANGE_FIELDS.includes(change?.field) ? { field: change.field, changed: true } : change,
+      ),
+    },
+  };
+}
 
 /**
  * GET history -> { items: [AuditItem], next_before_id }. Yalnız bu sitenin kayıtları.
@@ -96,7 +116,7 @@ export async function listPeopleHistory(siteCode, query = {}, db = pool) {
   );
   const rows = result.rows ?? [];
   const hasMore = rows.length > filters.limit;
-  const items = rows.slice(0, filters.limit).map(mapAuditRow);
+  const items = rows.slice(0, filters.limit).map((row) => scrubSensitiveChanges(mapAuditRow(row)));
   return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null };
 }
 
@@ -144,7 +164,9 @@ export async function listMyRecords(authUser, db = pool) {
       if (!vehiclesByPerson.has(key)) {
         vehiclesByPerson.set(key, []);
       }
-      vehiclesByPerson.get(key).push(mapVehicleRow(row));
+      // Yönetici iç notu (note) sakine dönmez.
+      const { note: _managerNote, ...vehicle } = mapVehicleRow(row);
+      vehiclesByPerson.get(key).push(vehicle);
     }
   }
   return {

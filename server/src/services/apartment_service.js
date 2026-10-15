@@ -118,10 +118,16 @@ export async function provisionApartmentResident({
   email,
   phoneNumber,
   isActive,
+  db = null,
 }) {
-  const client = await pool.connect();
+  // db verilirse (çağıranın açık transaction'ı) BEGIN/COMMIT/release çağıranındır: böylece sakin hesabı açma, CRM kaydıyla AYNI
+  // transaction'da yapılabilir (sonraki adım düşerse hesap da geri alınır). Verilmezse eski davranış (kendi bağlantısı/transaction'ı).
+  const ownClient = db === null;
+  const client = ownClient ? await pool.connect() : db;
   try {
-    await client.query('BEGIN');
+    if (ownClient) {
+      await client.query('BEGIN');
+    }
     const apartmentResult = await client.query(
       `
         SELECT
@@ -269,13 +275,19 @@ export async function provisionApartmentResident({
       [apartmentId],
     );
 
-    await client.query('COMMIT');
+    if (ownClient) {
+      await client.query('COMMIT');
+    }
     return finalResult.rows[0];
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (ownClient) {
+      await client.query('ROLLBACK');
+    }
     throw error;
   } finally {
-    client.release();
+    if (ownClient) {
+      client.release();
+    }
   }
 }
 

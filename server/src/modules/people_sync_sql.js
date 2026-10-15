@@ -35,7 +35,12 @@ const DESIRED_CTE = `
 /** Dahili (daire hesabı) e-posta alanı: gerçek iletişim adresi değildir. */
 export const INTERNAL_EMAIL_SUFFIX = '@ahbu.local';
 
-/** 1) Aynı e-postaya sahip hesapsız kişi varsa yinelenen kayıt açmak yerine o kişiye user_code bağlanır (alanlar yedek kalır). */
+/**
+ * 1) Aynı e-postaya sahip hesapsız kişi varsa yinelenen kayıt açmak yerine o kişiye user_code bağlanır. Bağlanınca ad/telefon/e-posta
+ * alanları BOŞALTILIR (hesaplı kişide okuma users'tan; hesap silinirse users BEFORE DELETE tetikleyicisi ad/telefonu yedekler).
+ * Güvenlik: bağlama yalnız o sitede ZATEN erişimi (aktif üyelik / eski sakin göstergesi) olan hesaplarla yapılır (desired).
+ * Elle girilmiş (origin='manual') ilişkiler bağlanınca korunur.
+ */
 const LINK_ACCOUNTLESS_SQL = `
   WITH ${DESIRED_CTE},
   candidates AS (
@@ -45,7 +50,7 @@ const LINK_ACCOUNTLESS_SQL = `
     WHERE u.email IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
   )
   UPDATE site_people sp
-  SET user_code = c.user_code, updated_at = NOW()
+  SET user_code = c.user_code, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
   FROM candidates c
   WHERE sp.site_code = c.site_code
     AND sp.user_code IS NULL
@@ -81,33 +86,38 @@ const REACTIVATE_PEOPLE_SQL = `
     AND sp.is_active = FALSE
 `;
 
-/** 4) Eksik güncel ilişki kayıtları ('resident' = ilişki belirtilmemiş; tarih üyelik oluşturma gününden). */
+/** 4) Eksik güncel ilişki kayıtları ('resident' = ilişki belirtilmemiş; tarih üyelik oluşturma gününden; kaynak 'sync'). */
 const INSERT_RESIDENCIES_SQL = `
   WITH ${DESIRED_CTE}
-  INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date)
-  SELECT d.site_code, d.apartment_id, sp.id, 'resident', TRUE, d.move_in
+  INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, origin)
+  SELECT d.site_code, d.apartment_id, sp.id, 'resident', TRUE, d.move_in, 'sync'
   FROM desired d
   INNER JOIN site_people sp ON sp.site_code = d.site_code AND sp.user_code = d.user_code
   ON CONFLICT (apartment_id, person_id) WHERE is_current DO NOTHING
 `;
 
 /**
- * 5) Erişimi başka bir akışla kapanmış (üyelik pasif/silinmiş, daire sakini sıfırlanmış) HESAPLI kişilerin güncel ilişkisi
- * biter; son ilişkisi biten kişi pasif olur. Hesapsız kişilere dokunulmaz. Sistem adına audit satırı yazılır.
+ * 5) Otomatik bitirme: YALNIZ eşitleme kaynaklı (origin='sync') güncel ilişkiler ve YALNIZ destekleyen kayıt GERÇEKTEN kalmadıysa
+ * (üyelik satırı silinmiş ve eski sakin göstergesi başka kişiye geçmiş/boşalmış). Pasif üyelik / askıya alınmış daire BİTİRMEZ
+ * (geçici pasife alma taşınma değildir); elle girilmiş (origin='manual') ilişkiler yalnız açık "Taşındı"/pasifleştirmeyle biter.
+ * Son ilişkisi biten kişi pasif olur (araçları da); hesapsız kişilere dokunulmaz. Sistem adına audit satırı yazılır.
  */
 const END_UNBACKED_SQL = `
-  WITH ${DESIRED_CTE},
-  ended AS (
+  WITH ended AS (
     UPDATE apartment_residencies r
     SET is_current = FALSE, move_out_date = CURRENT_DATE, updated_at = NOW()
     FROM site_people sp
     WHERE r.person_id = sp.id
       AND r.is_current = TRUE
+      AND r.origin = 'sync'
       AND sp.user_code IS NOT NULL
       AND ($1::BIGINT IS NULL OR sp.site_code = $1::BIGINT)
       AND ($2::INTEGER IS NULL OR sp.user_code = $2::INTEGER)
       AND NOT EXISTS (
-        SELECT 1 FROM desired d WHERE d.apartment_id = r.apartment_id AND d.user_code = sp.user_code
+        SELECT 1 FROM apartment_memberships am WHERE am.apartment_id = r.apartment_id AND am.user_code = sp.user_code
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM apartments a WHERE a.id = r.apartment_id AND a.resident_user_code = sp.user_code
       )
     RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation
   ),
@@ -123,15 +133,91 @@ const END_UNBACKED_SQL = `
       jsonb_build_object('residency_id', e.id, 'apartment_id', e.apartment_id, 'relation', e.relation, 'auto', TRUE)
     FROM ended e
     RETURNING id
+  ),
+  deactivated AS (
+    UPDATE site_people sp
+    SET is_active = FALSE, updated_at = NOW()
+    WHERE sp.id IN (SELECT person_id FROM ended)
+      AND sp.is_active = TRUE
+      AND NOT EXISTS (
+        SELECT 1 FROM apartment_residencies c
+        WHERE c.person_id = sp.id AND c.is_current = TRUE AND c.id NOT IN (SELECT id FROM ended)
+      )
+    RETURNING sp.id, sp.site_code
+  ),
+  vehicles_off AS (
+    UPDATE vehicles v
+    SET is_active = FALSE
+    WHERE v.person_id IN (SELECT id FROM deactivated) AND v.is_active = TRUE
+    RETURNING v.id
+  ),
+  logged_people AS (
+    INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
+    SELECT 'Sistem', 'system', 'person.deactivated', d.site_code, 'person', d.id::text,
+           jsonb_build_object('reason', 'residency_ended', 'auto', TRUE)
+    FROM deactivated d
+    RETURNING id
   )
-  UPDATE site_people sp
-  SET is_active = FALSE, updated_at = NOW()
-  WHERE sp.id IN (SELECT person_id FROM ended)
-    AND sp.is_active = TRUE
-    AND NOT EXISTS (
-      SELECT 1 FROM apartment_residencies c
-      WHERE c.person_id = sp.id AND c.is_current = TRUE AND c.id NOT IN (SELECT id FROM ended)
-    )
+  SELECT id FROM deactivated
+`;
+
+/**
+ * 6) Yetim kişiler: hesabı silinmiş ve adı yedeklenmemiş (user_code NULL + full_name NULL) aktif kayıtlar "Silinmiş hesap"
+ * hayaleti olarak kalmasın: pasifleştirilir, güncel ilişkileri ve araçları biter, Sistem adına audit yazılır.
+ * (users BEFORE DELETE tetikleyicisi bunu silme anında yapar; bu adım tetikleyici öncesi/dışı kalıntıları toplar.)
+ * Kullanıcıya özgü eşitlemede ($2 dolu) çalışmaz.
+ */
+const DEACTIVATE_ORPHANS_SQL = `
+  WITH orphans AS (
+    SELECT sp.id, sp.site_code
+    FROM site_people sp
+    WHERE sp.user_code IS NULL
+      AND sp.full_name IS NULL
+      AND sp.is_active = TRUE
+      AND $2::INTEGER IS NULL
+      AND ($1::BIGINT IS NULL OR sp.site_code = $1::BIGINT)
+  ),
+  ended AS (
+    UPDATE apartment_residencies r
+    SET is_current = FALSE, move_out_date = CURRENT_DATE, updated_at = NOW()
+    FROM orphans o
+    WHERE r.person_id = o.id AND r.is_current = TRUE
+    RETURNING r.id, r.site_code, r.apartment_id, r.person_id, r.relation
+  ),
+  logged AS (
+    INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
+    SELECT
+      'Sistem',
+      'system',
+      'residency.ended',
+      e.site_code,
+      'person',
+      e.person_id::text,
+      jsonb_build_object('residency_id', e.id, 'apartment_id', e.apartment_id, 'relation', e.relation, 'auto', TRUE, 'reason', 'account_deleted')
+    FROM ended e
+    RETURNING id
+  ),
+  vehicles_off AS (
+    UPDATE vehicles v
+    SET is_active = FALSE
+    WHERE v.person_id IN (SELECT id FROM orphans) AND v.is_active = TRUE
+    RETURNING v.id
+  ),
+  deactivated AS (
+    UPDATE site_people sp
+    SET is_active = FALSE, updated_at = NOW()
+    FROM orphans o
+    WHERE sp.id = o.id
+    RETURNING sp.id, sp.site_code
+  ),
+  logged_people AS (
+    INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
+    SELECT 'Sistem', 'system', 'person.deactivated', d.site_code, 'person', d.id::text,
+           jsonb_build_object('reason', 'account_deleted', 'auto', TRUE)
+    FROM deactivated d
+    RETURNING id
+  )
+  SELECT id FROM deactivated
 `;
 
 export const SYNC_STEPS = Object.freeze([
@@ -140,6 +226,7 @@ export const SYNC_STEPS = Object.freeze([
   { name: 'reactivate_people', sql: REACTIVATE_PEOPLE_SQL },
   { name: 'insert_residencies', sql: INSERT_RESIDENCIES_SQL },
   { name: 'end_unbacked', sql: END_UNBACKED_SQL },
+  { name: 'deactivate_orphans', sql: DEACTIVATE_ORPHANS_SQL },
 ]);
 
 /**

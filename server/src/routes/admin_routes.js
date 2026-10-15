@@ -928,6 +928,7 @@ adminRouter.patch('/admin/sites/:id', authRequired, requireSuperUser, async (req
         apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
         blockApartmentCounts,
         doorCount: doorCount ?? Number(existing.door_count ?? 1),
+        actor: req.authUser,
       });
     }
 

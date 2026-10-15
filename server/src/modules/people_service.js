@@ -9,6 +9,7 @@
 import { pool } from '../db.js';
 import { sendApartmentCredentials, provisionApartmentResident } from '../services/apartment_service.js';
 import { rotateTokensForSite } from '../services/local_token_service.js';
+import { cleanupDoorOverridesIfNoMembership, handOverApartmentResident } from '../services/membership_service.js';
 import { generateApartmentPin } from '../utils/helpers.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
@@ -35,7 +36,7 @@ import {
   todayIso,
   toIso,
 } from './people_common.js';
-import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { INTERNAL_EMAIL_SUFFIX, runSyncSteps } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 
 export const PERSON_NOT_FOUND = () => new PlatformError(404, 'PERSON_NOT_FOUND', 'Kişi bulunamadı.');
@@ -48,17 +49,58 @@ const RESIDENCY_NOT_CURRENT = () => new PlatformError(409, 'RESIDENCY_NOT_CURREN
 const PERSON_HAS_ACCOUNT = () =>
   new PlatformError(409, 'PERSON_HAS_ACCOUNT', 'Hesabı olan kişinin bilgileri kişinin kendi profilinden değişir.');
 
+/** 409 PERSON_EXISTS; bilinen kişi kimliği varsa eklenir (asla person_id:0 dönmez). */
 function personExists(personId) {
-  return new PlatformError(409, 'PERSON_EXISTS', 'Bu e-posta ile kayıtlı bir kişi zaten var.', {
-    person_id: Number(personId),
-  });
+  const id = Number(personId);
+  return new PlatformError(
+    409,
+    'PERSON_EXISTS',
+    'Bu e-posta ile kayıtlı bir kişi zaten var.',
+    Number.isSafeInteger(id) && id > 0 ? { person_id: id } : undefined,
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Ortak sorgu parçaları
 // ---------------------------------------------------------------------------
 
-/** Kişi satırı: hesaplı kişide ad/telefon/e-posta users'tan (dahili daire hesabında iletişim e-postası CRM'den). */
+/**
+ * Kişi kaynağı: hesaplı kişide ad/telefon/e-posta users'tan okunur. Dahili (@ahbu.local) daire hesabında iletişim e-postası
+ * GÜNCEL apartments.resident_email'dir (eski ekrandan değişse de bayatlamaz; CRM kopyası yedek).
+ */
+const PERSON_FROM = `
+  FROM site_people sp
+  LEFT JOIN users u ON u.user_code = sp.user_code
+  LEFT JOIN LATERAL (
+    SELECT a.resident_email
+    FROM apartments a
+    WHERE u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+      AND a.resident_user_code = sp.user_code
+      AND a.site_code = sp.site_code
+      AND a.resident_email IS NOT NULL
+    ORDER BY a.id
+    LIMIT 1
+  ) ia ON TRUE
+`;
+
+/** Kişinin görünen iletişim e-postası (SQL ifadesi; PERSON_FROM ile birlikte kullanılır). */
+const CONTACT_EMAIL_SQL = `(
+  CASE
+    WHEN u.user_code IS NULL THEN sp.email
+    WHEN u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN u.email
+    ELSE COALESCE(ia.resident_email, sp.email)
+  END
+)`;
+
+/** Hesap türü: 'none' (hesapsız) | 'internal' (dahili daire hesabı) | 'registered' (e-postayla kayıtlı gerçek hesap). */
+const ACCOUNT_KIND_SQL = `(
+  CASE
+    WHEN u.user_code IS NULL THEN 'none'
+    WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN 'internal'
+    ELSE 'registered'
+  END
+)`;
+
 const PERSON_SELECT = `
   SELECT
     sp.id,
@@ -68,13 +110,10 @@ const PERSON_SELECT = `
     sp.created_at,
     COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS full_name,
     COALESCE(NULLIF(u.phone_number, ''), sp.phone) AS phone,
-    CASE
-      WHEN u.user_code IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN u.email
-      ELSE sp.email
-    END AS email,
-    (u.user_code IS NOT NULL) AS has_account
-  FROM site_people sp
-  LEFT JOIN users u ON u.user_code = sp.user_code
+    ${CONTACT_EMAIL_SQL} AS email,
+    (u.user_code IS NOT NULL) AS has_account,
+    ${ACCOUNT_KIND_SQL} AS account_kind
+  ${PERSON_FROM}
 `;
 
 const FALLBACK_PERSON_NAME = 'Silinmiş hesap';
@@ -86,6 +125,7 @@ function mapPersonBase(row) {
     phone: row.phone ?? null,
     email: row.email ?? null,
     has_account: row.has_account === true,
+    account_kind: row.account_kind ?? (row.has_account === true ? 'registered' : 'none'),
     is_active: row.is_active === true,
   };
 }
@@ -225,7 +265,7 @@ function peopleWhere(siteCode, filters) {
     const termParam = add(folded);
     const parts = [
       `${foldSql("COALESCE(NULLIF(u.full_name, ''), sp.full_name)")} LIKE ${termParam} ESCAPE '\\'`,
-      `${foldSql("CASE WHEN u.user_code IS NOT NULL AND u.email NOT LIKE '%" + INTERNAL_EMAIL_SUFFIX + "' THEN u.email ELSE sp.email END")} LIKE ${termParam} ESCAPE '\\'`,
+      `${foldSql(CONTACT_EMAIL_SQL)} LIKE ${termParam} ESCAPE '\\'`,
       `EXISTS (
         SELECT 1 FROM apartment_residencies r
         INNER JOIN apartments a ON a.id = r.apartment_id
@@ -306,7 +346,7 @@ export async function listPeople(siteCode, query = {}, db = pool) {
   await syncSitePeopleSafe(siteCode);
   const { sql, params } = peopleWhere(siteCode, filters);
   const countResult = await db.query(
-    `SELECT COUNT(*)::INTEGER AS total FROM site_people sp LEFT JOIN users u ON u.user_code = sp.user_code WHERE ${sql}`,
+    `SELECT COUNT(*)::INTEGER AS total ${PERSON_FROM} WHERE ${sql}`,
     params,
   );
   const total = Number(countResult.rows?.[0]?.total ?? 0);
@@ -384,14 +424,14 @@ export async function getPersonDetail(siteCode, personId, { includeUserCode = fa
 // Yazma: yardımcılar
 // ---------------------------------------------------------------------------
 
-async function loadApartmentForSite(db, siteCode, apartmentId) {
+async function loadApartmentForSite(db, siteCode, apartmentId, { lock = false } = {}) {
   const result = await db.query(
     `
       SELECT a.id, a.site_code, a.unit_label, a.resident_user_code, b.block_name
       FROM apartments a
       INNER JOIN site_blocks b ON b.id = a.block_id
       WHERE a.id = $1 AND a.site_code = $2
-      LIMIT 1
+      LIMIT 1${lock ? ' FOR UPDATE OF a' : ''}
     `,
     [apartmentId, siteCode],
   );
@@ -419,16 +459,35 @@ async function assertRelationAvailable(db, apartmentId, relation, { excludeResid
   }
 }
 
-/** Erişim üyelikleri: hesaplı kişiye daire üyeliği (yönetici ekliyor: onay gerekmez) ve site düzeyi RESIDENT kaydı. */
+/**
+ * Erişim üyelikleri: hesaplı kişiye daire üyeliği (yönetici ekliyor: onay gerekmez) ve site düzeyi RESIDENT kaydı.
+ * Mevcut onay akışıyla (membership_service.approveJoinRequest) AYNI kural: daire satırı kilitlenir; dairede başka aktif
+ * APARTMENT_ADMIN yoksa bu kişi APARTMENT_ADMIN olur, varsa FAMILY_MEMBER (yeniden etkinleştirmede ikinci admin oluşmaz);
+ * eski sakin göstergesi (apartments.resident_user_code) boşsa kişiye işaretlenir.
+ */
 async function grantApartmentAccess(client, { siteCode, apartmentId, userCode }) {
+  await client.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [apartmentId]);
+  const otherAdmin = await client.query(
+    `
+      SELECT 1 FROM apartment_memberships
+      WHERE apartment_id = $1 AND role = 'APARTMENT_ADMIN' AND is_active = TRUE AND user_code <> $2
+      LIMIT 1
+    `,
+    [apartmentId, userCode],
+  );
+  const role = otherAdmin.rows?.[0] ? 'FAMILY_MEMBER' : 'APARTMENT_ADMIN';
   await client.query(
     `
       INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active)
-      VALUES ($1, $2, 'FAMILY_MEMBER', TRUE)
+      VALUES ($1, $2, $3, TRUE)
       ON CONFLICT (apartment_id, user_code)
-      DO UPDATE SET is_active = TRUE, updated_at = NOW()
+      DO UPDATE SET role = $3, is_active = TRUE, updated_at = NOW()
     `,
-    [apartmentId, userCode],
+    [apartmentId, userCode, role],
+  );
+  await client.query(
+    `UPDATE apartments SET resident_user_code = $1 WHERE id = $2 AND resident_user_code IS NULL`,
+    [userCode, apartmentId],
   );
   await client.query(
     `
@@ -465,12 +524,81 @@ async function insertResidency(client, { siteCode, apartmentId, personId, relati
 }
 
 /**
- * Bir güncel ilişkiyi bitirir ("Taşındı"). Satır SİLİNMEZ. Kişinin hesabı varsa O DAİREDEKİ erişim kapanır:
- * apartment_memberships.is_active=false ve (eski model) apartments.resident_user_code boşaltılır; başka dairedeki
- * üyelikler etkilenmez. Kişinin başka güncel ilişkisi kalmadıysa kişi pasif olur.
+ * Hesaplı kişinin bir dairedeki erişimini kapatır: mevcut üye çıkarma akışının (membership_service.removeApartmentMember)
+ * yan etkileriyle AYNI: üyelik pasif, kişi daire yöneticisi/eski sakin göstergesi ise yönetici devri (başka admin / en eski aktif
+ * üye / kimse yoksa gösterge ve PIN temizlenir), manuel kapı izinleri (kişinin sitede başka aktif bağı kalmadıysa) silinir.
+ * Dahili (@ahbu.local) daire hesabının başka erişimi kalmadıysa hesap PASİFLEŞİR (giriş ve PIN ile kapı kapanır).
+ * Daire satırı çağıran tarafından FOR UPDATE ile kilitlenmiştir (üyelik akışlarıyla aynı kilit sırası).
+ * @returns {Promise<boolean>} erişim gerçekten kapandı mı (anahtar döndürme gerekir mi)
+ */
+async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) {
+  const apartmentId = Number(apartment.id);
+  const memberResult = await client.query(
+    `SELECT role, is_active FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2 FOR UPDATE`,
+    [apartmentId, userCode],
+  );
+  const member = memberResult.rows?.[0] ?? null;
+  const legacy = apartment.resident_user_code !== null && apartment.resident_user_code !== undefined && Number(apartment.resident_user_code) === userCode;
+  let closed = false;
+  if (member && member.is_active === true) {
+    await client.query(
+      `UPDATE apartment_memberships SET is_active = FALSE, updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2`,
+      [apartmentId, userCode],
+    );
+    closed = true;
+  }
+  if (legacy || member?.role === 'APARTMENT_ADMIN') {
+    await handOverApartmentResident(client, apartmentId, userCode);
+    closed = closed || legacy;
+  }
+  const internalOff = await client.query(
+    `
+      UPDATE users
+      SET is_active = FALSE
+      WHERE user_code = $1
+        AND email LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+        AND is_active = TRUE
+        AND NOT EXISTS (SELECT 1 FROM apartment_memberships am WHERE am.user_code = $1 AND am.is_active = TRUE)
+        AND NOT EXISTS (SELECT 1 FROM apartments a WHERE a.resident_user_code = $1)
+      RETURNING user_code
+    `,
+    [userCode],
+  );
+  if (internalOff.rows?.[0]) {
+    closed = true;
+  }
+  await cleanupDoorOverridesIfNoMembership(client, siteCode, userCode);
+  return closed;
+}
+
+/** Kişinin aktif araçlarını pasifleştirir (kayıt silinmez; plaka kilitli kalmasın). Her araç için vehicle.removed audit. */
+async function deactivatePersonVehicles(client, { siteCode, personId, actor, reason }) {
+  const result = await client.query(
+    `UPDATE vehicles SET is_active = FALSE WHERE person_id = $1 AND is_active = TRUE RETURNING id, plate`,
+    [personId],
+  );
+  for (const vehicle of result.rows ?? []) {
+    await audit(client, actor, 'vehicle.removed', siteCode, 'vehicle', vehicle.id, {
+      plate: vehicle.plate,
+      person_id: Number(personId),
+      reason,
+    });
+  }
+}
+
+/**
+ * Bir güncel ilişkiyi bitirir ("Taşındı"). Satır SİLİNMEZ. Önce daire satırı kilitlenir (üyelik akışlarıyla aynı kilit sırası,
+ * 40P01 önleme). Kişinin hesabı varsa O DAİREDEKİ erişim kapanır (revokeApartmentAccess); başka dairedeki üyelikler etkilenmez.
+ * Kişinin başka güncel ilişkisi kalmadıysa kişi pasif olur ve araçları pasifleşir.
  * @returns {Promise<{ accessClosed: boolean }>}
  */
 async function closeResidency(client, { siteCode, residency, userCode, moveOutDate, actor, reason = null }) {
+  const apartmentLock = await client.query(
+    `SELECT id, site_code, resident_user_code FROM apartments WHERE id = $1 FOR UPDATE`,
+    [residency.apartment_id],
+  );
+  const apartment = apartmentLock.rows?.[0] ?? { id: residency.apartment_id, resident_user_code: null };
+
   const updated = await client.query(
     `
       UPDATE apartment_residencies
@@ -486,25 +614,7 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
 
   let accessClosed = false;
   if (userCode !== null && userCode !== undefined) {
-    const membership = await client.query(
-      `
-        UPDATE apartment_memberships
-        SET is_active = FALSE, updated_at = NOW()
-        WHERE apartment_id = $1 AND user_code = $2 AND is_active = TRUE
-        RETURNING id
-      `,
-      [residency.apartment_id, userCode],
-    );
-    const legacy = await client.query(
-      `
-        UPDATE apartments
-        SET resident_user_code = NULL, resident_pin_code = NULL, resident_email = NULL
-        WHERE id = $1 AND resident_user_code = $2
-        RETURNING id
-      `,
-      [residency.apartment_id, userCode],
-    );
-    accessClosed = (membership.rows?.length ?? 0) > 0 || (legacy.rows?.length ?? 0) > 0;
+    accessClosed = await revokeApartmentAccess(client, { siteCode, apartment, userCode });
   }
 
   await audit(client, actor, 'residency.ended', siteCode, 'person', residency.person_id, {
@@ -529,6 +639,7 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
         reason: 'residency_ended',
       });
     }
+    await deactivatePersonVehicles(client, { siteCode, personId: residency.person_id, actor, reason: 'residency_ended' });
   }
   return { accessClosed };
 }
@@ -565,7 +676,10 @@ export function parsePersonCreateInput(body = {}) {
   };
 }
 
-/** Sitede bu e-postayla kayıtlı kişi (hesaplı: users.e-posta veya dahili hesabın iletişim e-postası; hesapsız: kendi e-postası). */
+/**
+ * Sitede bu e-postayla kayıtlı kişi (hesaplı: users.e-posta veya dahili hesabın iletişim e-postası; hesapsız: kendi e-postası).
+ * Yalnız BU sitenin kişi kayıtlarında arar (başka sitenin bilgisi dönmez).
+ */
 async function findPersonByEmail(db, siteCode, email) {
   const result = await db.query(
     `
@@ -586,62 +700,106 @@ async function findPersonByEmail(db, siteCode, email) {
   return result.rows?.[0] ?? null;
 }
 
-async function findUserByEmail(db, email) {
+/**
+ * E-postaya sahip kayıtlı hesap - YALNIZ bu sitede ZATEN aktif bir bağı olan hesap (aktif daire üyeliği, eski sakin göstergesi,
+ * site üyeliği veya site yöneticiliği). Başka sitenin kullanıcısı bu yolla BAĞLANAMAZ, adı/telefonu/kodu sızmaz ve hesabın var olup
+ * olmadığı yanıttan anlaşılamaz (bulunamazsa kişi hesapsız kaydedilir). Dahili (@ahbu.local) adresler asla eşleşmez; hesap bağlama
+ * yalnız bu sorgunun sonucuyla yapılır (başka siteden kullanıcıya üyelik AÇILMAZ).
+ */
+async function findSiteUserByEmail(db, siteCode, email) {
+  if (typeof email !== 'string' || email === '' || email.endsWith(INTERNAL_EMAIL_SUFFIX)) {
+    return null;
+  }
   const result = await db.query(
-    `SELECT user_code FROM users WHERE lower(email) = $1 LIMIT 1`,
-    [email],
+    `
+      SELECT u.user_code
+      FROM users u
+      WHERE lower(u.email) = $1
+        AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+        AND (
+          EXISTS (
+            SELECT 1 FROM apartment_memberships am
+            INNER JOIN apartments a ON a.id = am.apartment_id
+            WHERE a.site_code = $2 AND am.user_code = u.user_code AND am.is_active = TRUE AND a.is_active = TRUE
+          )
+          OR EXISTS (
+            SELECT 1 FROM apartments a WHERE a.site_code = $2 AND a.resident_user_code = u.user_code AND a.is_active = TRUE
+          )
+          OR EXISTS (
+            SELECT 1 FROM site_memberships sm WHERE sm.site_code = $2 AND sm.user_code = u.user_code AND sm.is_active = TRUE
+          )
+          OR EXISTS (
+            SELECT 1 FROM site_manager_sites s WHERE s.site_code = $2 AND s.manager_user_code = u.user_code
+          )
+        )
+      LIMIT 1
+    `,
+    [email, siteCode],
   );
   return result.rows?.[0] ? Number(result.rows[0].user_code) : null;
 }
 
 /**
- * POST people. Hesap bağlama: e-posta kayıtlı bir kullanıcıya aitse kişi o kullanıcıya bağlanır ve daire verildiyse
- * apartment_memberships oluşturulur/yeniden etkinleştirilir. Hesap yoksa ve daire + e-posta varsa MEVCUT "daire sakini
- * hesabı oluştur ve kimlik bilgilerini e-postayla gönder" akışı (provisionApartmentResident + sendApartmentCredentials)
- * yeniden kullanılır; daire zaten bir sakin hesabına sahipse yalnız kayıt tutulur. E-posta yoksa yalnız kayıt tutulur.
+ * POST people. Tek transaction (site kilidi altında): kişi tekrarı, daire/ilişki uygunluğu, hesap bağlama/oluşturma ve kayıtlar
+ * birlikte işlenir; bir adım düşerse (RELATION_TAKEN yarışı, 23505 vb.) oluşan daire sakini hesabı da GERİ ALINIR.
+ * Hesap bağlama: e-posta BU SİTEDE zaten erişimi olan kayıtlı bir hesaba aitse (bkz. findSiteUserByEmail) kişi o hesaba bağlanır ve
+ * daire verildiyse apartment_memberships oluşturulur/yeniden etkinleştirilir; aksi halde kişi HESAPSIZ kaydedilir (yanıt şekli
+ * hesabın var olup olmadığına göre değişmez). Hesap yoksa ve daire + e-posta varsa ve dairenin sakin hesabı yoksa MEVCUT "daire sakini
+ * hesabı oluştur ve kimlik bilgilerini e-postayla gönder" akışı (provisionApartmentResident + sendApartmentCredentials) yeniden
+ * kullanılır; aksi halde yalnız kayıt tutulur. Yanıtta credentials_sent: true|false|null (null = hesap açılmadı).
  */
 export async function createPerson({ siteCode, input, actor, includeUserCode = true }) {
   const actorInfo = actorFromAuthUser(actor);
-  const apartment = input.apartmentId ? await loadApartmentForSite(pool, siteCode, input.apartmentId) : null;
-  if (apartment) {
-    await assertRelationAvailable(pool, apartment.id, input.relation);
+  // Hızlı ön doğrulama (havuz; kilitsiz). Yetkili kontroller aşağıda kilit altında tekrarlanır.
+  if (input.apartmentId) {
+    await loadApartmentForSite(pool, siteCode, input.apartmentId);
   }
 
-  let linkedUserCode = null;
-  let reusePersonId = null;
-  if (input.email) {
-    const existing = await findPersonByEmail(pool, siteCode, input.email);
-    if (existing?.is_active === true) {
-      throw personExists(existing.id);
-    }
-    reusePersonId = existing ? Number(existing.id) : null;
-    linkedUserCode = await findUserByEmail(pool, input.email);
-    if (existing?.user_code !== null && existing?.user_code !== undefined) {
-      linkedUserCode = Number(existing.user_code);
-    }
-  }
-
-  // Hesap yok + daire + e-posta + dairenin sakin hesabı yok -> mevcut daire sakini akışı (yeni davet mekanizması icat edilmez)
-  let provisionedUserCode = null;
-  const mustProvision =
-    linkedUserCode === null && apartment !== null && input.email !== null && apartment.resident_user_code === null;
-  if (mustProvision) {
-    const provisioned = await provisionApartmentResident({
-      apartmentId: Number(apartment.id),
-      fullName: input.fullName,
-      loginName: '',
-      password: generateApartmentPin(),
-      email: input.email,
-      phoneNumber: input.phone,
-      isActive: true,
-    });
-    provisionedUserCode = provisioned?.resident_user_code ? Number(provisioned.resident_user_code) : null;
-  }
-  const accountUserCode = linkedUserCode ?? provisionedUserCode;
-
+  let provisionedApartmentId = null;
   const personId = await withSiteTransaction(siteCode, async (client) => {
+    const apartment = input.apartmentId ? await loadApartmentForSite(client, siteCode, input.apartmentId, { lock: true }) : null;
+    if (apartment) {
+      await assertRelationAvailable(client, apartment.id, input.relation);
+    }
+
+    let linkedUserCode = null;
+    let reusePersonId = null;
+    if (input.email) {
+      const existing = await findPersonByEmail(client, siteCode, input.email);
+      if (existing?.is_active === true) {
+        throw personExists(existing.id);
+      }
+      reusePersonId = existing ? Number(existing.id) : null;
+      linkedUserCode = await findSiteUserByEmail(client, siteCode, input.email);
+      if (existing?.user_code !== null && existing?.user_code !== undefined) {
+        linkedUserCode = Number(existing.user_code);
+      }
+    }
+
+    // Hesap yok + daire + e-posta + dairenin sakin hesabı yok -> mevcut daire sakini akışı (yeni davet mekanizması icat edilmez)
+    let provisionedUserCode = null;
+    const mustProvision =
+      linkedUserCode === null && apartment !== null && input.email !== null && apartment.resident_user_code === null;
+    if (mustProvision) {
+      const provisioned = await provisionApartmentResident({
+        apartmentId: Number(apartment.id),
+        fullName: input.fullName,
+        loginName: '',
+        password: generateApartmentPin(),
+        email: input.email,
+        phoneNumber: input.phone,
+        isActive: true,
+        db: client,
+      });
+      provisionedUserCode = provisioned?.resident_user_code ? Number(provisioned.resident_user_code) : null;
+      provisionedApartmentId = provisionedUserCode !== null ? Number(apartment.id) : null;
+    }
+    const accountUserCode = linkedUserCode ?? provisionedUserCode;
+    const isBound = accountUserCode !== null;
+    // Hesaplı kişide ad/telefon/e-posta users'tan okunur (CRM'de boş); dahili hesapta iletişim e-postası yedek olarak saklanır.
+    const keepContactEmail = !isBound || provisionedUserCode !== null;
+
     let id = reusePersonId;
-    const keepContactEmail = provisionedUserCode !== null;
     if (id !== null) {
       // Pasif (taşınmış) kişi yeniden eklenirken kayıt YENİDEN KULLANILIR (geçmiş korunur, yinelenen kişi açılmaz).
       try {
@@ -650,13 +808,14 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
             UPDATE site_people
             SET is_active = TRUE,
                 user_code = COALESCE(user_code, $2),
-                full_name = CASE WHEN user_code IS NULL THEN $3 ELSE full_name END,
-                phone = CASE WHEN user_code IS NULL THEN COALESCE($4, phone) ELSE phone END,
+                full_name = CASE WHEN COALESCE(user_code, $2) IS NULL THEN $3::TEXT ELSE NULL END,
+                phone = CASE WHEN COALESCE(user_code, $2) IS NULL THEN COALESCE($4::TEXT, phone) ELSE NULL END,
+                email = CASE WHEN COALESCE(user_code, $2) IS NULL OR $6::BOOLEAN THEN COALESCE($7::TEXT, email) ELSE NULL END,
                 note = COALESCE($5, note),
                 updated_at = NOW()
-            WHERE id = $1 AND site_code = $6
+            WHERE id = $1 AND site_code = $8
           `,
-          [id, accountUserCode, input.fullName, input.phone, input.note, siteCode],
+          [id, accountUserCode, input.fullName, input.phone, input.note, provisionedUserCode !== null, input.email, siteCode],
         );
       } catch (error) {
         if (error?.code === '23505') {
@@ -675,9 +834,9 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
           [
             siteCode,
             accountUserCode,
-            input.fullName,
-            input.phone,
-            accountUserCode === null || keepContactEmail ? input.email : null,
+            isBound ? null : input.fullName,
+            isBound ? null : input.phone,
+            keepContactEmail ? input.email : null,
             input.note,
             actorInfo.userCode,
           ],
@@ -687,7 +846,7 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
         if (error?.code === '23505') {
           // İşlem iptal durumunda (aborted) bu bağlantıda sorgu çalışmaz: mevcut kişiyi ayrı bağlantıdan (havuz) ara.
           const duplicate = input.email ? await findPersonByEmail(pool, siteCode, input.email).catch(() => null) : null;
-          throw personExists(duplicate?.id ?? 0);
+          throw personExists(duplicate?.id);
         }
         throw error;
       }
@@ -699,7 +858,6 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
     });
 
     if (apartment) {
-      await assertRelationAvailable(client, apartment.id, input.relation);
       const residencyId = await insertResidency(client, {
         siteCode,
         apartmentId: Number(apartment.id),
@@ -719,29 +877,44 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
     return id;
   });
 
-  if (provisionedUserCode !== null) {
-    // Kimlik bilgilerini e-postayla gönder (mevcut akış); hata kişi kaydını bozmaz.
-    sendApartmentCredentials(Number(apartment.id)).catch((error) => {
+  let credentialsSent = null;
+  if (provisionedApartmentId !== null) {
+    // Kimlik bilgilerini e-postayla gönder (mevcut akış); hata kişi kaydını bozmaz, istemciye credentials_sent:false bildirilir.
+    try {
+      await sendApartmentCredentials(provisionedApartmentId);
+      credentialsSent = true;
+    } catch (error) {
+      credentialsSent = false;
       // eslint-disable-next-line no-console
       console.error('[people] daire sakini e-postasi gonderilemedi:', error?.code || error?.message || 'hata');
-    });
+    }
   }
-  return loadPersonDetail(pool, siteCode, personId, { includeUserCode });
+  const detail = await loadPersonDetail(pool, siteCode, personId, { includeUserCode });
+  return detail === null ? null : { ...detail, credentials_sent: credentialsSent };
 }
 
 // ---------------------------------------------------------------------------
 // Yazma: kişi düzenle
 // ---------------------------------------------------------------------------
 
+/** Geçmişte (history) eski/yeni DEĞERİ saklanmayan alanlar (KVKK: telefon, e-posta, yönetici iç notu): yalnız değiştiği kaydedilir. */
+export const SENSITIVE_CHANGE_FIELDS = Object.freeze(['phone', 'email', 'note']);
+
 function pushChange(changes, field, from, to) {
   if ((from ?? null) !== (to ?? null)) {
-    changes.push({ field, from: from ?? null, to: to ?? null });
+    if (SENSITIVE_CHANGE_FIELDS.includes(field)) {
+      changes.push({ field, changed: true });
+    } else {
+      changes.push({ field, from: from ?? null, to: to ?? null });
+    }
   }
 }
 
 /**
- * PATCH people/:personId. Hesaplı kişide full_name/phone/email gönderilirse 409 PERSON_HAS_ACCOUNT; note ve is_active her zaman.
- * is_active:false -> tüm güncel ilişkiler biter ("taşınma" kuralları: hesaplıysa erişim kapanır).
+ * PATCH people/:personId. Hesaplı kişide full_name/phone gönderilirse 409 PERSON_HAS_ACCOUNT; e-posta yalnız DAHİLİ (@ahbu.local)
+ * daire hesabında düzenlenir (iletişim e-postası apartments.resident_email'e yazılır), gerçek hesapta 409; note ve is_active her zaman.
+ * is_active:false -> önce site eşitlenir (henüz yansımamış üyelikler de kapansın), sonra tüm güncel ilişkiler biter ("taşınma"
+ * kuralları: hesaplıysa erişim kapanır), araçlar pasifleşir.
  */
 export async function updatePerson({ siteCode, personId, body = {}, actor, includeUserCode = true }) {
   const id = parsePositiveId(personId);
@@ -762,8 +935,18 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
 
   let closedAccess = false;
   await withSiteTransaction(siteCode, async (client) => {
+    if (nextIsActive === false) {
+      // Pasifleştirmeden ÖNCE erişim üyelikleriyle eşitle: yansımamış bir üyelik sonradan kişiyi yeniden etkinleştirmesin.
+      await runSyncSteps(client, { siteCode, userCode: null });
+    }
     const found = await client.query(
-      `SELECT id, user_code, full_name, phone, email, note, is_active FROM site_people WHERE id = $1 AND site_code = $2 FOR UPDATE`,
+      `
+        SELECT sp.id, sp.user_code, sp.full_name, sp.phone, sp.email, sp.note, sp.is_active, u.email AS account_email
+        FROM site_people sp
+        LEFT JOIN users u ON u.user_code = sp.user_code
+        WHERE sp.id = $1 AND sp.site_code = $2
+        FOR UPDATE OF sp
+      `,
       [id, siteCode],
     );
     const row = found.rows?.[0];
@@ -771,7 +954,8 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
       throw PERSON_NOT_FOUND();
     }
     const hasAccount = row.user_code !== null && row.user_code !== undefined;
-    if (hasAccount && (has('full_name') || has('phone') || has('email'))) {
+    const isInternalAccount = hasAccount && String(row.account_email ?? '').toLowerCase().endsWith(INTERNAL_EMAIL_SUFFIX);
+    if (hasAccount && (has('full_name') || has('phone') || (has('email') && !isInternalAccount))) {
       throw PERSON_HAS_ACCOUNT();
     }
 
@@ -782,29 +966,48 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
       values.push(value);
       sets.push(`${column} = $${values.length}`);
     };
+    // Yalnız DEĞİŞEN alanlar yazılır ve audit'e düşer (değişiklik yoksa UPDATE ve audit yok).
+    const changedField = (column, current, next) => (current ?? null) !== (next ?? null) && (setField(column, next), true);
     if (!hasAccount) {
-      if (patch.fullName !== undefined) {
+      if (patch.fullName !== undefined && changedField('full_name', row.full_name, patch.fullName)) {
         pushChange(changes, 'full_name', row.full_name, patch.fullName);
-        setField('full_name', patch.fullName);
       }
-      if (patch.phone !== undefined) {
+      if (patch.phone !== undefined && changedField('phone', row.phone, patch.phone)) {
         pushChange(changes, 'phone', row.phone, patch.phone);
-        setField('phone', patch.phone);
-      }
-      if (patch.email !== undefined) {
-        if (patch.email !== null && (row.email ?? null) !== patch.email) {
-          const duplicate = await findPersonByEmail(client, siteCode, patch.email);
-          if (duplicate && Number(duplicate.id) !== id && duplicate.is_active === true) {
-            throw personExists(duplicate.id);
-          }
-        }
-        pushChange(changes, 'email', row.email, patch.email);
-        setField('email', patch.email);
       }
     }
-    if (patch.note !== undefined) {
+    if (patch.email !== undefined && (!hasAccount || isInternalAccount)) {
+      let currentEmail = row.email ?? null;
+      if (isInternalAccount) {
+        const contact = await client.query(
+          `SELECT resident_email FROM apartments WHERE resident_user_code = $1 AND site_code = $2 ORDER BY id LIMIT 1`,
+          [row.user_code, siteCode],
+        );
+        currentEmail = contact.rows?.[0]?.resident_email ?? currentEmail;
+      }
+      if (patch.email !== null && currentEmail !== patch.email) {
+        const duplicate = await findPersonByEmail(client, siteCode, patch.email);
+        if (duplicate && Number(duplicate.id) !== id && duplicate.is_active === true) {
+          throw personExists(duplicate.id);
+        }
+      }
+      if (changedField('email', row.email, patch.email) || (isInternalAccount && currentEmail !== patch.email)) {
+        if (!sets.some((clause) => clause.startsWith('email = '))) {
+          setField('email', patch.email);
+        }
+        pushChange(changes, 'email', currentEmail, patch.email);
+      }
+      if (isInternalAccount && currentEmail !== patch.email) {
+        // Dahili hesapta iletişim e-postasının kaynağı apartments.resident_email'dir (kimlik bilgisi e-postası bu adrese gider).
+        await client.query(`UPDATE apartments SET resident_email = $1 WHERE resident_user_code = $2 AND site_code = $3`, [
+          patch.email,
+          row.user_code,
+          siteCode,
+        ]);
+      }
+    }
+    if (patch.note !== undefined && changedField('note', row.note, patch.note)) {
       pushChange(changes, 'note', row.note, patch.note);
-      setField('note', patch.note);
     }
 
     if (sets.length > 0) {
@@ -856,6 +1059,7 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
       if (deactivated.rows?.[0]) {
         await audit(client, actor, 'person.deactivated', siteCode, 'person', id, {});
       }
+      await deactivatePersonVehicles(client, { siteCode, personId: id, actor, reason: 'person_deactivated' });
     } else if (nextIsActive === true && row.is_active === false) {
       try {
         await client.query(`UPDATE site_people SET is_active = TRUE, updated_at = NOW() WHERE id = $1`, [id]);
@@ -875,6 +1079,7 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
   return loadPersonDetail(pool, siteCode, id, { includeUserCode });
 }
 
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Yazma: ilişkiler
 // ---------------------------------------------------------------------------
@@ -986,6 +1191,8 @@ export async function updateResidency({ siteCode, residencyId, body = {}, actor,
       sets.push(`move_in_date = $${values.length}`);
     }
     if (sets.length > 0) {
+      // Yönetici ilişkiyi elle düzenledi: kayıt artık "elle girilmiş" sayılır (erişim üyeliği kalkınca sessizce bitmez, H4).
+      sets.push("origin = 'manual'");
       sets.push('updated_at = NOW()');
       values.push(id);
       try {
@@ -1022,6 +1229,9 @@ export async function endResidency({ siteCode, residencyId, body = {}, actor, in
       throw RESIDENCY_NOT_CURRENT();
     }
     const moveOutDate = requestedDate ?? todayIso();
+    if (moveOutDate > todayIso()) {
+      throw invalidBody('move_out_date', 'move_out_date gelecekte olamaz.');
+    }
     const moveIn = dateToIso(row.move_in_date);
     if (moveIn !== null && moveOutDate < moveIn) {
       throw invalidBody('move_out_date', 'move_out_date giriş tarihinden önce olamaz.');

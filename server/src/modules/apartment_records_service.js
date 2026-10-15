@@ -144,7 +144,20 @@ export async function listApartments(siteCode, query = {}, db = pool) {
   }
   if (filters.q) {
     params.push(`%${escapeLike(foldText(filters.q))}%`);
-    clauses.push(`${foldSql("b.block_name || ' - ' || a.unit_label")} LIKE $${params.length} ESCAPE '\\'`);
+    const termParam = `$${params.length}`;
+    // Daire no / blok (etiket) VEYA dairenin GÜNCEL sakinlerinden birinin adı (hesaplıda users'tan, hesapsızda site_people'dan);
+    // kişi aramasıyla aynı normalize (Türkçe karakter ve büyük/küçük harf duyarsız).
+    clauses.push(`(
+      ${foldSql("b.block_name || ' - ' || a.unit_label")} LIKE ${termParam} ESCAPE '\\'
+      OR EXISTS (
+        SELECT 1
+        FROM apartment_residencies r
+        INNER JOIN site_people sp ON sp.id = r.person_id
+        LEFT JOIN users u ON u.user_code = sp.user_code
+        WHERE r.apartment_id = a.id AND r.is_current = TRUE
+          AND ${foldSql("COALESCE(NULLIF(u.full_name, ''), sp.full_name)")} LIKE ${termParam} ESCAPE '\\'
+      )
+    )`);
   }
   const where = clauses.join(' AND ');
   const countResult = await db.query(

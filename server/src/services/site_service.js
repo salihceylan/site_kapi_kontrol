@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { pool } from '../db.js';
+import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import {
   deviceIdsForSite,
@@ -1051,6 +1052,7 @@ export async function syncSiteStructureCounts({
   apartmentCount,
   blockApartmentCounts,
   doorCount,
+  actor = null,
 }) {
   let shouldRotateLocalTokens = false;
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
@@ -1122,6 +1124,8 @@ export async function syncSiteStructureCounts({
               [Number(apartment.id)],
             );
           }
+          // CRM kayıtları (ilişkiler/araçlar/alanlar) CASCADE ile gideceğinden önce audit anlık görüntüsü yazılır (engel koymaz).
+          await recordApartmentDeletionSnapshot(client, { siteCode, apartmentId: Number(apartment.id), actor });
           await client.query(`DELETE FROM apartments WHERE id = $1`, [Number(apartment.id)]);
         }
       }

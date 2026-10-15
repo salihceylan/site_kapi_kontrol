@@ -1641,7 +1641,7 @@ export async function checkApartmentManagementAccess(authUser, apartmentId) {
  * ona tanınmış manuel kapı izinlerini (door_access_overrides) temizler.
  * Kapsam YALNIZCA ilgili site + ilgili kullanıcıdır (başka kullanıcıların izinlerine dokunulmaz).
  */
-async function cleanupDoorOverridesIfNoMembership(client, siteCode, userCode) {
+export async function cleanupDoorOverridesIfNoMembership(client, siteCode, userCode) {
   await client.query(
     `DELETE FROM door_access_overrides dao
      WHERE dao.site_code = $1
@@ -1665,7 +1665,7 @@ async function cleanupDoorOverridesIfNoMembership(client, siteCode, userCode) {
  * başka aktif APARTMENT_ADMIN varsa gösterge ona taşınır; yoksa en eski aktif üye APARTMENT_ADMIN olur;
  * kimse kalmadıysa gösterge temizlenir (eski sakin göstergesi erişimi sürdürmesin diye).
  */
-async function handOverApartmentResident(client, apartmentId, removedUserCode, { keepPin = false } = {}) {
+export async function handOverApartmentResident(client, apartmentId, removedUserCode, { keepPin = false } = {}) {
   const otherAdminRes = await client.query(
     `SELECT user_code FROM apartment_memberships
      WHERE apartment_id = $1 AND user_code <> $2 AND is_active = TRUE AND role = 'APARTMENT_ADMIN'

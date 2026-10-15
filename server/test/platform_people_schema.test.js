@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
+import { DEFAULT_MIGRATIONS_DIR, blankSqlNoise, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
 import { PEOPLE_BACKFILL_CODE, runPeopleBackfill } from '../src/modules/people_backfill.js';
 import { SYNC_STEPS, runSyncSteps } from '../src/modules/people_sync_sql.js';
 
@@ -86,8 +86,8 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     assert.match(sql, /chk_apartments_land_share CHECK \(/);
     assert.match(sql, /land_share_denominator > 0 AND land_share_numerator >= 0 AND land_share_numerator <= land_share_denominator/);
     assert.match(sql, /chk_apartments_category_length CHECK \(category IS NULL OR char_length\(category\) <= 40\)/);
-    // her kisit kosullu (var olan kisit yeniden eklenmez)
-    assert.equal((sql.match(/IF NOT EXISTS \( SELECT 1 FROM pg_constraint/g) || []).length, 3);
+    // her kisit kosullu (var olan kisit yeniden eklenmez): 3 daire kisiti + iliski kaynagi (origin) kisiti
+    assert.equal((sql.match(/IF NOT EXISTS \( SELECT 1 FROM pg_constraint/g) || []).length, 4);
   });
 
   it('vehicles ve platform_backfills', () => {
@@ -100,11 +100,37 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     assert.match(sql, /CREATE TABLE IF NOT EXISTS platform_backfills \( code TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\) \)/);
   });
 
-  it('ekleyici: silme/dusurme/veri yazma yok; her CREATE ve ADD COLUMN IF NOT EXISTS ile', () => {
-    const sql = normalizeSql(MIGRATION);
+  it('ekleyici: silme/dusurme/veri yazma yok (tetikleyici fonksiyon govdesi haric); her CREATE ve ADD COLUMN IF NOT EXISTS ile', () => {
+    // dolar-tirnakli govdeler (DO bloklari, tetikleyici fonksiyonu) bosaltilir: ust duzey ifadelerde veri yazan/silen yok
+    const sql = normalizeSql(blankSqlNoise(MIGRATION));
     assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO/i.test(sql), false);
-    assert.deepEqual(sql.match(/CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)\s+(?!IF NOT EXISTS)/gi) || [], []);
-    assert.deepEqual(sql.match(/ADD\s+COLUMN\s+(?!IF NOT EXISTS)/gi) || [], []);
+    const full = normalizeSql(MIGRATION);
+    assert.deepEqual(full.match(/CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)\s+(?!IF NOT EXISTS)/gi) || [], []);
+    assert.deepEqual(full.match(/ADD\s+COLUMN\s+(?!IF NOT EXISTS)/gi) || [], []);
+  });
+
+  it('apartment_residencies.origin: eklemeli kolon (manual varsayilan) + CHECK (manual|sync), kosullu kisit', () => {
+    const sql = normalizeSql(MIGRATION);
+    assert.match(sql, /ALTER TABLE apartment_residencies ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'manual'/);
+    assert.match(sql, /conname = 'chk_apartment_residencies_origin' AND conrelid = 'apartment_residencies'::regclass/);
+    assert.match(sql, /ADD CONSTRAINT chk_apartment_residencies_origin CHECK \(origin IN \('manual', 'sync'\)\)/);
+  });
+
+  it('users BEFORE DELETE tetikleyicisi (H2): ad/telefon yedegi, e-posta temizligi, pasif, iliski + arac bitisi; silmeyi ENGELLEMEZ', () => {
+    const fn = /CREATE OR REPLACE FUNCTION trg_users_preserve_site_people\(\) RETURNS trigger AS \$\$([\s\S]*?)\$\$ LANGUAGE plpgsql;/.exec(MIGRATION)?.[1];
+    assert.ok(fn, 'tetikleyici fonksiyonu yok');
+    const body = fn.replace(/\s+/g, ' ');
+    assert.match(body, /UPDATE site_people SET full_name = COALESCE\(full_name, NULLIF\(OLD\.full_name, ''\)\), phone = COALESCE\(phone, NULLIF\(OLD\.phone_number, ''\)\), email = NULL, is_active = FALSE/);
+    assert.match(body, /WHERE user_code = OLD\.user_code/);
+    assert.match(body, /UPDATE apartment_residencies r SET is_current = FALSE, move_out_date = COALESCE\(r\.move_out_date, CURRENT_DATE\)/);
+    assert.match(body, /UPDATE vehicles v SET is_active = FALSE/);
+    assert.match(body, /RETURN OLD;/, 'BEFORE DELETE: satir donduruldu (silme surer)');
+    assert.equal(/RAISE\s|RETURN NULL/i.test(body), false, 'silmeyi engelleyen RAISE/RETURN NULL yok');
+    // denetim yazimi hata yutan alt blokta (denetim sorunu silmeyi bozmaz)
+    assert.match(body, /BEGIN INSERT INTO audit_log[\s\S]*EXCEPTION WHEN OTHERS THEN NULL; END;/);
+    const sql = normalizeSql(MIGRATION);
+    assert.match(sql, /tgname = 'trg_users_preserve_site_people' AND tgrelid = 'users'::regclass AND NOT tgisinternal/, 'kosullu olusturma (idempotent)');
+    assert.match(sql, /CREATE TRIGGER trg_users_preserve_site_people BEFORE DELETE ON users FOR EACH ROW EXECUTE PROCEDURE trg_users_preserve_site_people\(\)/);
   });
 });
 
@@ -144,13 +170,18 @@ describe('people_v1 aktarimi (ensureDbSchema)', () => {
     assert.equal(sqls[0], 'BEGIN');
     assert.match(sqls[1], /^SELECT pg_advisory_xact_lock/);
     assert.match(sqls[2], /^SELECT 1 FROM platform_backfills WHERE code = \$1/);
-    assert.equal(sqls.filter((s) => /^WITH desired AS/.test(s)).length, SYNC_STEPS.length);
+    const stepSqls = SYNC_STEPS.map((step) => step.sql.replace(/\s+/g, ' ').trim());
+    assert.deepEqual(
+      sqls.filter((s) => stepSqls.includes(s)),
+      stepSqls,
+      'TUM esitleme adimlari sirayla calisti',
+    );
     const marker = sqls.findIndex((s) => /^INSERT INTO platform_backfills/.test(s));
     const commit = sqls.indexOf('COMMIT');
     assert.ok(marker > 2 && commit > marker, 'isaret, aktarimla ayni transaction\'da ve COMMIT oncesinde');
     assert.deepEqual(client.log[marker].params, ['people_v1']);
     // tum siteler/kullanicilar: filtre parametreleri NULL
-    for (const entry of client.log.filter((e) => /^WITH desired AS/.test(e.sql))) {
+    for (const entry of client.log.filter((e) => stepSqls.includes(e.sql))) {
       assert.deepEqual(entry.params, [null, null]);
     }
   });
@@ -159,7 +190,8 @@ describe('people_v1 aktarimi (ensureDbSchema)', () => {
     const client = fakeClient({ done: true });
     const result = await runPeopleBackfill(client);
     assert.deepEqual(result, { ran: false });
-    assert.equal(client.log.some((e) => /^WITH desired AS/.test(e.sql)), false);
+    const stepSqls = SYNC_STEPS.map((step) => step.sql.replace(/\s+/g, ' ').trim());
+    assert.equal(client.log.some((e) => stepSqls.includes(e.sql)), false);
     assert.equal(client.log.some((e) => /^INSERT INTO platform_backfills/.test(e.sql)), false);
     assert.equal(client.log[client.log.length - 1].sql, 'COMMIT');
   });
@@ -177,19 +209,20 @@ describe('people_v1 aktarimi (ensureDbSchema)', () => {
 describe('esitleme SQL\'i (people_sync_sql)', () => {
   const allSql = SYNC_STEPS.map((step) => step.sql.replace(/\s+/g, ' ').trim());
 
-  it('5 adim, sabit sira; her adim ($1 site, $2 kullanici) parametreli', async () => {
+  it('6 adim, sabit sira; her adim ($1 site, $2 kullanici) parametreli', async () => {
     assert.deepEqual(SYNC_STEPS.map((s) => s.name), [
       'link_accountless',
       'insert_people',
       'reactivate_people',
       'insert_residencies',
       'end_unbacked',
+      'deactivate_orphans',
     ]);
     const calls = [];
     const counts = await runSyncSteps({ query: async (sql, params) => (calls.push(params), { rowCount: 3 }) }, { siteCode: 1000000001 });
-    assert.equal(calls.length, 5, 'bir siteyi esitlemek SABIT sayida sorgu (N+1 yok)');
+    assert.equal(calls.length, 6, 'bir siteyi esitlemek SABIT sayida sorgu (N+1 yok)');
     for (const params of calls) assert.deepEqual(params, [1000000001, null]);
-    assert.deepEqual(Object.values(counts), [3, 3, 3, 3, 3]);
+    assert.deepEqual(Object.values(counts), [3, 3, 3, 3, 3, 3]);
   });
 
   it('erisim yetkisini DEGISTIRMEZ: apartment_memberships / site_memberships / kapi tablolarina yazmaz', () => {
@@ -208,34 +241,55 @@ describe('esitleme SQL\'i (people_sync_sql)', () => {
     assert.match(sql, /am\.created_at::date AS move_in/);
   });
 
-  it('idempotent yazimlar: ON CONFLICT DO NOTHING / yalniz degisen satirlar', () => {
+  it('idempotent yazimlar: ON CONFLICT DO NOTHING / yalniz degisen satirlar; esitleme iliskisi origin = sync', () => {
     assert.match(allSql[1], /ON CONFLICT \(site_code, user_code\) WHERE user_code IS NOT NULL DO NOTHING/);
     assert.match(allSql[3], /ON CONFLICT \(apartment_id, person_id\) WHERE is_current DO NOTHING/);
+    assert.match(allSql[3], /\(site_code, apartment_id, person_id, relation, is_current, move_in_date, origin\) SELECT .*'resident', TRUE, d\.move_in, 'sync'/);
     assert.match(allSql[2], /sp\.is_active = FALSE/, 'yalniz pasif kisiler yeniden etkinlesir');
-    assert.match(allSql[4], /r\.is_current = TRUE AND sp\.user_code IS NOT NULL/, 'yalniz HESAPLI kisilerin guncel iliskisi biter');
-    assert.match(allSql[4], /NOT EXISTS \( SELECT 1 FROM desired d WHERE d\.apartment_id = r\.apartment_id AND d\.user_code = sp\.user_code \)/);
   });
 
-  it('hesapsiz kisiyle ayni e-postaya sahip kullanici bulunursa yinelenen kayit acilmaz: user_code baglanir', () => {
+  it('H4: otomatik bitirme YALNIZ origin=sync ve destekleyen uyelik/gosterge GERCEKTEN yoksa; pasif uyelik/pasif daire bitirmez', () => {
+    const sql = allSql[4];
+    assert.match(sql, /r\.is_current = TRUE AND r\.origin = 'sync' AND sp\.user_code IS NOT NULL/, 'yalniz esitleme kaynakli + HESAPLI kisi');
+    assert.match(sql, /NOT EXISTS \( SELECT 1 FROM apartment_memberships am WHERE am\.apartment_id = r\.apartment_id AND am\.user_code = sp\.user_code \)/);
+    assert.match(sql, /NOT EXISTS \( SELECT 1 FROM apartments a WHERE a\.id = r\.apartment_id AND a\.resident_user_code = sp\.user_code \)/);
+    assert.equal(/am\.is_active|a\.is_active|desired/.test(sql), false, 'is_active=false (askiya alma) ve pasif daire iliskiyi BITIRMEZ');
+    assert.equal(/WITH desired AS/.test(sql), false);
+  });
+
+  it('H1/H2: hesapsiz kisiyle ayni e-postaya sahip ERISIMI OLAN kullanici bulunursa user_code baglanir; ad/telefon/e-posta bosalir', () => {
     const sql = allSql[0];
-    assert.match(sql, /UPDATE site_people sp SET user_code = c\.user_code/);
+    assert.match(sql, /UPDATE site_people sp SET user_code = c\.user_code, full_name = NULL, phone = NULL, email = NULL/);
     assert.match(sql, /sp\.user_code IS NULL AND sp\.is_active = TRUE AND lower\(sp\.email\) = c\.email/);
     assert.match(sql, /u\.email NOT LIKE '%@ahbu\.local'/, 'dahili daire hesabi e-postasi eslestirmeye girmez');
-    // alanlar SILINMEZ (yedek kalir): UPDATE yalniz user_code ve updated_at
-    assert.equal(/SET user_code = c\.user_code, full_name|phone = NULL|email = NULL/.test(sql), false);
+    // baglama yalniz bu sitede aktif erisimi olan hesaplarla (desired) yapilir: baska sitenin kullanicisi baglanmaz
+    assert.match(sql, /FROM desired d INNER JOIN users u ON u\.user_code = d\.user_code/);
+    assert.match(sql, /WHERE sp\.site_code = c\.site_code/);
   });
 
   it('dahili (@ahbu.local) daire hesabinda iletisim e-postasi apartments.resident_email\'den kisi kaydina yazilir', () => {
     assert.match(allSql[1], /CASE WHEN u\.email LIKE '%@ahbu\.local' THEN MAX\(d\.contact_email\) ELSE NULL END/);
   });
 
-  it('otomatik biten iliski sistem adina audit yazar; son iliskisi biten kisi pasif olur', () => {
+  it('otomatik biten iliski sistem adina audit yazar; son iliskisi biten kisi pasif olur (araclari da)', () => {
     const sql = allSql[4];
     assert.match(sql, /INSERT INTO audit_log \(actor_name, actor_role, action, site_code, target_type, target_id, details\)/);
     assert.match(sql, /'Sistem', 'system', 'residency\.ended'/);
     assert.match(sql, /jsonb_build_object\('residency_id', e\.id, 'apartment_id', e\.apartment_id, 'relation', e\.relation, 'auto', TRUE\)/);
     assert.match(sql, /UPDATE site_people sp SET is_active = FALSE/);
     assert.match(sql, /c\.id NOT IN \(SELECT id FROM ended\)/);
+    assert.match(sql, /UPDATE vehicles v SET is_active = FALSE WHERE v\.person_id IN \(SELECT id FROM deactivated\)/);
+    assert.match(sql, /'person\.deactivated'/);
+  });
+
+  it('H2: yetim kisi (user_code NULL + full_name NULL, aktif) pasiflesir, iliskileri ve araclari biter, Sistem audit; kullanici bazli esitlemede calismaz', () => {
+    const sql = allSql[5];
+    assert.match(sql, /WHERE sp\.user_code IS NULL AND sp\.full_name IS NULL AND sp\.is_active = TRUE AND \$2::INTEGER IS NULL/);
+    assert.match(sql, /UPDATE apartment_residencies r SET is_current = FALSE/);
+    assert.match(sql, /UPDATE vehicles v SET is_active = FALSE/);
+    assert.match(sql, /UPDATE site_people sp SET is_active = FALSE/);
+    assert.match(sql, /'Sistem', 'system', 'person\.deactivated'/);
+    assert.match(sql, /'reason', 'account_deleted'/);
   });
 });
 

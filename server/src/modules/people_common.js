@@ -310,3 +310,21 @@ export function asNumberOrNull(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+/**
+ * Salt okuma rolü (BOARD_MEMBER) için yönetici iç notları: kişi `note` ve araç `note` alanları yanıtta NULL olur (anahtar kalır;
+ * istemci modelleri bozulmaz). Yönetici/süper yanıtı aynen kalır. Girdi değişmez; yeni nesne döner.
+ */
+export function redactManagerNotes(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactManagerNotes(entry));
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      out[key] = key === 'note' ? null : redactManagerNotes(entry);
+    }
+    return out;
+  }
+  return value;
+}

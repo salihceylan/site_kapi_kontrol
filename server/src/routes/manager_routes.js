@@ -459,6 +459,7 @@ managerRouter.patch('/manager/sites/:id', authRequired, requireSiteManager, asyn
         apartmentCount: apartmentCount ?? Number(existing.apartment_count ?? 0),
         blockApartmentCounts,
         doorCount: doorCount ?? Number(existing.door_count ?? 1),
+        actor: req.authUser,
       });
     }
 
