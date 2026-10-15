@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, blankSqlNoise, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
 import { PEOPLE_BACKFILL_CODE, runPeopleBackfill } from '../src/modules/people_backfill.js';
-import { SYNC_STEPS, runSyncSteps } from '../src/modules/people_sync_sql.js';
+import { SYNC_STEPS, runSyncSteps, siteTiePredicate } from '../src/modules/people_sync_sql.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (relative) => readFileSync(path.join(here, '..', 'src', relative), 'utf8').replace(/\r\n/g, '\n');
@@ -132,6 +132,20 @@ describe('migration 031: kisi ve daire kayitlari', () => {
     assert.match(sql, /tgname = 'trg_users_preserve_site_people' AND tgrelid = 'users'::regclass AND NOT tgisinternal/, 'kosullu olusturma (idempotent)');
     assert.match(sql, /CREATE TRIGGER trg_users_preserve_site_people BEFORE DELETE ON users FOR EACH ROW EXECUTE PROCEDURE trg_users_preserve_site_people\(\)/);
   });
+
+  it('S4/S11: tetikleyici kilit sirasini izler (apartments id sirasiyla FOR UPDATE, SONRA kisi/iliski/arac) ve YALNIZ aktif->pasif gecen kisiler icin audit yazar', () => {
+    const fn = /CREATE OR REPLACE FUNCTION trg_users_preserve_site_people\(\) RETURNS trigger AS \$\$([\s\S]*?)\$\$ LANGUAGE plpgsql;/.exec(MIGRATION)?.[1];
+    const body = fn.replace(/--.*$/gm, ' ').replace(/\s+/g, ' ');
+    const lockAt = body.indexOf('PERFORM a.id FROM apartments a WHERE a.resident_user_code = OLD.user_code');
+    assert.ok(lockAt >= 0, 'silinen kullanicinin daireleri once kilitlenir');
+    assert.match(body, /ORDER BY a\.id FOR UPDATE;/);
+    assert.match(body, /a\.id IN \(SELECT am\.apartment_id FROM apartment_memberships am WHERE am\.user_code = OLD\.user_code\)/);
+    assert.match(body, /a\.id IN \( SELECT r\.apartment_id FROM apartment_residencies r INNER JOIN site_people sp ON sp\.id = r\.person_id WHERE sp\.user_code = OLD\.user_code AND r\.is_current \)/);
+    const auditAt = body.indexOf('INSERT INTO audit_log');
+    const updateAt = body.indexOf('UPDATE site_people SET');
+    assert.ok(lockAt < auditAt && auditAt < updateAt, 'sira: daire kilidi -> audit (henuz aktif olanlar) -> guncellemeler');
+    assert.match(body, /FROM site_people sp WHERE sp\.user_code = OLD\.user_code AND sp\.is_active;/, 'zaten pasif kisiler icin yeni audit satiri yazilmaz');
+  });
 });
 
 describe('people_v1 aktarimi (ensureDbSchema)', () => {
@@ -235,7 +249,7 @@ describe('esitleme SQL\'i (people_sync_sql)', () => {
   });
 
   it('istenen durum: aktif daire + aktif uyelik ve eski resident_user_code sakini', () => {
-    const sql = allSql[0];
+    const sql = allSql[1]; // desired kumesi (INSERT_PEOPLE ve ortak yardimci ayni tanimi kullanir)
     assert.match(sql, /FROM apartment_memberships am INNER JOIN apartments a ON a\.id = am\.apartment_id WHERE am\.is_active = TRUE AND a\.is_active = TRUE/);
     assert.match(sql, /FROM apartments a WHERE a\.resident_user_code IS NOT NULL AND a\.is_active = TRUE/);
     assert.match(sql, /am\.created_at::date AS move_in/);
@@ -257,15 +271,23 @@ describe('esitleme SQL\'i (people_sync_sql)', () => {
     assert.equal(/WITH desired AS/.test(sql), false);
   });
 
-  it('H1/H2: hesapsiz kisiyle ayni e-postaya sahip ERISIMI OLAN kullanici bulunursa user_code baglanir; ad/telefon/e-posta bosalir', () => {
+  it('S1/H1: hesapsiz kisiyle ayni e-postaya sahip, bu sitede BAGI olan kullanici bulunursa user_code baglanir; ad/telefon/e-posta bosalir; bag tanimi ORTAK yardimci', () => {
     const sql = allSql[0];
-    assert.match(sql, /UPDATE site_people sp SET user_code = c\.user_code, full_name = NULL, phone = NULL, email = NULL/);
-    assert.match(sql, /sp\.user_code IS NULL AND sp\.is_active = TRUE AND lower\(sp\.email\) = c\.email/);
+    assert.match(sql, /^UPDATE site_people sp SET user_code = u\.user_code, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW\(\) FROM users u WHERE/);
+    assert.match(sql, /sp\.user_code IS NULL AND sp\.is_active = TRUE AND sp\.email IS NOT NULL AND lower\(u\.email\) = lower\(sp\.email\)/);
     assert.match(sql, /u\.email NOT LIKE '%@ahbu\.local'/, 'dahili daire hesabi e-postasi eslestirmeye girmez');
-    // baglama yalniz bu sitede aktif erisimi olan hesaplarla (desired) yapilir: baska sitenin kullanicisi baglanmaz
-    assert.match(sql, /FROM desired d INNER JOIN users u ON u\.user_code = d\.user_code/);
-    assert.match(sql, /WHERE sp\.site_code = c\.site_code/);
+    // baglama YALNIZ ortak "sitede bag" tanimiyla yapilir (createPerson/addResidency da ayni yardimciyi kullanir)
+    assert.ok(sql.includes(normalizeSql(siteTiePredicate('u.user_code', 'sp.site_code'))), 'LINK ortak siteTiePredicate kullanir');
+    assert.match(sql, /NOT EXISTS \( SELECT 1 FROM site_people x WHERE x\.site_code = sp\.site_code AND x\.user_code = u\.user_code \)/);
   });
+
+  it('S1: siteTiePredicate YALNIZ aktif daire uyeligi ve resident_user_code gostergesidir; site_memberships (STAFF/BOARD_MEMBER/RESIDENT) ve yoneticilik bag degildir', () => {
+    const predicate = normalizeSql(siteTiePredicate('X.user', 'Y.site'));
+    assert.match(predicate, /apartment_memberships tie_am INNER JOIN apartments tie_a ON tie_a\.id = tie_am\.apartment_id WHERE tie_a\.site_code = Y\.site AND tie_am\.user_code = X\.user AND tie_am\.is_active = TRUE AND tie_a\.is_active = TRUE/);
+    assert.match(predicate, /apartments tie_r WHERE tie_r\.site_code = Y\.site AND tie_r\.resident_user_code = X\.user AND tie_r\.is_active = TRUE/);
+    assert.equal(/site_memberships|site_manager_sites|role/i.test(predicate), false);
+  });
+
 
   it('dahili (@ahbu.local) daire hesabinda iletisim e-postasi apartments.resident_email\'den kisi kaydina yazilir', () => {
     assert.match(allSql[1], /CASE WHEN u\.email LIKE '%@ahbu\.local' THEN MAX\(d\.contact_email\) ELSE NULL END/);
@@ -280,6 +302,12 @@ describe('esitleme SQL\'i (people_sync_sql)', () => {
     assert.match(sql, /c\.id NOT IN \(SELECT id FROM ended\)/);
     assert.match(sql, /UPDATE vehicles v SET is_active = FALSE WHERE v\.person_id IN \(SELECT id FROM deactivated\)/);
     assert.match(sql, /'person\.deactivated'/);
+  });
+
+  it('S2b: esitleme kaynakli otomatik pasiflestirme de kisiyi hesaptan KOPARIR: users\'taki ad/telefon/e-posta kopyalanir, user_code NULL', () => {
+    const sql = allSql[4];
+    assert.match(sql, /deactivated AS \( UPDATE site_people sp SET is_active = FALSE, full_name = COALESCE\(NULLIF\(u\.full_name, ''\), sp\.full_name\), phone = COALESCE\(NULLIF\(u\.phone_number, ''\), sp\.phone\)/);
+    assert.match(sql, /WHEN u\.email LIKE '%@ahbu\.local' THEN COALESCE\( \(SELECT a\.resident_email FROM apartments a WHERE a\.resident_user_code = sp\.user_code AND a\.site_code = sp\.site_code ORDER BY a\.id LIMIT 1\), sp\.email \) ELSE u\.email END, user_code = NULL, updated_at = NOW\(\) FROM users u WHERE u\.user_code = sp\.user_code AND sp\.id IN \(SELECT person_id FROM ended\)/);
   });
 
   it('H2: yetim kisi (user_code NULL + full_name NULL, aktif) pasiflesir, iliskileri ve araclari biter, Sistem audit; kullanici bazli esitlemede calismaz', () => {

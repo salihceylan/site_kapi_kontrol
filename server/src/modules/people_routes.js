@@ -17,7 +17,7 @@ import { authRequired } from '../middlewares/auth_middleware.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { getApartmentDetail, listApartments, updateApartment } from './apartment_records_service.js';
 import { resolvePeopleAccess } from './people_access.js';
-import { redactManagerNotes } from './people_common.js';
+import { redactForReadOnlyRole } from './people_common.js';
 import { listMyRecords, listPeopleHistory } from './people_history_service.js';
 import {
   addResidency,
@@ -56,8 +56,8 @@ export const peopleReadLimiter = createRuleLimiter({
 
 const canSeeUserCode = (access) => access.kind === 'super' || access.kind === 'manager';
 
-// Kurul üyesi (salt okuma) yönetici iç notlarını (kişi/araç note) GÖRMEZ: sunucu veriyi hiç vermez (null).
-const redactFor = (access, body) => (canSeeUserCode(access) ? body : redactManagerNotes(body));
+// Kurul üyesi (salt okuma) yönetici iç notlarını (kişi/araç note: null) ve kullanıcı kodlarını (actor_user_code vb.) GÖRMEZ.
+const redactFor = (access, body) => (canSeeUserCode(access) ? body : redactForReadOnlyRole(body));
 
 /**
  * Ortak sarmalayıcı: yetki + site doğrulaması -> iş -> JSON. `run({ req, access })` { status?, body } döndürür.

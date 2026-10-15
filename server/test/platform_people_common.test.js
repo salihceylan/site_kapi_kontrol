@@ -20,6 +20,7 @@ import {
   parseRelationInput,
   parseSearchTerm,
   parseStatusFilter,
+  redactForReadOnlyRole,
   redactManagerNotes,
   todayIso,
 } from '../src/modules/people_common.js';
@@ -314,5 +315,24 @@ describe('redactManagerNotes (H14: kurul uyesine yonetici ic notu verilmez)', ()
     assert.equal(redactManagerNotes('x'), 'x');
     assert.equal(redactManagerNotes(date), date);
     assert.deepEqual(redactManagerNotes([1, { note: 2 }]), [1, { note: null }]);
+  });
+});
+
+describe('redactForReadOnlyRole (S9: kurul uyesi icin not + kullanici kodu temizligi)', () => {
+  it('note null olur; actor_user_code / user_code / created_by alanlari yanittan CIKARILIR; diger alanlar korunur; girdi degismez', () => {
+    const body = {
+      user_code: 30001,
+      note: 'ic not',
+      items: [{ id: 1, actor_user_code: 20001, actor_name: 'Ayse', note: null, details: { changes: [{ field: 'note', changed: true }], created_by: 7 } }],
+    };
+    const redacted = redactForReadOnlyRole(body);
+    assert.equal('user_code' in redacted, false);
+    assert.equal(redacted.note, null);
+    assert.equal('actor_user_code' in redacted.items[0], false);
+    assert.equal('created_by' in redacted.items[0].details, false);
+    assert.equal(redacted.items[0].actor_name, 'Ayse');
+    assert.deepEqual(redacted.items[0].details.changes, [{ field: 'note', changed: true }]);
+    assert.equal(body.user_code, 30001, 'girdi degismez');
+    assert.equal(body.items[0].actor_user_code, 20001);
   });
 });

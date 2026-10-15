@@ -116,6 +116,8 @@ function installFakeDb() {
       if (CLIENT_INFRA.some((pattern) => pattern.test(sql)) || STEP_SQLS.has(sql)) return ok();
       // satir kilidi sorgusu (FOR UPDATE) bos = "kayit yok" (404 senaryolari); baska hicbir transaction sorgusu sessizce gecmez
       if (/^SELECT\b[\s\S]*\bFOR UPDATE\b/.test(sql)) return ok();
+      // kullanici bazli esitleme: kullanicinin siteleri (bos = kilit alinacak site yok)
+      if (/^SELECT DISTINCT site_code FROM \(/.test(sql)) return ok();
       throw new Error(`BEKLENMEYEN transaction SQL (sahte DB kati): ${sql.slice(0, 200)}`);
     },
     release() {},
@@ -425,7 +427,7 @@ describe('GET people: sorgu, sayfalama, sabit sorgu sayisi', () => {
     assert.equal(dataQueries.length, 4, dataQueries.map((q) => q.sql.slice(0, 50)).join(' | '));
     // esitleme: BEGIN + kilit (BEKLEMEZ: try-lock) + 6 adim + COMMIT (site basina sabit)
     assert.equal(state.clientLog.length, 2 + SYNC_STEPS.length + 1);
-    assert.equal(state.clientLog.filter((q) => /^WITH desired AS/.test(q.sql)).length, 4);
+    assert.equal(state.clientLog.filter((q) => /^WITH desired AS/.test(q.sql)).length, 3, 'WITH desired ile baslayan adimlar (link artik ortak siteTiePredicate kullanir)');
     assert.deepEqual(state.clientLog[0].sql, 'BEGIN');
     assert.match(state.clientLog[1].sql, /^SELECT pg_try_advisory_xact_lock/);
     assert.equal(state.clientLog[1].params[0], `people_sync:${SITE_1}`);
@@ -575,7 +577,9 @@ describe('GET people/:personId: PersonDetail', () => {
     // gercek hesap: users.email; dahili hesap: GUNCEL apartments.resident_email (yedek sp.email); hesapsiz: sp.email
     assert.match(sql, /WHEN u\.user_code IS NULL THEN sp\.email WHEN u\.email NOT LIKE '%@ahbu\.local' THEN u\.email ELSE COALESCE\(ia\.resident_email, sp\.email\) END \) AS email/);
     assert.match(sql, /LEFT JOIN LATERAL \( SELECT a\.resident_email FROM apartments a WHERE u\.email LIKE '%@ahbu\.local' AND a\.resident_user_code = sp\.user_code AND a\.site_code = sp\.site_code/);
-    assert.match(sql, /WHEN u\.user_code IS NULL THEN 'none' WHEN u\.email LIKE '%@ahbu\.local' THEN 'internal' ELSE 'registered' END \) AS account_kind/);
+    // S7: pasif dahili daire hesabi (taşınan sakinin kapatilan hesabi) "hesapli" gosterilmez
+    assert.match(sql, /WHEN u\.user_code IS NULL OR \(u\.user_code IS NOT NULL AND u\.email LIKE '%@ahbu\.local' AND u\.is_active = FALSE\) THEN 'none' WHEN u\.email LIKE '%@ahbu\.local' THEN 'internal' ELSE 'registered' END \) AS account_kind/);
+    assert.match(sql, /\(u\.user_code IS NOT NULL AND NOT \(u\.user_code IS NOT NULL AND u\.email LIKE '%@ahbu\.local' AND u\.is_active = FALSE\)\) AS has_account/);
   });
 });
 
@@ -636,12 +640,13 @@ describe('yazma uclari: girdi dogrulama (400, DB yazmasi yok)', () => {
     assert.equal(missing.body.code, 'PERSON_NOT_FOUND');
   });
 
-  it('POST residencies: apartment_id zorunlu; relation gecersiz 400; yok kisi 404', async () => {
+  it('POST residencies: apartment_id zorunlu; relation gecersiz 400; yok / baska sitenin dairesi 404 (daire kilitsiz on dogrulanir; kisi yok 404 service testinde)', async () => {
     assert.equal((await call('POST', `${base()}/people/5/residencies`, { body: {} })).body.code, 'INVALID_BODY');
     assert.equal((await call('POST', `${base()}/people/5/residencies`, { body: { apartment_id: 9, relation: 'x' } })).body.code, 'INVALID_BODY');
     const missing = await call('POST', `${base()}/people/5/residencies`, { body: { apartment_id: 9 } });
     assert.equal(missing.status, 404);
-    assert.equal(missing.body.code, 'PERSON_NOT_FOUND');
+    assert.equal(missing.body.code, 'APARTMENT_NOT_FOUND');
+    assert.equal(state.clientLog.length, 0, 'daire yokken islem (BEGIN) hic acilmadi');
   });
 
   it('PATCH/POST end residencies: yok kayit 404 RESIDENCY_NOT_FOUND; move_out_date gecersiz 400', async () => {
@@ -797,6 +802,23 @@ describe('GET apartments / vehicles / history / my-records', () => {
     assert.equal(JSON.stringify(board.body).includes('ic not'), false);
     const manager = await call('GET', `${base()}/vehicles`, { user: users.mgrA });
     assert.equal(manager.body.items[0].note, 'ic not');
+  });
+
+  it('S9: kurul uyesine donen history/kart yanitlarinda kullanici kodlari (actor_user_code, user_code) YOK; yonetici/super icin aynen', async () => {
+    overrides.push([
+      /^SELECT a\.id, a\.created_at, a\.actor_user_code[\s\S]*FROM audit_log a/,
+      () =>
+        ok([
+          { id: '12', created_at: T0, actor_user_code: 20001, actor_name: 'Ayşe Yönetici', actor_role: 'site_manager', action: 'person.updated', site_code: String(SITE_1), site_name: 'Gül', target_type: 'person', target_id: '5', details: { changes: [{ field: 'full_name', from: 'A', to: 'B' }] } },
+        ]),
+    ]);
+    const board = await call('GET', `${base()}/history`, { user: users.board });
+    assert.equal(board.status, 200);
+    assert.equal('actor_user_code' in board.body.items[0], false, 'yonetici user_code\'u kurula sizmaz');
+    assert.equal(board.body.items[0].actor_name, 'Ayşe Yönetici', 'ad kalir');
+    assert.equal(JSON.stringify(board.body).includes('20001'), false);
+    const manager = await call('GET', `${base()}/history`, { user: users.mgrA });
+    assert.equal(manager.body.items[0].actor_user_code, 20001);
   });
 
   it('H13: daire aramasi (q) etiketin yani sira dairenin GUNCEL sakinlerinin adinda da eslesir (Turkce/harf duyarsiz, kisi aramasiyla ayni normalize)', async () => {

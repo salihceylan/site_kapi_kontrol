@@ -117,6 +117,11 @@ describe('H6: daire silinmeden once CRM kayitlarinin audit anlik goruntusu (apar
     const hook = service.indexOf('await recordApartmentDeletionSnapshot(client, { siteCode, apartmentId: Number(apartment.id), actor });');
     const del = service.indexOf('await client.query(`DELETE FROM apartments WHERE id = $1`');
     assert.ok(hook > 0 && del > hook, 'anlik goruntu DELETE\'ten once');
+    // S10: goruntu ile DELETE arasi kilitsiz DEGIL - CRM yazmalariyla ayni site kilidi islemin basinda (BEGIN'den hemen sonra) alinir
+    const siteLock = service.indexOf("await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [peopleLockKey(siteCode)]);");
+    const begin = service.indexOf("await client.query('BEGIN');", service.indexOf('export async function syncSiteStructureCounts'));
+    assert.ok(begin > 0 && siteLock > begin && siteLock < hook, 'site kilidi BEGIN sonrasi ve anlik goruntuden once');
+    assert.match(service, /import \{ peopleLockKey \} from '\.\.\/modules\/people_sync\.js';/);
     assert.match(service, /export async function syncSiteStructureCounts\(\{[\s\S]*?actor = null,\s*\}\) \{/);
     assert.match(source('routes/admin_routes.js'), /doorCount: doorCount \?\? Number\(existing\.door_count \?\? 1\),\s*actor: req\.authUser,/);
     assert.match(source('routes/manager_routes.js'), /doorCount: doorCount \?\? Number\(existing\.door_count \?\? 1\),\s*actor: req\.authUser,/);

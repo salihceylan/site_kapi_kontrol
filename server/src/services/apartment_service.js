@@ -300,7 +300,8 @@ export async function resetApartmentResident(apartmentId, db = pool) {
     }
 
     const aptResult = await client.query(
-      `SELECT * FROM apartments WHERE id = $1 LIMIT 1`,
+      // Daire satiri DELETE users'tan ONCE kilitlenir (kilit sirasi: apartments -> users -> CRM kisi kayitlari; 40P01 onleme).
+      `SELECT * FROM apartments WHERE id = $1 LIMIT 1 FOR UPDATE`,
       [apartmentId],
     );
     if (aptResult.rowCount === 0) {

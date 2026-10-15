@@ -455,6 +455,17 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
     await client.query('BEGIN');
 
+    // 0. Kilit sirasi (apartments -> users -> CRM kisi kayitlari): kullanicinin daireleri (uye oldugu + sakin gostergesi) id sirasiyla
+    //    DAHA ILK adimda kilitlenir. users silme tetikleyicisi ve CRM ("Tasindi"/pasiflestirme) yazmalari ayni sirayi izler; aksi halde
+    //    uyelik satirlarini once silip sonra daire kilidini beklemek 40P01 (deadlock) uretirdi.
+    await runOptionalStep(
+      client,
+      `SELECT a.id FROM apartments a
+       WHERE a.resident_user_code = $1 OR a.id IN (SELECT am.apartment_id FROM apartment_memberships am WHERE am.user_code = $1)
+       ORDER BY a.id FOR UPDATE`,
+      [targetCode],
+    );
+
     // 1. Cihaz iliskilendirmeleri
     await client.query('UPDATE devices SET assigned_user_code = NULL WHERE assigned_user_code = $1', [targetCode]);
     await client.query('UPDATE devices SET owner_user_id = NULL WHERE owner_user_id = (SELECT id FROM users WHERE user_code = $1)', [targetCode]);

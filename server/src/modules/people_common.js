@@ -328,3 +328,27 @@ export function redactManagerNotes(value) {
   }
   return value;
 }
+
+/** Kurul üyesine (salt okuma) hiç verilmeyen kullanıcı kodu alanları: yönetici/hesap kimlikleri (history actor_user_code vb.). */
+const USER_CODE_KEYS = new Set(['actor_user_code', 'user_code', 'created_by']);
+
+/**
+ * Salt okuma rolü (BOARD_MEMBER) yanıt temizliği: yönetici iç notları NULL (redactManagerNotes) + kullanıcı kodu alanları
+ * (actor_user_code, user_code, created_by) yanıttan ÇIKARILIR (history'de yöneticilerin user_code'ları sızmasın). Girdi değişmez.
+ */
+export function redactForReadOnlyRole(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactForReadOnlyRole(entry));
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (USER_CODE_KEYS.has(key)) {
+        continue;
+      }
+      out[key] = key === 'note' ? null : redactForReadOnlyRole(entry);
+    }
+    return out;
+  }
+  return value;
+}

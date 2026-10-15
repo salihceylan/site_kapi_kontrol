@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { pool } from '../db.js';
 import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
+import { peopleLockKey } from '../modules/people_sync.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import {
   deviceIdsForSite,
@@ -1068,6 +1069,9 @@ export async function syncSiteStructureCounts({
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // CRM (Kişi ve Daire Kayıtları) yazmalarıyla aynı site kilidi: daire silme (CASCADE ile iliski/arac) ve anlik goruntu, devam eden
+    // bir "Tasindi"/pasiflestirme ile yarismaz (kilit sirasi: site kilidi -> apartments -> users -> CRM satirlari).
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [peopleLockKey(siteCode)]);
     const blocks = await listSiteBlocks(siteCode, client);
     const doors = await listSiteDoors(siteCode, client);
 

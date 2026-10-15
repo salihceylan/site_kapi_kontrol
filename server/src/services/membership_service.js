@@ -11,6 +11,7 @@ import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.js';
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
 import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
+import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
 import {
   SQL_BULK_APARTMENT_USERS,
   SQL_BULK_BLOCK_USERS,
@@ -1665,7 +1666,15 @@ export async function cleanupDoorOverridesIfNoMembership(client, siteCode, userC
  * başka aktif APARTMENT_ADMIN varsa gösterge ona taşınır; yoksa en eski aktif üye APARTMENT_ADMIN olur;
  * kimse kalmadıysa gösterge temizlenir (eski sakin göstergesi erişimi sürdürmesin diye).
  */
-export async function handOverApartmentResident(client, apartmentId, removedUserCode, { keepPin = false } = {}) {
+export async function handOverApartmentResident(
+  client,
+  apartmentId,
+  removedUserCode,
+  { keepPin = false, indicatorOwnedByRemoved = true } = {},
+) {
+  // indicatorOwnedByRemoved=false: apartments.resident_user_code çıkarılan kişiye ait DEĞİL (ör. dahili daire hesabı göstergede,
+  // çıkarılan kayıtlı kullanıcı yalnız APARTMENT_ADMIN): gösterge ve PIN'e DOKUNULMAZ; yalnız admin rolü devredilir.
+  // Varsayılan (true) eski davranıştır; çağıranlar daire satırı kilitliyken gösterge sahipliğini bilir.
   const otherAdminRes = await client.query(
     `SELECT user_code FROM apartment_memberships
      WHERE apartment_id = $1 AND user_code <> $2 AND is_active = TRUE AND role = 'APARTMENT_ADMIN'
@@ -1673,10 +1682,12 @@ export async function handOverApartmentResident(client, apartmentId, removedUser
     [apartmentId, removedUserCode],
   );
   if (otherAdminRes.rowCount > 0) {
-    await client.query(
-      `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
-      [Number(otherAdminRes.rows[0].user_code), apartmentId],
-    );
+    if (indicatorOwnedByRemoved) {
+      await client.query(
+        `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
+        [Number(otherAdminRes.rows[0].user_code), apartmentId],
+      );
+    }
     return;
   }
 
@@ -1693,11 +1704,13 @@ export async function handOverApartmentResident(client, apartmentId, removedUser
       `UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW() WHERE apartment_id = $1 AND user_code = $2`,
       [apartmentId, newAdminCode],
     );
-    await client.query(
-      `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
-      [newAdminCode, apartmentId],
-    );
-  } else {
+    if (indicatorOwnedByRemoved) {
+      await client.query(
+        `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
+        [newAdminCode, apartmentId],
+      );
+    }
+  } else if (indicatorOwnedByRemoved) {
     // keepPin: geçici pasife alma (toggle) geri alınabilir olduğundan eski PIN göstergesi silinmez.
     await client.query(
       keepPin
@@ -1755,11 +1768,15 @@ export async function removeApartmentMember({ apartmentId, targetUserCode, authU
     }
 
     if (legacy || memUpdate.rows[0]?.role === 'APARTMENT_ADMIN') {
-      await handOverApartmentResident(client, apt.id, tUserCode);
+      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy });
     }
 
     // Kapı istisnalarını temizle (yalnızca kişinin başka aktif üyeliği kalmadıysa)
     await cleanupDoorOverridesIfNoMembership(client, apt.site_code, tUserCode);
+
+    // CRM (Kişi ve Daire Kayıtları): "Daireden çıkar" kalıcı bir çıkarmadır -> o (kullanıcı, daire) için güncel ilişkiler biter.
+    // (Geçici pasife alma - toggleApartmentMemberStatus - bunu YAPMAZ.) Hata çıkarma işlemini bozmaz.
+    await endResidenciesForMemberRemoval(client, { apartmentId: apt.id, userCode: tUserCode, actor: authUser });
 
     await client.query('COMMIT');
     committed = true;
@@ -1944,7 +1961,7 @@ export async function deleteApartmentMember({ apartmentId, targetUserCode, authU
 
     // 3. Silinen kişi dairenin yöneticisi / apartments.resident_user_code ise yönetici devri
     if (legacy || delRes.rows[0]?.role === 'APARTMENT_ADMIN') {
-      await handOverApartmentResident(client, apt.id, tUserCode);
+      await handOverApartmentResident(client, apt.id, tUserCode, { indicatorOwnedByRemoved: legacy });
     }
 
     await client.query('COMMIT');

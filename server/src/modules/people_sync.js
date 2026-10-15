@@ -108,7 +108,39 @@ export async function syncUserPeople(userCode, { wait = true } = {}) {
   if (!Number.isSafeInteger(user) || user <= 0) {
     return null;
   }
-  return withSyncTransaction(`people_sync_user:${user}`, (client) => runSyncSteps(client, { siteCode: null, userCode: user }), { wait });
+  return withSyncTransaction(
+    `people_sync_user:${user}`,
+    async (client) => {
+      // Kullanıcı eşitlemesi birden çok sitenin kişi kayıtlarını YAZAR: CRM yazmalarıyla (site kilidi) yarışıp "Taşındı" sonrası
+      // hayalet ilişki eklemesin diye ilgili sitelerin kilidi de alınır (okuma ucunda try-lock: meşgulse bu eşitleme atlanır).
+      const sites = await client.query(
+        `
+          SELECT DISTINCT site_code FROM (
+            SELECT a.site_code FROM apartment_memberships am INNER JOIN apartments a ON a.id = am.apartment_id WHERE am.user_code = $1
+            UNION
+            SELECT a.site_code FROM apartments a WHERE a.resident_user_code = $1
+            UNION
+            SELECT sp.site_code FROM site_people sp WHERE sp.user_code = $1
+          ) s
+          ORDER BY site_code
+        `,
+        [user],
+      );
+      for (const row of sites.rows ?? []) {
+        const key = peopleLockKey(row.site_code);
+        if (wait) {
+          await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
+        } else {
+          const lock = await client.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', [key]);
+          if (lock.rows?.[0]?.locked !== true) {
+            return SKIPPED_BUSY;
+          }
+        }
+      }
+      return runSyncSteps(client, { siteCode: null, userCode: user });
+    },
+    { wait },
+  );
 }
 
 async function safely(key, label, run) {

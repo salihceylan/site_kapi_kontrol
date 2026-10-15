@@ -1164,9 +1164,32 @@ export async function ensureDbSchema() {
 
       -- 6. Hesap silinince (eski silme/sifirlama akislari dahil) kisi kaydi KORUNUR: ad/telefon yedeklenir, iletisim e-postasi
       -- temizlenir (uq_site_people_email ile cakisip silmeyi 500 yapmasin), kisi pasif olur, guncel iliskileri ve araclari biter.
-      -- Kayitlar silinmez (gecmis kalir); tetikleyici silmeyi ENGELLEMEZ (yalniz basit UPDATE ifadeleri; denetim yazimi alt blokta).
+      -- Kayitlar silinmez (gecmis kalir); tetikleyici silmeyi ENGELLEMEZ (yalniz kilit + basit UPDATE ifadeleri; denetim yazimi alt blokta).
       CREATE OR REPLACE FUNCTION trg_users_preserve_site_people() RETURNS trigger AS $$
       BEGIN
+        -- Kilit sirasi: apartments (id sirasiyla) -> users -> site_people / apartment_residencies / vehicles. CRM yazmalari da ayni
+        -- sirayi izler; boylece kullanici silme ile "Tasindi"/pasiflestirme yarisi 40P01 (deadlock) uretmez.
+        PERFORM a.id
+        FROM apartments a
+        WHERE a.resident_user_code = OLD.user_code
+           OR a.id IN (SELECT am.apartment_id FROM apartment_memberships am WHERE am.user_code = OLD.user_code)
+           OR a.id IN (
+             SELECT r.apartment_id FROM apartment_residencies r
+             INNER JOIN site_people sp ON sp.id = r.person_id
+             WHERE sp.user_code = OLD.user_code AND r.is_current
+           )
+        ORDER BY a.id
+        FOR UPDATE;
+        -- Denetim YALNIZ aktiften pasife gecen kisiler icin (zaten pasif olanlar icin tekrar yazilmaz); hata silmeyi engellemez.
+        BEGIN
+          INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
+          SELECT 'Sistem', 'system', 'person.deactivated', sp.site_code, 'person', sp.id::text,
+                 jsonb_build_object('reason', 'account_deleted', 'auto', TRUE)
+          FROM site_people sp
+          WHERE sp.user_code = OLD.user_code AND sp.is_active;
+        EXCEPTION WHEN OTHERS THEN
+          NULL;
+        END;
         UPDATE site_people
         SET full_name = COALESCE(full_name, NULLIF(OLD.full_name, '')),
             phone = COALESCE(phone, NULLIF(OLD.phone_number, '')),
@@ -1182,15 +1205,6 @@ export async function ensureDbSchema() {
         SET is_active = FALSE
         FROM site_people sp
         WHERE v.person_id = sp.id AND sp.user_code = OLD.user_code AND v.is_active;
-        BEGIN
-          INSERT INTO audit_log (actor_name, actor_role, action, site_code, target_type, target_id, details)
-          SELECT 'Sistem', 'system', 'person.deactivated', sp.site_code, 'person', sp.id::text,
-                 jsonb_build_object('reason', 'account_deleted', 'auto', TRUE)
-          FROM site_people sp
-          WHERE sp.user_code = OLD.user_code;
-        EXCEPTION WHEN OTHERS THEN
-          NULL;
-        END;
         RETURN OLD;
       END;
       $$ LANGUAGE plpgsql;

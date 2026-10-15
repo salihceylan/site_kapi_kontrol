@@ -12,12 +12,16 @@ let log;
 let lockResult;
 let connectCalls;
 let failSteps;
+let userSites;
+let busyKeys;
 
 beforeEach(() => {
   log = [];
   lockResult = true;
   connectCalls = 0;
   failSteps = false;
+  userSites = [];
+  busyKeys = new Set();
   delete process.env.PEOPLE_SYNC_MIN_INTERVAL_MS;
   resetPeopleSyncThrottle();
   pool.connect = async () => {
@@ -26,7 +30,8 @@ beforeEach(() => {
       async query(text, params) {
         const sql = norm(text);
         log.push({ sql, params });
-        if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return { rows: [{ locked: lockResult }], rowCount: 1 };
+        if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return { rows: [{ locked: lockResult && !busyKeys.has(params?.[0]) }], rowCount: 1 };
+        if (/^SELECT DISTINCT site_code FROM \(/.test(sql)) return { rows: userSites.map((site_code) => ({ site_code })), rowCount: userSites.length };
         if (failSteps && /^WITH /.test(sql)) throw Object.assign(new Error('SECRET'), { code: 'XX000' });
         return { rows: [], rowCount: 0 };
       },
@@ -137,5 +142,37 @@ describe('H7: okuma uclari icin syncSitePeopleSafe', () => {
     };
     assert.equal(await syncSitePeopleSafe(SITE), null);
     assert.equal(await syncUserPeople('abc'), null);
+  });
+});
+
+describe('S8: kullanici bazli esitleme (my-records) CRM yazmalariyla yarismaz: ilgili sitelerin kilidini de alir', () => {
+  it('okuma (try-lock): kullanicinin siteleri sirayla try-lock ile kilitlenir; hepsi alinirsa adimlar calisir', async () => {
+    userSites = [1000000001, 1000000002];
+    await syncUserPeopleSafe(20004);
+    const locks = log.filter((q) => /^SELECT pg_try_advisory_xact_lock/.test(q.sql)).map((q) => q.params[0]);
+    assert.deepEqual(locks, ['people_sync_user:20004', 'people_sync:1000000001', 'people_sync:1000000002']);
+    assert.ok(log.some((q) => /^WITH /.test(q.sql)), 'adimlar calisti');
+    assert.equal(log[log.length - 1].sql, 'COMMIT');
+  });
+
+  it('bir sitenin CRM yazma kilidi MESGULSE kullanici esitlemesi ATLANIR (adim yok, hayalet iliski eklenmez), okuma engellenmez', async () => {
+    userSites = [1000000001, 1000000002];
+    busyKeys = new Set(['people_sync:1000000002']);
+    const result = await syncUserPeopleSafe(20004);
+    assert.deepEqual(result, { skipped: true, reason: 'busy' });
+    assert.equal(log.some((q) => /^WITH /.test(q.sql)), false);
+  });
+
+  it('acik cagri (wait:true) site kilitlerini BEKLER (bloklayan kilit)', async () => {
+    userSites = [1000000001];
+    await syncUserPeople(20004);
+    const blocking = log.filter((q) => /^SELECT pg_advisory_xact_lock/.test(q.sql)).map((q) => q.params[0]);
+    assert.deepEqual(blocking, ['people_sync_user:20004', 'people_sync:1000000001']);
+  });
+
+  it('kullanicinin sitesi yoksa yalniz kendi kilidi alinir ve adimlar yine calisir', async () => {
+    await syncUserPeopleSafe(20004);
+    assert.equal(log.filter((q) => /^SELECT pg_try_advisory_xact_lock/.test(q.sql)).length, 1);
+    assert.ok(log.some((q) => /^WITH /.test(q.sql)));
   });
 });

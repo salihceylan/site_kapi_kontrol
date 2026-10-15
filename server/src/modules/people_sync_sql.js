@@ -36,28 +36,47 @@ const DESIRED_CTE = `
 export const INTERNAL_EMAIL_SUFFIX = '@ahbu.local';
 
 /**
+ * "Sitede bağ" tanımının TEK kaynağı (eşitleme LINK adımı, createPerson/addResidency hesap bağlama ve erişim verme kararı bunu kullanır):
+ * kullanıcının O SİTENİN aktif dairesinde aktif apartment_memberships satırı VEYA o dairede apartments.resident_user_code göstergesi
+ * (yukarıdaki `desired` kümesiyle AYNI). Yalnız site_memberships (STAFF / BOARD_MEMBER / RESIDENT) ya da yöneticilik TEK BAŞINA bağ
+ * SAYILMAZ: yönetici başkasının hesabına ek rol vererek o hesabı "bağlı" yapıp kişi kaydına bağlayamaz.
+ * @param {string} userExpr kullanıcı kodu SQL ifadesi (ör. 'u.user_code', '$1')
+ * @param {string} siteExpr site kodu SQL ifadesi (ör. 'sp.site_code', '$2')
+ */
+export function siteTiePredicate(userExpr, siteExpr) {
+  return `(
+    EXISTS (
+      SELECT 1 FROM apartment_memberships tie_am
+      INNER JOIN apartments tie_a ON tie_a.id = tie_am.apartment_id
+      WHERE tie_a.site_code = ${siteExpr} AND tie_am.user_code = ${userExpr} AND tie_am.is_active = TRUE AND tie_a.is_active = TRUE
+    )
+    OR EXISTS (
+      SELECT 1 FROM apartments tie_r
+      WHERE tie_r.site_code = ${siteExpr} AND tie_r.resident_user_code = ${userExpr} AND tie_r.is_active = TRUE
+    )
+  )`;
+}
+
+/**
  * 1) Aynı e-postaya sahip hesapsız kişi varsa yinelenen kayıt açmak yerine o kişiye user_code bağlanır. Bağlanınca ad/telefon/e-posta
  * alanları BOŞALTILIR (hesaplı kişide okuma users'tan; hesap silinirse users BEFORE DELETE tetikleyicisi ad/telefonu yedekler).
  * Güvenlik: bağlama yalnız o sitede ZATEN erişimi (aktif üyelik / eski sakin göstergesi) olan hesaplarla yapılır (desired).
  * Elle girilmiş (origin='manual') ilişkiler bağlanınca korunur.
  */
 const LINK_ACCOUNTLESS_SQL = `
-  WITH ${DESIRED_CTE},
-  candidates AS (
-    SELECT DISTINCT d.site_code, d.user_code, lower(u.email) AS email
-    FROM desired d
-    INNER JOIN users u ON u.user_code = d.user_code
-    WHERE u.email IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
-  )
   UPDATE site_people sp
-  SET user_code = c.user_code, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
-  FROM candidates c
-  WHERE sp.site_code = c.site_code
-    AND sp.user_code IS NULL
+  SET user_code = u.user_code, full_name = NULL, phone = NULL, email = NULL, updated_at = NOW()
+  FROM users u
+  WHERE sp.user_code IS NULL
     AND sp.is_active = TRUE
-    AND lower(sp.email) = c.email
+    AND sp.email IS NOT NULL
+    AND lower(u.email) = lower(sp.email)
+    AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+    AND ($1::BIGINT IS NULL OR sp.site_code = $1::BIGINT)
+    AND ($2::INTEGER IS NULL OR u.user_code = $2::INTEGER)
+    AND ${siteTiePredicate('u.user_code', 'sp.site_code')}
     AND NOT EXISTS (
-      SELECT 1 FROM site_people x WHERE x.site_code = c.site_code AND x.user_code = c.user_code
+      SELECT 1 FROM site_people x WHERE x.site_code = sp.site_code AND x.user_code = u.user_code
     )
 `;
 
@@ -100,7 +119,9 @@ const INSERT_RESIDENCIES_SQL = `
  * 5) Otomatik bitirme: YALNIZ eşitleme kaynaklı (origin='sync') güncel ilişkiler ve YALNIZ destekleyen kayıt GERÇEKTEN kalmadıysa
  * (üyelik satırı silinmiş ve eski sakin göstergesi başka kişiye geçmiş/boşalmış). Pasif üyelik / askıya alınmış daire BİTİRMEZ
  * (geçici pasife alma taşınma değildir); elle girilmiş (origin='manual') ilişkiler yalnız açık "Taşındı"/pasifleştirmeyle biter.
- * Son ilişkisi biten kişi pasif olur (araçları da); hesapsız kişilere dokunulmaz. Sistem adına audit satırı yazılır.
+ * Son ilişkisi biten kişi pasif olur (araçları da) ve hesaptan KOPARILIR: ad/telefon/e-posta o anki hâliyle kişi satırına yazılır,
+ * user_code NULL olur (taşınan kişinin hesabını sonradan değiştirdiği bilgi bu sitede görünmesin). Hesapsız kişilere dokunulmaz.
+ * Sistem adına audit satırı yazılır.
  */
 const END_UNBACKED_SQL = `
   WITH ended AS (
@@ -136,8 +157,21 @@ const END_UNBACKED_SQL = `
   ),
   deactivated AS (
     UPDATE site_people sp
-    SET is_active = FALSE, updated_at = NOW()
-    WHERE sp.id IN (SELECT person_id FROM ended)
+    SET is_active = FALSE,
+        full_name = COALESCE(NULLIF(u.full_name, ''), sp.full_name),
+        phone = COALESCE(NULLIF(u.phone_number, ''), sp.phone),
+        email = CASE
+          WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN COALESCE(
+            (SELECT a.resident_email FROM apartments a WHERE a.resident_user_code = sp.user_code AND a.site_code = sp.site_code ORDER BY a.id LIMIT 1),
+            sp.email
+          )
+          ELSE u.email
+        END,
+        user_code = NULL,
+        updated_at = NOW()
+    FROM users u
+    WHERE u.user_code = sp.user_code
+      AND sp.id IN (SELECT person_id FROM ended)
       AND sp.is_active = TRUE
       AND NOT EXISTS (
         SELECT 1 FROM apartment_residencies c

@@ -36,7 +36,8 @@ import {
   todayIso,
   toIso,
 } from './people_common.js';
-import { INTERNAL_EMAIL_SUFFIX, runSyncSteps } from './people_sync_sql.js';
+import { deactivatePersonRecord } from './people_records.js';
+import { INTERNAL_EMAIL_SUFFIX, runSyncSteps, siteTiePredicate } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 
 export const PERSON_NOT_FOUND = () => new PlatformError(404, 'PERSON_NOT_FOUND', 'Kişi bulunamadı.');
@@ -92,10 +93,13 @@ const CONTACT_EMAIL_SQL = `(
   END
 )`;
 
-/** Hesap türü: 'none' (hesapsız) | 'internal' (dahili daire hesabı) | 'registered' (e-postayla kayıtlı gerçek hesap). */
+/** PASİF dahili daire hesabı (taşınan sakinin hesabı kapatıldı): giriş/kapı kapalı olduğundan "hesaplı" sayılmaz (dürüst gösterim). */
+const DEAD_INTERNAL_ACCOUNT_SQL = `(u.user_code IS NOT NULL AND u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' AND u.is_active = FALSE)`;
+
+/** Hesap türü: 'none' (hesapsız / pasif dahili hesap) | 'internal' (dahili daire hesabı) | 'registered' (e-postayla kayıtlı gerçek hesap). */
 const ACCOUNT_KIND_SQL = `(
   CASE
-    WHEN u.user_code IS NULL THEN 'none'
+    WHEN u.user_code IS NULL OR ${DEAD_INTERNAL_ACCOUNT_SQL} THEN 'none'
     WHEN u.email LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN 'internal'
     ELSE 'registered'
   END
@@ -111,7 +115,7 @@ const PERSON_SELECT = `
     COALESCE(NULLIF(u.full_name, ''), sp.full_name) AS full_name,
     COALESCE(NULLIF(u.phone_number, ''), sp.phone) AS phone,
     ${CONTACT_EMAIL_SQL} AS email,
-    (u.user_code IS NOT NULL) AS has_account,
+    (u.user_code IS NOT NULL AND NOT ${DEAD_INTERNAL_ACCOUNT_SQL}) AS has_account,
     ${ACCOUNT_KIND_SQL} AS account_kind
   ${PERSON_FROM}
 `;
@@ -186,7 +190,7 @@ export const VEHICLE_SELECT = `
   ) ap ON TRUE
 `;
 
-async function withSiteTransaction(siteCode, work) {
+async function runSiteTransactionOnce(siteCode, work) {
   const client = await pool.connect();
   let began = false;
   try {
@@ -207,6 +211,22 @@ async function withSiteTransaction(siteCode, work) {
     throw error;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * CRM yazma transaction'ı (site kilidi altında). Kilit sırası: site kilidi -> apartments (id sırasıyla) -> users -> kişi/ilişki/araç.
+ * Başka akışlarla (kullanıcı silme, daire sıfırlama...) nadir bir 40P01 (deadlock) olursa İŞLEM TEK SEFER baştan denenir.
+ * `work` yeniden çalışabilir olmalı: dış durum yalnız çağrı başında sıfırlanarak güncellenir.
+ */
+async function withSiteTransaction(siteCode, work) {
+  try {
+    return await runSiteTransactionOnce(siteCode, work);
+  } catch (error) {
+    if (error?.code === '40P01') {
+      return runSiteTransactionOnce(siteCode, work);
+    }
+    throw error;
   }
 }
 
@@ -539,6 +559,7 @@ async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) 
   );
   const member = memberResult.rows?.[0] ?? null;
   const legacy = apartment.resident_user_code !== null && apartment.resident_user_code !== undefined && Number(apartment.resident_user_code) === userCode;
+  const wasActiveAdmin = member?.is_active === true && member.role === 'APARTMENT_ADMIN';
   let closed = false;
   if (member && member.is_active === true) {
     await client.query(
@@ -547,8 +568,10 @@ async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) 
     );
     closed = true;
   }
-  if (legacy || member?.role === 'APARTMENT_ADMIN') {
-    await handOverApartmentResident(client, apartmentId, userCode);
+  // Yönetici devri YALNIZ çıkarılan kişi göstergenin sahibiyse (legacy) ya da AKTİF daire yöneticisiyse; gösterge/PIN'e yalnız
+  // gösterge çıkarılan kişiye aitse dokunulur (başka sakinin - ör. dahili hesabın - göstergesi ve PIN'i korunur).
+  if (legacy || wasActiveAdmin) {
+    await handOverApartmentResident(client, apartmentId, userCode, { indicatorOwnedByRemoved: legacy });
     closed = closed || legacy;
   }
   const internalOff = await client.query(
@@ -571,33 +594,20 @@ async function revokeApartmentAccess(client, { siteCode, apartment, userCode }) 
   return closed;
 }
 
-/** Kişinin aktif araçlarını pasifleştirir (kayıt silinmez; plaka kilitli kalmasın). Her araç için vehicle.removed audit. */
-async function deactivatePersonVehicles(client, { siteCode, personId, actor, reason }) {
-  const result = await client.query(
-    `UPDATE vehicles SET is_active = FALSE WHERE person_id = $1 AND is_active = TRUE RETURNING id, plate`,
-    [personId],
-  );
-  for (const vehicle of result.rows ?? []) {
-    await audit(client, actor, 'vehicle.removed', siteCode, 'vehicle', vehicle.id, {
-      plate: vehicle.plate,
-      person_id: Number(personId),
-      reason,
-    });
-  }
-}
-
 /**
- * Bir güncel ilişkiyi bitirir ("Taşındı"). Satır SİLİNMEZ. Önce daire satırı kilitlenir (üyelik akışlarıyla aynı kilit sırası,
- * 40P01 önleme). Kişinin hesabı varsa O DAİREDEKİ erişim kapanır (revokeApartmentAccess); başka dairedeki üyelikler etkilenmez.
- * Kişinin başka güncel ilişkisi kalmadıysa kişi pasif olur ve araçları pasifleşir.
+ * Bir güncel ilişkiyi bitirir ("Taşındı"). Satır SİLİNMEZ. Kilit sırası apartments -> users -> kişi/ilişki/araç: çağıranlar (endResidency,
+ * updatePerson) bilinen daireleri kişi/ilişki satırlarından ÖNCE kilitler; bu fonksiyon ilişkinin dairesini (yeniden) kilitleyerek başlar,
+ * böylece eşitlemenin sonradan bulduğu daireler de üyelik akışlarıyla aynı sırayı izler. Kişinin hesabı varsa O DAİREDEKİ erişim kapanır
+ * (revokeApartmentAccess); başka dairedeki üyelikler etkilenmez. Kişinin başka güncel ilişkisi kalmadıysa kişi pasif olur, HESAPTAN KOPAR
+ * (anlık kopya) ve araçları pasifleşir.
  * @returns {Promise<{ accessClosed: boolean }>}
  */
 async function closeResidency(client, { siteCode, residency, userCode, moveOutDate, actor, reason = null }) {
   const apartmentLock = await client.query(
-    `SELECT id, site_code, resident_user_code FROM apartments WHERE id = $1 FOR UPDATE`,
+    `SELECT id, site_code, resident_user_code, resident_email FROM apartments WHERE id = $1 FOR UPDATE`,
     [residency.apartment_id],
   );
-  const apartment = apartmentLock.rows?.[0] ?? { id: residency.apartment_id, resident_user_code: null };
+  const apartment = apartmentLock.rows?.[0] ?? { id: residency.apartment_id, resident_user_code: null, resident_email: null };
 
   const updated = await client.query(
     `
@@ -612,6 +622,11 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
     throw RESIDENCY_NOT_CURRENT();
   }
 
+  const contactEmailBeforeRevoke =
+    userCode !== null && userCode !== undefined && apartment.resident_user_code !== null && apartment.resident_user_code !== undefined
+    && Number(apartment.resident_user_code) === Number(userCode)
+      ? (apartment.resident_email ?? null)
+      : null;
   let accessClosed = false;
   if (userCode !== null && userCode !== undefined) {
     accessClosed = await revokeApartmentAccess(client, { siteCode, apartment, userCode });
@@ -630,16 +645,15 @@ async function closeResidency(client, { siteCode, residency, userCode, moveOutDa
     [residency.person_id],
   );
   if (!remaining.rows?.[0]) {
-    const deactivated = await client.query(
-      `UPDATE site_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND is_active = TRUE RETURNING id`,
-      [residency.person_id],
-    );
-    if (deactivated.rows?.[0]) {
-      await audit(client, actor, 'person.deactivated', siteCode, 'person', residency.person_id, {
-        reason: 'residency_ended',
-      });
-    }
-    await deactivatePersonVehicles(client, { siteCode, personId: residency.person_id, actor, reason: 'residency_ended' });
+    // Son ilişki bitti: kişi pasifleşir ve HESAPTAN KOPAR (ad/telefon/e-posta anlık kopyası kişi satırına yazılır, user_code NULL),
+    // araçları pasifleşir. Dahili hesapta güncel iletişim e-postası daire satırından alınır (gösterge henüz temizlenmeden okundu).
+    await deactivatePersonRecord(client, {
+      siteCode,
+      personId: residency.person_id,
+      actor,
+      reason: 'residency_ended',
+      contactEmail: contactEmailBeforeRevoke,
+    });
   }
   return { accessClosed };
 }
@@ -701,10 +715,11 @@ async function findPersonByEmail(db, siteCode, email) {
 }
 
 /**
- * E-postaya sahip kayıtlı hesap - YALNIZ bu sitede ZATEN aktif bir bağı olan hesap (aktif daire üyeliği, eski sakin göstergesi,
- * site üyeliği veya site yöneticiliği). Başka sitenin kullanıcısı bu yolla BAĞLANAMAZ, adı/telefonu/kodu sızmaz ve hesabın var olup
- * olmadığı yanıttan anlaşılamaz (bulunamazsa kişi hesapsız kaydedilir). Dahili (@ahbu.local) adresler asla eşleşmez; hesap bağlama
- * yalnız bu sorgunun sonucuyla yapılır (başka siteden kullanıcıya üyelik AÇILMAZ).
+ * E-postaya sahip kayıtlı hesap - YALNIZ bu sitede ZATEN "bağı" olan AKTİF hesap (siteTiePredicate: bu sitenin aktif dairesinde aktif
+ * apartment_memberships satırı veya apartments.resident_user_code göstergesi; eşitleme LINK adımıyla AYNI tanım). Yalnız site_memberships
+ * (STAFF / BOARD_MEMBER / RESIDENT) ya da yöneticilik bağ SAYILMAZ: başkasının hesabına ek rol verip onu "bağlı" yapmak mümkün değildir.
+ * Başka sitenin kullanıcısı bu yolla BAĞLANAMAZ, adı/telefonu/kodu sızmaz ve hesabın var olup olmadığı yanıttan anlaşılamaz (bulunamazsa
+ * kişi hesapsız kaydedilir). Dahili (@ahbu.local) adresler asla eşleşmez.
  */
 async function findSiteUserByEmail(db, siteCode, email) {
   if (typeof email !== 'string' || email === '' || email.endsWith(INTERNAL_EMAIL_SUFFIX)) {
@@ -716,27 +731,65 @@ async function findSiteUserByEmail(db, siteCode, email) {
       FROM users u
       WHERE lower(u.email) = $1
         AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
-        AND (
-          EXISTS (
-            SELECT 1 FROM apartment_memberships am
-            INNER JOIN apartments a ON a.id = am.apartment_id
-            WHERE a.site_code = $2 AND am.user_code = u.user_code AND am.is_active = TRUE AND a.is_active = TRUE
-          )
-          OR EXISTS (
-            SELECT 1 FROM apartments a WHERE a.site_code = $2 AND a.resident_user_code = u.user_code AND a.is_active = TRUE
-          )
-          OR EXISTS (
-            SELECT 1 FROM site_memberships sm WHERE sm.site_code = $2 AND sm.user_code = u.user_code AND sm.is_active = TRUE
-          )
-          OR EXISTS (
-            SELECT 1 FROM site_manager_sites s WHERE s.site_code = $2 AND s.manager_user_code = u.user_code
-          )
-        )
+        AND u.is_active = TRUE
+        AND ${siteTiePredicate('u.user_code', '$2')}
       LIMIT 1
     `,
     [email, siteCode],
   );
   return result.rows?.[0] ? Number(result.rows[0].user_code) : null;
+}
+
+/** Kullanıcı bu sitede erişim verilebilir mi: aktif hesap + sitede bağ (aynı tanım). Değilse kişi yalnız CRM ilişkisi olarak eklenir. */
+async function userHasUsableSiteTie(db, siteCode, userCode) {
+  if (userCode === null || userCode === undefined) {
+    return false;
+  }
+  const result = await db.query(
+    `
+      SELECT u.user_code
+      FROM users u
+      WHERE u.user_code = $1
+        AND u.is_active = TRUE
+        AND ${siteTiePredicate('u.user_code', '$2')}
+      LIMIT 1
+    `,
+    [Number(userCode), siteCode],
+  );
+  return Boolean(result.rows?.[0]);
+}
+
+/** Pasif kişiyi yeniden etkinleştirmeden önce çakışan AKTİF kişi var mı (uq_site_people_email) - varsa 409 PERSON_EXISTS (+ gerçek person_id). */
+async function conflictingPersonId(siteCode, email, excludeId) {
+  if (!email) {
+    return null;
+  }
+  const duplicate = await findPersonByEmail(pool, siteCode, String(email).toLowerCase()).catch(() => null);
+  return duplicate && Number(duplicate.id) !== Number(excludeId) && duplicate.is_active === true ? Number(duplicate.id) : null;
+}
+
+/**
+ * Pasif kişiyi etkinleştirir (updatePerson is_active:true, addResidency, createPerson yeniden kullanım). Hesapsız kişide e-posta başka
+ * AKTİF kişiye geçmişse veya 23505 olursa ham hata (500) yerine 409 PERSON_EXISTS döner.
+ */
+async function activatePersonRecord(client, { siteCode, person }) {
+  if (person.user_code === null || person.user_code === undefined) {
+    const email = person.email ? String(person.email).toLowerCase() : null;
+    if (email) {
+      const duplicate = await findPersonByEmail(client, siteCode, email);
+      if (duplicate && Number(duplicate.id) !== Number(person.id) && duplicate.is_active === true) {
+        throw personExists(duplicate.id);
+      }
+    }
+  }
+  try {
+    await client.query(`UPDATE site_people SET is_active = TRUE, updated_at = NOW() WHERE id = $1`, [person.id]);
+  } catch (error) {
+    if (error?.code === '23505') {
+      throw personExists(await conflictingPersonId(siteCode, person.email, person.id));
+    }
+    throw error;
+  }
 }
 
 /**
@@ -757,6 +810,7 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
 
   let provisionedApartmentId = null;
   const personId = await withSiteTransaction(siteCode, async (client) => {
+    provisionedApartmentId = null; // 40P01 yeniden denemesinde sıfırlanır
     const apartment = input.apartmentId ? await loadApartmentForSite(client, siteCode, input.apartmentId, { lock: true }) : null;
     if (apartment) {
       await assertRelationAvailable(client, apartment.id, input.relation);
@@ -772,7 +826,9 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
       reusePersonId = existing ? Number(existing.id) : null;
       linkedUserCode = await findSiteUserByEmail(client, siteCode, input.email);
       if (existing?.user_code !== null && existing?.user_code !== undefined) {
-        linkedUserCode = Number(existing.user_code);
+        // Pasif kişi hâlâ bir hesaba bağlıysa (eski kayıt): bağ yalnız "sitede bağ" kuralı sağlanıyorsa korunur; aksi halde kopar
+        // (erişim verilmez, canlı veri akışı kesilir).
+        linkedUserCode = (await userHasUsableSiteTie(client, siteCode, existing.user_code)) ? Number(existing.user_code) : null;
       }
     }
 
@@ -807,10 +863,10 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
           `
             UPDATE site_people
             SET is_active = TRUE,
-                user_code = COALESCE(user_code, $2),
-                full_name = CASE WHEN COALESCE(user_code, $2) IS NULL THEN $3::TEXT ELSE NULL END,
-                phone = CASE WHEN COALESCE(user_code, $2) IS NULL THEN COALESCE($4::TEXT, phone) ELSE NULL END,
-                email = CASE WHEN COALESCE(user_code, $2) IS NULL OR $6::BOOLEAN THEN COALESCE($7::TEXT, email) ELSE NULL END,
+                user_code = $2::INTEGER,
+                full_name = CASE WHEN $2::INTEGER IS NULL THEN $3::TEXT ELSE NULL END,
+                phone = CASE WHEN $2::INTEGER IS NULL THEN COALESCE($4::TEXT, phone) ELSE NULL END,
+                email = CASE WHEN $2::INTEGER IS NULL OR $6::BOOLEAN THEN COALESCE($7::TEXT, email) ELSE NULL END,
                 note = COALESCE($5, note),
                 updated_at = NOW()
             WHERE id = $1 AND site_code = $8
@@ -819,7 +875,7 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
         );
       } catch (error) {
         if (error?.code === '23505') {
-          throw personExists(id);
+          throw personExists(await conflictingPersonId(siteCode, input.email, id));
         }
         throw error;
       }
@@ -935,7 +991,25 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
 
   let closedAccess = false;
   await withSiteTransaction(siteCode, async (client) => {
+    closedAccess = false; // 40P01 yeniden denemesinde sıfırlanır
     if (nextIsActive === false) {
+      // Kilit sırası (apartments -> users -> kişi/ilişki): kişinin ŞU AN güncel ilişkisi olan daireler kişi satırlarından ÖNCE
+      // (id sırasıyla) kilitlenir; kullanıcı silme / daire sıfırlama akışlarıyla 40P01 yarışı olmasın. Eşitlemenin sonradan bulduğu
+      // dairelerin kilidi closeResidency'de alınır (nadir artık yarışta işlem TEK SEFER yeniden denenir).
+      const known = await client.query(
+        `
+          SELECT DISTINCT r.apartment_id
+          FROM apartment_residencies r
+          INNER JOIN site_people sp ON sp.id = r.person_id
+          WHERE r.person_id = $1 AND sp.site_code = $2 AND r.is_current = TRUE
+          ORDER BY r.apartment_id
+        `,
+        [id, siteCode],
+      );
+      const knownIds = (known.rows ?? []).map((row) => Number(row.apartment_id));
+      if (knownIds.length > 0) {
+        await client.query(`SELECT id FROM apartments WHERE id = ANY($1::BIGINT[]) ORDER BY id FOR UPDATE`, [knownIds]);
+      }
       // Pasifleştirmeden ÖNCE erişim üyelikleriyle eşitle: yansımamış bir üyelik sonradan kişiyi yeniden etkinleştirmesin.
       await runSyncSteps(client, { siteCode, userCode: null });
     }
@@ -1052,23 +1126,10 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
         });
         closedAccess = closedAccess || result.accessClosed;
       }
-      const deactivated = await client.query(
-        `UPDATE site_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND is_active = TRUE RETURNING id`,
-        [id],
-      );
-      if (deactivated.rows?.[0]) {
-        await audit(client, actor, 'person.deactivated', siteCode, 'person', id, {});
-      }
-      await deactivatePersonVehicles(client, { siteCode, personId: id, actor, reason: 'person_deactivated' });
+      // İlişkisi olmayan kişi için de: pasif + hesaptan kopar (ad/telefon/e-posta anlık kopyası) + araçlar pasif (zaten pasifse yalnız araçlar).
+      await deactivatePersonRecord(client, { siteCode, personId: id, actor, reason: 'person_deactivated' });
     } else if (nextIsActive === true && row.is_active === false) {
-      try {
-        await client.query(`UPDATE site_people SET is_active = TRUE, updated_at = NOW() WHERE id = $1`, [id]);
-      } catch (error) {
-        if (error?.code === '23505') {
-          throw personExists(0);
-        }
-        throw error;
-      }
+      await activatePersonRecord(client, { siteCode, person: { id, user_code: row.user_code, email: row.email } });
       await audit(client, actor, 'person.updated', siteCode, 'person', id, {
         changes: [{ field: 'is_active', from: false, to: true }],
       });
@@ -1079,7 +1140,6 @@ export async function updatePerson({ siteCode, personId, body = {}, actor, inclu
   return loadPersonDetail(pool, siteCode, id, { includeUserCode });
 }
 
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Yazma: ilişkiler
 // ---------------------------------------------------------------------------
@@ -1097,16 +1157,20 @@ export async function addResidency({ siteCode, personId, body = {}, actor, inclu
   const relation = parseRelationInput(body.relation, 'resident');
   const moveInDate = normalizeDateInput(body.move_in_date, 'move_in_date');
 
+  // Hızlı ön doğrulama (kilitsiz): başka sitenin dairesi / yok daire 404.
+  await loadApartmentForSite(pool, siteCode, apartmentId);
+
   await withSiteTransaction(siteCode, async (client) => {
+    // Kilit sırası: daire satırı (apartments) kişi satırından ÖNCE kilitlenir (kullanıcı silme / sıfırlama akışlarıyla 40P01 önleme).
+    const apartment = await loadApartmentForSite(client, siteCode, apartmentId, { lock: true });
     const found = await client.query(
-      `SELECT id, user_code, is_active FROM site_people WHERE id = $1 AND site_code = $2 FOR UPDATE`,
+      `SELECT id, user_code, is_active, email FROM site_people WHERE id = $1 AND site_code = $2 FOR UPDATE`,
       [id, siteCode],
     );
     const person = found.rows?.[0];
     if (!person) {
       throw PERSON_NOT_FOUND();
     }
-    const apartment = await loadApartmentForSite(client, siteCode, apartmentId);
     const duplicate = await client.query(
       `SELECT id FROM apartment_residencies WHERE apartment_id = $1 AND person_id = $2 AND is_current = TRUE LIMIT 1`,
       [apartmentId, id],
@@ -1123,12 +1187,13 @@ export async function addResidency({ siteCode, personId, body = {}, actor, inclu
       moveInDate: moveInDate ?? todayIso(),
     });
     if (person.is_active !== true) {
-      await client.query(`UPDATE site_people SET is_active = TRUE, updated_at = NOW() WHERE id = $1`, [id]);
+      await activatePersonRecord(client, { siteCode, person });
       await audit(client, actor, 'person.updated', siteCode, 'person', id, {
         changes: [{ field: 'is_active', from: false, to: true }],
       });
     }
-    if (person.user_code !== null && person.user_code !== undefined) {
+    // Erişim YALNIZ hesap aktifse ve bu sitede "bağ" varsa verilir (yoksa kişi yalnız CRM ilişkisi olarak eklenir; S2/S7).
+    if (person.user_code !== null && person.user_code !== undefined && (await userHasUsableSiteTie(client, siteCode, person.user_code))) {
       await grantApartmentAccess(client, { siteCode, apartmentId: Number(apartment.id), userCode: Number(person.user_code) });
     }
     await audit(client, actor, 'residency.added', siteCode, 'person', id, {
@@ -1224,6 +1289,21 @@ export async function endResidency({ siteCode, residencyId, body = {}, actor, in
 
   let accessClosed = false;
   const personId = await withSiteTransaction(siteCode, async (client) => {
+    accessClosed = false; // 40P01 yeniden denemesinde sıfırlanır
+    // Kilit sırası: ilişkinin dairesi (apartments) ilişki/kişi satırlarından ÖNCE kilitlenir (kilitsiz okuma -> daire kilidi -> ilişki
+    // kilidi ve yeniden okuma). Kullanıcı silme / daire sıfırlama / daire silme akışlarıyla 40P01 yarışını önler.
+    const pre = await client.query(
+      `
+        SELECT r.apartment_id
+        FROM apartment_residencies r
+        INNER JOIN site_people sp ON sp.id = r.person_id
+        WHERE r.id = $1 AND sp.site_code = $2
+      `,
+      [id, siteCode],
+    );
+    if (pre.rows?.[0]) {
+      await client.query(`SELECT id FROM apartments WHERE id = $1 FOR UPDATE`, [pre.rows[0].apartment_id]);
+    }
     const row = await loadResidencyForSite(client, siteCode, id);
     if (row.is_current !== true) {
       throw RESIDENCY_NOT_CURRENT();
