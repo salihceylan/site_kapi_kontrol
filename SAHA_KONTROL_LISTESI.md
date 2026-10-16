@@ -1373,3 +1373,58 @@ Sitedeki herkesin, her dairenin ve her aracın tek yerde tutulduğu çekirdek ka
 - [ ] **60.18. (Operasyon) Canlı Dağıtım Doğrulaması:**
   - **Nasıl Test Edilir:** Sunucuda: `SELECT code FROM platform_backfills;` ve `SELECT tgname FROM pg_trigger WHERE tgname='trg_users_preserve_site_people';` ve `pm2 logs kapi-api --lines 60 --nostream`.
   - **Beklenen Sonuç:** Biri `people_v1`, diğeri tetikleyici adını döndürür; günlükte "people_v1 aktarimi basarisiz" yoktur; `/health` içinde `mqtt.connected:true`. (Provada 3 aktif üyelik = 3 kişi + 3 ilişki; kapı üyelik sayısı değişmedi.)
+
+---
+
+## 61. 📢 Duyuru ve Bildirim — Faz 3a: Duyuru, Hedefleme, Okundu, E-posta, Tercihler (2026-10-16)
+
+Yönetimin sakinlere duyuru yaptığı çekirdek modül (her sitede hep açık). Sözleşme: `docs/PLATFORM_DUYURU.md` (sonundaki kararlar öncelikli). Bu sürümde uygulama kapalıyken telefon bildirimi ve Belgeler YOK (Faz 3b; telefon bildirimi için Firebase kurulumu gerekir); SMS ve WhatsApp "Yakında…". Uygulama açıkken bildirim anlık itme değil, ~20 sn yoklamadır.
+
+- [ ] **61.1. Duyuru Oluşturma ve Hedef Seçimi:**
+  - **Nasıl Test Edilir:** Site yöneticisi olarak çekmeceden "Duyurular"ı açın; "Yeni Duyuru": başlık, metin, önem (Normal/Acil); hedefi "Tüm site", sonra "Bloklar", sonra "Daireler" seçerek deneyin; yayınlamadan önce çıkan "N kişiye ulaşır, M kişinin e-postası var" özetine bakın.
+  - **Beklenen Sonuç:** Hedef değişince kişi sayısı değişir. Hedefte ulaşılacak kimse yoksa yayın engellenir ve nedeni söylenir. SMS ve WhatsApp seçenekleri "Yakında…" etiketli ve pasiftir.
+- [ ] **61.2. Yayınlama, Sakinde Görünme ve Okundu:**
+  - **Nasıl Test Edilir:** Duyuruyu "Şimdi yayınla". Sakin hesabıyla Duyurular'ı açın, duyuruyu okuyun; yönetici olarak duyurunun ayrıntısında "Alıcılar" sekmesine bakın.
+  - **Beklenen Sonuç:** Sakinde okunmamış duyuru nokta ve kalın başlıkla görünür, açınca okundu olur, çekmece rozeti düşer. Yönetici kaç kişinin okuduğunu ve okumayanların isimlerini görür (Okumayanlar / Okuyanlar, arama).
+- [ ] **61.3. Anlık Bildirim (Yaklaşık 20 Saniye) ve Acil Şerit:**
+  - **Nasıl Test Edilir:** Sakin hesabı uygulamayı açık tutarken yönetici yeni duyuru, sonra Acil duyuru yayınlasın. Sakin Profilim ekranına geçip aşağı kaydırsın.
+  - **Beklenen Sonuç:** En geç ~20 sn içinde "Yeni duyuru" uyarısı ve rozet çıkar (sayfayı yenilemeden). Acil duyuruda ekranın üstünde kırmızı şerit okunana kadar sabit kalır, kaydırınca kaybolmaz, başka menülerde de görünür; dokununca duyuru açılır, okununca şerit kalkar. Bağlantı koparsa "daha seyrek kontrol ediliyor" notu çıkar.
+- [ ] **61.4. Taslak, Zamanlama ve Zamanında Yayın:**
+  - **Nasıl Test Edilir:** Taslak kaydedin; Düzenle → Zamanla: 2-3 dakika sonrası (İstanbul saati); geçmiş saat ve 1 yıldan uzak saat deneyin; bekleyin.
+  - **Beklenen Sonuç:** Taslak ve "Zamanlanmış" yalnız yöneticide görünür. Zamanı gelince kendiliğinden "Yayında" olur ve sakinlere ulaşır (audit'te "Sistem"). Geçersiz zaman açık Türkçe uyarı verir.
+- [ ] **61.5. Düzenleme, Geri Çekme ve Silme:**
+  - **Nasıl Test Edilir:** Yayınlanmış duyurunun metnini düzeltin; başka bir duyuruyu geri çekin; bir taslağı silin; yayınlanmışı silmeyi deneyin.
+  - **Beklenen Sonuç:** Düzeltme sakinde güncellenir ve "Düzenlendi" notu görünür (yeniden bildirim/e-posta yok). Yayınlanmış duyuruda yalnız başlık/metin değişir. Geri çekilen duyuru sakinde kaybolur, yöneticide "Geri çekildi" olarak kalır. Silme yalnız taslak/zamanlanmışta (onaylı).
+- [ ] **61.6. E-posta ile Gönderme ve İstatistik:**
+  - **Nasıl Test Edilir:** "E-posta da gönder"i işaretleyerek (kendi e-postalı kişiniz dahil) yayınlayın; duyuru ayrıntısındaki e-posta özetine bakın; aynı adresli iki kişiye gönderin.
+  - **Beklenen Sonuç:** Yayın isteği hemen döner, e-postalar kısa sürede gelir. Konu "[Site Adı] Başlık" (acilde "ACİL: " öneki). İstatistik: gönderilen, e-postası olmayan, tercihi nedeniyle atlanan, yinelenen adres, sınır nedeniyle atlanan. Aynı adrese bir duyuruda tek e-posta gider.
+- [ ] **61.7. Bildirim Tercihleri:**
+  - **Nasıl Test Edilir:** Sakin hesabında Profil → "Bildirim Tercihleri": e-posta anahtarını kapatın; yönetici normal, sonra acil duyuruyu e-postalı yayınlasın.
+  - **Beklenen Sonuç:** Normal duyurunun e-postası gelmez (uygulamada görünür), acil duyurunun e-postası tercihten etkilenmez. "Telefon bildirimi — Yakında…" pasiftir. Yalnız görevli ve bireysel hesapta bu bölüm ve "Duyurular" menüsü yoktur.
+- [ ] **61.8. Abonelikten Çıkma Bağlantısı:**
+  - **Nasıl Test Edilir:** Hesabı olmayan (yalnız kayıtlı) e-postalı bir kişiye duyuru gönderin; e-postadaki "Abonelikten çık" bağlantısını açıp onaylayın (Gmail'de ayrıca "Abonelikten çık" düğmesi); aynı kişiye yeni (acil dahil) duyuru gönderin. Hesabı olan biri için aynı bağlantıyı kullanıp uygulamadaki tercihe bakın, tercihi açın.
+  - **Beklenen Sonuç:** Onay sayfası açılır, "Evet"e basılana kadar hiçbir şey değişmez. Çıkıştan sonra o adrese acil dahil duyuru e-postası gitmez (istatistikte "tercihi nedeniyle atlandı"). Hesabı olan kişide uygulamadaki e-posta tercihi KAPALI görünür; tercihi açınca e-postalar yeniden gelir.
+- [ ] **61.9. Kötüye Kullanım Sınırları:**
+  - **Nasıl Test Edilir:** Aynı duyuruyu art arda iki kez yayınlayın; kısa sürede çok sayıda e-postalı yayın veya zamanlama yapın; aynı adrese bir gün içinde dörtten çok duyuru e-postası gönderin.
+  - **Beklenen Sonuç:** İkinci aynı duyuru "az önce yayınlandı" diye engellenir ve liste güncellenir. Yönetici saatlik sınır (10 e-postalı yayın/zamanlama), site günlük sınırları (30 yayın, 3 acil+e-posta) aşılınca açık Türkçe mesaj çıkar; adres başına günlük 3 sınırını aşan e-posta "sınır nedeniyle atlandı" olur.
+- [ ] **61.10. Yönetim Kurulu Üyesi: Salt Okunur:**
+  - **Nasıl Test Edilir:** Kurul hesabıyla Duyurular → "Yönetim görünümü"; çok az kişiye (1-4) giden bir duyuruyu açın; görevli hesabıyla menüye bakın.
+  - **Beklenen Sonuç:** Yazma düğmeleri, alıcı isimleri ve oluşturan kişi görünmez; yalnız içerik ve sayılar vardır. 1-4 alıcılı duyuruda okunma/e-posta sayıları "—" ve "Gizli: küçük hedef" olur. Görevli hesapta "Duyurular" yoktur.
+- [ ] **61.11. Başka Siteden Duyuru Görünmez:**
+  - **Nasıl Test Edilir:** İki ayrı sitede iki ayrı yönetici birer duyuru yayınlasın; her sitenin sakin hesabıyla gelen kutusuna bakın.
+  - **Beklenen Sonuç:** Sakin yalnız kendi sitesinin ve kendisine hedeflenen duyuruları görür. Başka sitenin duyurusu hiçbir ekranda çıkmaz.
+- [ ] **61.12. Form Hataları ve Girişler:**
+  - **Nasıl Test Edilir:** Başlığı boş bırakıp ekranın altındaki Yayınla'ya basın; saat alanına 9:30 yapıştırın; tarihe 31.02 yazın; başlığa 130 karakter yapıştırın; Acil seçip e-postayı kapatın ve Acil'e yeniden dokunun; yazı boyutunu en büyüğe alın.
+  - **Beklenen Sonuç:** Eksik alan olunca form ilk hatalı alana kaydırır, imleç oradadır ve "işaretli alanları düzeltin" özeti çıkar. Saat 09:30 olur; 31.02 "Geçersiz tarih" der; uzun başlık sessizce kesilmez, sayaç kırmızı olur ve gönderilmez; Acil'e yeniden dokunmak e-posta tercihini ezmez. Taşma yoktur.
+- [ ] **61.13. Aynı Sitede Görevli ve Sakin:**
+  - **Nasıl Test Edilir:** Aynı sitede hem görevli rolü hem dairesi olan hesapla giriş yapın.
+  - **Beklenen Sonuç:** "Duyurular" menüsü, rozet, bildirim ve tercih bölümü çalışır (kapı erişimi olan görevli sakin sayılır). Yalnız görevli (dairesi/kapı erişimi olmayan) hesapta yoktur.
+- [ ] **61.14. (Geliştirici) Gerçek Veritabanı ve Yarış Doğrulaması:**
+  - **Nasıl Test Edilir:** server klasöründe `node scripts/qa_platform_pg.mjs` komutunu `QA_CONFIRM_DISPOSABLE_DB=yes` ile çalıştırın.
+  - **Beklenen Sonuç:** Yedi bölüm yeşil (≈771 kontrol): migrate zinciri = ensureDbSchema, kitle kuralları, yayın yarışları, IDOR/rol matrisi, e-posta kuyruğu (tercih, acil, sınırlar, bastırma, geri çekme yarışı), kilit turları (yayın × yapı değişikliği dahil, 40P01=0), 3000 daireli sitede yayın ≈250 ms.
+- [ ] **61.15. (Operasyon) Gizli Anahtar, Genel Uç ve Dağıtım:**
+  - **Nasıl Test Edilir:** Sunucu .env'e güçlü rastgele ANNOUNCEMENT_EMAIL_SECRET (≥ 16 karakter) ekleyin (ilk e-postadan önce; değiştirilirse eskisini ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS'a yazın); PUBLIC_APP_URL/PUBLIC_BASE_URL kökünü doğrulayın; `curl -i "https://api.gudeteknoloji.com.tr/public/announcement-unsubscribe?t=x"`; pm2 loglarına bakın.
+  - **Beklenen Sonuç:** Tanımsız/zayıf sır için açılışta `[ENV] UYARI` görünür; sır tanımlıyken görünmez. Geçersiz belirteçli istek 400 ve "Bağlantı geçersiz" sayfası (CSP başlıklarıyla) döner. Kök yanlışsa e-postadaki bağlantı ölüdür. Loglarda e-posta adresi/başlık yoktur, erişim logunda `?t=***` maskelidir.
+- [ ] **61.16. Eski Ekranlar ve Kapı Açma Etkilenmedi:**
+  - **Nasıl Test Edilir:** Duyuru özelliği gelmişken kapı açma, QR, misafir bağlantısı, Kişiler ve Modüller ekranlarını kısaca kullanın.
+  - **Beklenen Sonuç:** Hiçbiri değişmeden çalışır. Modüller ekranında "Duyuru ve Bildirim" "Her sitede açık" görünür.

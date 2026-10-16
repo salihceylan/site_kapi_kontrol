@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1 ve Faz 2a (Kişi ve Daire Kayıtları) canlıda ve denemeye hazır. Faz 2'nin Excel'den toplu yükleme ve dışa aktarma maddeleri (F2.08, F2.09) sıradaki adım. Faz 3 (duyuru ve bildirim) sırada. Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a ve Faz 3a (Duyuru ve Bildirim) canlıda ve denemeye hazır. Sırada: Faz 2b (Excel'den toplu yükleme ve dışa aktarma), Faz 3b (Belgeler ve uygulama kapalıyken telefon bildirimi; telefon bildirimi için sizden Firebase kurulumu gerekecek). Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
   "bolumler": [
     {
       "id": "F0",
@@ -636,8 +636,8 @@
     {
       "id": "F3",
       "baslik": "Duyuru ve bildirim",
-      "durum": "planli",
-      "ozet": "Yönetim sakinlere duyuru yapar. Duyuru uygulamada, e-postayla ve telefon bildirimiyle ulaşır. SMS ve WhatsApp sonraki aşamadadır (Yakında…). Her sitede hep açıktır.",
+      "durum": "hazir",
+      "ozet": "Yönetim sakinlere duyuru yapar: uygulamada, e-postayla ve (sonraki adımda) telefon bildirimiyle. Duyurular hedeflenir (tüm site, bloklar, seçili daireler), zamanlanabilir, okunma takip edilir. Belgeler ve uygulama kapalıyken telefon bildirimi bir sonraki adımdadır; SMS ve WhatsApp Yakında… Her sitede hep açıktır.",
       "maddeler": [
         {
           "id": "F3.01",
@@ -650,20 +650,21 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.02",
           "baslik": "Kime gideceğini seçme",
           "adimlar": [
-            "Yeni duyuruda hedefi seçin: tüm site, bir blok ya da seçili daireler.",
+            "Yeni duyuruda hedefi seçin: tüm site, bir ya da birkaç blok, ya da seçili daireler.",
+            "Yayınlamadan önce çıkan “N kişiye ulaşır, M kişinin e-postası var” özetine bakın.",
             "Yayınlayıp farklı bloklardaki sakin hesaplarıyla bakın."
           ],
-          "beklenen": "Duyuru yalnızca seçilen hedefteki kişilerde görünür. Yönetici, kaç kişiye gideceğini yayından önce görür.",
+          "beklenen": "Duyuru yalnızca seçilen hedefteki kişilerde görünür. Yönetici kaç kişiye gideceğini yayından önce görür. Hedefte ulaşılacak kimse yoksa yayın engellenir ve nedeni söylenir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.03",
@@ -676,7 +677,7 @@
           "rol_notu": "Daire sakini",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.04",
@@ -684,24 +685,24 @@
           "adimlar": [
             "Yönetici olarak yayınlanmış duyurunun ayrıntısını açın."
           ],
-          "beklenen": "Kaç kişinin okuduğu ve kimlerin okumadığı görünür.",
+          "beklenen": "Kaç kişinin okuduğu ve kimlerin okumadığı (isimle) görünür. Yönetim kurulu üyesi yalnız sayıları görür, isimleri görmez; çok az kişiye giden duyurularda sayılar da gizlenir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.05",
-          "baslik": "Uygulama açıkken anında bildirim",
+          "baslik": "Uygulama açıkken bildirim (yaklaşık 20 saniye)",
           "adimlar": [
             "Sakin hesabıyla uygulamayı açık bırakın.",
             "Yönetici hesabıyla yeni duyuru yayınlayın."
           ],
-          "beklenen": "Sakinin ekranında sayfayı yenilemeden bildirim ve rozet belirir.",
+          "beklenen": "Sakinin ekranında sayfayı yenilemeden, en geç yaklaşık 20 saniye içinde “Yeni duyuru” uyarısı ve rozet belirir. Acil duyuru, okunana kadar ekranın üstünde kırmızı bir şeritte kalır ve her ekranda görünür. (Uygulama kapalıyken telefon bildirimi sonraki adımdadır.)",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.06",
@@ -709,15 +710,15 @@
           "adimlar": [
             "Yeni duyuruda “E-posta da gönder”i işaretleyip yayınlayın."
           ],
-          "beklenen": "E-postası kayıtlı hedef kişilere e-posta gider. Yönetici kaç e-posta gönderildiğini, kaç kişinin e-postası olmadığını görür.",
+          "beklenen": "E-postası kayıtlı hedef kişilere e-posta gider (aynı adrese bir duyuru yalnız bir kez). Yönetici kaç e-posta gönderildiğini, kaç kişinin e-postası olmadığını, kaçının tercihi nedeniyle atlandığını görür. Yayın isteği e-postanın bitmesini beklemez; e-postanın altında abonelikten çıkma bağlantısı vardır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "E-postası kayıtlı birkaç sakin",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.07",
-          "baslik": "Uygulama kapalıyken telefon bildirimi",
+          "baslik": "Uygulama kapalıyken telefon bildirimi (sonraki adım)",
           "adimlar": [
             "Sakin telefonunda uygulamayı tamamen kapatın.",
             "Yönetici hesabıyla acil duyuru yayınlayın."
@@ -739,7 +740,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.09",
@@ -752,7 +753,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.10",
@@ -761,15 +762,15 @@
             "Sakin hesabında “Bildirim Tercihleri”ni açın.",
             "E-posta bildirimini kapatın."
           ],
-          "beklenen": "Normal duyurular e-posta ile gelmez, uygulamada görünmeye devam eder. Acil duyurular tercih ne olursa olsun gider.",
+          "beklenen": "Normal duyurular e-posta ile gelmez, uygulamada görünmeye devam eder. Acil duyuruların e-postası tercihten etkilenmez; uygulamada her zaman görünürler. “Telefon bildirimi” Yakında… olarak pasif görünür.",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F3.11",
-          "baslik": "Belgeler",
+          "baslik": "Belgeler (sonraki adım)",
           "adimlar": [
             "Yönetici “Belgeler”e bir PDF (ör. yönetim planı) yükler ve kimlerin göreceğini seçer.",
             "Sakin hesabıyla belgeyi açın."
@@ -799,6 +800,86 @@
           "on_kosul": "",
           "yeni": false,
           "gelistirme": "yakinda"
+        },
+        {
+          "id": "F3.14",
+          "baslik": "Yönetim kurulu üyesi yalnız okur",
+          "adimlar": [
+            "Yönetim kurulu üyesi hesabıyla “Duyurular” → “Yönetim görünümü”i açın.",
+            "Bir duyuruya dokunun; yazma düğmelerine ve alıcı listesine bakın."
+          ],
+          "beklenen": "Yeni duyuru, düzenle, geri çek, sil düğmeleri yoktur; alıcı isimleri ve oluşturan kişi görünmez, yalnız içerik ve sayılar vardır. Görevli (STAFF) hesabında “Duyurular” menüsü yoktur.",
+          "rol_notu": "Yönetim kurulu üyesi / görevli",
+          "on_kosul": "Yönetim kurulu üyesi tanımlı bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F3.15",
+          "baslik": "Başka sitenin duyurusu görünmez",
+          "adimlar": [
+            "İki ayrı sitede iki ayrı yönetici hesabıyla birer duyuru yayınlayın.",
+            "Her sitenin sakin hesabıyla gelen kutusuna bakın; birinci sitenin yöneticisiyle ikinci sitenin duyurusunu açmayı deneyin."
+          ],
+          "beklenen": "Sakin yalnız kendi sitesinin (ve kendisine hedeflenmiş) duyurularını görür. Başka sitenin duyurusu hiçbir ekranda ya da listede çıkmaz.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "İki ayrı site",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F3.16",
+          "baslik": "Acil duyuru her ekranda görünür",
+          "adimlar": [
+            "Sakin hesabıyla Profilim ekranındayken yönetici acil bir duyuru yayınlasın.",
+            "Panel'e dönüp aşağı kaydırın; başka bir menüye geçin."
+          ],
+          "beklenen": "Ekranın üstünde kırmızı “Acil duyuru” şeridi okunana kadar sabit kalır (kaydırınca kaybolmaz, başka menülerde de görünür). Dokununca duyuru açılır; okununca şerit kalkar.",
+          "rol_notu": "Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F3.17",
+          "baslik": "Form kullanımı: hata uyarıları ve girişler",
+          "adimlar": [
+            "Yeni duyuruda başlığı boş bırakıp ekranın altındaki Yayınla'ya basın.",
+            "Saat alanına 9:30 yapıştırın; tarihe 31.02 yazın; başlığa 130 karakter yapıştırın.",
+            "Önemi Acil yapın, e-postayı kapatın, Acil çipine yeniden dokunun."
+          ],
+          "beklenen": "Eksik alan olduğunda form ilk hatalı alana kaydırır ve “işaretli alanları düzeltin” uyarısı çıkar. Saat 09:30 olur; 31.02 için “Geçersiz tarih” denir; fazla uzun başlık sessizce kesilmez, sayaç kırmızı olur ve gönderilmez. Acil çipine yeniden dokunmak kapattığınız e-posta tercihini değiştirmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F3.18",
+          "baslik": "Aynı duyuruyu iki kez yayınlama koruması",
+          "adimlar": [
+            "Aynı başlık ve metinle art arda iki kez “Şimdi yayınla” yapın (yarım dakika içinde).",
+            "Bir günde çok sayıda duyuru yayınlamayı deneyin."
+          ],
+          "beklenen": "İkinci aynı duyuru “zaten yayınlandı” uyarısıyla engellenir ve liste güncellenir. Günlük/saatlik sınır aşılırsa açık bir Türkçe mesaj çıkar.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F3.19",
+          "baslik": "E-postadan abonelikten çıkma",
+          "adimlar": [
+            "Hesabı olmayan (yalnız kayıtlı) bir kişiye e-postalı duyuru gönderin.",
+            "Gelen e-postadaki “abonelikten çık” bağlantısını açın ve onaylayın.",
+            "Aynı kişiye yeni bir duyuru gönderin."
+          ],
+          "beklenen": "Onay sayfası açılır, onaylayınca bir daha duyuru e-postası gelmez; yönetici istatistiğinde “tercihi nedeniyle atlandı” görünür. Kişinin kaydı ve uygulama içi duyuruları (hesabı varsa) etkilenmez.",
+          "rol_notu": "Alıcı / site yöneticisi",
+          "on_kosul": "E-postası olan hesapsız bir kişi",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
