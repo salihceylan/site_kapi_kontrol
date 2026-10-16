@@ -448,7 +448,7 @@ inline bool mqttReconnect() {
   }
   gMqttOnKontrolHataSayac = 0;  // tam connect'e giriliyor (on-kontrol gecti ya da atlandi)
 
-  const String clientId = "JetPass-" + cihazUniqueId();  // urun adi (eski: "AHBU-"); broker yetkisi kullanici adina bagli
+  const String clientId = "SmartKeyPass-" + cihazUniqueId();  // urun adi (eski: "AHBU-"); broker yetkisi kullanici adina bagli
   const String deviceAvailabilityTopic = mqttDeviceTopic("availability");
   const String mqttUser = wifiMqttUser(MQTT_DEFAULT_USER);
   const String mqttPass = wifiMqttPassword(MQTT_DEFAULT_PASS);

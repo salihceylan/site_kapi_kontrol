@@ -1,11 +1,11 @@
-# JetPass Cihaz Etiketleyici (Windows Desktop)
+# SmartKeyPass Cihaz Etiketleyici (Windows Desktop)
 
 Bu arac Windows'ta masaustu uygulamasi olarak calisir.
 
 Amac:
 - Bagli ESP32 cihazlarini otomatik tarar.
 - Cihazin unique ID bilgisini (MAC) otomatik okur.
-- Ortasi JetPass logolu QR olusturur.
+- Ortasi SmartKeyPass logolu QR olusturur.
 - QR cikti dosyasini `output/` klasorune kaydeder.
 - `cihaz_kontrol` kodundan firmware surumu olusturur.
 - Son surumu secili ESP32 cihaza yukler.
@@ -64,7 +64,7 @@ Bu pencerede:
 
 ## Cihaz Kaydı, Sunucu Depolama ve PDF Raporlama
 
-JetPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilgisayarda hem de sunucuda arşivler:
+SmartKeyPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilgisayarda hem de sunucuda arşivler:
 
 ### 1. Sunucu Tarafı Depolama (VPS)
 - **Karekod PNG Dosyaları:** `/var/www/site_kapi_kontrol/server/public/qrcodes/<device_uid>.png`
@@ -79,7 +79,7 @@ JetPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilgisaya
 ### 2. Yerel Bilgisayar Depolama
 - **Karekod PNG Dosyaları:** `company_qr_tool/output/qrcodes/<device_uid>.png`
 - **Cihaz İndeks Dosyası:** `company_qr_tool/output/labeled_devices.json`
-- **PDF Raporları:** İsteğe bağlı olarak seçilen dosya yolu (ör. `JetPass_Cihaz_Karekod_Raporu_YYYYMMDD.pdf`)
+- **PDF Raporları:** İsteğe bağlı olarak seçilen dosya yolu (ör. `SmartKeyPass_Cihaz_Karekod_Raporu_YYYYMMDD.pdf`)
 
 ### 3. Yeni Butonlar ve İşlevleri
 - **`[ Cihazı Sunucuya Kaydet ]`**: Seçili cihazın UID'sini, çipini ve karekod görselini sunucuya (`/var/www/site_kapi_kontrol/server/public/qrcodes/`) ve veritabanına aktarır.
@@ -88,8 +88,8 @@ JetPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilgisaya
 
 ## Logo
 
-Karekodun ortasindaki ve rapor basligindaki logo `company_qr_tool/assets/jetpass_logo.png` dosyasidir
-(JetPass, Akilli Gecis Sistemleri). Eski `ahbu_logo.png` ev otomasyonunun logosuydu, kaldirildi.
+Karekodun ortasindaki ve rapor basligindaki logo `company_qr_tool/assets/smartkeypass_logo.png` dosyasidir
+(SmartKeyPass, Akilli Gecis Sistemleri). Eski `ahbu_logo.png` ev otomasyonunun logosuydu, kaldirildi.
 
 ## Gereksinimler
 

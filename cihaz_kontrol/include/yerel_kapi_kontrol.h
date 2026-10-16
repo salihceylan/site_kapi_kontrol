@@ -286,7 +286,7 @@ inline void yerelKapiKontrolBaslat() {
     gYerelDurum.sonKabulVar = false;
   }
 
-  String mdnsHost = "jetpass-" + cihazUniqueId();  // urun adi (eski: "ahbu-")
+  String mdnsHost = "smartkeypass-" + cihazUniqueId();  // urun adi (eski: "ahbu-")
   mdnsHost.toLowerCase();
   if (MDNS.begin(mdnsHost.c_str())) {
     MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);  // servis turu protokol kimligidir, DEGISMEZ

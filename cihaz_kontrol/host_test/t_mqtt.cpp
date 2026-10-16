@@ -114,16 +114,17 @@ int main() {
   g_local_token = "tok";
 
   // ------------------------------------------------------------------------------------------------ E surumler
-  { printf("E sürümler (OTA_VERSION_C3 4.3.2, OTA_VERSION_WROOM 5.2.1: JetPass adi)\n");
-    CHECK(std::string(OTA_VERSION_C3) == "4.3.2", "OTA_VERSION_C3 = 4.3.2");
-    CHECK(std::string(OTA_VERSION_WROOM) == "5.2.1", "OTA_VERSION_WROOM = 5.2.1");
+  { printf("E sürümler (OTA_VERSION_C3 4.3.3, OTA_VERSION_WROOM 5.2.2: SmartKeyPass adi)\n");
+    CHECK(std::string(OTA_VERSION_C3) == "4.3.3", "OTA_VERSION_C3 = 4.3.3");
+    CHECK(std::string(OTA_VERSION_WROOM) == "5.2.2", "OTA_VERSION_WROOM = 5.2.2");
 #if defined(BOARD_ESP32_WROOM_RELAY)
-    CHECK(std::string(OTA_CURRENT_VERSION) == "5.2.1" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.2.1 / esp32-wroom");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "5.2.2" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.2.2 / esp32-wroom");
 #else
-    CHECK(std::string(OTA_CURRENT_VERSION) == "4.3.2" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.3.2 / esp32-c3");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "4.3.3" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.3.3 / esp32-c3");
 #endif
-    // Onceki (AHBU adli) surumler 4.3.1 / 5.2.0: JetPass yuklenen kart OTA ile eski ada geri DONMEZ (artan-surum kurali).
-    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.3.1")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.2.0")) > 0, "yeni surumler eskilerden BUYUK (OTA artan-surum kurali)");
+    // Onceki surumler (AHBU adli 4.3.1 / 5.2.0 ve ara surum 4.3.2 / 5.2.1): SmartKeyPass yuklenen kart OTA ile eski ada
+    // geri DONMEZ (artan-surum kurali).
+    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.3.2")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.2.1")) > 0, "yeni surumler eskilerden BUYUK (OTA artan-surum kurali)");
   }
 
   // ------------------------------------------------------------------------------------------------ acilis: gercek mqttSetup/otaSetup/baglanma

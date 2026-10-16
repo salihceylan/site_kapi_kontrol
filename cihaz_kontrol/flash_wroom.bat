@@ -19,7 +19,7 @@ echo [2/3] Firmware app0 (0x10000) yukleniyor (%PORT%)...
 call pio run -e esp32_relay_wroom -t upload --upload-port %PORT%
 if errorlevel 1 (
     echo [HATA] USB yukleme basarisiz!
-    echo Lutfen JetPass Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak kapatin!
+    echo Lutfen SmartKeyPass Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak kapatin!
     exit /b 1
 )
 

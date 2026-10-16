@@ -21,9 +21,11 @@
 // Hedef donanimlara ozel surumler (C3 sahadaki cihazlar ile WROOM ayri takip edilir).
 // 4.3.0 / 5.2.0: yerel kontrol protokolu v2 (challenge'a bagli HMAC; cihaz+uygulama birlikte), zayif admin PIN reddi, QR tekrar penceresi,
 // OTA olaylarinda ota_job_id (protokol degisikligi nedeniyle minor artis).
-// 4.3.2 / 5.2.1: urun adi JetPass (BLE adi JetPass<UID>, mDNS jetpass-<uid>, MQTT istemci kimligi JetPass-<UID>).
-inline constexpr char OTA_VERSION_C3[] = "4.3.2";
-inline constexpr char OTA_VERSION_WROOM[] = "5.2.1";
+// 4.3.2 / 5.2.1: ara surum, hicbir karta yuklenmedi.
+// 4.3.3 / 5.2.2: urun adi SmartKeyPass (BLE adi SmartKeyPass<UID>, mDNS smartkeypass-<uid>, MQTT istemci kimligi
+// SmartKeyPass-<UID>).
+inline constexpr char OTA_VERSION_C3[] = "4.3.3";
+inline constexpr char OTA_VERSION_WROOM[] = "5.2.2";
 
 #if defined(BOARD_ESP32_WROOM_RELAY) || defined(BOARD_ESP32_WROOM)
 inline constexpr char OTA_TARGET[] = "esp32-wroom";

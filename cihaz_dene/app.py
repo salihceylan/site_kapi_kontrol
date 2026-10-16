@@ -100,7 +100,7 @@ class SerialWorker:
 class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("JetPass Cihaz Deneme")
+        self.root.title("SmartKeyPass Cihaz Deneme")
         self.root.configure(bg=CLR_BG)
         self.root.minsize(1040, 700)
 
@@ -140,7 +140,7 @@ class App:
         main.columnconfigure(1, weight=2)
         main.rowconfigure(2, weight=1)
 
-        ttk.Label(main, text="JetPass Cihaz Deneme", style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(main, text="SmartKeyPass Cihaz Deneme", style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
 
         conn = ttk.Frame(main, style="Card.TFrame", padding=14)
         conn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 12))

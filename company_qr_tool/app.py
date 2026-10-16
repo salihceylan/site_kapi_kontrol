@@ -34,7 +34,7 @@ ASSETS_DIR = BASE_DIR / "assets"
 OUTPUT_DIR = BASE_DIR / "output"
 QRCODES_DIR = OUTPUT_DIR / "qrcodes"
 LABELED_DEVICES_FILE = OUTPUT_DIR / "labeled_devices.json"
-LOGO_PATH = ASSETS_DIR / "jetpass_logo.png"
+LOGO_PATH = ASSETS_DIR / "smartkeypass_logo.png"
 
 DEVICE_PROJECT_DIR = (BASE_DIR / ".." / "cihaz_kontrol").resolve()
 PLATFORMIO_INI_PATH = DEVICE_PROJECT_DIR / "platformio.ini"
@@ -128,7 +128,7 @@ def _is_key_safe_url(url: str) -> bool:
 
 
 def company_request_headers(url: str, extra: dict | None = None) -> dict:
-    headers = {"User-Agent": "JetPass-Device-Tool/1.0"}
+    headers = {"User-Agent": "SmartKeyPass-Device-Tool/1.0"}
     if extra:
         headers.update(extra)
     key = get_company_api_key()
@@ -602,7 +602,7 @@ def generate_devices_catalog_pdf(
     devices: list[dict],
     output_pdf_path: Path,
     logo_path: Path,
-    report_title: str = "JetPass CİHAZ VE KAREKOD ENVANTER RAPORU",
+    report_title: str = "SmartKeyPass CİHAZ VE KAREKOD ENVANTER RAPORU",
 ) -> Path:
     PAGE_WIDTH = 2480
     PAGE_HEIGHT = 3508
@@ -663,7 +663,7 @@ def generate_devices_catalog_pdf(
         # Header Texts
         text_x = logo_x + 210
         draw.text((text_x, header_top + 45), report_title, fill="#FFFFFF", font=font_title)
-        draw.text((text_x, header_top + 105), "JetPass Akıllı Geçiş ve Kapı Kontrol Sistemleri", fill="#DDF3E5", font=font_subtitle)
+        draw.text((text_x, header_top + 105), "SmartKeyPass Akıllı Geçiş ve Kapı Kontrol Sistemleri", fill="#DDF3E5", font=font_subtitle)
         draw.text((text_x, header_top + 155), f"Rapor Tarihi: {current_time_str}   |   Toplam Kayıtlı Cihaz: {total_devices}", fill="#93C5FD", font=font_meta)
 
         # 2. Devices Grid
@@ -721,7 +721,7 @@ def generate_devices_catalog_pdf(
                 except Exception:
                     pass
             port_val = str(dev.get("port", "-")).strip()
-            desc_val = str(dev.get("description", "JetPass Geçiş Kontrol")).strip()
+            desc_val = str(dev.get("description", "SmartKeyPass Geçiş Kontrol")).strip()
             if len(desc_val) > 28:
                 desc_val = desc_val[:26] + "..."
 
@@ -741,7 +741,7 @@ def generate_devices_catalog_pdf(
         # 3. Footer
         footer_y = PAGE_HEIGHT - MARGIN_BOTTOM - 40
         draw.line([MARGIN_X, footer_y, PAGE_WIDTH - MARGIN_X, footer_y], fill="#CBD5E1", width=2)
-        draw.text((MARGIN_X, footer_y + 15), "JetPass Akıllı Geçiş Sistemleri • Güde Teknoloji • www.gudeteknoloji.com.tr", fill="#64748B", font=font_footer)
+        draw.text((MARGIN_X, footer_y + 15), "SmartKeyPass Akıllı Geçiş Sistemleri • Güde Teknoloji • www.gudeteknoloji.com.tr", fill="#64748B", font=font_footer)
         page_str = f"Sayfa {page_idx + 1} / {total_pages}"
         bbox = draw.textbbox((0, 0), page_str, font=font_footer)
         draw.text((PAGE_WIDTH - MARGIN_X - (bbox[2] - bbox[0]), footer_y + 15), page_str, fill="#0F3A29", font=font_footer)
@@ -1065,7 +1065,7 @@ def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
 class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title("JetPass Cihaz Etiketleyici")
+        self.root.title("SmartKeyPass Cihaz Etiketleyici")
         self.root.configure(bg=CLR_APP_BG)
         self.root.minsize(1100, 760)
         try:
@@ -1267,7 +1267,7 @@ class App:
         hlogo = ttk.Label(header, image=self.brand_photo, style="Header.TLabel")
         hlogo.grid(row=0, column=0, rowspan=2, sticky="w")
         hlogo.image = self.brand_photo
-        ttk.Label(header, text="JetPass Cihaz Etiketleyici", style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        ttk.Label(header, text="SmartKeyPass Cihaz Etiketleyici", style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
         ttk.Label(header, text="ID oku, QR uret, firmware surumle ve cihaza yukle.", style="Sub.TLabel").grid(row=1, column=1, sticky="w", padx=(10, 0))
 
         left = ttk.Frame(main, style="Card.TFrame", padding=14)
@@ -1721,7 +1721,7 @@ class App:
         self.root.after(0, lambda: self._prompt_save_pdf(all_devices))
 
     def _prompt_save_pdf(self, devices: list[dict]) -> None:
-        default_name = f"JetPass_Cihaz_Karekod_Raporu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        default_name = f"SmartKeyPass_Cihaz_Karekod_Raporu_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         target_path = filedialog.asksaveasfilename(
             title="Karekodlu Cihaz Listesi PDF Raporunu Kaydet",
             defaultextension=".pdf",
@@ -1972,7 +1972,7 @@ class App:
                 "allowed_uids": [],
                 "sha256": hashes["firmware_bin"]["sha256"],
                 "md5": hashes["firmware_bin"]["md5"],
-                "notes": f"JetPass firmware v{version} ({target}).",
+                "notes": f"SmartKeyPass firmware v{version} ({target}).",
             }
             manifest_path = folder / "manifest.json"
             manifest_path.write_text(json.dumps(ota_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2256,7 +2256,7 @@ class App:
         target = filedialog.asksaveasfilename(
             title="Guncelleme ZIP dosyasini kaydet",
             defaultextension=".zip",
-            initialfile=f"JetPass_guncelleme_{env}_v{version}.zip",
+            initialfile=f"SmartKeyPass_guncelleme_{env}_v{version}.zip",
             filetypes=[("ZIP dosyasi", "*.zip"), ("Tum dosyalar", "*.*")],
         )
         if not target:
@@ -2344,10 +2344,10 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo JetPass firmware yukleme tamamlandi. Surum: v{version} ({target})
+echo SmartKeyPass firmware yukleme tamamlandi. Surum: v{version} ({target})
 pause
 """
-            readme = f"""JetPass cihaz USB guncelleme paketi
+            readme = f"""SmartKeyPass cihaz USB guncelleme paketi
 
 Surum: v{version}
 Hedef Donanim: {target}
@@ -2357,7 +2357,7 @@ Bootloader offset: {boot_offset}
 Kullanim:
 1. ZIP dosyasini bir klasore cikarin.
 2. {target} cihazini USB ile bilgisayara baglayin.
-3. flash_jetpass_usb.bat dosyasina cift tiklayin.
+3. flash_smartkeypass_usb.bat dosyasina cift tiklayin.
 4. Program COM portunu otomatik bulur ve firmware yukler.
 
 Gerekli yazilim:
@@ -2370,7 +2370,7 @@ Paket icerigi:
 - firmware/partitions.bin
 - firmware/firmware.bin
 - firmware/manifest.json
-- flash_jetpass_usb.bat
+- flash_smartkeypass_usb.bat
 - tools/python3/
 - tools/tool-esptoolpy/
 - tools/site-packages/
@@ -2383,7 +2383,7 @@ Paket icerigi:
                 zf.write(part, "firmware/partitions.bin")
                 zf.write(firm, "firmware/firmware.bin")
                 zf.write(manifest, "firmware/manifest.json")
-                zf.writestr("flash_jetpass_usb.bat", bat)
+                zf.writestr("flash_smartkeypass_usb.bat", bat)
                 zf.writestr("README.txt", readme)
                 zip_directory(zf, BUNDLED_PYTHON_DIR, "tools/python3")
                 zip_directory(zf, BUNDLED_ESPTOOL_DIR, "tools/tool-esptoolpy")
@@ -2407,7 +2407,7 @@ Paket icerigi:
 class LabeledDevicesWindow:
     def __init__(self, parent: tk.Tk, logo_path: Path, on_download_pdf: Callable[[], None]) -> None:
         self.window = tk.Toplevel(parent)
-        self.window.title("JetPass Kayıtlı Cihazlar ve Karekod Envanteri")
+        self.window.title("SmartKeyPass Kayıtlı Cihazlar ve Karekod Envanteri")
         self.window.configure(bg=CLR_APP_BG)
         self.window.minsize(1080, 680)
         self.logo_path = logo_path
@@ -2692,7 +2692,7 @@ class DeviceTesterWindow:
 
     def __init__(self, parent: tk.Tk) -> None:
         self.window = tk.Toplevel(parent)
-        self.window.title("JetPass Cihaz Deneme")
+        self.window.title("SmartKeyPass Cihaz Deneme")
         self.window.configure(bg=CLR_APP_BG)
         self.window.minsize(1040, 700)
 
@@ -2721,7 +2721,7 @@ class DeviceTesterWindow:
         main.columnconfigure(1, weight=2)
         main.rowconfigure(2, weight=1)
 
-        ttk.Label(main, text="JetPass Cihaz Deneme", style="Head.TLabel").grid(
+        ttk.Label(main, text="SmartKeyPass Cihaz Deneme", style="Head.TLabel").grid(
             row=0,
             column=0,
             columnspan=2,
@@ -2958,7 +2958,7 @@ class DeviceTesterWindow:
     def _fetch_public_ip(self, uid: str) -> None:
         try:
             url = f"{API_BASE_URL}/api/devices"
-            req = urllib.request.Request(url, headers={"User-Agent": "JetPass-Tester/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "SmartKeyPass-Tester/1.0"})
             with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
@@ -2986,7 +2986,7 @@ class DeviceTesterWindow:
 class ScreenFirmwareWindow:
     def __init__(self, parent: tk.Tk, logo_path: Path | None = None) -> None:
         self.window = tk.Toplevel(parent)
-        self.window.title("JetPass Ekran Yazılımı Güncelleyici (2.4\" ST7789)")
+        self.window.title("SmartKeyPass Ekran Yazılımı Güncelleyici (2.4\" ST7789)")
         self.window.configure(bg=CLR_APP_BG)
         self.window.minsize(1060, 720)
 
@@ -3026,7 +3026,7 @@ class ScreenFirmwareWindow:
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         header.columnconfigure(1, weight=1)
 
-        ttk.Label(header, text="🖥️ JetPass Ekran Yazılımı Güncelleyici", style="Title.TLabel").grid(
+        ttk.Label(header, text="🖥️ SmartKeyPass Ekran Yazılımı Güncelleyici", style="Title.TLabel").grid(
             row=0, column=0, sticky="w"
         )
         ttk.Label(
@@ -3284,7 +3284,7 @@ class ScreenFirmwareWindow:
                     buf = s.read(s.in_waiting or 64).decode("utf-8", errors="ignore")
                     if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:
                         detected_port = p_name
-                        detected_info = f"✅ {p_name} (JetPass 2.4\" Ekran Aktif)"
+                        detected_info = f"✅ {p_name} (SmartKeyPass 2.4\" Ekran Aktif)"
                         break
             except Exception:
                 pass
