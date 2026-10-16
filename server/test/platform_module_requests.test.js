@@ -525,7 +525,7 @@ describe('POST module-requests', () => {
       assert.equal(core.status, 400, code);
       assert.equal(core.body.code, 'MODULE_NOT_TOGGLEABLE');
     }
-    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
       const soon = await post({ module_code: code });
       assert.equal(soon.status, 409, code);
       assert.equal(soon.body.code, 'MODULE_COMING_SOON');
@@ -537,6 +537,19 @@ describe('POST module-requests', () => {
     assert.equal(state.requests.length, 0);
     assert.equal(state.audit.length, 0);
     assert.equal(notifications.length, 0);
+  });
+
+  it('finance (Faz 4a) artik "available": yonetici modul talep edebilir (201, bekleyen, "Aidat ve Finans"); varsayilan KAPALI oldugundan ALREADY_ENABLED degil', async () => {
+    const res = await post({ module_code: 'finance', note: 'Aidat takibi için.' });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.request.module_code, 'finance');
+    assert.equal(res.body.request.module_name, 'Aidat ve Finans');
+    assert.equal(res.body.request.status, 'pending');
+    assert.equal(state.requests.length, 1);
+    // ayni (site, modul) icin ikinci bekleyen talep yine engellenir
+    const again = await post({ module_code: 'finance' });
+    assert.equal(again.status, 409);
+    assert.equal(again.body.code, 'MODULE_REQUEST_PENDING');
   });
 
   it('gecersiz govde 400 INVALID_BODY: module_code eksik/metin degil, not metin degil veya 500 karakterden uzun', async () => {
@@ -1069,13 +1082,26 @@ describe('PUT /admin/module-requests/:id', () => {
     assert.equal((await decide(created.id, { decision: 'reject' })).status, 200);
   });
 
-  it('onay aninda modul "yakinda" (finance): 409 MODULE_COMING_SOON, talep bekleyen kalir; ret yine mumkun', async () => {
+  it('finance (Faz 4a) talebi onaylaninca modul ACILIR (site_modules finance enabled) ve audit module.enabled yazilir', async () => {
     const created = seedRequest({ module_code: 'finance', site_code: SITE_2 });
+    const res = await decide(created.id, { decision: 'approve' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.request.status, 'approved');
+    assert.equal(res.body.request.module_name, 'Aidat ve Finans');
+    assert.equal(state.siteModules.get(`${SITE_2}:finance`).enabled, true);
+    assert.deepEqual(
+      state.audit.map((a) => [a.action, a.target_id]),
+      [['module.enabled', 'finance'], ['module_request.approved', String(created.id)]],
+    );
+  });
+
+  it('onay aninda modul "yakinda" (reservation): 409 MODULE_COMING_SOON, talep bekleyen kalir; ret yine mumkun', async () => {
+    const created = seedRequest({ module_code: 'reservation', site_code: SITE_2 });
     const res = await decide(created.id, { decision: 'approve' });
     assert.equal(res.status, 409);
     assert.equal(res.body.code, 'MODULE_COMING_SOON');
     assert.equal(state.requests[0].status, 'pending');
-    assert.equal(state.siteModules.has(`${SITE_2}:finance`), false);
+    assert.equal(state.siteModules.has(`${SITE_2}:reservation`), false);
     assert.equal(state.audit.length, 0);
     assert.equal((await decide(created.id, { decision: 'reject' })).status, 200);
   });

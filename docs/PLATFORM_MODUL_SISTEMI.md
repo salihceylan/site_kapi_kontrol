@@ -22,7 +22,7 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `door_control` | Geçiş Kontrol (SmartKeyPass) | hayır | `available` | AÇIK |
 | `people` | Kişi ve Daire Kayıtları | evet | `available` (Faz 2a) | — (hep açık) |
 | `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
-| `finance` | Aidat ve Finans | hayır | `coming_soon` | KAPALI |
+| `finance` | Aidat ve Finans | hayır | `available` (Faz 4a) | KAPALI |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
 | `work_tracking` | İş Takibi | hayır | `coming_soon` | KAPALI |
 | `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |

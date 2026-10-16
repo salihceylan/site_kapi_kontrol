@@ -386,7 +386,10 @@ export function handleSiteMutationError(error, res, genericErrorMessage) {
   if (isClientSafeError(error)) {
     const explicit = Number(error.statusCode);
     const status = Number.isInteger(explicit) && explicit >= 400 && explicit < 500 ? explicit : 400;
-    return res.status(status).json({ error: error.message });
+    // Platform hatalari (PlatformError, expose=true) makine okunur `code` da tasir (ornek: 409 APARTMENT_HAS_FINANCE); eski hatalarin govdesi aynen kalir.
+    const platformCode =
+      error.expose === true && typeof error.code === 'string' && /^[A-Z][A-Z0-9_]*$/.test(error.code) ? { code: error.code } : {};
+    return res.status(status).json({ error: error.message, ...platformCode });
   }
   return respondUnexpectedError(res, error, genericErrorMessage);
 }

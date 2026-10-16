@@ -41,7 +41,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       door_control: [false, 'available'],
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
-      finance: [false, 'coming_soon'],
+      finance: [false, 'available'], // Faz 4a: Aidat ve Finans kullanılabilir (varsayılan KAPALI; süper açar, yönetici modül talep eder)
       reservation: [false, 'coming_soon'],
       work_tracking: [false, 'coming_soon'],
       metering: [false, 'coming_soon'],
@@ -76,10 +76,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (yalniz door_control)', () => {
+  it('toggleable = !core && status === available (door_control ve Faz 4a ile finance)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control'],
+      ['door_control', 'finance'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -107,10 +107,22 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
+  });
+
+  it('finance (Faz 4a): available + toggleable, varsayilan KAPALI; satir yoksa kapali, satir true ise acik, satir false ise kapali', () => {
+    assert.equal(def('finance').status, 'available');
+    assert.equal(def('finance').core, false);
+    assert.equal(def('finance').defaultEnabled, false);
+    assert.equal(isToggleable(def('finance')), true);
+    assert.equal(computeModuleEnabled(def('finance'), undefined), false);
+    assert.equal(computeModuleEnabled(def('finance'), null), false);
+    assert.equal(computeModuleEnabled(def('finance'), {}), false);
+    assert.equal(computeModuleEnabled(def('finance'), { enabled: true }), true);
+    assert.equal(computeModuleEnabled(def('finance'), { enabled: false }), false);
   });
 
   it('people (Faz 2a): core + available -> HEP acik (satir olmasa da, satir false dese de) ve kapatilamaz', () => {
@@ -187,8 +199,12 @@ describe('platform katalog: enabled hesabi', () => {
     assert.equal(people.updated_at, null);
     assert.equal(people.updated_by, null);
     const finance = list.find((m) => m.code === 'finance');
-    assert.equal(finance.toggleable, false);
-    assert.equal(finance.status, 'coming_soon');
+    assert.equal(finance.toggleable, true, 'Faz 4a: finance artık kullanılabilir ve açılıp kapatılabilir');
+    assert.equal(finance.status, 'available');
+    assert.equal(finance.enabled, false, 'varsayılan KAPALI');
+    const reservation = list.find((m) => m.code === 'reservation');
+    assert.equal(reservation.toggleable, false);
+    assert.equal(reservation.status, 'coming_soon');
   });
 });
 

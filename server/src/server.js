@@ -25,6 +25,7 @@ import { siteApplicationRouter } from './modules/site_application_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
 import { announcementRouter } from './modules/announcement_routes.js';
 import { announcementPublicRouter } from './modules/announcement_public_routes.js';
+import { financeRouter } from './modules/finance_routes.js';
 import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
@@ -85,6 +86,7 @@ app.use(siteApplicationRouter);
 app.use(peopleRouter);
 app.use(announcementRouter);
 app.use(announcementPublicRouter);
+app.use(financeRouter);
 
 // Serve Flutter Web SPA if build/web exists
 if (fs.existsSync(webBuildPath)) {

@@ -39,6 +39,12 @@
 //             e-posta (yavas/hatali SMTP istegi bozmaz, adres loga yazilmaz), audit gizliligi, 3000 daireli onay suresi, kilit sirasi turlari
 //             (onay x hesap silme, onay x cihaz sahiplenme, onay x yeni basvuru; 40P01 OLMAMALI). QA_ONLY=site_applications ile ayri kosulur.
 //
+//   finance   Aidat ve Finans (Faz 4a): sema (CHECK/indeks/degismezlik tetikleyicisi, created_by SET NULL, site silme CASCADE, daire RESTRICT), dagitim
+//             matematigi (esit/sabit/kategori/arsa payi/m2; pay toplami = tutar, rastgele ozellik testi), borclandirma (onizleme yazmaz, PREVIEW_STALE,
+//             PREVIEW_INCOMPLETE/skip_missing, ayni donem ikinci kez 409, ESZAMANLI cift post, idempotency_key), tahsilat/ters kayit/duzeltme (cift
+//             ters 409, ters kaydin tersi 409, duzeltme tek islem), ay kapatma, yetki matrisi/IDOR/modul kapali, sakin ucu responsible_party matrisi,
+//             daire azaltma APARTMENT_HAS_FINANCE, 3000 daireli sitede sure ve EXPLAIN, kilit turlari (40P01 = 0), audit gizliligi. QA_ONLY=finance ile ayri kosulur.
+//
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
 //       initdb -D <dizin> -U postgres --auth=trust
@@ -127,6 +133,10 @@ const CATALOG_TABLES = [
   'platform_settings',
   'site_applications',
   'site_manager_sites',
+  'fee_definitions',
+  'fee_runs',
+  'ledger_entries',
+  'finance_period_closures',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -163,10 +173,10 @@ async function readCatalog(client) {
   const triggers = await client.query(
     `SELECT c.relname AS tbl, t.tgname, regexp_replace(pg_get_triggerdef(t.oid), '\\s+', ' ', 'g') AS def
      FROM pg_trigger t INNER JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE NOT t.tgisinternal AND t.tgname = 'trg_users_preserve_site_people' ORDER BY 1, 2`,
+     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname = 'trg_users_preserve_site_people' ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
@@ -245,6 +255,7 @@ async function runParent() {
     locks: `${prefix}_locks`,
     announcements: `${prefix}_announcements`,
     site_applications: `${prefix}_site_applications`,
+    finance: `${prefix}_finance`,
   };
   const admin = new pg.Client(connectConfig(process.env.QA_ADMIN_DB || 'postgres'));
   await admin.connect();
@@ -300,7 +311,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -313,7 +324,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -526,6 +537,8 @@ async function sectionChain() {
   check('bos DB: duyuru tablolari (032) var ve BOS', announcementCounts.rows[0].a === 0 && announcementCounts.rows[0].r === 0 && announcementCounts.rows[0].p === 0);
   const applicationCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c`);
   check('bos DB: site basvurusu tablolari (033) var; basvuru ve abonelik BOS; 2 plan + 1 ayar tohumu', applicationCounts.rows[0].a === 0 && applicationCounts.rows[0].s === 0 && applicationCounts.rows[0].p === 2 && applicationCounts.rows[0].c === 1, applicationCounts.rows[0]);
+  const financeCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM fee_definitions)::int AS d, (SELECT COUNT(*) FROM fee_runs)::int AS r, (SELECT COUNT(*) FROM ledger_entries)::int AS l, (SELECT COUNT(*) FROM finance_period_closures)::int AS c, (SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'trg_ledger_entries_append_only' AND NOT tgisinternal)::int AS t`);
+  check('bos DB: finans tablolari (034) var ve BOS; defter degismezligi tetikleyicisi kurulu', financeCounts.rows[0].d === 0 && financeCounts.rows[0].r === 0 && financeCounts.rows[0].l === 0 && financeCounts.rows[0].c === 0 && financeCounts.rows[0].t === 1, financeCounts.rows[0]);
   const seedRows = await pool.query(`SELECT code, is_active, price_minor, billing_period FROM subscription_plans ORDER BY code`);
   check('tohum planlar: manual_approval ACIK, standard KAPALI, ikisi de fiyatsiz', same(seedRows.rows.map((r) => [r.code, r.is_active, r.price_minor, r.billing_period]), [['manual_approval', true, null, null], ['standard', false, null, null]]), seedRows.rows);
   const seedSetting = await pool.query(`SELECT value FROM platform_settings WHERE key = 'site_onboarding'`);
@@ -641,6 +654,7 @@ async function sectionUpgrade() {
   check(`${scenario}: baslangicta kisi tablolari YOK`, (await q(`SELECT to_regclass('public.site_people') AS t`)).rows[0].t === null);
   check(`${scenario}: baslangicta duyuru tablolari (032) YOK`, (await q(`SELECT to_regclass('public.announcements') AS t`)).rows[0].t === null);
   check(`${scenario}: baslangicta site basvurusu tablolari (033) YOK`, (await q(`SELECT to_regclass('public.site_applications') AS a, to_regclass('public.subscription_plans') AS p`)).rows[0].a === null);
+  check(`${scenario}: baslangicta finans tablolari (034) YOK`, (await q(`SELECT to_regclass('public.fee_definitions') AS d, to_regclass('public.ledger_entries') AS l`)).rows[0].l === null);
   const beforeDoors = hasModules ? Object.fromEntries(await Promise.all(Object.keys(EXPECTED_DOORS).map(async (u) => [u, await doorNamesFor(doorSvc, q, Number(u))]))) : null;
   const beforeDumps = await legacyDumps(q);
 
@@ -657,6 +671,9 @@ async function sectionUpgrade() {
   check(`${scenario}: 032 tablolari (announcements, announcement_recipients, notification_preferences) olustu ve BOS (eski veriye satir yazilmadi)`, announcementTables.rows[0].a !== null && announcementTables.rows[0].r !== null && announcementTables.rows[0].p !== null && announcementRows === 0);
   const applicationTables = (await q(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c, (SELECT COUNT(*) FROM sites)::int AS sites`)).rows[0];
   check(`${scenario}: 033 tablolari olustu; MEVCUT sitelere abonelik satiri YAZILMADI (backfill yok); basvuru BOS; yalniz 2 plan + 1 ayar tohumu`, applicationTables.sites >= 3 && applicationTables.a === 0 && applicationTables.s === 0 && applicationTables.p === 2 && applicationTables.c === 1, applicationTables);
+  const financeTables = (await q(`SELECT (SELECT COUNT(*) FROM fee_definitions)::int AS d, (SELECT COUNT(*) FROM fee_runs)::int AS r, (SELECT COUNT(*) FROM ledger_entries)::int AS l, (SELECT COUNT(*) FROM finance_period_closures)::int AS c`)).rows[0];
+  const ledgerTrigger = (await q(`SELECT 1 FROM pg_trigger WHERE tgname = 'trg_ledger_entries_append_only' AND tgrelid = 'ledger_entries'::regclass AND NOT tgisinternal`)).rowCount;
+  check(`${scenario}: 034 finans tablolari olustu ve BOS (eski veriye satir yazilmadi); defter degismezligi tetikleyicisi kurulu`, financeTables.d === 0 && financeTables.r === 0 && financeTables.l === 0 && financeTables.c === 0 && ledgerTrigger === 1, financeTables);
   const linkColumn = (await q(`SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'site_manager_sites' AND column_name = 'link_source'`)).rows[0];
   const linkRows = (await q(`SELECT COUNT(*)::int AS total, COUNT(link_source)::int AS tagged FROM site_manager_sites`)).rows[0];
   check(`${scenario}: site_manager_sites.link_source eklendi (TEXT, NULL'lanabilir, varsayilan YOK); MEVCUT yonetici baglarinin TAMAMI NULL (= sahip) kaldi, hicbiri degismedi`, linkColumn?.data_type === 'text' && linkColumn.is_nullable === 'YES' && linkColumn.column_default === null && linkRows.total >= 2 && linkRows.tagged === 0, { linkColumn, linkRows });
@@ -940,8 +957,8 @@ async function sectionPlatform() {
   check('super yeniden acar (onay gerekmez); kapilar geri gelir', res.status === 200 && (await call('GET', '/app/my-doors', RESIDENT)).body.doors.length === 2);
   res = await call('PUT', `/manager/sites/${S1}/modules/people`, SUPER, { enabled: false, confirm: true });
   check('cekirdek modul (people) kapatilamaz -> MODULE_NOT_TOGGLEABLE', res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
-  res = await call('PUT', `/manager/sites/${S1}/modules/finance`, SUPER, { enabled: true });
-  check('yakinda modulu acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
+  res = await call('PUT', `/manager/sites/${S1}/modules/reservation`, SUPER, { enabled: true });
+  check('yakinda modulu (reservation) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
   const auditCodes = (await q(`SELECT action FROM audit_log WHERE site_code = $1 ORDER BY id`, [S1])).rows.map((r) => r.action);
   check('audit: module.disabled sonra module.enabled', same(auditCodes.filter((a) => a.startsWith('module.')), ['module.disabled', 'module.enabled']), auditCodes);
 
@@ -6263,6 +6280,1552 @@ async function sectionSiteApplications() {
   await finishChild(pool);
 }
 
+// <finance-section-start>
+// --------------------------------------------------------------------------------------------------------------
+// CHILD bolum: finance (Aidat ve Finans, Faz 4a; docs/PLATFORM_FINANS.md)
+// --------------------------------------------------------------------------------------------------------------
+
+/** Gercek authRequired + gercek JWT; hiz sinirlayicilar devre disi (birim testlerinde sinanir), requireSiteManager/requireSuperUser KALIR. */
+async function startFinanceHttp(pool) {
+  const express = (await import('express')).default;
+  const { signAccessToken } = await import('../src/jwt.js');
+  const { requireSiteManager, requireSuperUser } = await import('../src/middlewares/auth_middleware.js');
+  const { financeRouter } = await import('../src/modules/finance_routes.js');
+  const { moduleRouter } = await import('../src/modules/module_routes.js');
+  const { adminRouter } = await import('../src/routes/admin_routes.js');
+  const keep = new Set([requireSiteManager, requireSuperUser]);
+  for (const router of [financeRouter, moduleRouter, adminRouter]) {
+    for (const layer of router.stack) {
+      if (!layer.route) continue;
+      const stack = layer.route.stack;
+      for (let i = 1; i < stack.length - 1; i += 1) {
+        if (!keep.has(stack[i].handle)) stack[i].handle = (_req, _res, next) => next();
+      }
+    }
+  }
+  const app = express();
+  app.use(express.json());
+  app.use(financeRouter);
+  app.use(moduleRouter);
+  app.use(adminRouter);
+  const server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tokens = new Map();
+  const tokenFor = async (userCode) => {
+    if (!tokens.has(userCode)) {
+      const row = (await pool.query(`SELECT user_code AS id, email, role, password_hash FROM users WHERE user_code = $1`, [userCode])).rows[0];
+      tokens.set(userCode, signAccessToken({ id: row.id, email: row.email, role: row.role }, { passwordHash: row.password_hash }));
+    }
+    return tokens.get(userCode);
+  };
+  async function call(method, urlPath, userCode, body, rawBody) {
+    const headers = { 'content-type': 'application/json' };
+    if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
+    const response = await fetch(`${base}${urlPath}`, { method, headers, body: rawBody !== undefined ? rawBody : body === undefined ? undefined : JSON.stringify(body) });
+    let json = null;
+    try {
+      json = await response.json();
+    } catch (_e) {
+      // govdesiz yanit
+    }
+    return { status: response.status, body: json };
+  }
+  return { call, close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }) };
+}
+
+async function sectionFinance() {
+  await childEnv();
+  // 200 bin satirlik dolgu ve CASCADE temizligi yuklu makinede havuzun varsayilan 30 sn / 35 sn zaman asimlarini asabilir (yalniz bu QA sureci)
+  process.env.DB_STATEMENT_TIMEOUT_MS = process.env.DB_STATEMENT_TIMEOUT_MS || '240000';
+  const { pool, ensureDbSchema } = await import('../src/db.js');
+  const q = (sql, params = []) => pool.query(sql, params);
+  const hooks = installPoolHooks(pool);
+  const http = await startFinanceHttp(pool);
+  const { call } = http;
+  const siteSvc = await import('../src/services/site_service.js');
+  const dist = await import('../src/modules/finance_distribution.js');
+  const money = await import('../src/modules/finance_money.js');
+  const { todayIso } = await import('../src/modules/people_common.js');
+  const failCode = async (sql, params = []) => {
+    try {
+      await q(sql, params);
+      return null;
+    } catch (error) {
+      return error.code ?? String(error.message);
+    }
+  };
+  const failMessage = async (sql, params = []) => {
+    try {
+      await q(sql, params);
+      return null;
+    } catch (error) {
+      return `${error.code}:${error.message}`;
+    }
+  };
+
+  // --- tarih yardimcilari (gercek saat, Istanbul takvimi)
+  const TODAY = todayIso();
+  const monthIndex = Number(TODAY.slice(0, 4)) * 12 + (Number(TODAY.slice(5, 7)) - 1);
+  const monthStart = (offset) => {
+    const index = monthIndex + offset;
+    return `${String((index - (index % 12)) / 12).padStart(4, '0')}-${String((index % 12) + 1).padStart(2, '0')}-01`;
+  };
+  const ym = (offset) => monthStart(offset).slice(0, 7);
+  const dayOf = (offset, day) => `${ym(offset)}-${String(day).padStart(2, '0')}`;
+
+  // --- kullanici / site fabrikalari
+  let nextUser = 21000;
+  const mkUser = async (name, role = 'individual', options = {}) => {
+    nextUser += 1;
+    const code = nextUser;
+    await q(
+      `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
+       VALUES ($1, $2, $3, $4, 'x', TRUE, TRUE, 'approved', $5)`,
+      [code, name, options.email ?? `fin${code}@qa.example`, role, options.phone ?? null],
+    );
+    return code;
+  };
+  let nextSite = 1000000300;
+  const mkSite = async (name, blocks, { approved = true } = {}) => {
+    nextSite += 1;
+    const code = nextSite;
+    await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, $3, CASE WHEN $3 = 'approved' THEN NOW() END)`, [code, name, approved ? 'approved' : 'pending']);
+    const apts = [];
+    let order = 0;
+    for (const [blockName, count] of Object.entries(blocks)) {
+      order += 1;
+      const blockId = Number((await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, $2, $3) RETURNING id`, [code, blockName, order])).rows[0].id);
+      for (let n = 1; n <= count; n += 1) {
+        const id = Number((await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) VALUES ($1, $2, $3, $4) RETURNING id`, [code, blockId, `Daire ${n}`, n])).rows[0].id);
+        apts.push({ id, block: blockName, blockId, n, label: `${blockName} - Daire ${n}` });
+      }
+    }
+    const apt = (label) => apts.find((a) => a.label === label);
+    return { code, apts, apt, ids: apts.map((a) => a.id) };
+  };
+  const link = {
+    manager: (site, user) => q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [site, user]),
+    member: (site, user, role) => q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, $3)`, [site, user, role]),
+  };
+  const addPerson = async (site, { user = null, name = null }) =>
+    Number((await q(`INSERT INTO site_people (site_code, user_code, full_name) VALUES ($1, $2, $3) RETURNING id`, [site, user, user === null ? name : null])).rows[0].id);
+  const addResidency = (site, apartment, person, relation, { current = true } = {}) =>
+    q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin) VALUES ($1, $2, $3, $4, $5, 'manual')`, [site, apartment, person, relation, current]);
+
+  // --- tekrar kullanilan ISTEK yardimcilari
+  const P = (site) => `/manager/sites/${site}/finance`;
+  let keyCounter = 0;
+  const key = (label = 'k') => `qa-${label}-${(keyCounter += 1)}-${Date.now()}`;
+  const enableModule = (site) => call('PUT', `/manager/sites/${site}/modules/finance`, SUPER, { enabled: true });
+  const ledgerRows = async (site) => (await q(`SELECT * FROM ledger_entries WHERE site_code = $1 ORDER BY id`, [site])).rows;
+  const ledgerSum = async (site, extra = '') => BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 ${extra}`, [site])).rows[0].s);
+  const balanceOf = async (site, apartment) => BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2`, [site, apartment])).rows[0].s);
+  const counts = async (site) =>
+    (await q(`SELECT (SELECT COUNT(*) FROM ledger_entries WHERE site_code = $1)::int AS ledger, (SELECT COUNT(*) FROM fee_runs WHERE site_code = $1)::int AS runs, (SELECT COUNT(*) FROM fee_definitions WHERE site_code = $1)::int AS defs, (SELECT COUNT(*) FROM audit_log WHERE site_code = $1 AND action LIKE 'finance.%')::int AS audits`, [site])).rows[0];
+  const auditRows = async (site, action) => (await q(`SELECT * FROM audit_log WHERE site_code = $1 AND action = $2 ORDER BY id`, [site, action])).rows;
+
+  // --- ortak kullanicilar (kimlik ve roller)
+  const SUPER = await mkUser('Finans Super', 'super_user');
+  const MGR = await mkUser('Finans Yonetici', 'site_manager');
+  const MGR2 = await mkUser('Baska Site Yoneticisi', 'site_manager');
+  const BOARD = await mkUser('Finans Kurul', 'individual');
+  const STAFF = await mkUser('Finans Gorevli', 'individual');
+  const OUTSIDER = await mkUser('Ilgisiz Kisi', 'individual');
+  const RESIDENT = await mkUser('Finans Sakin', 'apartment_owner');
+
+  // ============================================================================================================
+  // A. Sema: tablolar, CHECK'ler, indeksler, degismezlik tetikleyicisi, FK davranislari (gercek PG)
+  // ============================================================================================================
+  console.log('--- A. sema ---');
+  const sc = await mkSite('Sema Sitesi', { 'A Blok': 3 });
+  const [sa1, sa2] = sc.ids;
+  const tables = (await q(`SELECT to_regclass('public.fee_definitions') AS d, to_regclass('public.fee_runs') AS r, to_regclass('public.ledger_entries') AS l, to_regclass('public.finance_period_closures') AS c`)).rows[0];
+  check('A1: dort tablo var (fee_definitions, fee_runs, ledger_entries, finance_period_closures)', Object.values(tables).every((v) => v !== null), tables);
+  const indexNames = new Set((await q(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename IN ('fee_definitions', 'fee_runs', 'ledger_entries', 'finance_period_closures')`)).rows.map((r) => r.indexname));
+  const expectedIndexes = ['uq_ledger_entries_reverses', 'uq_ledger_entries_idempotency', 'idx_ledger_entries_apartment', 'idx_ledger_entries_period', 'idx_ledger_entries_run', 'idx_ledger_entries_apartment_fk', 'idx_ledger_entries_created_by', 'idx_fee_definitions_site', 'idx_fee_runs_site_period', 'uq_fee_runs_idempotency', 'uq_fee_runs_definition_period'];
+  check('A2: sozlesmedeki indeksler (kismi tekil ters kayit/idempotans, (site,daire,tarih,id), (site,donem), (run_id)) ve FK indeksleri var', expectedIndexes.every((name) => indexNames.has(name)), expectedIndexes.filter((n) => !indexNames.has(n)));
+  const idxDefs = Object.fromEntries((await q(`SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'ledger_entries'`)).rows.map((r) => [r.indexname, r.indexdef]));
+  check('A2b: ters kayit tekil indeksi (reverses_entry_id) WHERE NOT NULL; idempotans (site_code, idempotency_key) WHERE NOT NULL; ekstre indeksi (site_code, apartment_id, entry_date, id)',
+    /UNIQUE.*\(reverses_entry_id\).*WHERE \(reverses_entry_id IS NOT NULL\)/.test(idxDefs.uq_ledger_entries_reverses) && /UNIQUE.*\(site_code, idempotency_key\).*WHERE \(idempotency_key IS NOT NULL\)/.test(idxDefs.uq_ledger_entries_idempotency) && /\(site_code, apartment_id, entry_date, id\)/.test(idxDefs.idx_ledger_entries_apartment), idxDefs);
+
+  const defaultsDef = { name: 'T', kind: 'one_time', distribution: 'equal', area_basis: null, amount_minor: 1000, category_amounts: null, due_day: null, start_period: '2026-01-01', end_period: null, target_type: 'site', target_block_ids: [], target_apartment_ids: [] };
+  const insertDef = (over = {}) => {
+    const v = { ...defaultsDef, ...over };
+    const cols = Object.keys(v);
+    return failCode(`INSERT INTO fee_definitions (site_code, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) `, [sc.code, ...cols.map((c) => v[c])]);
+  };
+  const badDefs = [
+    ['bos ad', { name: '' }], ['81 karakterlik ad', { name: 'x'.repeat(81) }], ['gecersiz tur', { kind: 'x' }], ['gecersiz dagitim', { distribution: 'x' }],
+    ['m2 dagitiminda alan esasi YOK (NULL gecisi tuzagi)', { distribution: 'area' }], ['gecersiz alan esasi', { distribution: 'area', area_basis: 'foo' }], ['m2 disinda alan esasi', { area_basis: 'gross' }],
+    ['sabit tutar NULL', { distribution: 'fixed', amount_minor: null }], ['tutar 0', { amount_minor: 0 }], ['tutar > 10^12', { amount_minor: 1000000000001 }], ['negatif tutar', { amount_minor: -5 }],
+    ['kategori + tutar birlikte', { distribution: 'category', amount_minor: 1000, category_amounts: JSON.stringify({ a: 1 }) }], ['kategori tutarlari YOK', { distribution: 'category', amount_minor: null }],
+    ['kategori tutarlari bos nesne', { distribution: 'category', amount_minor: null, category_amounts: '{}' }], ['kategori tutarlari dizi', { distribution: 'category', amount_minor: null, category_amounts: '[]' }],
+    ['esit dagitimda kategori tutarlari', { category_amounts: JSON.stringify({ a: 1 }) }],
+    ['vade gunu 0', { kind: 'recurring', due_day: 0 }], ['vade gunu 29', { kind: 'recurring', due_day: 29 }], ['aylik tanimda vade gunu YOK', { kind: 'recurring', due_day: null }],
+    ['baslangic ayin ilk gunu degil', { start_period: '2026-01-02' }], ['bitis baslangictan once', { start_period: '2026-05-01', end_period: '2026-04-01' }], ['bitis ayin ilk gunu degil', { end_period: '2026-06-15' }],
+    ['hedef bloklar ama kimlik yok', { target_type: 'blocks' }], ['site hedefinde blok kimligi', { target_type: 'site', target_block_ids: [1] }], ['daire hedefinde hem daire hem blok', { target_type: 'apartments', target_apartment_ids: [1], target_block_ids: [1] }], ['gecersiz hedef turu', { target_type: 'x' }],
+  ];
+  const badDefResults = [];
+  for (const [label, over] of badDefs) badDefResults.push([label, await insertDef(over)]);
+  check(`A3: fee_definitions CHECK'leri ${badDefs.length} gecersiz kombinasyonu 23514 ile reddeder (area_basis NULL gecisi dahil)`, badDefResults.every(([, code]) => code === '23514'), badDefResults.filter(([, c]) => c !== '23514'));
+  const goodDefs = [['gecerli esit', {}], ['gecerli sabit aylik', { distribution: 'fixed', kind: 'recurring', due_day: 28 }], ['gecerli m2', { distribution: 'area', area_basis: 'net' }], ['gecerli kategori', { distribution: 'category', amount_minor: null, category_amounts: JSON.stringify({ '2+1': 5 }) }], ['gecerli blok hedefi', { target_type: 'blocks', target_block_ids: [1, 2] }], ['gecerli sinirda tutar', { amount_minor: 1000000000000 }]];
+  const goodDefResults = [];
+  for (const [label, over] of goodDefs) goodDefResults.push([label, await insertDef(over)]);
+  check('A3b: gecerli tanimlar kabul edilir (esit, sabit aylik vade gunu 28, m2 net, kategori, blok hedefi, tam 10^12 kuruş)', goodDefResults.every(([, code]) => code === null), goodDefResults.filter(([, c]) => c !== null));
+  await q(`DELETE FROM fee_definitions WHERE site_code = $1`, [sc.code]);
+
+  const defId = Number((await q(`INSERT INTO fee_definitions (site_code, name, kind, distribution, amount_minor, start_period) VALUES ($1, 'Sema', 'one_time', 'equal', 1000, '2026-01-01') RETURNING id`, [sc.code])).rows[0].id);
+  const runId = Number((await q(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count) VALUES ($1, $2, '2026-01-01', 1000, 2) RETURNING id`, [sc.code, defId])).rows[0].id);
+  check('A4: fee_runs (tanim, donem) UNIQUE: ayni ay ikinci kez 23505', (await failCode(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count) VALUES ($1, $2, '2026-01-01', 1, 1)`, [sc.code, defId])) === '23505');
+  const badRuns = [['toplam 0', `0, 1, '2026-02-01'`], ['toplam > 10^14', `100000000000001, 1, '2026-02-01'`], ['daire sayisi 0', `5, 0, '2026-02-01'`], ['donem ayin ilk gunu degil', `5, 1, '2026-02-15'`]];
+  const badRunResults = [];
+  for (const [label, vals] of badRuns) badRunResults.push([label, await failCode(`INSERT INTO fee_runs (site_code, definition_id, total_minor, apartment_count, period) VALUES ($1, $2, ${vals})`, [sc.code, defId])]);
+  check('A4b: fee_runs CHECK\'leri (toplam, sayi, donem) 23514', badRunResults.every(([, code]) => code === '23514'), badRunResults);
+
+  const insertEntry = (over = {}) => {
+    const v = { kind: 'charge', amount_minor: 1000, period: '2026-01-01', entry_date: '2026-01-02', payer_party: 'both', apartment_id: sa1, ...over };
+    const cols = Object.keys(v);
+    return q(`INSERT INTO ledger_entries (site_code, ${cols.join(', ')}) VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING id`, [sc.code, ...cols.map((c) => v[c])]);
+  };
+  const entryFail = async (over) => {
+    try {
+      await insertEntry(over);
+      return null;
+    } catch (error) {
+      return error.code;
+    }
+  };
+  const charge1 = Number((await insertEntry({ definition_id: defId, run_id: runId, due_date: '2026-01-05', created_by: SUPER })).rows[0].id);
+  const payment1 = Number((await insertEntry({ kind: 'payment', amount_minor: -400, method: 'cash', created_by: SUPER })).rows[0].id);
+  const badEntries = [
+    ['borc negatif', { amount_minor: -5 }], ['tutar 0', { amount_minor: 0 }], ['tahsilat pozitif', { kind: 'payment', amount_minor: 5, method: 'cash' }], ['tahsilat yontemsiz', { kind: 'payment', amount_minor: -5 }],
+    ['gecersiz yontem', { kind: 'payment', amount_minor: -5, method: 'kart' }], ['borca yontem', { method: 'cash' }], ['ters kayit hedefsiz', { kind: 'reversal', amount_minor: -5 }], ['borc ters kayit hedefli', { reverses_entry_id: charge1 }],
+    ['gecersiz para birimi', { currency: 'try' }], ['donem ayin ilk gunu degil', { period: '2026-01-02' }], ['gecersiz odeyen', { payer_party: 'x' }], ['tutar > 10^12', { amount_minor: 1000000000001 }], ['tutar < -10^12', { kind: 'payment', amount_minor: -1000000000001, method: 'cash' }],
+    ['201 karakterlik aciklama', { description: 'x'.repeat(201) }], ['bos islem anahtari', { idempotency_key: '' }], ['65 karakterlik islem anahtari', { idempotency_key: 'k'.repeat(65) }], ['borca iptal nedeni', { reversal_reason: 'x' }], ['gecersiz tur', { kind: 'x' }],
+  ];
+  const badEntryResults = [];
+  for (const [label, over] of badEntries) badEntryResults.push([label, await entryFail(over)]);
+  check(`A5: ledger_entries CHECK'leri ${badEntries.length} gecersiz kombinasyonu 23514 ile reddeder (isaret, tutar, yontem, ters kayit eslesmesi, para birimi, donem, sinirlar)`, badEntryResults.every(([, code]) => code === '23514'), badEntryResults.filter(([, c]) => c !== '23514'));
+  const reversal1 = Number((await insertEntry({ kind: 'reversal', amount_minor: 400, reverses_entry_id: payment1, reversal_reason: 'deneme', created_by: SUPER })).rows[0].id);
+  check('A5b: gecerli ters kayit (karsi isaret, hedefli) kabul edilir; AYNI kayda ikinci ters kayit 23505 (kismi tekil indeks)', reversal1 > 0 && (await entryFail({ kind: 'reversal', amount_minor: 400, reverses_entry_id: payment1 })) === '23505');
+  check('A5c: ters kaydin hedefi olmayan (olmayan kimlik) 23503; ayni site icinde ayni islem anahtari 23505, baska sitede serbest', (await entryFail({ kind: 'reversal', amount_minor: 1, reverses_entry_id: 999999999 })) === '23503'
+    && (await entryFail({ idempotency_key: 'AYNI' })) === null && (await entryFail({ idempotency_key: 'AYNI' })) === '23505');
+  const other = await mkSite('Sema Diger Site', { 'B Blok': 1 });
+  check('A5d: ayni islem anahtari BASKA sitede kabul edilir', (await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, idempotency_key) VALUES ($1, $2, 'charge', 5, '2026-01-01', '2026-01-02', 'both', 'AYNI')`, [other.code, other.ids[0]])).rowCount === 1);
+
+  // --- defter degismezligi (tetikleyici)
+  const updMsg = await failMessage(`UPDATE ledger_entries SET amount_minor = 1 WHERE id = $1`, [charge1]);
+  const delMsg = await failMessage(`DELETE FROM ledger_entries WHERE id = $1`, [charge1]);
+  const mixMsg = await failMessage(`UPDATE ledger_entries SET created_by = NULL, description = 'x' WHERE id = $1`, [charge1]);
+  const descMsg = await failMessage(`UPDATE ledger_entries SET description = 'x' WHERE id = $1`, [charge1]);
+  const bulkMsg = await failMessage(`UPDATE ledger_entries SET period = '2026-02-01' WHERE site_code = $1`, [sc.code]);
+  check('A6: defter satiri UPDATE / DELETE tetikleyici hatasi verir (finance ledger is append-only); tek alan ve toplu UPDATE dahil', [updMsg, delMsg, mixMsg, descMsg, bulkMsg].every((m) => m && /finance ledger is append-only/.test(m)), [updMsg, delMsg, mixMsg, descMsg, bulkMsg]);
+  const sample = await q(`SELECT amount_minor::text AS a, description, period FROM ledger_entries WHERE id = $1`, [charge1]);
+  check('A6b: reddedilen UPDATE/DELETE sonrasi satir AYNEN duruyor', sample.rows.length === 1 && sample.rows[0].a === '1000' && sample.rows[0].description === null);
+
+  // kullanici silme akisi BOZULMAZ: created_by SET NULL referans eylemi (yalniz bu sutun, yalniz NULL'a) tetikleyiciden gecer
+  const deletable = await mkUser('Silinecek Kasiyer', 'site_manager');
+  const delEntry = Number((await insertEntry({ kind: 'payment', amount_minor: -50, method: 'transfer', created_by: deletable })).rows[0].id);
+  const delRun = (await q(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count, posted_by) VALUES ($1, $2, '2026-03-01', 5, 1, $3) RETURNING id`, [sc.code, defId, deletable])).rows[0].id;
+  const delDef = (await q(`INSERT INTO fee_definitions (site_code, name, kind, distribution, amount_minor, start_period, created_by) VALUES ($1, 'Kullanici', 'one_time', 'equal', 5, '2026-01-01', $2) RETURNING id`, [sc.code, deletable])).rows[0].id;
+  await q(`INSERT INTO finance_period_closures (site_code, period, closed_by) VALUES ($1, '2025-12-01', $2)`, [sc.code, deletable]);
+  const userDelete = await failCode(`DELETE FROM users WHERE user_code = $1`, [deletable]);
+  const afterDelete = (await q(`SELECT l.created_by, (SELECT posted_by FROM fee_runs WHERE id = $2) AS posted_by, (SELECT created_by FROM fee_definitions WHERE id = $3) AS def_by, (SELECT closed_by FROM finance_period_closures WHERE site_code = $4 AND period = '2025-12-01') AS closed_by, l.amount_minor::text AS amount FROM ledger_entries l WHERE l.id = $1`, [delEntry, delRun, delDef, sc.code])).rows[0];
+  check('A7: kullanici silme BOZULMAZ: defter created_by, fee_runs.posted_by, fee_definitions.created_by, finance_period_closures.closed_by NULL olur; defter satiri (tutar) KALIR', userDelete === null && afterDelete.created_by === null && afterDelete.posted_by === null && afterDelete.def_by === null && afterDelete.closed_by === null && afterDelete.amount === '-50', { userDelete, afterDelete });
+  check('A7b: kullanici silinince baska hicbir defter sutunu degismedi (tetikleyici istisnasi yalniz created_by -> NULL)', (await q(`SELECT kind, period::text AS period, method FROM ledger_entries WHERE id = $1`, [delEntry])).rows[0].method === 'transfer');
+
+  // apartments RESTRICT <-> site CASCADE
+  const restrictCode = await failCode(`DELETE FROM apartments WHERE id = $1`, [sa1]);
+  check('A8: mali kaydi olan daire dogrudan SILINEMEZ (FK ON DELETE RESTRICT, 23001); kaydi olmayan daire silinebilir', restrictCode === '23001' && (await failCode(`DELETE FROM apartments WHERE id = $1`, [sc.ids[2]])) === null, restrictCode);
+  await q(`INSERT INTO finance_period_closures (site_code, period) VALUES ($1, '2026-01-01')`, [sc.code]);
+  const siteDeleteError = await failCode(`DELETE FROM sites WHERE site_code = $1`, [sc.code]);
+  const leftovers = (await q(`SELECT (SELECT COUNT(*) FROM ledger_entries WHERE site_code = $1)::int AS l, (SELECT COUNT(*) FROM fee_runs WHERE site_code = $1)::int AS r, (SELECT COUNT(*) FROM fee_definitions WHERE site_code = $1)::int AS d, (SELECT COUNT(*) FROM finance_period_closures WHERE site_code = $1)::int AS c, (SELECT COUNT(*) FROM apartments WHERE site_code = $1)::int AS a`, [sc.code])).rows[0];
+  check('A9: SITE SILININCE defter dahil her sey CASCADE silinir (tetikleyici "site artik yok" istisnasi; daire RESTRICT\'i engellemez); kalinti yok', siteDeleteError === null && Object.values(leftovers).every((n) => n === 0), { siteDeleteError, leftovers });
+  const otherSiteSafe = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1`, [other.code])).rows[0].n;
+  check('A9b: baska sitenin defteri etkilenmedi', otherSiteSafe === 1);
+  await q(`DELETE FROM sites WHERE site_code = $1`, [other.code]);
+
+  // ensureDbSchema x2: no-op (veri ve sema degismez)
+  const schemaDump = async () => (await q(`SELECT (SELECT COUNT(*) FROM ledger_entries)::int AS l, (SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'trg_ledger_entries_append_only' AND NOT tgisinternal)::int AS t, (SELECT COUNT(*) FROM pg_indexes WHERE tablename IN ('ledger_entries', 'fee_runs', 'fee_definitions', 'finance_period_closures'))::int AS i, (SELECT COUNT(*) FROM pg_constraint WHERE conrelid IN ('ledger_entries'::regclass, 'fee_runs'::regclass, 'fee_definitions'::regclass, 'finance_period_closures'::regclass))::int AS c`)).rows[0];
+  const dumpBefore = await schemaDump();
+  await ensureDbSchema();
+  await ensureDbSchema();
+  check('A10: ensureDbSchema iki kez daha calistirilinca finans semasi (tetikleyici, indeks, kisit) ve veri DEGISMEZ', same(dumpBefore, await schemaDump()) && dumpBefore.t === 1, dumpBefore);
+
+  // ============================================================================================================
+  // B. Dagitim matematigi (saf, BigInt) ve ozellik testi: pay toplami tutara BIREBIR esit
+  // ============================================================================================================
+  console.log('--- B. dagitim matematigi ---');
+  const mulberry32 = (seed) => () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const rnd = mulberry32(20261016);
+  const randInt = (max) => Math.floor(rnd() * (max + 1)); // 0..max (yalniz TEST girdisi uretir; para hesabi degil)
+  const randBig = (digits) => {
+    let text = '';
+    for (let i = 0; i < digits; i += 1) text += String(randInt(9));
+    return BigInt(text);
+  };
+  const shuffle = (list) => {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = randInt(i);
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+  let propertyFailures = [];
+  for (let trial = 0; trial < 3000; trial += 1) {
+    const n = 1 + randInt(trial % 10 === 0 ? 400 : 40);
+    const total = trial % 7 === 0 ? BigInt(randInt(50)) : randBig(1 + randInt(12)); // 0 .. 10^12 - 1
+    const ids = shuffle(Array.from({ length: n }, (_, i) => 1000 + i * 3 + randInt(2)));
+    const uniqueIds = [...new Set(ids)];
+    let weights = uniqueIds.map(() => (rnd() < 0.15 ? 0n : BigInt(1 + randInt(trial % 3 === 0 ? 5 : 1000000))));
+    if (weights.every((w) => w === 0n)) weights[0] = 1n;
+    const items = uniqueIds.map((id, i) => ({ id, weight: weights[i] }));
+    const result = dist.distributeLargestRemainder(total, items);
+    const weightSum = weights.reduce((a, b) => a + b, 0n);
+    let sum = 0n;
+    let bad = null;
+    for (const item of items) {
+      const share = result.get(item.id);
+      sum += share;
+      const exact = (total * item.weight) / weightSum;
+      if (share !== exact && share !== exact + 1n) bad = `pay ${share} sinir disi (taban ${exact})`;
+      if (item.weight === 0n && share !== 0n) bad = 'sifir agirlik pay aldi';
+    }
+    if (sum !== total) bad = `toplam ${sum} != ${total}`;
+    const again = dist.distributeLargestRemainder(total, shuffle(items));
+    if (items.some((item) => again.get(item.id) !== result.get(item.id))) bad = 'girdi sirasina bagimli (deterministik degil)';
+    if (bad) propertyFailures.push({ trial, n, total: String(total), bad });
+  }
+  check(`B1: ozellik testi (3000 rastgele girdi, 1-400 daire, tutar 0..10^12): pay toplami tutara BIREBIR esit; her pay tabana veya tabana+1; sifir agirlik 0; girdi sirasindan bagimsiz`, propertyFailures.length === 0, propertyFailures.slice(0, 3));
+  const tie = dist.distributeLargestRemainder(7n, [30, 10, 50, 20, 40].map((id) => ({ id, weight: 1n })));
+  check('B2: esitlikte apartment_id KUCUK olan kalan kurusu once alir: 7 kurus / 5 daire -> 10 ve 20 ikiser, digerleri birer', [...tie.entries()].sort((a, b) => a[0] - b[0]).map(([id, v]) => `${id}:${v}`).join(',') === '10:2,20:2,30:1,40:1,50:1');
+  const huge = dist.distributeLargestRemainder(1000000000000n, Array.from({ length: 3000 }, (_, i) => ({ id: i + 1, weight: 1n })));
+  check('B3: 10^12 kurus / 3000 daire: toplam birebir, paylar yalniz iki deger', [...huge.values()].reduce((a, b) => a + b, 0n) === 1000000000000n && new Set(huge.values()).size === 2);
+  // arsa payi: farkli paydalar ortak paydaya tamsayi aritmetigiyle gelir
+  let landFailures = [];
+  const denominators = [100, 360, 1000, 7000, 10000, 2000];
+  for (let trial = 0; trial < 600; trial += 1) {
+    const n = 2 + randInt(30);
+    const shares = Array.from({ length: n }, (_, i) => {
+      const denominator = denominators[randInt(denominators.length - 1)];
+      return { id: i + 1, numerator: BigInt(1 + randInt(denominator - 1)), denominator: BigInt(denominator) };
+    });
+    const weights = dist.landShareWeights(shares);
+    const total = randBig(1 + randInt(11)) + 1n;
+    const split = dist.distributeLargestRemainder(total, weights);
+    let sum = 0n;
+    for (const v of split.values()) sum += v;
+    let proportional = true;
+    for (let i = 0; i + 1 < n; i += 1) {
+      // w_i / w_j == (n_i/d_i) / (n_j/d_j)  <=>  w_i * n_j * d_i == w_j * n_i * d_j
+      if (weights[i].weight * shares[i + 1].numerator * shares[i].denominator !== weights[i + 1].weight * shares[i].numerator * shares[i + 1].denominator) proportional = false;
+    }
+    if (sum !== total || !proportional) landFailures.push({ trial, sum: String(sum), total: String(total), proportional });
+  }
+  check('B4: arsa payi (farkli paydalar 100/360/1000/7000/10000/2000, 600 rastgele girdi): agirliklar kesirlerle ORANTILI (tam sayi capraz carpim) ve pay toplami tutara esit', landFailures.length === 0, landFailures.slice(0, 3));
+  const lcmError = (() => {
+    const primes = [];
+    for (let candidate = 2147483647; primes.length < 24; candidate -= 2) {
+      let isPrime = true;
+      for (let d = 3; d * d <= candidate; d += 2) {
+        if (candidate % d === 0) { isPrime = false; break; }
+      }
+      if (isPrime) primes.push(candidate);
+    }
+    try {
+      dist.landShareWeights(primes.map((p, i) => ({ id: i + 1, numerator: 1n, denominator: BigInt(p) })));
+      return null;
+    } catch (error) {
+      return error.code;
+    }
+  })();
+  check('B5: ortak payda sinirsiz buyuyemez: 24 ayri asal payda (> 512 bit EKOK) -> LAND_SHARE_UNSUPPORTED', lcmError === 'LAND_SHARE_UNSUPPORTED', lcmError);
+  // plan: eksik veri, Turkce harf duyarsiz kategori, sifir tutarli daireler
+  const aptFx = (id, extra = {}) => ({ id, label: `D${id}`, blockName: 'A', blockSort: 1, aptSort: id, payerParty: 'both', category: null, grossX100: null, netX100: null, landNumerator: null, landDenominator: null, ...extra });
+  const catPlan = dist.buildDistributionPlan({ distribution: 'category', categoryAmounts: { 'DÜKKAN': 20000, '2+1': 10000, 'iş yeri': 30000 } }, [aptFx(1, { category: 'dükkan' }), aptFx(2, { category: '2+1' }), aptFx(3, { category: 'İŞ YERİ' }), aptFx(4), aptFx(5, { category: '9+9' })]);
+  check('B6: kategori eslesmesi Turkce harf ve buyuk/kucuk harf duyarsiz (DUKKAN=dukkan, IS YERI); kategorisiz ve haritada olmayan daire eksik veri (iki ayri neden)',
+    catPlan.lines.map((l) => `${l.apartmentId}:${l.amount}`).join(',') === '1:20000,2:10000,3:30000' && same(catPlan.missing.map((m) => [m.apartmentId, m.reasonCode]), [[4, 'category_missing'], [5, 'category_amount_missing']]) && catPlan.total === 60000n, catPlan);
+  const areaPlan = dist.buildDistributionPlan({ distribution: 'area', areaBasis: 'net', amountMinor: 100000 }, [aptFx(1, { netX100: '10000', grossX100: '99999' }), aptFx(2, { netX100: '30000' }), aptFx(3, { netX100: null, grossX100: '5000' }), aptFx(4, { netX100: '0' })]);
+  check('B7: m2 dagitimi secili esas (net) uzerinden; net m2 tanimsiz/0 olan daire eksik veri; paylar 1:3 oraninda ve toplam 100000', areaPlan.lines.map((l) => `${l.apartmentId}:${l.amount}`).join(',') === '1:25000,2:75000' && same(areaPlan.missing.map((m) => m.apartmentId), [3, 4]), areaPlan);
+  const landPlan = dist.buildDistributionPlan({ distribution: 'land_share', amountMinor: 1000 }, [aptFx(1, { landNumerator: 1, landDenominator: 4 }), aptFx(2, { landNumerator: 1, landDenominator: 2 }), aptFx(3), aptFx(4, { landNumerator: 0, landDenominator: 10 })]);
+  check('B8: arsa payi dagitimi 1/4 : 1/2 -> 333 / 667 (kalan kurus buyuk kalana); tanimsiz ve sifir paylar eksik veri', landPlan.lines.map((l) => `${l.apartmentId}:${l.amount}`).join(',') === '1:333,2:667' && landPlan.total === 1000n && same(landPlan.missing.map((m) => m.apartmentId), [3, 4]), landPlan);
+  const tinyPlan = dist.buildDistributionPlan({ distribution: 'equal', amountMinor: 2 }, [aptFx(1), aptFx(2), aptFx(3), aptFx(4), aptFx(5)]);
+  check('B9: 2 kurus / 5 daire: yalniz 2 daire 1 kurus alir (defter satiri sifir olamaz), toplam 2, sifir paylar sayilir', tinyPlan.lines.length === 2 && tinyPlan.total === 2n && tinyPlan.zeroAmountCount === 3 && tinyPlan.lines.map((l) => l.apartmentId).join(',') === '1,2');
+  const fixedPlan = dist.buildDistributionPlan({ distribution: 'fixed', amountMinor: 123456 }, [aptFx(2, { payerParty: 'owner' }), aptFx(1, { payerParty: 'tenant' })]);
+  check('B10: sabit tutar her daireye; odeyen taraf dairenin responsible_party degeri; siralama blok/daire sirasi', fixedPlan.total === 246912n && fixedPlan.lines.map((l) => `${l.apartmentId}:${l.payerParty}`).join(',') === '1:tenant,2:owner');
+  const bad = [1.5, '100', NaN, Infinity, -1, 0, 1e21, 2 ** 53, 1000000000001, null, undefined, true, {}, [5]];
+  check('B11: parseMinor yalniz JSON TAMSAYI kabul eder (ondalik, metin, NaN, sonsuz, negatif, 0, tasma, > 10^12, null, nesne reddedilir)', bad.every((value) => money.parseMinor(value) === null) && money.parseMinor(1) === 1 && money.parseMinor(1000000000000) === 1000000000000 && money.parseMinor(0, { min: 0 }) === 0);
+
+  // ============================================================================================================
+  // C. Dunya, modul kapali/acik, yetki matrisi, IDOR
+  // ============================================================================================================
+  console.log('--- C. yetki, modul, IDOR ---');
+  const fs1 = await mkSite('Finans Sitesi', { 'A Blok': 10, 'B Blok': 10 });
+  const fs2 = await mkSite('Baska Finans Sitesi', { 'C Blok': 4 });
+  await link.manager(fs1.code, MGR);
+  await link.manager(fs2.code, MGR2);
+  await link.member(fs1.code, BOARD, 'BOARD_MEMBER');
+  await link.member(fs1.code, STAFF, 'STAFF');
+  await link.member(fs1.code, RESIDENT, 'RESIDENT');
+  // daire alanlari: A blok (10 daire): brut 90+n, net 70+n, arsa payi n/1000, kategori 2+1 (n<=5) / 3+1, odeyen owner/both/tenant donusumlu.
+  // B blok (10 daire): brut 120.50, net 100.25, arsa payi 12/2000, kategori Dukkan (n<=2) / 2+1; B Daire 10 hicbir verisi olmayan (eksik veri) daire.
+  const PARTIES = ['owner', 'both', 'tenant'];
+  for (const a of fs1.apts) {
+    if (a.block === 'A Blok') {
+      await q(`UPDATE apartments SET gross_area_m2 = $2, net_area_m2 = $3, land_share_numerator = $4, land_share_denominator = 1000, category = $5, responsible_party = $6 WHERE id = $1`, [a.id, `${90 + a.n}.00`, `${70 + a.n}.00`, a.n, a.n <= 5 ? '2+1' : '3+1', PARTIES[a.n % 3]]);
+    } else if (a.n < 10) {
+      await q(`UPDATE apartments SET gross_area_m2 = 120.50, net_area_m2 = 100.25, land_share_numerator = 12, land_share_denominator = 2000, category = $2, responsible_party = 'both' WHERE id = $1`, [a.id, a.n <= 2 ? 'Dükkan' : '2+1']);
+    }
+  }
+  const A = (n) => fs1.apt(`A Blok - Daire ${n}`);
+  const B = (n) => fs1.apt(`B Blok - Daire ${n}`);
+
+  const c2Def = Number((await q(`INSERT INTO fee_definitions (site_code, name, kind, distribution, amount_minor, start_period) VALUES ($1, 'Baska site', 'one_time', 'equal', 100, '2026-01-01') RETURNING id`, [fs2.code])).rows[0].id);
+  const c2Run = Number((await q(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count) VALUES ($1, $2, '2026-01-01', 100, 1) RETURNING id`, [fs2.code, c2Def])).rows[0].id);
+  const c2Entry = Number((await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, run_id, payer_party) VALUES ($1, $2, 'charge', 100, '2026-01-01', '2026-01-01', '2026-01-05', $3, $4, 'both') RETURNING id`, [fs2.code, fs2.ids[0], c2Def, c2Run])).rows[0].id);
+
+  // --- modul KAPALI: tum finans uclari 403 MODULE_DISABLED (module: finance); rol kontrolu modulden ONCE
+  const readProbes = [`${P(fs1.code)}/definitions`, `${P(fs1.code)}/balances`, `${P(fs1.code)}/periods`, `${P(fs1.code)}/summary`, `${P(fs1.code)}/apartments/${A(1).id}/account`];
+  const writeProbes = [['POST', `${P(fs1.code)}/definitions`], ['POST', `${P(fs1.code)}/definitions/1/preview`], ['POST', `${P(fs1.code)}/definitions/1/post`], ['POST', `${P(fs1.code)}/charges/preview`], ['POST', `${P(fs1.code)}/charges`], ['POST', `${P(fs1.code)}/payments`], ['POST', `${P(fs1.code)}/entries/1/reverse`], ['POST', `${P(fs1.code)}/entries/1/correct`], ['POST', `${P(fs1.code)}/periods/${ym(0)}/close`]];
+  const disabledResults = [];
+  for (const user of [SUPER, MGR, BOARD]) {
+    for (const url of readProbes) disabledResults.push(['GET', url, user, await call('GET', url, user)]);
+  }
+  for (const user of [SUPER, MGR]) {
+    for (const [method, url] of writeProbes) disabledResults.push([method, url, user, await call(method, url, user, {})]);
+  }
+  check('C1: finance modulu KAPALI (varsayilan): super, yonetici ve kurul icin TUM finans uclari 403 MODULE_DISABLED { module: finance }',
+    disabledResults.every(([, , , r]) => r.status === 403 && r.body.code === 'MODULE_DISABLED' && r.body.module === 'finance'), disabledResults.filter(([, , , r]) => !(r.status === 403 && r.body.code === 'MODULE_DISABLED')).map(([m, u, who, r]) => `${m} ${u} ${who} ${r.status} ${r.body?.code}`).slice(0, 4));
+  const roleBeforeModule = [];
+  for (const [user, expected] of [[STAFF, 'FORBIDDEN_ROLE'], [RESIDENT, 'FORBIDDEN_ROLE'], [OUTSIDER, 'FORBIDDEN_ROLE'], [MGR2, 'FORBIDDEN_SITE']]) {
+    roleBeforeModule.push([user, (await call('GET', `${P(fs1.code)}/definitions`, user)).body?.code === expected]);
+  }
+  check('C2: modul kapaliyken bile yetkisiz roller modulu ogrenemez: gorevli/sakin/ilgisiz 403 FORBIDDEN_ROLE, baska site yoneticisi 403 FORBIDDEN_SITE', roleBeforeModule.every(([, ok]) => ok), roleBeforeModule);
+  check('C3: kurul uye KAPALI modulde POST dener: once rol (403 FORBIDDEN_ROLE)', (await call('POST', `${P(fs1.code)}/payments`, BOARD, {})).body?.code === 'FORBIDDEN_ROLE');
+  const catalog = await call('GET', `/manager/sites/${fs1.code}/modules`, MGR);
+  const financeModule = catalog.body?.modules?.find((m) => m.code === 'finance');
+  check('C4: katalog: finance "available" + toggleable, varsayilan KAPALI (yonetici modul talep eder, super acar)', catalog.status === 200 && financeModule?.status === 'available' && financeModule.toggleable === true && financeModule.enabled === false && financeModule.core === false, financeModule);
+  check('C4b: yonetici modulu DOGRUDAN acamaz (yalniz super): 403', (await call('PUT', `/manager/sites/${fs1.code}/modules/finance`, MGR, { enabled: true })).status === 403);
+  const enabled = await enableModule(fs1.code);
+  check('C5: super finance modulunu acar (artik "yakinda" degil): 200', enabled.status === 200, enabled.body);
+  await enableModule(fs2.code);
+
+  // --- yetki matrisi (modul ACIK)
+  const matrix = [];
+  const expectRole = async (label, method, url, user, body, status, code) => {
+    const r = await call(method, url, user, body);
+    matrix.push([label, r.status === status && (code === undefined || r.body?.code === code), `${r.status} ${r.body?.code}`]);
+    return r;
+  };
+  for (const [user, name, status, code] of [[SUPER, 'super', 200], [MGR, 'yonetici', 200], [BOARD, 'kurul', 200], [STAFF, 'gorevli', 403, 'FORBIDDEN_ROLE'], [RESIDENT, 'sakin', 403, 'FORBIDDEN_ROLE'], [OUTSIDER, 'ilgisiz', 403, 'FORBIDDEN_ROLE'], [MGR2, 'baska site yoneticisi', 403, 'FORBIDDEN_SITE']]) {
+    for (const url of readProbes) await expectRole(`GET ${name} ${url.split('/finance/')[1]}`, 'GET', url, user, undefined, status, code);
+  }
+  const noToken = await call('GET', `${P(fs1.code)}/definitions`, null);
+  matrix.push(['kimliksiz 401', noToken.status === 401, noToken.status]);
+  for (const [method, url] of writeProbes) {
+    for (const [user, name] of [[BOARD, 'kurul'], [STAFF, 'gorevli'], [RESIDENT, 'sakin']]) await expectRole(`${method} ${name} ${url.split('/finance/')[1]}`, method, url, user, {}, 403, 'FORBIDDEN_ROLE');
+    await expectRole(`${method} baska site ${url.split('/finance/')[1]}`, method, url, MGR2, {}, 403, 'FORBIDDEN_SITE');
+  }
+  await expectRole('PATCH kurul definitions', 'PATCH', `${P(fs1.code)}/definitions/1`, BOARD, {}, 403, 'FORBIDDEN_ROLE');
+  await expectRole('POST kurul reopen', 'POST', `${P(fs1.code)}/periods/${ym(-1)}/reopen`, BOARD, {}, 403, 'FORBIDDEN_ROLE');
+  await expectRole('POST yonetici reopen (yalniz super)', 'POST', `${P(fs1.code)}/periods/${ym(-1)}/reopen`, MGR, {}, 403, 'FORBIDDEN_ROLE');
+  await expectRole('gecersiz site kodu 400', 'GET', '/manager/sites/abc/finance/definitions', SUPER, undefined, 400, 'INVALID_SITE_CODE');
+  await expectRole('olmayan site 404', 'GET', '/manager/sites/999999999/finance/definitions', SUPER, undefined, 404, 'SITE_NOT_FOUND');
+  check(`C6: yetki matrisi (${matrix.length} durum): yonetici/super yazar-okur; kurul YALNIZ okur (tum POST/PATCH 403 FORBIDDEN_ROLE); gorevli/sakin/ilgisiz 403; baska site 403 FORBIDDEN_SITE; kimliksiz 401; gecersiz/olmayan site 400/404`, matrix.every(([, ok]) => ok), matrix.filter(([, ok]) => !ok).slice(0, 5));
+  check('C7: /app/my-finance kimliksiz 401', (await call('GET', '/app/my-finance', null)).status === 401);
+
+  // ============================================================================================================
+  // D. Tanimlar: dogrulama, olusturma, PATCH kurallari, IDOR
+  // ============================================================================================================
+  console.log('--- D. tanimlar ---');
+  const base = P(fs1.code);
+  const foreignBlock = Number((await q(`SELECT id FROM site_blocks WHERE site_code = $1 LIMIT 1`, [fs2.code])).rows[0].id);
+  const baseDef = { name: 'Aidat', kind: 'recurring', distribution: 'fixed', amount_minor: 150000, due_day: 1, start_period: ym(-3), target: { type: 'site' } };
+  const invalidDefs = [
+    ['ad yok', { name: undefined }, 'INVALID_BODY'], ['ad bosluk', { name: '   ' }, 'INVALID_BODY'], ['81 karakterlik ad', { name: 'x'.repeat(81) }, 'INVALID_BODY'], ['gecersiz tur', { kind: 'haftalik' }, 'INVALID_BODY'], ['gecersiz dagitim', { distribution: 'rastgele' }, 'INVALID_BODY'],
+    ['ONDALIK tutar (1500.5)', { amount_minor: 1500.5 }, 'INVALID_BODY'], ['METIN tutar', { amount_minor: '150000' }, 'INVALID_BODY'], ['tutar 0', { amount_minor: 0 }, 'INVALID_BODY'], ['negatif tutar', { amount_minor: -10 }, 'INVALID_BODY'],
+    ['10^12 + 1 tutar', { amount_minor: 1000000000001 }, 'INVALID_BODY'], ['1e21 tutar', { amount_minor: 1e21 }, 'INVALID_BODY'], ['tutar yok', { amount_minor: undefined }, 'INVALID_BODY'], ['amount / amount_minor farkli', { amount: 5, amount_minor: 6 }, 'INVALID_BODY'],
+    ['aylikta vade gunu yok', { due_day: undefined }, 'INVALID_BODY'], ['vade gunu 29', { due_day: 29 }, 'INVALID_BODY'], ['vade gunu 0', { due_day: 0 }, 'INVALID_BODY'], ['vade gunu metin', { due_day: '5' }, 'INVALID_BODY'],
+    ['baslangic donemi yok', { start_period: undefined }, 'INVALID_BODY'], ['baslangic 2026-13', { start_period: '2026-13' }, 'INVALID_BODY'], ['baslangic ayin ikinci gunu', { start_period: '2026-01-02' }, 'INVALID_BODY'], ['bitis < baslangic', { end_period: ym(-5) }, 'INVALID_BODY'],
+    ['m2 dagitimi alan esassiz', { distribution: 'area' }, 'INVALID_BODY'], ['esit dagitimda kategori tutarlari', { distribution: 'equal', category_amounts: { a: 100 } }, 'INVALID_BODY'], ['kategori dagitiminda tutar', { distribution: 'category', category_amounts: { a: 100 } }, 'INVALID_BODY'],
+    ['kategori tutari ondalik', { distribution: 'category', amount_minor: undefined, category_amounts: { a: 1.5 } }, 'INVALID_BODY'], ['ayni kategori iki kez (harf farki)', { distribution: 'category', amount_minor: undefined, category_amounts: { DUKKAN: 1000, dukkan: 2000 } }, 'INVALID_BODY'],
+    ['hedef yok', { target: undefined }, 'INVALID_BODY'], ['gecersiz hedef turu', { target: { type: 'kat' } }, 'INVALID_BODY'], ['blok hedefi bos', { target: { type: 'blocks', block_ids: [] } }, 'INVALID_TARGET'],
+    ['BASKA sitenin blogu', { target: { type: 'blocks', block_ids: [foreignBlock] } }, 'INVALID_TARGET'], ['BASKA sitenin dairesi', { target: { type: 'apartments', apartment_ids: [fs2.ids[0]] } }, 'INVALID_TARGET'], ['hedef dairelerde metin kimlik', { target: { type: 'apartments', apartment_ids: ['abc'] } }, 'INVALID_TARGET'],
+  ];
+  const defCountBefore = (await counts(fs1.code)).defs;
+  const invalidResults = [];
+  for (const [label, over, code] of invalidDefs) {
+    const r = await call('POST', `${base}/definitions`, MGR, { ...baseDef, ...over });
+    invalidResults.push([label, r.status === 400 && r.body?.code === code, `${r.status} ${r.body?.code}`]);
+  }
+  check(`D1: ${invalidDefs.length} gecersiz tanim govdesi 400 (INVALID_BODY / INVALID_TARGET) ile reddedilir: ondalik/metin/tasan tutar, vade gunu, donem, dagitim-alan uyumsuzlugu, baska sitenin blok/dairesi`, invalidResults.every(([, ok]) => ok) && (await counts(fs1.code)).defs === defCountBefore, invalidResults.filter(([, ok]) => !ok).slice(0, 5));
+  check('D1b: ham govde: bozuk JSON 400 (sunucu hatasi degil); govde dizi/metin gelirse 400', (await call('POST', `${base}/definitions`, MGR, undefined, '{"name": ')).status === 400 && (await call('POST', `${base}/definitions`, MGR, undefined, '[1,2]')).status === 400);
+
+  const created = await call('POST', `${base}/definitions`, MGR, baseDef);
+  const aidat = created.body;
+  check('D2: tanim olusturma 201 { Definition }: kurus TAMSAYI, donemler YYYY-MM, hedef (duz + ic ice), has_runs false, last_posted_period null, olusturan yonetici adi',
+    created.status === 201 && Number.isInteger(aidat.id) && aidat.name === 'Aidat' && aidat.kind === 'recurring' && aidat.distribution === 'fixed' && aidat.amount_minor === 150000 && aidat.start_period === ym(-3) && aidat.end_period === null && aidat.due_day === 1
+      && aidat.target_type === 'site' && same(aidat.target_block_ids, []) && aidat.target.type === 'site' && aidat.is_active === true && aidat.has_runs === false && aidat.last_posted_period === null && aidat.created_by_name === 'Finans Yonetici' && aidat.category_amounts === null && aidat.area_basis === null && aidat.currency === 'TRY', created.body);
+  const aliasCreated = await call('POST', `${base}/definitions`, MGR, { ...baseDef, name: 'Alias', amount_minor: undefined, amount: 777, start_period: `${ym(-3)}-01` });
+  check('D2b: "amount" (kurus) takma adi kabul edilir; baslangic YYYY-MM-01 de kabul edilir', aliasCreated.status === 201 && aliasCreated.body.amount_minor === 777 && aliasCreated.body.start_period === ym(-3), aliasCreated.body);
+  const createAudit = await auditRows(fs1.code, 'finance.definition.created');
+  check('D2c: audit finance.definition.created: target_type finance, target_id, site_code dolu; details YALNIZ tur/dagitim/hedef/donem (tanim adi YOK)', createAudit.length === 2 && createAudit[0].target_type === 'finance' && createAudit[0].target_id === String(aidat.id) && Number(createAudit[0].site_code) === fs1.code && !JSON.stringify(createAudit[0].details).includes('Aidat') && createAudit[0].actor_user_code === MGR && createAudit[0].details.distribution === 'fixed', createAudit[0]);
+
+  const categoryDef = await call('POST', `${base}/definitions`, MGR, { name: 'Kategori Aidat', kind: 'recurring', distribution: 'category', category_amounts: { '2+1': 100000, '3+1': 150000, 'Dükkan': 250000 }, due_day: 10, start_period: ym(-3), target: { type: 'site' } });
+  check('D3: kategori tanimi: category_amounts kurus tamsayi; amount_minor null', categoryDef.status === 201 && categoryDef.body.amount_minor === null && categoryDef.body.category_amounts['2+1'] === 100000 && categoryDef.body.category_amounts['Dükkan'] === 250000, categoryDef.body);
+  const areaDef = await call('POST', `${base}/definitions`, MGR, { name: 'Alan Aidat', kind: 'recurring', distribution: 'area', area_basis: 'gross', amount_minor: 5000000, due_day: 15, start_period: ym(-3), target: { type: 'blocks', block_ids: [A(1).blockId] } });
+  check('D3b: m2 tanimi + blok hedefi (etiketli): area_basis gross, hedef blok adi dondu', areaDef.status === 201 && areaDef.body.area_basis === 'gross' && areaDef.body.target.block_ids[0] === A(1).blockId && areaDef.body.target.blocks[0]?.name === 'A Blok', areaDef.body);
+
+  const listAll = await call('GET', `${base}/definitions`, MGR);
+  const listRecurring = await call('GET', `${base}/definitions?kind=recurring&active=true`, MGR);
+  const listOneTime = await call('GET', `${base}/definitions?kind=one_time`, MGR);
+  check('D4: GET definitions { items } (+ kind / active suzgecleri); gecersiz suzgec 400 INVALID_QUERY', listAll.status === 200 && listAll.body.items.length === 4 && listRecurring.body.items.length === 4 && listOneTime.body.items.length === 0 && (await call('GET', `${base}/definitions?kind=x`, MGR)).body?.code === 'INVALID_QUERY' && (await call('GET', `${base}/definitions?active=maybe`, MGR)).body?.code === 'INVALID_QUERY');
+  const boardList = await call('GET', `${base}/definitions`, BOARD);
+  check('D4b: kurul listede yonetici adi GORMEZ (created_by_name null); yonetici gorur', boardList.body.items.every((d) => d.created_by_name === null) && listAll.body.items.every((d) => d.created_by_name === 'Finans Yonetici'));
+
+  // PATCH (borclandirilmamis): tutar / dagitim degisir; capraz kurallar
+  const patchBad = [
+    ['bos govde', {}, 'INVALID_BODY'], ['ondalik tutar', { amount_minor: 10.5 }, 'INVALID_BODY'], ['kategoriye gecis ama kategori tutari yok', { distribution: 'category' }, 'INVALID_BODY'], ['m2 gecisi esassiz', { distribution: 'area' }, 'INVALID_BODY'],
+    ['vade gunu 40', { due_day: 40 }, 'INVALID_BODY'], ['bitis baslangictan once', { end_period: ym(-9) }, 'INVALID_BODY'], ['aktiflik metin', { is_active: 'evet' }, 'INVALID_BODY'], ['baska sitenin blogu', { target: { type: 'blocks', block_ids: [foreignBlock] } }, 'INVALID_TARGET'],
+  ];
+  const patchResults = [];
+  for (const [label, body, code] of patchBad) {
+    const r = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, body);
+    patchResults.push([label, r.status === 400 && r.body?.code === code, `${r.status} ${r.body?.code}`]);
+  }
+  check('D5: PATCH gecersiz govdeler 400; tanim degismez', patchResults.every(([, ok]) => ok) && (await call('GET', `${base}/definitions?kind=recurring`, MGR)).body.items.find((d) => d.id === aidat.id).amount_minor === 150000, patchResults.filter(([, ok]) => !ok));
+  const patched = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { amount_minor: 160000, due_day: 3 });
+  check('D5b: borclandirilmamis tanimda tutar ve vade gunu degisir', patched.status === 200 && patched.body.amount_minor === 160000 && patched.body.due_day === 3, patched.body);
+  const toEqual = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { distribution: 'equal', amount_minor: 4000000 });
+  const backToFixed = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { distribution: 'fixed', amount_minor: 150000, due_day: 1 });
+  check('D5c: dagitim degisimi (fixed -> equal -> fixed) yalniz borclandirilmamis tanimda; bagimli alanlar (alan esasi, kategori tutarlari) sifirlanir', toEqual.status === 200 && toEqual.body.distribution === 'equal' && toEqual.body.amount_minor === 4000000 && backToFixed.status === 200 && backToFixed.body.distribution === 'fixed' && backToFixed.body.amount_minor === 150000, [toEqual.body, backToFixed.body]);
+  const toCategory = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { distribution: 'category', category_amounts: { '2+1': 1000 } });
+  const catBack = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { distribution: 'fixed', amount_minor: 150000 });
+  check('D5d: kategoriye gecis (kategori tutarlariyla) ve geri donus: amount_minor null <-> dolu, category_amounts sifirlanir', toCategory.status === 200 && toCategory.body.amount_minor === null && toCategory.body.category_amounts['2+1'] === 1000 && catBack.status === 200 && catBack.body.category_amounts === null && catBack.body.amount_minor === 150000, [toCategory.body, catBack.body]);
+  check('D6: IDOR: baska sitenin tanimi (preview / post / PATCH) 404 DEFINITION_NOT_FOUND; gecersiz kimlik 404',
+    (await call('POST', `${base}/definitions/${c2Def}/preview`, MGR, { period: ym(0) })).body?.code === 'DEFINITION_NOT_FOUND' && (await call('POST', `${base}/definitions/${c2Def}/post`, MGR, { period: ym(0), expected_total_minor: 0, expected_apartment_count: 0 })).body?.code === 'DEFINITION_NOT_FOUND'
+      && (await call('PATCH', `${base}/definitions/${c2Def}`, MGR, { name: 'Ele gecirme' })).status === 404 && (await call('PATCH', `${base}/definitions/abc`, MGR, { name: 'x' })).status === 404);
+  check('D6b: baska sitenin tanimi hic degismedi', (await q(`SELECT name FROM fee_definitions WHERE id = $1`, [c2Def])).rows[0].name === 'Baska site');
+
+  // ============================================================================================================
+  // E. Onizleme (yazmaz), PREVIEW_STALE, borclandirma, tekrar, eszamanli cift post, idempotency_key
+  // ============================================================================================================
+  console.log('--- E. onizleme ve borclandirma ---');
+  const defUrl = (id, action) => `${base}/definitions/${id}/${action}`;
+  const postBodyOf = (prev, extra = {}) => ({ period: prev.period, expected_total_minor: prev.total_minor, expected_apartment_count: prev.apartment_count, ...extra });
+  const snap0 = await counts(fs1.code);
+  const prev1 = await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(-1) });
+  check('E1: onizleme 200 { period, definition_id, total_minor, apartment_count, lines, missing_data, already_posted, closed }: 20 daire x 150000 = 3000000 kurus (tamsayi); satirda kim oder; donem YYYY-MM',
+    prev1.status === 200 && prev1.body.period === ym(-1) && prev1.body.definition_id === aidat.id && prev1.body.total_minor === 3000000 && prev1.body.apartment_count === 20 && prev1.body.lines.length === 20 && same(prev1.body.missing_data, [])
+      && prev1.body.already_posted === false && prev1.body.closed === false && prev1.body.lines.every((l) => l.amount_minor === 150000 && Number.isInteger(l.apartment_id) && typeof l.label === 'string' && ['owner', 'tenant', 'both'].includes(l.payer_party))
+      && prev1.body.lines[0].label === 'A Blok - Daire 1' && prev1.body.lines[0].block_name === 'A Blok' && prev1.body.lines[19].label === 'B Blok - Daire 10', prev1.body);
+  const snap1 = await counts(fs1.code);
+  check('E2: ONIZLEME YAZMAZ: defter, fee_runs, tanim ve audit sayilari ayni', same(snap0, snap1), [snap0, snap1]);
+  const partiesOk = prev1.body.lines.every((l) => {
+    const a = fs1.apts.find((x) => x.id === l.apartment_id);
+    return l.payer_party === (a.block === 'A Blok' ? PARTIES[a.n % 3] : 'both');
+  });
+  check('E2b: onizleme "kim oder" = dairenin responsible_party degeri', partiesOk);
+  const badPreviews = [
+    ['donem yok', {}, 400, 'INVALID_BODY'], ['donem metin', { period: 'abc' }, 400, 'INVALID_BODY'], ['donem 2026-13', { period: '2026-13' }, 400, 'INVALID_BODY'], ['donem ayin 15i', { period: `${ym(0)}-15` }, 400, 'INVALID_BODY'],
+    ['baslangictan ONCE donem', { period: ym(-4) }, 409, 'DEFINITION_INACTIVE'], ['13 ay sonrasi donem', { period: ym(13) }, 400, 'INVALID_BODY'],
+  ];
+  const badPreviewResults = [];
+  for (const [label, body, status, code] of badPreviews) {
+    const r = await call('POST', defUrl(aidat.id, 'preview'), MGR, body);
+    badPreviewResults.push([label, r.status === status && r.body?.code === code, `${r.status} ${r.body?.code}`]);
+  }
+  check('E3: onizleme donem dogrulamasi: eksik/gecersiz donem 400; tanim baslangicindan once 409 DEFINITION_INACTIVE; 12 aydan uzak gelecek 400', badPreviewResults.every(([, ok]) => ok), badPreviewResults.filter(([, ok]) => !ok));
+
+  // post govde dogrulamasi (hicbir sey yazilmaz)
+  const badPosts = [
+    ['beklenen toplam yok', { period: ym(-1), expected_apartment_count: 20 }], ['beklenen toplam ondalik', postBodyOf(prev1.body, { expected_total_minor: 3000000.5 })], ['beklenen toplam metin', postBodyOf(prev1.body, { expected_total_minor: '3000000' })],
+    ['beklenen sayi yok', { period: ym(-1), expected_total_minor: 3000000 }], ['beklenen sayi ondalik', postBodyOf(prev1.body, { expected_apartment_count: 20.5 })], ['skip_missing metin', postBodyOf(prev1.body, { skip_missing: 'evet' })],
+    ['idempotency_key bosluklu', postBodyOf(prev1.body, { idempotency_key: 'a b' })], ['idempotency_key 65 karakter', postBodyOf(prev1.body, { idempotency_key: 'k'.repeat(65) })], ['donem yok', { expected_total_minor: 3000000, expected_apartment_count: 20 }],
+  ];
+  const badPostResults = [];
+  for (const [label, body] of badPosts) {
+    const r = await call('POST', defUrl(aidat.id, 'post'), MGR, body);
+    badPostResults.push([label, r.status === 400 && r.body?.code === 'INVALID_BODY', `${r.status} ${r.body?.code}`]);
+  }
+  check('E4: post govdesi dogrulamasi 400 INVALID_BODY (beklenen toplam/sayi tamsayi olmali, anahtar bicimi); hicbir sey yazilmaz', badPostResults.every(([, ok]) => ok) && same(await counts(fs1.code), snap0), badPostResults.filter(([, ok]) => !ok));
+
+  // PREVIEW_STALE: onizleme sonrasi veri degisti -> 409, hicbir sey yazilmaz
+  const prev2 = await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(-2) });
+  await q(`UPDATE apartments SET is_active = FALSE WHERE id = $1`, [B(10).id]);
+  const stale = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev2.body));
+  check('E5: PREVIEW_STALE: onizleme sonrasi daire pasiflesti -> 409 PREVIEW_STALE (+ guncel toplam/sayi), HICBIR SEY yazilmaz', stale.status === 409 && stale.body.code === 'PREVIEW_STALE' && stale.body.apartment_count === 19 && stale.body.total_minor === 2850000 && same(await counts(fs1.code), snap0), stale.body);
+  const staleTotal = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev2.body, { expected_apartment_count: 19, expected_total_minor: 2850001 }));
+  check('E5b: yalniz TOPLAM uyusmazsa da (sayi dogru) 409 PREVIEW_STALE', staleTotal.status === 409 && staleTotal.body.code === 'PREVIEW_STALE' && same(await counts(fs1.code), snap0));
+  await q(`UPDATE apartments SET is_active = TRUE WHERE id = $1`, [B(10).id]);
+
+  // basarili borclandirma
+  const posted1 = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body, { idempotency_key: key('run1') }));
+  const entries1 = (await q(`SELECT l.*, a.responsible_party FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE l.site_code = $1 AND l.run_id = $2 ORDER BY l.apartment_id`, [fs1.code, posted1.body?.run?.id ?? 0])).rows;
+  check('E6: borclandirma 201 { run, entries_count: 20 }; run toplam/sayi/donem; 20 defter satiri (charge, 150000, donem, kayit tarihi = donem ilk gunu, vade = ayin 1i), olusturan ve odeyen taraf (dairenin responsible_party degeri)',
+    posted1.status === 201 && posted1.body.entries_count === 20 && posted1.body.run.total_minor === 3000000 && posted1.body.run.apartment_count === 20 && posted1.body.run.period === ym(-1) && posted1.body.run.definition_id === aidat.id
+      && entries1.length === 20 && entries1.every((e) => e.kind === 'charge' && e.amount_minor === '150000' && e.payer_party === e.responsible_party && e.created_by === MGR && Number(e.definition_id) === aidat.id), posted1.body);
+  const dateCheck = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE run_id = $1 AND period = $2::date AND entry_date = $2::date AND due_date = $2::date`, [posted1.body.run.id, monthStart(-1)])).rows[0].n;
+  check('E6b: kayit tarihi ve vade (due_day 1) donemin ilk gunu; 20 satirin tamami', dateCheck === 20);
+  const runAudit = await auditRows(fs1.code, 'finance.run.posted');
+  check('E7: audit finance.run.posted: details YALNIZ { definition_id, period, total_minor, apartment_count, skipped_missing_count } (ad/metin YOK)', runAudit.length === 1 && runAudit[0].target_id === String(posted1.body.run.id) && same(Object.keys(runAudit[0].details).sort(), ['apartment_count', 'definition_id', 'period', 'skipped_missing_count', 'total_minor']) && runAudit[0].details.total_minor === 3000000, runAudit[0]);
+  const again = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body));
+  check('E8: AYNI ay ikinci kez borclandirilamaz: 409 PERIOD_ALREADY_POSTED; yeni anahtar da calismaz; hicbir sey yazilmaz', again.status === 409 && again.body.code === 'PERIOD_ALREADY_POSTED' && (await ledgerRows(fs1.code)).length === 20 && (await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body, { idempotency_key: key('baska') }))).body.code === 'PERIOD_ALREADY_POSTED');
+  const replay = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev1.body, { idempotency_key: posted1.body ? (await q(`SELECT idempotency_key FROM fee_runs WHERE id = $1`, [posted1.body.run.id])).rows[0].idempotency_key : 'x' }));
+  check('E9: AYNI idempotency_key tekrari AYNI calistirmayi dondurur (200, yeni kayit YOK, 409 degil)', replay.status === 200 && replay.body.run.id === posted1.body.run.id && replay.body.entries_count === 20 && (await ledgerRows(fs1.code)).length === 20, replay);
+  const conflictKey = (await q(`SELECT idempotency_key FROM fee_runs WHERE id = $1`, [posted1.body.run.id])).rows[0].idempotency_key;
+  const conflict = await call('POST', defUrl(aidat.id, 'post'), MGR, { period: ym(-2), expected_total_minor: 3000000, expected_apartment_count: 20, idempotency_key: conflictKey });
+  check('E9b: ayni anahtar FARKLI donem icin kullanilirsa 409 IDEMPOTENCY_CONFLICT (yeni borclandirma yazilmaz)', conflict.status === 409 && conflict.body.code === 'IDEMPOTENCY_CONFLICT' && (await ledgerRows(fs1.code)).length === 20, conflict.body);
+  check('E10: tekrar onizleme "already_posted: true"', (await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(-1) })).body.already_posted === true);
+
+  // ikinci donem (artik 20 daire): ESZAMANLI cift post -> tek calistirma
+  const prevNow = (await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(0) })).body;
+  const [raceA, raceB] = await Promise.all([call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prevNow)), call('POST', defUrl(aidat.id, 'post'), SUPER, postBodyOf(prevNow))]);
+  const raceStatuses = [raceA.status, raceB.status].sort();
+  check('E11: ESZAMANLI cift post (iki istek ayni anda, anahtarsiz): biri 201, digeri 409 PERIOD_ALREADY_POSTED; ledger\'da tek calistirmanin 20 satiri', same(raceStatuses, [201, 409]) && [raceA, raceB].find((r) => r.status === 409).body.code === 'PERIOD_ALREADY_POSTED'
+    && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND period = $2::date`, [fs1.code, monthStart(0)])).rows[0].n === 20 && (await q(`SELECT COUNT(*)::int AS n FROM fee_runs WHERE definition_id = $1 AND period = $2::date`, [aidat.id, monthStart(0)])).rows[0].n === 1, [raceA.status, raceB.status]);
+  const prevNext = (await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(1) })).body;
+  const sameKey = key('cift');
+  const [keyA, keyB] = await Promise.all([call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prevNext, { idempotency_key: sameKey })), call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prevNext, { idempotency_key: sameKey }))]);
+  check('E12: ESZAMANLI cift post AYNI idempotency_key ile: biri 201 digeri 200 (ayni calistirma); 20 satir, tek run', same([keyA.status, keyB.status].sort(), [200, 201]) && keyA.body.run.id === keyB.body.run.id
+    && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND period = $2::date`, [fs1.code, monthStart(1)])).rows[0].n === 20, [keyA.status, keyB.status]);
+  // dagitim dongusu icin kalanlar: ym(-2) simdi basarili (daire tekrar aktif)
+  const prev2b = (await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(-2) })).body;
+  const posted2 = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prev2b));
+  check('E13: onizleme taze alininca post basarili (stale sonrasi yeniden onizle -> onayla akisi)', prev2b.apartment_count === 20 && posted2.status === 201);
+
+  // PATCH kurallari (borclandirilmis): yalnizca ad, bitis donemi, aktiflik, vade gunu
+  const lockedPatches = [['tutar', { amount_minor: 1 }], ['dagitim', { distribution: 'equal', amount_minor: 100 }], ['baslangic', { start_period: ym(-6) }], ['hedef', { target: { type: 'blocks', block_ids: [A(1).blockId] } }]];
+  const lockedResults = [];
+  for (const [label, body] of lockedPatches) {
+    const r = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, body);
+    lockedResults.push([label, r.status === 409 && r.body?.code === 'DEFINITION_LOCKED', `${r.status} ${r.body?.code}`]);
+  }
+  check('E14: borclandirilmis tanimda tutar / dagitim / baslangic / hedef degismez: 409 DEFINITION_LOCKED', lockedResults.every(([, ok]) => ok), lockedResults.filter(([, ok]) => !ok));
+  const renamed = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { name: 'Aylik Aidat', due_day: 5, end_period: ym(6) });
+  const badEnd = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { end_period: ym(-1) });
+  check('E15: borclandirilmis tanimda ad, vade gunu, bitis donemi degisir; son borclandirilan aydan ONCE bitis 400; has_runs true, last_posted_period', renamed.status === 200 && renamed.body.name === 'Aylik Aidat' && renamed.body.due_day === 5 && renamed.body.end_period === ym(6) && renamed.body.has_runs === true && renamed.body.last_posted_period === ym(1) && badEnd.status === 400, [renamed.body, badEnd.body]);
+  const outOfRange = await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(8) });
+  check('E15b: bitis donemi disindaki donem 409 DEFINITION_INACTIVE (onizleme ve post)', outOfRange.status === 409 && outOfRange.body.code === 'DEFINITION_INACTIVE' && (await call('POST', defUrl(aidat.id, 'post'), MGR, { period: ym(8), expected_total_minor: 0, expected_apartment_count: 0 })).body.code === 'DEFINITION_INACTIVE');
+  await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { due_day: 1 });
+  const deactivated = await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { is_active: false });
+  const inactivePreview = await call('POST', defUrl(aidat.id, 'preview'), MGR, { period: ym(2) });
+  const inactivePost = await call('POST', defUrl(aidat.id, 'post'), MGR, { period: ym(2), expected_total_minor: 3000000, expected_apartment_count: 20 });
+  check('E16: pasiflestirilen tanim: 409 DEFINITION_INACTIVE (onizleme ve post); audit finance.definition.deactivated', deactivated.status === 200 && deactivated.body.is_active === false && inactivePreview.body?.code === 'DEFINITION_INACTIVE' && inactivePost.body?.code === 'DEFINITION_INACTIVE' && (await auditRows(fs1.code, 'finance.definition.deactivated')).length === 1);
+  const inactiveReplay = await call('POST', defUrl(aidat.id, 'post'), MGR, postBodyOf(prevNext, { idempotency_key: sameKey }));
+  check('E16b: pasif tanimda bile ONCEKI istegin idempotency_key tekrari aynı calistirmayi dondurur (200)', inactiveReplay.status === 200 && inactiveReplay.body.run.id === keyA.body.run.id);
+  await call('PATCH', `${base}/definitions/${aidat.id}`, MGR, { is_active: true });
+  check('E17: audit finance.definition.updated (details yalniz alan adlari)', (await auditRows(fs1.code, 'finance.definition.updated')).every((r) => Array.isArray(r.details.fields) && !JSON.stringify(r.details).includes('Aylik')));
+
+  // ============================================================================================================
+  // F. Ek borc ve dagitim yontemleri (esit / arsa payi / m2 / kategori / sabit), eksik veri, skip_missing, tek seferlik tanim
+  // ============================================================================================================
+  console.log('--- F. ek borc ve dagitim ---');
+  const refSplit = (total, items) => {
+    const sum = items.reduce((s, i) => s + i.w, 0n);
+    const rows = items.map((i) => ({ id: i.id, base: (total * i.w) / sum, rem: (total * i.w) % sum }));
+    const left = Number(total - rows.reduce((s, r) => s + r.base, 0n));
+    rows.sort((a, b) => (a.rem === b.rem ? a.id - b.id : a.rem > b.rem ? -1 : 1));
+    const out = new Map(rows.map((r) => [r.id, r.base]));
+    for (let i = 0; i < left; i += 1) out.set(rows[i].id, out.get(rows[i].id) + 1n);
+    return out;
+  };
+  const amountsOfRun = async (runId) => new Map((await q(`SELECT apartment_id, amount_minor::text AS a FROM ledger_entries WHERE run_id = $1`, [runId])).rows.map((r) => [Number(r.apartment_id), BigInt(r.a)]));
+  const sameAmounts = (actual, expected) => actual.size === expected.size && [...expected].every(([id, v]) => actual.get(id) === v);
+  const chargeBody = (over = {}) => ({ name: 'Ek Borc', distribution: 'equal', amount_minor: 1000001, target: { type: 'site' }, due_date: dayOf(1, 15), ...over });
+  const chargeUrl = `${base}/charges`;
+  const doCharge = async (body, { skip = false } = {}) => {
+    const preview = await call('POST', `${chargeUrl}/preview`, MGR, body);
+    const post = preview.status === 200
+      ? await call('POST', chargeUrl, MGR, { ...body, expected_total_minor: preview.body.total_minor, expected_apartment_count: preview.body.apartment_count, skip_missing: skip, idempotency_key: key('ek') })
+      : null;
+    return { preview, post };
+  };
+
+  // F1: esit dagitim, bolunemeyen tutar (1000001 / 20): kalan kurus apartment_id en kucuk daireye
+  const snapF = await counts(fs1.code);
+  const eqPreview = await call('POST', `${chargeUrl}/preview`, MGR, chargeBody());
+  check('F1: ek borc ONIZLEME: esit 1000001 kurus / 20 daire, satir toplami 1000001; ONIZLEME YAZMAZ (tanim da olusmaz)', eqPreview.status === 200 && eqPreview.body.total_minor === 1000001 && eqPreview.body.apartment_count === 20 && eqPreview.body.definition_id === null && eqPreview.body.period === ym(0) && eqPreview.body.due_date === dayOf(1, 15)
+    && eqPreview.body.lines.reduce((s, l) => s + l.amount_minor, 0) === 1000001 && eqPreview.body.lines.filter((l) => l.amount_minor === 50001).length === 1 && same(snapF, await counts(fs1.code)), eqPreview.body.lines.slice(0, 2));
+  const eq = await doCharge(chargeBody());
+  const eqAmounts = await amountsOfRun(eq.post.body?.run?.id ?? 0);
+  const minId = Math.min(...fs1.ids);
+  check('F1b: ek borc POST 201: tek islemde tek seferlik tanim + borclandirma; pay toplami 1000001 BIREBIR; kalan 1 kurus en kucuk apartment_id\'li daireye (50001), digerleri 50000',
+    eq.post.status === 201 && eq.post.body.entries_count === 20 && eq.post.body.definition.kind === 'one_time' && eq.post.body.definition.has_runs === true && eq.post.body.definition.due_day === null && eqAmounts.size === 20
+      && [...eqAmounts.values()].reduce((a, b) => a + b, 0n) === 1000001n && eqAmounts.get(minId) === 50001n && [...eqAmounts].filter(([id, v]) => id !== minId && v === 50000n).length === 19, eq.post.body);
+  const eqRows = (await q(`SELECT DISTINCT due_date::text AS due, entry_date::text AS entry, period::text AS period FROM ledger_entries WHERE run_id = $1`, [eq.post.body.run.id])).rows;
+  check('F1c: ek borc vadesi istekteki tarih, kayit tarihi BUGUN, donem bu ay', eqRows.length === 1 && eqRows[0].due === dayOf(1, 15) && eqRows[0].entry === TODAY && eqRows[0].period === monthStart(0), eqRows);
+  const eqReplay = await call('POST', chargeUrl, MGR, { ...chargeBody(), expected_total_minor: 1000001, expected_apartment_count: 20, idempotency_key: (await q(`SELECT idempotency_key FROM fee_runs WHERE id = $1`, [eq.post.body.run.id])).rows[0].idempotency_key });
+  check('F1d: ek borc idempotency_key tekrari: 200, ayni calistirma ve tanim, ikinci tanim/satir YOK', eqReplay.status === 200 && eqReplay.body.run.id === eq.post.body.run.id && eqReplay.body.definition.id === eq.post.body.definition.id && (await q(`SELECT COUNT(*)::int AS n FROM fee_definitions WHERE site_code = $1 AND kind = 'one_time'`, [fs1.code])).rows[0].n === 1);
+  check('F1e: audit finance.charge.posted (details yalniz dagitim/donem/toplam/sayi; ad YOK)', (await auditRows(fs1.code, 'finance.charge.posted')).length === 1 && !JSON.stringify((await auditRows(fs1.code, 'finance.charge.posted'))[0].details).includes('Ek Borc'));
+
+  // F2: ek borc dogrulama
+  const snapAfterF1 = await counts(fs1.code);
+  const badCharges = [
+    ['ondalik tutar', chargeBody({ amount_minor: 100.5 })], ['metin tutar', chargeBody({ amount_minor: '1000' })], ['negatif tutar', chargeBody({ amount_minor: -1 })], ['tasan tutar', chargeBody({ amount_minor: 1e13 })], ['ad yok', chargeBody({ name: undefined })],
+    ['gecersiz dagitim', chargeBody({ distribution: 'rastgele' })], ['vade tarihi gecersiz', chargeBody({ due_date: '2026-02-30' })], ['hedef baska site', chargeBody({ target: { type: 'apartments', apartment_ids: [fs2.ids[0]] } })],
+  ];
+  const badChargeResults = [];
+  for (const [label, body] of badCharges) {
+    const preview = await call('POST', `${chargeUrl}/preview`, MGR, body);
+    const post = await call('POST', chargeUrl, MGR, { ...body, expected_total_minor: 1, expected_apartment_count: 1 });
+    badChargeResults.push([label, preview.status === 400 && post.status === 400, `${preview.status}/${post.status} ${preview.body?.code}`]);
+  }
+  const noExpected = await call('POST', chargeUrl, MGR, chargeBody());
+  check('F2: ek borc gecersiz govdeler 400 (onizleme ve post); onay icin beklenen toplam/sayi ZORUNLU (yoksa 400); hicbir sey yazilmaz', badChargeResults.every(([, ok]) => ok) && noExpected.status === 400 && noExpected.body.code === 'INVALID_BODY' && (await counts(fs1.code)).runs === snapAfterF1.runs, badChargeResults.filter(([, ok]) => !ok));
+
+  // F3: arsa payi (farkli paydalar), eksik veri
+  const lsBody = chargeBody({ name: 'Arsa Payi', distribution: 'land_share', amount_minor: 2000000 });
+  const ls = await call('POST', `${chargeUrl}/preview`, MGR, lsBody);
+  check('F3: arsa payi onizleme: B Daire 10 EKSIK VERI (neden metni + kodu); 19 satir, toplam 2000000', ls.status === 200 && ls.body.apartment_count === 19 && ls.body.total_minor === 2000000 && ls.body.missing_data.length === 1 && ls.body.missing_data[0].apartment_id === B(10).id && ls.body.missing_data[0].label === 'B Blok - Daire 10' && ls.body.missing_data[0].reason === 'Arsa payı tanımsız' && ls.body.missing_data[0].reason_code === 'land_share_missing', ls.body.missing_data);
+  const lsNoSkip = await call('POST', chargeUrl, MGR, { ...lsBody, expected_total_minor: 2000000, expected_apartment_count: 19, idempotency_key: key('ls') });
+  check('F3b: eksik veri varken skip_missing YOK: 409 PREVIEW_INCOMPLETE, hicbir sey yazilmaz', lsNoSkip.status === 409 && lsNoSkip.body.code === 'PREVIEW_INCOMPLETE' && lsNoSkip.body.missing_count === 1 && (await q(`SELECT COUNT(*)::int AS n FROM fee_definitions WHERE name = 'Arsa Payi'`)).rows[0].n === 0);
+  const lsPost = await call('POST', chargeUrl, MGR, { ...lsBody, expected_total_minor: 2000000, expected_apartment_count: 19, skip_missing: true, idempotency_key: key('ls2') });
+  const lsAmounts = await amountsOfRun(lsPost.body?.run?.id ?? 0);
+  const lsWeights = fs1.apts.filter((a) => a.id !== B(10).id).map((a) => ({ id: a.id, w: a.block === 'A Blok' ? BigInt(a.n * 2) : 12n })); // ortak payda 2000
+  check('F3c: skip_missing: true ile eksik daire HARIC tutulur, kalanlar 2000/1000 ortak paydasiyla orantili (A n/1000 -> 2n/2000, B 12/2000); toplam 2000000 BIREBIR; eksik daire borclandirilmaz; audit sayisi', lsPost.status === 201 && sameAmounts(lsAmounts, refSplit(2000000n, lsWeights)) && [...lsAmounts.values()].reduce((a, b) => a + b, 0n) === 2000000n && !lsAmounts.has(B(10).id)
+    && (await auditRows(fs1.code, 'finance.charge.posted')).some((r) => r.details.skipped_missing_count === 1), [lsPost.status, [...lsAmounts]]);
+
+  // F4: m2 (brut ve net)
+  for (const basis of ['gross', 'net']) {
+    const body = chargeBody({ name: `Alan ${basis}`, distribution: 'area', area_basis: basis, amount_minor: 3333333 });
+    const out = await doCharge(body, { skip: true });
+    const weights = fs1.apts.filter((a) => a.id !== B(10).id).map((a) => {
+      const x100 = a.block === 'A Blok' ? BigInt((basis === 'gross' ? 90 + a.n : 70 + a.n) * 100) : basis === 'gross' ? 12050n : 10025n;
+      return { id: a.id, w: x100 };
+    });
+    const amounts = await amountsOfRun(out.post.body?.run?.id ?? 0);
+    check(`F4: m2 dagitimi (${basis}): agirlik = m2 x 100 tamsayi; B Daire 10 (m2 yok) eksik; paylar referansla BIREBIR, toplam 3333333`, out.preview.body.missing_data.length === 1 && out.preview.body.missing_data[0].reason_code === 'area_missing' && out.post.status === 201 && sameAmounts(amounts, refSplit(3333333n, weights)) && [...amounts.values()].reduce((a, b) => a + b, 0n) === 3333333n, out.post.body);
+  }
+
+  // F5: kategori
+  const catBody = chargeBody({ name: 'Kategori Borc', distribution: 'category', amount_minor: undefined, category_amounts: { '2+1': 100000, '3+1': 150000, 'DÜKKAN': 250000 } });
+  const cat = await doCharge(catBody, { skip: true });
+  const catAmounts = await amountsOfRun(cat.post.body?.run?.id ?? 0);
+  const expectedCat = new Map(fs1.apts.filter((a) => a.id !== B(10).id).map((a) => [a.id, a.block === 'A Blok' ? (a.n <= 5 ? 100000n : 150000n) : a.n <= 2 ? 250000n : 100000n]));
+  check('F5: kategori dagitimi: dairenin kategorisine karsilik gelen daire basi tutar (Dukkan eslesmesi buyuk/kucuk harf ve Turkce karakter duyarsiz); kategorisiz B Daire 10 eksik; toplam 2450000', cat.preview.body.missing_data.length === 1 && cat.preview.body.missing_data[0].reason_code === 'category_missing' && cat.preview.body.total_minor === 2450000 && cat.post.status === 201 && sameAmounts(catAmounts, expectedCat), cat.post.body);
+  await q(`UPDATE apartments SET category = 'Garaj' WHERE id = $1`, [B(10).id]);
+  const catMissingAmount = await call('POST', `${chargeUrl}/preview`, MGR, catBody);
+  check('F5b: kategori haritada yoksa ("Garaj") eksik veri nedeni category_amount_missing', catMissingAmount.body.missing_data.length === 1 && catMissingAmount.body.missing_data[0].reason_code === 'category_amount_missing' && catMissingAmount.body.missing_data[0].reason === 'Kategori için tutar tanımlı değil');
+  await q(`UPDATE apartments SET category = NULL WHERE id = $1`, [B(10).id]);
+
+  // F6: sabit tutar + daire hedefi; blok hedefi ile bolunemeyen esit tutar
+  const fixedSubset = await doCharge(chargeBody({ name: 'Sabit', distribution: 'fixed', amount_minor: 5000, target: { type: 'apartments', apartment_ids: [A(2).id, A(1).id] } }));
+  check('F6: sabit tutar yalniz secili 2 daireye: toplam 10000 (2 x 5000)', fixedSubset.post.status === 201 && fixedSubset.post.body.run.total_minor === 10000 && fixedSubset.post.body.entries_count === 2 && sameAmounts(await amountsOfRun(fixedSubset.post.body.run.id), new Map([[A(1).id, 5000n], [A(2).id, 5000n]])));
+  const blockEq = await doCharge(chargeBody({ name: 'Blok', distribution: 'equal', amount_minor: 999, target: { type: 'blocks', block_ids: [B(1).blockId] } }));
+  const blockAmounts = await amountsOfRun(blockEq.post.body?.run?.id ?? 0);
+  const bIds = fs1.apts.filter((a) => a.block === 'B Blok').map((a) => a.id).sort((a, b) => a - b);
+  check('F6b: blok hedefi: 999 kurus / B blok 10 daire -> 9 daire 100, en BUYUK id\'li daire 99 (esitlikte kucuk id once); toplam 999', blockEq.post.status === 201 && blockAmounts.size === 10 && [...blockAmounts.values()].reduce((a, b) => a + b, 0n) === 999n && blockAmounts.get(bIds[9]) === 99n && bIds.slice(0, 9).every((id) => blockAmounts.get(id) === 100n), [...blockAmounts]);
+  const tiny = await call('POST', `${chargeUrl}/preview`, MGR, chargeBody({ name: 'Cok kucuk', amount_minor: 3 }));
+  check('F6c: 3 kurus / 20 daire: yalniz 3 daire 1 kurus (defter satiri sifir olamaz); zero_amount_count 17', tiny.body.apartment_count === 3 && tiny.body.total_minor === 3 && tiny.body.zero_amount_count === 17 && tiny.body.lines.every((l) => l.amount_minor === 1));
+  const nothing = await call('POST', chargeUrl, MGR, chargeBody({ name: 'Bos', distribution: 'land_share', target: { type: 'apartments', apartment_ids: [B(10).id] }, expected_total_minor: 0, expected_apartment_count: 0, skip_missing: true }));
+  check('F6d: borclandirilacak daire kalmayinca (hepsi eksik / hariç) 409 NOTHING_TO_POST, hicbir sey yazilmaz', nothing.status === 409 && nothing.body.code === 'NOTHING_TO_POST' && (await q(`SELECT COUNT(*)::int AS n FROM fee_definitions WHERE name = 'Bos'`)).rows[0].n === 0, nothing.body);
+
+  // F7: tek seferlik TANIM (definitions + post, due_date)
+  const oneTime = await call('POST', `${base}/definitions`, MGR, { name: 'Boya', kind: 'one_time', distribution: 'fixed', amount_minor: 1000, start_period: ym(0), target: { type: 'site' } });
+  const otPreview = await call('POST', defUrl(oneTime.body.id, 'preview'), MGR, { due_date: dayOf(0, 28) });
+  const otPost = await call('POST', defUrl(oneTime.body.id, 'post'), MGR, { due_date: dayOf(0, 28), expected_total_minor: otPreview.body.total_minor, expected_apartment_count: otPreview.body.apartment_count });
+  const otAgain = await call('POST', defUrl(oneTime.body.id, 'post'), MGR, { due_date: dayOf(0, 28), expected_total_minor: otPreview.body.total_minor, expected_apartment_count: otPreview.body.apartment_count });
+  check('F7: tek seferlik tanim: onizleme (period = bu ay, vade = istekteki), post 201; IKINCI kez 409 PERIOD_ALREADY_POSTED; onizleme already_posted true', oneTime.status === 201 && oneTime.body.due_day === null && otPreview.body.period === ym(0) && otPreview.body.due_date === dayOf(0, 28) && otPost.status === 201 && otAgain.status === 409 && otAgain.body.code === 'PERIOD_ALREADY_POSTED' && (await call('POST', defUrl(oneTime.body.id, 'preview'), MGR, {})).body.already_posted === true, [oneTime.body, otPost.body]);
+  check('F7b: tek seferlik tanimda donem GIRILMEZ (period yoksayilir); gecersiz vade tarihi 400', (await call('POST', defUrl(oneTime.body.id, 'preview'), MGR, { due_date: 'yarin' })).status === 400);
+
+  // ============================================================================================================
+  // G. Tahsilat, ters kayit, duzeltme, bakiye / ekstre / ozet (temiz site: fs3)
+  // ============================================================================================================
+  console.log('--- G. tahsilat, ters kayit, bakiye ---');
+  const fs3 = await mkSite('Defter Sitesi', { 'P Blok': 6 });
+  await link.manager(fs3.code, MGR);
+  await link.member(fs3.code, BOARD, 'BOARD_MEMBER');
+  await enableModule(fs3.code);
+  const b3 = P(fs3.code);
+  const P3 = (n) => fs3.apt(`P Blok - Daire ${n}`);
+  const dailyDef = (await call('POST', `${b3}/definitions`, MGR, { name: 'Aidat3', kind: 'recurring', distribution: 'fixed', amount_minor: 100000, due_day: 1, start_period: ym(-4), target: { type: 'site' } })).body;
+  for (const offset of [-2, -1, 0, 1]) {
+    const pv = (await call('POST', `${b3}/definitions/${dailyDef.id}/preview`, MGR, { period: ym(offset) })).body;
+    const r = await call('POST', `${b3}/definitions/${dailyDef.id}/post`, MGR, { period: ym(offset), expected_total_minor: pv.total_minor, expected_apartment_count: pv.apartment_count });
+    if (r.status !== 201) throw new Error(`fs3 borclandirma basarisiz: ${JSON.stringify(r.body)}`);
+  }
+  check('G0: hazirlik: 4 donem x 6 daire x 100000 = 2400000 borc', (await ledgerSum(fs3.code)) === 2400000n);
+
+  // bagimsiz (JS) dogruluk tablosu: bakiye ve vadesi gecmis tutar
+  const truthOf = async (site) => {
+    const rows = (await q(`SELECT apartment_id, amount_minor::text AS a, to_char(due_date, 'YYYY-MM-DD') AS due FROM ledger_entries WHERE site_code = $1`, [site])).rows;
+    const map = new Map();
+    for (const row of rows) {
+      const id = Number(row.apartment_id);
+      const entry = map.get(id) ?? { balance: 0n, notDue: 0n };
+      const amount = BigInt(row.a);
+      entry.balance += amount;
+      if (row.due !== null && row.due > TODAY) entry.notDue += amount;
+      map.set(id, entry);
+    }
+    return new Map([...map].map(([id, e]) => [id, { balance: e.balance, overdue: e.balance - e.notDue > 0n ? e.balance - e.notDue : 0n }]));
+  };
+  const account = (site, apt, query = '', user = MGR) => call('GET', `${P(site)}/apartments/${apt}/account${query}`, user);
+
+  const a1 = P3(1).id;
+  const startAcc = (await account(fs3.code, a1)).body;
+  check('G1: ekstre (hareketsiz): bakiye 400000, vadesi gecmis 300000 (FIFO-ortuk: bakiye - vadesi gelmemis 100000); daire bilgisi + responsible_party + para birimi',
+    startAcc.balance_minor === 400000 && startAcc.overdue_minor === 300000 && startAcc.apartment.id === a1 && startAcc.apartment.label === 'P Blok - Daire 1' && startAcc.apartment.block_name === 'P Blok' && startAcc.apartment.responsible_party === 'both' && startAcc.currency === 'TRY' && startAcc.items.length === 4 && startAcc.next_before_id === null, startAcc);
+  check('G1b: ekstre satiri (Entry) alanlari: kind charge, kurus tamsayi, donem YYYY-MM, tarihler, tanim adi, odeyen, ters kayit alanlari null', startAcc.items.every((e) => e.kind === 'charge' && e.amount_minor === 100000 && /^\d{4}-\d{2}$/.test(e.period) && /^\d{4}-\d{2}-\d{2}$/.test(e.entry_date) && /^\d{4}-\d{2}-\d{2}$/.test(e.due_date) && e.definition_name === 'Aidat3' && e.payer_party === 'both' && e.reverses_entry_id === null && e.reversed_by_entry_id === null && e.reversal_reason === null && e.method === null && e.created_by_name === 'Finans Yonetici') && startAcc.items[0].entry_date > startAcc.items[3].entry_date);
+
+  // --- tahsilat
+  const payBody = (apt, over = {}) => ({ apartment_id: apt, amount_minor: 50000, entry_date: TODAY, method: 'cash', description: 'Nakit tahsilat', idempotency_key: key('pay'), ...over });
+  const pay1Key = key('pay1');
+  const pay1 = await call('POST', `${b3}/payments`, MGR, payBody(a1, { idempotency_key: pay1Key }));
+  check('G2: tahsilat 201 { entry, balance_minor }: defterde NEGATIF kurus (-50000), kind payment, yontem, donem = tarihin ayi, odeyen = daire responsible_party; bakiye 350000', pay1.status === 201 && pay1.body.entry.kind === 'payment' && pay1.body.entry.amount_minor === -50000 && pay1.body.entry.method === 'cash' && pay1.body.entry.period === ym(0) && pay1.body.entry.entry_date === TODAY && pay1.body.entry.payer_party === 'both' && pay1.body.entry.description === 'Nakit tahsilat' && pay1.body.balance_minor === 350000, pay1.body);
+  const pay1Replay = await call('POST', `${b3}/payments`, MGR, payBody(a1, { idempotency_key: pay1Key }));
+  check('G3: ayni idempotency_key tekrari = AYNI kayit (200, yeni satir yok, cift tahsilat olmaz); bakiye 350000', pay1Replay.status === 200 && pay1Replay.body.entry.id === pay1.body.entry.id && pay1Replay.body.balance_minor === 350000 && (await ledgerSum(fs3.code, `AND kind = 'payment'`)) === -50000n);
+  const keyDifferent = await call('POST', `${b3}/payments`, MGR, payBody(a1, { idempotency_key: pay1Key, amount_minor: 60000 }));
+  const keyOtherApt = await call('POST', `${b3}/payments`, MGR, payBody(P3(2).id, { idempotency_key: pay1Key }));
+  check('G3b: ayni anahtar FARKLI tutar / FARKLI daire icin gelirse 409 IDEMPOTENCY_CONFLICT (yeni tahsilat yazilmaz)', keyDifferent.body?.code === 'IDEMPOTENCY_CONFLICT' && keyOtherApt.body?.code === 'IDEMPOTENCY_CONFLICT' && (await ledgerSum(fs3.code, `AND kind = 'payment'`)) === -50000n);
+  const tomorrow = new Date(Date.parse(`${TODAY}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const badPayments = [
+    ['gelecek tarih', payBody(a1, { entry_date: tomorrow }), 'INVALID_BODY'], ['gecersiz tarih', payBody(a1, { entry_date: '2026-02-30' }), 'INVALID_BODY'], ['tarih yok', payBody(a1, { entry_date: undefined }), 'INVALID_BODY'], ['1999 tarihi', payBody(a1, { entry_date: '1999-12-31' }), 'INVALID_BODY'],
+    ['ondalik tutar', payBody(a1, { amount_minor: 100.5 }), 'INVALID_BODY'], ['metin tutar', payBody(a1, { amount_minor: '100' }), 'INVALID_BODY'], ['sifir tutar', payBody(a1, { amount_minor: 0 }), 'INVALID_BODY'], ['negatif tutar', payBody(a1, { amount_minor: -100 }), 'INVALID_BODY'],
+    ['10^12 + 1 tutar', payBody(a1, { amount_minor: 1000000000001 }), 'INVALID_BODY'], ['1e21 tutar', payBody(a1, { amount_minor: 1e21 }), 'INVALID_BODY'], ['gecersiz yontem', payBody(a1, { method: 'kart' }), 'INVALID_BODY'], ['yontem yok', payBody(a1, { method: undefined }), 'INVALID_BODY'],
+    ['anahtar yok', payBody(a1, { idempotency_key: undefined }), 'INVALID_BODY'], ['201 karakterlik aciklama', payBody(a1, { description: 'x'.repeat(201) }), 'INVALID_BODY'], ['daire yok', payBody(undefined), 'INVALID_BODY'], ['daire metin', payBody('abc'), 'INVALID_BODY'],
+  ];
+  const badPaymentResults = [];
+  const ledgerBeforeBad = (await ledgerRows(fs3.code)).length;
+  for (const [label, body, code] of badPayments) {
+    const r = await call('POST', `${b3}/payments`, MGR, body);
+    badPaymentResults.push([label, r.status === 400 && r.body?.code === code, `${r.status} ${r.body?.code}`]);
+  }
+  check(`G4: ${badPayments.length} gecersiz tahsilat govdesi 400 INVALID_BODY: GELECEK TARIH, ondalik/metin/sifir/negatif/tasan tutar, gecersiz yontem, eksik anahtar; hicbir satir yazilmaz`, badPaymentResults.every(([, ok]) => ok) && (await ledgerRows(fs3.code)).length === ledgerBeforeBad, badPaymentResults.filter(([, ok]) => !ok));
+  const foreignPay = await call('POST', `${b3}/payments`, MGR, payBody(fs2.ids[0]));
+  check('G5: IDOR: baska sitenin dairesine tahsilat 404 APARTMENT_NOT_FOUND, hicbir satir yazilmaz', foreignPay.status === 404 && foreignPay.body.code === 'APARTMENT_NOT_FOUND' && (await ledgerRows(fs3.code)).length === ledgerBeforeBad);
+  const cleanDesc = await call('POST', `${b3}/payments`, MGR, payBody(P3(2).id, { amount_minor: 10000, method: 'cheque', description: `  Cek   no\u0000 12  ` , idempotency_key: key('pay2') }));
+  check('G5b: aciklama temizlenir (kontrol karakteri atilir, bosluklar tekil); yontem "cheque" kabul', cleanDesc.status === 201 && cleanDesc.body.entry.description === 'Cek no 12' && cleanDesc.body.entry.method === 'cheque', cleanDesc.body.entry);
+  const past = await call('POST', `${b3}/payments`, MGR, payBody(P3(3).id, { amount_minor: 20000, entry_date: dayOf(-2, 10), method: 'transfer', idempotency_key: key('past') }));
+  check('G5c: gecmis tarihli tahsilat (acik donem) donem = o ayin ilki, kayit tarihi istekteki', past.status === 201 && past.body.entry.period === ym(-2) && past.body.entry.entry_date === dayOf(-2, 10) && past.body.entry.method === 'transfer');
+  const over = await call('POST', `${b3}/payments`, MGR, payBody(P3(6).id, { amount_minor: 500000, idempotency_key: key('over') }));
+  check('G6: fazla odeme ALACAK olarak gorunur: 400000 borca 500000 tahsilat -> bakiye -100000 (negatif)', over.status === 201 && over.body.balance_minor === -100000 && (await balanceOf(fs3.code, P3(6).id)) === -100000n);
+  const concurrentKey = key('cc');
+  const [ccA, ccB] = await Promise.all([call('POST', `${b3}/payments`, MGR, payBody(P3(4).id, { amount_minor: 30000, idempotency_key: concurrentKey })), call('POST', `${b3}/payments`, SUPER, payBody(P3(4).id, { amount_minor: 30000, idempotency_key: concurrentKey }))]);
+  check('G7: ESZAMANLI cift tahsilat (ayni anahtar): biri 201 digeri 200, TEK defter satiri (cift tahsilat olmaz)', same([ccA.status, ccB.status].sort(), [200, 201]) && ccA.body.entry.id === ccB.body.entry.id && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND idempotency_key = $2`, [fs3.code, concurrentKey])).rows[0].n === 1);
+  const [dA, dB] = await Promise.all([call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d1') })), call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d2') }))]);
+  check('G7b: ESZAMANLI iki FARKLI anahtarli tahsilat ikisi de yazilir (gercek iki tahsilat); bakiye 400000 - 2000', dA.status === 201 && dB.status === 201 && (await balanceOf(fs3.code, P3(5).id)) === 398000n);
+  check('G8: audit finance.payment.recorded: details { apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['amount_minor', 'apartment_id', 'method', 'period']) && !JSON.stringify(r.details).includes('Nakit')));
+
+  // --- ters kayit
+  const reverseUrl = (id) => `${b3}/entries/${id}/reverse`;
+  const revKey = key('rev');
+  const rev1 = await call('POST', reverseUrl(pay1.body.entry.id), MGR, { reason: 'Hatali giris GIZLI-NEDEN-777', idempotency_key: revKey });
+  check('G9: ters kayit 201 { entry, balance_minor }: kind reversal, KARSI isaret (+50000), reverses_entry_id, neden, donem = bugunun acik ayi; bakiye 400000\'e doner', rev1.status === 201 && rev1.body.entry.kind === 'reversal' && rev1.body.entry.amount_minor === 50000 && rev1.body.entry.reverses_entry_id === pay1.body.entry.id && rev1.body.entry.reversal_reason === 'Hatali giris GIZLI-NEDEN-777' && rev1.body.entry.period === ym(0) && rev1.body.entry.entry_date === TODAY && rev1.body.balance_minor === 400000, rev1.body);
+  const rev1Replay = await call('POST', reverseUrl(pay1.body.entry.id), MGR, { reason: 'Hatali giris GIZLI-NEDEN-777', idempotency_key: revKey });
+  check('G9b: ters kayit idempotency_key tekrari 200 ayni kayit; anahtar baska kayit icin 409', rev1Replay.status === 200 && rev1Replay.body.entry.id === rev1.body.entry.id && (await call('POST', reverseUrl(cleanDesc.body.entry.id), MGR, { idempotency_key: revKey })).body?.code === 'IDEMPOTENCY_CONFLICT');
+  const rev2 = await call('POST', reverseUrl(pay1.body.entry.id), MGR, {});
+  check('G10: bir kaydin ikinci ters kaydi YOK: 409 ENTRY_ALREADY_REVERSED', rev2.status === 409 && rev2.body.code === 'ENTRY_ALREADY_REVERSED');
+  const revRev = await call('POST', reverseUrl(rev1.body.entry.id), MGR, {});
+  check('G11: ters kaydin tersi YOK: 409 ENTRY_NOT_REVERSIBLE', revRev.status === 409 && revRev.body.code === 'ENTRY_NOT_REVERSIBLE');
+  const raceTarget = past.body.entry.id;
+  const [rA, rB] = await Promise.all([call('POST', reverseUrl(raceTarget), MGR, { reason: 'yaris 1' }), call('POST', reverseUrl(raceTarget), SUPER, { reason: 'yaris 2' })]);
+  check('G12: ESZAMANLI cift ters kayit: biri 201 digeri 409 ENTRY_ALREADY_REVERSED; tek ters satir', same([rA.status, rB.status].sort(), [201, 409]) && [rA, rB].find((r) => r.status === 409).body.code === 'ENTRY_ALREADY_REVERSED' && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE reverses_entry_id = $1`, [raceTarget])).rows[0].n === 1);
+  check('G12b: IDOR: baska sitenin kaydi / olmayan kayit / gecersiz kimlik 404 ENTRY_NOT_FOUND', (await call('POST', reverseUrl(c2Entry), MGR, {})).body?.code === 'ENTRY_NOT_FOUND' && (await call('POST', reverseUrl(999999999), MGR, {})).body?.code === 'ENTRY_NOT_FOUND' && (await call('POST', reverseUrl('abc'), MGR, {})).body?.code === 'ENTRY_NOT_FOUND'
+    && (await call('POST', `${b3}/entries/${c2Entry}/correct`, MGR, { amount_minor: 1, entry_date: TODAY, method: 'cash', idempotency_key: key('x') })).body?.code === 'ENTRY_NOT_FOUND' && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE reverses_entry_id = $1`, [c2Entry])).rows[0].n === 0);
+  const chargeEntry = startAcc.items[0];
+  const revCharge = await call('POST', reverseUrl(chargeEntry.id), MGR, { reason: 'Hatali borc' });
+  const nextAcc = (await account(fs3.code, a1)).body;
+  check('G13: borc kaydi iptal edilir (karsi isaret -100000); ters kayit asilini AYNI vadeyle tasir: vadesi gecmis hesabi bozulmaz (sonuc: bakiye 300000 + asil borc vade yapisina gore)', revCharge.status === 201 && revCharge.body.entry.amount_minor === -chargeEntry.amount_minor && revCharge.body.entry.due_date === chargeEntry.due_date && revCharge.body.balance_minor === 300000 && nextAcc.balance_minor === 300000, [revCharge.body, nextAcc.balance_minor, nextAcc.overdue_minor]);
+  const accAfter = (await account(fs3.code, a1)).body;
+  const byId = new Map(accAfter.items.map((e) => [e.id, e]));
+  check('G14: ekstre ters kayitlari isaretler: asil kayitta reversed_by_entry_id, ters kayitta reverses_entry_id; bakiye = tum satirlarin toplami', byId.get(pay1.body.entry.id).reversed_by_entry_id === rev1.body.entry.id && byId.get(rev1.body.entry.id).reverses_entry_id === pay1.body.entry.id && byId.get(chargeEntry.id).reversed_by_entry_id === revCharge.body.entry.id && accAfter.balance_minor === Number(await balanceOf(fs3.code, a1)));
+
+  // --- duzeltme (correct)
+  const p4 = P3(4).id;
+  const toCorrect = ccA.body.entry;
+  const correctKey = key('corr');
+  const corrected = await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 45000, entry_date: TODAY, method: 'transfer', description: 'Duzeltilmis', idempotency_key: correctKey });
+  const balAfterCorrect = await balanceOf(fs3.code, p4);
+  check('G15: duzeltme 201 { reversal, entry, balance_minor }: TEK islemde eski tahsilat tersi (+30000) ve yeni tahsilat (-45000); bakiye = 400000 - 45000', corrected.status === 201 && corrected.body.reversal.kind === 'reversal' && corrected.body.reversal.amount_minor === 30000 && corrected.body.reversal.reverses_entry_id === toCorrect.id && corrected.body.entry.kind === 'payment' && corrected.body.entry.amount_minor === -45000 && corrected.body.entry.method === 'transfer' && corrected.body.balance_minor === 355000 && balAfterCorrect === 355000n, corrected.body);
+  const corrReplay = await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 45000, entry_date: TODAY, method: 'transfer', description: 'Duzeltilmis', idempotency_key: correctKey });
+  check('G16: duzeltme idempotency_key tekrari 200 (ayni iki kayit, yeni satir yok)', corrReplay.status === 200 && corrReplay.body.entry.id === corrected.body.entry.id && corrReplay.body.reversal.id === corrected.body.reversal.id && (await balanceOf(fs3.code, p4)) === 355000n);
+  const corrAgain = await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 1000, entry_date: TODAY, method: 'cash', idempotency_key: key('corr2') });
+  const corrCharge = await call('POST', `${b3}/entries/${startAcc.items[1].id}/correct`, MGR, { amount_minor: 1000, entry_date: TODAY, method: 'cash', idempotency_key: key('corr3') });
+  const corrReversal = await call('POST', `${b3}/entries/${rev1.body.entry.id}/correct`, MGR, { amount_minor: 1000, entry_date: TODAY, method: 'cash', idempotency_key: key('corr4') });
+  check('G17: duzeltme kurallari: zaten tersi alinmis 409 ENTRY_ALREADY_REVERSED; borc 409 ENTRY_NOT_CORRECTABLE; ters kayit 409 ENTRY_NOT_REVERSIBLE', corrAgain.body?.code === 'ENTRY_ALREADY_REVERSED' && corrCharge.body?.code === 'ENTRY_NOT_CORRECTABLE' && corrReversal.body?.code === 'ENTRY_NOT_REVERSIBLE');
+  check('G17b: duzeltme govdesi dogrulamasi (ondalik tutar, gelecek tarih, anahtar yok) 400', (await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 1.5, entry_date: TODAY, method: 'cash', idempotency_key: key('c5') })).status === 400 && (await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 100, entry_date: tomorrow, method: 'cash', idempotency_key: key('c6') })).status === 400 && (await call('POST', `${b3}/entries/${toCorrect.id}/correct`, MGR, { amount_minor: 100, entry_date: TODAY, method: 'cash' })).status === 400);
+  // atomiklik: duzeltmenin ikinci adimi (yeni tahsilat) hata verirse ters kayit DA yazilmaz
+  const p5pay = await call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 7000, idempotency_key: key('atom') }));
+  const ledgerCountBeforeAtomic = (await ledgerRows(fs3.code)).length;
+  hooks.failOnce = { match: /INSERT INTO ledger_entries[\s\S]*'payment'/, code: '57014', times: 1 };
+  const atomic = await call('POST', `${b3}/entries/${p5pay.body.entry.id}/correct`, MGR, { amount_minor: 9000, entry_date: TODAY, method: 'cash', idempotency_key: key('atom2') });
+  hooks.failOnce = null;
+  check('G18: duzeltme YARIM KALMAZ: yeni tahsilat INSERT\'i hata verince (enjekte) ters kayit da geri alinir; 500 (ayrinti sizmaz); satir sayisi ve bakiye ayni', atomic.status === 500 && !JSON.stringify(atomic.body).includes('57014') && (await ledgerRows(fs3.code)).length === ledgerCountBeforeAtomic && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE reverses_entry_id = $1`, [p5pay.body.entry.id])).rows[0].n === 0, atomic.body);
+  const corrOk = await call('POST', `${b3}/entries/${p5pay.body.entry.id}/correct`, MGR, { amount_minor: 9000, entry_date: TODAY, method: 'cash', idempotency_key: key('atom3') });
+  check('G18b: hata sonrasi ayni duzeltme normal calisir', corrOk.status === 201);
+  check('G19: audit finance.entry.reversed / finance.entry.corrected: details yalniz tutar/kimlik/donem; neden metni ve aciklama YOK', (await auditRows(fs3.code, 'finance.entry.reversed')).length >= 2 && (await auditRows(fs3.code, 'finance.entry.corrected')).length >= 2
+    && ![...(await auditRows(fs3.code, 'finance.entry.reversed')), ...(await auditRows(fs3.code, 'finance.entry.corrected'))].some((r) => /GIZLI|Hatali|Duzeltilmis|Nakit/.test(JSON.stringify(r.details))));
+
+  // --- FIFO-ortuk vadesi gecmis tutar adim adim (temiz daire P6 degil; P3(2): 400000 - 10000 odeme)
+  const f = P3(2).id;
+  const step = async (label, amountToPay, expectedBalance, expectedOverdue) => {
+    if (amountToPay > 0) await call('POST', `${b3}/payments`, MGR, payBody(f, { amount_minor: amountToPay, idempotency_key: key('fifo') }));
+    const acc = (await account(fs3.code, f)).body;
+    check(`G20 FIFO ${label}: bakiye ${expectedBalance}, vadesi gecmis ${expectedOverdue}`, acc.balance_minor === expectedBalance && acc.overdue_minor === expectedOverdue, { balance: acc.balance_minor, overdue: acc.overdue_minor });
+  };
+  await step('baslangic (400000 - 10000 odenmis)', 0, 390000, 290000);
+  await step('+100000 odeme', 100000, 290000, 190000);
+  await step('+250000 odeme (vadesi gecmis biter, gelecek vadeden de kapanir)', 250000, 40000, 0);
+  await step('+100000 odeme (fazla -> alacak)', 100000, -60000, 0);
+
+  // --- bakiye listesi, filtreler, toplamlar (bagimsiz JS dogruluk tablosuyla)
+  const truth = await truthOf(fs3.code);
+  const balances = (await call('GET', `${b3}/balances?limit=200`, MGR)).body;
+  const truthTotals = { debt: 0n, credit: 0n };
+  for (const [, v] of truth) {
+    if (v.balance > 0n) truthTotals.debt += v.balance;
+    if (v.balance < 0n) truthTotals.credit -= v.balance;
+  }
+  check('G21: bakiye listesi { items, total, totals }: her dairenin bakiyesi ve vadesi gecmis tutari bagimsiz hesapla BIREBIR; toplam 6; totals.debt/credit = pozitif/negatif bakiyelerin toplami',
+    balances.total === 6 && balances.items.length === 6 && balances.items.every((i) => {
+      const t = truth.get(i.apartment_id) ?? { balance: 0n, overdue: 0n };
+      return BigInt(i.balance_minor) === t.balance && BigInt(i.overdue_minor) === t.overdue && typeof i.label === 'string' && i.block_name === 'P Blok';
+    }) && BigInt(balances.totals.debt_minor) === truthTotals.debt && BigInt(balances.totals.credit_minor) === truthTotals.credit && balances.totals.credit_minor > 0, { totals: balances.totals, truthTotals });
+  const debtors = (await call('GET', `${b3}/balances?status=debtor`, MGR)).body;
+  const credits = (await call('GET', `${b3}/balances?status=credit`, MGR)).body;
+  check('G22: durum suzgeci: debtor yalniz pozitif, credit yalniz negatif bakiye; total suzguce gore; totals SUZGEDEN bagimsiz (sitenin tamami); borclu bakiye azalan sirali', debtors.items.every((i) => i.balance_minor > 0) && credits.items.length >= 2 && credits.items.every((i) => i.balance_minor < 0) && debtors.total === debtors.items.length && debtors.items.every((v, i, a) => i === 0 || a[i - 1].balance_minor >= v.balance_minor)
+    && same(debtors.totals, balances.totals) && same(credits.totals, balances.totals) && debtors.total + credits.total <= 6);
+  // arama: etiket + sakin adi (Turkce karakter / buyuk-kucuk harf duyarsiz); sahip ve kiraci adi
+  const ownerPerson = await addPerson(fs3.code, { name: 'Ayşe Öztürk' });
+  const tenantPerson = await addPerson(fs3.code, { name: 'Çağlar Şen' });
+  await addResidency(fs3.code, P3(3).id, ownerPerson, 'owner');
+  await addResidency(fs3.code, P3(3).id, tenantPerson, 'tenant');
+  const bySearch = (await call('GET', `${b3}/balances?q=${encodeURIComponent('ayse OZTURK')}`, MGR)).body;
+  const byLabel = (await call('GET', `${b3}/balances?q=${encodeURIComponent('DAIRE 4')}`, MGR)).body;
+  const bySearchTenant = (await call('GET', `${b3}/balances?q=${encodeURIComponent('caglar')}`, MGR)).body;
+  check('G23: arama: sakin adi (Turkce harf + harf duyarsiz: "ayse OZTURK" -> Ayşe Öztürk), daire etiketi; sahip/kiraci adlari satirda; joker karakter (%) literal', bySearch.items.length === 1 && bySearch.items[0].apartment_id === P3(3).id && bySearch.items[0].owner_name === 'Ayşe Öztürk' && bySearch.items[0].tenant_name === 'Çağlar Şen' && byLabel.items.length === 1 && byLabel.items[0].apartment_id === P3(4).id && bySearchTenant.items.length === 1 && (await call('GET', `${b3}/balances?q=${encodeURIComponent('%')}`, MGR)).body.items.length === 0, [bySearch.items, byLabel.items]);
+  const page1 = (await call('GET', `${b3}/balances?limit=2&offset=0`, MGR)).body;
+  const page2 = (await call('GET', `${b3}/balances?limit=2&offset=2`, MGR)).body;
+  const beyond = (await call('GET', `${b3}/balances?limit=2&offset=100`, MGR)).body;
+  check('G24: sayfalama: limit/offset; sayfalar kesisimsiz, total 6; offset sondan sonra bos sayfa ama total ve totals KORUNUR', page1.items.length === 2 && page2.items.length === 2 && page1.total === 6 && new Set([...page1.items, ...page2.items].map((i) => i.apartment_id)).size === 4 && beyond.items.length === 0 && beyond.total === 6 && same(beyond.totals, balances.totals));
+  const badQueries = ['status=x', 'limit=0', 'limit=abc', 'offset=-1', 'limit=1.5'];
+  const badQueryResults = [];
+  for (const qs of badQueries) badQueryResults.push([qs, (await call('GET', `${b3}/balances?${qs}`, MGR)).body?.code === 'INVALID_QUERY']);
+  check('G24b: gecersiz sorgu (status, limit, offset) 400 INVALID_QUERY; limit ust siniri 200\'e indirilir', badQueryResults.every(([, ok]) => ok) && (await call('GET', `${b3}/balances?limit=100000`, MGR)).status === 200, badQueryResults);
+  const empty = (await call('GET', `${b3}/balances?q=${encodeURIComponent('hic yok boyle biri')}`, MGR)).body;
+  check('G24c: eslesme yoksa items bos, total 0, totals yine sitenin toplami', empty.items.length === 0 && empty.total === 0 && same(empty.totals, balances.totals));
+
+  // --- ekstre sayfalama / filtre / gizlilik
+  const walk = [];
+  let cursor = null;
+  for (let guard = 0; guard < 20; guard += 1) {
+    const page = (await account(fs3.code, a1, `?limit=2${cursor === null ? '' : `&before_id=${cursor}`}`)).body;
+    walk.push(...page.items.map((e) => e.id));
+    cursor = page.next_before_id;
+    if (cursor === null) break;
+  }
+  const allIds = (await q(`SELECT id FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 ORDER BY entry_date DESC, id DESC`, [fs3.code, a1])).rows.map((r) => Number(r.id));
+  check('G25: ekstre sayfalama (limit 2, before_id imleci) tum hareketleri TEK TEK ve sirali dolasir (entry_date DESC, id DESC)', same(walk, allIds) && walk.length >= 6, [walk, allIds]);
+  const ranged = (await account(fs3.code, a1, `?from=${dayOf(-1, 1)}&to=${dayOf(-1, 28)}`)).body;
+  check('G25b: from / to entry_date suzgeci (iki ucu dahil)', ranged.items.length >= 1 && ranged.items.every((e) => e.entry_date >= dayOf(-1, 1) && e.entry_date <= dayOf(-1, 28)) && ranged.balance_minor === accAfter.balance_minor);
+  const foreignCursor = (await account(fs3.code, a1, `?before_id=${c2Entry}`)).body;
+  const otherAptCursor = (await account(fs3.code, a1, `?before_id=${(await q(`SELECT MAX(id) AS id FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2`, [fs3.code, P3(2).id])).rows[0].id}`)).body;
+  check('G26: ekstre imleci baska sitenin / baska dairenin kaydini gostermez: sayfa bos, imlec null (sizinti yok)', foreignCursor.items.length === 0 && foreignCursor.next_before_id === null && otherAptCursor.items.length === 0 && otherAptCursor.next_before_id === null);
+  const accountBad = [(await account(fs3.code, a1, '?limit=0')).body?.code, (await account(fs3.code, a1, '?from=abc')).body?.code, (await account(fs3.code, a1, '?before_id=x')).body?.code, (await account(fs3.code, a1, `?from=${dayOf(0, 5)}&to=${dayOf(-1, 5)}`)).body?.code];
+  check('G26b: ekstre gecersiz sorgu 400 INVALID_QUERY (limit, tarih, imlec, ters aralik)', accountBad.every((c) => c === 'INVALID_QUERY'), accountBad);
+  check('G26c: IDOR: baska sitenin dairesi / olmayan daire ekstresi 404 APARTMENT_NOT_FOUND', (await account(fs3.code, fs2.ids[0])).body?.code === 'APARTMENT_NOT_FOUND' && (await account(fs3.code, 999999999)).body?.code === 'APARTMENT_NOT_FOUND' && (await account(fs3.code, 'abc')).body?.code === 'APARTMENT_NOT_FOUND' && (await account(fs3.code, a1, '', MGR2)).body?.code === 'FORBIDDEN_SITE');
+  const boardAcc = (await account(fs3.code, a1, '', BOARD)).body;
+  check('G27: kurul ekstreyi gorur ama olusturan yonetici adi NULL (yonetici gorur)', boardAcc.items.length >= 6 && boardAcc.items.every((e) => e.created_by_name === null) && accAfter.items.some((e) => e.created_by_name === 'Finans Yonetici') && boardAcc.balance_minor === accAfter.balance_minor);
+  const boardBalances = (await call('GET', `${b3}/balances`, BOARD)).body;
+  check('G27b: kurul TUM daire bakiyelerini gorur (sakin adlari dahil)', boardBalances.total === 6 && boardBalances.items.find((i) => i.apartment_id === P3(3).id)?.owner_name === 'Ayşe Öztürk');
+
+  // --- ozet
+  const summary = (await call('GET', `${b3}/summary`, MGR)).body;
+  const sumTruth = await truthOf(fs3.code);
+  let tBal = 0n; let tDebt = 0n; let tCredit = 0n; let tDebtors = 0;
+  for (const [, v] of sumTruth) {
+    tBal += v.balance;
+    if (v.balance > 0n) { tDebt += v.balance; tDebtors += 1; }
+    if (v.balance < 0n) tCredit -= v.balance;
+  }
+  const tCharged = BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 AND period = $2::date AND (kind = 'charge' OR (kind = 'reversal' AND amount_minor < 0))`, [fs3.code, monthStart(0)])).rows[0].s);
+  const tCollected = -BigInt((await q(`SELECT COALESCE(SUM(amount_minor), 0)::text AS s FROM ledger_entries WHERE site_code = $1 AND period = $2::date AND (kind = 'payment' OR (kind = 'reversal' AND amount_minor > 0))`, [fs3.code, monthStart(0)])).rows[0].s);
+  check('G28: ozet { currency, open_period, balance_total, debt_total, credit_total, debtor_count, this_period { charged, collected } } bagimsiz hesapla BIREBIR',
+    summary.currency === 'TRY' && summary.open_period === ym(0) && BigInt(summary.balance_total_minor) === tBal && BigInt(summary.debt_total_minor) === tDebt && BigInt(summary.credit_total_minor) === tCredit && summary.debtor_count === tDebtors && BigInt(summary.this_period.charged_minor) === tCharged && BigInt(summary.this_period.collected_minor) === tCollected && summary.balance_total_minor === summary.debt_total_minor - summary.credit_total_minor, [summary, { tBal, tDebt, tCredit, tDebtors, tCharged, tCollected }]);
+  check('G28b: ozet kurul icin de okunur', (await call('GET', `${b3}/summary`, BOARD)).status === 200);
+
+  // ============================================================================================================
+  // H. Donem kapatma / yeniden acma (fs4)
+  // ============================================================================================================
+  console.log('--- H. donemler ---');
+  const fs4 = await mkSite('Donem Sitesi', { 'D Blok': 3 });
+  await link.manager(fs4.code, MGR);
+  await link.member(fs4.code, BOARD, 'BOARD_MEMBER');
+  await enableModule(fs4.code);
+  const b4 = P(fs4.code);
+  const D4 = (n) => fs4.apt(`D Blok - Daire ${n}`);
+  const periodsOf = (user = MGR) => call('GET', `${b4}/periods`, user);
+  const emptyPeriods = await periodsOf();
+  check('H1: dönem listesi (hic kapanis yok): { closed_through: null, items: [], open_period: bu ay }', emptyPeriods.status === 200 && emptyPeriods.body.closed_through === null && same(emptyPeriods.body.items, []) && emptyPeriods.body.open_period === ym(0), emptyPeriods.body);
+  const periodDef = (await call('POST', `${b4}/definitions`, MGR, { name: 'Donem Aidat', kind: 'recurring', distribution: 'fixed', amount_minor: 10000, due_day: 1, start_period: ym(-5), target: { type: 'site' } })).body;
+  const postPeriod = async (definitionId, offset) => {
+    const pv = (await call('POST', `${b4}/definitions/${definitionId}/preview`, MGR, { period: ym(offset) })).body;
+    return call('POST', `${b4}/definitions/${definitionId}/post`, MGR, { period: ym(offset), expected_total_minor: pv.total_minor, expected_apartment_count: pv.apartment_count });
+  };
+  for (const offset of [-3, -2, -1, 0]) await postPeriod(periodDef.id, offset);
+  const pay4 = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(1).id, amount_minor: 4000, entry_date: dayOf(-1, 10), method: 'cash', idempotency_key: key('h') });
+  check('H2: hazirlik: 4 donem borclandirildi, acik donemde tahsilat', pay4.status === 201 && (await ledgerRows(fs4.code)).length === 13);
+
+  const closeUrl = (offset) => `${b4}/periods/${ym(offset)}/close`;
+  const closeFuture = await call('POST', closeUrl(1), MGR, {});
+  check('H3: gelecek ay kapatilamaz: 409 PERIOD_NOT_CLOSABLE; gecersiz donem metni 400', closeFuture.status === 409 && closeFuture.body.code === 'PERIOD_NOT_CLOSABLE' && (await call('POST', `${b4}/periods/abc/close`, MGR, {})).status === 400 && (await call('POST', `${b4}/periods/2026-13/close`, MGR, {})).status === 400);
+  const closeFirst = await call('POST', closeUrl(-3), MGR, {});
+  check('H4: siteye ILK kapatma serbest (3 ay once): 200; closed_through, open_period (bu ay), kapatan adi', closeFirst.status === 200 && closeFirst.body.closed_through === ym(-3) && closeFirst.body.open_period === ym(0) && closeFirst.body.items.length === 1 && closeFirst.body.items[0].period === ym(-3) && closeFirst.body.items[0].closed_by_name === 'Finans Yonetici' && typeof closeFirst.body.items[0].closed_at === 'string', closeFirst.body);
+  const skip = await call('POST', closeUrl(-1), MGR, {});
+  const dup = await call('POST', closeUrl(-3), MGR, {});
+  check('H5: donemler SIRAYLA kapanir: onceki ay kapali degilse 409 PERIOD_NOT_CLOSABLE; zaten kapali donem tekrar kapatilamaz', skip.status === 409 && skip.body.code === 'PERIOD_NOT_CLOSABLE' && dup.status === 409 && dup.body.code === 'PERIOD_NOT_CLOSABLE');
+  const earlier = await call('POST', closeUrl(-5), MGR, {});
+  check('H5b: kapali donemlerden ONCEKI bir ay kapatilamaz (onceki ay kapali degil)', earlier.status === 409 && earlier.body.code === 'PERIOD_NOT_CLOSABLE');
+  check('H6: kapali doneme borclandirma / tahsilat / ek borc eklenemez: 409 PERIOD_CLOSED (ledger degismez)', await (async () => {
+    const before = (await ledgerRows(fs4.code)).length;
+    const otherDef = (await call('POST', `${b4}/definitions`, MGR, { name: 'Ikinci', kind: 'recurring', distribution: 'equal', amount_minor: 3000, due_day: 1, start_period: ym(-5), target: { type: 'site' } })).body;
+    const preview = (await call('POST', `${b4}/definitions/${otherDef.id}/preview`, MGR, { period: ym(-3) })).body;
+    const post = await call('POST', `${b4}/definitions/${otherDef.id}/post`, MGR, { period: ym(-3), expected_total_minor: preview.total_minor, expected_apartment_count: preview.apartment_count });
+    const payment = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(1).id, amount_minor: 100, entry_date: dayOf(-3, 5), method: 'cash', idempotency_key: key('closed') });
+    return preview.closed === true && post.status === 409 && post.body.code === 'PERIOD_CLOSED' && payment.status === 409 && payment.body.code === 'PERIOD_CLOSED' && (await ledgerRows(fs4.code)).length === before;
+  })());
+  for (const offset of [-2, -1]) await call('POST', closeUrl(offset), MGR, {});
+  const closeCurrent = await call('POST', closeUrl(0), MGR, {});
+  check('H7: bu ay da (gelecek degil) kapatilabilir; acik donem sonraki aya kayar (open_period)', closeCurrent.status === 200 && closeCurrent.body.closed_through === ym(0) && closeCurrent.body.open_period === ym(1) && closeCurrent.body.items.map((i) => i.period).join(',') === [ym(0), ym(-1), ym(-2), ym(-3)].join(','), closeCurrent.body);
+  const lateCharge = await call('POST', `${b4}/charges`, MGR, { name: 'Gec', distribution: 'equal', amount_minor: 900, target: { type: 'site' }, expected_total_minor: 900, expected_apartment_count: 3 });
+  const latePay = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(1).id, amount_minor: 100, entry_date: TODAY, method: 'cash', idempotency_key: key('closed2') });
+  check('H8: bu ay kapaliyken ek borc ve bugunun tahsilati 409 PERIOD_CLOSED; kapali ayin ek borc onizlemesi closed:true', lateCharge.body?.code === 'PERIOD_CLOSED' && latePay.body?.code === 'PERIOD_CLOSED' && (await call('POST', `${b4}/charges/preview`, MGR, { name: 'Gec', distribution: 'equal', amount_minor: 900, target: { type: 'site' } })).body.closed === true);
+  const revInClosed = await call('POST', `${b4}/entries/${pay4.body.entry.id}/reverse`, MGR, { reason: 'kapali donemdeki kayit' });
+  check('H9: KAPALI donemdeki kaydin tersi AÇIK dönemde (bugunun ayi kapaliysa SONRAKI acik ay) yazilir: donem = ' + ym(1) + ', kayit tarihi bugun', revInClosed.status === 201 && revInClosed.body.entry.period === ym(1) && revInClosed.body.entry.entry_date === TODAY && revInClosed.body.balance_minor === 40000, revInClosed.body);
+  const sumClosed = (await call('GET', `${b4}/summary`, MGR)).body;
+  check('H9b: ozet open_period = ' + ym(1), sumClosed.open_period === ym(1));
+  const closedCorrect = await call('POST', `${b4}/entries/${pay4.body.entry.id}/correct`, MGR, { amount_minor: 100, entry_date: dayOf(-1, 10), method: 'cash', idempotency_key: key('closedcorr') });
+  check('H9c: tersi alinmis kayit duzeltilemez (409 ENTRY_ALREADY_REVERSED)', closedCorrect.body?.code === 'ENTRY_ALREADY_REVERSED');
+  const reopenManager = await call('POST', `${b4}/periods/${ym(0)}/reopen`, MGR, {});
+  const reopenOlder = await call('POST', `${b4}/periods/${ym(-1)}/reopen`, SUPER, {});
+  const reopenBad = await call('POST', `${b4}/periods/abc/reopen`, SUPER, {});
+  check('H10: yeniden acma YALNIZ super: yonetici 403 FORBIDDEN_ROLE; yalniz EN SON kapatilan ay: eski ay 409 PERIOD_NOT_REOPENABLE; gecersiz donem 400', reopenManager.status === 403 && reopenManager.body.code === 'FORBIDDEN_ROLE' && reopenOlder.status === 409 && reopenOlder.body.code === 'PERIOD_NOT_REOPENABLE' && reopenBad.status === 400);
+  const reopened = await call('POST', `${b4}/periods/${ym(0)}/reopen`, SUPER, {});
+  check('H11: super en son kapali ayi acar: 200, closed_through bir onceki aya doner, open_period bu ay', reopened.status === 200 && reopened.body.closed_through === ym(-1) && reopened.body.open_period === ym(0) && reopened.body.items.length === 3, reopened.body);
+  const payAgain = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(1).id, amount_minor: 100, entry_date: TODAY, method: 'cash', idempotency_key: key('reopened') });
+  check('H12: yeniden acilan ayda tahsilat yine mumkun', payAgain.status === 201);
+  const closeAudit = await auditRows(fs4.code, 'finance.period.closed');
+  const reopenAudit = await auditRows(fs4.code, 'finance.period.reopened');
+  check('H13: audit finance.period.closed (4) / reopened (1): target_id = donem, details { period } (baska bir sey YOK)', closeAudit.length === 4 && reopenAudit.length === 1 && closeAudit.every((r) => same(Object.keys(r.details), ['period']) && r.target_type === 'finance' && Number(r.site_code) === fs4.code) && reopenAudit[0].target_id === ym(0) && reopenAudit[0].actor_user_code === SUPER, [closeAudit[0], reopenAudit[0]]);
+  const boardPeriods = await periodsOf(BOARD);
+  check('H14: kurul donemleri okur ama kapatan adi NULL; kurul kapatamaz (403)', boardPeriods.status === 200 && boardPeriods.body.items.length === 3 && boardPeriods.body.items.every((i) => i.closed_by_name === null) && (await call('POST', closeUrl(0), BOARD, {})).status === 403);
+  // yeniden acilan ay tekrar kapatilabilir ve tum kapanislar tek tek geri alinabilir
+  await call('POST', closeUrl(0), MGR, {});
+  for (const offset of [0, -1, -2, -3]) await call('POST', `${b4}/periods/${ym(offset)}/reopen`, SUPER, {});
+  const afterAll = (await periodsOf()).body;
+  check('H15: tum kapanislar sirayla geri alinabilir; sonunda closed_through null', afterAll.closed_through === null && afterAll.items.length === 0 && afterAll.open_period === ym(0));
+  const noClosed = await call('POST', `${b4}/periods/${ym(0)}/reopen`, SUPER, {});
+  check('H15b: kapali donem yokken yeniden acma 409 PERIOD_NOT_REOPENABLE', noClosed.status === 409 && noClosed.body.code === 'PERIOD_NOT_REOPENABLE');
+
+  // kapali donemdeki tahsilat DUZELTILIR: ters kayit acik donemde, yeni tahsilat acik ayda; yeni tarih kapali aya dusuyorsa hicbir sey yazilmaz
+  const corrPay = await call('POST', `${b4}/payments`, MGR, { apartment_id: D4(3).id, amount_minor: 2500, entry_date: dayOf(-1, 7), method: 'cash', idempotency_key: key('hc1') });
+  await call('POST', closeUrl(-1), MGR, {});
+  const ledgerBeforeCorr = (await ledgerRows(fs4.code)).length;
+  const corrClosed = await call('POST', `${b4}/entries/${corrPay.body.entry.id}/correct`, MGR, { amount_minor: 3000, entry_date: dayOf(-1, 8), method: 'cash', idempotency_key: key('hc2') });
+  check('H17: duzeltmenin YENI tahsilat tarihi kapali aya dusuyorsa 409 PERIOD_CLOSED ve ters kayit DA yazilmaz (yarim kalmaz)', corrClosed.status === 409 && corrClosed.body.code === 'PERIOD_CLOSED' && (await ledgerRows(fs4.code)).length === ledgerBeforeCorr);
+  const corrOpen = await call('POST', `${b4}/entries/${corrPay.body.entry.id}/correct`, MGR, { amount_minor: 3000, entry_date: TODAY, method: 'transfer', idempotency_key: key('hc3') });
+  check('H17b: KAPALI aydaki tahsilat duzeltilebilir: ters kayit bugunun acik ayinda (' + ym(0) + '), yeni tahsilat bugunun tarihiyle; bakiye 40000 - 3000 = 37000', corrOpen.status === 201 && corrOpen.body.reversal.period === ym(0) && corrOpen.body.entry.period === ym(0) && corrOpen.body.entry.amount_minor === -3000 && corrOpen.body.balance_minor === 37000, corrOpen.body);
+  await q(`DELETE FROM finance_period_closures WHERE site_code = $1`, [fs4.code]);
+
+  // kapatma x tahsilat: BELIRLEYICI kilit deneyi (kapanis INSERT'i commit oncesi bekletilir; tahsilat kilidi BEKLEMELI, sonra PERIOD_CLOSED almali)
+  const raceClose = async (removeLock) => {
+    await q(`DELETE FROM finance_period_closures WHERE site_code = $1`, [fs4.code]);
+    hooks.rewrite = removeLock ? (text) => text.replace('SELECT pg_advisory_xact_lock(hashtext($1))', 'SELECT $1::text') : null;
+    let openGate;
+    hooks.pause = { match: /INSERT INTO finance_period_closures/, gate: new Promise((resolve) => { openGate = resolve; }), hit: false };
+    const closing = call('POST', closeUrl(-1), SUPER, {});
+    const reached = await waitFor(() => hooks.pause.hit, 8000);
+    hooks.pause = null; // kapanis tx'i advisory kilidi tutuyor, INSERT'i henuz calistirmadi
+    let paymentSettled = false;
+    const paying = call('POST', `${b4}/payments`, MGR, { apartment_id: D4(2).id, amount_minor: 77, entry_date: dayOf(-1, 3), method: 'cash', idempotency_key: key('raceclose') }).then((r) => {
+      paymentSettled = true;
+      return r;
+    });
+    await sleep(700);
+    const settledWhileOpen = paymentSettled;
+    openGate();
+    const [closeResult, payResult] = [await closing, await paying];
+    hooks.rewrite = null;
+    return { reached, settledWhileOpen, closeStatus: closeResult.status, paymentStatus: payResult.status, code: payResult.body?.code };
+  };
+  const withoutLock = await raceClose(true);
+  await q(`DELETE FROM finance_period_closures WHERE site_code = $1`, [fs4.code]);
+  const withLock = await raceClose(false);
+  check('H16 KONTROL DENEYI: finans advisory kilidi OLMADAN kapanis commit edilmeden tahsilat kapanacak aya yazilir (201): kilidin gerekliligi', withoutLock.reached && withoutLock.settledWhileOpen === true && withoutLock.paymentStatus === 201 && withoutLock.closeStatus === 200, withoutLock);
+  check('H16: advisory kilitle tahsilat kapanisin commitini BEKLER (bu sirada bitmez) ve sonra 409 PERIOD_CLOSED alir; kapanis 200', withLock.reached && withLock.settledWhileOpen === false && withLock.closeStatus === 200 && withLock.paymentStatus === 409 && withLock.code === 'PERIOD_CLOSED', withLock);
+  await q(`DELETE FROM finance_period_closures WHERE site_code = $1`, [fs4.code]);
+
+  // ============================================================================================================
+  // I. Sakin: /app/my-finance (responsible_party matrisi, family_member, yedek kural, sizinti yok, modul/onay)
+  // ============================================================================================================
+  console.log('--- I. sakin ucu ---');
+  const fs5 = await mkSite('Sakin Sitesi', { 'S Blok': 8 });
+  await link.manager(fs5.code, MGR);
+  await enableModule(fs5.code);
+  const b5 = P(fs5.code);
+  const S5 = (n) => fs5.apt(`S Blok - Daire ${n}`);
+  const partyOf = { 1: 'owner', 2: 'tenant', 3: 'both', 4: 'owner', 5: 'tenant', 6: 'owner', 7: 'both', 8: 'owner' };
+  for (const n of Object.keys(partyOf)) await q(`UPDATE apartments SET responsible_party = $2 WHERE id = $1`, [S5(Number(n)).id, partyOf[n]]);
+  const person = async (name, apt, relation, options = {}) => {
+    const user = options.noAccount ? null : await mkUser(name, 'apartment_owner');
+    const personId = await addPerson(fs5.code, options.noAccount ? { name } : { user });
+    if (options.inactivePerson) await q(`UPDATE site_people SET is_active = FALSE WHERE id = $1`, [personId]);
+    await addResidency(fs5.code, S5(apt).id, personId, relation, { current: options.current !== false });
+    return { user, personId };
+  };
+  const O1 = await person('Malik 1', 1, 'owner'); const T1 = await person('Kiraci 1', 1, 'tenant'); const R1 = await person('Sakin 1', 1, 'resident'); const F1 = await person('Aile 1', 1, 'family_member');
+  const O2 = await person('Malik 2', 2, 'owner'); const T2 = await person('Kiraci 2', 2, 'tenant');
+  const O3 = await person('Malik 3', 3, 'owner'); const T3 = await person('Kiraci 3', 3, 'tenant'); const R3 = await person('Sakin 3', 3, 'resident'); const F3 = await person('Aile 3', 3, 'family_member');
+  const T4 = await person('Kiraci 4', 4, 'tenant'); const R4 = await person('Sakin 4', 4, 'resident'); const F4 = await person('Aile 4', 4, 'family_member');
+  const O5 = await person('Malik 5', 5, 'owner'); const F5 = await person('Aile 5', 5, 'family_member');
+  await person('Hesapsiz Malik 6', 6, 'owner', { noAccount: true }); const T6 = await person('Kiraci 6', 6, 'tenant');
+  const F7 = await person('Aile 7', 7, 'family_member'); const O7 = await person('Pasif Malik 7', 7, 'owner', { inactivePerson: true });
+  const O8 = await person('Eski Malik 8', 8, 'owner', { current: false }); const R8 = await person('Sakin 8', 8, 'resident');
+  // O1 ayni zamanda 3. dairede de "sakin" (cok daireli kullanici)
+  await addResidency(fs5.code, S5(3).id, O1.personId, 'resident');
+  // alakasiz kullanici ve baska siteler (modul kapali; onay bekleyen)
+  const NOBODY = await mkUser('Kimse', 'apartment_owner');
+  const closedSite = await mkSite('Modulsuz Sakin Sitesi', { 'M Blok': 1 });
+  const pendingSite = await mkSite('Onaysiz Sakin Sitesi', { 'N Blok': 1 }, { approved: false });
+  const closedPerson = await addPerson(closedSite.code, { user: O1.user });
+  await addResidency(closedSite.code, closedSite.ids[0], closedPerson, 'owner');
+  await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', TRUE)`, [pendingSite.code]);
+  const pendingPerson = await addPerson(pendingSite.code, { user: O1.user });
+  await addResidency(pendingSite.code, pendingSite.ids[0], pendingPerson, 'owner');
+  for (const site of [closedSite, pendingSite]) {
+    const defId = Number((await q(`INSERT INTO fee_definitions (site_code, name, kind, distribution, amount_minor, start_period) VALUES ($1, 'Gizli Site Borcu', 'one_time', 'equal', 99999, '2026-01-01') RETURNING id`, [site.code])).rows[0].id);
+    const runId = Number((await q(`INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count) VALUES ($1, $2, '2026-01-01', 99999, 1) RETURNING id`, [site.code, defId])).rows[0].id);
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, run_id, payer_party) VALUES ($1, $2, 'charge', 99999, '2026-01-01', '2026-01-01', '2026-01-05', $3, $4, 'both')`, [site.code, site.ids[0], defId, runId]);
+  }
+  // borclar: gecmis vadeli (ym(-1)) ve gelecek vadeli (ym(1)) 100000; S1'de odeme + ters kayit (yonetici metinleri), S3'te kismi odeme
+  const residentDef = (await call('POST', `${b5}/definitions`, MGR, { name: 'Sakin Aidat GIZLI-TANIM', kind: 'recurring', distribution: 'fixed', amount_minor: 100000, due_day: 1, start_period: ym(-2), target: { type: 'site' } })).body;
+  for (const offset of [-1, 1]) {
+    const pv = (await call('POST', `${b5}/definitions/${residentDef.id}/preview`, MGR, { period: ym(offset) })).body;
+    await call('POST', `${b5}/definitions/${residentDef.id}/post`, MGR, { period: ym(offset), expected_total_minor: pv.total_minor, expected_apartment_count: pv.apartment_count });
+  }
+  const s1Pay = await call('POST', `${b5}/payments`, MGR, { apartment_id: S5(1).id, amount_minor: 30000, entry_date: TODAY, method: 'cash', description: 'GIZLI-ACIKLAMA-1', idempotency_key: key('s1') });
+  await call('POST', `${b5}/entries/${s1Pay.body.entry.id}/reverse`, MGR, { reason: 'GIZLI-NEDEN-2' });
+  await call('POST', `${b5}/payments`, MGR, { apartment_id: S5(3).id, amount_minor: 150000, entry_date: TODAY, method: 'transfer', description: 'GIZLI-ACIKLAMA-3', idempotency_key: key('s3') });
+  const mine = async (user) => (await call('GET', '/app/my-finance', user)).body;
+  const idsOf = (body) => body.items.map((i) => i.apartment_id).sort((a, b) => a - b);
+  const expectVisible = [
+    ['O1 (S1 malik + S3 sakin): S1 ve S3', O1.user, [S5(1).id, S5(3).id]], ['T1 (S1 kiraci, sorumlu=malik)', T1.user, []], ['R1 (S1 belirsiz iliski, sorumlu=malik)', R1.user, []], ['F1 (aile uyesi)', F1.user, []],
+    ['O2 (S2 malik, sorumlu=kiraci)', O2.user, []], ['T2 (S2 kiraci, sorumlu=kiraci)', T2.user, [S5(2).id]],
+    ['O3 (S3 malik, sorumlu=ikisi)', O3.user, [S5(3).id]], ['T3 (S3 kiraci)', T3.user, [S5(3).id]], ['R3 (S3 belirsiz iliski, sorumlu=ikisi)', R3.user, [S5(3).id]], ['F3 (S3 aile uyesi, sorumlu=ikisi: GORMEZ)', F3.user, []],
+    ['T4 (S4 sorumlu=malik ama malik yok: yedek kural)', T4.user, [S5(4).id]], ['R4 (S4 yedek kural)', R4.user, [S5(4).id]], ['F4 (S4 aile: yedekte de GORMEZ)', F4.user, []],
+    ['O5 (S5 sorumlu=kiraci ama kiraci yok: yedek)', O5.user, [S5(5).id]], ['F5 (S5 aile)', F5.user, []],
+    ['T6 (S6 sorumlu=malik; HESAPSIZ ama kayitli malik var: yedek UYGULANMAZ)', T6.user, []],
+    ['F7 (S7 yalniz aile)', F7.user, []], ['O7 (S7 PASIF kisi)', O7.user, []],
+    ['O8 (S8 taşınmış eski malik, is_current=false)', O8.user, []], ['R8 (S8 sorumlu=malik, guncel malik yok: yedek)', R8.user, [S5(8).id]],
+    ['ilgisiz kullanici', NOBODY, []],
+  ];
+  const visibleResults = [];
+  for (const [label, user, expected] of expectVisible) {
+    const body = await mine(user);
+    visibleResults.push([label, same(idsOf(body), [...expected].sort((a, b) => a - b)), idsOf(body)]);
+  }
+  check(`I1: sorumlu taraf matrisi (${expectVisible.length} durum): owner -> malik, tenant -> kiraci, both -> malik+kiraci+belirsiz; family_member HICBIR durumda; eslesen guncel kisi yoksa yedek (resident/owner/tenant); pasif kisi / taşınmış iliski gormez; ilgisiz kullanici bos`, visibleResults.every(([, ok]) => ok), visibleResults.filter(([, ok]) => !ok));
+  const o1 = await mine(O1.user);
+  const o1s1 = o1.items.find((i) => i.apartment_id === S5(1).id);
+  const o1s3 = o1.items.find((i) => i.apartment_id === S5(3).id);
+  check('I2: O1\'in iki dairesi icin alanlar: site_code, site_name, label, block_name, currency, balance_minor (tamsayi), overdue_minor, next_due_date, next_due_minor, payer_party (dairenin responsible_party degeri), recent',
+    o1.items.length === 2 && o1s1.site_code === fs5.code && o1s1.site_name === 'Sakin Sitesi' && o1s1.label === 'S Blok - Daire 1' && o1s1.block_name === 'S Blok' && o1s1.currency === 'TRY' && o1s1.payer_party === 'owner' && o1s3.payer_party === 'both' && Array.isArray(o1s1.recent), o1.items);
+  check('I3: S1: 200000 borc (30000 odeme + ters kayit net sifir); vadesi gecmis 100000 (gelecek vadeli 100000 haric); sirada vade = gelecek ay 1\'i, tutar 100000', o1s1.balance_minor === 200000 && o1s1.overdue_minor === 100000 && o1s1.next_due_date === `${ym(1)}-01` && o1s1.next_due_minor === 100000, o1s1);
+  check('I4: S3: 150000 odemeden sonra bakiye 50000; vadesi gecmis 0; FIFO: gelecek vadeli borcun 50000\'i odenmis sayilir -> sirada 50000', o1s3.balance_minor === 50000 && o1s3.overdue_minor === 0 && o1s3.next_due_date === `${ym(1)}-01` && o1s3.next_due_minor === 50000, o1s3);
+  const noDebt = await mine(T2.user);
+  check('I5: bagimsiz kontrol: S2 kiracisi 200000 borclu, vade bilgileri dolu', noDebt.items[0].balance_minor === 200000 && noDebt.items[0].overdue_minor === 100000 && noDebt.items[0].next_due_minor === 100000);
+  const residentText = JSON.stringify([o1, await mine(T2.user), await mine(R8.user)]);
+  check('I6: sakin yanitinda yonetici serbest metinleri (aciklama, ters kayit nedeni), olusturan yonetici adi, tanim adi disindaki hicbir sey ve BASKA dairenin / sitenin verisi YOK', !/GIZLI-ACIKLAMA|GIZLI-NEDEN|Finans Yonetici|Gizli Site Borcu/.test(residentText) && !residentText.includes('Modulsuz') && !residentText.includes('Onaysiz') && o1s1.recent.every((e) => e.description === null && e.reversal_reason === null && e.created_by_name === null));
+  check('I6b: recent: yalniz KENDI dairesi, son hareketler yeni -> eski; S1\'de borclar + odeme + ters kayit; Entry alanlari tam', o1s1.recent.length === 4 && o1s1.recent.every((e, i, a) => i === 0 || a[i - 1].entry_date >= e.entry_date) && o1s1.recent.some((e) => e.kind === 'reversal' && e.reverses_entry_id !== null) && o1s1.recent.some((e) => e.kind === 'payment' && e.amount_minor === -30000 && e.method === 'cash') && o1s1.recent.every((e) => 'definition_name' in e && 'reversed_by_entry_id' in e && 'payer_party' in e));
+  // modulu KAPALI ve onay bekleyen siteler gorunmez (O1 oralarda da malik); modul kapatilirsa daire kaybolur
+  check('I7: O1 modulu KAPALI siteye ve ONAYSIZ siteye bagli ama bu sitelerin borcu GORUNMEZ', o1.items.every((i) => i.site_code === fs5.code));
+  await call('PUT', `/manager/sites/${fs5.code}/modules/finance`, SUPER, { enabled: false });
+  const afterDisable = await mine(O1.user);
+  check('I8: finance modulu KAPANINCA sakin uc bos doner (Borcum gorunmez)', afterDisable.items.length === 0);
+  await enableModule(fs5.code);
+  check('I8b: modul tekrar acilinca veri yerinde', (await mine(O1.user)).items.length === 2);
+  // recent siniri: 30
+  for (let i = 0; i < 40; i += 1) {
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method) VALUES ($1, $2, 'payment', -1, $3, $4, 'both', 'cash')`, [fs5.code, S5(2).id, monthStart(-1), `${ym(-1)}-${String((i % 28) + 1).padStart(2, '0')}`]);
+  }
+  const t2Many = await mine(T2.user);
+  check('I9: recent en fazla 30 satir (40 hareketli dairede 30), yeni -> eski sirali; bakiye tum satirlari kapsar', t2Many.items[0].recent.length === 30 && t2Many.items[0].recent.every((e, i, a) => i === 0 || a[i - 1].entry_date >= e.entry_date) && t2Many.items[0].balance_minor === 200000 - 40, t2Many.items[0].balance_minor);
+  // hesapli kullanicinin yeni uyeligi: bos kullanici icin de hata vermez
+  const orphanUser = await mine(OUTSIDER);
+  check('I10: dairesi olmayan hesap icin /app/my-finance 200 { items: [] }', same(orphanUser, { items: [] }));
+
+  // ============================================================================================================
+  // J. Daire azaltma x mali kayit: 409 APARTMENT_HAS_FINANCE (islem GERI ALINIR); mali kaydi olmayan daire azaltma AYNEN calisir
+  // ============================================================================================================
+  console.log('--- J. daire azaltma ---');
+  const shrinkArgs = (site, count) => ({ siteCode: site, blockCount: 1, apartmentCount: count, blockApartmentCounts: [count], doorCount: 0 });
+  const fs7 = await mkSite('Azaltma Sitesi', { 'Z Blok': 4 });
+  await link.manager(fs7.code, MGR);
+  await enableModule(fs7.code);
+  const Z7 = (n) => fs7.apt(`Z Blok - Daire ${n}`);
+  const countApts = async (site) => (await q(`SELECT COUNT(*)::int AS n FROM apartments WHERE site_code = $1`, [site])).rows[0].n;
+  const shrinkPay = await call('POST', `${P(fs7.code)}/payments`, MGR, { apartment_id: Z7(4).id, amount_minor: 1234, entry_date: TODAY, method: 'cash', idempotency_key: key('z4') });
+  let shrinkError = null;
+  try {
+    await siteSvc.syncSiteStructureCounts(shrinkArgs(fs7.code, 3));
+  } catch (error) {
+    shrinkError = error;
+  }
+  const auditAfterShrink = (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE site_code = $1 AND action = 'apartment.deleted'`, [fs7.code])).rows[0].n;
+  check('J1: mali kaydi olan (son) daireyi silecek azaltma 409 APARTMENT_HAS_FINANCE ile REDDEDILIR; islem GERI ALINIR (daire sayisi 4, defter ve audit ayni)', shrinkPay.status === 201 && shrinkError?.code === 'APARTMENT_HAS_FINANCE' && shrinkError.statusCode === 409 && shrinkError.message === 'Mali kaydı olan daire silinemez.' && (await countApts(fs7.code)) === 4 && (await ledgerRows(fs7.code)).length === 1 && auditAfterShrink === 0, shrinkError);
+  const shrinkHttp = await call('PATCH', `/admin/sites/${fs7.code}`, SUPER, { block_count: 1, apartment_count: 3, block_apartment_counts: [3], door_count: 1 });
+  check('J2: yonetim ucu (PATCH /admin/sites/:id) ayni sonucu { error, code: APARTMENT_HAS_FINANCE } ile 409 doner; site degismez', shrinkHttp.status === 409 && shrinkHttp.body.code === 'APARTMENT_HAS_FINANCE' && shrinkHttp.body.error === 'Mali kaydı olan daire silinemez.' && (await countApts(fs7.code)) === 4, shrinkHttp);
+
+  const fs8 = await mkSite('Azaltma Serbest Sitesi', { 'Y Blok': 5 });
+  await link.manager(fs8.code, MGR);
+  await enableModule(fs8.code);
+  const Y8 = (n) => fs8.apt(`Y Blok - Daire ${n}`);
+  await call('POST', `${P(fs8.code)}/payments`, MGR, { apartment_id: Y8(1).id, amount_minor: 500, entry_date: TODAY, method: 'cash', idempotency_key: key('y1') });
+  await call('POST', `${P(fs8.code)}/payments`, MGR, { apartment_id: Y8(2).id, amount_minor: 600, entry_date: TODAY, method: 'cash', idempotency_key: key('y2') });
+  const limitSite = await mkSite('Sinir Tutar Sitesi', { 'Q Blok': 1 });
+  await link.manager(limitSite.code, MGR);
+  await enableModule(limitSite.code);
+  const bigPay = await call('POST', `${P(limitSite.code)}/payments`, MGR, { apartment_id: limitSite.ids[0], amount_minor: 1000000000000, entry_date: TODAY, method: 'transfer', idempotency_key: key('big') });
+  check('J2b: sinirdaki tutar (10^12 kurus) tahsilati: kurus tamsayi, bakiye -10^12 JSON tamsayisi; bir kurus fazlasi reddedilir', bigPay.status === 201 && bigPay.body.entry.amount_minor === -1000000000000 && bigPay.body.balance_minor === -1000000000000 && (await ledgerSum(limitSite.code)) === -1000000000000n && (await call('POST', `${P(limitSite.code)}/payments`, MGR, { apartment_id: limitSite.ids[0], amount_minor: 1000000000001, entry_date: TODAY, method: 'transfer', idempotency_key: key('big2') })).status === 400);
+  let freeError = null;
+  try {
+    await siteSvc.syncSiteStructureCounts(shrinkArgs(fs8.code, 3));
+    await siteSvc.syncSiteStructureCounts(shrinkArgs(fs8.code, 2));
+  } catch (error) {
+    freeError = error;
+  }
+  check('J3: mali kaydi OLMAYAN dairelerin azaltilmasi AYNEN calisir (5 -> 3 -> 2); mali kayitli daireler ve defter yerinde', freeError === null && (await countApts(fs8.code)) === 2 && (await ledgerRows(fs8.code)).length === 2 && (await ledgerSum(fs8.code)) === -1100n, freeError);
+  let blockedSecond = null;
+  try {
+    await siteSvc.syncSiteStructureCounts(shrinkArgs(fs8.code, 1));
+  } catch (error) {
+    blockedSecond = error;
+  }
+  check('J4: ayni sitede mali kayitli daire (2. daire) silinmek istenince yine 409 APARTMENT_HAS_FINANCE; daire sayisi 2', blockedSecond?.code === 'APARTMENT_HAS_FINANCE' && (await countApts(fs8.code)) === 2);
+
+  // belirleyici kilit deneyleri: azaltma x borclandirma (kilit sirasi: people -> finance_post -> apartments); deadlock YOK
+  const fs11 = await mkSite('Kilit Sitesi', { 'K Blok': 4 });
+  await link.manager(fs11.code, MGR);
+  await enableModule(fs11.code);
+  const b11 = P(fs11.code);
+  const lockDef = (await call('POST', `${b11}/definitions`, MGR, { name: 'Kilit', kind: 'recurring', distribution: 'equal', amount_minor: 4000, due_day: 1, start_period: ym(-8), target: { type: 'site' } })).body;
+  const lockPreview = (await call('POST', `${b11}/definitions/${lockDef.id}/preview`, MGR, { period: ym(-1) })).body;
+  const deadlocksBeforeK = hooks.deadlocks;
+  // K1: borclandirma finans kilidini TUTARKEN daire azaltma bekler; sonra mali kaydi gorup 409 alir
+  let openGate;
+  hooks.pause = { match: /INSERT INTO fee_runs/, gate: new Promise((resolve) => { openGate = resolve; }), hit: false };
+  const postingK1 = call('POST', `${b11}/definitions/${lockDef.id}/post`, MGR, { period: ym(-1), expected_total_minor: lockPreview.total_minor, expected_apartment_count: lockPreview.apartment_count });
+  const k1Reached = await waitFor(() => hooks.pause.hit, 8000);
+  hooks.pause = null;
+  let k1Settled = false;
+  const shrinkingK1 = siteSvc.syncSiteStructureCounts(shrinkArgs(fs11.code, 3)).then(() => ({ ok: true }), (error) => ({ ok: false, code: error.code })).then((r) => { k1Settled = true; return r; });
+  await sleep(700);
+  const k1SettledWhileOpen = k1Settled;
+  openGate();
+  const [k1Post, k1Shrink] = [await postingK1, await shrinkingK1];
+  check('K1: borclandirma (finans kilidi + daire kilitleri) surerken daire azaltma BEKLER (bitmez); sonra mali kaydi gorup APARTMENT_HAS_FINANCE alir; borclandirma 201; deadlock YOK', k1Reached && k1SettledWhileOpen === false && k1Post.status === 201 && k1Shrink.ok === false && k1Shrink.code === 'APARTMENT_HAS_FINANCE' && (await countApts(fs11.code)) === 4 && hooks.deadlocks === deadlocksBeforeK, { k1Reached, k1SettledWhileOpen, k1Post: k1Post.status, k1Shrink });
+  // K2: tersi: daire azaltma finans kilidini tutarken (DELETE oncesi) borclandirma bekler; sonra daire sayisi degistigi icin PREVIEW_STALE
+  const fs12 = await mkSite('Kilit Sitesi 2', { 'L Blok': 4 });
+  await link.manager(fs12.code, MGR);
+  await enableModule(fs12.code);
+  const b12 = P(fs12.code);
+  const lockDef2 = (await call('POST', `${b12}/definitions`, MGR, { name: 'Kilit2', kind: 'recurring', distribution: 'equal', amount_minor: 4000, due_day: 1, start_period: ym(-8), target: { type: 'site' } })).body;
+  const lockPreview2 = (await call('POST', `${b12}/definitions/${lockDef2.id}/preview`, MGR, { period: ym(-1) })).body;
+  let openGate2;
+  hooks.pause = { match: /DELETE FROM apartments/, gate: new Promise((resolve) => { openGate2 = resolve; }), hit: false };
+  const shrinkingK2 = siteSvc.syncSiteStructureCounts(shrinkArgs(fs12.code, 3)).then(() => ({ ok: true }), (error) => ({ ok: false, code: error.code }));
+  const k2Reached = await waitFor(() => hooks.pause.hit, 8000);
+  hooks.pause = null;
+  let k2Settled = false;
+  const postingK2 = call('POST', `${b12}/definitions/${lockDef2.id}/post`, MGR, { period: ym(-1), expected_total_minor: lockPreview2.total_minor, expected_apartment_count: lockPreview2.apartment_count }).then((r) => { k2Settled = true; return r; });
+  await sleep(700);
+  const k2SettledWhileOpen = k2Settled;
+  openGate2();
+  const [k2Shrink, k2Post] = [await shrinkingK2, await postingK2];
+  check('K2: daire azaltma (finans kilidi tutuyor) surerken borclandirma BEKLER; azaltma commit olunca 3 daire gorur: PREVIEW_STALE (409), hicbir borc yazilmaz; deadlock YOK', k2Reached && k2SettledWhileOpen === false && k2Shrink.ok === true && k2Post.status === 409 && k2Post.body.code === 'PREVIEW_STALE' && k2Post.body.apartment_count === 3 && (await countApts(fs12.code)) === 3 && (await ledgerRows(fs12.code)).length === 0 && hooks.deadlocks === deadlocksBeforeK, { k2Reached, k2SettledWhileOpen, k2Shrink, post: [k2Post.status, k2Post.body] });
+
+  // ============================================================================================================
+  // L. Buyuk site (3000 daire): borclandirma suresi, EXPLAIN (ledger_entries uzerinde sirali tarama yok), tutar sinirlari
+  // ============================================================================================================
+  console.log('--- L. buyuk site: sure ve EXPLAIN ---');
+  const bigCode = ++nextSite;
+  await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Buyuk Site', 'approved', NOW())`, [bigCode]);
+  await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) SELECT $1, 'Blok ' || g, g FROM generate_series(1, 6) g`, [bigCode]);
+  await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order, gross_area_m2, net_area_m2, land_share_numerator, land_share_denominator, category, responsible_party)
+           SELECT $1, b.id, 'Daire ' || g, g, 80 + (g % 40), 60 + (g % 40), 1 + (g % 9), 10000, CASE WHEN g % 3 = 0 THEN '3+1' ELSE '2+1' END, 'both'
+           FROM site_blocks b CROSS JOIN generate_series(1, 500) g WHERE b.site_code = $1`, [bigCode]);
+  await link.manager(bigCode, MGR);
+  await enableModule(bigCode);
+  // gercekci coklu-kiraci tablo boyutu: baska sitelerin defteri (planlayici sitenin payini kucuk gorur)
+  const fillerCode = ++nextSite;
+  await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, 'Dolgu Site', 'approved', NOW())`, [fillerCode]);
+  await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, 'Dolgu', 1)`, [fillerCode]);
+  await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT $1, b.id, 'D' || g, g FROM site_blocks b CROSS JOIN generate_series(1, 2000) g WHERE b.site_code = $1`, [fillerCode]);
+  // toplu dolgu (200 bin satir): havuzun 30 sn'lik statement_timeout'u yuklu makinede asilabilir -> ayri baglantida zaman asimi kapali
+  const bulkStart = Date.now();
+  const bulkClient = await pool.connect();
+  try {
+    await bulkClient.query('SET statement_timeout = 0');
+    await bulkClient.query(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party)
+           SELECT $1, a.id, 'charge', 10000 + (m % 7), (date '2024-01-01' + (m || ' month')::interval)::date, (date '2024-01-01' + (m || ' month')::interval)::date, (date '2024-01-01' + (m || ' month')::interval)::date, 'both'
+           FROM apartments a CROSS JOIN generate_series(0, 99) m WHERE a.site_code = $1`, [fillerCode]);
+    await bulkClient.query('SET statement_timeout = 0');
+    await bulkClient.query('ANALYZE ledger_entries');
+  } finally {
+    await bulkClient.query('RESET statement_timeout').catch(() => {});
+    bulkClient.release();
+  }
+  console.log(`   (dolgu: 200000 defter satiri ${Date.now() - bulkStart} ms)`);
+  await q('ANALYZE apartments');
+  await q('ANALYZE ledger_entries');
+  const bigBase = P(bigCode);
+  const bigDef = (await call('POST', `${bigBase}/definitions`, MGR, { name: 'Buyuk Aidat', kind: 'recurring', distribution: 'equal', amount_minor: 450000000, due_day: 1, start_period: ym(-12), target: { type: 'site' } })).body;
+  const previewStart = Date.now();
+  const bigPreview = await call('POST', `${bigBase}/definitions/${bigDef.id}/preview`, MGR, { period: ym(-1) });
+  const previewMs = Date.now() - previewStart;
+  check(`L1: 3000 daireli sitede onizleme (${previewMs} ms): 3000 satir, toplam 450000000 (150000 x 3000)`, bigPreview.status === 200 && bigPreview.body.apartment_count === 3000 && bigPreview.body.total_minor === 450000000 && bigPreview.body.lines.length === 3000 && bigPreview.body.lines.every((l) => l.amount_minor === 150000), previewMs);
+  const postStart = Date.now();
+  const bigPost = await call('POST', `${bigBase}/definitions/${bigDef.id}/post`, MGR, { period: ym(-1), expected_total_minor: 450000000, expected_apartment_count: 3000 });
+  const postMs = Date.now() - postStart;
+  check(`L2: 3000 daireli sitede borclandirma TEK transaction / tek INSERT...SELECT ile ${postMs} ms (< 3000 ms); 3000 satir, toplam birebir`, bigPost.status === 201 && bigPost.body.entries_count === 3000 && postMs < 3000 && (await ledgerSum(bigCode)) === 450000000n && (await ledgerRows(bigCode)).length === 3000, postMs);
+  // bolunemeyen buyuk tutar: 3000 daireye 1000000007 kurus
+  const unevenDef = (await call('POST', `${bigBase}/definitions`, MGR, { name: 'Bolunemeyen', kind: 'recurring', distribution: 'land_share', amount_minor: 1000000007, due_day: 1, start_period: ym(-12), target: { type: 'site' } })).body;
+  const unevenPreview = (await call('POST', `${bigBase}/definitions/${unevenDef.id}/preview`, MGR, { period: ym(-2) })).body;
+  const unevenStart = Date.now();
+  const unevenPost = await call('POST', `${bigBase}/definitions/${unevenDef.id}/post`, MGR, { period: ym(-2), expected_total_minor: unevenPreview.total_minor, expected_apartment_count: unevenPreview.apartment_count });
+  const unevenMs = Date.now() - unevenStart;
+  check(`L3: 3000 daire arsa payi dagitimi (bolunemeyen 1000000007 kurus): ${unevenMs} ms, toplam BIREBIR 1000000007, her pay >= 0`, unevenPost.status === 201 && (await ledgerSum(bigCode, `AND run_id = ${unevenPost.body.run.id}`)) === 1000000007n && unevenMs < 3000, unevenMs);
+  const hugeFixed = (await call('POST', `${bigBase}/definitions`, MGR, { name: 'Asiri', kind: 'recurring', distribution: 'fixed', amount_minor: 1000000000000, due_day: 1, start_period: ym(-12), target: { type: 'site' } })).body;
+  const hugePreview = (await call('POST', `${bigBase}/definitions/${hugeFixed.id}/preview`, MGR, { period: ym(-3) })).body;
+  const hugePost = await call('POST', `${bigBase}/definitions/${hugeFixed.id}/post`, MGR, { period: ym(-3), expected_total_minor: 100000000000000, expected_apartment_count: 3000 });
+  const hugePostExact = await call('POST', `${bigBase}/definitions/${hugeFixed.id}/post`, MGR, { period: ym(-3), expected_total_minor: hugePreview.total_minor, expected_apartment_count: 3000 });
+  check('L4: tutar sinirlari: 3000 x 10^12 kurus toplam JSON\'da tamsayi olarak gorunur ama borclandirilamaz (> 10^14): hem uyumsuz hem tam beklenenle 400/409, hicbir sey yazilmaz', hugePreview.total_minor === 3000000000000000 && Number.isSafeInteger(hugePreview.total_minor) && [400, 409].includes(hugePost.status) && hugePostExact.status === 400 && (await q(`SELECT COUNT(*)::int AS n FROM fee_runs WHERE definition_id = $1`, [hugeFixed.id])).rows[0].n === 0, [hugePreview.total_minor, hugePost.status, hugePostExact.status]);
+
+  // EXPLAIN: okuma sorgularinin planinda ledger_entries uzerinde sirali tarama (Seq Scan) YOK
+  const seqScansOn = (node, table) => {
+    if (!node || typeof node !== 'object') return [];
+    const own = node['Node Type'] === 'Seq Scan' && node['Relation Name'] === table ? [node] : [];
+    return own.concat((node.Plans ?? []).flatMap((child) => seqScansOn(child, table)));
+  };
+  const explainCalls = async (label, run, needles) => {
+    hooks.log = [];
+    await run();
+    const captured = hooks.log.filter((entry) => entry.text && /FROM ledger_entries/.test(entry.text) && needles.some((needle) => needle.test(entry.text)));
+    hooks.log = null;
+    const findings = [];
+    for (const entry of captured) {
+      const plan = await q(`EXPLAIN (FORMAT JSON) ${entry.text}`, entry.values);
+      const seq = seqScansOn(plan.rows[0]['QUERY PLAN'][0].Plan, 'ledger_entries');
+      findings.push({ sql: entry.text.replace(/\s+/g, ' ').slice(0, 90), seqScans: seq.length });
+    }
+    check(`L5 EXPLAIN ${label}: ${captured.length} sorgu, ledger_entries uzerinde sirali tarama (Seq Scan) YOK`, captured.length > 0 && findings.every((f) => f.seqScans === 0), findings);
+  };
+  await explainCalls('bakiye listesi', () => call('GET', `${bigBase}/balances?limit=50`, MGR), [/GROUP BY l\.apartment_id/]);
+  await explainCalls('bakiye listesi (borclu + arama)', () => call('GET', `${bigBase}/balances?status=debtor&q=daire%2012&limit=50`, MGR), [/GROUP BY l\.apartment_id/]);
+  const bigApt = Number((await q(`SELECT id FROM apartments WHERE site_code = $1 ORDER BY id LIMIT 1 OFFSET 1234`, [bigCode])).rows[0].id);
+  await explainCalls('daire ekstresi', () => call('GET', `${bigBase}/apartments/${bigApt}/account?limit=50`, MGR), [/ORDER BY l\.entry_date DESC/, /SUM\(amount_minor\)/]);
+  await explainCalls('ozet', () => call('GET', `${bigBase}/summary`, MGR), [/GROUP BY apartment_id/, /period = \$2::DATE/]);
+  await explainCalls('tahsilat (bakiye + tekrar sorgusu)', () => call('POST', `${bigBase}/payments`, MGR, { apartment_id: bigApt, amount_minor: 1000, entry_date: TODAY, method: 'cash', idempotency_key: key('big') }), [/idempotency_key = \$2/, /SUM\(amount_minor\)/]);
+  const bigEntryId = (await q(`SELECT MIN(id) AS id FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2`, [bigCode, bigApt])).rows[0].id;
+  await explainCalls('ters kayit (hedef + ters var mi)', () => call('POST', `${bigBase}/entries/${bigEntryId}/reverse`, MGR, {}), [/reverses_entry_id = \$1/, /l\.id = \$1/]);
+  const bigResident = await mkUser('Buyuk Site Sakini', 'apartment_owner');
+  const bigPerson = await addPerson(bigCode, { user: bigResident });
+  await addResidency(bigCode, bigApt, bigPerson, 'owner');
+  await explainCalls('sakin Borcum (/app/my-finance)', () => call('GET', '/app/my-finance', bigResident), [/FROM ledger_entries l/]);
+  // sayfalama maliyeti: balances sayfa 60 (offset) da hizli
+  const pageStart = Date.now();
+  const pageRes = await call('GET', `${bigBase}/balances?limit=50&offset=2900`, MGR);
+  const pageMs = Date.now() - pageStart;
+  check(`L6: 3000 daireli sitede bakiye listesi sayfasi (${pageMs} ms) < 1500 ms; toplam 3000`, pageRes.status === 200 && pageRes.body.total === 3000 && pageRes.body.items.length === 50 && pageMs < 1500, pageMs);
+  const cleanupClient = await pool.connect();
+  try {
+    await cleanupClient.query('SET statement_timeout = 0');
+    await cleanupClient.query(`DELETE FROM sites WHERE site_code = ANY($1::bigint[])`, [[bigCode, fillerCode]]);
+  } finally {
+    await cleanupClient.query('RESET statement_timeout').catch(() => {});
+    cleanupClient.release();
+  }
+  check('L7: buyuk site silinince defter dahil CASCADE (3000+ satir; tetikleyici ve RESTRICT engellemez)', (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = ANY($1::bigint[])`, [[bigCode, fillerCode]])).rows[0].n === 0);
+
+  // ============================================================================================================
+  // M. Kilit turlari: borclandirma x tahsilat x ters kayit x duzeltme x daire azaltma x kullanici silme (40P01 = 0)
+  // ============================================================================================================
+  console.log('--- M. kilit turlari ---');
+  const rounds = Math.min(30, Number(process.env.QA_LOCK_ROUNDS || 25));
+  const lockApartments = 40;
+  const fs10 = await mkSite('Yaris Sitesi', { 'R Blok': lockApartments });
+  await link.manager(fs10.code, MGR);
+  await enableModule(fs10.code);
+  const b10 = P(fs10.code);
+  const targeted = fs10.ids.slice(0, 10);
+  const raceDef = (await call('POST', `${b10}/definitions`, MGR, { name: 'Yaris', kind: 'recurring', distribution: 'fixed', amount_minor: 1000, due_day: 1, start_period: ym(-60), target: { type: 'apartments', apartment_ids: targeted } })).body;
+  const deadlocksBeforeRounds = hooks.deadlocks;
+  const errorsBeforeRounds = serverErrors.filter((line) => /errorId=/.test(line)).length;
+  const outcomes = { ok: 0, bad: [] };
+  const expectOutcome = (label, ok, detail) => {
+    if (ok) outcomes.ok += 1;
+    else outcomes.bad.push(`${label}: ${JSON.stringify(detail)}`);
+  };
+  let deletedUsers = 0;
+  for (let round = 0; round < rounds; round += 1) {
+    const victim = await mkUser(`Silinecek Kasiyer ${round}`, 'apartment_owner');
+    const victimApt = targeted[round % targeted.length];
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, $2, 'FAMILY_MEMBER')`, [victimApt, victim]);
+    for (let i = 0; i < 3; i += 1) {
+      await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, created_by) VALUES ($1, $2, 'payment', -5, $3, $4, 'both', 'cash', $5)`, [fs10.code, targeted[(round + i) % targeted.length], monthStart(0), TODAY, victim]);
+    }
+    const p1 = await call('POST', `${b10}/payments`, MGR, { apartment_id: targeted[round % 10], amount_minor: 300, entry_date: TODAY, method: 'cash', idempotency_key: key('m1') });
+    const p2 = await call('POST', `${b10}/payments`, MGR, { apartment_id: targeted[(round + 3) % 10], amount_minor: 400, entry_date: TODAY, method: 'cash', idempotency_key: key('m2') });
+    const period = ym(-1 - round);
+    const remaining = lockApartments - round - 1;
+    const ops = [
+      async () => {
+        const pv = (await call('POST', `${b10}/definitions/${raceDef.id}/preview`, MGR, { period })).body;
+        const r = await call('POST', `${b10}/definitions/${raceDef.id}/post`, MGR, { period, expected_total_minor: pv.total_minor, expected_apartment_count: pv.apartment_count });
+        expectOutcome('post', r.status === 201, [r.status, r.body]);
+      },
+      async () => {
+        const r = await call('POST', `${b10}/payments`, SUPER, { apartment_id: targeted[(round + 5) % 10], amount_minor: 111, entry_date: TODAY, method: 'transfer', idempotency_key: key('m3') });
+        expectOutcome('odeme', r.status === 201, [r.status, r.body]);
+      },
+      async () => {
+        const r = await call('POST', `${b10}/entries/${p1.body.entry.id}/reverse`, MGR, { reason: 'yaris' });
+        expectOutcome('ters kayit', r.status === 201, [r.status, r.body]);
+      },
+      async () => {
+        const r = await call('POST', `${b10}/entries/${p2.body.entry.id}/correct`, SUPER, { amount_minor: 450, entry_date: TODAY, method: 'cash', idempotency_key: key('m4') });
+        expectOutcome('duzeltme', r.status === 201, [r.status, r.body]);
+      },
+      async () => {
+        try {
+          await siteSvc.syncSiteStructureCounts(shrinkArgs(fs10.code, remaining));
+          expectOutcome('daire azaltma', true);
+        } catch (error) {
+          expectOutcome('daire azaltma', false, error.code ?? error.message);
+        }
+      },
+      async () => {
+        try {
+          await q(`DELETE FROM users WHERE user_code = $1`, [victim]);
+          deletedUsers += 1;
+          expectOutcome('kullanici silme', true);
+        } catch (error) {
+          expectOutcome('kullanici silme', false, error.code ?? error.message);
+        }
+      },
+    ];
+    const delays = ops.map(() => randInt(3));
+    await Promise.all(ops.map(async (op, index) => {
+      await sleep(delays[index]);
+      return op();
+    }));
+  }
+  const raceDeadlocks = hooks.deadlocks - deadlocksBeforeRounds;
+  const raceErrors = serverErrors.filter((line) => /errorId=/.test(line)).length - errorsBeforeRounds;
+  check(`M1: ${rounds} tur x 6 ESZAMANLI islem (borclandirma, tahsilat, ters kayit, duzeltme, daire azaltma, kullanici silme): hepsi basarili (${outcomes.ok}/${rounds * 6}); deadlock (40P01) = 0; sunucu 500 yok`, outcomes.bad.length === 0 && raceDeadlocks === 0 && raceErrors === 0, { bad: outcomes.bad.slice(0, 4), deadlocks: raceDeadlocks, serverErrors: raceErrors });
+  const runIntegrity = (await q(`SELECT COUNT(*)::int AS n FROM fee_runs r WHERE r.total_minor <> COALESCE((SELECT SUM(l.amount_minor) FROM ledger_entries l WHERE l.run_id = r.id AND l.kind = 'charge'), 0) OR r.apartment_count <> (SELECT COUNT(*) FROM ledger_entries l WHERE l.run_id = r.id AND l.kind = 'charge')`)).rows[0].n;
+  check('M2: tutarlilik: HER borclandirmada (tum veritabani) run.total_minor = satirlarin toplami ve run.apartment_count = satir sayisi (yarim borclandirma yok)', runIntegrity === 0, runIntegrity);
+  check(`M3: azaltma turlari sonunda ${lockApartments - rounds} daire kaldi; silinen ${deletedUsers} kullanicinin defter satirlari KALDI (created_by NULL)`, (await countApts(fs10.code)) === lockApartments - rounds && deletedUsers === rounds && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND created_by IS NULL`, [fs10.code])).rows[0].n === rounds * 3);
+  const dupReversals = (await q(`SELECT reverses_entry_id FROM ledger_entries WHERE reverses_entry_id IS NOT NULL GROUP BY 1 HAVING COUNT(*) > 1`)).rows;
+  check('M4: hicbir kaydin birden fazla ters kaydi yok; defterde sifir/yanlis isaretli satir yok', dupReversals.length === 0 && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE amount_minor = 0 OR (kind = 'charge' AND amount_minor < 0) OR (kind = 'payment' AND amount_minor > 0)`)).rows[0].n === 0);
+
+  // ============================================================================================================
+  // O. Site silme x finans (defter dahil CASCADE; RESTRICT / tetikleyici engellemez; eszamanli finans islemleriyle deadlock yok)
+  // ============================================================================================================
+  console.log('--- O. site silme ---');
+  const delSite = await mkSite('Silinecek Finans Sitesi', { 'X Blok': 3 });
+  await link.manager(delSite.code, MGR);
+  await enableModule(delSite.code);
+  const delBase = P(delSite.code);
+  const siteDelDef = (await call('POST', `${delBase}/definitions`, MGR, { name: 'Silinecek', kind: 'recurring', distribution: 'fixed', amount_minor: 1000, due_day: 1, start_period: ym(-3), target: { type: 'site' } })).body;
+  const delPreview = (await call('POST', `${delBase}/definitions/${siteDelDef.id}/preview`, MGR, { period: ym(-1) })).body;
+  await call('POST', `${delBase}/definitions/${siteDelDef.id}/post`, MGR, { period: ym(-1), expected_total_minor: delPreview.total_minor, expected_apartment_count: delPreview.apartment_count });
+  const delPay = await call('POST', `${delBase}/payments`, MGR, { apartment_id: delSite.ids[0], amount_minor: 500, entry_date: TODAY, method: 'cash', idempotency_key: key('del') });
+  await call('POST', `${delBase}/entries/${delPay.body.entry.id}/reverse`, MGR, {});
+  await call('POST', `${delBase}/periods/${ym(-1)}/close`, MGR, {});
+  const beforeDelete = await counts(delSite.code);
+  let deleteError = null;
+  try {
+    await siteSvc.deleteSitePermanently(delSite.code, await actorOf(pool, SUPER));
+  } catch (error) {
+    deleteError = error;
+  }
+  const afterDelete2 = (await q(`SELECT (SELECT COUNT(*) FROM ledger_entries WHERE site_code = $1)::int AS l, (SELECT COUNT(*) FROM fee_runs WHERE site_code = $1)::int AS r, (SELECT COUNT(*) FROM fee_definitions WHERE site_code = $1)::int AS d, (SELECT COUNT(*) FROM finance_period_closures WHERE site_code = $1)::int AS c, (SELECT COUNT(*) FROM apartments WHERE site_code = $1)::int AS a, (SELECT COUNT(*) FROM sites WHERE site_code = $1)::int AS s`, [delSite.code])).rows[0];
+  check(`O1: mali kayitli site deleteSitePermanently ile SILINIR (${beforeDelete.ledger} defter satiri, calistirma, tanim, kapanis, daireler dahil CASCADE; RESTRICT ve tetikleyici engellemez); kalinti yok`, deleteError === null && beforeDelete.ledger > 0 && Object.values(afterDelete2).every((n) => n === 0), { deleteError: deleteError?.message, afterDelete2 });
+
+  // eszamanli: borclandirma x tahsilat x site silme
+  const deadlocksBeforeDelete = hooks.deadlocks;
+  const errorsBeforeDelete = serverErrors.filter((line) => /errorId=/.test(line)).length;
+  const deleteProblems = [];
+  for (let round = 0; round < 12; round += 1) {
+    const racing = await mkSite(`Silme Yarisi ${round}`, { 'Y Blok': 5 });
+    await link.manager(racing.code, MGR);
+    await enableModule(racing.code);
+    const rb = P(racing.code);
+    const rd = (await call('POST', `${rb}/definitions`, MGR, { name: 'Y', kind: 'recurring', distribution: 'fixed', amount_minor: 1000, due_day: 1, start_period: ym(-3), target: { type: 'site' } })).body;
+    const ops = [
+      async () => {
+        const pv = await call('POST', `${rb}/definitions/${rd.id}/preview`, MGR, { period: ym(-1) });
+        if (pv.status !== 200) return pv.status;
+        return (await call('POST', `${rb}/definitions/${rd.id}/post`, MGR, { period: ym(-1), expected_total_minor: pv.body.total_minor, expected_apartment_count: pv.body.apartment_count })).status;
+      },
+      async () => (await call('POST', `${rb}/payments`, MGR, { apartment_id: racing.ids[0], amount_minor: 100, entry_date: TODAY, method: 'cash', idempotency_key: key('rd') })).status,
+      async () => (await call('POST', `${rb}/periods/${ym(-1)}/close`, SUPER, {})).status,
+      async () => (await failCode(`DELETE FROM sites WHERE site_code = $1`, [racing.code])) ?? 'silindi',
+    ];
+    const delays = ops.map(() => randInt(4));
+    const results = await Promise.all(ops.map(async (op, index) => {
+      await sleep(delays[index]);
+      return op();
+    }));
+    // finans islemleri: 201/200 (silmeden once), 403/404 (site silindi: yonetici baglantisi da gitti) ya da ya da 409 (kapanis x tahsilat sirasi); silme HER ZAMAN basarili
+    if (!results.slice(0, 3).every((status) => [200, 201, 403, 404, 409].includes(status)) || results[3] !== 'silindi') deleteProblems.push({ round, results });
+    const left = (await q(`SELECT (SELECT COUNT(*) FROM ledger_entries WHERE site_code = $1)::int + (SELECT COUNT(*) FROM fee_runs WHERE site_code = $1)::int + (SELECT COUNT(*) FROM fee_definitions WHERE site_code = $1)::int AS n`, [racing.code])).rows[0].n;
+    if (left !== 0) deleteProblems.push({ round, left });
+  }
+  check('O2: 12 tur ESZAMANLI borclandirma x tahsilat x donem kapatma x site silme: silme her zaman basarili (defter CASCADE), finans islemleri 200/201/403/404/409; kalinti yok; deadlock (40P01) ve sunucu 500 yok',
+    deleteProblems.length === 0 && hooks.deadlocks === deadlocksBeforeDelete && serverErrors.filter((line) => /errorId=/.test(line)).length === errorsBeforeDelete, { deleteProblems: deleteProblems.slice(0, 3), deadlocks: hooks.deadlocks - deadlocksBeforeDelete });
+
+  // ============================================================================================================
+  // N. Audit gizliligi ve son tutarlilik
+  // ============================================================================================================
+  console.log('--- N. audit ve tutarlilik ---');
+  const financeAudits = (await q(`SELECT * FROM audit_log WHERE action LIKE 'finance.%' ORDER BY id`)).rows;
+  const auditActions = new Set(financeAudits.map((r) => r.action));
+  const expectedActions = ['finance.definition.created', 'finance.definition.updated', 'finance.definition.deactivated', 'finance.run.posted', 'finance.charge.posted', 'finance.payment.recorded', 'finance.entry.reversed', 'finance.entry.corrected', 'finance.period.closed', 'finance.period.reopened'];
+  check('N1: sozlesmedeki 10 audit eylemi yazildi', expectedActions.every((a) => auditActions.has(a)), expectedActions.filter((a) => !auditActions.has(a)));
+  check(`N2: ${financeAudits.length} finans audit satirinin TAMAMI target_type "finance", target_id ve site_code dolu`, financeAudits.every((r) => r.target_type === 'finance' && r.target_id !== null && r.site_code !== null));
+  const forbidden = /Aidat|Ek Borc|Arsa|Alan |Kategori|Boya|Nakit|Cek no|Duzeltilmis|GIZLI|Hatali|Ay[sş]e|Çağlar|Caglar|Finans Yonetici|Sakin Aidat/;
+  const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
+  check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
+  const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor'].includes(k)), [...allDetailKeys]);
+
+  // son tutarlilik (tum veritabani)
+  const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;
+  const reversalSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN ledger_entries o ON o.id = l.reverses_entry_id WHERE o.site_code <> l.site_code OR o.apartment_id <> l.apartment_id`)).rows[0].n;
+  check('N6: IDOR iz tutarliligi: hicbir defter satiri baska sitenin dairesine bagli degil; hicbir ters kayit baska site/daire kaydini tersine cevirmiyor', apartmentSites === 0 && reversalSites === 0, { apartmentSites, reversalSites });
+  const sumByRun = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l WHERE l.run_id IS NOT NULL AND l.definition_id IS NULL`)).rows[0].n;
+  check('N7: run_id olan her satirin definition_id\'si de dolu', sumByRun === 0);
+  const nonIntegers = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE amount_minor::text !~ '^-?[0-9]+$'`)).rows[0].n;
+  check('N8: tum defter tutarlari tam sayi kurus (BIGINT)', nonIntegers === 0);
+  const serverFailures = serverErrors.filter((line) => /errorId=/.test(line));
+  check('N9: bolum boyunca beklenmeyen sunucu 500 (errorId) hatasi YOK; yalniz bilerek enjekte edilen 1 hata (G18)', serverFailures.length === 1, serverFailures.slice(0, 3));
+  await http.close();
+  await finishChild(pool);
+}
+// <finance-section-end>
+
 // --------------------------------------------------------------------------------------------------------------
 
 const SECTIONS = {
@@ -6273,6 +7836,7 @@ const SECTIONS = {
   people: sectionPeople,
   announcements: sectionAnnouncements,
   site_applications: sectionSiteApplications,
+  finance: sectionFinance,
 };
 
 if (SECTION === '') {

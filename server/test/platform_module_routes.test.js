@@ -515,9 +515,15 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
       updated_by: null,
     });
     const finance = res.body.modules.find((m) => m.code === 'finance');
-    assert.equal(finance.enabled, false);
-    assert.equal(finance.toggleable, false);
-    assert.equal(finance.can_toggle, false);
+    assert.equal(finance.status, 'available', 'Faz 4a: Aidat ve Finans kullanılabilir');
+    assert.equal(finance.enabled, false, 'varsayılan KAPALI');
+    assert.equal(finance.toggleable, true);
+    assert.equal(finance.can_toggle, false, 'yönetici modül açıp kapatamaz (modül talep eder)');
+    const reservation = res.body.modules.find((m) => m.code === 'reservation');
+    assert.equal(reservation.status, 'coming_soon');
+    assert.equal(reservation.enabled, false);
+    assert.equal(reservation.toggleable, false);
+    assert.equal(reservation.can_toggle, false);
   });
 
   it('can_toggle yalnizca SUPER kullanici ve toggleable modulde true; request_status bekleyen talebi gosterir', async () => {
@@ -529,7 +535,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['door_control', true, true],
         ['people', false, false],
         ['announcements', false, false],
-        ['finance', false, false],
+        ['finance', true, true],
         ['reservation', false, false],
         ['work_tracking', false, false],
         ['metering', false, false],
@@ -770,7 +776,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
-    for (const code of ['finance', 'reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
       const open = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled: true } });
       assert.equal(open.status, 409, code);
       assert.equal(open.body.code, 'MODULE_COMING_SOON');
@@ -780,6 +786,29 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
     }
     assert.equal(state.audit.length, 0);
     assert.equal(state.siteModules.size, 0);
+  });
+
+  it('finance (Faz 4a): super acar (200, onay GEREKMEZ, audit module.enabled) ve kapatir (onay gerekmez, audit module.disabled); yerel kontrol anahtari dondurulmez', async () => {
+    const open = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: true } });
+    assert.equal(open.status, 200, JSON.stringify(open.body));
+    const financeOpen = open.body.modules.find((m) => m.code === 'finance');
+    assert.equal(financeOpen.enabled, true);
+    assert.equal(financeOpen.toggleable, true);
+    assert.equal(state.siteModules.get(`${SITE_1}:finance`).enabled, true);
+    const close = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } });
+    assert.equal(close.status, 200, JSON.stringify(close.body));
+    assert.equal(close.body.modules.find((m) => m.code === 'finance').enabled, false);
+    assert.deepEqual(
+      state.audit.map((a) => [a.action, a.target_id]),
+      [['module.enabled', 'finance'], ['module.disabled', 'finance']],
+    );
+    assert.equal(state.rotations.length, 0, 'yalniz door_control kapaninca anahtar doner');
+  });
+
+  it('finance: yonetici (super olmayan) modulu DOGRUDAN acamaz: 403', async () => {
+    const res = await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.mgrA, body: { enabled: true } });
+    assert.equal(res.status, 403);
+    assert.equal(state.siteModules.has(`${SITE_1}:finance`), false);
   });
 
   it('denetim kaydi yazilamazsa ana islem BOZULMAZ (savepoint ile yutulur ve loglanir)', async () => {
@@ -937,6 +966,8 @@ describe('PUT modul: door_control kapaninca yerel kontrol anahtarlari dondurulur
     // onaysiz kapatma (409), zaten acik modulu acma, yakinda modulu kapatma, yetkisiz, olmayan site
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(), { user: users.superUser, body: { enabled: true } });
+    await call('PUT', moduleUrl(SITE_1, 'reservation'), { user: users.superUser, body: { enabled: false } });
+    await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: true } });
     await call('PUT', moduleUrl(SITE_1, 'finance'), { user: users.superUser, body: { enabled: false } });
     await call('PUT', moduleUrl(SITE_1), { user: users.mgrB, body: { enabled: false, confirm: true } });
     await call('PUT', moduleUrl(1999999999), { user: users.superUser, body: { enabled: false, confirm: true } });
@@ -1503,7 +1534,8 @@ describe('GET /app/my-modules', () => {
       { site_code: '1000000004', site_name: 'Zambak', management_type: 'apartment_site', rank: 2, door_access: false },
     ];
     state.siteModules.set(`${SITE_2}:door_control`, { site_code: SITE_2, module_code: 'door_control', enabled: false });
-    // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez
+    // katalogda olmayan ve "yakinda" modul satirlari sonucu degistirmez; finance (Faz 4a, available) satiri enabled: true ise ACIK
+    state.siteModules.set(`${SITE_1}:reservation`, { site_code: SITE_1, module_code: 'reservation', enabled: true });
     state.siteModules.set(`${SITE_1}:finance`, { site_code: SITE_1, module_code: 'finance', enabled: true });
     state.siteModules.set(`${SITE_1}:baska`, { site_code: SITE_1, module_code: 'baska', enabled: true });
 
@@ -1534,7 +1566,9 @@ describe('GET /app/my-modules', () => {
       ]);
     }
     assert.equal(res.body.sites[0].modules.door_control, true);
-    assert.equal(res.body.sites[0].modules.finance, false, 'yakinda modul satiri olsa bile false');
+    assert.equal(res.body.sites[0].modules.reservation, false, 'yakinda modul satiri olsa bile false');
+    assert.equal(res.body.sites[0].modules.finance, true, 'Faz 4a: finance satiri enabled ise acik');
+    assert.equal(res.body.sites[1].modules.finance, false, 'satir yoksa varsayilan KAPALI');
     assert.equal(res.body.sites[1].modules.door_control, false);
   });
 

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { pool } from '../db.js';
 import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
+import { apartmentHasFinance, financeLockKey } from '../modules/finance_common.js';
 import { peopleLockKey } from '../modules/people_sync.js';
 import { ensureSiteApartmentResidents } from './apartment_service.js';
 import {
@@ -1066,6 +1067,7 @@ export async function syncSiteStructureCounts({
   actor = null,
 }) {
   let shouldRotateLocalTokens = false;
+  let financeLocked = false;
   const resolvedBlockApartmentCounts = buildBlockApartmentCounts({
     blockCount,
     apartmentCount,
@@ -1131,6 +1133,20 @@ export async function syncSiteStructureCounts({
           .sort((a, b) => Number(b.sort_order) - Number(a.sort_order));
         const removeCount = currentApartments.length - targetApartmentCount;
         for (const apartment of removableApartments.slice(0, removeCount)) {
+          // Aidat ve Finans (Faz 4a): mali kaydı (defter satırı) olan daire silinemez. Finans yazmalarıyla aynı site kilidi ilk silmeden ÖNCE alınır
+          // (kilit sırası: people_sync -> finance_post -> apartments); böylece eşzamanlı tahsilat/borçlandırma ile kontrol ve silme arasında yarış olmaz.
+          // İşlem GERİ ALINIR (tek daire bile engeller); mali kaydı olmayan dairelerde davranış aynen kalır.
+          if (!financeLocked) {
+            await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [financeLockKey(siteCode)]);
+            financeLocked = true;
+          }
+          const financeCheck = await client.query(
+            `SELECT 1 FROM ledger_entries WHERE site_code = $1 AND apartment_id = $2 LIMIT 1`,
+            [siteCode, Number(apartment.id)],
+          );
+          if (financeCheck.rows?.[0]) {
+            throw apartmentHasFinance();
+          }
           if (apartment.resident_user_code != null) {
             shouldRotateLocalTokens = true;
             await client.query(

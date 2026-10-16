@@ -52,7 +52,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Aidat ve Finans',
     description: 'Aidat, borç ve alacak takibi; gelir ve gider kayıtları.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({
