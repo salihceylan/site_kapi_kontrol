@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
@@ -1185,6 +1186,316 @@ class AuthApi {
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return _parsePayload('Kayıtlarım', () => MyRecord.listFrom(payload['records']));
+  }
+
+  // --- Duyuru ve Bildirim (Faz 3a) ----------------------------------------------------------
+  // Yönetici uçları `/manager/sites/:siteCode/announcements...`, sakin uçları `/app/...` altındadır
+  // (sözleşme: docs/PLATFORM_DUYURU.md). Okuma yönetici / süper kullanıcı / kurul üyesine, yazma yalnız
+  // yönetici / süper kullanıcıya açıktır; yetki sunucuda doğrulanır (403 FORBIDDEN_ROLE / FORBIDDEN_SITE).
+
+  String _announcementPath(int siteCode, [String tail = '', Map<String, String>? query]) {
+    final path =
+        '/manager/sites/$siteCode/announcements${tail.isEmpty ? '' : '/$tail'}';
+    if (query == null || query.isEmpty) return path;
+    return Uri(path: path, queryParameters: query).toString();
+  }
+
+  /// Yönetici duyuru listesi. [status]: `draft|scheduled|published|withdrawn|all` (sunucu varsayılanı
+  /// `all`); [query] başlıkta aranır.
+  Future<AnnouncementPage> listAnnouncements({
+    required String token,
+    required int siteCode,
+    String? status,
+    String? query,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _announcementPath(siteCode, '', {
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyurular', () => AnnouncementPage.fromJson(payload));
+  }
+
+  Future<AnnouncementDetail> getAnnouncement({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _announcementPath(siteCode, '$announcementId'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => AnnouncementDetail.fromJson(payload));
+  }
+
+  /// Alıcılar (okuyan / okumayan). [read]: `all|true|false`. Kurul üyesine 403 döner.
+  Future<AnnouncementRecipientPage> listAnnouncementRecipients({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+    String? read,
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _announcementPath(siteCode, '$announcementId/recipients', {
+        if (read != null && read.isNotEmpty) 'read': read,
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Alıcılar',
+      () => AnnouncementRecipientPage.fromJson(payload),
+    );
+  }
+
+  /// Yayın öncesi kitle önizlemesi (hiçbir şey yazmaz).
+  Future<AudiencePreview> previewAnnouncementAudience({
+    required String token,
+    required int siteCode,
+    required AnnouncementTargetInput target,
+    bool sendEmail = false,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _announcementPath(siteCode, 'preview-audience'),
+      token: token,
+      body: {'target': target.toJson(), 'send_email': sendEmail},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Kitle önizlemesi', () => AudiencePreview.fromJson(payload));
+  }
+
+  /// Duyuru oluşturur (201). [publish]: `draft|now|schedule`; `schedule` iken [publishAt] verilir ve
+  /// UTC ISO 8601 olarak gönderilir.
+  Future<AnnouncementDetail> createAnnouncement({
+    required String token,
+    required int siteCode,
+    required String title,
+    required String body,
+    required AnnouncementTargetInput target,
+    AnnouncementImportance importance = AnnouncementImportance.normal,
+    bool sendEmail = false,
+    String publish = 'draft',
+    DateTime? publishAt,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _announcementPath(siteCode),
+      token: token,
+      body: {
+        'title': title.trim(),
+        'body': body.trim(),
+        'importance': importance.apiValue,
+        'target': target.toJson(),
+        'send_email': sendEmail,
+        'publish': publish,
+        if (publish == 'schedule' && publishAt != null)
+          'publish_at': publishAt.toUtc().toIso8601String(),
+      },
+    );
+    _ensureStatus(response, 201);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => AnnouncementDetail.fromJson(payload));
+  }
+
+  /// Duyuruyu günceller: yalnız [fields] içindekiler gönderilir (`title`, `body`, `importance`, `target`,
+  /// `send_email`, `publish_at`). Yayınlanmış duyuruda yalnız `title` / `body` kabul edilir.
+  Future<AnnouncementDetail> updateAnnouncement({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+    required Map<String, Object?> fields,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: _announcementPath(siteCode, '$announcementId'),
+      token: token,
+      body: Map<String, dynamic>.of(fields),
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => AnnouncementDetail.fromJson(payload));
+  }
+
+  /// Taslak / zamanlanmış duyuruyu şimdi yayınlar.
+  Future<AnnouncementDetail> publishAnnouncement({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _announcementPath(siteCode, '$announcementId/publish'),
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => AnnouncementDetail.fromJson(payload));
+  }
+
+  /// Yayındaki duyuruyu geri çeker (geri alınamaz).
+  Future<AnnouncementDetail> withdrawAnnouncement({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _announcementPath(siteCode, '$announcementId/withdraw'),
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => AnnouncementDetail.fromJson(payload));
+  }
+
+  /// Taslak / zamanlanmış duyuruyu siler.
+  Future<void> deleteAnnouncement({
+    required String token,
+    required int siteCode,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'DELETE',
+      path: _announcementPath(siteCode, '$announcementId'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+  }
+
+  /// Sakin gelen kutusu (`published_at DESC, id DESC`); sonraki sayfa için önceki yanıttaki
+  /// `next_before_id` [beforeId] olarak verilir. [siteCode] tek siteyle sınırlar.
+  Future<ResidentAnnouncementPage> listMyAnnouncements({
+    required String token,
+    int limit = 30,
+    int? beforeId,
+    int? siteCode,
+  }) async {
+    final query = <String, String>{
+      'limit': '$limit',
+      if (beforeId != null) 'before_id': '$beforeId',
+      if (siteCode != null) 'site_code': '$siteCode',
+    };
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: Uri(path: '/app/announcements', queryParameters: query).toString(),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyurular', () => ResidentAnnouncementPage.fromJson(payload));
+  }
+
+  /// Sakin için tam kayıt. OKUNDU YAZMAZ ([markAnnouncementRead] ayrıdır).
+  Future<ResidentAnnouncement> getMyAnnouncement({
+    required String token,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/announcements/$announcementId',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Duyuru', () => ResidentAnnouncement.fromJson(payload));
+  }
+
+  /// Duyuruyu okundu işaretler (idempotent). Dönüş: ilk okuma zamanı (alan yoksa null).
+  Future<DateTime?> markAnnouncementRead({
+    required String token,
+    required int announcementId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/announcements/$announcementId/read',
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return announcementInstant(payload['read_at']);
+  }
+
+  /// Tümünü okundu yapar ([siteCode] verilirse yalnız o site). Dönüş: işaretlenen adet.
+  Future<int> markAllAnnouncementsRead({required String token, int? siteCode}) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/app/announcements/read-all',
+      token: token,
+      body: {'site_code': ?siteCode},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return crmInt(payload['marked']);
+  }
+
+  /// Hafif bildirim özeti (uygulama bunu yoklar).
+  Future<NotificationSummary> getNotificationSummary({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/notifications/summary',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Bildirim özeti', () => NotificationSummary.fromJson(payload));
+  }
+
+  Future<NotificationPrefs> getNotificationPreferences({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/notification-preferences',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Bildirim tercihleri', () => NotificationPrefs.fromJson(payload));
+  }
+
+  /// E-posta tercihini yazar. `push_*` anahtarları GÖNDERİLMEZ (şimdilik değişmez). Yanıtta tercih alanı
+  /// yoksa istenen değer geçerli sayılır.
+  Future<NotificationPrefs> setNotificationPreferences({
+    required String token,
+    required bool emailAnnouncements,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PUT',
+      path: '/app/notification-preferences',
+      token: token,
+      body: {'email_announcements': emailAnnouncements},
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Bildirim tercihleri',
+      () => NotificationPrefs.fromJson(payload, fallbackEmail: emailAnnouncements),
+    );
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -2440,6 +2751,19 @@ class AuthApi {
         return 'Bu plaka bu sitede zaten kayıtlı.';
       case 'FORBIDDEN_ROLE':
         return 'Bu işlem için yetkiniz yok.';
+      // Duyuru ve Bildirim (Faz 3a). INVALID_BODY için sunucunun Türkçe etiketli metni kullanılır.
+      case 'ANNOUNCEMENT_NOT_FOUND':
+        return 'Duyuru bulunamadı ya da artık yayında değil.';
+      case 'INVALID_STATE':
+        return 'Duyurunun durumu değişmiş. Listeyi yenileyip tekrar deneyin.';
+      case 'NO_RECIPIENTS':
+        return 'Seçilen hedefte duyuruyu alacak kimse yok. Hedefi değiştirin.';
+      case 'INVALID_TARGET':
+        return 'Seçilen blok veya daireler bu siteye ait değil. Hedefi yeniden seçin.';
+      case 'INVALID_SCHEDULE':
+        return 'Yayın zamanı geçersiz. En az 1 dakika, en çok 1 yıl sonrası seçin.';
+      case 'ANNOUNCEMENT_EMAIL_LIMIT':
+        return 'Tek seferde en çok 1000 kişiye e-posta gönderilebilir. Hedefi bölüp ayrı duyurular oluşturun.';
       default:
         return null;
     }

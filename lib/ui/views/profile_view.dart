@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_records_section.dart';
+import 'package:site_kapi_kontrol/ui/widgets/notification_prefs_section.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({
@@ -21,6 +22,7 @@ class ProfileView extends StatelessWidget {
     required this.isSaving,
     required this.onSave,
     this.authService,
+    this.showNotificationPrefs = false,
   });
 
   final UserSession session;
@@ -37,6 +39,10 @@ class ProfileView extends StatelessWidget {
 
   /// Verilirse formun altında "Kayıtlarım" bölümü (kişi / daire kayıtlarım, salt okunur) gösterilir.
   final AuthService? authService;
+
+  /// true (ve [authService] verilmişse): "Bildirim Tercihleri" bölümü (duyuru alabilen roller). Platform
+  /// Faz 3a.
+  final bool showNotificationPrefs;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +164,10 @@ class ProfileView extends StatelessWidget {
             const SizedBox(height: AppSpace.lg),
             MyRecordsSection(authService: authService!),
           ],
+          if (authService != null && showNotificationPrefs) ...[
+            const SizedBox(height: AppSpace.lg),
+            NotificationPrefsSection(authService: authService!),
+          ],
         ],
       ),
     );
@@ -215,12 +225,20 @@ class _ProfileHero extends StatelessWidget {
 /// Daire sakini (apartment_owner) için salt okunur hesap bilgileri. Sakin hesapları yönetici tarafından
 /// yönetilir (kendi profilini güncelleyemez); "Profilim" menüsü boş sayfa yerine bu bilgileri gösterir.
 class ResidentProfileView extends StatelessWidget {
-  const ResidentProfileView({super.key, required this.session, this.authService});
+  const ResidentProfileView({
+    super.key,
+    required this.session,
+    this.authService,
+    this.showNotificationPrefs = false,
+  });
 
   final UserSession session;
 
   /// Verilirse hesap kartının altında "Kayıtlarım" bölümü (daire, ilişki, araç; salt okunur) gösterilir.
   final AuthService? authService;
+
+  /// true (ve [authService] verilmişse): "Bildirim Tercihleri" bölümü (Platform Faz 3a).
+  final bool showNotificationPrefs;
 
   @override
   Widget build(BuildContext context) {
@@ -307,6 +325,10 @@ class ResidentProfileView extends StatelessWidget {
         card,
         const SizedBox(height: AppSpace.lg),
         MyRecordsSection(authService: service, showWhenEmpty: true),
+        if (showNotificationPrefs) ...[
+          const SizedBox(height: AppSpace.lg),
+          NotificationPrefsSection(authService: service),
+        ],
       ],
     );
   }

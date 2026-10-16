@@ -51,6 +51,12 @@ enum SirketMenuItem {
   /// modunda) ve süper kullanıcı için rol listesindedir; kurul üyesi için [YanMenu.additionalItems]
   /// ile eklenir (salt okunur). Görevli (STAFF) için yoktur.
   kisiler,
+
+  /// Platform Faz 3a: Duyurular. Rol listesinde YOKTUR; alıcısı olabilecek rollere (daire sakini,
+  /// yönetici / süper kullanıcı, kurul üyesi) [YanMenu.additionalItems] ile eklenir ("Kişiler"in hemen
+  /// altına). Yönetici: duyuru yönetimi; sakin: gelen kutusu (okunmamış sayısı rozetle). Görevli
+  /// (STAFF) ve bireysel kullanıcı için yoktur.
+  duyurular,
 }
 
 class YanMenu extends StatelessWidget {
@@ -68,6 +74,7 @@ class YanMenu extends StatelessWidget {
     this.extraActions = const <YanMenuAction>[],
     this.hiddenItems = const <SirketMenuItem>{},
     this.badgeCounts = const <SirketMenuItem, int>{},
+    this.badgeNouns = const <SirketMenuItem, String>{},
     this.additionalItems = const <SirketMenuItem>{},
   });
 
@@ -91,6 +98,10 @@ class YanMenu extends StatelessWidget {
 
   /// Öğe başına sayı rozeti (örn. bekleyen modül talebi sayısı). 0 ya da yok = rozet yok.
   final Map<SirketMenuItem, int> badgeCounts;
+
+  /// Rozetin ekran okuyucu için sayıdan sonra okunan sözcüğü ("3 okunmamış"); verilmeyen öğede
+  /// "bekleyen".
+  final Map<SirketMenuItem, String> badgeNouns;
 
   /// Rolün kendi listesinde olmayan ama kullanıcıya açık ek öğeler (varsayılan boş: menü eskisi gibidir).
   /// Örn. yalnız kurul üyesi olan bir sakine "Kişiler" eklenir ("Site Yönetimi"nin, o yoksa "Panel"in
@@ -157,6 +168,7 @@ class YanMenu extends StatelessWidget {
               selected: selectedItem == items[i],
               tone: tone,
               badge: badgeCounts[items[i]] ?? 0,
+              badgeNoun: badgeNouns[items[i]] ?? 'bekleyen',
               onTap: () => onSelect(items[i]),
             ),
           ),
@@ -350,24 +362,27 @@ class _DrawerHeader extends StatelessWidget {
 }
 
 /// Ek öğeleri rol listesine yerleştirir: "Site Yönetimi" varsa hemen altına (yönetici sırasıyla tutarlı),
-/// yoksa "Panel"in hemen altına; ikisi de yoksa sona. Rol listesinde zaten olan öğe tekrarlanmaz.
+/// yoksa "Panel"in hemen altına; ikisi de yoksa sona. "Duyurular" varsa "Kişiler"in hemen altına gelir.
+/// Rol listesinde zaten olan öğe tekrarlanmaz. Birden çok ek öğe numaralandırma sırasıyla eklenir.
 List<SirketMenuItem> _withExtras(
   List<SirketMenuItem> roleItems,
   Set<SirketMenuItem> extras,
 ) {
   final missing = <SirketMenuItem>[
-    for (final extra in extras)
-      if (!roleItems.contains(extra)) extra,
+    for (final item in SirketMenuItem.values)
+      if (extras.contains(item) && !roleItems.contains(item)) item,
   ];
   if (missing.isEmpty) return roleItems;
-  var anchor = roleItems.indexOf(SirketMenuItem.siteler);
-  if (anchor < 0) anchor = roleItems.indexOf(SirketMenuItem.dashboard);
-  final at = anchor < 0 ? roleItems.length : anchor + 1;
-  return <SirketMenuItem>[
-    ...roleItems.take(at),
-    ...missing,
-    ...roleItems.skip(at),
-  ];
+  final result = List<SirketMenuItem>.of(roleItems);
+  for (final extra in missing) {
+    var anchor = extra == SirketMenuItem.duyurular
+        ? result.indexOf(SirketMenuItem.kisiler)
+        : -1;
+    if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
+    if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
+    result.insert(anchor < 0 ? result.length : anchor + 1, extra);
+  }
+  return result;
 }
 
 List<SirketMenuItem> _itemsForRole(
@@ -480,6 +495,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Modül Talepleri';
     case SirketMenuItem.kisiler:
       return 'Kişiler';
+    case SirketMenuItem.duyurular:
+      return 'Duyurular';
   }
 }
 
@@ -521,21 +538,25 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.inbox_rounded;
     case SirketMenuItem.kisiler:
       return Icons.contacts_rounded;
+    case SirketMenuItem.duyurular:
+      return Icons.campaign_rounded;
   }
 }
 
-/// Menü öğesinin sağındaki sayı rozeti (örn. bekleyen modül talebi): tehlike tonunun koyu ucu üstünde
-/// beyaz sayı (>= 4,5:1). 99'dan büyük sayılar "99+" yazılır. Ekran okuyucuya tek ifade olarak okunur.
+/// Menü öğesinin sağındaki sayı rozeti (örn. bekleyen modül talebi, okunmamış duyuru): tehlike tonunun
+/// koyu ucu üstünde beyaz sayı (>= 4,5:1). 99'dan büyük sayılar "99+" yazılır. Ekran okuyucuya tek ifade
+/// olarak okunur ("3 bekleyen" / "3 okunmamış").
 class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.count});
+  const _CountBadge({required this.count, this.noun = 'bekleyen'});
 
   final int count;
+  final String noun;
 
   @override
   Widget build(BuildContext context) {
     final label = count > 99 ? '99+' : '$count';
     return Semantics(
-      label: '$count bekleyen',
+      label: '$count $noun',
       child: ExcludeSemantics(
         child: DecoratedBox(
           key: const ValueKey<String>('yan_menu_rozet'),
@@ -597,6 +618,7 @@ class _MenuTile extends StatelessWidget {
     required this.tone,
     required this.onTap,
     this.badge = 0,
+    this.badgeNoun = 'bekleyen',
   });
 
   final IconData icon;
@@ -607,6 +629,9 @@ class _MenuTile extends StatelessWidget {
 
   /// Sağda gösterilen sayı rozeti (0 = yok).
   final int badge;
+
+  /// Rozetin ekran okuyucu sözcüğü ("3 bekleyen").
+  final String badgeNoun;
 
   /// Seçili çubuğun anahtarı (her öğede bir tane; yalnız seçilide yükseklik 22).
   static const Key selectedBarKey = ValueKey<String>('yan_menu_secili_cubuk');
@@ -659,7 +684,7 @@ class _MenuTile extends StatelessWidget {
                 ),
                 // Rozetli öğede (en çok bir tane) trailing kullanılır; rozetsiz öğeler başlığa tam
                 // genişlik verir (bkz. alttaki çubuk açıklaması).
-                trailing: badge > 0 ? _CountBadge(count: badge) : null,
+                trailing: badge > 0 ? _CountBadge(count: badge, noun: badgeNoun) : null,
               ),
               // Çubuk ListTile.trailing yerine üstte çizilir: trailing en az 32 dp yer ayırır ve
               // başlığın genişliğini her öğede daraltırdı (uzun başlıklar gereksiz sarardı).

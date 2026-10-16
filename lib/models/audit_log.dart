@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 
 /// Denetim kaydı satırı (`GET /admin/audit-log` -> `items[]`). Kayıtlar yalnız eklenir.
@@ -70,7 +71,7 @@ class AuditLogEntry {
       case 'module_request.cancelled':
         return 'Talep geri çekildi';
       default:
-        return peopleActionLabel(action) ?? 'Diğer işlem';
+        return peopleActionLabel(action) ?? announcementActionLabel(action) ?? 'Diğer işlem';
     }
   }
 
@@ -104,6 +105,9 @@ class AuditLogEntry {
         return _numbered('Daire');
       case 'vehicle':
         return _numbered('Araç');
+      case 'announcement':
+        // Başlık / gövde denetim kaydına yazılmaz; yalnız numara gösterilir.
+        return _numbered('Duyuru');
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;

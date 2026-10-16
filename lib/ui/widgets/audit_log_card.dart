@@ -16,17 +16,23 @@ AppTone auditToneOf(String action) {
     case 'person.created':
     case 'residency.added':
     case 'vehicle.added':
+    case 'announcement.created':
+    case 'announcement.published':
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
     case 'apartment.deleted':
+    case 'announcement.withdrawn':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':
     case 'residency.ended':
     case 'vehicle.removed':
+    case 'announcement.deleted':
       return AppTone.neutral;
     case 'module_request.created':
+    case 'announcement.updated':
+    case 'announcement.scheduled':
       return AppTone.info;
     case 'module_request.rejected':
       return AppTone.danger;

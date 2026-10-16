@@ -1,0 +1,150 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
+import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/views/announcements_admin_view.dart';
+import 'package:site_kapi_kontrol/ui/views/announcements_inbox_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+
+/// "Duyurular" ekranı (Platform Faz 3a, çekirdek `announcements` modülü). Kullanıcının rolüne göre iki
+/// görünüm barındırır:
+///
+/// - **Gelen kutusu** ([showInbox]): daire sakini (ve sakin modundaki yönetici): kronolojik duyuru listesi,
+///   okundu işaretleme, çekmece rozeti. Yeni duyurular uygulama açıkken yaklaşık 20 saniyede bir
+///   kontrol edilir (anlık itme DEĞİL); açıklama metni bunu söyler.
+/// - **Yönetim** ([manageSites] / [readOnlySites]): yönetici / süper kullanıcı: oluşturma, düzenleme,
+///   yayınlama, geri çekme, alıcılar; kurul üyesi aynı ekranı SALT OKUNUR görür.
+///
+/// İkisi birden varsa (yönetim kurulu üyesi olan sakin) üstte iki seçenek çıkar; tek görünüm varsa
+/// seçenek çizilmez. Hiçbiri yoksa açıklayıcı boş durum gösterilir. [AnnouncementsViewState.reload] sayfa
+/// kabuğunun aşağı çekip yenilemesinden çağrılır.
+class AnnouncementsView extends StatefulWidget {
+  const AnnouncementsView({
+    super.key,
+    required this.authService,
+    this.manageSites = false,
+    this.readOnlySites = const <PeopleSite>[],
+    this.showInbox = false,
+    this.inboxSites = const <PeopleSite>[],
+    this.notifier,
+  });
+
+  final AuthService authService;
+  final bool manageSites;
+  final List<PeopleSite> readOnlySites;
+  final bool showInbox;
+  final List<PeopleSite> inboxSites;
+  final AnnouncementNotifier? notifier;
+
+  @override
+  State<AnnouncementsView> createState() => AnnouncementsViewState();
+}
+
+enum _Mode { inbox, manage }
+
+class AnnouncementsViewState extends State<AnnouncementsView> {
+  _Mode? _chosen;
+  final GlobalKey<AnnouncementsInboxViewState> _inboxKey =
+      GlobalKey<AnnouncementsInboxViewState>();
+  final GlobalKey<AnnouncementsAdminViewState> _adminKey =
+      GlobalKey<AnnouncementsAdminViewState>();
+
+  bool get _hasManage => widget.manageSites || widget.readOnlySites.isNotEmpty;
+  bool get _hasInbox => widget.showInbox;
+
+  /// Gösterilen görünüm: seçilen hâlâ varsa o, yoksa gelen kutusu, yoksa yönetim.
+  _Mode? get _mode {
+    final chosen = _chosen;
+    if (chosen == _Mode.inbox && _hasInbox) return _Mode.inbox;
+    if (chosen == _Mode.manage && _hasManage) return _Mode.manage;
+    if (_hasInbox) return _Mode.inbox;
+    if (_hasManage) return _Mode.manage;
+    return null;
+  }
+
+  /// Çekip yenileme: görünen görünümün verisini yeniden çeker.
+  Future<void> reload() async {
+    switch (_mode) {
+      case _Mode.inbox:
+        await (_inboxKey.currentState?.reload() ?? Future<void>.value());
+      case _Mode.manage:
+        await (_adminKey.currentState?.reload() ?? Future<void>.value());
+      case null:
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final mode = _mode;
+    final Widget content;
+    switch (mode) {
+      case _Mode.inbox:
+        content = AnnouncementsInboxView(
+          key: _inboxKey,
+          authService: widget.authService,
+          notifier: widget.notifier,
+          sites: widget.inboxSites,
+        );
+      case _Mode.manage:
+        content = AnnouncementsAdminView(
+          key: _adminKey,
+          authService: widget.authService,
+          manageSites: widget.manageSites,
+          readOnlySites: widget.readOnlySites,
+        );
+      case null:
+        content = const EmptyCard(
+          icon: Icons.campaign_rounded,
+          title: 'Duyuru bulunamadı.',
+          message: 'Duyurular, bir siteye bağlı olduğunuzda burada görünür.',
+        );
+    }
+    final description = switch (mode) {
+      _Mode.inbox =>
+        'Yönetimin size gönderdiği duyurular burada görünür. Yeni duyurular uygulama açıkken '
+            'yaklaşık 20 saniyede bir kontrol edilir; uygulama kapalıyken telefon bildirimi gelmez.',
+      _Mode.manage =>
+        'Sitenizdeki sakinlere duyuru gönderin, okunma durumunu izleyin. Duyurular uygulamada '
+            've (isterseniz) e-postayla iletilir.',
+      null => 'Sitenizin duyuruları burada görünür.',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PageHeaderCard(title: 'Duyurular', icon: Icons.campaign_rounded),
+        const SizedBox(height: AppSpace.sm),
+        Text(description, style: th.bodyMedium),
+        const SizedBox(height: AppSpace.lg),
+        if (_hasInbox && _hasManage) ...[
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: [
+              ChoiceChip(
+                key: const ValueKey<String>('announcements_mode_inbox'),
+                avatar: const Icon(Icons.inbox_rounded, size: 18),
+                label: const Text('Gelen kutusu'),
+                selected: mode == _Mode.inbox,
+                onSelected: (_) => setState(() => _chosen = _Mode.inbox),
+              ),
+              ChoiceChip(
+                key: const ValueKey<String>('announcements_mode_manage'),
+                avatar: const Icon(Icons.visibility_rounded, size: 18),
+                label: const Text('Yönetim görünümü'),
+                selected: mode == _Mode.manage,
+                onSelected: (_) => setState(() => _chosen = _Mode.manage),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
+        content,
+      ],
+    );
+  }
+}

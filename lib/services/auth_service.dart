@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
@@ -1345,6 +1346,203 @@ class AuthService extends ChangeNotifier {
   /// Sakinin kendi güncel kayıtları (`GET /app/my-records`).
   Future<List<MyRecord>> getMyRecords() {
     return _runAuthorized((token) => api.getMyRecords(token: token));
+  }
+
+  // --- Duyuru ve Bildirim (Faz 3a) ----------------------------------------------------------
+  // Hata durumunda ApiException FIRLATIR (Türkçe mesajlı); oturum hatası [_runAuthorized] içinde işlenir.
+
+  /// Yönetici duyuru listesi. [status]: `draft|scheduled|published|withdrawn|all`.
+  Future<AnnouncementPage> listAnnouncements(
+    int siteCode, {
+    String? status,
+    String? query,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listAnnouncements(
+        token: token,
+        siteCode: siteCode,
+        status: status,
+        query: query,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  Future<AnnouncementDetail> getAnnouncement(int siteCode, int announcementId) {
+    return _runAuthorized(
+      (token) => api.getAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+      ),
+    );
+  }
+
+  /// Alıcılar (kurul üyesine 403). [read]: `all|true|false`.
+  Future<AnnouncementRecipientPage> listAnnouncementRecipients(
+    int siteCode,
+    int announcementId, {
+    String? read,
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listAnnouncementRecipients(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+        read: read,
+        query: query,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  Future<AudiencePreview> previewAnnouncementAudience(
+    int siteCode,
+    AnnouncementTargetInput target, {
+    bool sendEmail = false,
+  }) {
+    return _runAuthorized(
+      (token) => api.previewAnnouncementAudience(
+        token: token,
+        siteCode: siteCode,
+        target: target,
+        sendEmail: sendEmail,
+      ),
+    );
+  }
+
+  /// [publish]: `draft|now|schedule`; `schedule` iken [publishAt] (en az 1 dakika, en çok 1 yıl sonra).
+  Future<AnnouncementDetail> createAnnouncement(
+    int siteCode, {
+    required String title,
+    required String body,
+    required AnnouncementTargetInput target,
+    AnnouncementImportance importance = AnnouncementImportance.normal,
+    bool sendEmail = false,
+    String publish = 'draft',
+    DateTime? publishAt,
+  }) {
+    return _runAuthorized(
+      (token) => api.createAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        title: title,
+        body: body,
+        target: target,
+        importance: importance,
+        sendEmail: sendEmail,
+        publish: publish,
+        publishAt: publishAt,
+      ),
+    );
+  }
+
+  /// Yalnız [fields] içindeki alanlar gönderilir; yayınlanmış duyuruda yalnız `title` / `body`.
+  Future<AnnouncementDetail> updateAnnouncement(
+    int siteCode,
+    int announcementId,
+    Map<String, Object?> fields,
+  ) {
+    return _runAuthorized(
+      (token) => api.updateAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+        fields: fields,
+      ),
+    );
+  }
+
+  Future<AnnouncementDetail> publishAnnouncement(int siteCode, int announcementId) {
+    return _runAuthorized(
+      (token) => api.publishAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+      ),
+    );
+  }
+
+  Future<AnnouncementDetail> withdrawAnnouncement(int siteCode, int announcementId) {
+    return _runAuthorized(
+      (token) => api.withdrawAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+      ),
+    );
+  }
+
+  Future<void> deleteAnnouncement(int siteCode, int announcementId) async {
+    await _runAuthorized(
+      (token) => api.deleteAnnouncement(
+        token: token,
+        siteCode: siteCode,
+        announcementId: announcementId,
+      ),
+    );
+  }
+
+  /// Sakin gelen kutusu; sonraki sayfa için `nextBeforeId` [beforeId] olarak verilir.
+  Future<ResidentAnnouncementPage> listMyAnnouncements({
+    int limit = 30,
+    int? beforeId,
+    int? siteCode,
+  }) {
+    return _runAuthorized(
+      (token) => api.listMyAnnouncements(
+        token: token,
+        limit: limit,
+        beforeId: beforeId,
+        siteCode: siteCode,
+      ),
+    );
+  }
+
+  /// Sakin için tam kayıt (OKUNDU YAZMAZ).
+  Future<ResidentAnnouncement> getMyAnnouncement(int announcementId) {
+    return _runAuthorized(
+      (token) => api.getMyAnnouncement(token: token, announcementId: announcementId),
+    );
+  }
+
+  /// Duyuruyu okundu işaretler (idempotent); ilk okuma zamanını döndürür.
+  Future<DateTime?> markAnnouncementRead(int announcementId) {
+    return _runAuthorized(
+      (token) => api.markAnnouncementRead(token: token, announcementId: announcementId),
+    );
+  }
+
+  /// Tümünü okundu yapar; işaretlenen adedi döndürür.
+  Future<int> markAllAnnouncementsRead({int? siteCode}) {
+    return _runAuthorized(
+      (token) => api.markAllAnnouncementsRead(token: token, siteCode: siteCode),
+    );
+  }
+
+  /// Bildirim özeti (yoklanır).
+  Future<NotificationSummary> getNotificationSummary() {
+    return _runAuthorized((token) => api.getNotificationSummary(token: token));
+  }
+
+  Future<NotificationPrefs> getNotificationPreferences() {
+    return _runAuthorized((token) => api.getNotificationPreferences(token: token));
+  }
+
+  Future<NotificationPrefs> setNotificationPreferences({required bool emailAnnouncements}) {
+    return _runAuthorized(
+      (token) => api.setNotificationPreferences(
+        token: token,
+        emailAnnouncements: emailAnnouncements,
+      ),
+    );
   }
 
   Future<({bool deleted, bool pending, String? message, String? error})> deleteSite({

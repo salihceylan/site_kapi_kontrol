@@ -126,6 +126,12 @@ import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
 import 'package:site_kapi_kontrol/ui/views/modules_view.dart';
 import 'package:site_kapi_kontrol/ui/views/people_view.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/announcement_read_dialog.dart';
+import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
+import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
 
@@ -145,6 +151,8 @@ class HomePage extends StatefulWidget {
 
     this.moduleAccess,
 
+    this.announcementNotifier,
+
   });
 
 
@@ -158,6 +166,11 @@ class HomePage extends StatefulWidget {
   /// Platform modül sistemi: hangi modüllerin açık olduğu. Verilmezse sayfa kendi örneğini kurar
   /// (`getMyModules`; süper kullanıcıda her şey açık) ve sayfayla birlikte kapatır. Testler için.
   final ModuleAccess? moduleAccess;
+
+  /// Platform Faz 3a: duyuru bildirim durumu (okunmamış rozeti, acil şerit, "yeni duyuru" olayları).
+  /// Verilmezse sayfa kendi örneğini kurar (`getNotificationSummary` yoklaması) ve sayfayla birlikte
+  /// kapatır. Testler için.
+  final AnnouncementNotifier? announcementNotifier;
 
 
 
@@ -190,6 +203,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       GlobalKey<ModuleRequestsViewState>();
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
   final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
+  final GlobalKey<AnnouncementsViewState> _announcementsKey =
+      GlobalKey<AnnouncementsViewState>();
+
+  // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
+  // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
+  // acil duyuru Panel'in üstündeki kırmızı şeride dönüşür.
+  late final AnnouncementNotifier _announcements = widget.announcementNotifier ??
+      AnnouncementNotifier(
+        fetchSummary: () => widget.authService.getNotificationSummary(),
+        fetchInbox: () => widget.authService.listMyAnnouncements(limit: 30),
+        fetchAnnouncement: (id) => widget.authService.getMyAnnouncement(id),
+        isActive: _isModulePollingActive,
+        isEligible: _isAnnouncementPollingEligible,
+      );
+  StreamSubscription<AnnouncementAlert>? _announcementAlerts;
   String _lastDoorModuleSignature = '';
   UserRole? _lastSeenRole;
 
@@ -380,6 +408,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _initModuleAccess();
 
+    _initAnnouncements();
+
 
 
     _loadInitialData();
@@ -397,6 +427,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
 
     _statusPoller.dispose();
+
+    _disposeAnnouncements();
 
     _disposeModuleAccess();
 
@@ -426,6 +458,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // Arka plandayken modül değişmiş olabilir (yönetici kapattı/açtı): ön plana dönüşte hemen çek.
       _moduleAccess.resetBackoff();
       unawaited(_moduleAccess.refresh());
+      // Arka plandayken yeni duyuru gelmiş olabilir: ön plana dönüşte hemen çek.
+      _announcements.resetBackoff();
+      unawaited(_announcements.refresh());
       unawaited(_loadSuperDoorModule());
       _startStatusAutoRefreshTimer();
       if (_doorControlDoor != null) {
@@ -562,11 +597,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (session == null) {
       _lastSeenRole = null;
       _moduleAccess.clear();
+      _announcements.clear();
       return;
     }
     if (_lastSeenRole != session.role) {
       _lastSeenRole = session.role;
       unawaited(_moduleAccess.refresh());
+      // Rol değişince alıcı olma durumu değişebilir: eski duyuru durumu atılır, yeniden okunur.
+      _announcements.clear();
+      unawaited(_announcements.refresh());
     }
   }
 
@@ -617,11 +656,164 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _canAccessPeople(UserRole role) =>
       _canManagePeople(role) || _moduleAccess.boardMemberSites.isNotEmpty;
 
-  /// Rolün kendi menü listesinde olmayan ek öğeler: kurul üyesine "Kişiler".
-  Set<SirketMenuItem> _extraMenuItems(UserRole role) =>
-      _moduleAccess.boardMemberSites.isNotEmpty
-          ? const <SirketMenuItem>{SirketMenuItem.kisiler}
-          : const <SirketMenuItem>{};
+  /// Rolün kendi menü listesinde olmayan ek öğeler: kurul üyesine "Kişiler"; alıcısı olabilecek rollere
+  /// (daire sakini, yönetici / süper kullanıcı, kurul üyesi) "Duyurular".
+  Set<SirketMenuItem> _extraMenuItems(UserRole role) => <SirketMenuItem>{
+        if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
+        if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
+      };
+
+  // --- Duyuru ve Bildirim (Faz 3a) ---
+
+  /// Yazma yetkisi (duyuru oluşturma / yayınlama): süper kullanıcı ve site yöneticisi (yönetici modunda).
+  bool _canManageAnnouncements(UserRole role) => _canManagePeople(role);
+
+  /// Kullanıcı en az bir sitede duyuru ALABİLİR mi? Modül verisi yokken (fail-open) daire sakini alıcı
+  /// sayılır; veri varsa yalnız görevli (STAFF) olunan sitelerde alıcı değildir.
+  bool _hasResidentSite() {
+    if (!_moduleAccess.isFiltering) return true;
+    return _moduleAccess.result!.sites.any((s) => s.role != 'staff');
+  }
+
+  /// Gelen kutusu (sakin görünümü): daire sakini ve sakin modundaki yönetici. Süper kullanıcı ve bireysel
+  /// kullanıcı alıcı olamaz.
+  bool _hasAnnouncementInbox(UserRole role) {
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return false;
+      case UserRole.siteManager:
+        return _isResidentMode;
+      case UserRole.apartmentOwner:
+        return _hasResidentSite();
+    }
+  }
+
+  /// "Duyurular" menü öğesine erişim: yönetim yetkisi, kurul üyeliği (salt okunur) ya da gelen kutusu.
+  /// Görevli (STAFF) ve bireysel kullanıcı için yoktur.
+  bool _canAccessAnnouncements(UserRole role) =>
+      _canManageAnnouncements(role) ||
+      _moduleAccess.boardMemberSites.isNotEmpty ||
+      _hasAnnouncementInbox(role);
+
+  /// Duyuru bildirimi yoklanır mı / tercih bölümü gösterilir mi? Yönetici modundaki site yöneticisi de kendi
+  /// dairesi için alıcı olabilir; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli hesap alıcı değildir.
+  bool _receivesAnnouncements(UserRole role) {
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return false;
+      case UserRole.siteManager:
+        return true;
+      case UserRole.apartmentOwner:
+        return _hasResidentSite();
+    }
+  }
+
+  bool _isAnnouncementPollingEligible() {
+    final session = widget.authService.session;
+    return session != null && _receivesAnnouncements(session.role);
+  }
+
+  /// Sakinin duyuru alabileceği siteler (birden çoksa gelen kutusunda site süzgeci çıkar).
+  List<PeopleSite> _announcementInboxSites() {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.role != 'staff') PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  void _initAnnouncements() {
+    _announcementAlerts = _announcements.alerts.listen(_onAnnouncementAlert);
+    _announcements.addListener(_onAnnouncementsChanged);
+    _announcements.start(immediately: true);
+  }
+
+  void _disposeAnnouncements() {
+    unawaited(_announcementAlerts?.cancel());
+    _announcements.removeListener(_onAnnouncementsChanged);
+    if (widget.announcementNotifier == null) {
+      _announcements.dispose();
+    } else {
+      _announcements.stop();
+    }
+  }
+
+  /// Rozet / acil şerit değişti: menü ve Panel yeniden kurulur.
+  void _onAnnouncementsChanged() {
+    if (!mounted || widget.authService.session == null) return;
+    setState(() {});
+  }
+
+  /// Yeni duyuru (uygulama açıkken, <= ~20 sn yoklamayla): uygulama içi bildirim. "Aç" duyuruyu açar.
+  void _onAnnouncementAlert(AnnouncementAlert alert) {
+    if (!mounted || widget.authService.session == null) return;
+    final title = (alert.title ?? '').trim();
+    AppSnack.show(
+      context,
+      title.isEmpty ? 'Yeni duyuru var.' : 'Yeni duyuru: $title',
+      kind: alert.urgent ? AppSnackKind.warning : AppSnackKind.info,
+      replace: true,
+      duration: const Duration(seconds: 8),
+      action: SnackBarAction(
+        label: 'Aç',
+        onPressed: () => _openAnnouncement(alert.announcementId),
+      ),
+    );
+  }
+
+  /// Duyuruyu okuma penceresinde açar (menüden bağımsız; okununca rozet ve şerit güncellenir). Numara
+  /// bilinmiyorsa "Duyurular" ekranına gider.
+  void _openAnnouncement(int? id, {ResidentAnnouncement? known}) {
+    final session = widget.authService.session;
+    if (!mounted || session == null) return;
+    if (id == null) {
+      if (_canAccessMenu(SirketMenuItem.duyurular, session.role)) {
+        setState(() => _selectedMenu = SirketMenuItem.duyurular);
+      }
+      return;
+    }
+    void refreshAfterChange() {
+      unawaited(_announcements.refresh());
+      unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
+    }
+
+    unawaited(
+      AnnouncementReadDialog.show(
+        context,
+        authService: widget.authService,
+        announcement: known ?? ResidentAnnouncement(id: id),
+        onRead: (updated) {
+          _announcements.noteRead(updated.id, urgent: updated.isUrgent);
+          refreshAfterChange();
+        },
+        onGone: refreshAfterChange,
+      ),
+    );
+  }
+
+  /// Panel'in üstündeki kalıcı kırmızı şerit: okunmamış ACİL duyuru varken; dokununca duyuruyu açar.
+  Widget _withUrgentBanner(UserSession session, Widget view) {
+    final onPanel =
+        _selectedMenu == SirketMenuItem.dashboard || _selectedMenu == SirketMenuItem.ellerSerbest;
+    if (!onPanel || !_announcements.hasUnreadUrgent || !_receivesAnnouncements(session.role)) {
+      return view;
+    }
+    final urgent = _announcements.urgentAnnouncement;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        UrgentAnnouncementBanner(
+          count: _announcements.unreadUrgent,
+          title: urgent?.title,
+          onTap: () => _openAnnouncement(urgent?.id, known: urgent),
+        ),
+        const SizedBox(height: AppSpace.lg),
+        view,
+      ],
+    );
+  }
 
   /// Panel'de seçilebilen siteler: yalnız Geçiş Kontrol modülü AÇIK olanlar.
   List<SiteRecord> _doorControlSelectableSites(List<SiteRecord> sites) {
@@ -676,6 +868,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Kişiler: yönetim yetkisi ya da kurul üyeliği (salt okunur); görevli ve sakin için yok.
     if (item == SirketMenuItem.kisiler) {
       return _canAccessPeople(role);
+    }
+
+    // Duyurular: yönetim yetkisi, kurul üyeliği (salt okunur) ya da gelen kutusu; görevli (STAFF) ve
+    // bireysel kullanıcı için yok.
+    if (item == SirketMenuItem.duyurular) {
+      return _canAccessAnnouncements(role);
     }
 
     switch (role) {
@@ -794,6 +992,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.kisiler:
         return 'Kişiler';
+
+      case SirketMenuItem.duyurular:
+        return 'Duyurular';
 
     }
 
@@ -3903,6 +4104,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.kisiler:
         await _peopleViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.duyurular:
+        _announcements.resetBackoff();
+        unawaited(_announcements.refresh());
+        await _announcementsKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -4168,7 +4374,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         badgeCounts: <SirketMenuItem, int>{
           if (session.role == UserRole.superUser)
             SirketMenuItem.modulTalepleri: _moduleAccess.pendingRequestCount ?? 0,
+          if (_hasAnnouncementInbox(session.role))
+            SirketMenuItem.duyurular: _announcements.unreadCount,
         },
+        badgeNouns: const <SirketMenuItem, String>{SirketMenuItem.duyurular: 'okunmamış'},
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,
@@ -4236,7 +4445,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final view = _buildContentView(session);
     return PageEntry(
       key: ValueKey<String>('${_selectedMenu.name}-$_isResidentMode'),
-      child: view,
+      // Panel'de okunmamış acil duyuru varsa en üstte kalıcı kırmızı şerit.
+      child: _withUrgentBanner(session, view),
     );
   }
 
@@ -4384,6 +4594,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           return ResidentProfileView(
             session: session,
             authService: widget.authService,
+            showNotificationPrefs: _receivesAnnouncements(session.role),
           );
 
         }
@@ -4409,6 +4620,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onSave: _saveProfile,
 
           authService: widget.authService,
+
+          showNotificationPrefs: _receivesAnnouncements(session.role),
 
         );
 
@@ -4674,6 +4887,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
           manageSites: _canManagePeople(session.role),
           readOnlySites: _boardPeopleSites(),
+        );
+
+      case SirketMenuItem.duyurular:
+        return AnnouncementsView(
+          key: _announcementsKey,
+          authService: widget.authService,
+          manageSites: _canManageAnnouncements(session.role),
+          readOnlySites: _boardPeopleSites(),
+          showInbox: _hasAnnouncementInbox(session.role),
+          inboxSites: _announcementInboxSites(),
+          notifier: _announcements,
         );
 
       case SirketMenuItem.katilimVeKurulum:

@@ -344,9 +344,14 @@ void main() {
         titles.indexOf('Kişiler'),
         titles.indexOf('Site Yönetimi') + 1,
       );
+      // Platform Faz 3a: "Duyurular" "Kişiler"in hemen altına eklenir, "Modüller" onun altındadır.
+      expect(
+        titles.indexOf('Duyurular'),
+        titles.indexOf('Kişiler') + 1,
+      );
       expect(
         titles.indexOf('Modüller'),
-        titles.indexOf('Kişiler') + 1,
+        titles.indexOf('Duyurular') + 1,
       );
       await _disposeHome(t);
     });
