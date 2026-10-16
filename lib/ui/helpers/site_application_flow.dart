@@ -12,14 +12,44 @@ import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
-/// Site BAŞVURUSU yapabilen roller: yalnız bireysel kullanıcı ve daire kullanıcısı. Site yöneticisi
-/// ("Site Ekle" anlık kalır) ve süper kullanıcı başvuramaz; başvuru kartı / formu bu rollere gösterilmez.
+/// HER ZAMAN site BAŞVURUSU yapan roller: bireysel kullanıcı ve daire kullanıcısı. Süper kullanıcı
+/// başvuramaz. Site yöneticisi yalnız sunucu `requires_application: true` derse başvurur
+/// ([usesSiteApplicationFlow]).
 bool canApplyForSite(UserRole? role) =>
     role == UserRole.individual || role == UserRole.apartmentOwner;
 
+/// Başvuru durumu (`GET .../mine`) izlenen roller: başvuranlar ve site yöneticisi (sahip bağı olmayan
+/// yönetici de başvurabilir). Süper kullanıcıda `mine` ÇAĞRILMAZ.
+bool tracksSiteApplications(UserRole? role) =>
+    canApplyForSite(role) || role == UserRole.siteManager;
+
+/// Bu kullanıcı için "site kur / ekle" BAŞVURU akışı mı? Bireysel / daire kullanıcısı: her zaman. Site
+/// yöneticisi: yalnız sunucu `requires_application: true` bildirdiyse (false / alan yok: anlık "Site Ekle").
+bool usesSiteApplicationFlow(UserRole? role, SiteApplicationTracker? tracker) =>
+    canApplyForSite(role) ||
+    (role == UserRole.siteManager && tracker?.requiresApplication == true);
+
+/// Başvuru formu kapandıktan sonra durumu sunucudan okur: YALNIZ başvuru gönderildiyse (`applied`), zaten
+/// bekleyen başvuru varsa (`alreadyPending`) ya da sonuç belirsizse (`uncertain`). Form hiçbir şey
+/// göndermeden kapandıysa gereksiz `mine` çağrısı yapılmaz.
+void syncApplicationsAfterForm(SiteApplicationTracker? tracker, SetupSiteOutcome? outcome) {
+  if (tracker == null) return;
+  switch (outcome) {
+    case SetupSiteOutcome.applied:
+    case SetupSiteOutcome.uncertain:
+      unawaited(tracker.noteSubmitted());
+    case SetupSiteOutcome.alreadyPending:
+    case SetupSiteOutcome.applicationRequired:
+      unawaited(tracker.noteChanged());
+    case SetupSiteOutcome.created:
+    case null:
+      break;
+  }
+}
+
 /// Site başvurusu formunu açar ([previous] verilirse "Yeniden başvur": önceki değerlerle). Form hangi
-/// sonuçla kapanırsa kapansın (409 `APPLICATION_PENDING` gibi durum uyuşmazlıkları dahil) başvuru durumu
-/// sunucudan yeniden okunur ([tracker] verilmişse).
+/// sonuçla kapanırsa kapansın başvuru gönderildiyse / zaten bekleyen varsa / sonuç belirsizse durum sunucudan
+/// yeniden okunur ([tracker] verilmişse; bkz. [syncApplicationsAfterForm]).
 Future<SetupSiteOutcome?> openSiteApplicationForm(
   BuildContext context, {
   required AuthService authService,
@@ -34,7 +64,7 @@ Future<SetupSiteOutcome?> openSiteApplicationForm(
     prefill: previous,
     deviceUid: deviceUid,
   );
-  if (tracker != null) unawaited(tracker.noteChanged());
+  syncApplicationsAfterForm(tracker, outcome);
   return outcome;
 }
 

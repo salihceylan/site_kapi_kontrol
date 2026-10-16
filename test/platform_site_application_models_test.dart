@@ -100,6 +100,24 @@ void main() {
       expect(a.deviceAvailable, isFalse);
     });
 
+    test('eksik / tanınmayan durum BEKLEYEN sayılmaz: "Durum bilinmiyor", eylem sunulmaz', () {
+      final missing = SiteApplication.fromJson(<String, dynamic>{'id': 3, 'site_name': 'X'});
+      expect(missing.status, SiteApplicationStatus.unknown);
+      expect(missing.isPending, isFalse);
+      expect(missing.hasKnownStatus, isFalse);
+      expect(missing.statusLabel, 'Durum bilinmiyor');
+      expect(const SiteApplication(id: 1).isPending, isFalse, reason: 'yapıcı varsayılanı da bekleyen değil');
+      // Eksik durumlu kayıt `mine` içinde bekleyen sayılıp "iptal et" sunmaz.
+      final mine = MySiteApplications.fromJson(<String, dynamic>{
+        'pending': null,
+        'items': <Map<String, dynamic>>[
+          <String, dynamic>{'id': 3, 'site_name': 'X'},
+        ],
+      });
+      expect(mine.pending, isNull);
+      expect(mine.latest!.hasKnownStatus, isFalse);
+    });
+
     test('eksik sayaçlar listelerden türetilir; boş ad "Adsız site"; bilinmeyen alan yok sayılır', () {
       final a = SiteApplication.fromJson(<String, dynamic>{
         'id': '9',
@@ -112,7 +130,7 @@ void main() {
         'yeni_alan': 123,
       });
       expect(a.id, 9);
-      expect(a.status, SiteApplicationStatus.pending);
+      expect(a.status, SiteApplicationStatus.unknown);
       expect(a.siteNameLabel, 'Adsız site');
       expect(a.blockCount, 2);
       expect(a.apartmentCount, 20, reason: 'camelCase ve snake_case daire sayısı okunur');
@@ -122,9 +140,10 @@ void main() {
       expect(a.createdAt, isNull);
     });
 
-    test('bilinmeyen durum ham değeriyle görünür (kayıt kaybolmaz)', () {
+    test('bilinmeyen durum ham kodla DEĞİL "Durum bilinmiyor" olarak görünür (kayıt kaybolmaz)', () {
       final a = SiteApplication.fromJson(_row(status: 'on_hold'));
-      expect(a.statusLabel, 'on_hold');
+      expect(a.statusLabel, 'Durum bilinmiyor');
+      expect(a.statusLabel.contains('on_hold'), isFalse);
       expect(a.isPending, isFalse);
       expect(
         SiteApplication.fromJson(_row(status: 'rejected')).statusLabel,
@@ -170,10 +189,32 @@ void main() {
       expect(mine.latest!.isPending, isTrue);
     });
 
-    test('hiç başvuru yok: latest null', () {
+    test('hiç başvuru yok: latest null (yalnız pending:null + items:[] meşru boş); alan yoksa hata', () {
       final mine = MySiteApplications.fromJson(<String, dynamic>{'pending': null, 'items': <Object>[]});
       expect(mine.latest, isNull);
-      expect(MySiteApplications.fromJson(const <String, dynamic>{}).latest, isNull);
+      expect(mine.requiresApplication, isNull);
+      expect(() => MySiteApplications.fromJson(const <String, dynamic>{}), throwsFormatException);
+      expect(() => SiteApplicationPage.fromJson(const <String, dynamic>{}), throwsFormatException);
+      // Biri varsa yanıt anlaşılır.
+      expect(MySiteApplications.fromJson(<String, dynamic>{'items': <Object>[]}).latest, isNull);
+    });
+
+    test('requires_application: true / false okunur; bool değilse null', () {
+      expect(
+        MySiteApplications.fromJson(<String, dynamic>{'pending': null, 'items': <Object>[], 'requires_application': true})
+            .requiresApplication,
+        isTrue,
+      );
+      expect(
+        MySiteApplications.fromJson(<String, dynamic>{'pending': null, 'items': <Object>[], 'requires_application': false})
+            .requiresApplication,
+        isFalse,
+      );
+      expect(
+        MySiteApplications.fromJson(<String, dynamic>{'pending': null, 'items': <Object>[], 'requires_application': 'evet'})
+            .requiresApplication,
+        isNull,
+      );
     });
   });
 
@@ -258,6 +299,26 @@ void main() {
       expect(auditToneOf('site_application.cancelled'), AppTone.neutral);
       expect(auditToneOf('site_application.created'), AppTone.info);
       expect(auditToneOf('platform_settings.updated'), AppTone.info);
+    });
+
+    test('platform_setting (tekil, sunucunun yazdığı) ve platform_settings (çoğul) aynı etiketi verir', () {
+      for (final type in const ['platform_setting', 'platform_settings']) {
+        final entry = AuditLogEntry.fromJson(<String, dynamic>{
+          'id': 9,
+          'action': 'platform_settings.updated',
+          'target_type': type,
+          'target_id': 'site_onboarding',
+        });
+        expect(entry.targetLabel, 'Site açılış modu', reason: type);
+        expect(entry.targetLabel!.contains('site_onboarding'), isFalse, reason: 'ham anahtar görünmez');
+        final other = AuditLogEntry.fromJson(<String, dynamic>{
+          'id': 10,
+          'action': 'platform_settings.updated',
+          'target_type': type,
+          'target_id': 'baska_ayar',
+        });
+        expect(other.targetLabel, 'Platform ayarı', reason: type);
+      }
     });
 
     test('hedef etiketi: başvuru numarası; ayar anahtarı ham gösterilmez', () {

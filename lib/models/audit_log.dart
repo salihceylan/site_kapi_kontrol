@@ -116,7 +116,9 @@ class AuditLogEntry {
         // Site adı / gerekçe / not denetim kaydına yazılmaz; yalnız başvuru numarası gösterilir.
         return _numbered('Başvuru');
       case 'platform_settings':
-        // Hedef ayar anahtarıdır (örn. `site_onboarding`); ham anahtar gösterilmez.
+      case 'platform_setting':
+        // Hedef ayar anahtarıdır (örn. `site_onboarding`); ham anahtar gösterilmez. Sunucu hedef türünü
+        // tekil (`platform_setting`) yazar; çoğul yazım da kabul edilir.
         return targetId == 'site_onboarding' ? 'Site açılış modu' : 'Platform ayarı';
       default:
         final id = targetId;

@@ -73,10 +73,10 @@ void main() {
       expect(find.text('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
       expect(find.text('Site Sakini Girişi'), findsOneWidget);
       expect(find.text('Daireye Katıl'), findsOneWidget);
-      expect(find.text('Yönetici & Cihaz Kurulumu'), findsOneWidget);
-      expect(find.text('Yönetici Ol'), findsOneWidget);
+      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
+      expect(find.text('Cihaz'), findsOneWidget);
       expect(find.text('QR / Kod ile Daireye Katıl'), findsOneWidget);
-      expect(find.text('Cihaz Ekleyerek Site Yöneticisi Ol'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsOneWidget);
       expect(find.text('Katılım Başvurularım'), findsOneWidget);
       expect(find.text('Güneş Sitesi'), findsOneWidget);
       expect(find.text('A Blok • Daire 12'), findsOneWidget);
@@ -111,7 +111,7 @@ void main() {
 
       expect(find.text('Katılım Başvurularım'), findsNothing);
       expect(find.text('Site Sakini Girişi'), findsOneWidget);
-      expect(find.text('Yönetici & Cihaz Kurulumu'), findsOneWidget);
+      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
     });
   });
 
@@ -129,7 +129,7 @@ void main() {
 
         for (final (title, badge) in const <(String, String)>[
           ('Site Sakini Girişi', 'Daireye Katıl'),
-          ('Yönetici & Cihaz Kurulumu', 'Yönetici Ol'),
+          ('Site Kurulumu & Cihaz', 'Cihaz'),
         ]) {
           final titleBottom = t.getBottomLeft(find.text(title)).dy;
           final badgeTop = t
@@ -196,13 +196,13 @@ void main() {
         expect(
           find.widgetWithText(
             ElevatedButton,
-            'Cihaz Ekleyerek Site Yöneticisi Ol',
+            'Cihaz Ekle',
           ),
           findsOneWidget,
         );
         for (final label in const <String>[
           'QR / Kod ile Daireye Katıl',
-          'Cihaz Ekleyerek Site Yöneticisi Ol',
+          'Cihaz Ekle',
         ]) {
           expect(
             t.widget<Text>(find.text(label)).overflow,
@@ -243,7 +243,7 @@ void main() {
           reason: 'diyalogdan dönünce başvurular otomatik yenilenir',
         );
 
-        await _tapVisible(t, find.text('Cihaz Ekleyerek Site Yöneticisi Ol'));
+        await _tapVisible(t, find.text('Cihaz Ekle'));
         await t.pump();
         expect(taps.claim, 1);
         expect(auth.requestCalls, initialCalls + 2);
@@ -362,10 +362,11 @@ void main() {
             'QR / Kod ile Daireye Katıl',
           ),
           (
-            'Yönetici & Cihaz Kurulumu',
+            'Site Kurulumu & Cihaz',
             AppTone.primary,
-            Icons.admin_panel_settings_rounded,
-            'Cihaz Ekleyerek Site Yöneticisi Ol',
+            // Cihaz eklemek yönetici yapmaz (B3): "yönetici paneli" simgesi yerine nötr cihaz-ekle simgesi.
+            Icons.add_to_photos_rounded,
+            'Cihaz Ekle',
           ),
         ]) {
           final card = find.ancestor(
@@ -431,7 +432,7 @@ void main() {
         );
         for (final title in const <String>[
           'Site Sakini Girişi',
-          'Yönetici & Cihaz Kurulumu',
+          'Site Kurulumu & Cihaz',
         ]) {
           final card = find.ancestor(
             of: find.text(title),

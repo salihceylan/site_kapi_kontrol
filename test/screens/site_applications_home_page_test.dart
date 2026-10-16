@@ -5,6 +5,8 @@
 // - Bireysel / daire kullanıcısı: başvuru durumu kartı, başvuru formu, yoklama yaşam döngüsü, onaylanınca
 //   oturum/rol sunucudan yenilenir ve kullanıcı sayfa yenilenmeden yönetici görünümüne geçer.
 // - Cihaz sahiplenmek kullanıcıyı yönetici YAPMAZ (rol değişmez): bilgi + "Site Kur" eylemi.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
@@ -286,14 +288,21 @@ void main() {
       }
     });
 
-    testWidgets('site yöneticisi / süper kullanıcı: kendi başvuru uçları (mine) hiç çağrılmaz, başvuru kartı yok', (t) async {
-      for (final role in const [UserRole.siteManager, UserRole.superUser]) {
-        final auth = _HomeApp(role: role)..sites = [_site(11, 'Gül Sitesi')];
-        await _pumpHome(t, auth);
-        expect(auth.mineCalls, 0, reason: '$role');
-        expect(find.byType(SiteApplicationStatusCard), findsNothing);
-        await _disposeHome(t);
-      }
+    testWidgets('süper kullanıcı: kendi başvuru uçları (mine) HİÇ çağrılmaz; site yöneticisi: oturum açılırken BİR kez (requires_application), başvuru kartı yok', (t) async {
+      // Süper kullanıcı başvuramaz: sunucuya sormak da gereksiz.
+      final superAuth = _HomeApp(role: UserRole.superUser)..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, superAuth);
+      expect(superAuth.mineCalls, 0);
+      expect(find.byType(SiteApplicationStatusCard), findsNothing);
+      await _disposeHome(t);
+
+      // Site yöneticisi: `requires_application` (sahip bağı yok -> başvuru) yalnız `mine` ile bilinir; alan gelmezse
+      // (eski sunucu) hiçbir kart / etiket değişmez.
+      final manager = _HomeApp(role: UserRole.siteManager)..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, manager);
+      expect(manager.mineCalls, 1);
+      expect(find.byType(SiteApplicationStatusCard), findsNothing);
+      await _disposeHome(t);
     });
 
     testWidgets('başvuru durumu alınamayınca (fail) yetki / menü AÇILMAZ: bireysel kullanıcı bireysel kalır', (t) async {
@@ -601,6 +610,325 @@ void main() {
       await settleFor(t, 900);
       expect(auth.setupCalls, hasLength(1));
       expect(auth.createCalls, isEmpty);
+      await _disposeHome(t);
+    });
+  });
+
+  group('B1: site yöneticisi - sahip bağı yoksa başvuru (requires_application)', () {
+    Future<void> openSites(WidgetTester t) async {
+      await _tapMenu(t, 'Site Yönetimi');
+      await t.pump(const Duration(milliseconds: 600));
+    }
+
+    Future<void> tapAddSite(WidgetTester t, String label) async {
+      final add = find.text(label);
+      expect(add, findsWidgets);
+      await t.ensureVisible(add.first);
+      await t.pump();
+      await t.tap(add.first);
+      await settleFor(t, 600);
+    }
+
+    Future<void> fillAndSubmit(WidgetTester t, String name) async {
+      await t.enterText(find.widgetWithText(TextFormField, 'Site Adı *'), name);
+      final submit = find.byKey(const ValueKey<String>('setup_site_submit'));
+      await scrollTo(t, submit);
+      await t.tap(submit);
+      await settleFor(t, 900);
+    }
+
+    testWidgets('sahip bağı OLMAYAN yönetici: `mine` oturum açılırken BİR kez; düğme "Site Başvurusu", form BAŞVURU kipinde açılır', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = true
+        ..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, auth, height: 1600);
+      expect(auth.mineCalls, 1);
+      await openSites(t);
+      expect(find.text('Yeni Site'), findsNothing);
+
+      await tapAddSite(t, 'Site Başvurusu');
+      expect(auth.mineCalls, 1, reason: 'durum zaten biliniyor: tekrar okunmaz');
+      expect(find.text('Onaydan sonra site yöneticisi olursunuz'), findsOneWidget, reason: 'başvuru kipi');
+      expect(find.text('Site Kurulum Sihirbazı'), findsNothing);
+
+      await fillAndSubmit(t, 'İkinci Site');
+      expect(auth.createCalls, hasLength(1));
+      expect(auth.setupCalls, isEmpty, reason: 'anlık kurulum denenmedi');
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('setup_site_done')));
+      await settleFor(t, 600);
+
+      expect(auth.role, UserRole.siteManager, reason: 'onaya kadar rol aynı');
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget, reason: 'yönetici panosunda durum kartı');
+      expect(find.byKey(const ValueKey<String>('site_application_cancel')), findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('başvurusu bekleyen yöneticinin panosunda (Panel) aynı durum kartı görünür', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = true
+        ..sites = [_site(11, 'Gül Sitesi')]
+        ..seed([saRow(7, siteName: 'Ek Site')]);
+      await _pumpHome(t, auth, height: 1600);
+      expect(find.byType(DashboardView), findsOneWidget);
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('sahip bağı olan yönetici (requires_application: false): "Yeni Site" ANLIK kalır, başvuru kartı yok', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = false
+        ..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, auth, height: 1600);
+      expect(auth.mineCalls, 1);
+      expect(find.byType(SiteApplicationStatusCard), findsNothing);
+      await openSites(t);
+      expect(find.text('Site Başvurusu'), findsNothing);
+      await tapAddSite(t, 'Yeni Site');
+      expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
+      await fillAndSubmit(t, 'İkinci Site');
+      expect(auth.setupCalls, hasLength(1));
+      expect(auth.createCalls, isEmpty);
+      expect(auth.mineCalls, 1);
+      await _disposeHome(t);
+    });
+
+    testWidgets('alan HİÇ gelmezse (eski sunucu) eski davranış: anlık "Yeni Site"; durum alınamasa da yönetici panosu hata göstermez', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..mineError = ApiException('Bağlantı yok.')
+        ..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, auth, height: 1600);
+      expect(find.text('Bağlantı yok.'), findsNothing, reason: 'yönetici panosu başvuru yükleme hatasıyla rahatsız edilmez');
+      expect(find.byType(DashboardView), findsOneWidget);
+      await openSites(t);
+      await tapAddSite(t, 'Yeni Site');
+      expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
+      expect(find.text('Site Başvurusu'), findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('çıkmaz YOK: durum eskiydi (requires false) ama sunucu 409 APPLICATION_REQUIRED verdi -> form başvuru kipine geçer, bilgiler korunur', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = false
+        ..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, auth, height: 1600);
+      await openSites(t);
+      // Sunucuda sahip bağı bu arada kalktı (istemcinin bilgisi eski).
+      auth.serverRequiresApplication = true;
+      await tapAddSite(t, 'Yeni Site');
+      expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
+      await fillAndSubmit(t, 'İkinci Site');
+      expect(auth.setupCalls, hasLength(1));
+      expect(find.textContaining('Site eklemek için başvuru yapmanız gerekiyor'), findsOneWidget);
+      expect(find.text('Onaydan sonra site yöneticisi olursunuz'), findsOneWidget);
+      final name = t.widget<EditableText>(
+        find.descendant(of: find.widgetWithText(TextFormField, 'Site Adı *'), matching: find.byType(EditableText)),
+      );
+      expect(name.controller.text, 'İkinci Site', reason: 'girilen bilgiler korundu');
+
+      // Aynı pencereden başvuru gönderilir.
+      final submit = find.byKey(const ValueKey<String>('setup_site_submit'));
+      await scrollTo(t, submit);
+      await t.tap(submit);
+      await settleFor(t, 900);
+      expect(auth.createCalls, hasLength(1));
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+      final mineBefore = auth.mineCalls;
+      await t.tap(find.byKey(const ValueKey<String>('setup_site_done')));
+      await settleFor(t, 700);
+      expect(auth.mineCalls, greaterThan(mineBefore), reason: 'form kapanınca durum sunucudan okundu');
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      expect(find.text('Site Başvurusu'), findsOneWidget, reason: 'düğme artık başvuru etiketli');
+      await _disposeHome(t);
+    });
+
+    testWidgets('çıkmaz YOK: 409 APPLICATION_REQUIRED sonrası form başvurusuz kapatılsa da durum yeniden okunur ve düğme "Site Başvurusu" olur', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = false
+        ..sites = [_site(11, 'Gül Sitesi')];
+      await _pumpHome(t, auth, height: 1600);
+      await openSites(t);
+      auth.serverRequiresApplication = true;
+      await tapAddSite(t, 'Yeni Site');
+      await fillAndSubmit(t, 'İkinci Site');
+      expect(find.text('Onaydan sonra site yöneticisi olursunuz'), findsOneWidget);
+      final mineBefore = auth.mineCalls;
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 700);
+      expect(auth.mineCalls, greaterThan(mineBefore));
+      expect(auth.createCalls, isEmpty);
+      expect(find.text('Site Başvurusu'), findsWidgets);
+      expect(find.text('Yeni Site'), findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('başvurusu ONAYLANAN yöneticide sahip bağı oluşur: kart kalkar, düğme yeniden "Yeni Site" (anlık)', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = true
+        ..sites = [_site(11, 'Gül Sitesi')]
+        ..seed([saRow(7, siteName: 'Ek Site')]);
+      await _pumpHome(t, auth, height: 1600);
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+
+      auth.serverDecide(7, 'approved');
+      await _elapse(t, const Duration(seconds: 31));
+      await t.pump(const Duration(seconds: 1));
+      await t.pump(const Duration(milliseconds: 600));
+      expect(auth.role, UserRole.siteManager);
+      expect(find.text('Site başvurunuz inceleniyor'), findsNothing);
+      expect(find.text('Site başvurunuz onaylandı'), findsNothing, reason: 'yönetici panosunda onaylı kart yok');
+      await openSites(t);
+      expect(find.text('Yeni Site'), findsWidgets);
+      expect(find.text('Site Başvurusu'), findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('sahip bağı olmayan, sitesiz yönetici: ana ekranda başvuru durumu kartı; "Site Yönetimi"nde "Site Başvurusu" düğmesi', (t) async {
+      final auth = _HomeApp(role: UserRole.siteManager)
+        ..serverRequiresApplication = true
+        ..seed([saRow(7, siteName: 'Ek Site')]);
+      await _pumpHome(t, auth, height: 1600);
+      expect(find.byType(IndividualHomeView), findsOneWidget);
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      expect(find.text('Site Kurmak İçin Başvur'), findsNothing, reason: 'yöneticide başvuru eylemi "Site Yönetimi" ekranındadır');
+      await _tapMenu(t, 'Site Yönetimi');
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.text('Site Başvurusu'), findsWidgets);
+      expect(find.text('Yeni Site'), findsNothing);
+      await _disposeHome(t);
+    });
+  });
+
+  group('B9: başvuru durumu bilinmiyor / kontrol ediliyor / bekleyen: eylemler pasif ve nedeni yazılı', () {
+    testWidgets('durum ALINAMADI: "Site Kurmak İçin Başvur" pasif (neden ipucunda), "Siteyi Kur" pasif; durum gelince ikisi de etkin', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)
+        ..devices = [saDevice('ESP32_C3_ABC')]
+        ..mineError = ApiException('Bağlantı yok.');
+      await _pumpHome(t, auth, height: 1800);
+      expect(find.text('Başvuru Durumu Alınamadı'), findsOneWidget);
+      var apply = t.widget<ElevatedButton>(find.byKey(const ValueKey<String>('site_application_apply')));
+      expect(apply.onPressed, isNull);
+      expect(find.byTooltip(RegExp('Başvuru durumu alınamadı')), findsWidgets, reason: 'neden ipucuyla söylenir');
+      final setup = find.widgetWithText(ElevatedButton, 'Siteyi Kur');
+      await scrollTo(t, setup);
+      expect(t.widget<ElevatedButton>(setup).onPressed, isNull);
+
+      auth.mineError = null;
+      await t.tap(find.text('Tekrar Dene').first);
+      await settleFor(t, 400);
+      apply = t.widget<ElevatedButton>(find.byKey(const ValueKey<String>('site_application_apply')));
+      expect(apply.onPressed, isNotNull);
+      expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
+      await scrollTo(t, find.widgetWithText(ElevatedButton, 'Siteyi Kur'));
+      expect(t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Siteyi Kur')).onPressed, isNotNull);
+      await _disposeHome(t);
+    });
+
+    testWidgets('durum KONTROL EDİLİYOR (ilk okuma sürerken): "Durum Kontrol Ediliyor..." pasif', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)..devices = [saDevice('ESP32_C3_ABC')];
+      final gate = Completer<void>();
+      auth.mineGates.add(gate);
+      await _pumpHome(t, auth, height: 1800);
+      expect(find.text('Durum Kontrol Ediliyor...'), findsOneWidget);
+      expect(t.widget<ElevatedButton>(find.byKey(const ValueKey<String>('site_application_apply'))).onPressed, isNull);
+      final setup = find.widgetWithText(ElevatedButton, 'Siteyi Kur');
+      await scrollTo(t, setup);
+      expect(t.widget<ElevatedButton>(setup).onPressed, isNull);
+      gate.complete();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('BEKLEYEN başvuru varken "Siteyi Kur" pasif ve neden ipucunda (sunucuya gidip 409 almaz)', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)
+        ..devices = [saDevice('ESP32_C3_ABC')]
+        ..seed([saRow(7)]);
+      await _pumpHome(t, auth, height: 1800);
+      final setup = find.widgetWithText(ElevatedButton, 'Siteyi Kur');
+      await scrollTo(t, setup);
+      expect(t.widget<ElevatedButton>(setup).onPressed, isNull);
+      expect(find.byTooltip(RegExp('Zaten bekleyen bir site başvurunuz var')), findsWidgets);
+      expect(find.text('Başvurunuz İnceleniyor'), findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('durum hazırken "Siteyi Kur" başvuru formunu CİHAZ SEÇİLİ açar', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)..devices = [saDevice('ESP32_C3_ABC')];
+      await _pumpHome(t, auth, height: 1800);
+      final setup = find.widgetWithText(ElevatedButton, 'Siteyi Kur');
+      await scrollTo(t, setup);
+      await t.tap(setup);
+      await settleFor(t, 700);
+      expect(find.text('Onaydan sonra site yöneticisi olursunuz'), findsOneWidget);
+      expect(find.text('ESP32_C3_ABC'), findsWidgets);
+      await _disposeHome(t);
+    });
+  });
+
+  group('B10/B18: rol değişimi, tek yenileme, onay kartı ömrü', () {
+    testWidgets('daire kullanıcısı <-> bireysel rol değişimi: açık ekranda başvuru kartı yerinde kalır; taze durum için gereksiz istek yok', (t) async {
+      // (Eski durumun yeniden okunması ekran düzeyinde, saat enjekte edilerek sınanır:
+      // site_application_screens_sync_test.dart.)
+      final auth = _HomeApp(role: UserRole.apartmentOwner)..seed([saRow(7, status: 'rejected', decisionNote: 'Eksik')]);
+      await _pumpHome(t, auth, height: 1600);
+      await _tapMenu(t, 'Daireye Katıl & Cihaz Ekle');
+      expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
+      final loaded = auth.mineCalls;
+
+      auth.changeSession(role: UserRole.individual);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(auth.mineCalls, loaded, reason: 'tazelik kuralı: 1 dakikadan taze durum yeniden okunmaz');
+      expect(find.text('Site başvurunuz reddedildi'), findsOneWidget);
+      expect(auth.role, UserRole.individual);
+      await _disposeHome(t);
+    });
+
+    testWidgets('onay yenilemesi başarılı ama rol hâlâ başvuran (yöneticilik sonradan alınmış): onaylı kart KALKAR, tekrar gelmez', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)..seed([saRow(7)]);
+      await _pumpHome(t, auth);
+      // Sunucuda karar verildi ama kullanıcının rolü (başka nedenle) değişmedi.
+      auth.serverDecide(7, 'approved');
+      auth.serverRole = UserRole.individual;
+      await _elapse(t, const Duration(seconds: 31));
+      await t.pump(const Duration(seconds: 1));
+      await t.pump(const Duration(milliseconds: 600));
+      expect(auth.role, UserRole.individual);
+      expect(find.text('Site başvurunuz onaylandı'), findsNothing, reason: 'yenileme başarılı + rol aynı: yanıltıcı kart yok');
+      expect(find.byKey(const ValueKey<String>('site_application_refresh_account')), findsNothing);
+      // Sonraki yoklamalarda / yeniden okumada kart geri gelmez.
+      await _elapse(t, const Duration(minutes: 2));
+      expect(find.text('Site başvurunuz onaylandı'), findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('onayda hesap yenileme TEK kez yapılır (çift yenileme yok): oturum yenilendi, Panel verisi bir kez okundu', (t) async {
+      final auth = _HomeApp(role: UserRole.individual)..seed([saRow(7, siteName: 'Gül Sitesi')]);
+      await _pumpHome(t, auth);
+      auth.serverDecide(7, 'approved');
+      auth.sites = [_site(11, 'Gül Sitesi')];
+      final sitesBefore = auth.listSitesCalls;
+      final forcedBefore = auth.refreshSessionForcedCalls;
+      await _elapse(t, const Duration(seconds: 31));
+      await t.pump(const Duration(seconds: 1));
+      await t.pump(const Duration(milliseconds: 600));
+      expect(auth.role, UserRole.siteManager);
+      expect(auth.refreshSessionForcedCalls - forcedBefore, 1, reason: 'zorla oturum yenileme bir kez');
+      expect(auth.listSitesCalls - sitesBefore, lessThanOrEqualTo(2), reason: 'Panel verisi tekrar tekrar okunmaz');
+      await _disposeHome(t);
+    });
+
+    testWidgets('yenileme (Yenile) bekleyen yokken başvuru durumunu gereksiz YOKLAMAZ; bireysel ana ekran yenilemesi tazeliği korur', (t) async {
+      final auth = _HomeApp(role: UserRole.individual);
+      await _pumpHome(t, auth, height: 1400);
+      final before = auth.mineCalls;
+      await t.tap(find.byTooltip('Yenile').first);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      // Taze bilgi varken (az önce okundu) mine'ın art arda tekrar okunmaması beklenir; en çok 1 ek çağrı kabul.
+      expect(auth.mineCalls - before, lessThanOrEqualTo(1));
       await _disposeHome(t);
     });
   });

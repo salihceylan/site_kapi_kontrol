@@ -434,11 +434,117 @@ void main() {
       await _tapFilter(t, 'rejected');
       await _openDetail(t, 'Kuzey Evleri');
       expect(_inDialog(find.text('Gerekçe: Adres bilgisi eksik.')), findsOneWidget);
+      expect(_inDialog(find.text('Bu not başvurana görünür.')), findsOneWidget);
     });
 
-    testWidgets('başvuran hesabı silinmiş (applicant: null): "Silinmiş hesap" gösterilir, onay APPLICANT_UNAVAILABLE ile reddedilir', (t) async {
+    testWidgets('B15: onaylı başvuruda karar notu "Onay notu" etiketiyle ve "başvurana görünür" uyarısıyla gösterilir', (t) async {
       final auth = _auth()
-        ..applicantUnavailable = true
+        ..seed([
+          saRow(
+            41,
+            status: 'approved',
+            decidedAt: DateTime.utc(2026, 10, 16, 12),
+            decidedByName: 'Süper Yönetici',
+            decisionNote: 'Hoş geldiniz, site kuruldu.',
+          ),
+        ]);
+      await _pump(t, auth, height: 1400);
+      await _tapFilter(t, 'approved');
+      await _openDetail(t, 'Gül Sitesi');
+      expect(_inDialog(find.text('Onay notu: Hoş geldiniz, site kuruldu.')), findsOneWidget);
+      expect(_inDialog(find.text('Bu not başvurana görünür.')), findsOneWidget);
+      expect(_inDialog(find.textContaining('Gerekçe:')), findsNothing);
+    });
+
+    testWidgets('B15: 20 blok -> ilk 12 görünür, "Tümünü göster" ile ONAY ÖNCESİ tüm blok adları görülebilir', (t) async {
+      final blocks = <Map<String, dynamic>>[
+        for (var i = 1; i <= 20; i++) <String, dynamic>{'name': 'Blok $i', 'apartment_count': 5},
+      ];
+      final auth = _auth()..seed([saRow(41, blocks: blocks)]);
+      await _pump(t, auth, height: 1800);
+      await _openDetail(t, 'Gül Sitesi');
+      expect(_inDialog(find.text('Blok 1 • 5 daire')), findsOneWidget);
+      expect(_inDialog(find.text('Blok 12 • 5 daire')), findsOneWidget);
+      expect(_inDialog(find.text('Blok 20 • 5 daire')), findsNothing, reason: 'varsayılan: ilk 12');
+
+      final toggle = find.byKey(const ValueKey<String>('site_application_pills_toggle_blok'));
+      await scrollTo(t, toggle);
+      expect(find.text('Tümünü göster (8 blok daha)'), findsOneWidget);
+      await t.tap(toggle);
+      await settleFor(t, 200);
+      expect(_inDialog(find.text('Blok 13 • 5 daire')), findsOneWidget);
+      expect(_inDialog(find.text('Blok 20 • 5 daire')), findsOneWidget, reason: 'tümü görülebilir');
+      expect(find.text('Daha az göster'), findsOneWidget);
+
+      await t.tap(toggle);
+      await settleFor(t, 200);
+      expect(_inDialog(find.text('Blok 20 • 5 daire')), findsNothing);
+    });
+
+    testWidgets('B15: 12 ve altı blokta "Tümünü göster" düğmesi çıkmaz', (t) async {
+      final auth = _seeded();
+      await _pump(t, auth, height: 1400);
+      await _openDetail(t, 'Gül Sitesi');
+      expect(find.byKey(const ValueKey<String>('site_application_pills_toggle_blok')), findsNothing);
+    });
+
+    testWidgets('B19: iptal edilmiş başvuruda "Başvuran iptal etti • tarih" (sunucu iptalde decided_at yazar), eylem yok', (t) async {
+      final auth = _auth()
+        ..seed([saRow(41, status: 'cancelled', decidedAt: DateTime.utc(2026, 10, 16, 21, 30))]);
+      await _pump(t, auth, height: 1400);
+      await _tapFilter(t, 'cancelled');
+      await _openDetail(t, 'Gül Sitesi');
+      expect(_inDialog(find.text('Başvuran iptal etti • 17.10.2026 00:30')), findsOneWidget, reason: 'İstanbul saati');
+      expect(find.byKey(const ValueKey<String>('site_application_action_approve')), findsNothing);
+      expect(_inDialog(find.textContaining('Gerekçe:')), findsNothing);
+    });
+
+    testWidgets('B16: ret gerekçesi sınırı KOD NOKTASIdır: 300 emoji geçerli (sayaç 300/300), 301 emoji hata; kırpılmış metin sayılır', (t) async {
+      final auth = _seeded();
+      await _pump(t, auth, height: 1400);
+      await _openDetail(t, 'Gül Sitesi');
+      await _tapKey(t, 'site_application_action_reject');
+      final field = find.byKey(const ValueKey<String>('site_application_reject_reason'));
+      await t.enterText(field, '😀' * 300);
+      await t.pump();
+      expect(find.text('300/300'), findsOneWidget);
+      expect(find.text('Gerekçe en çok 300 karakter olabilir.'), findsNothing);
+      expect(t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Reddet')).onPressed, isNotNull);
+
+      await t.enterText(field, '😀' * 301);
+      await t.pump();
+      expect(find.text('301/300'), findsOneWidget);
+      expect(find.text('Gerekçe en çok 300 karakter olabilir.'), findsOneWidget);
+      expect(t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Reddet')).onPressed, isNull);
+
+      // Sayaç, hata ve düğme AYNI (kırpılmış) metni kullanır: baştaki / sondaki boşluk fazlalık sayılmaz.
+      await t.enterText(field, '   ${'a' * 300}   ');
+      await t.pump();
+      expect(find.text('300/300'), findsOneWidget);
+      expect(find.text('Gerekçe en çok 300 karakter olabilir.'), findsNothing);
+      expect(t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Reddet')).onPressed, isNotNull);
+    });
+
+    testWidgets('B16: arama alanı sessizce kırpılmaz: 100 karakter aşılırsa uyarı çıkar, sunucuya ilk 100 kod noktası gider', (t) async {
+      final auth = _seeded();
+      await _pump(t, auth);
+      final search = find.byKey(const ValueKey<String>('site_applications_search'));
+      await t.enterText(search, 'a' * 130);
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump();
+      expect(t.widget<EditableText>(find.descendant(of: search, matching: find.byType(EditableText))).controller.text.length, 130,
+          reason: 'alan sessizce kırpılmaz');
+      expect(find.text('Arama yalnız ilk 100 karakterle yapılır.'), findsOneWidget);
+      expect(auth.adminListCalls.last.query, 'a' * 100);
+
+      await t.enterText(search, 'a' * 40);
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump();
+      expect(find.text('Arama yalnız ilk 100 karakterle yapılır.'), findsNothing);
+    });
+
+    testWidgets('B12: başvuran hesabı silinmiş (applicant: null): "Silinmiş hesap" gösterilir, "Onayla" PASİF (neden yazılı), yalnız "Reddet" etkin', (t) async {
+      final auth = _auth()
         ..seed([saRow(41, siteName: 'Hayalet Sitesi', deletedApplicant: true)]);
       await _pump(t, auth, height: 1400);
       expect(find.text('Başvuran: Silinmiş hesap'), findsOneWidget);
@@ -447,15 +553,22 @@ void main() {
       expect(find.byKey(const ValueKey<String>('site_application_deleted_applicant')), findsOneWidget);
       expect(_inDialog(find.text('ayse@example.com')), findsNothing, reason: 'iletişim bilgisi yok');
 
-      await _tapKey(t, 'site_application_action_approve');
-      expect(find.textContaining('Başvuran site yöneticisi olacak.'), findsOneWidget);
-      await _confirmApprove(t);
+      final approve = t.widget<PrimaryActionButton>(find.byKey(const ValueKey<String>('site_application_action_approve')));
+      final reject = t.widget<PrimaryActionButton>(find.byKey(const ValueKey<String>('site_application_action_reject')));
+      expect(approve.onPressed, isNull, reason: 'kesin 409 verecek işlem sunulmaz');
+      expect(reject.onPressed, isNotNull);
       expect(
-        _inDialog(find.text('Başvuran hesap silinmiş ya da pasif; başvuru onaylanamaz.')),
+        find.byKey(const ValueKey<String>('site_application_approve_disabled_reason')),
         findsOneWidget,
       );
-      // Reddetme yine mümkün.
-      expect(find.byKey(const ValueKey<String>('site_application_action_reject')), findsOneWidget);
+      expect(find.textContaining('Onay kapalı: başvuran hesap silinmiş'), findsOneWidget);
+      expect(auth.approveCalls, isEmpty);
+
+      // Reddetme çalışır.
+      await _tapKey(t, 'site_application_action_reject');
+      await t.tap(find.widgetWithText(ElevatedButton, 'Reddet'));
+      await settleFor(t, 700);
+      expect(auth.rejectCalls, [(id: 41, reason: '')]);
     });
 
     testWidgets('ayrıntı hatası: Tekrar Dene; 404 ise "artık yok" ve eylem yok, liste tazelenir', (t) async {
@@ -581,7 +694,7 @@ void main() {
       await _tapKey(t, 'site_application_action_approve');
       await _confirmApprove(t);
       expect(
-        _inDialog(find.text('Başvuran hesap silinmiş ya da pasif; başvuru onaylanamaz.')),
+        _inDialog(find.text('Başvuran hesap silinmiş, pasif, e-postası doğrulanmamış ya da onaysız olabilir; başvuru onaylanamaz.')),
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey<String>('site_application_action_reject')), findsOneWidget);

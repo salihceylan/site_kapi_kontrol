@@ -486,7 +486,7 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Daireye Katıl & Cihaz Ekle';
     case SirketMenuItem.cihazEkle:
       if (role == UserRole.superUser) return 'Şirket Cihazı Kaydet';
-      if (role == UserRole.individual) return 'Yönetici Olarak Cihaz Ekle';
+      if (role == UserRole.individual) return 'Cihaz Ekle';
       return 'Cihaz Kaydet';
     case SirketMenuItem.kayitliCihazlar:
       if (role == UserRole.superUser) return 'Şirket Cihaz Envanteri';

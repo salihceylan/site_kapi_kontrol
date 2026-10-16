@@ -431,7 +431,7 @@ class EmptyCard extends StatelessWidget {
 }
 
 /// İkincil (yönetim) eylemi: ton zeminli düğme. `ElevatedButton/OutlinedButton/FilledButton`'ın
-/// `style:`'ına verilir; düğme tipi (test bulucuları) değişmez. En az 44 dp yükseklik.
+/// `style:`'ına verilir; düğme tipi (test bulucuları) değişmez. En az 48 dp yükseklik (dokunma hedefi).
 ///
 /// Hiyerarşi: ikincil eylem DÜZ kalır. `ElevatedButton`a verilirse tema cila katmanı (üst ışık + alt
 /// gölge) soluk ton zemininin üstünde kirli bir gradyan bırakıyordu; [_flatLayer] o katmanı kapatır
@@ -447,7 +447,7 @@ ButtonStyle tonalActionStyle(
     disabledForegroundColor: p.textSecondary,
     disabledBackgroundColor: p.surfaceMuted,
     elevation: 0,
-    minimumSize: const Size(0, 44),
+    minimumSize: const Size(0, 48),
   ).copyWith(
     backgroundBuilder: _flatLayer,
     side: WidgetStateProperty.resolveWith(
@@ -483,7 +483,7 @@ ButtonStyle dangerOutlineStyle(BuildContext context) {
   return OutlinedButton.styleFrom(
     foregroundColor: tone.ink(p),
     disabledForegroundColor: p.textSecondary,
-    minimumSize: const Size(0, 44),
+    minimumSize: const Size(0, 48),
   ).copyWith(
     side: WidgetStateProperty.resolveWith(
       (states) => BorderSide(
@@ -511,6 +511,6 @@ ButtonStyle filledToneStyle(
     // Düz dolgu: tema gölgesi (mavi, yükselti 2-4) tonlu düğmede yanlış renkli halka çiziyordu.
     elevation: 0,
     shadowColor: Colors.transparent,
-    minimumSize: const Size(0, 44),
+    minimumSize: const Size(0, 48),
   );
 }

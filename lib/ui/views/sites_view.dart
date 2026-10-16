@@ -36,6 +36,7 @@ class SitesView extends StatelessWidget {
     required this.onRefreshSites,
     required this.onLoadPage,
     required this.onOpenAddSite,
+    this.addSiteLabel = 'Yeni Site',
     required this.onSelectSite,
     required this.onEditSite,
     required this.onDeleteSite,
@@ -83,6 +84,9 @@ class SitesView extends StatelessWidget {
   final VoidCallback onRefreshSites;
   final ValueChanged<int> onLoadPage;
   final VoidCallback onOpenAddSite;
+
+  /// Site ekleme düğmesinin etiketi: sahip bağı olmayan yönetici başvuru yapar ("Site Başvurusu").
+  final String addSiteLabel;
   final ValueChanged<SiteRecord> onSelectSite;
   final ValueChanged<SiteRecord> onEditSite;
   final ValueChanged<SiteRecord> onDeleteSite;
@@ -129,7 +133,7 @@ class SitesView extends StatelessWidget {
               ? ElevatedButton.icon(
                   onPressed: onOpenAddSite,
                   icon: const Icon(Icons.add_business_outlined),
-                  label: const Text('Yeni Site'),
+                  label: Text(addSiteLabel),
                 )
               : null,
         ),

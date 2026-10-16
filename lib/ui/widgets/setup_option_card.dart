@@ -36,7 +36,7 @@ class SetupOptionCard extends StatelessWidget {
   final IconData icon;
   final String title;
 
-  /// Başlığın yanındaki kısa rozet metni ('Daireye Katıl', 'YÖNETİCİ'...).
+  /// Başlığın yanındaki kısa rozet metni ('Daireye Katıl', 'BAŞVURU'...).
   final String badge;
 
   final String description;

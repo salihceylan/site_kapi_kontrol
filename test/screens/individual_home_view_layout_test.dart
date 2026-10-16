@@ -167,11 +167,11 @@ void main() {
 
       expect(find.text('Hoş Geldiniz!'), findsOneWidget);
       expect(find.text('Site Sakini Girişi'), findsOneWidget);
-      expect(find.text('Yönetici & Cihaz Kurulumu'), findsOneWidget);
+      expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
-      expect(find.text('Yönetici Olarak Cihaz Ekle'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsOneWidget);
       expect(find.text('HIZLI KATILIM'), findsOneWidget);
-      expect(find.text('YÖNETİCİ'), findsOneWidget);
+      expect(find.text('CİHAZ'), findsOneWidget);
       await _dispose(t);
     });
 

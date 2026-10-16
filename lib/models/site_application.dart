@@ -6,6 +6,9 @@ abstract final class SiteApplicationStatus {
   static const String approved = 'approved';
   static const String rejected = 'rejected';
   static const String cancelled = 'cancelled';
+
+  /// Sunucu `status` göndermediyse ya da tanınmayan değer: BEKLEYEN sayılmaz, hiçbir eylem sunulmaz.
+  static const String unknown = 'unknown';
 }
 
 int _asInt(Object? raw, [int fallback = 0]) {
@@ -101,7 +104,7 @@ class SiteApplicant {
 class SiteApplication {
   const SiteApplication({
     required this.id,
-    this.status = SiteApplicationStatus.pending,
+    this.status = SiteApplicationStatus.unknown,
     this.siteName = '',
     this.city,
     this.district,
@@ -129,7 +132,8 @@ class SiteApplication {
 
   final int id;
 
-  /// `pending`, `approved`, `rejected` ya da `cancelled`.
+  /// `pending`, `approved`, `rejected` ya da `cancelled`; eksik / tanınmayan değer ham tutulur ama
+  /// bekleyen SAYILMAZ ([statusLabel] "Durum bilinmiyor").
   final String status;
   final String siteName;
   final String? city;
@@ -174,7 +178,12 @@ class SiteApplication {
   bool get isCancelled => status == SiteApplicationStatus.cancelled;
   bool get hasDevice => deviceUid != null;
 
-  /// Okunur durum adı; bilinmeyen değerde ham değer (kayıt kaybolmaz).
+  /// Durum sunucunun bildirdiği dört değerden biri mi? Değilse kart kısıtlı görünür ve eylem sunulmaz.
+  bool get hasKnownStatus =>
+      isPending || isApproved || isRejected || isCancelled;
+
+  /// Okunur durum adı; bilinmeyen değerde "Durum bilinmiyor" (ham kod kullanıcıya gösterilmez; kayıt
+  /// yine listelenir).
   String get statusLabel {
     switch (status) {
       case SiteApplicationStatus.pending:
@@ -186,7 +195,7 @@ class SiteApplication {
       case SiteApplicationStatus.cancelled:
         return 'İptal edildi';
       default:
-        return status;
+        return 'Durum bilinmiyor';
     }
   }
 
@@ -221,7 +230,7 @@ class SiteApplication {
     final available = json['device_available'];
     return SiteApplication(
       id: _asInt(json['id']),
-      status: _text(json['status']) ?? SiteApplicationStatus.pending,
+      status: _text(json['status']) ?? SiteApplicationStatus.unknown,
       siteName: json['site_name']?.toString() ?? '',
       city: _text(json['city']),
       district: _text(json['district']),
@@ -261,14 +270,14 @@ class SiteApplicationPage {
   final List<SiteApplication> items;
   final int total;
 
+  /// `items` listesi yoksa yanıt anlaşılamamıştır ([FormatException]): boş liste ("başvuru yok") sanılmaz.
   factory SiteApplicationPage.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
-    final items = rawItems is List
-        ? rawItems
-              .whereType<Map>()
-              .map((e) => SiteApplication.fromJson(Map<String, dynamic>.from(e)))
-              .toList(growable: false)
-        : const <SiteApplication>[];
+    if (rawItems is! List) throw const FormatException('items yok');
+    final items = rawItems
+        .whereType<Map>()
+        .map((e) => SiteApplication.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
     return SiteApplicationPage(items: items, total: _asIntOrNull(json['total']) ?? items.length);
   }
 }
@@ -276,15 +285,29 @@ class SiteApplicationPage {
 /// `GET /membership/site-applications/mine`: bekleyen başvuru (yoksa null) ve son başvurular (yeniden eskiye).
 @immutable
 class MySiteApplications {
-  const MySiteApplications({this.pending, this.items = const <SiteApplication>[]});
+  const MySiteApplications({
+    this.pending,
+    this.items = const <SiteApplication>[],
+    this.requiresApplication,
+  });
 
   final SiteApplication? pending;
   final List<SiteApplication> items;
 
+  /// Sunucunun `requires_application` bildirimi: true = bu kullanıcı site eklemek için başvurmalı (örn. sahip
+  /// bağı olmayan site yöneticisi); false = anlık "Site Ekle" açık; alan yoksa null (eski sunucu: rolden
+  /// türetilen eski davranış).
+  final bool? requiresApplication;
+
   /// Ekranda gösterilecek en güncel başvuru: bekleyen varsa o, yoksa listenin ilki.
   SiteApplication? get latest => pending ?? (items.isEmpty ? null : items.first);
 
+  /// `pending` ve `items` alanlarının İKİSİ de yoksa yanıt anlaşılamamıştır ([FormatException]): "başvuru yok"
+  /// sanılmaz. Yalnız `pending: null` + `items: []` meşru boş durumdur.
   factory MySiteApplications.fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('pending') && !json.containsKey('items')) {
+      throw const FormatException('pending/items yok');
+    }
     final rawItems = json['items'];
     final items = rawItems is List
         ? rawItems
@@ -305,7 +328,12 @@ class MySiteApplications {
         }
       }
     }
-    return MySiteApplications(pending: pending, items: items);
+    final requires = json['requires_application'];
+    return MySiteApplications(
+      pending: pending,
+      items: items,
+      requiresApplication: requires is bool ? requires : null,
+    );
   }
 }
 

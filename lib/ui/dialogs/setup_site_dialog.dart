@@ -10,14 +10,17 @@ import '../../services/api_exception.dart';
 import '../../services/auth_service.dart';
 import '../design/app_card.dart';
 import '../design/app_dialog.dart';
+import '../design/app_snack.dart';
 import '../design/buttons.dart';
 import '../design/icon_orb.dart';
 import '../design/motion_widgets.dart';
 import '../design/tokens.dart';
+import '../helpers/a11y_announce.dart';
 import '../helpers/dialog_guard.dart';
 import '../helpers/form_validation.dart';
 import '../helpers/paged_loader.dart';
 import '../helpers/retry_lock.dart';
+import '../helpers/text_length.dart';
 import '../widgets/crm_parts.dart';
 import '../widgets/management_type_selector.dart';
 import '../widgets/site_application_parts.dart';
@@ -33,8 +36,26 @@ enum SetupSiteMode {
   application,
 }
 
-/// Formun sonucu: site kuruldu (anlık) ya da başvuru gönderildi.
-enum SetupSiteOutcome { created, applied }
+/// Formun sonucu.
+enum SetupSiteOutcome {
+  /// Site kuruldu (anlık kurulum).
+  created,
+
+  /// Başvuru gönderildi.
+  applied,
+
+  /// Sunucu zaten BEKLEYEN başvuru olduğunu söyledi (409 `APPLICATION_PENDING`): form kapanır, çağıran durumu
+  /// yeniden okur ve bekleyen başvuru kartı görünür.
+  alreadyPending,
+
+  /// Anlık kurulum 409 `APPLICATION_REQUIRED` döndü (istemci "anlık" sanıyordu): form başvuru kipine geçti ve
+  /// başvuru gönderilmeden kapandı; çağıran başvuru durumunu (`requires_application`) yeniden okur.
+  applicationRequired,
+
+  /// Başvuru gönderimi hata verdi ama istek sunucuya ulaşmış OLABİLİR (zaman aşımı / 5xx / bilinmeyen hata) ve
+  /// form başvuru alınmadan kapandı: çağıran durumu yeniden okur.
+  uncertain,
+}
 
 class _BlockDraft {
   _BlockDraft({required this.name, required this.apartmentCount})
@@ -45,6 +66,9 @@ class _BlockDraft {
   int apartmentCount;
   final TextEditingController nameController;
   final TextEditingController countController;
+
+  /// Ad alanının durumu: bir blok adı değişince öbürlerinin "benzersiz olmalı" hatası canlı güncellensin.
+  final GlobalKey<FormFieldState<String>> nameKey = GlobalKey<FormFieldState<String>>();
 
   void dispose() {
     nameController.dispose();
@@ -107,12 +131,23 @@ class SetupSiteDialog extends StatefulWidget {
 
   /// Oturumun rolüne göre varsayılan çalışma biçimi: bireysel / daire kullanıcısı başvurur; site
   /// yöneticisi ve süper kullanıcı anlık kurar (oturum yoksa eski davranış: anlık).
-  static SetupSiteMode modeFor(AuthService authService) {
+  ///
+  /// [requiresApplication]: sunucunun `requires_application` bildirimi. Sahip bağı olmayan site yöneticisi
+  /// (true) de BAŞVURUR; false / null ise anlık kurar (alan yoksa eski davranış).
+  static SetupSiteMode modeFor(AuthService authService, {bool? requiresApplication}) {
     final role = authService.session?.role;
-    return role == UserRole.individual || role == UserRole.apartmentOwner
-        ? SetupSiteMode.application
-        : SetupSiteMode.instant;
+    if (role == UserRole.individual || role == UserRole.apartmentOwner) {
+      return SetupSiteMode.application;
+    }
+    if (role == UserRole.siteManager && requiresApplication == true) {
+      return SetupSiteMode.application;
+    }
+    return SetupSiteMode.instant;
   }
+
+  /// "Zaten bekleyen başvuru" iletisi (form kapandıktan sonra gösterilir).
+  static const String alreadyPendingMessage =
+      'Zaten bekleyen bir site başvurunuz var. Durumu başvuru kartında görebilirsiniz.';
 
   static Future<SetupSiteOutcome?> show(
     BuildContext context, {
@@ -120,8 +155,8 @@ class SetupSiteDialog extends StatefulWidget {
     String? deviceUid,
     SetupSiteMode? mode,
     SiteApplication? prefill,
-  }) {
-    return showDialog<SetupSiteOutcome>(
+  }) async {
+    final outcome = await showDialog<SetupSiteOutcome>(
       context: context,
       barrierDismissible: false,
       builder: (_) => SetupSiteDialog(
@@ -131,6 +166,10 @@ class SetupSiteDialog extends StatefulWidget {
         prefill: prefill,
       ),
     );
+    if (outcome == SetupSiteOutcome.alreadyPending && context.mounted) {
+      AppSnack.show(context, alreadyPendingMessage, kind: AppSnackKind.warning);
+    }
+    return outcome;
   }
 
   @override
@@ -147,7 +186,10 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   late final TextEditingController _noteController;
   final RetryLock _retry = RetryLock();
 
-  late final SetupSiteMode _mode = widget.mode ?? SetupSiteDialog.modeFor(widget.authService);
+  /// Çalışma biçimi. Anlık kurulum 409 `APPLICATION_REQUIRED` dönerse (eskimiş rol / alan) başvuru kipine
+  /// geçilir: kullanıcı çıkmaza sokulmaz, girdiği bilgiler korunur.
+  late SetupSiteMode _mode = widget.mode ?? SetupSiteDialog.modeFor(widget.authService);
+  final FocusNode _successFocus = FocusNode(debugLabel: 'site_application_success');
 
   String? _selectedCity;
   String? _selectedDistrict;
@@ -159,15 +201,31 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   final List<_DoorDraft> _doors = [];
   bool _submitting = false;
   String? _error;
+  String? _infoNote;
   SetupSiteOutcome? _outcome;
+
+  /// Başvuru isteği hata verdi ama sunucuya ulaşmış olabilir (sonuç belirsiz).
+  bool _uncertain = false;
+
+  /// Anlık kurulum `APPLICATION_REQUIRED` ile reddedildi ve form başvuru kipine geçti.
+  bool _sawApplicationRequired = false;
 
   // Başvuru modunda isteğe bağlı cihaz seçimi.
   List<String> _deviceUids = <String>[];
   bool _devicesLoading = false;
+  String? _devicesError;
   String _selectedDevice = _noDevice;
   int _deviceVersion = 0;
 
   bool get _isApplication => _mode == SetupSiteMode.application;
+
+  /// Form kapanırken (Kapat / geri / Tamam) döndürülen sonuç: gönderildiyse `applied`, sonucu belirsiz bir
+  /// hata varsa `uncertain`, aksi hâlde null.
+  SetupSiteOutcome? get _closeResult =>
+      _outcome ??
+      (_uncertain
+          ? SetupSiteOutcome.uncertain
+          : (_sawApplicationRequired ? SetupSiteOutcome.applicationRequired : null));
 
   @override
   void initState() {
@@ -214,6 +272,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   @override
   void dispose() {
     _retry.dispose();
+    _successFocus.dispose();
     _nameController.dispose();
     _addressController.dispose();
     _noteController.dispose();
@@ -227,10 +286,15 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   }
 
   /// Hesaba bağlı, henüz bir siteye atanmamış cihazları çeker (başvuruda isteğe bağlı seçim). Hata olursa
-  /// seçim gizli kalır ve başvuru cihazsız yapılabilir ("Cihaz sonra eklenebilir").
+  /// "Hesabınıza bağlı cihaz yok" DENMEZ: hata ve "Tekrar Dene" gösterilir; cihaz seçimi isteğe bağlı
+  /// kaldığından başvuru cihazsız yine yapılabilir.
   Future<void> _loadDevices() async {
-    setState(() => _devicesLoading = true);
+    setState(() {
+      _devicesLoading = true;
+      _devicesError = null;
+    });
     List<String> uids = <String>[];
+    String? failure;
     try {
       final devices = await widget.authService.getMyClaimedDevices();
       uids = <String>[
@@ -238,12 +302,16 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           if (d['site_code'] == null && (d['device_uid']?.toString() ?? '').isNotEmpty)
             d['device_uid'].toString(),
       ];
-    } catch (_) {
-      // Cihaz listesi alınamadı: cihazsız başvuru yine mümkündür.
+    } catch (e) {
+      failure = crmMessageOf(
+        e,
+        'Cihaz listesi alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+      );
     }
     if (!mounted) return;
     setState(() {
       _devicesLoading = false;
+      _devicesError = failure;
       final explicit = widget.deviceUid;
       if (explicit != null && !uids.contains(explicit)) uids = <String>[explicit, ...uids];
       _deviceUids = uids;
@@ -291,6 +359,18 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
     setState(() {
       final removed = _blocks.removeAt(index);
       removed.dispose();
+    });
+    _revalidateBlockNames();
+  }
+
+  /// Bir blok adı değişince (ya da blok silinince) TÜM blok adı alanlarının "benzersiz olmalı" hatası canlı
+  /// güncellenir: yinelenen adı düzeltmek eşinin hatasını kendiliğinden kaldırır.
+  void _revalidateBlockNames() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final block in _blocks) {
+        block.nameKey.currentState?.validate();
+      }
     });
   }
 
@@ -358,6 +438,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
     setState(() {
       _submitting = true;
       _error = null;
+      _infoNote = null;
     });
 
     try {
@@ -375,10 +456,19 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           note: _noteController.text,
         );
         if (!mounted) return;
-        // Başarı iletisi aynı pencerede gösterilir; "Tamam" ile (ya da geri tuşuyla) kapanır.
+        // Başarı iletisi aynı pencerede gösterilir; "Tamam" ile (ya da geri tuşuyla) kapanır. Form başarı
+        // görünümüyle değiştiği için odak başlığa taşınır ve ekran okuyucuya duyurulur.
         setState(() {
           _submitting = false;
           _outcome = SetupSiteOutcome.applied;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _successFocus.requestFocus();
+          announcePolite(
+            context,
+            'Başvurunuz alındı. Süper kullanıcı onayladığında site yöneticisi olacaksınız.',
+          );
         });
         return;
       }
@@ -398,24 +488,57 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       popIfCurrent(context, SetupSiteOutcome.created);
     } on ApiException catch (e) {
       if (!mounted) return;
-      final limited = _retry.lockIfRateLimited(e, () {
-        if (mounted) setState(() {});
-      });
-      // Rol eskimiş olabilir (zaten yönetici / başvuru gerekli): oturum sunucudan yenilenir.
-      if (e.code == 'ALREADY_SITE_MANAGER' || e.code == 'APPLICATION_REQUIRED') {
+      // Zaten bekleyen başvuru: form kapanır, çağıran durumu yeniden okur (bekleyen başvuru kartı görünür).
+      if (_isApplication && e.code == 'APPLICATION_PENDING') {
+        popIfCurrent(context, SetupSiteOutcome.alreadyPending);
+        return;
+      }
+      final limited = _retry.lockIfRateLimited(e, _onRetryReady);
+      // Rol eskimiş olabilir (zaten yönetici): oturum sunucudan yenilenir.
+      if (e.code == 'ALREADY_SITE_MANAGER') {
         unawaited(widget.authService.refreshSession(force: true));
       }
+      // Anlık kurulum kapalı (sahip bağı olmayan yönetici ya da bayat alan): çıkmaz yok -> başvuru kipine
+      // geçilir, girilen bilgiler korunur; çağıran durumu sunucudan yeniden okur (form kapanınca).
+      final switchToApplication = !_isApplication && e.code == 'APPLICATION_REQUIRED';
       setState(() {
-        _error = limited ? RetryLock.messageFor(e) : crmMessageOf(e, _failureFallback);
+        if (switchToApplication) {
+          _sawApplicationRequired = true;
+          _mode = SetupSiteMode.application;
+          _selectedDevice = widget.deviceUid ?? _noDevice;
+          if (widget.deviceUid != null && !_deviceUids.contains(widget.deviceUid)) {
+            _deviceUids = <String>[widget.deviceUid!];
+          }
+          _error =
+              'Site eklemek için başvuru yapmanız gerekiyor. Bilgileriniz korundu; '
+              '"Başvuruyu Gönder" ile devam edebilirsiniz.';
+        } else {
+          _error = limited ? RetryLock.messageFor(e) : crmMessageOf(e, _failureFallback);
+        }
+        // İstek sunucuya ulaşmış olabilir (zaman aşımı / 5xx): form başvuru alınmadan kapanırsa çağıran durumu
+        // yeniden okur.
+        if (_isApplication && (e.statusCode == null || e.isServerError)) _uncertain = true;
         _submitting = false;
       });
+      if (switchToApplication) unawaited(_loadDevices());
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _error = _failureFallback;
+        if (_isApplication) _uncertain = true;
         _submitting = false;
       });
     }
+  }
+
+  /// Hız sınırı (429) kilidi açıldı: eski hata silinir, kısa bir bilgi gösterilir ve ekran okuyucuya duyurulur.
+  void _onRetryReady() {
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+      _infoNote = 'Tekrar deneyebilirsiniz.';
+    });
+    announcePolite(context, 'Tekrar deneyebilirsiniz.');
   }
 
   String get _failureFallback => _isApplication
@@ -424,15 +547,19 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
-    final th = Theme.of(context).textTheme;
     // Büyük yazıda sabit başlık küçülür: alt başlık kaydırılan formun başına taşınır ve onay düğmesi
     // sabit satır yerine formun SONUNA alınır (içerik için yer kalsın).
     final compactHeader = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     final submitted = _outcome == SetupSiteOutcome.applied;
+    // Kısa / yatay ekranda ya da klavye açıkken (ya da büyük yazıda) sabit başlık + sabit alt düğme formdan yer
+    // bırakmaz ve taşırdı (AppDialog notu: içeriğe Expanded verme, tüm pencere kaydırılsın). Bu durumlarda
+    // başlık, form ve gönder düğmesi TEK kaydırma alanında akar; gönder düğmesi formun sonundadır.
+    final screen = MediaQuery.sizeOf(context);
+    final available = screen.height - MediaQuery.viewInsetsOf(context).bottom - 2 * AppSpace.xl;
+    final scrollAll = compactHeader || available < _scrollAllBelow;
     final subtitle = _isApplication
         ? 'Onaydan sonra site yöneticisi olursunuz'
-        : 'Site Sahibi (SITE_OWNER) Yapılandırması';
+        : 'Site Yönetimi Ayarları';
     final submitButton = PrimaryActionButton(
       key: const ValueKey<String>('setup_site_submit'),
       label: _submitting
@@ -443,294 +570,377 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       // Gönderim sürerken ve hız sınırı (429) sonrası kısa süre kilitli: art arda deneme yapılmasın.
       onPressed: (_submitting || _retry.locked) ? null : _submit,
     );
-    final cities = turkeyCitiesAndDistricts.keys.toList();
-    final districts = _selectedCity != null
-        ? (turkeyCitiesAndDistricts[_selectedCity] ?? <String>[])
-        : <String>[];
+    final header = _buildHeader(context, compactHeader: compactHeader, subtitle: subtitle);
+    const formPadding = EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.lg, AppSpace.xl, AppSpace.lg);
+
+    final Widget content;
+    if (submitted) {
+      content = scrollAll
+          ? SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [header, const Divider(height: 1), _buildSuccess(context)],
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                const Divider(height: 1),
+                Flexible(child: SingleChildScrollView(child: _buildSuccess(context))),
+              ],
+            );
+    } else if (scrollAll) {
+      content = SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            const Divider(height: 1),
+            Form(
+              key: _formKey,
+              // Düzeltilen alanın hatası kendiliğinden kalkar (yalnız gönderimde değil).
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Padding(
+                padding: formPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _fieldChildren(
+                    context,
+                    compactHeader: compactHeader,
+                    subtitle: subtitle,
+                    trailingSubmit: submitButton,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          const Divider(height: 1),
+          // Form İçeriği
+          Expanded(
+            child: Form(
+              key: _formKey,
+              // Düzeltilen alanın hatası kendiliğinden kalkar (yalnız gönderimde değil).
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: SingleChildScrollView(
+                padding: formPadding,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _fieldChildren(
+                    context,
+                    compactHeader: compactHeader,
+                    subtitle: subtitle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Onay Butonu (sabit; yer darsa formun sonunda)
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.md, AppSpace.xl, AppSpace.xl),
+            child: submitButton,
+          ),
+        ],
+      );
+    }
 
     return PopScope(
       // Gönderim sürerken geri tuşu pencereyi kapatmaz; başvuru gönderildiyse sonuçla kapanır.
       canPop: !_submitting && !submitted,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && submitted && !_submitting) popIfCurrent(context, _outcome);
+        if (!didPop && submitted && !_submitting) popIfCurrent(context, _closeResult);
       },
       child: Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: AppSpace.lg, vertical: AppSpace.xl),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Başlık ve İkon (+ sağ üstte kapatma; başlık düğmenin altına girmesin diye sağdan pay)
-              Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 32),
-                    child: AppDialogHeader(
-                      title: _isApplication ? 'Site Başvurusu' : 'Site Kurulum Sihirbazı',
-                      subtitle: compactHeader ? null : subtitle,
-                      icon: _isApplication ? Icons.domain_add_rounded : Icons.apartment_rounded,
-                    ),
-                  ),
-                  PositionedDirectional(
-                    top: AppSpace.sm,
-                    end: AppSpace.sm,
-                    child: IconButton(
-                      onPressed: _submitting ? null : () => popIfCurrent(context, _outcome),
-                      icon: const Icon(Icons.close_rounded),
-                      tooltip: 'Kapat',
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 1),
-
-              if (submitted)
-                Flexible(child: _buildSuccess(context))
-              else ...[
-                // Form İçeriği
-                Expanded(
-                  child: Form(
-                    key: _formKey,
-                    // Düzeltilen alanın hatası kendiliğinden kalkar (yalnız gönderimde değil).
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.lg, AppSpace.xl, AppSpace.lg),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (compactHeader) ...[
-                            Text(subtitle, style: th.bodySmall),
-                            const SizedBox(height: AppSpace.md),
-                          ],
-                          // Hata Mesajı (kaydırılmış formda görünür konuma gelir)
-                          if (_error != null) CrmFormError(message: _error!),
-
-                          if (_isApplication) ...[
-                            const InlineNotice(
-                              tone: AppTone.info,
-                              message:
-                                  'Başvurunuz süper kullanıcı tarafından incelenir. Onaylandığında siteniz '
-                                  'kurulur ve siz site yöneticisi olursunuz.',
-                            ),
-                            const SizedBox(height: AppSpace.lg),
-                            _buildDeviceSection(context),
-                            const SizedBox(height: AppSpace.lg),
-                          ] else if (widget.deviceUid != null) ...[
-                            // Bağlanacak Cihaz Bilgi Kartı
-                            _buildDevicePanel(context),
-                            const SizedBox(height: AppSpace.lg),
-                          ],
-
-                          // Site Adı
-                          TextFormField(
-                            controller: _nameController,
-                            enabled: !_submitting,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Site Adı *',
-                              hintText: 'Örn: Gül Sitesi',
-                              prefixIcon: Icon(Icons.business_rounded),
-                            ),
-                            validator: (val) {
-                              final name = (val ?? '').trim();
-                              if (name.isEmpty) return 'Site adı zorunludur.';
-                              if (name.length > SetupSiteDialog.maxNameLength) {
-                                return 'Site adı en çok ${SetupSiteDialog.maxNameLength} karakter olabilir.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpace.md),
-
-                          // Yönetim Türü (Site Adı ile İl arasında)
-                          ManagementTypeSelector(
-                            value: _managementType,
-                            onChanged: (type) => setState(() => _managementType = type),
-                          ),
-                          const SizedBox(height: AppSpace.md),
-
-                          // İl & İlçe Seçimi
-                          Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _selectedCity,
-                                  isExpanded: true,
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
-                                  dropdownColor: p.surface,
-                                  menuMaxHeight: 320,
-                                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                                  decoration: const InputDecoration(
-                                    labelText: 'İl',
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                  ),
-                                  items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
-                                  onChanged: _submitting
-                                      ? null
-                                      : (val) {
-                                          setState(() {
-                                            _selectedCity = val;
-                                            _selectedDistrict = null;
-                                          });
-                                        },
-                                ),
-                              ),
-                              const SizedBox(width: AppSpace.md),
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _selectedDistrict,
-                                  isExpanded: true,
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
-                                  dropdownColor: p.surface,
-                                  menuMaxHeight: 320,
-                                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                                  decoration: const InputDecoration(
-                                    labelText: 'İlçe',
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                  ),
-                                  items: districts.map((d) => DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis))).toList(),
-                                  onChanged: (_selectedCity == null || _submitting)
-                                      ? null
-                                      : (val) {
-                                          setState(() {
-                                            _selectedDistrict = val;
-                                          });
-                                        },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpace.md),
-
-                          // Açık Adres
-                          TextFormField(
-                            controller: _addressController,
-                            enabled: !_submitting,
-                            maxLines: 2,
-                            decoration: const InputDecoration(
-                              labelText: 'Açık Adres (İsteğe Bağlı)',
-                              hintText: 'Mahalle, Cadde, Sokak No...',
-                              prefixIcon: Icon(Icons.location_on_outlined),
-                            ),
-                            validator: (val) => (val ?? '').trim().length > SetupSiteDialog.maxAddressLength
-                                ? 'Adres en çok ${SetupSiteDialog.maxAddressLength} karakter olabilir.'
-                                : null,
-                          ),
-                          const SizedBox(height: AppSpace.xl),
-
-                          // Dinamik Bloklar ve Daireler Başlığı
-                          SectionHeader(
-                            title: 'Bloklar ve Daireler',
-                            icon: Icons.apartment_rounded,
-                            trailing: TextButton.icon(
-                              onPressed: (_submitting || _blocks.length >= SetupSiteDialog.maxBlocks)
-                                  ? null
-                                  : _addBlock,
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: const Text('Blok Ekle'),
-                            ),
-                          ),
-                          Text(
-                            _blocks.length >= SetupSiteDialog.maxBlocks
-                                ? 'En fazla ${SetupSiteDialog.maxBlocks} blok eklenebilir.'
-                                : 'Her bloğun adını ve daire sayısını belirleyin',
-                            style: th.bodySmall,
-                          ),
-                          const SizedBox(height: AppSpace.md),
-
-                          // Blok Kartları Listesi (ilk 8 satır girişte kademeli belirir)
-                          for (var idx = 0; idx < _blocks.length; idx++) ...[
-                            if (idx > 0) const SizedBox(height: AppSpace.md),
-                            StaggeredEntry(index: idx, child: _buildBlockRow(context, idx)),
-                          ],
-                          const SizedBox(height: AppSpace.xl),
-
-                          // Dinamik Kapılar Başlığı
-                          SectionHeader(
-                            title: 'Kapılar',
-                            icon: Icons.meeting_room_rounded,
-                            trailing: TextButton.icon(
-                              onPressed: (_submitting || _doors.length >= SetupSiteDialog.maxDoors)
-                                  ? null
-                                  : _addDoor,
-                              icon: const Icon(Icons.add_rounded, size: 18),
-                              label: const Text('Kapı Ekle'),
-                            ),
-                          ),
-                          Text(
-                            _doors.length >= SetupSiteDialog.maxDoors
-                                ? 'En fazla ${SetupSiteDialog.maxDoors} kapı eklenebilir.'
-                                : 'Sitenin kapılarını ve isimlerini belirleyin',
-                            style: th.bodySmall,
-                          ),
-                          const SizedBox(height: AppSpace.md),
-
-                          // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
-                          for (var idx = 0; idx < _doors.length; idx++) ...[
-                            if (idx > 0) const SizedBox(height: AppSpace.sm),
-                            StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
-                          ],
-
-                          if (_isApplication) ...[
-                            const SizedBox(height: AppSpace.xl),
-                            // Süper kullanıcıya iletilecek isteğe bağlı not.
-                            TextFormField(
-                              key: const ValueKey<String>('site_application_note'),
-                              controller: _noteController,
-                              enabled: !_submitting,
-                              minLines: 2,
-                              maxLines: 4,
-                              maxLength: SetupSiteDialog.maxNoteLength,
-                              // Sınırı aşan giriş (yapıştırma) sessizce kırpılmaz: sayaç ve hata gösterilir.
-                              maxLengthEnforcement: MaxLengthEnforcement.none,
-                              keyboardType: TextInputType.multiline,
-                              textCapitalization: TextCapitalization.sentences,
-                              decoration: const InputDecoration(
-                                labelText: 'Not (İsteğe Bağlı)',
-                                hintText: 'Süper kullanıcıya iletmek istediğiniz bilgi',
-                                alignLabelWithHint: true,
-                              ),
-                              validator: (val) => (val ?? '').trim().length > SetupSiteDialog.maxNoteLength
-                                  ? 'Not en çok ${SetupSiteDialog.maxNoteLength} karakter olabilir.'
-                                  : null,
-                            ),
-                            const SizedBox(height: AppSpace.lg),
-                            // Ödeme altyapısı hazır değil: pasif satır.
-                            const SiteSubscriptionComingSoonRow(),
-                          ],
-                          if (compactHeader) ...[
-                            const SizedBox(height: AppSpace.xl),
-                            submitButton,
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Onay Butonu (sabit; büyük yazıda formun sonunda)
-                if (!compactHeader) ...[
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.md, AppSpace.xl, AppSpace.xl),
-                    child: submitButton,
-                  ),
-                ],
-              ],
-            ],
-          ),
+          child: content,
         ),
       ),
     );
   }
 
+  /// Pencerenin kaydırma-hepsi düzene geçtiği kullanılabilir yükseklik (dp): klavye ve pencere kenar
+  /// boşlukları düşülmüş. Altında sabit başlık + sabit alt düğme formdan yer bırakmaz.
+  static const double _scrollAllBelow = 560;
+
+  /// Başlık şeridi + sağ üstte kapatma düğmesi (başlık düğmenin altına girmesin diye sağdan pay).
+  Widget _buildHeader(BuildContext context, {required bool compactHeader, required String subtitle}) {
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: 40),
+          child: AppDialogHeader(
+            title: _isApplication ? 'Site Başvurusu' : 'Site Kurulum Sihirbazı',
+            subtitle: compactHeader ? null : subtitle,
+            icon: _isApplication ? Icons.domain_add_rounded : Icons.apartment_rounded,
+          ),
+        ),
+        PositionedDirectional(
+          top: AppSpace.sm,
+          end: AppSpace.sm,
+          child: IconButton(
+            onPressed: _submitting ? null : () => popIfCurrent(context, _closeResult),
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Kapat',
+            // Dokunma hedefi >= 48 dp.
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Form alanları. [trailingSubmit] verilirse (kaydırma-hepsi düzeni) gönder düğmesi formun sonuna eklenir.
+  List<Widget> _fieldChildren(
+    BuildContext context, {
+    required bool compactHeader,
+    required String subtitle,
+    Widget? trailingSubmit,
+  }) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final cities = turkeyCitiesAndDistricts.keys.toList();
+    final districts = _selectedCity != null
+        ? (turkeyCitiesAndDistricts[_selectedCity] ?? <String>[])
+        : <String>[];
+    return <Widget>[
+      if (compactHeader) ...[
+        Text(subtitle, style: th.bodySmall),
+        const SizedBox(height: AppSpace.md),
+      ],
+      // Hata Mesajı (kaydırılmış formda görünür konuma gelir)
+      if (_error != null) CrmFormError(message: _error!),
+      if (_infoNote != null) ...[
+        InlineNotice(tone: AppTone.info, message: _infoNote!),
+        const SizedBox(height: AppSpace.md),
+      ],
+
+      if (_isApplication) ...[
+        const InlineNotice(
+          tone: AppTone.info,
+          message:
+              'Başvurunuz süper kullanıcı tarafından incelenir. Onaylandığında siteniz '
+              'kurulur ve siz site yöneticisi olursunuz.',
+        ),
+        const SizedBox(height: AppSpace.lg),
+        _buildDeviceSection(context),
+        const SizedBox(height: AppSpace.lg),
+      ] else if (widget.deviceUid != null) ...[
+        // Bağlanacak Cihaz Bilgi Kartı
+        _buildDevicePanel(context),
+        const SizedBox(height: AppSpace.lg),
+      ],
+
+      // Site Adı
+      TextFormField(
+        controller: _nameController,
+        enabled: !_submitting,
+        textInputAction: TextInputAction.next,
+        decoration: const InputDecoration(
+          labelText: 'Site Adı *',
+          hintText: 'Örn: Gül Sitesi',
+          prefixIcon: Icon(Icons.business_rounded),
+        ),
+        validator: (val) {
+          final name = (val ?? '').trim();
+          if (name.isEmpty) return 'Site adı zorunludur.';
+          if (name.length > SetupSiteDialog.maxNameLength) {
+            return 'Site adı en çok ${SetupSiteDialog.maxNameLength} karakter olabilir.';
+          }
+          return null;
+        },
+      ),
+      const SizedBox(height: AppSpace.md),
+
+      // Yönetim Türü (Site Adı ile İl arasında)
+      ManagementTypeSelector(
+        value: _managementType,
+        onChanged: (type) => setState(() => _managementType = type),
+      ),
+      const SizedBox(height: AppSpace.md),
+
+      // İl & İlçe Seçimi
+      Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: _selectedCity,
+              isExpanded: true,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              dropdownColor: p.surface,
+              menuMaxHeight: 320,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              decoration: const InputDecoration(
+                labelText: 'İl',
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              ),
+              items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _submitting
+                  ? null
+                  : (val) {
+                      setState(() {
+                        _selectedCity = val;
+                        _selectedDistrict = null;
+                      });
+                    },
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: _selectedDistrict,
+              isExpanded: true,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              dropdownColor: p.surface,
+              menuMaxHeight: 320,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              decoration: const InputDecoration(
+                labelText: 'İlçe',
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              ),
+              items: districts.map((d) => DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: (_selectedCity == null || _submitting)
+                  ? null
+                  : (val) {
+                      setState(() {
+                        _selectedDistrict = val;
+                      });
+                    },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpace.md),
+
+      // Açık Adres
+      TextFormField(
+        controller: _addressController,
+        enabled: !_submitting,
+        maxLines: 2,
+        decoration: const InputDecoration(
+          labelText: 'Açık Adres (İsteğe Bağlı)',
+          hintText: 'Mahalle, Cadde, Sokak No...',
+          prefixIcon: Icon(Icons.location_on_outlined),
+        ),
+        validator: (val) => (val ?? '').trim().length > SetupSiteDialog.maxAddressLength
+            ? 'Adres en çok ${SetupSiteDialog.maxAddressLength} karakter olabilir.'
+            : null,
+      ),
+      const SizedBox(height: AppSpace.xl),
+
+      // Dinamik Bloklar ve Daireler Başlığı
+      SectionHeader(
+        title: 'Bloklar ve Daireler',
+        icon: Icons.apartment_rounded,
+        trailing: TextButton.icon(
+          onPressed: (_submitting || _blocks.length >= SetupSiteDialog.maxBlocks)
+              ? null
+              : _addBlock,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Blok Ekle'),
+        ),
+      ),
+      Text(
+        _blocks.length >= SetupSiteDialog.maxBlocks
+            ? 'En fazla ${SetupSiteDialog.maxBlocks} blok eklenebilir.'
+            : 'Her bloğun adını ve daire sayısını belirleyin',
+        style: th.bodySmall,
+      ),
+      const SizedBox(height: AppSpace.md),
+
+      // Blok Kartları Listesi (ilk 8 satır girişte kademeli belirir)
+      for (var idx = 0; idx < _blocks.length; idx++) ...[
+        if (idx > 0) const SizedBox(height: AppSpace.md),
+        StaggeredEntry(index: idx, child: _buildBlockRow(context, idx)),
+      ],
+      const SizedBox(height: AppSpace.xl),
+
+      // Dinamik Kapılar Başlığı
+      SectionHeader(
+        title: 'Kapılar',
+        icon: Icons.meeting_room_rounded,
+        trailing: TextButton.icon(
+          onPressed: (_submitting || _doors.length >= SetupSiteDialog.maxDoors)
+              ? null
+              : _addDoor,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Kapı Ekle'),
+        ),
+      ),
+      Text(
+        _doors.length >= SetupSiteDialog.maxDoors
+            ? 'En fazla ${SetupSiteDialog.maxDoors} kapı eklenebilir.'
+            : 'Sitenin kapılarını ve isimlerini belirleyin',
+        style: th.bodySmall,
+      ),
+      const SizedBox(height: AppSpace.md),
+
+      // Kapı Kartları Listesi (ilk 8 satır girişte kademeli belirir)
+      for (var idx = 0; idx < _doors.length; idx++) ...[
+        if (idx > 0) const SizedBox(height: AppSpace.sm),
+        StaggeredEntry(index: idx, child: _buildDoorRow(context, idx)),
+      ],
+
+      if (_isApplication) ...[
+        const SizedBox(height: AppSpace.xl),
+        // Süper kullanıcıya iletilecek isteğe bağlı not.
+        TextFormField(
+          key: const ValueKey<String>('site_application_note'),
+          controller: _noteController,
+          enabled: !_submitting,
+          minLines: 2,
+          maxLines: 4,
+          maxLength: SetupSiteDialog.maxNoteLength,
+          // Sınırı aşan giriş (yapıştırma) sessizce kırpılmaz: sayaç ve hata gösterilir. Sayım sunucuyla aynı
+          // birimdedir: kırpılmış metnin Unicode kod noktası.
+          maxLengthEnforcement: MaxLengthEnforcement.none,
+          onChanged: (_) => setState(() {}),
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
+              characterCounter(
+                context,
+                trimmedCodePoints(_noteController.text),
+                SetupSiteDialog.maxNoteLength,
+              ),
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Not (İsteğe Bağlı)',
+            hintText: 'Süper kullanıcıya iletmek istediğiniz bilgi',
+            alignLabelWithHint: true,
+          ),
+          validator: (val) => trimmedCodePoints(val ?? '') > SetupSiteDialog.maxNoteLength
+              ? 'Not en çok ${SetupSiteDialog.maxNoteLength} karakter olabilir.'
+              : null,
+        ),
+        const SizedBox(height: AppSpace.lg),
+        // Ödeme altyapısı hazır değil: pasif satır.
+        const SiteSubscriptionComingSoonRow(),
+      ],
+
+      if (trailingSubmit != null) ...[
+        const SizedBox(height: AppSpace.xl),
+        trailingSubmit,
+      ],
+    ];
+  }
+
   /// Başvuru gönderildi iletisi (aynı pencerede). Metinler sarar; "Tamam" sonuçla kapatır.
   Widget _buildSuccess(BuildContext context) {
     final th = Theme.of(context).textTheme;
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(AppSpace.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -746,10 +956,14 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             ),
             const SizedBox(height: AppSpace.lg),
           ],
-          Semantics(
-            header: true,
-            liveRegion: true,
-            child: Text('Başvurunuz alındı.', style: th.titleLarge),
+          // Form başarı görünümüyle değişince odak başlığa taşınır (klavye / ekran okuyucu bağlamı kaybetmez).
+          Focus(
+            focusNode: _successFocus,
+            child: Semantics(
+              header: true,
+              liveRegion: true,
+              child: Text('Başvurunuz alındı.', style: th.titleLarge),
+            ),
           ),
           const SizedBox(height: AppSpace.sm),
           Text(
@@ -767,7 +981,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             key: const ValueKey<String>('setup_site_done'),
             label: 'Tamam',
             icon: Icons.check_rounded,
-            onPressed: () => popIfCurrent(context, _outcome),
+            onPressed: () => popIfCurrent(context, _closeResult),
           ),
         ],
       ),
@@ -778,17 +992,37 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   Widget _buildDeviceSection(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final Widget body;
+    // Liste alınamadıysa "cihaz yok" DENMEZ: hata ve "Tekrar Dene" gösterilir (seçim isteğe bağlı kalır).
+    final errorNotice = _devicesError == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.md),
+            child: InlineNotice(
+              tone: AppTone.warning,
+              message: _devicesError!,
+              onRetry: _devicesLoading ? null : () => unawaited(_loadDevices()),
+            ),
+          );
     if (_devicesLoading && _deviceUids.isEmpty) {
       body = const DialogLoadingNote(text: 'Cihazlarınız yükleniyor...');
     } else if (_deviceUids.isEmpty) {
-      body = Text(
-        'Hesabınıza bağlı cihaz yok. Cihaz sonra eklenebilir; cihazınız yoksa da başvuru yapabilirsiniz.',
-        style: th.bodyMedium,
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ?errorNotice,
+          Text(
+            _devicesError != null
+                ? 'Cihaz seçimi isteğe bağlıdır; cihazsız da başvuru yapabilirsiniz.'
+                : 'Hesabınıza bağlı cihaz yok. Cihaz sonra eklenebilir; cihazınız yoksa da başvuru yapabilirsiniz.',
+            style: th.bodyMedium,
+          ),
+        ],
       );
     } else {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          ?errorNotice,
           DropdownButtonFormField<String>(
             key: ValueKey<String>('site_application_device_$_deviceVersion'),
             initialValue: _selectedDevice,
@@ -913,8 +1147,14 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
               constraints.maxWidth < 300;
           // Blok Adı
           final nameField = TextFormField(
+            key: b.nameKey,
             controller: b.nameController,
             enabled: !_submitting,
+            onChanged: (_) {
+              // Silme düğmesinin bağlamlı ipucu güncel adı taşır; yinelenen ad hataları canlı güncellenir.
+              setState(() {});
+              _revalidateBlockNames();
+            },
             decoration: const InputDecoration(
               labelText: 'Blok Adı',
               isDense: true,
@@ -948,7 +1188,8 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
               ? IconButton(
                   onPressed: _submitting ? null : () => _removeBlock(idx),
                   icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
-                  tooltip: 'Bloğu Sil',
+                  // Bağlamlı ipucu / ekran okuyucu etiketi: hangi blok silinir.
+                  tooltip: 'Bloğu sil: ${_effectiveBlockName(b)}',
                 )
               : null;
           if (stacked) {
@@ -998,6 +1239,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             child: TextFormField(
               controller: d.nameController,
               enabled: !_submitting,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: 'Kapı ${idx + 1} Adı',
                 hintText: 'Örn: Ana Giriş, Blok Girişi, Otopark...',
@@ -1013,7 +1255,9 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
             IconButton(
               onPressed: _submitting ? null : () => _removeDoor(idx),
               icon: Icon(Icons.delete_outline_rounded, color: AppTone.danger.ink(p), size: 20),
-              tooltip: 'Kapıyı Sil',
+              // Bağlamlı ipucu / ekran okuyucu etiketi: hangi kapı silinir.
+              tooltip:
+                  'Kapıyı sil: ${d.nameController.text.trim().isEmpty ? 'Kapı ${idx + 1}' : d.nameController.text.trim()}',
             ),
         ],
       ),

@@ -7,19 +7,23 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
 
-/// Bireysel ana ekranın (ve "Daireye Katıl & Cihaz Ekle" ekranının) üstündeki SİTE BAŞVURUSU durum kartı
-/// (Platform: site başvurusu). Durum [SiteApplicationTracker]dan gelir; kart yalnız onun görünümüdür.
+/// Bireysel ana ekranın (ve "Daireye Katıl & Cihaz Ekle" ile yönetici panosunun) üstündeki SİTE BAŞVURUSU
+/// durum kartı (Platform: site başvurusu). Durum [SiteApplicationTracker]dan gelir; kart yalnız onun görünümüdür.
 ///
-/// - Bekleyen: "Site başvurunuz inceleniyor" (site adı, yapı, tarih) + onaylı "Başvuruyu iptal et".
+/// - Bekleyen: "Site başvurunuz inceleniyor" (site adı, tarih, "Başvuruyu iptal et" onaylı).
 /// - Reddedildi: gerekçe + "Yeniden başvur" (formu önceki değerlerle açar).
 /// - İptal edildi: kısa kart + "Yeniden başvur".
-/// - Onaylandı (yakın zamanda): oturum/rol yenilenir; yenileme sürerken / başarısız olursa "Hesabı yenile".
-/// - Durum ALINAMADIYSA: hata + "Tekrar Dene" (ASLA "başvuru yok" denmez). Önceki durum varken yoklama
-///   hatası kartı silmez; altına uyarı eklenir.
+/// - Onaylandı ([showApproved] true iken, rol henüz değişmediyse): oturum/rol yenilenirken "Hesabı yenile".
+///   Yenileme sonrası rol hâlâ değişmediyse kart kaldırılır (`consumeApproval`).
+/// - Durum sunucudan tanınmayan bir değerse: kısıtlı kart ("Durum bilinmiyor"), hiçbir eylem sunulmaz.
+/// - HATA HER DURUMDA görünür: durum hiç alınamadıysa hata + "Tekrar Dene" (asla "başvuru yok" denmez); önceki
+///   durum varken yenileme hatası kartın üstüne uyarı olarak eklenir (boş / reddedildi / iptal kartları dahil).
+///   Gönderilen başvuru doğrulanamadıysa "Başvurunuz alındı, ancak durum yenilenemedi" bilgisi çıkar.
 ///
 /// Çift dokunuş korumaları: iptal / yeniden başvur / hesabı yenile sürerken düğmeler kilitlidir. Zamanlar
 /// İstanbul saatiyle gösterilir.
@@ -29,6 +33,8 @@ class SiteApplicationStatusCard extends StatefulWidget {
     required this.tracker,
     required this.onReapply,
     this.onRefreshAccount,
+    this.showApproved = true,
+    this.showLoadFailure = true,
   });
 
   final SiteApplicationTracker tracker;
@@ -39,12 +45,30 @@ class SiteApplicationStatusCard extends StatefulWidget {
   /// Onaylanmış ama rolü henüz yenilenmemiş hesap için elle yenileme (oturum + ekran).
   final Future<void> Function()? onRefreshAccount;
 
+  /// Onaylandı kartı gösterilsin mi? Yalnız rolü hâlâ başvuran olan hesap için anlamlıdır; site yöneticisinde
+  /// (başvurusu onaylanmış) "güncelleniyor" kartı yanıltır.
+  final bool showApproved;
+
+  /// Durum HİÇ alınamadığında hata gösterilsin mi? Site yöneticisi panosunda (başvuru gerekli mi belirsiz)
+  /// kapatılır: anlık "Site Ekle" çalışmaya devam eder ve sunucu yine de 409 ile yönlendirir.
+  final bool showLoadFailure;
+
   @override
   State<SiteApplicationStatusCard> createState() => _SiteApplicationStatusCardState();
 }
 
 class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
   bool _busy = false;
+
+  /// Kartın başlığı: kart değişince (örn. bekleyen -> iptal edildi) odak buraya taşınır; iptal düğmesi
+  /// kaybolunca klavye / ekran okuyucu bağlamı kaybolmaz.
+  final FocusNode _titleFocus = FocusNode(debugLabel: 'site_application_card_title');
+
+  @override
+  void dispose() {
+    _titleFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _guarded(Future<void> Function() action) async {
     if (_busy) return;
@@ -71,6 +95,12 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     if (!mounted) return;
     if (cancelled != null) {
       AppSnack.show(context, 'Başvurunuz iptal edildi.', kind: AppSnackKind.success);
+      // Düğme kaybolur: odak yeni kartın başlığına taşınır ve değişiklik duyurulur.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _titleFocus.requestFocus();
+        announcePolite(context, 'Başvurunuz iptal edildi.');
+      });
     }
   });
 
@@ -89,32 +119,77 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
       listenable: widget.tracker,
       builder: (context, _) {
         final tracker = widget.tracker;
-        if (!tracker.hasLoaded) {
-          final error = tracker.error;
-          if (error == null) return const SizedBox.shrink();
-          // Durum bilinmiyor: "başvuru yok" DEMEZ.
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.lg),
-            child: InlineNotice(message: error, onRetry: () => unawaited(tracker.refresh())),
-          );
+        final children = <Widget>[];
+
+        final notice = _buildNotice(tracker);
+        if (notice != null) children.add(notice);
+
+        if (tracker.hasLoaded) {
+          final card = _buildCard(context, tracker);
+          if (card != null) children.add(card);
         }
-        final latest = tracker.latest;
-        if (latest == null) return const SizedBox.shrink();
-        final Widget card;
-        if (latest.isPending) {
-          card = _buildPending(context, tracker, latest);
-        } else if (latest.isRejected) {
-          card = _buildRejected(context, tracker, latest);
-        } else if (latest.isCancelled) {
-          card = _buildCancelled(context, tracker, latest);
-        } else if (latest.isApproved && _recentlyDecided(latest)) {
-          card = _buildApproved(context, tracker, latest);
-        } else {
-          return const SizedBox.shrink();
-        }
-        return Padding(padding: const EdgeInsets.only(bottom: AppSpace.lg), child: card);
+        if (children.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpace.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpace.md),
+                children[i],
+              ],
+            ],
+          ),
+        );
       },
     );
+  }
+
+  /// Hata / belirsizlik bildirimi (her durumda; kartın ÜSTÜNDE).
+  Widget? _buildNotice(SiteApplicationTracker tracker) {
+    final error = tracker.error;
+    if (tracker.awaitingConfirmation) {
+      return error == null
+          ? const InlineNotice(
+              tone: AppTone.info,
+              icon: Icons.sync_rounded,
+              message: 'Başvurunuz alındı. Başvuru durumu kontrol ediliyor...',
+            )
+          : InlineNotice(
+              tone: AppTone.warning,
+              message:
+                  'Başvurunuz alındı, ancak durum yenilenemedi. Kısa süre sonra yeniden denenecek; '
+                  'isterseniz şimdi deneyebilirsiniz.',
+              onRetry: () => unawaited(tracker.refresh()),
+            );
+    }
+    if (error == null) return null;
+    if (!tracker.hasLoaded) {
+      // Durum bilinmiyor: "başvuru yok" DEMEZ.
+      return widget.showLoadFailure
+          ? InlineNotice(message: error, onRetry: () => unawaited(tracker.refresh()))
+          : null;
+    }
+    return InlineNotice(
+      tone: AppTone.warning,
+      message: '$error Gösterilen başvuru bilgisi eski olabilir.',
+      onRetry: () => unawaited(tracker.refresh()),
+    );
+  }
+
+  Widget? _buildCard(BuildContext context, SiteApplicationTracker tracker) {
+    final latest = tracker.latest;
+    if (latest == null) return null;
+    if (latest.isPending) return _buildPending(context, tracker, latest);
+    if (latest.isRejected) return _buildRejected(context, latest);
+    if (latest.isCancelled) return _buildCancelled(context, latest);
+    if (latest.isApproved) {
+      if (!widget.showApproved || tracker.isApprovalConsumed(latest.id) || !_recentlyDecided(latest)) {
+        return null;
+      }
+      return _buildApproved(context, latest);
+    }
+    return _buildUnknown(context, latest);
   }
 
   static bool _recentlyDecided(SiteApplication a) {
@@ -148,9 +223,12 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(
-                      header: true,
-                      child: Text(title, style: th.titleMedium),
+                    Focus(
+                      focusNode: _titleFocus,
+                      child: Semantics(
+                        header: true,
+                        child: Text(title, style: th.titleMedium),
+                      ),
                     ),
                     const SizedBox(height: AppSpace.xs),
                     SiteApplicationStatusChip(application),
@@ -201,14 +279,6 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
           const SizedBox(height: AppSpace.md),
           InlineNotice(message: tracker.cancelError!),
         ],
-        if (tracker.error != null) ...[
-          const SizedBox(height: AppSpace.md),
-          InlineNotice(
-            message: tracker.error!,
-            tone: AppTone.warning,
-            onRetry: () => unawaited(tracker.refresh()),
-          ),
-        ],
         const SizedBox(height: AppSpace.md),
         OutlinedButton.icon(
           key: const ValueKey<String>('site_application_cancel'),
@@ -221,13 +291,16 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.cancel_outlined, size: 18),
-          label: Text(cancelling ? 'İptal ediliyor...' : 'Başvuruyu iptal et'),
+          label: Semantics(
+            liveRegion: cancelling,
+            child: Text(cancelling ? 'İptal ediliyor...' : 'Başvuruyu iptal et'),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildRejected(BuildContext context, SiteApplicationTracker tracker, SiteApplication a) {
+  Widget _buildRejected(BuildContext context, SiteApplication a) {
     final p = context.palette;
     final th = Theme.of(context).textTheme;
     final reason = a.decisionNote;
@@ -254,7 +327,7 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     );
   }
 
-  Widget _buildCancelled(BuildContext context, SiteApplicationTracker tracker, SiteApplication a) {
+  Widget _buildCancelled(BuildContext context, SiteApplication a) {
     final th = Theme.of(context).textTheme;
     return _frame(
       context,
@@ -272,7 +345,7 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
     );
   }
 
-  Widget _buildApproved(BuildContext context, SiteApplicationTracker tracker, SiteApplication a) {
+  Widget _buildApproved(BuildContext context, SiteApplication a) {
     final th = Theme.of(context).textTheme;
     final canRefresh = widget.onRefreshAccount != null;
     return _frame(
@@ -301,9 +374,33 @@ class _SiteApplicationStatusCardState extends State<SiteApplicationStatusCard> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.refresh_rounded, size: 18),
-            label: const Text('Hesabı yenile'),
+            // Meşgulken etiket değişir ve canlı bölge olarak duyurulur (spinner tek başına anlam taşımaz).
+            label: Semantics(
+              liveRegion: _busy,
+              child: Text(_busy ? 'Hesap yenileniyor...' : 'Hesabı yenile'),
+            ),
           ),
         ],
+      ],
+    );
+  }
+
+  /// Tanınmayan / eksik durum: kısıtlı görünüm; hiçbir eylem (iptal, yeniden başvur) sunulmaz.
+  Widget _buildUnknown(BuildContext context, SiteApplication a) {
+    final th = Theme.of(context).textTheme;
+    return _frame(
+      context,
+      tone: AppTone.neutral,
+      icon: Icons.help_outline_rounded,
+      title: 'Site başvurunuz',
+      application: a,
+      children: [
+        ..._summaryLines(context, a),
+        const SizedBox(height: AppSpace.sm),
+        Text(
+          'Başvurunuzun durumu anlaşılamadı. Güncellemek için aşağı çekip yenileyin.',
+          style: th.bodyMedium,
+        ),
       ],
     );
   }

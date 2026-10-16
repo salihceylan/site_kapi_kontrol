@@ -10,6 +10,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -28,7 +30,9 @@ Map<String, dynamic> saRow(
   List<Map<String, dynamic>>? blocks,
   List<String>? doors,
   String? deviceUid,
-  bool deviceAvailable = true,
+
+  /// null: sunucu gibi -> yalnız BEKLEYEN başvuruda `true` (karar sonrası cihaz tüketilmiş / bağlanmış olabilir).
+  bool? deviceAvailable,
   String? note,
   int applicantCode = 5,
   String applicantName = 'Ayşe Yılmaz',
@@ -66,7 +70,8 @@ Map<String, dynamic> saRow(
     ],
     'device_uid': deviceUid,
     'note': note,
-    'plan_code': 'manual_approval',
+    // Sunucu `plan_code`u başvuruda boş (null) bırakır; `payment_reference` hiçbir yanıtta yoktur.
+    'plan_code': null,
     'payment_status': 'not_required',
     'decision_note': decisionNote,
     'decided_at': decidedAt?.toUtc().toIso8601String(),
@@ -85,7 +90,7 @@ Map<String, dynamic> saRow(
           },
     'decision_source': status == 'pending' || status == 'cancelled' ? null : 'super_user',
     'decided_by_name': decidedByName,
-    'device_available': deviceAvailable,
+    'device_available': deviceAvailable ?? status == 'pending',
   };
 }
 
@@ -121,6 +126,10 @@ class SiteApplicationFakeAuth extends AuthService {
 
   /// Hesaba bağlı cihazlar (`GET /membership/my-devices`).
   List<Map<String, dynamic>> devices = <Map<String, dynamic>>[];
+
+  /// Sunucunun `requires_application` bildirimi (yalnız site yöneticisi için anlamlı): true = sahip bağı
+  /// olmayan yönetici başvurur, false = anlık "Site Ekle" açık, null = alan HİÇ gönderilmez (eski sunucu).
+  bool? serverRequiresApplication;
 
   /// Sayfa boyutu üst sınırı (sayfalama testleri için küçük verilir).
   int? maxPage;
@@ -184,12 +193,19 @@ class SiteApplicationFakeAuth extends AuthService {
     notifyListeners();
   }
 
+  DateTime? _verifiedAt;
+
+  /// Oturumun SON BAŞARILI doğrulanma anı (gerçek [AuthService] gibi: hata yutulur, değer ilerlemez).
+  @override
+  DateTime? get sessionVerifiedAt => _verifiedAt;
+
   @override
   Future<void> refreshSession({bool force = false}) async {
     refreshSessionCalls++;
     if (force) refreshSessionForcedCalls++;
     final error = refreshSessionError;
     if (error != null) return;
+    _verifiedAt = DateTime.now();
     if (role != serverRole) {
       role = serverRole;
       notifyListeners();
@@ -253,14 +269,18 @@ class SiteApplicationFakeAuth extends AuthService {
     await createGate?.future;
     final error = createError;
     if (error != null) throw error;
-    if (serverRole == UserRole.siteManager) {
+    // Sahip bağı olan site yöneticisi başvuramaz (anlık "Site Ekle"yi kullanır); sahip bağı olmayan yönetici
+    // (`requires_application: true`) başvurur.
+    if (serverRole == UserRole.siteManager && serverRequiresApplication != true) {
       throw ApiException(
         AuthApi.siteApplicationAlreadyManagerMessage,
         statusCode: 409,
         code: 'ALREADY_SITE_MANAGER',
       );
     }
-    if (serverRole != UserRole.individual && serverRole != UserRole.apartmentOwner) {
+    if (serverRole != UserRole.individual &&
+        serverRole != UserRole.apartmentOwner &&
+        serverRole != UserRole.siteManager) {
       throw _coded('FORBIDDEN_ROLE', 403);
     }
     if (rows.values.any((r) => _mine(r) && r['status'] == 'pending')) {
@@ -301,6 +321,7 @@ class SiteApplicationFakeAuth extends AuthService {
     return MySiteApplications.fromJson(<String, dynamic>{
       'pending': pending == null ? null : userJson(pending),
       'items': <Map<String, dynamic>>[for (final r in mine.take(10)) userJson(r)],
+      if (serverRequiresApplication != null) 'requires_application': serverRequiresApplication,
     });
   }
 
@@ -313,7 +334,10 @@ class SiteApplicationFakeAuth extends AuthService {
     final row = rows[applicationId];
     if (row == null || !_mine(row)) throw _coded('APPLICATION_NOT_FOUND', 404);
     if (row['status'] != 'pending') throw _coded('APPLICATION_NOT_PENDING', 409);
-    row['status'] = 'cancelled';
+    row
+      ..['status'] = 'cancelled'
+      ..['decided_at'] = DateTime.now().toUtc().toIso8601String()
+      ..['device_available'] = false;
     return SiteApplication.fromJson(userJson(row));
   }
 
@@ -342,8 +366,10 @@ class SiteApplicationFakeAuth extends AuthService {
     });
     final error = setupError;
     if (error != null) throw error;
-    // Bireysel / daire kullanıcısı için anlık kurulum kapalıdır (sunucu kuralı).
-    if (serverRole == UserRole.individual || serverRole == UserRole.apartmentOwner) {
+    // Bireysel / daire kullanıcısı ve sahip bağı olmayan yönetici için anlık kurulum kapalıdır (sunucu kuralı).
+    if (serverRole == UserRole.individual ||
+        serverRole == UserRole.apartmentOwner ||
+        (serverRole == UserRole.siteManager && serverRequiresApplication == true)) {
       throw _coded('APPLICATION_REQUIRED', 409);
     }
     return <String, dynamic>{'ok': true};
@@ -442,9 +468,14 @@ class SiteApplicationFakeAuth extends AuthService {
       ..['decided_at'] = DateTime.now().toUtc().toIso8601String()
       ..['decided_by_name'] = 'Süper Yönetici'
       ..['decision_source'] = 'super_user'
+      ..['device_available'] = false
       ..['site_code'] = 900 + applicantCodeOf(row);
-    // Başvuranın sunucudaki rolü site yöneticisi olur (yerel oturum yalnız refreshSession ile eşitlenir).
-    if (_mine(row)) serverRole = UserRole.siteManager;
+    // Başvuranın sunucudaki rolü site yöneticisi olur (yerel oturum yalnız refreshSession ile eşitlenir) ve
+    // artık sahip bağı vardır (`requires_application` düşer).
+    if (_mine(row)) {
+      serverRole = UserRole.siteManager;
+      if (serverRequiresApplication != null) serverRequiresApplication = false;
+    }
     return SiteApplicationDecision.fromJson(<String, dynamic>{
       'application': row,
       'site': <String, dynamic>{'site_code': row['site_code'], 'name': row['site_name']},
@@ -469,6 +500,7 @@ class SiteApplicationFakeAuth extends AuthService {
       ..['decided_at'] = DateTime.now().toUtc().toIso8601String()
       ..['decided_by_name'] = 'Süper Yönetici'
       ..['decision_source'] = 'super_user'
+      ..['device_available'] = false
       ..['decision_note'] = (reason ?? '').trim().isEmpty ? null : reason!.trim();
     return SiteApplication.fromJson(row);
   }
@@ -482,8 +514,12 @@ class SiteApplicationFakeAuth extends AuthService {
       ..['decided_by_name'] = 'Başka Yönetici'
       ..['decision_source'] = 'super_user'
       ..['decision_note'] = note
+      ..['device_available'] = false
       ..['site_code'] = status == 'approved' ? 900 + id : null;
-    if (status == 'approved' && _mine(row)) serverRole = UserRole.siteManager;
+    if (status == 'approved' && _mine(row)) {
+      serverRole = UserRole.siteManager;
+      if (serverRequiresApplication != null) serverRequiresApplication = false;
+    }
   }
 
   @visibleForTesting
@@ -492,6 +528,27 @@ class SiteApplicationFakeAuth extends AuthService {
       rows[row['id'] as int] = row;
     }
   }
+}
+
+/// Ekran okuyucu duyurularını (`SemanticsService.sendAnnouncement`) toplar; test bitince işleyiciyi kaldırır.
+List<String> captureAnnouncements(WidgetTester t) {
+  final announced = <String>[];
+  t.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<dynamic>(SystemChannels.accessibility, (
+    dynamic message,
+  ) async {
+    if (message is Map && message['type'] == 'announce') {
+      final data = message['data'];
+      if (data is Map && data['message'] is String) announced.add(data['message'] as String);
+    }
+    return null;
+  });
+  addTearDown(
+    () => t.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<dynamic>(
+      SystemChannels.accessibility,
+      null,
+    ),
+  );
+  return announced;
 }
 
 /// Bir cihaz kaydı (`GET /membership/my-devices` öğesi).

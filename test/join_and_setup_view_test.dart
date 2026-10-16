@@ -65,11 +65,11 @@ void main() {
     // Verify Title and Cards
     expect(find.text('Daireye Katıl & Cihaz Ekle'), findsOneWidget);
     expect(find.text('Site Sakini Girişi'), findsOneWidget);
-    expect(find.text('Yönetici & Cihaz Kurulumu'), findsOneWidget);
+    expect(find.text('Site Kurulumu & Cihaz'), findsOneWidget);
 
     // Verify Action Buttons
     expect(find.text('QR / Kod ile Daireye Katıl'), findsOneWidget);
-    expect(find.text('Cihaz Ekleyerek Site Yöneticisi Ol'), findsOneWidget);
+    expect(find.text('Cihaz Ekle'), findsOneWidget);
 
     // Verify Join Request List item rendered
     expect(find.text('Katılım Başvurularım'), findsOneWidget);
@@ -82,7 +82,7 @@ void main() {
     expect(joinClicked, isTrue);
 
     // Tap Claim button
-    await tester.tap(find.text('Cihaz Ekleyerek Site Yöneticisi Ol'));
+    await tester.tap(find.text('Cihaz Ekle'));
     await tester.pump();
     expect(claimClicked, isTrue);
   });

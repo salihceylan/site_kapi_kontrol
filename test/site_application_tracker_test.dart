@@ -24,8 +24,11 @@ SiteApplication _app(
   decidedAt: decidedAt,
 );
 
-MySiteApplications _mine({SiteApplication? pending, List<SiteApplication> items = const <SiteApplication>[]}) =>
-    MySiteApplications(pending: pending, items: items);
+MySiteApplications _mine({
+  SiteApplication? pending,
+  List<SiteApplication> items = const <SiteApplication>[],
+  bool? requiresApplication,
+}) => MySiteApplications(pending: pending, items: items, requiresApplication: requiresApplication);
 
 class _Server {
   MySiteApplications state = const MySiteApplications();
@@ -327,6 +330,134 @@ void main() {
     expect(tracker.cancelError, 'Bu başvuru artık bekleyen durumda değil.');
     expect(tracker.latest!.isRejected, isTrue, reason: 'durum sunucudan yeniden okundu');
     expect(tracker.pending, isNull);
+    tracker.dispose();
+  });
+
+  testWidgets('iptal sürerken clear(): eski iptal sonucu geri YAZILMAZ (yeni kullanıcıya sızmaz)', (t) async {
+    final server = _Server()..state = _mine(pending: _app(5));
+    final tracker = _tracker(server);
+    await tracker.ensureLoaded();
+    server.cancelGate = Completer<void>();
+    final cancel = tracker.cancelPending();
+    tracker.clear();
+    server.cancelGate!.complete();
+    expect(await cancel, isNull);
+    await t.pump();
+    expect(tracker.hasLoaded, isFalse, reason: 'clear sonrası eski iptal sonucu veriyi geri getirmez');
+    expect(tracker.pending, isNull);
+    expect(tracker.cancelling, isFalse);
+    expect(tracker.cancelError, isNull);
+    tracker.dispose();
+  });
+
+  testWidgets('requiresApplication sunucudan okunur; alan yoksa null', (t) async {
+    final server = _Server()..state = _mine(requiresApplication: true);
+    final tracker = _tracker(server);
+    expect(tracker.requiresApplication, isNull, reason: 'yüklenmeden bilinmiyor');
+    await tracker.ensureLoaded();
+    expect(tracker.requiresApplication, isTrue);
+    server.state = _mine(requiresApplication: false);
+    await tracker.refresh();
+    expect(tracker.requiresApplication, isFalse);
+    server.state = _mine();
+    await tracker.refresh();
+    expect(tracker.requiresApplication, isNull);
+    tracker.dispose();
+  });
+
+  testWidgets('applyAvailability: yükleniyor=checking, hata=unknown, bekleyen=pending, sağlıklı=ready', (t) async {
+    final server = _Server()..gated = true;
+    final tracker = _tracker(server);
+    expect(tracker.applyAvailability, SiteApplyAvailability.checking, reason: 'henüz yüklenmedi');
+    final first = tracker.refresh();
+    expect(tracker.applyAvailability, SiteApplyAvailability.checking);
+    server.gates[0].completeError(ApiException('Bağlantı yok.'));
+    await first;
+    expect(tracker.applyAvailability, SiteApplyAvailability.unknown, reason: 'durum ÖĞRENİLEMEDİ');
+
+    server.gated = false;
+    server.error = null;
+    server.state = _mine(pending: _app(5));
+    await tracker.refresh();
+    expect(tracker.applyAvailability, SiteApplyAvailability.pending);
+
+    server.state = _mine();
+    await tracker.refresh();
+    expect(tracker.applyAvailability, SiteApplyAvailability.ready);
+    tracker.dispose();
+  });
+
+  testWidgets('B2: önceki başarılı veri varken yenileme hatası -> hata görünür ve yoklama / yeniden deneme SÜRER', (t) async {
+    final server = _Server()..state = _mine(items: [_app(4, status: 'rejected')]);
+    final tracker = _tracker(server);
+    await tracker.ensureLoaded();
+    expect(tracker.isPolling, isFalse, reason: 'sağlıklı ve bekleyen yok: yoklama yok');
+
+    server.error = ApiException('Bağlantı yok.');
+    expect(await tracker.refresh(), isFalse);
+    expect(tracker.error, 'Bağlantı yok.');
+    expect(tracker.latest!.isRejected, isTrue, reason: 'önceki veri korunur');
+    expect(tracker.isPolling, isTrue, reason: 'hatalı yenilemeden sonra yeniden denenir');
+
+    final calls = server.fetchCalls;
+    server.error = null;
+    await _elapse(t, const Duration(seconds: 61));
+    expect(server.fetchCalls, greaterThan(calls));
+    expect(tracker.error, isNull);
+    expect(tracker.isPolling, isFalse, reason: 'düzelince yoklama durur');
+    tracker.dispose();
+  });
+
+  testWidgets('B2: gönderilen başvurunun doğrulanması başarısızsa awaitingConfirmation sürer, CTA pasif, yeniden denenir', (t) async {
+    final server = _Server()..state = _mine();
+    final tracker = _tracker(server);
+    await tracker.ensureLoaded();
+    expect(tracker.applyAvailability, SiteApplyAvailability.ready);
+
+    // 201 geldi; ama `mine` okuması başarısız.
+    server.error = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
+    await tracker.noteSubmitted();
+    expect(tracker.awaitingConfirmation, isTrue);
+    expect(tracker.error, isNotNull);
+    expect(tracker.applyAvailability, SiteApplyAvailability.unknown, reason: 'belirsizlikte yeni başvuru pasif');
+    expect(tracker.isPolling, isTrue);
+
+    // Sunucu düzelir; yeniden deneme başvuruyu doğrular.
+    server.error = null;
+    server.state = _mine(pending: _app(8));
+    await _elapse(t, const Duration(seconds: 61));
+    expect(tracker.awaitingConfirmation, isFalse);
+    expect(tracker.pending!.id, 8);
+    expect(tracker.applyAvailability, SiteApplyAvailability.pending);
+    tracker.dispose();
+  });
+
+  testWidgets('noteSubmitted başarılıysa awaitingConfirmation hemen kalkar', (t) async {
+    final server = _Server()..state = _mine(pending: _app(9));
+    final tracker = _tracker(server);
+    await tracker.noteSubmitted();
+    expect(tracker.awaitingConfirmation, isFalse);
+    expect(tracker.pending!.id, 9);
+    tracker.dispose();
+  });
+
+  testWidgets('B18: consumeApproval kartı kaldırır; clear() tüketimi sıfırlar; olay yine bir kez gelir', (t) async {
+    final server = _Server()..state = _mine(items: [_app(5, status: 'approved')]);
+    final tracker = _tracker(server);
+    final events = <int>[];
+    final sub = tracker.approvals.listen((a) => events.add(a.id));
+    await tracker.ensureLoaded();
+    await t.pump();
+    expect(events, <int>[5]);
+    expect(tracker.isApprovalConsumed(5), isFalse);
+    tracker.consumeApproval(5);
+    expect(tracker.isApprovalConsumed(5), isTrue);
+    await tracker.refresh();
+    await t.pump();
+    expect(events, <int>[5], reason: 'aynı onay için ikinci olay yok');
+    tracker.clear();
+    expect(tracker.isApprovalConsumed(5), isFalse);
+    unawaited(sub.cancel());
     tracker.dispose();
   });
 

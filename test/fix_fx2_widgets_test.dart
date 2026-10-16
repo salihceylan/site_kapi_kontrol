@@ -454,7 +454,9 @@ void main() {
       expect(blockNames(tester), ['A Blok', 'B Blok', 'C Blok']);
 
       // B bloğunu sil
-      final deleteButtons = find.byTooltip('Bloğu Sil');
+      final deleteButtons = find.byWidgetPredicate(
+        (w) => w is IconButton && (w.tooltip ?? '').startsWith('Bloğu sil: '),
+      );
       await tester.ensureVisible(deleteButtons.at(1));
       await tester.tap(deleteButtons.at(1));
       await tester.pumpAndSettle();

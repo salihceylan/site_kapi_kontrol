@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
 import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -93,6 +94,12 @@ class _HomeModAuth extends ModulesFakeAuth {
 
   @override
   bool get isLoggedIn => loggedIn;
+
+  /// Bireysel kullanıcının başvuru durumu (`GET /membership/site-applications/mine`): sunucu gibi "hiç başvuru
+  /// yok". Durum alınamazsa "Site Kurmak İçin Başvur" eylemi dürüstçe pasif kalır; bu test dosyası başvuru
+  /// akışını değil kapalı modülde ana ekranın erişilebilirliğini sınar, o yüzden sahte sunucu boş durumu döner.
+  @override
+  Future<MySiteApplications> getMySiteApplications() async => const MySiteApplications();
 
   /// Oturum değişimi (çıkış / yeni giriş / rol değişimi) ve dinleyicilere bildirim.
   void changeSession({UserRole? role, bool? loggedIn}) {

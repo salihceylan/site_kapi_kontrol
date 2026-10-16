@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_application_detail_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
+import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
@@ -33,6 +34,9 @@ class SiteApplicationsView extends StatefulWidget {
 
   /// Sayfa başına başvuru sayısı (sunucu varsayılanı).
   static const int pageSize = 30;
+
+  /// Arama metninin kullanılan en çok uzunluğu (kod noktası; sunucu fazlasını keser).
+  static const int searchMaxLength = 100;
 
   /// Durum süzgeci seçenekleri: (sunucu `status` değeri, görünen ad). İlki varsayılandır.
   static const List<(String, String)> statusFilters = <(String, String)>[
@@ -96,7 +100,8 @@ class SiteApplicationsViewState extends State<SiteApplicationsView> {
 
   void _applyFilters() {
     _timer?.cancel();
-    final next = _search.text.trim();
+    // Sunucu aramayı ilk 100 kod noktasıyla yapar: istemci de aynısını gönderir (ve fazlalığı belirtir).
+    final next = firstCodePoints(_search.text.trim(), SiteApplicationsView.searchMaxLength);
     final signature = '$next|$_status';
     // Aynı sorgu (Enter + gecikme sayacı, aynı süzgeci yeniden seçme) tekrar çağrılmaz.
     if (signature == _lastSignature &&
@@ -185,14 +190,15 @@ class SiteApplicationsViewState extends State<SiteApplicationsView> {
                 key: const ValueKey<String>('site_applications_search'),
                 controller: _search,
                 textInputAction: TextInputAction.search,
-                maxLength: 100,
-                buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
-                    null,
                 onChanged: _onSearchChanged,
                 onSubmitted: (_) => _applyFilters(),
                 decoration: InputDecoration(
                   labelText: 'Başvuru ara',
                   hintText: 'Site adı, şehir, başvuran adı veya e-postası',
+                  // Sessiz kırpma yok: sınır aşılırsa kullanıcıya söylenir.
+                  helperText: trimmedCodePoints(_search.text) > SiteApplicationsView.searchMaxLength
+                      ? 'Arama yalnız ilk ${SiteApplicationsView.searchMaxLength} karakterle yapılır.'
+                      : null,
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _search.text.isEmpty
                       ? null

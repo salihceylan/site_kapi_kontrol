@@ -45,6 +45,11 @@ class _FakeAuth extends AuthService {
   }
 }
 
+/// Tooltip'i [prefix] ile başlayan silme düğmeleri (ipucu satır adını da taşır).
+Finder _deleteButtons(String prefix) => find.byWidgetPredicate(
+  (w) => w is IconButton && (w.tooltip ?? '').startsWith(prefix),
+);
+
 Future<void> _open(
   WidgetTester t,
   _FakeAuth auth, {
@@ -96,9 +101,12 @@ void main() {
     await scrollTo(t, find.text('Kapı Ekle'));
     await t.tap(find.text('Kapı Ekle'));
     await settleFor(t);
-    expect(find.byTooltip('Bloğu Sil'), findsNWidgets(2));
-    expect(find.byTooltip('Kapıyı Sil'), findsNWidgets(2));
-    await scrollTo(t, find.byTooltip('Kapıyı Sil').last);
+    // Silme düğmeleri hangi satırı sildiklerini ipucunda söyler (ekran okuyucu etiketi de budur).
+    expect(_deleteButtons('Bloğu sil: '), findsNWidgets(2));
+    expect(_deleteButtons('Kapıyı sil: '), findsNWidgets(2));
+    expect(find.byTooltip('Bloğu sil: A Blok'), findsOneWidget);
+    expect(find.byTooltip('Kapıyı sil: Kapı 2'), findsOneWidget);
+    await scrollTo(t, _deleteButtons('Kapıyı sil: ').last);
 
     // Boş site adıyla gönderim: doğrulama iletisi.
     await scrollTo(t, find.byType(PrimaryActionButton));

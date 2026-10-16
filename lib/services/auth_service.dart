@@ -73,6 +73,7 @@ class AuthService extends ChangeNotifier {
   Future<void>? _refreshInFlight;
   DateTime? _lastSessionCheckAt;
   String? _sessionNotice;
+  DateTime? _sessionVerifiedAt;
 
   /// Süren parola değişimi sayısı (updateMyProfile / changeApartmentMemberPassword). Sunucu
   /// parolayı yazar yazmaz eski token'ı iptal eder, yeni token ise ancak yanıtla gelir; bu aralıkta
@@ -80,6 +81,12 @@ class AuthService extends ChangeNotifier {
   int _credentialSwapDepth = 0;
 
   UserSession? get session => _session;
+
+  /// Oturum bilgisinin (rol dahil) sunucudaki `/me` ile SON BAŞARILI doğrulandığı an; hiç doğrulanmadıysa
+  /// null. [refreshSession] hata durumunu yutar; çağıran yenilemenin gerçekten başarılı olup olmadığını
+  /// bu değerin ilerlemesinden anlar (örn. onaylanmış başvuruda rol hâlâ bireyselse "yenilendi ama rol
+  /// değişmedi" ile "yenilenemedi"yi ayırmak için).
+  DateTime? get sessionVerifiedAt => _sessionVerifiedAt;
   bool get isLoggedIn => _session != null;
   bool get isReady => _isReady;
 
@@ -202,6 +209,7 @@ class AuthService extends ChangeNotifier {
       if (_session?.token != active.token) {
         return; // Bu arada oturum değişti/kapandı.
       }
+      _sessionVerifiedAt = DateTime.now();
       if (!fresh.isActive) {
         _sessionNotice = 'Hesabınız pasif duruma alındı. Lütfen yöneticinizle iletişime geçin.';
         await logout();

@@ -26,7 +26,8 @@ Future<void> joinAndSetupTour(E2eScreenContext c, {bool lookupJoinToken = false}
         : null,
   );
   await c.openAndClose(
-    'Cihaz Ekleyerek Site Yöneticisi Ol',
+    'Cihaz Ekle',
+    exact: true,
     shotName: 'cihaz_sahiplen_diyalogu',
     expectTexts: const <String>['Cihaz Sahiplen'],
     whileOpen: () async {

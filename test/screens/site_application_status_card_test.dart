@@ -40,6 +40,8 @@ Future<_Card> _pump(
   bool dark = false,
   bool withAccountRefresh = true,
   bool load = true,
+  bool showApproved = true,
+  bool showLoadFailure = true,
 }) async {
   final tracker = SiteApplicationTracker(
     fetch: () => auth.getMySiteApplications(),
@@ -60,6 +62,8 @@ Future<_Card> _pump(
               await card.accountGate?.future;
             }
           : null,
+      showApproved: showApproved,
+      showLoadFailure: showLoadFailure,
     ),
     width: width,
     height: height,
@@ -340,8 +344,153 @@ void main() {
       await t.pump(const Duration(seconds: 31));
       await t.pump();
       expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
-      expect(find.text('Bağlantı yok.'), findsOneWidget);
+      expect(find.textContaining('Bağlantı yok.'), findsOneWidget);
+      expect(find.textContaining('Gösterilen başvuru bilgisi eski olabilir'), findsOneWidget);
       expect(find.text('Tekrar Dene'), findsOneWidget);
+      await _end(t, card);
+    });
+
+    // B2: hata her durumda dürüstçe görünür (yalnız bekleyen kartta değil).
+    for (final status in const ['rejected', 'cancelled']) {
+      testWidgets('B2: önceki veri ($status kartı) varken yenileme hatası -> kartın üstünde "Tekrar Dene" uyarısı', (t) async {
+        final auth = _auth()..seed([saRow(7, status: status, decisionNote: 'Eksik')]);
+        final card = await _pump(t, auth);
+        expect(find.text('Tekrar Dene'), findsNothing);
+        auth.mineError = ApiException('Bağlantı yok.');
+        await card.tracker.refresh();
+        await t.pump();
+        expect(find.textContaining('Bağlantı yok.'), findsOneWidget);
+        expect(find.text('Tekrar Dene'), findsOneWidget);
+        expect(find.byKey(const ValueKey<String>('site_application_reapply')), findsOneWidget, reason: 'kart silinmez');
+
+        auth.mineError = null;
+        await t.tap(find.text('Tekrar Dene'));
+        await settleFor(t, 100);
+        expect(find.text('Tekrar Dene'), findsNothing);
+        await _end(t, card);
+      });
+    }
+
+    testWidgets('B2: başvuru yokken (boş durum) yenileme hatası da görünür: sessiz kalmaz', (t) async {
+      final auth = _auth();
+      final card = await _pump(t, auth);
+      auth.mineError = ApiException('Bağlantı yok.');
+      await card.tracker.refresh();
+      await t.pump();
+      expect(find.textContaining('Bağlantı yok.'), findsOneWidget);
+      expect(find.text('Tekrar Dene'), findsOneWidget);
+      await _end(t, card);
+    });
+
+    testWidgets('B2: başvuru gönderildi ama durum yenilenemedi -> "alındı, durum yenilenemedi" bilgisi, yeniden deneme sürer', (t) async {
+      final auth = _auth();
+      final card = await _pump(t, auth);
+      auth.mineError = ApiException('Bağlantı yok.');
+      await card.tracker.noteSubmitted();
+      await t.pump();
+      expect(find.textContaining('Başvurunuz alındı, ancak durum yenilenemedi'), findsOneWidget);
+      expect(find.text('Tekrar Dene'), findsOneWidget);
+      expect(card.tracker.isPolling, isTrue);
+
+      auth.mineError = null;
+      auth.seed([saRow(7)]);
+      await t.pump(const Duration(seconds: 61));
+      await t.pump();
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      expect(find.textContaining('durum yenilenemedi'), findsNothing);
+      await _end(t, card);
+    });
+
+    testWidgets('B2: gönderim sonrası doğrulama sürerken "durum kontrol ediliyor" bilgisi (liveRegion bildirimi)', (t) async {
+      final auth = _auth()..seed([saRow(7)]);
+      final card = await _pump(t, auth);
+      final gate = Completer<void>();
+      auth.mineGates.add(gate);
+      unawaited(card.tracker.noteSubmitted());
+      await t.pump();
+      expect(find.textContaining('Başvuru durumu kontrol ediliyor'), findsOneWidget);
+      gate.complete();
+      await t.pump();
+      await t.pump();
+      expect(find.textContaining('kontrol ediliyor'), findsNothing);
+      await _end(t, card);
+    });
+
+    testWidgets('B17: tanınmayan / eksik durum -> kısıtlı kart, HİÇBİR eylem yok, ham kod yok', (t) async {
+      final auth = _auth()
+        ..seed([
+          <String, dynamic>{...saRow(7), 'status': 'on_hold'},
+        ]);
+      final card = await _pump(t, auth);
+      expect(find.text('Site başvurunuz'), findsOneWidget);
+      expect(find.text('Durum bilinmiyor'), findsOneWidget);
+      expect(find.textContaining('on_hold'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('site_application_cancel')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('site_application_reapply')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('site_application_refresh_account')), findsNothing);
+      expect(card.tracker.pending, isNull, reason: 'bekleyen sayılmadı');
+      await _end(t, card);
+    });
+
+    testWidgets('B18: yönetici panosunda (showApproved: false) onaylı kart görünmez', (t) async {
+      final auth = _auth()..seed([saRow(7, status: 'approved', decidedAt: DateTime.now())]);
+      final card = await _pump(t, auth, showApproved: false);
+      expect(find.text('Site başvurunuz onaylandı'), findsNothing);
+      await _end(t, card);
+    });
+
+    testWidgets('B18: onay tüketildi (yenileme sonrası rol hâlâ başvuran) -> kart KALKAR', (t) async {
+      final auth = _auth()..seed([saRow(7, status: 'approved', decidedAt: DateTime.now())]);
+      final card = await _pump(t, auth);
+      expect(find.text('Site başvurunuz onaylandı'), findsOneWidget);
+      card.tracker.consumeApproval(7);
+      await t.pump();
+      expect(find.text('Site başvurunuz onaylandı'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('site_application_refresh_account')), findsNothing);
+      await _end(t, card);
+    });
+
+    testWidgets('showLoadFailure: false (yönetici panosu) durum HİÇ alınamazsa sessiz kalır; veri varken uyarı yine görünür', (t) async {
+      final auth = _auth()..mineError = ApiException('Bağlantı yok.');
+      final card = await _pump(t, auth, showLoadFailure: false);
+      expect(find.textContaining('Bağlantı yok.'), findsNothing);
+      auth.mineError = null;
+      auth.seed([saRow(7)]);
+      await card.tracker.refresh();
+      await t.pump();
+      expect(find.text('Site başvurunuz inceleniyor'), findsOneWidget);
+      auth.mineError = ApiException('Bağlantı yok.');
+      await card.tracker.refresh();
+      await t.pump();
+      expect(find.textContaining('Bağlantı yok.'), findsOneWidget);
+      await _end(t, card);
+    });
+
+    testWidgets('B6: iptal sonrası odak yeni kartın başlığına taşınır ve iptal DUYURULUR', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = _auth()..seed([saRow(7)]);
+      final card = await _pump(t, auth);
+      await t.tap(find.byKey(const ValueKey<String>('site_application_cancel')));
+      await settleFor(t, 400);
+      await t.tap(find.widgetWithText(ElevatedButton, 'Başvuruyu İptal Et'));
+      await settleFor(t, 600);
+      expect(find.text('Site başvurunuzu iptal ettiniz'), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'site_application_card_title');
+      expect(announced, contains('Başvurunuz iptal edildi.'));
+      await _end(t, card);
+    });
+
+    testWidgets('B6: "Hesabı yenile" meşgulken etiket "Hesap yenileniyor..." olur (canlı bölge)', (t) async {
+      final auth = _auth()..seed([saRow(7, status: 'approved', decidedAt: DateTime.now())]);
+      final card = await _pump(t, auth);
+      card.accountGate = Completer<void>();
+      await t.tap(find.byKey(const ValueKey<String>('site_application_refresh_account')));
+      await t.pump();
+      expect(find.text('Hesap yenileniyor...'), findsOneWidget);
+      expect(find.text('Hesabı yenile'), findsNothing);
+      card.accountGate!.complete();
+      await t.pump();
+      expect(find.text('Hesabı yenile'), findsOneWidget);
       await _end(t, card);
     });
 

@@ -46,7 +46,7 @@ class JoinAndSetupView extends StatefulWidget {
 }
 
 class _JoinAndSetupViewState extends State<JoinAndSetupView> {
-  /// Cihaz ekleyerek yönetici olma düğmesi (eski eylem; etiketi ve davranışı aynıdır).
+  /// Cihaz ekleme düğmesi. Cihaz sahiplenmek kullanıcıyı site yöneticisi YAPMAZ: etiket yanıltmaz.
   Widget _claimButton({bool tonal = false}) {
     return ElevatedButton.icon(
       style: tonal ? tonalActionStyle(context) : null,
@@ -58,45 +58,25 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
         Icons.add_circle_outline_rounded,
         size: 20,
       ),
-      label: Text(
-        // Başvuru akışında cihaz sahiplenmek yönetici yapmaz: etiket yanıltmasın.
-        tonal ? 'Cihaz Ekle' : 'Cihaz Ekleyerek Site Yöneticisi Ol',
-        textAlign: TextAlign.center,
-      ),
+      label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
     );
   }
 
-  /// "Yönetici & Cihaz Kurulumu" kartının eylemi: başvuru akışı kapalıysa (rol uygun değil) eski tek düğme;
-  /// açıksa birincil "Site Kurmak İçin Başvur", ikincil cihaz düğmesi ve "Yakında…" pasif satırı.
+  /// "Site Kurulumu & Cihaz" kartının eylemi: başvuru akışı kapalıysa (rol uygun değil) yalnız "Cihaz Ekle";
+  /// açıksa birincil "Site Kurmak İçin Başvur" ([SiteApplyCta]: bekleyen / durum bilinmezken pasif), ikincil
+  /// cihaz düğmesi ve "Yakında…" pasif satırı.
   Widget _buildAdminAction() {
     final tracker = widget.applications;
     if (tracker == null) return _claimButton();
-    return ListenableBuilder(
-      listenable: tracker,
-      builder: (context, _) {
-        final pending = tracker.pending != null;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ElevatedButton.icon(
-              key: const ValueKey<String>('site_application_apply'),
-              onPressed: pending ? null : () => unawaited(_openApplicationForm()),
-              icon: Icon(
-                pending ? Icons.hourglass_top_rounded : Icons.domain_add_rounded,
-                size: 20,
-              ),
-              label: Text(
-                pending ? 'Başvurunuz İnceleniyor' : 'Site Kurmak İçin Başvur',
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            _claimButton(tonal: true),
-            const SizedBox(height: AppSpace.sm),
-            const SiteSubscriptionComingSoonRow(),
-          ],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SiteApplyCta(tracker: tracker, onApply: _openApplicationForm),
+        const SizedBox(height: AppSpace.sm),
+        _claimButton(tonal: true),
+        const SizedBox(height: AppSpace.sm),
+        const SiteSubscriptionComingSoonRow(),
+      ],
     );
   }
 
@@ -116,7 +96,9 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
   @override
   void didUpdateWidget(JoinAndSetupView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.applications != widget.applications) {
+    // Takipçi ya da rol değişti (örn. bireysel <-> daire kullanıcısı): açık ekran durumu yeniden yükler.
+    if (oldWidget.applications != widget.applications ||
+        oldWidget.session.role != widget.session.role) {
       unawaited(widget.applications?.ensureLoaded());
     }
   }
@@ -193,7 +175,7 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                               ),
                               const SizedBox(height: AppSpace.xs),
                               Text(
-                                'Yeni bir siteye/daireye katılabilir veya kutudan çıkan yeni bir cihazı sahiplenerek site yöneticisi olabilirsiniz.',
+                                'Yeni bir siteye/daireye katılabilir ya da yeni bir cihazı hesabınıza ekleyebilirsiniz.',
                                 style: th.bodyMedium,
                               ),
                             ],
@@ -211,6 +193,8 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                     tracker: widget.applications!,
                     onReapply: _openApplicationForm,
                     onRefreshAccount: widget.onRefreshAccount,
+                    showApproved: canApplyForSite(widget.session.role),
+                    showLoadFailure: canApplyForSite(widget.session.role),
                   ),
 
                 // ==========================================
@@ -252,11 +236,13 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                   index: 2,
                   child: SetupOptionCard(
                     tone: AppTone.primary,
-                    icon: Icons.admin_panel_settings_rounded,
-                    title: 'Yönetici & Cihaz Kurulumu',
-                    badge: 'Yönetici Ol',
+                    icon: widget.applications == null
+                        ? Icons.add_to_photos_rounded
+                        : Icons.domain_add_rounded,
+                    title: 'Site Kurulumu & Cihaz',
+                    badge: widget.applications == null ? 'Cihaz' : 'Başvuru',
                     description: widget.applications == null
-                        ? 'Satın aldığınız kutudaki QR kodu veya Seri Numarasını okutup cihazınızı bağlayarak yeni site kurun ve site yöneticisi olun.'
+                        ? 'Satın aldığınız kutudaki QR kodu veya Seri Numarasını okutup cihazınızı hesabınıza ekleyin.'
                         : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve site yöneticisi olursunuz. Cihaz şart değildir, kutudaki QR kodu veya Seri Numarasıyla sonra da eklenebilir.',
                     action: _buildAdminAction(),
                   ),

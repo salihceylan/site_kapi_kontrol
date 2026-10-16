@@ -73,10 +73,14 @@ const Map<String, String> _expected = <String, String>{
   'APPLICATION_PENDING': 'Zaten bekleyen bir site başvurunuz var.',
   'APPLICATION_NOT_FOUND': 'Başvuru bulunamadı.',
   'APPLICATION_NOT_PENDING': 'Bu başvuru artık bekleyen durumda değil.',
-  'APPLICANT_UNAVAILABLE': 'Başvuran hesap silinmiş ya da pasif; başvuru onaylanamaz.',
-  'APPLICATION_DAILY_LIMIT': 'Günlük başvuru sınırına ulaştınız. Yarın tekrar deneyin.',
+  'APPLICANT_UNAVAILABLE':
+      'Başvuran hesap silinmiş, pasif, e-postası doğrulanmamış ya da onaysız olabilir; başvuru onaylanamaz.',
+  // Sunucu sınırı kayan 24 saattir ("yarın" denmez).
+  'APPLICATION_DAILY_LIMIT': 'Son 24 saatte en fazla 5 başvuru yapabilirsiniz. Daha sonra tekrar deneyin.',
   'PAYMENT_NOT_AVAILABLE': 'Ödeme ile site açma yakında.',
-  'APPLICATION_DATA_INVALID': 'Başvuru bilgileri geçersiz. Alanları kontrol edip tekrar deneyin.',
+  // Yalnız süper kullanıcı onayında (422): sunucu yönlendirmesini ezmez, ne yapılacağını söyler.
+  'APPLICATION_DATA_INVALID':
+      'Başvurudaki yapı verisi geçersiz; onaylanamaz. Reddedip başvuranın yeniden başvurmasını isteyin.',
 };
 
 void main() {
@@ -92,9 +96,39 @@ void main() {
       }
     });
 
-    test('ALREADY_SITE_MANAGER ve DEVICE_NOT_FOUND genel eşlemesi korunur', () {
+    test('ALREADY_SITE_MANAGER, DEVICE_NOT_FOUND ve USER_NOT_FOUND genel eşlemesi korunur', () {
       expect(AuthApi.messageForErrorCode('ALREADY_SITE_MANAGER'), 'Bu kişi zaten site yöneticisi.');
       expect(AuthApi.messageForErrorCode('DEVICE_NOT_FOUND'), 'Cihaz bulunamadı.');
+      expect(AuthApi.messageForErrorCode('USER_NOT_FOUND'), 'Bu e-posta ile kayıtlı hesap yok.');
+    });
+
+    test('USER_NOT_FOUND başvuru bağlamında genel "kayıtlı hesap yok" DEĞİL: başvuran / süper dilinde', () async {
+      Future<void> expectMessage(Future<Object?> call, String expected) => expectLater(
+        call,
+        throwsA(isA<ApiException>().having((e) => e.message, 'message', expected)),
+      );
+      http.Response notFound(http.Request r) =>
+          _json({'error': 'Bu e-posta ile kayıtlı hesap yok.', 'code': 'USER_NOT_FOUND'}, 404);
+      final api = _api(_Recorder(), notFound);
+      await expectMessage(
+        api.createSiteApplication(token: 'tok', name: 'x', blocks: _blocks),
+        AuthApi.siteApplicationAccountNotFoundMessage,
+      );
+      await expectMessage(api.getMySiteApplications(token: 'tok'), AuthApi.siteApplicationAccountNotFoundMessage);
+      await expectMessage(
+        api.cancelSiteApplication(token: 'tok', applicationId: 1),
+        AuthApi.siteApplicationAccountNotFoundMessage,
+      );
+      await expectMessage(
+        api.approveSiteApplication(token: 'tok', applicationId: 1),
+        AuthApi.siteApplicationApplicantNotFoundMessage,
+      );
+      await expectMessage(
+        api.rejectSiteApplication(token: 'tok', applicationId: 1),
+        AuthApi.siteApplicationApplicantNotFoundMessage,
+      );
+      expect(AuthApi.siteApplicationAccountNotFoundMessage.contains('e-posta'), isFalse);
+      expect(AuthApi.siteApplicationApplicantNotFoundMessage.contains('e-posta'), isFalse);
     });
 
     test('HTTP yanıtından geçince ApiException.message Türkçe eşleme olur (sunucu metni değil)', () async {
@@ -268,6 +302,33 @@ void main() {
       final broken = _api(_Recorder(), (r) => _json({'tamam': true}, 201));
       await expectLater(
         broken.createSiteApplication(token: 'tok', name: 'x', blocks: _blocks),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test('getMySiteApplications: requires_application okunur; alan yoksa null (eski sunucu)', () async {
+      final api = _api(_Recorder(), (r) => _json({'pending': null, 'items': <Object>[], 'requires_application': true}));
+      expect((await api.getMySiteApplications(token: 'tok')).requiresApplication, isTrue);
+      final falseApi = _api(_Recorder(), (r) => _json({'pending': null, 'items': <Object>[], 'requires_application': false}));
+      expect((await falseApi.getMySiteApplications(token: 'tok')).requiresApplication, isFalse);
+      final legacy = _api(_Recorder(), (r) => _json({'pending': null, 'items': <Object>[]}));
+      expect((await legacy.getMySiteApplications(token: 'tok')).requiresApplication, isNull);
+    });
+
+    test('bozuk yanıt: pending ve items ikisi de yoksa "başvuru yok" DEĞİL, hata (yalnız boş pending+items meşru)', () async {
+      final empty = _api(_Recorder(), (r) => _json(<String, dynamic>{}));
+      await expectLater(
+        empty.getMySiteApplications(token: 'tok'),
+        throwsA(isA<ApiException>().having((e) => e.message, 'message', contains('anlaşılamadı'))),
+      );
+      final other = _api(_Recorder(), (r) => _json({'tamam': true}));
+      await expectLater(other.getMySiteApplications(token: 'tok'), throwsA(isA<ApiException>()));
+      final legit = _api(_Recorder(), (r) => _json({'pending': null, 'items': <Object>[]}));
+      expect((await legit.getMySiteApplications(token: 'tok')).latest, isNull);
+      // Süper kullanıcı listesi de aynı kuralla: `items` yoksa hata.
+      final page = _api(_Recorder(), (r) => _json(<String, dynamic>{}));
+      await expectLater(
+        page.listAdminSiteApplications(token: 'tok'),
         throwsA(isA<ApiException>()),
       );
     });

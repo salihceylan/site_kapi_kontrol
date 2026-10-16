@@ -26,10 +26,10 @@ Widget _companyView(_Taps taps) => DeviceAddView(
 
 /// Bireysel kullanıcı kullanımı (home_page.dart ile aynı özel metinler).
 Widget _individualView(_Taps taps) => DeviceAddView(
-  title: 'Yönetici Olarak Cihaz Ekle',
+  title: 'Cihaz Ekle',
   qrTitle: 'Kutu QR Kodunu Okut',
   qrDescription:
-      'Cihaz ambalaj kutusundaki QR kodu kameraya göstererek cihazı hesabınıza bağlayın ve yeni site kurulumunu başlatın.',
+      'Cihaz ambalaj kutusundaki QR kodu kameraya göstererek cihazı hesabınıza bağlayın. Site yöneticisi olmak için Site Kur ile başvuru yapabilirsiniz.',
   qrButtonLabel: 'QR Kodunu Okut',
   manualTitle: 'Seri No / UID ile Cihaz Ekle',
   manualDescription:
@@ -84,7 +84,8 @@ void main() {
         dark: dark,
       );
 
-      expect(find.text('Yönetici Olarak Cihaz Ekle'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsOneWidget);
+      expect(find.textContaining('Yönetici Olarak'), findsNothing, reason: 'cihaz eklemek yönetici yapmaz');
       expect(find.text('Kutu QR Kodunu Okut'), findsOneWidget);
       expect(find.text('Seri No / UID ile Cihaz Ekle'), findsOneWidget);
       expect(find.text('QR Kodunu Okut'), findsOneWidget);

@@ -14,6 +14,7 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
 
 import 'dialog_layout_harness.dart';
@@ -144,15 +145,95 @@ void main() {
       expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
     });
 
-    testWidgets('anlık kurulumda eskimiş rol: 409 APPLICATION_REQUIRED Türkçe gösterilir ve oturum yenilenir', (t) async {
-      // Yerel oturum "site yöneticisi" der ama sunucu artık bireysel kullanıcı diye bilir.
-      final auth = _auth(UserRole.siteManager)..serverRole = UserRole.individual;
-      await _open(t, auth);
+    testWidgets('B1 ÇIKMAZ YOK: anlık kurulum 409 APPLICATION_REQUIRED -> form BAŞVURU kipine geçer, bilgiler korunur, aynı formdan başvurulur', (t) async {
+      // Sahip bağı olmayan yönetici: istemci "anlık" sanır (alan eksik / bayat), sunucu 409 der.
+      final auth = _auth(UserRole.siteManager)..serverRequiresApplication = true;
+      final out = await _open(t, auth);
+      expect(find.text('Site Kurulum Sihirbazı'), findsOneWidget);
       await _enter(t, 'Site Adı *', 'Güneş Sitesi');
       await _submit(t);
-      expect(find.text('Site kurmak için başvuru yapmalısınız.'), findsOneWidget);
-      expect(auth.refreshSessionForcedCalls, 1, reason: 'rol sunucudan eşitlenir');
-      expect(auth.role, UserRole.individual);
+
+      expect(auth.setupCalls, hasLength(1));
+      expect(find.text('Site Başvurusu'), findsOneWidget, reason: 'başvuru kipine geçildi');
+      expect(find.text('Site Kurulum Sihirbazı'), findsNothing);
+      expect(find.text('Başvuruyu Gönder'), findsOneWidget);
+      expect(find.textContaining('Site eklemek için başvuru yapmanız gerekiyor'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('site_application_note')), findsOneWidget);
+      String text(String label) => t.widget<EditableText>(find.descendant(of: _field(label), matching: find.byType(EditableText))).controller.text;
+      expect(text('Site Adı *'), 'Güneş Sitesi', reason: 'girilen bilgiler korunur');
+      expect(auth.deviceCalls, 1, reason: 'cihaz listesi başvuru kipinde istenir');
+
+      await _submit(t);
+      expect(auth.createCalls, hasLength(1));
+      expect(auth.createCalls.single['name'], 'Güneş Sitesi');
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('setup_site_done')));
+      await settleFor(t, 400);
+      expect(out.outcome, SetupSiteOutcome.applied);
+    });
+
+    testWidgets('B1: APPLICATION_REQUIRED sonrası başvuru göndermeden kapanış -> applicationRequired (çağıran durumu yeniden okur)', (t) async {
+      final auth = _auth(UserRole.siteManager)..serverRequiresApplication = true;
+      final out = await _open(t, auth);
+      await _enter(t, 'Site Adı *', 'Güneş Sitesi');
+      await _submit(t);
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 400);
+      expect(out.closed, isTrue);
+      expect(out.outcome, SetupSiteOutcome.applicationRequired);
+    });
+
+    testWidgets('B1: modeFor: yönetici requires_application:true ise BAŞVURU; false / null ise anlık; bireysel hep başvuru', (t) async {
+      final manager = _auth(UserRole.siteManager);
+      expect(SetupSiteDialog.modeFor(manager, requiresApplication: true), SetupSiteMode.application);
+      expect(SetupSiteDialog.modeFor(manager, requiresApplication: false), SetupSiteMode.instant);
+      expect(SetupSiteDialog.modeFor(manager), SetupSiteMode.instant, reason: 'alan yoksa eski davranış');
+      expect(SetupSiteDialog.modeFor(_auth(UserRole.individual), requiresApplication: false), SetupSiteMode.application);
+      expect(SetupSiteDialog.modeFor(_auth(UserRole.superUser), requiresApplication: true), SetupSiteMode.instant,
+          reason: 'süper kullanıcı başvurmaz');
+    });
+
+    testWidgets('B1: sahip bağı olmayan yönetici başvuru kipinde formu açar ve başvuru ucunu kullanır (anlık uç çağrılmaz)', (t) async {
+      final auth = _auth(UserRole.siteManager)..serverRequiresApplication = true;
+      final out = _Out();
+      await openDialogAt(
+        t,
+        (context) async {
+          out.outcome = await SetupSiteDialog.show(
+            context,
+            authService: auth,
+            mode: SetupSiteDialog.modeFor(auth, requiresApplication: true),
+          );
+          out.closed = true;
+        },
+        width: 400,
+        height: 900,
+        scale: 1.0,
+        dark: false,
+      );
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.text('Site Başvurusu'), findsOneWidget);
+      await _enter(t, 'Site Adı *', 'İkinci Site');
+      await _submit(t);
+      expect(auth.createCalls, hasLength(1));
+      expect(auth.setupCalls, isEmpty);
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+    });
+
+    testWidgets('B7: kapatma düğmesi en az 48 dp (dokunma hedefi)', (t) async {
+      final auth = _auth();
+      await _open(t, auth);
+      final close = t.getSize(find.byTooltip('Kapat'));
+      expect(close.width, greaterThanOrEqualTo(48));
+      expect(close.height, greaterThanOrEqualTo(48));
+    });
+
+    testWidgets('B3: anlık sihirbazın alt başlığı iç rol kodu (SITE_OWNER) göstermez', (t) async {
+      final auth = _auth(UserRole.siteManager);
+      await _open(t, auth);
+      expect(find.text('Site Yönetimi Ayarları'), findsOneWidget);
+      expect(find.textContaining('SITE_OWNER'), findsNothing);
+      expect(find.textContaining('Site Sahibi'), findsNothing);
     });
   });
 
@@ -233,10 +314,35 @@ void main() {
       expect(auth.createCalls.single['deviceUid'], 'ESP32_NEW');
     });
 
-    testWidgets('cihaz listesi alınamadı: seçici gizli, başvuru cihazsız yapılabilir', (t) async {
+    testWidgets('B4: cihaz listesi alınamadı -> "cihaz yok" DENMEZ: hata + Tekrar Dene; cihazsız başvuru yine yapılabilir', (t) async {
       final auth = _auth()..devicesError = ApiException('Bağlantı yok.');
       await _open(t, auth);
-      expect(find.textContaining('Cihaz sonra eklenebilir'), findsOneWidget);
+      await scrollTo(t, find.text('Bağlantı yok.'));
+      expect(find.text('Bağlantı yok.'), findsOneWidget, reason: 'hata görünür');
+      expect(find.text('Tekrar Dene'), findsOneWidget);
+      expect(find.textContaining('Hesabınıza bağlı cihaz yok'), findsNothing, reason: 'yanlış "yok" denmez');
+      expect(find.textContaining('Cihaz seçimi isteğe bağlıdır'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('site_application_device_1')), findsNothing);
+
+      // Tekrar Dene: liste gelince seçici çıkar, hata kalkar.
+      auth
+        ..devicesError = null
+        ..devices = [saDevice('ESP32_RETRY')];
+      await t.tap(find.text('Tekrar Dene'));
+      await settleFor(t, 200);
+      expect(auth.deviceCalls, 2);
+      expect(find.text('Bağlantı yok.'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('site_application_device_2')), findsOneWidget);
+
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      expect(auth.createCalls.single['deviceUid'], isNull, reason: 'cihaz seçimi isteğe bağlı: varsayılan cihazsız');
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+    });
+
+    testWidgets('B4: liste hatasına rağmen cihazsız başvuru gönderilebilir (hata yutulmaz ama engellemez)', (t) async {
+      final auth = _auth()..devicesError = ApiException('Bağlantı yok.');
+      await _open(t, auth);
       await _enter(t, 'Site Adı *', 'Gül Sitesi');
       await _submit(t);
       expect(auth.createCalls.single['deviceUid'], isNull);
@@ -433,12 +539,18 @@ void main() {
       await _submit(t);
     }
 
-    testWidgets('409 APPLICATION_PENDING: Türkçe mesaj pencere içinde, pencere açık, tekrar denenebilir', (t) async {
+    testWidgets('B8: 409 APPLICATION_PENDING -> form KAPANIR (alreadyPending), bekleyen kartı için çağıran haberdar edilir, ileti gösterilir', (t) async {
+      // Davranış değişikliği: eskiden pencere açık kalıp "Başvuruyu Gönder" aktif kalıyordu (aynı hata tekrarlanırdı).
       final auth = _auth()..seed([saRow(3, applicantCode: 5)]);
-      await failWith(t, auth);
-      expect(find.text('Zaten bekleyen bir site başvurunuz var.'), findsOneWidget);
+      final out = await _open(t, auth);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      expect(out.closed, isTrue);
+      expect(out.outcome, SetupSiteOutcome.alreadyPending);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text(SetupSiteDialog.alreadyPendingMessage), findsOneWidget);
       expect(find.text('Başvurunuz alındı.'), findsNothing);
-      expect(_submitButton(t).onPressed, isNotNull);
+      expect(auth.createCalls, hasLength(1), reason: 'tekrar gönderilmedi');
     });
 
     testWidgets('409 ALREADY_SITE_MANAGER: başvuran diliyle mesaj; oturum sunucudan yenilenir', (t) async {
@@ -449,10 +561,14 @@ void main() {
       expect(auth.refreshSessionForcedCalls, 1);
     });
 
-    testWidgets('günlük başvuru sınırı (409 APPLICATION_DAILY_LIMIT): Türkçe mesaj, kilit yok', (t) async {
+    testWidgets('günlük başvuru sınırı (409 APPLICATION_DAILY_LIMIT): kayan 24 saat mesajı ("yarın" değil), kilit yok', (t) async {
       final auth = _auth()..dailyLimit = 0;
       await failWith(t, auth);
-      expect(find.text('Günlük başvuru sınırına ulaştınız. Yarın tekrar deneyin.'), findsOneWidget);
+      expect(
+        find.text('Son 24 saatte en fazla 5 başvuru yapabilirsiniz. Daha sonra tekrar deneyin.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Yarın'), findsNothing);
       expect(_submitButton(t).onPressed, isNotNull);
     });
 
@@ -475,7 +591,12 @@ void main() {
           code: 'APPLICATION_DATA_INVALID',
         );
       await failWith(t, auth);
-      expect(find.text('Başvuru bilgileri geçersiz. Alanları kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(
+        find.text(
+          'Başvurudaki yapı verisi geçersiz; onaylanamaz. Reddedip başvuranın yeniden başvurmasını isteyin.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('429: düğme retry-after kadar kilitli, mesajda bekleme süresi; süre dolunca açılır', (t) async {
@@ -488,6 +609,21 @@ void main() {
       expect(_submitButton(t).onPressed, isNotNull);
     });
 
+    testWidgets('B11: 429 kilidi dolunca sessiz açılmaz: eski hata silinir, "Tekrar deneyebilirsiniz." gösterilir ve DUYURULUR', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = _auth()
+        ..createError = ApiException('Çok fazla istek gönderildi.', statusCode: 429, retryAfterSeconds: 10);
+      await failWith(t, auth);
+      expect(find.textContaining('Çok sık deneme yapıldı'), findsOneWidget);
+      expect(announced, isEmpty);
+      await t.pump(const Duration(seconds: 11));
+      await t.pump();
+      expect(find.textContaining('Çok sık deneme yapıldı'), findsNothing, reason: 'bayat hata kalmaz');
+      expect(find.text('Tekrar deneyebilirsiniz.'), findsOneWidget);
+      expect(announced, contains('Tekrar deneyebilirsiniz.'));
+      expect(_submitButton(t).onPressed, isNotNull);
+    });
+
     testWidgets('beklenmeyen istisna: genel Türkçe mesaj, ham istisna sızmaz', (t) async {
       final auth = _auth()..createError = StateError('ham ayrıntı application_id');
       await failWith(t, auth);
@@ -497,13 +633,187 @@ void main() {
     });
 
     testWidgets('hata kutusu kaydırılmış formda görünür konuma gelir (320x640 x2,0)', (t) async {
-      final auth = _auth()..createError = ApiException('Zaten bekleyen bir site başvurunuz var.', statusCode: 409, code: 'APPLICATION_PENDING');
+      final auth = _auth()..createError = ApiException(AuthApi.siteApplicationDeviceNotFoundMessage, statusCode: 404, code: 'DEVICE_NOT_FOUND');
       await _open(t, auth, width: 320, height: 640, scale: 2.0);
       await _enter(t, 'Site Adı *', 'Gül Sitesi');
       await _submit(t, ms: 900);
-      final rect = t.getRect(find.text('Zaten bekleyen bir site başvurunuz var.'));
+      final rect = t.getRect(find.text(AuthApi.siteApplicationDeviceNotFoundMessage));
       expect(rect.top, greaterThanOrEqualTo(0));
       expect(rect.bottom, lessThanOrEqualTo(640));
+    });
+  });
+
+  group('B5: kısa / yatay ekran + klavye + büyük yazı', () {
+    for (final application in const [true, false]) {
+      for (final dark in const [false, true]) {
+        testWidgets(
+          '${application ? 'başvuru' : 'anlık'} formu 640x360 x2,0 + klavye (200 dp) ${dark ? 'koyu' : 'açık'}: taşma yok, gönder düğmesine kaydırılıp basılır',
+          (t) async {
+            final auth = _auth(application ? UserRole.individual : UserRole.siteManager);
+            await _open(t, auth, width: 640, height: 360, scale: 2.0, dark: dark);
+            t.view.viewInsets = const FakeViewPadding(bottom: 200);
+            addTearDown(t.view.resetViewInsets);
+            await t.pump();
+            expect(t.takeException(), isNull);
+
+            await _enter(t, 'Site Adı *', 'Gül Sitesi');
+            final submit = find.byKey(const ValueKey<String>('setup_site_submit'));
+            await scrollTo(t, submit);
+            expect(t.takeException(), isNull);
+            await t.tap(submit);
+            await settleFor(t, 800);
+            expect(application ? auth.createCalls : auth.setupCalls, hasLength(1));
+            expect(t.takeException(), isNull);
+          },
+        );
+      }
+    }
+
+    testWidgets('kısa ekran (360 dp yükseklik) + klavye: başlık formla birlikte kayar (sabit başlık yer yemez)', (t) async {
+      final auth = _auth();
+      await _open(t, auth, width: 640, height: 360, scale: 1.0);
+      final header = find.text('Site Başvurusu');
+      final before = t.getTopLeft(header).dy;
+      t.view.viewInsets = const FakeViewPadding(bottom: 160);
+      addTearDown(t.view.resetViewInsets);
+      await t.pump();
+      await scrollTo(t, find.byKey(const ValueKey<String>('setup_site_submit')));
+      expect(t.getTopLeft(header).dy, lessThan(before), reason: 'başlık içerikle birlikte kaydı: tek kaydırma alanı');
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('uzun ekranda düzen eskisi gibi: gönder düğmesi SABİT altta (kaydırmadan görünür)', (t) async {
+      final auth = _auth();
+      await _open(t, auth, width: 400, height: 900, scale: 1.0);
+      final submit = find.byKey(const ValueKey<String>('setup_site_submit'));
+      expect(submit, findsOneWidget);
+      final rect = t.getRect(submit);
+      expect(rect.bottom, lessThanOrEqualTo(900));
+      expect(rect.top, greaterThan(500), reason: 'altta sabit');
+    });
+  });
+
+  group('B6: başarı görünümünde odak ve duyuru', () {
+    testWidgets('form başarı görünümüyle değişince odak başlığa taşınır ve ekran okuyucuya duyurulur', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = _auth();
+      await _open(t, auth);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      expect(find.text('Başvurunuz alındı.'), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'site_application_success');
+      expect(
+        announced,
+        contains('Başvurunuz alındı. Süper kullanıcı onayladığında site yöneticisi olacaksınız.'),
+      );
+    });
+  });
+
+  group('B10/B11/B16: kapanış sonucu, bağlamlı silme düğmeleri, canlı doğrulama, kod noktası sayımı', () {
+    testWidgets('B10: istek sonucu BELİRSİZ hata (zaman aşımı) sonrası kapatınca uncertain; kesin hata (400) sonrası null', (t) async {
+      final uncertain = _auth()..createError = ApiException('Sunucu zaman aşımına uğradı.');
+      var out = await _open(t, uncertain);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      expect(find.textContaining('Sunucu zaman aşımına uğradı'), findsOneWidget);
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 400);
+      expect(out.outcome, SetupSiteOutcome.uncertain);
+
+      final definite = _auth()
+        ..createError = ApiException('Site adı zorunludur.', statusCode: 400, code: 'INVALID_BODY');
+      out = await _open(t, definite);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 400);
+      expect(out.closed, isTrue);
+      expect(out.outcome, isNull, reason: 'kesin ret: durum yeniden okunmasına gerek yok');
+
+      final server = _auth()..createError = ApiException('Sunucu hatası', statusCode: 503);
+      out = await _open(t, server);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _submit(t);
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 400);
+      expect(out.outcome, SetupSiteOutcome.uncertain, reason: '5xx: istek sunucuya ulaşmış olabilir');
+    });
+
+    testWidgets('B10: hiçbir şey göndermeden kapatma -> null (gereksiz mine çağrısı yok)', (t) async {
+      final auth = _auth();
+      final out = await _open(t, auth);
+      await t.tap(find.byTooltip('Kapat'));
+      await settleFor(t, 400);
+      expect(out.outcome, isNull);
+      expect(auth.createCalls, isEmpty);
+    });
+
+    testWidgets('B11: silme düğmeleri hangi satırı sildiğini söyler (ipucu + ekran okuyucu etiketi), ad değişince güncellenir', (t) async {
+      final auth = _auth();
+      await _open(t, auth, height: 1400);
+      await scrollTo(t, find.text('Blok Ekle'));
+      await t.tap(find.text('Blok Ekle'));
+      await settleFor(t, 200);
+      await scrollTo(t, find.text('Kapı Ekle'));
+      await t.tap(find.text('Kapı Ekle'));
+      await settleFor(t, 200);
+      expect(find.byTooltip('Bloğu sil: A Blok'), findsOneWidget);
+      expect(find.byTooltip('Bloğu sil: B Blok'), findsOneWidget);
+      expect(find.byTooltip('Kapıyı sil: Ana Giriş Kapısı'), findsOneWidget);
+      expect(find.byTooltip('Kapıyı sil: Kapı 2'), findsOneWidget);
+      final handle = t.ensureSemantics();
+      expect(
+        t.getSemantics(find.byTooltip('Bloğu sil: B Blok')).getSemanticsData().tooltip,
+        'Bloğu sil: B Blok',
+      );
+      handle.dispose();
+
+      await t.enterText(find.widgetWithText(TextFormField, 'Blok Adı').at(1), 'Kuzey');
+      await t.pump();
+      expect(find.byTooltip('Bloğu sil: Kuzey'), findsOneWidget);
+      expect(find.byTooltip('Bloğu sil: B Blok'), findsNothing);
+    });
+
+    testWidgets('B11: yinelenen blok adı hatası CANLI güncellenir (eşinin hatası düzeltince kendiliğinden kalkar)', (t) async {
+      final auth = _auth();
+      await _open(t, auth, height: 1400);
+      await scrollTo(t, find.text('Blok Ekle'));
+      await t.tap(find.text('Blok Ekle'));
+      await settleFor(t, 200);
+      final names = find.widgetWithText(TextFormField, 'Blok Adı');
+      await t.enterText(names.at(1), 'A Blok');
+      await t.pump();
+      await t.pump();
+      expect(find.text('Blok adı benzersiz olmalı.'), findsNWidgets(2), reason: 'iki alan da işaretlenir');
+      await t.enterText(names.at(0), 'Z Blok');
+      await t.pump();
+      await t.pump();
+      expect(find.text('Blok adı benzersiz olmalı.'), findsNothing, reason: 'gönder düğmesine basmadan temizlendi');
+    });
+
+    testWidgets('B16: not sınırı KOD NOKTASIdır (emoji 1 sayılır): 500 emoji kabul; sayaç aynı birimde', (t) async {
+      final auth = _auth();
+      await _open(t, auth, height: 1600);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _enter(t, 'Not (İsteğe Bağlı)', '😀' * 500);
+      expect(find.text('500/500'), findsOneWidget, reason: 'sayaç kod noktası sayar (UTF-16 olsa 1000 olurdu)');
+      await _submit(t);
+      expect(auth.createCalls, hasLength(1), reason: '500 emoji sunucuda da geçerli (500 kod noktası)');
+    });
+
+    testWidgets('B16: 501 emoji reddedilir; kırpılmış metin sayılır (baştaki / sondaki boşluk fazlalık sayılmaz)', (t) async {
+      final auth = _auth();
+      await _open(t, auth, height: 1600);
+      await _enter(t, 'Site Adı *', 'Gül Sitesi');
+      await _enter(t, 'Not (İsteğe Bağlı)', '😀' * 501);
+      expect(find.text('501/500'), findsOneWidget);
+      await _submit(t);
+      expect(find.text('Not en çok 500 karakter olabilir.'), findsOneWidget);
+      expect(auth.createCalls, isEmpty);
+      await _enter(t, 'Not (İsteğe Bağlı)', '   ${'a' * 500}   ');
+      expect(find.text('500/500'), findsOneWidget, reason: 'boşluklar sayılmaz');
+      await _submit(t);
+      expect(auth.createCalls, hasLength(1));
     });
   });
 
@@ -525,6 +835,33 @@ void main() {
       await _submit(t);
       expect(find.text('Başvurunuz alındı.'), findsOneWidget);
       await scrollTo(t, find.byKey(const ValueKey<String>('setup_site_done')));
+    });
+
+    g4LayoutMatrix('"Cihaz Eklendi" bilgi penceresi: uzun UID, bilgi metni, Site Kur / Daha Sonra', (t, w, h, s, dark) async {
+      final auth = _auth();
+      await openDialogAt(
+        t,
+        (context) => offerSiteApplicationAfterClaim(
+          context,
+          authService: auth,
+          deviceUid: 'ESP32_C3_ABCDEF1234567890ABCDEF',
+        ),
+        width: w,
+        height: h,
+        scale: s,
+        dark: dark,
+      );
+      expect(find.text('Cihaz Eklendi'), findsOneWidget);
+      expect(find.text(kDeviceAddedMessage), findsOneWidget);
+      final siteSetup = find.byKey(const ValueKey<String>('device_added_site_setup'));
+      final later = find.byKey(const ValueKey<String>('device_added_later'));
+      await scrollTo(t, siteSetup);
+      expect(t.getSize(siteSetup).height, greaterThanOrEqualTo(48));
+      await scrollTo(t, later);
+      expect(t.getSize(later).height, greaterThanOrEqualTo(48));
+      await t.tap(later);
+      await settleFor(t, 400);
+      expect(find.text('Cihaz Eklendi'), findsNothing);
     });
 
     g4LayoutMatrix('yeniden başvur: önceki değerler, uzun adlar', (t, w, h, s, dark) async {

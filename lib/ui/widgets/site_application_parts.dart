@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:site_kapi_kontrol/models/site_application.dart';
+import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -32,6 +35,58 @@ class SiteApplicationStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = siteApplicationStatusStyle(application.status);
     return StatusChip(label: application.statusLabel, tone: style.tone, icon: style.icon);
+  }
+}
+
+/// "Başvur" eylemi PASİF olduğunda NEDEN metni (tooltip + ekran okuyucu ipucu); hazırsa null.
+String? siteApplyDisabledReason(SiteApplyAvailability availability) {
+  switch (availability) {
+    case SiteApplyAvailability.ready:
+      return null;
+    case SiteApplyAvailability.pending:
+      return 'Zaten bekleyen bir site başvurunuz var. Sonucunu bekleyin ya da başvuruyu iptal edin.';
+    case SiteApplyAvailability.checking:
+      return 'Başvuru durumu kontrol ediliyor. Birkaç saniye sonra tekrar deneyin.';
+    case SiteApplyAvailability.unknown:
+      return 'Başvuru durumu alınamadı. Üstteki "Tekrar Dene" ile yeniden deneyin.';
+  }
+}
+
+/// "Site Kurmak İçin Başvur" eylemi: durum biliniyor ve bekleyen yokken etkin; bekleyen başvuru varken
+/// ("Başvurunuz İnceleniyor"), durum kontrol edilirken ya da ALINAMADIYKEN pasif, nedeni tooltip ve ekran okuyucu
+/// ipucuyla söylenir. Tek anahtar: `site_application_apply`.
+class SiteApplyCta extends StatelessWidget {
+  const SiteApplyCta({super.key, required this.tracker, required this.onApply});
+
+  final SiteApplicationTracker tracker;
+  final Future<void> Function() onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: tracker,
+      builder: (context, _) {
+        final availability = tracker.applyAvailability;
+        final reason = siteApplyDisabledReason(availability);
+        final (IconData icon, String label) = switch (availability) {
+          SiteApplyAvailability.ready => (Icons.domain_add_rounded, 'Site Kurmak İçin Başvur'),
+          SiteApplyAvailability.pending => (Icons.hourglass_top_rounded, 'Başvurunuz İnceleniyor'),
+          SiteApplyAvailability.checking => (Icons.sync_rounded, 'Durum Kontrol Ediliyor...'),
+          SiteApplyAvailability.unknown => (Icons.sync_problem_rounded, 'Başvuru Durumu Alınamadı'),
+        };
+        final button = ElevatedButton.icon(
+          key: const ValueKey<String>('site_application_apply'),
+          onPressed: reason == null ? () => unawaited(onApply()) : null,
+          icon: Icon(icon, size: 20),
+          label: Text(label, textAlign: TextAlign.center),
+        );
+        if (reason == null) return button;
+        return Tooltip(
+          message: reason,
+          child: Semantics(hint: reason, child: button),
+        );
+      },
+    );
   }
 }
 

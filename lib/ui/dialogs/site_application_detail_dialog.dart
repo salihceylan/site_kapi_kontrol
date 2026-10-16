@@ -11,10 +11,12 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
+import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart' show isLongTitle;
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
@@ -87,6 +89,7 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
   bool _loading = false;
   String? _error;
   String? _actionError;
+  String? _infoNote;
   String? _busyAction;
   bool _gone = false;
   int _token = 0;
@@ -146,11 +149,18 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
   /// Eylem hatası: mesaj gösterilir; durum uyuşmazlığında ayrıntı yeniden okunur ve liste tazelenir.
   void _fail(Object e, String fallback) {
     if (!mounted) return;
+    // Hız sınırı süresi dolunca eski hata silinir, kısa bilgi gösterilir ve ekran okuyucuya duyurulur.
     final limited = _retry.lockIfRateLimited(e, () {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {
+        _actionError = null;
+        _infoNote = 'Tekrar deneyebilirsiniz.';
+      });
+      announcePolite(context, 'Tekrar deneyebilirsiniz.');
     });
     setState(() {
       _busyAction = null;
+      _infoNote = null;
       _actionError = limited ? RetryLock.messageFor(e) : crmMessageOf(e, fallback);
     });
     if (e is ApiException &&
@@ -283,6 +293,10 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
           const SizedBox(height: AppSpace.md),
         ],
         if (_actionError != null) CrmFormError(message: _actionError!),
+        if (_infoNote != null) ...[
+          InlineNotice(tone: AppTone.info, message: _infoNote!),
+          const SizedBox(height: AppSpace.md),
+        ],
         Wrap(
           spacing: AppSpace.sm,
           runSpacing: AppSpace.xs,
@@ -369,13 +383,18 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
                     for (final b in a.blocks) '${b.name} • ${b.apartmentCount} daire',
                   ],
                   noun: 'blok',
+                  key: const ValueKey<String>('site_application_blocks'),
                 ),
               ],
               if (a.doors.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.md),
                 Text('Kapılar', style: th.bodySmall?.copyWith(color: p.textSecondary)),
                 const SizedBox(height: AppSpace.xs),
-                _PillWrap(labels: [for (final d in a.doors) d.name], noun: 'kapı'),
+                _PillWrap(
+                  key: const ValueKey<String>('site_application_doors'),
+                  labels: [for (final d in a.doors) d.name],
+                  noun: 'kapı',
+                ),
               ],
             ],
           ),
@@ -434,7 +453,12 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
                 Text(_decisionText(a), style: secondary),
                 if (a.decisionNote != null) ...[
                   const SizedBox(height: AppSpace.xs),
-                  Text('Gerekçe: ${a.decisionNote}', style: secondary),
+                  // Karar notu başvurana GÖRÜNÜR (sunucu `decision_note`): etiket ve uyarı bunu söyler.
+                  Text(
+                    '${a.isApproved ? 'Onay notu' : 'Gerekçe'}: ${a.decisionNote}',
+                    style: secondary,
+                  ),
+                  Text('Bu not başvurana görünür.', style: th.bodySmall),
                 ],
                 if (a.isApproved && a.siteCode != null) ...[
                   const SizedBox(height: AppSpace.xs),
@@ -452,8 +476,17 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
             icon: Icons.check_circle_outline,
             tone: AppTone.success,
             loading: _busyAction == 'approve',
-            onPressed: _actionsLocked ? null : _approve,
+            // Silinmiş başvuranın başvurusu onaylanamaz (sunucu kesin 409 verir): yalnız "Reddet" etkindir.
+            onPressed: (_actionsLocked || a.applicant == null) ? null : _approve,
           ),
+          if (a.applicant == null) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'Onay kapalı: başvuran hesap silinmiş. Başvuruyu yalnız reddedebilirsiniz.',
+              key: const ValueKey<String>('site_application_approve_disabled_reason'),
+              style: secondary,
+            ),
+          ],
           const SizedBox(height: AppSpace.sm),
           PrimaryActionButton(
             key: const ValueKey<String>('site_application_action_reject'),
@@ -507,9 +540,10 @@ class _SiteApplicationDetailDialogState extends State<SiteApplicationDetailDialo
   }
 }
 
-/// Uzun listeleri (100 bloğa kadar) sınırlı gösteren çip kümesi: ilk [limit] öğe, kalanı "+N blok daha".
-class _PillWrap extends StatelessWidget {
-  const _PillWrap({required this.labels, required this.noun});
+/// Uzun listeleri (100 bloğa kadar) önce sınırlı gösteren çip kümesi: ilk [limit] öğe, kalanı "Tümünü göster"
+/// ile açılır. Onay öncesi TÜM blok / kapı adları görülebilir.
+class _PillWrap extends StatefulWidget {
+  const _PillWrap({super.key, required this.labels, required this.noun});
 
   final List<String> labels;
   final String noun;
@@ -517,15 +551,36 @@ class _PillWrap extends StatelessWidget {
   static const int limit = 12;
 
   @override
+  State<_PillWrap> createState() => _PillWrapState();
+}
+
+class _PillWrapState extends State<_PillWrap> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final shown = labels.take(limit).toList(growable: false);
+    final labels = widget.labels;
+    final shown = _expanded ? labels : labels.take(_PillWrap.limit).toList(growable: false);
     final hidden = labels.length - shown.length;
-    return Wrap(
-      spacing: AppSpace.sm,
-      runSpacing: AppSpace.sm,
+    final collapsible = labels.length > _PillWrap.limit;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final label in shown) DialogMetaPill(label),
-        if (hidden > 0) DialogMetaPill('+$hidden $noun daha'),
+        Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [for (final label in shown) DialogMetaPill(label)],
+        ),
+        if (collapsible)
+          TextButton(
+            key: ValueKey<String>('site_application_pills_toggle_${widget.noun}'),
+            onPressed: () => setState(() => _expanded = !_expanded),
+            child: Text(
+              _expanded
+                  ? 'Daha az göster'
+                  : 'Tümünü göster ($hidden ${widget.noun} daha)',
+            ),
+          ),
       ],
     );
   }
@@ -553,7 +608,8 @@ class _RejectDialogState extends State<_RejectDialog> {
 
   /// Gerekçe sınırı aşıldı mı? Sınırı aşan giriş (yapıştırma) sessizce KIRPILMAZ: sayaç ve hata gösterilir,
   /// "Reddet" kapanır.
-  bool get _tooLong => _reason.text.trim().length > SiteApplicationDetailDialog.maxReasonLength;
+  /// Sunucu gerekçeyi KIRPILMIŞ metnin kod noktası olarak sayar; sayaç, hata ve düğme AYNI metni / birimi kullanır.
+  bool get _tooLong => trimmedCodePoints(_reason.text) > SiteApplicationDetailDialog.maxReasonLength;
 
   @override
   Widget build(BuildContext context) {
@@ -580,7 +636,7 @@ class _RejectDialogState extends State<_RejectDialog> {
         children: [
           Text(
             '"${widget.siteName}" başvurusu reddedilecek. Başvuran daha sonra yeniden başvurabilir. '
-            'İsterseniz başvurana gösterilecek bir gerekçe yazabilirsiniz.',
+            'İsterseniz bir gerekçe yazabilirsiniz; gerekçe başvurana görünür.',
             style: th.bodyMedium?.copyWith(color: p.textSecondary),
           ),
           const SizedBox(height: AppSpace.md),
@@ -591,6 +647,12 @@ class _RejectDialogState extends State<_RejectDialog> {
             maxLines: 4,
             maxLength: SiteApplicationDetailDialog.maxReasonLength,
             maxLengthEnforcement: MaxLengthEnforcement.none,
+            buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
+                characterCounter(
+                  context,
+                  trimmedCodePoints(_reason.text),
+                  SiteApplicationDetailDialog.maxReasonLength,
+                ),
             onChanged: (_) => setState(() {}),
             keyboardType: TextInputType.multiline,
             textCapitalization: TextCapitalization.sentences,
