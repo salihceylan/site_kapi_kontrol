@@ -5,7 +5,7 @@ Bu belge sunucu (`server/`) ve uygulama (`lib/`) için BAĞLAYICIDIR. Öncül be
 ## Politika (kullanıcı kararı, 2026-10-16)
 
 1. **Bugün:** Bireysel bir kişi site kurmak için **başvuru** yapar; süper kullanıcı onaylayınca site kurulur ve kişi **site yöneticisi** olur (rolü `site_manager`; kurulan site ona bağlanır). Onaya kadar kişi bireysel kullanıcı olarak kalır, hiçbir yönetici yetkisi yoktur.
-2. **Cihaz (JetPass) artık şart DEĞİL.** Platform artık yalnız kapı kontrol değildir (JetPass = "Geçiş Kontrol" modülü). Cihaz isteğe bağlıdır: başvuruda verilirse ve hâlâ başvuranın cihazıysa onayda 1. kapıya bağlanır.
+2. **Cihaz (SmartKeyPass) artık şart DEĞİL.** Platform artık yalnız kapı kontrol değildir (SmartKeyPass = "Geçiş Kontrol" modülü). Cihaz isteğe bağlıdır: başvuruda verilirse ve hâlâ başvuranın cihazıysa onayda 1. kapıya bağlanır.
 3. **Daha sonra (altyapı bugün hazırlanır, ödeme bugün YOK):** Site yöneticisi olmak isteyen kişi sistem ücretini ödeyecek/abonelik açacak ve süper kullanıcı onayı olmadan yönetici olacak. Bu yüzden başvuru, abonelik planı ve ödeme durumu alanları bugünden şemada vardır; ödeme sağlayıcısı ve fiyatlar yoktur ("Yakında…").
 4. **Değişmeyenler:** Kendi (sahip) sitesi olan `site_manager`'ın "Site Ekle"si ve süper kullanıcının site kurması (anında) aynen kalır; kendi sitesi olmayan yönetici (davetle/ortak yönetici olarak yönetici olmuş ya da hiç site kurmamış) BAŞVURUR (aşağıdaki "Sahip bağı kuralı") (ek site için de ileride başvuru/ödeme istenebilir; bu bir ürün kararıdır, şimdilik YAPILMAZ). "Abonelik Talepleri" (site yöneticisi olarak KAYIT olanın e-posta doğrulaması + süper kullanıcı onayı) aynen kalır.
 

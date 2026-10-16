@@ -1253,14 +1253,14 @@ Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yu
 
 ## 59. 🧩 Platform Modül Sistemi — Faz 1: Modül Aç/Kapa, Yönetim Türü, Denetim Kaydı, Ek Roller (2026-10-15)
 
-Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (JetPass) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
+Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (SmartKeyPass) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
 
 - [ ] **59.1. Eski ve Yeni Uygulama Sürümü: Kapı Açma Değişmez:**
   - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle, sonra yeni sürümle giriş yapın; telefondan kapıyı açın, giriş QR kodu üretin, bir misafir bağlantısı oluşturup açın.
   - **Beklenen Sonuç:** Üçü de her iki sürümde eskisi gibi çalışır, hata çıkmaz (Geçiş Kontrol modülü varsayılan olarak AÇIKTIR; mevcut siteler etkilenmez).
 - [ ] **59.2. Modüller Ekranı:**
   - **Nasıl Test Edilir:** Site yöneticisi olarak ve ayrıca süper kullanıcı olarak çekmeceden "Modüller"i açın.
-  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (JetPass)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
+  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (SmartKeyPass)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
 - [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma (süper kullanıcı):**
   - **Nasıl Test Edilir:** Süper kullanıcı olarak Modüller ekranında bir sitenin Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın. Site yöneticisi hesabıyla aynı siteye bakın.
   - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri kaybolur, Panel'de "Geçiş Kontrol modülü kapalı" kartı çıkar. Yeniden açınca her şey anında geri gelir. Site yöneticisi kendisi açıp kapatamaz (anahtarı yoktur; API ile denerse 403 "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.").
@@ -1311,7 +1311,7 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
   - **Beklenen Sonuç:** Çekmece öğesinde bekleyen sayısı rozeti görünür ve onay/ret sonrası düşer. Onayda modül siteye tanımlanır; site yöneticisi yenileyince "Tanımlı" görür ve modülün menüleri gelir. Retta yönetici gerekçeyi "Modül Taleplerim"de görür, modül kapalı kalır. İkinci onay "Bu talep artık bekleyen durumda değil." der. Süper kullanıcı modülü Modüller anahtarıyla doğrudan açarsa o modülün bekleyen talebi otomatik "onaylandı" olur. Denetim Kaydı'nda `module_request.*` ve `module.enabled` satırları görünür.
 - [ ] **59.19. Ürün Adı: "Site ve Toplu Yaşam Yönetim Sistemi":**
   - **Nasıl Test Edilir:** Giriş ekranına, Panel başlığına, web sekme başlığına, Android/Windows uygulama adına, doğrulama kodu ve şifre sıfırlama e-postalarına ve şifre sıfırlama sayfasına bakın; kapı kartında etiketi okuyun.
-  - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). Kapı modülünün adı JetPass'tir (kapı kartı etiketleri "JetPass AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (JetPass)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.
+  - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). Kapı modülünün adı SmartKeyPass'tir (kapı kartı etiketleri "SmartKeyPass AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (SmartKeyPass)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.
 
 ---
 
@@ -1433,7 +1433,7 @@ Yönetimin sakinlere duyuru yaptığı çekirdek modül (her sitede hep açık).
 
 ## 62. 📝 Site Yöneticisi Olma — Site Başvurusu ve Süper Kullanıcı Onayı (2026-10-16)
 
-Bireysel kullanıcı site için başvurur; süper kullanıcı onaylayınca site kurulur ve kişi site yöneticisi olur. JetPass cihazı şart değildir (isteğe bağlı); cihaz sahiplenmek yönetici yapmaz. İleride ödeme/abonelik bu onayın yerini alacak (altyapı hazır, ödeme yok). Sözleşme: `docs/PLATFORM_SITE_BASVURUSU.md` (sondaki kararlar öncelikli). Mevcut sahibi olduğu sitesi olan yöneticinin "Site Ekle"si ve süper kullanıcının site kurması anlık kalır.
+Bireysel kullanıcı site için başvurur; süper kullanıcı onaylayınca site kurulur ve kişi site yöneticisi olur. SmartKeyPass cihazı şart değildir (isteğe bağlı); cihaz sahiplenmek yönetici yapmaz. İleride ödeme/abonelik bu onayın yerini alacak (altyapı hazır, ödeme yok). Sözleşme: `docs/PLATFORM_SITE_BASVURUSU.md` (sondaki kararlar öncelikli). Mevcut sahibi olduğu sitesi olan yöneticinin "Site Ekle"si ve süper kullanıcının site kurması anlık kalır.
 
 - [ ] **62.1. Bireysel Başvuru (Cihaz Şartı Yok):**
   - **Nasıl Test Edilir:** Cihazı OLMAYAN bir bireysel hesapla giriş yapın; ana ekranda "Site Kurmak İçin Başvur"a dokunun; site adı, şehir/ilçe, blok ve daire sayılarını girip "Başvuruyu Gönder".

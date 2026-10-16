@@ -1,6 +1,6 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
-  "aciklama": "JetPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
+  "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
   "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a ve “Site yöneticisi olma (site başvurusu)” canlıda ve denemeye hazır. Sırada: Faz 2b (Excel'den toplu yükleme ve dışa aktarma), Faz 3b (Belgeler ve uygulama kapalıyken telefon bildirimi; telefon bildirimi için sizden Firebase kurulumu gerekecek). Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
   "bolumler": [
     {
@@ -133,7 +133,7 @@
       "id": "F1",
       "baslik": "Modül sistemi ve yönetim türü",
       "durum": "hazir",
-      "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (JetPass) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
+      "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (SmartKeyPass) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
       "maddeler": [
         {
           "id": "F1.01",
@@ -141,7 +141,7 @@
           "adimlar": [
             "Menüden “Modüller” ekranını açın."
           ],
-          "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (JetPass) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
+          "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (SmartKeyPass) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": true,
@@ -194,7 +194,7 @@
           "adimlar": [
             "Kapıları zaten kullanan bir sitenin Modüller ekranına bakın."
           ],
-          "beklenen": "Geçiş Kontrol (JetPass) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
+          "beklenen": "Geçiş Kontrol (SmartKeyPass) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -381,7 +381,7 @@
             "Doğrulama kodu ya da şifre sıfırlama e-postasını ve şifre sıfırlama sayfasını açın.",
             "Kapı kartındaki etiketi okuyun."
           ],
-          "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. Kapı modülünün adı JetPass’tir: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (JetPass)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
+          "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. Kapı modülünün adı SmartKeyPass’tir: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (SmartKeyPass)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
           "rol_notu": "Hepsi",
           "on_kosul": "Yeni APK / web / e-posta",
           "yeni": true,
@@ -475,7 +475,7 @@
           ],
           "beklenen": "Rol bireysel kalır, yönetici görünümüne geçilmez. Pencere “Site yöneticisi olmak için Site Kur ile başvuru yapabilirsiniz” der; “Site Kur” başvuru formunu sahiplenilen cihaz seçili açar. Hiçbir yerde “cihaz ekleyince yönetici olursunuz” denmez.",
           "rol_notu": "Bireysel kullanıcı",
-          "on_kosul": "Sahiplenilebilir bir JetPass cihazı",
+          "on_kosul": "Sahiplenilebilir bir SmartKeyPass cihazı",
           "yeni": true,
           "gelistirme": "hazir"
         },
@@ -1430,7 +1430,7 @@
       "id": "F10",
       "baslik": "Geçiş kontrol genişlemesi",
       "durum": "yakinda",
-      "ozet": "Yakında… Geçiş Kontrol (JetPass) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
+      "ozet": "Yakında… Geçiş Kontrol (SmartKeyPass) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
       "maddeler": [
         {
           "id": "F10.01",

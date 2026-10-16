@@ -32,7 +32,7 @@ enum SetupSiteMode {
   instant,
 
   /// Süper kullanıcı onayına gidecek BAŞVURU (`POST /membership/site-applications`): bireysel / daire
-  /// kullanıcısı. JetPass cihazı şart DEĞİLDİR (isteğe bağlı).
+  /// kullanıcısı. SmartKeyPass cihazı şart DEĞİLDİR (isteğe bağlı).
   application,
 }
 

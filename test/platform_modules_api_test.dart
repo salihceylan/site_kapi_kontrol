@@ -56,7 +56,7 @@ Map<String, dynamic> _siteModulesBody({bool doorEnabled = true}) =>
       'modules': <Map<String, dynamic>>[
         <String, dynamic>{
           'code': 'door_control',
-          'name': 'Geçiş Kontrol (JetPass)',
+          'name': 'Geçiş Kontrol (SmartKeyPass)',
           'description': 'Kapı açma',
           'core': false,
           'status': 'available',
@@ -78,7 +78,7 @@ void main() {
         'modules': <Map<String, dynamic>>[
           <String, dynamic>{
             'code': 'door_control',
-            'name': 'Geçiş Kontrol (JetPass)',
+            'name': 'Geçiş Kontrol (SmartKeyPass)',
             'description': 'x',
             'core': false,
             'status': 'available',
@@ -952,7 +952,7 @@ void main() {
           'modules': <Map<String, dynamic>>[
             <String, dynamic>{
               'code': 'door_control',
-              'name': 'Geçiş Kontrol (JetPass)',
+              'name': 'Geçiş Kontrol (SmartKeyPass)',
               'core': false,
               'status': 'available',
               'enabled': door,

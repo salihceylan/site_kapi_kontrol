@@ -11,9 +11,10 @@ const String bleWifiCommandUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f003';
 const String bleWifiNetworksUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f004';
 const String bleWifiResultUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f005';
 
-/// Kurulum yayınındaki cihaz adı önekleri. Yeni firmware `JetPass<UID>` yayınlar; sahadaki eski kartlar
-/// (JetPass firmware'i yüklenene kadar) `AHBU<UID>` yayınlar. İkisi de tanınır.
-const List<String> bleProvisionDeviceNamePrefixes = <String>['JetPass', 'AHBU'];
+/// Kurulum yayınındaki cihaz adı önekleri. Yeni firmware `SmartKeyPass<UID>` yayınlar; 128-bit servis UUID'si
+/// reklam paketinde yer kapladığından ad orada kısaltılabilir (`SmartKey…`), bu yüzden önek `SmartKey`dir.
+/// Sahadaki eski kartlar (yeni firmware yüklenene kadar) `AHBU<UID>` yayınlar. İkisi de tanınır.
+const List<String> bleProvisionDeviceNamePrefixes = <String>['SmartKey', 'AHBU'];
 
 /// Ad, kurulabilir bir kapı cihazına mı ait (büyük/küçük harf duyarsız önek eşleşmesi)?
 bool isBleProvisionDeviceName(String name) {

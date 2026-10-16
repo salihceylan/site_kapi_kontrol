@@ -36,7 +36,7 @@ class AuditLogEntry {
 
   /// Bilinen modül kodlarının Türkçe adları (denetim satırında "ne" kısmı için).
   static const Map<String, String> _moduleNames = <String, String>{
-    'door_control': 'Geçiş Kontrol (JetPass)',
+    'door_control': 'Geçiş Kontrol (SmartKeyPass)',
     'people': 'Kişi ve Daire Kayıtları',
     'announcements': 'Duyuru ve Bildirim',
     'finance': 'Aidat ve Finans',

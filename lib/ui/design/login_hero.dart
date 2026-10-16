@@ -15,7 +15,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 /// Gradyan halkalı logo + başlık + alt başlık.
 ///
 /// - Giriş: `LoginHero(title: 'Site ve Toplu Yaşam Yönetim Sistemi', subtitle: 'Yönetici ve sakin girişi')`.
-///   (Platformun adı budur; JetPass yalnız kapı modülünün adıdır.)
+///   (Platformun adı budur; SmartKeyPass yalnız kapı modülünün adıdır.)
 /// - Açılış/ara ekran: `LoginHero()` (yalnız logo).
 /// - Taşma: başlık ve alt başlık ortalanır, sabit yükseklik yoktur (uzun başlık ve büyük yazıda
 ///   satır sarar; kısıtlı genişlikte kelime ortasından da bölünür).

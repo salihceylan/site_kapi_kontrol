@@ -139,7 +139,7 @@ class PdfLogsService {
                     ),
                     pw.SizedBox(width: 8),
                     pw.Text(
-                      'JetPass AKILLI KAPI & GEÇİŞ SİSTEMİ',
+                      'SmartKeyPass AKILLI KAPI & GEÇİŞ SİSTEMİ',
                       style: pw.TextStyle(
                         color: primaryColor,
                         fontSize: 11,

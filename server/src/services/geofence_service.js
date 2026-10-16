@@ -1,5 +1,5 @@
 /**
- * JetPass Geçiş Kontrol - Geofence (Konum Doğrulama) Servisi
+ * SmartKeyPass Geçiş Kontrol - Geofence (Konum Doğrulama) Servisi
  * Aşama 5 & 6: Sunucu Tabanlı Mesafe Doğrulaması, Sahte Konum ve Güvenlik Katmanı
  *
  * SÖZLEŞME C3 (istemci -> sunucu; POST /app/doors/:id/open, POST /app/doors/scan-qr-open,

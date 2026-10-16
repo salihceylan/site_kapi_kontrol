@@ -77,7 +77,7 @@ void main() {
       expect(find.text('Modül kapatıldı'), findsOneWidget);
       expect(find.text('Ek rol atandı'), findsOneWidget);
       expect(find.text('Modül açıldı'), findsOneWidget);
-      expect(find.text('Geçiş Kontrol (JetPass)'), findsNWidgets(2));
+      expect(find.text('Geçiş Kontrol (SmartKeyPass)'), findsNWidgets(2));
       expect(find.text('Kullanıcı 42 • Yönetim Kurulu / Denetçi'), findsOneWidget);
       expect(find.text('Süper Yönetici • Süper Kullanıcı'), findsNWidgets(2));
       expect(find.text('Site: Gül Sitesi'), findsNWidgets(2));

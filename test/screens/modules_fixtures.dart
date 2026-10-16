@@ -64,7 +64,7 @@ SiteModulesState mdState(
     'modules': <Map<String, dynamic>>[
       m(
         'door_control',
-        'Geçiş Kontrol (JetPass)',
+        'Geçiş Kontrol (SmartKeyPass)',
         'Telefondan kapı açma, karekod ve misafir geçişi; kapı ve cihaz yönetimi.',
         status: 'available',
         enabled: door,

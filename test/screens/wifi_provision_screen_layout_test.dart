@@ -22,9 +22,9 @@ import '../design/harness.dart';
 import 'g4_test_support.dart';
 
 const List<BleProvisionDevice> _devices = <BleProvisionDevice>[
-  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:01', name: 'JetPass-KAPI-01', rssi: -48),
-  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:02', name: 'JetPass-KAPI-02', rssi: -60),
-  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:03', name: 'JetPass-KAPI-03', rssi: -72),
+  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:01', name: 'SmartKeyPass-KAPI-01', rssi: -48),
+  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:02', name: 'SmartKeyPass-KAPI-02', rssi: -60),
+  BleProvisionDevice(id: 'AA:BB:CC:DD:EE:03', name: 'SmartKeyPass-KAPI-03', rssi: -72),
   BleProvisionDevice(id: 'AA:BB:CC:DD:EE:04', name: 'AHBU-KAPI-04', rssi: -90),
 ];
 
@@ -78,7 +78,7 @@ Future<void> _tapVisible(WidgetTester t, Finder finder) async {
 
 /// Cihaza bağlanmış sayfa: (cihaz bulundu -> ilk cihaza dokun -> bağlandı).
 Future<void> _connect(WidgetTester t) async {
-  await _tapVisible(t, find.text('JetPass-KAPI-01'));
+  await _tapVisible(t, find.text('SmartKeyPass-KAPI-01'));
   await t.pump();
   await t.pump(const Duration(milliseconds: 300));
 }
@@ -182,7 +182,7 @@ void main() {
         dark: dark,
       );
 
-      expect(find.text('JetPass-KAPI-01'), findsOneWidget);
+      expect(find.text('SmartKeyPass-KAPI-01'), findsOneWidget);
       expect(find.text('Çok güçlü (-48 dBm)'), findsOneWidget);
       expect(find.text('Güçlü (-60 dBm)'), findsOneWidget);
       expect(find.text('Orta (-72 dBm)'), findsOneWidget);
@@ -299,7 +299,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
       expect(service.scans, 2);
-      expect(find.text('JetPass-KAPI-01'), findsOneWidget);
+      expect(find.text('SmartKeyPass-KAPI-01'), findsOneWidget);
       await _dispose(t);
     });
 
@@ -393,11 +393,11 @@ void main() {
         await _connect(t);
 
         final selected = t.widget<ListTile>(
-          find.widgetWithText(ListTile, 'JetPass-KAPI-01'),
+          find.widgetWithText(ListTile, 'SmartKeyPass-KAPI-01'),
         );
         expect(selected.selected, isTrue);
         final other = t.widget<ListTile>(
-          find.widgetWithText(ListTile, 'JetPass-KAPI-02'),
+          find.widgetWithText(ListTile, 'SmartKeyPass-KAPI-02'),
         );
         expect(other.selected, isFalse);
         await _dispose(t);

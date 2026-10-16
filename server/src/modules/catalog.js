@@ -24,7 +24,7 @@ function defineModule(definition) {
 export const MODULE_CATALOG = Object.freeze([
   defineModule({
     code: 'door_control',
-    name: 'Geçiş Kontrol (JetPass)',
+    name: 'Geçiş Kontrol (SmartKeyPass)',
     description: 'Telefondan kapı açma, karekod ve misafir geçişi; kapı ve cihaz yönetimi.',
     core: false,
     status: MODULE_STATUS_AVAILABLE,
