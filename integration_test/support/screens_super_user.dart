@@ -16,7 +16,7 @@ List<E2eScreenSpec> superUserScreens() {
     E2eScreenSpec(
       name: 'panel',
       menuLabel: 'Panel',
-      titleText: 'AHBU Panel',
+      titleText: 'Panel',
       interactions: (c) => adminPanelTour(c, siteKeys: const <String>['site_1', 'site_2']),
     ),
     const E2eScreenSpec(

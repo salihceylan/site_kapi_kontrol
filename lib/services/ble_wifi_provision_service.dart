@@ -11,6 +11,18 @@ const String bleWifiCommandUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f003';
 const String bleWifiNetworksUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f004';
 const String bleWifiResultUuid = '6f64be30-0d46-4f6d-9cd4-4f9d08b5f005';
 
+/// Kurulum yayınındaki cihaz adı önekleri. Yeni firmware `JetPass<UID>` yayınlar; sahadaki eski kartlar
+/// (JetPass firmware'i yüklenene kadar) `AHBU<UID>` yayınlar. İkisi de tanınır.
+const List<String> bleProvisionDeviceNamePrefixes = <String>['JetPass', 'AHBU'];
+
+/// Ad, kurulabilir bir kapı cihazına mı ait (büyük/küçük harf duyarsız önek eşleşmesi)?
+bool isBleProvisionDeviceName(String name) {
+  final String upper = name.trim().toUpperCase();
+  return bleProvisionDeviceNamePrefixes.any(
+    (String prefix) => upper.startsWith(prefix.toUpperCase()),
+  );
+}
+
 class BleProvisionException implements Exception {
   const BleProvisionException(this.message);
 
@@ -266,7 +278,7 @@ class BleWifiProvisionService {
         .listen(
           (DiscoveredDevice device) {
             final String name = device.name.trim();
-            if (!name.toUpperCase().startsWith('AHBU')) {
+            if (!isBleProvisionDeviceName(name)) {
               return;
             }
             devices[device.id] = BleProvisionDevice(

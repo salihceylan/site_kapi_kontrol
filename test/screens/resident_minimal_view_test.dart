@@ -64,8 +64,8 @@ Widget _card({
 
 /// Sade kartta bulunmaması gereken, eski kartın açıklama/rozet metinleri.
 const List<String> _removedTexts = <String>[
-  'AHBU AKILLI GEÇİŞ',
-  'AHBU YEREL AĞ GEÇİŞ',
+  'JetPass AKILLI GEÇİŞ',
+  'JetPass YEREL AĞ GEÇİŞ',
   '🟢 Çevrimiçi - Kapıyı açmak için dokunun',
   '🔴 Cihaz Çevrimdışı',
   'Yerel IP: 192.168.100.200',

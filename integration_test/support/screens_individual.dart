@@ -12,7 +12,7 @@ List<E2eScreenSpec> individualScreens({bool lookupJoinToken = false}) => <E2eScr
       const E2eScreenSpec(
         name: 'panel',
         menuLabel: 'Panel',
-        titleText: 'AHBU Panel',
+        titleText: 'Panel',
         interactions: individualPanelTour,
       ),
       E2eScreenSpec(

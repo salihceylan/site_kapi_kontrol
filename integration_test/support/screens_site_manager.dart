@@ -13,7 +13,7 @@ List<E2eScreenSpec> siteManagerScreens({required List<String> siteKeys}) => <E2e
       E2eScreenSpec(
         name: 'panel',
         menuLabel: 'Panel',
-        titleText: 'AHBU Panel',
+        titleText: 'Panel',
         interactions: (c) => adminPanelTour(c, siteKeys: siteKeys),
       ),
       const E2eScreenSpec(
@@ -66,7 +66,7 @@ List<E2eScreenSpec> siteManagerResidentModeScreens() => <E2eScreenSpec>[
       const E2eScreenSpec(
         name: 'panel',
         menuLabel: 'Panel',
-        titleText: 'AHBU Panel',
+        titleText: 'Panel',
         interactions: individualPanelTour,
       ),
       const E2eScreenSpec(

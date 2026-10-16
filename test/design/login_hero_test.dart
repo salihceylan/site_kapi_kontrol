@@ -11,7 +11,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 import 'harness.dart';
 
-const String _title = 'AHBU Giriş';
+const String _title = 'Giriş';
 const String _subtitle = 'Akıllı Kapı & Site Otomasyon Paneli';
 
 const LoginHero _full = LoginHero(title: _title, subtitle: _subtitle);
@@ -46,7 +46,7 @@ void main() {
   group('LoginHero: durumlar', () {
     testWidgets('başlık + alt başlık + logo: metinler birebir', (t) async {
       await pumpAt(t, _full, scale: 1.0);
-      expect(find.text('AHBU Giriş'), findsOneWidget);
+      expect(find.text('Giriş'), findsOneWidget);
       expect(find.text('Akıllı Kapı & Site Otomasyon Paneli'), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
     });

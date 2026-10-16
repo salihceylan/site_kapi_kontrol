@@ -47,7 +47,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       metering: [false, 'coming_soon'],
       online_payment: [false, 'coming_soon'],
     });
-    assert.equal(def('door_control').name, 'Geçiş Kontrol (AHBU)');
+    assert.equal(def('door_control').name, 'Geçiş Kontrol (JetPass)');
     assert.equal(def('people').name, 'Kişi ve Daire Kayıtları');
     assert.equal(def('online_payment').name, 'Online Tahsilat ve Banka Bağlantısı');
   });
@@ -171,7 +171,7 @@ describe('platform katalog: enabled hesabi', () => {
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',
-      name: 'Geçiş Kontrol (AHBU)',
+      name: 'Geçiş Kontrol (JetPass)',
       description: def('door_control').description,
       core: false,
       status: 'available',

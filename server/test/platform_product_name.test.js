@@ -1,4 +1,4 @@
-// Urun adi (Faz 1.1): platformun adi "Site ve Toplu Yasam Yonetim Sistemi"; AHBU yalnizca Gecis Kontrol (kapi) modulunun adi.
+// Urun adi (Faz 1.1): platformun adi "Site ve Toplu Yasam Yonetim Sistemi"; JetPass (eski adi AHBU) yalnizca Gecis Kontrol (kapi) modulunun adi.
 // E-posta konu/baslik/imza/metinleri ve sifre sifirlama sayfalari yeni adi tasir; kapi modulu adlari DEGISMEZ.
 import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -156,7 +156,7 @@ describe('urun adi: e-posta konu / baslik / metinleri', () => {
       to: 'root@example.com',
       fullName: 'Süper Kullanıcı',
       siteName: `Gül ${xss}`,
-      moduleName: 'Geçiş Kontrol (AHBU)',
+      moduleName: 'Geçiş Kontrol (JetPass)',
       requesterName: `Ayşe ${xss}`,
       note: `Lütfen açın ${xss}`,
     });
@@ -169,7 +169,7 @@ describe('urun adi: e-posta konu / baslik / metinleri', () => {
     assert.match(message.text, /Not: Lütfen açın/);
     assert.match(message.text, /Modül Talepleri ekranından onaylayabilir veya reddedebilirsiniz\.$/);
     assert.match(message.html, new RegExp(`🧩 ${PRODUCT}</h2>`));
-    assert.match(message.html, /<strong>Modül:<\/strong> Geçiş Kontrol \(AHBU\)/);
+    assert.match(message.html, /<strong>Modül:<\/strong> Geçiş Kontrol \(JetPass\)/);
     assert.equal(message.html.includes('<img'), false, 'HTML kacirilmali');
     assert.match(message.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
     assert.match(message.html, new RegExp(`${PRODUCT} tarafından otomatik olarak gönderilmiştir`));
@@ -254,15 +254,14 @@ describe('urun adi: sifre sifirlama sayfalari', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Kaynak korumasi: AHBU yalnizca kapi modulunde kalir
+// Kaynak korumasi: kapi modulunun adi JetPass; "AHBU" yalnizca cihaz protokol kimliklerinde kalir
 // ---------------------------------------------------------------------------
 
-describe('urun adi: AHBU yalnizca kapi (Gecis Kontrol) modulunde kalir', () => {
+describe('urun adi: kapi modulu JetPass; AHBU yalnizca cihaz protokol kimliklerinde', () => {
+  // Sahadaki cihazlarla uyum icin DEGISMEYEN protokol kimlikleri (gorunen ad degildir).
   const ALLOWED_FILES = new Set([
-    'modules/catalog.js', // "Gecis Kontrol (AHBU)" modul adi
     'routes/door_log_routes.js', // X-AHBU-Device-UID basligi (cihaz)
-    'services/door_access_policy.js', // AHBU:DOOR: karekod bicimi (kapi) ve dosya aciklamasi
-    'services/geofence_service.js', // kapi geofence aciklamasi
+    'services/door_access_policy.js', // AHBU:DOOR: karekod bicimi (kapi)
   ]);
 
   function listJs(dir) {
@@ -288,8 +287,9 @@ describe('urun adi: AHBU yalnizca kapi (Gecis Kontrol) modulunde kalir', () => {
     assert.equal(/AHBU/.test(read('routes/auth_routes.js')), false);
   });
 
-  it('kalanlar degismedi: katalog adi, cihaz basligi, karekod bicimi', () => {
-    assert.match(read('modules/catalog.js'), /name: 'Geçiş Kontrol \(AHBU\)'/);
+  it('katalog adi "Geçiş Kontrol (JetPass)"; protokol kimlikleri degismedi (cihaz basligi, karekod bicimi)', () => {
+    assert.match(read('modules/catalog.js'), /name: 'Geçiş Kontrol \(JetPass\)'/);
+    assert.equal(/AHBU/.test(read('modules/catalog.js')), false);
     assert.match(read('routes/door_log_routes.js'), /X-AHBU-Device-UID/);
     assert.match(read('services/door_access_policy.js'), /AHBU:DOOR:/);
   });

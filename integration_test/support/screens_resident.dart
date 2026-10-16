@@ -13,7 +13,7 @@ List<E2eScreenSpec> residentScreens() => <E2eScreenSpec>[
       const E2eScreenSpec(
         name: 'panel',
         menuLabel: 'Panel',
-        titleText: 'AHBU Panel',
+        titleText: 'Panel',
         interactions: residentRemoteTour,
       ),
       const E2eScreenSpec(

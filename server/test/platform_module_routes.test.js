@@ -502,7 +502,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.modules.length, 8);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
-      name: 'Geçiş Kontrol (AHBU)',
+      name: 'Geçiş Kontrol (JetPass)',
       description: doorOf(res.body).description,
       core: false,
       status: 'available',

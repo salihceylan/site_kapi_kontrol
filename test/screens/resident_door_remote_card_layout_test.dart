@@ -187,7 +187,7 @@ void main() {
     });
 
     testWidgets(
-      'yerel ağda: YEREL AĞDAN AÇ (warning); üst rozet "AHBU YEREL AĞ GEÇİŞ"',
+      'yerel ağda: YEREL AĞDAN AÇ (warning); üst rozet "JetPass YEREL AĞ GEÇİŞ"',
       (t) async {
         var opened = 0;
         await pumpAt(
@@ -203,8 +203,8 @@ void main() {
         expect(find.text('YEREL AĞDAN AÇ'), findsOneWidget);
         expect(_button(t).tone, AppTone.warning);
         expect(_button(t).icon, Icons.wifi_rounded);
-        expect(find.text('AHBU YEREL AĞ GEÇİŞ'), findsOneWidget);
-        expect(find.text('AHBU AKILLI GEÇİŞ'), findsNothing);
+        expect(find.text('JetPass YEREL AĞ GEÇİŞ'), findsOneWidget);
+        expect(find.text('JetPass AKILLI GEÇİŞ'), findsNothing);
         expect(
           find.text('🟡 Yerel Ağda Aktif - Kapıyı açmak için dokunun'),
           findsOneWidget,
@@ -214,13 +214,13 @@ void main() {
       },
     );
 
-    testWidgets('bulutta çevrimiçi: üst rozet "AHBU AKILLI GEÇİŞ" (primary)', (
+    testWidgets('bulutta çevrimiçi: üst rozet "JetPass AKILLI GEÇİŞ" (primary)', (
       t,
     ) async {
       await pumpAt(t, _card(), width: 360, scale: 1.0);
-      expect(find.text('AHBU AKILLI GEÇİŞ'), findsOneWidget);
+      expect(find.text('JetPass AKILLI GEÇİŞ'), findsOneWidget);
       final chip = t.widget<StatusChip>(
-        find.widgetWithText(StatusChip, 'AHBU AKILLI GEÇİŞ'),
+        find.widgetWithText(StatusChip, 'JetPass AKILLI GEÇİŞ'),
       );
       expect(chip.tone, AppTone.primary);
     });

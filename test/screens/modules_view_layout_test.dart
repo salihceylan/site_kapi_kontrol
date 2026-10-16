@@ -81,7 +81,7 @@ ModulesFakeAuth _managerAuth({
       requests ??
       <ModuleRequest>[
         if (pendingDoor)
-          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (AHBU)'),
+          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (JetPass)'),
       ];
   return auth;
 }
@@ -96,7 +96,7 @@ void main() {
         door: false,
         pendingDoor: true,
         requests: <ModuleRequest>[
-          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (AHBU)'),
+          mdRequest(31, moduleCode: 'door_control', moduleName: 'Geçiş Kontrol (JetPass)'),
           mdRequest(
             30,
             status: 'rejected',
@@ -357,7 +357,7 @@ void main() {
 
       expect(find.text('Modüller'), findsOneWidget);
       expect(find.text('Site Modülleri'), findsOneWidget);
-      expect(find.text('Geçiş Kontrol (AHBU)'), findsOneWidget);
+      expect(find.text('Geçiş Kontrol (JetPass)'), findsOneWidget);
       expect(find.byType(Switch), findsOneWidget,
           reason: 'yalnız açılıp kapatılabilen modülde anahtar var');
       expect(find.widgetWithText(StatusChip, 'Açık'), findsOneWidget);
@@ -481,7 +481,7 @@ void main() {
       expect(auth.setCalls.single.confirm, isTrue);
       expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
       expect(t.widget<Switch>(find.byType(Switch)).value, isFalse);
-      expect(find.text('Geçiş Kontrol (AHBU) kapatıldı.'), findsOneWidget);
+      expect(find.text('Geçiş Kontrol (JetPass) kapatıldı.'), findsOneWidget);
       expect(changed, hasLength(1));
       expect(auth.getModulesCalls.length, readsBefore + 1,
           reason: 'işlem sonrası modül durumu otomatik yeniden çekilir');
@@ -500,7 +500,7 @@ void main() {
       expect(auth.setCalls.single.enabled, isTrue);
       expect(auth.setCalls.single.confirm, isFalse);
       expect(find.widgetWithText(StatusChip, 'Açık'), findsOneWidget);
-      expect(find.text('Geçiş Kontrol (AHBU) açıldı.'), findsOneWidget);
+      expect(find.text('Geçiş Kontrol (JetPass) açıldı.'), findsOneWidget);
     });
 
     testWidgets('sunucu hatası: Türkçe mesaj gösterilir, anahtar eski değerde kalır', (t) async {

@@ -1,5 +1,5 @@
 /**
- * AHBU Kapı Kontrol Sistemi - Kapı Açma Politikası (saf, DB/MQTT bağımsız)
+ * JetPass Geçiş Kontrol - Kapı Açma Politikası (saf, DB/MQTT bağımsız)
  *
  * Sözleşme C2: `assertDoorOpenAllowed({ door, channel, authUser })`
  *  - Senkron; ihlalde Error fırlatır: err.statusCode = 403, err.code = '<KOD>'.

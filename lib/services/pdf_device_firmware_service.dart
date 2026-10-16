@@ -264,7 +264,7 @@ class PdfDeviceFirmwareService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'AHBU AKILLI KAPI KONTROL SİSTEMİ',
+                'JetPass AKILLI KAPI KONTROL SİSTEMİ',
                 style: pw.TextStyle(
                   font: fontBold,
                   fontSize: 14,
@@ -587,7 +587,7 @@ class PdfDeviceFirmwareService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(
-            'AHBU IoT Akıllı Kapı Sistemleri - Gizli & Kurumsal Yönetici Raporudur',
+            'JetPass IoT Akıllı Kapı Sistemleri - Gizli & Kurumsal Yönetici Raporudur',
             style: pw.TextStyle(font: fontRegular, fontSize: 8, color: textMuted),
           ),
           pw.Text(

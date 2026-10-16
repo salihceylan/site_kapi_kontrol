@@ -278,7 +278,7 @@ class ResidentDoorRemoteCard extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: StatusChip(
-                    label: ui.isLocalOnline ? 'AHBU YEREL AĞ GEÇİŞ' : 'AHBU AKILLI GEÇİŞ',
+                    label: ui.isLocalOnline ? 'JetPass YEREL AĞ GEÇİŞ' : 'JetPass AKILLI GEÇİŞ',
                     tone: ui.isLocalOnline ? AppTone.warning : AppTone.primary,
                     icon: ui.isLocalOnline ? Icons.wifi_rounded : Icons.sensors_rounded,
                   ),

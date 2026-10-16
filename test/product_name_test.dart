@@ -1,8 +1,9 @@
-// Platform Faz 1.1: ürün adı. Platformun görünen adı "Site ve Toplu Yaşam Yönetim Sistemi"dir; AHBU
-// yalnız Geçiş Kontrol (kapı açma) modülünün adıdır.
+// Platform Faz 1.1: ürün adı. Platformun görünen adı "Site ve Toplu Yaşam Yönetim Sistemi"dir; JetPass
+// yalnız Geçiş Kontrol (kapı açma) modülünün adıdır (2026-10-16: eski adı AHBU).
 //
 // DEĞİŞENLER (platform düzeyi): uygulama başlığı, giriş ekranı başlığı/alt başlığı, Panel başlığı, katılım
-// kodu metinleri. KALANLAR (kapı modülü): kapı kartı etiketleri, "Geçiş Kontrol (AHBU)", BLE ad öneki.
+// kodu metinleri. KAPI MODÜLÜ: kapı kartı etiketleri, "Geçiş Kontrol (JetPass)", kapı/cihaz PDF raporları.
+// BLE taraması hem yeni "JetPass" hem sahadaki eski "AHBU" adlı kartları tanır.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/ble_wifi_provision_service.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_join_qr_dialog.dart';
 
 import 'screens/dialog_layout_harness.dart';
@@ -121,23 +123,39 @@ void main() {
     });
   });
 
-  group('kapı modülünde AHBU adı KALIR', () {
-    test('Geçiş Kontrol (AHBU) modül adı ve denetim kaydı etiketi', () {
+  group('kapı modülünün adı JetPass', () {
+    test('Geçiş Kontrol (JetPass) modül adı ve denetim kaydı etiketi', () {
       final entry = AuditLogEntry.fromJson(<String, dynamic>{
         'id': 1,
         'action': 'module.disabled',
         'target_type': 'module',
         'target_id': 'door_control',
       });
-      expect(entry.targetLabel, 'Geçiş Kontrol (AHBU)');
+      expect(entry.targetLabel, 'Geçiş Kontrol (JetPass)');
     });
 
-    test('kapı kartı etiketleri, BLE ad öneki ve kapı/cihaz PDF raporları AHBU adını korur', () {
-      expect(_read('lib/ui/widgets/resident_door_remote_card.dart'), contains("'AHBU AKILLI GEÇİŞ'"));
-      expect(_read('lib/ui/widgets/resident_door_remote_card.dart'), contains("'AHBU YEREL AĞ GEÇİŞ'"));
-      expect(_read('lib/services/ble_wifi_provision_service.dart'), contains("startsWith('AHBU')"));
-      expect(_read('lib/services/pdf_logs_service.dart'), contains('AHBU AKILLI KAPI & GEÇİŞ SİSTEMİ'));
-      expect(_read('lib/services/pdf_device_firmware_service.dart'), contains('AHBU AKILLI KAPI KONTROL SİSTEMİ'));
+    test('kapı kartı etiketleri ve kapı/cihaz PDF raporları JetPass adını taşır; AHBU geçmez', () {
+      final card = _read('lib/ui/widgets/resident_door_remote_card.dart');
+      expect(card, contains("'JetPass AKILLI GEÇİŞ'"));
+      expect(card, contains("'JetPass YEREL AĞ GEÇİŞ'"));
+      final logs = _read('lib/services/pdf_logs_service.dart');
+      expect(logs, contains('JetPass AKILLI KAPI & GEÇİŞ SİSTEMİ'));
+      final firmware = _read('lib/services/pdf_device_firmware_service.dart');
+      expect(firmware, contains('JetPass AKILLI KAPI KONTROL SİSTEMİ'));
+      for (final String source in <String>[card, logs, firmware]) {
+        expect(source.contains('AHBU'), isFalse);
+      }
+    });
+
+    test('BLE taraması yeni JetPass ve eski AHBU adlı kartları tanır, başkalarını tanımaz', () {
+      expect(isBleProvisionDeviceName('JetPass240AC4E2E001'), isTrue);
+      expect(isBleProvisionDeviceName('JETPASS240AC4E2E001'), isTrue);
+      expect(isBleProvisionDeviceName(' jetpass240ac4e2e001 '), isTrue);
+      expect(isBleProvisionDeviceName('AHBU240AC4E2E001'), isTrue);
+      expect(isBleProvisionDeviceName('ahbu240ac4e2e001'), isTrue);
+      expect(isBleProvisionDeviceName('Jet240AC4E2E001'), isFalse);
+      expect(isBleProvisionDeviceName('ESP32'), isFalse);
+      expect(isBleProvisionDeviceName(''), isFalse);
     });
 
     test('daire giriş bilgileri PDF\'i (platform düzeyi belge) platform adını kullanır', () {

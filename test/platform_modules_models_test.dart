@@ -98,7 +98,7 @@ void main() {
     test('katalog satırı: enabled/toggleable alanları yoksa sunucudaki hesapla aynı varsayılan', () {
       final door = PlatformModule.fromJson(<String, dynamic>{
         'code': 'door_control',
-        'name': 'Geçiş Kontrol (AHBU)',
+        'name': 'Geçiş Kontrol (JetPass)',
         'description': 'Kapı açma',
         'core': false,
         'status': 'available',
@@ -133,7 +133,7 @@ void main() {
     test('site durumu satırı: enabled, toggleable, updated_at, updated_by okunur', () {
       final m = PlatformModule.fromJson(<String, dynamic>{
         'code': 'door_control',
-        'name': 'Geçiş Kontrol (AHBU)',
+        'name': 'Geçiş Kontrol (JetPass)',
         'description': '…',
         'core': false,
         'status': 'available',
@@ -183,7 +183,7 @@ void main() {
         'modules': <Map<String, dynamic>>[
           <String, dynamic>{
             'code': 'door_control',
-            'name': 'Geçiş Kontrol (AHBU)',
+            'name': 'Geçiş Kontrol (JetPass)',
             'core': false,
             'status': 'available',
             'enabled': true,
@@ -562,7 +562,7 @@ void main() {
     test('modül eylemleri: Türkçe başlık ve modül adı', () {
       final off = AuditLogEntry.fromJson(row(7, 'module.disabled'));
       expect(off.actionLabel, 'Modül kapatıldı');
-      expect(off.targetLabel, 'Geçiş Kontrol (AHBU)');
+      expect(off.targetLabel, 'Geçiş Kontrol (JetPass)');
       expect(off.siteName, 'Gül Sitesi');
       expect(off.createdAt!.toUtc(), DateTime.utc(2026, 10, 15, 9, 30));
       expect(AuditLogEntry.fromJson(row(8, 'module.enabled')).actionLabel, 'Modül açıldı');

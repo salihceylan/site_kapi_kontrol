@@ -440,7 +440,7 @@ describe('POST module-requests', () => {
       site_code: SITE_1,
       site_name: 'Gül Sitesi',
       module_code: 'door_control',
-      module_name: 'Geçiş Kontrol (AHBU)',
+      module_name: 'Geçiş Kontrol (JetPass)',
       status: 'pending',
       note: 'Kapıları uygulamadan açmak istiyoruz.',
       requested_by_name: 'Ayşe Yönetici',
@@ -492,7 +492,7 @@ describe('POST module-requests', () => {
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].id, 1);
     assert.equal(notifications[0].site_name, 'Gül Sitesi');
-    assert.equal(notifications[0].module_name, 'Geçiş Kontrol (AHBU)');
+    assert.equal(notifications[0].module_name, 'Geçiş Kontrol (JetPass)');
     assert.equal(notifications[0].requested_by_name, 'Ayşe Yönetici');
     assert.equal(notifications[0].note, 'not');
   });
@@ -951,7 +951,7 @@ describe('PUT /admin/module-requests/:id', () => {
       site_code: SITE_1,
       site_name: 'Gül Sitesi',
       module_code: 'door_control',
-      module_name: 'Geçiş Kontrol (AHBU)',
+      module_name: 'Geçiş Kontrol (JetPass)',
       status: 'approved',
       note: 'lütfen',
       requested_by_name: 'Ayşe Yönetici',
@@ -1170,7 +1170,7 @@ describe('yeni talep bildirimi: tum AKTIF super kullanicilara e-posta', () => {
   const request = {
     id: 7,
     site_name: 'Gül Sitesi',
-    module_name: 'Geçiş Kontrol (AHBU)',
+    module_name: 'Geçiş Kontrol (JetPass)',
     requested_by_name: 'Ayşe Yönetici',
     note: 'Lütfen açın <b>acil</b>',
   };
@@ -1219,7 +1219,7 @@ describe('yeni talep bildirimi: tum AKTIF super kullanicilara e-posta', () => {
     assert.equal(sent.length, 1);
     assert.equal(sent[0].to, 'bir@example.com');
     assert.match(sent[0].text, /Gül Sitesi/);
-    assert.match(sent[0].text, /Geçiş Kontrol \(AHBU\)/);
+    assert.match(sent[0].text, /Geçiş Kontrol \(JetPass\)/);
     assert.match(sent[0].text, /Ayşe Yönetici/);
     assert.match(sent[0].text, /acil/);
   });
