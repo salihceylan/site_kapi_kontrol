@@ -52,6 +52,16 @@ class AuditLogView extends StatefulWidget {
     ('site_application.rejected', 'Site başvurusu reddedildi'),
     ('site_application.cancelled', 'Site başvurusu iptal edildi'),
     ('platform_settings.updated', 'Platform ayarı güncellendi'),
+    ('finance.definition.created', 'Aidat tanımı eklendi'),
+    ('finance.definition.updated', 'Aidat tanımı güncellendi'),
+    ('finance.definition.deactivated', 'Aidat tanımı pasifleştirildi'),
+    ('finance.run.posted', 'Aidat borçlandırıldı'),
+    ('finance.charge.posted', 'Ek borç yazıldı'),
+    ('finance.payment.recorded', 'Tahsilat kaydedildi'),
+    ('finance.entry.reversed', 'Mali kayıt iptal edildi'),
+    ('finance.entry.corrected', 'Tahsilat düzeltildi'),
+    ('finance.period.closed', 'Mali dönem kapatıldı'),
+    ('finance.period.reopened', 'Mali dönem yeniden açıldı'),
   ];
 
   @override

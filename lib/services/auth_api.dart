@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
+import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -855,7 +856,8 @@ class AuthApi {
   // süper kullanıcı uçları `/admin/site-applications...` altındadır. Başarı durum kodu (200/201)
   // savunmacı okunur: ikisi de kabul edilir.
 
-  /// 200 ya da 201 kabul edilir; başka durum [ApiException] fırlatır.
+  /// 200 ya da 201 kabul edilir; başka durum [ApiException] fırlatır. (Aidat ve Finans'ta da kullanılır:
+  /// idempotent yazmalar ilk seferde 201, aynı anahtarla tekrarında 200 döner; ikisi de başarıdır.)
   void _ensureCreatedOrOk(http.Response response) {
     final status = response.statusCode;
     _ensureStatus(response, status == 201 ? 201 : 200);
@@ -1752,6 +1754,381 @@ class AuthApi {
       'Bildirim tercihleri',
       () => NotificationPrefs.fromJson(payload, fallbackEmail: emailAnnouncements),
     );
+  }
+
+  // --- Aidat ve Finans (Faz 4a) -------------------------------------------------------------
+  // Yönetici uçları `/manager/sites/:siteCode/finance/...`, sakin ucu `/app/my-finance` (sözleşme:
+  // docs/PLATFORM_FINANS.md). Tutarlar KURUŞ tamsayıdır. Okuma yönetici / süper kullanıcı / kurul
+  // üyesine, yazma yalnız yönetici / süper kullanıcıya açıktır; yetki ve modül durumu sunucuda doğrulanır
+  // (403 FORBIDDEN_ROLE / MODULE_DISABLED). Yazma istekleri ASLA otomatik yeniden denenmez; çift kayıt
+  // `idempotency_key` ile önlenir (aynı anahtar = aynı kayıt, 200).
+
+  String _financePath(int siteCode, String tail, [Map<String, String>? query]) {
+    final path = '/manager/sites/$siteCode/finance/$tail';
+    if (query == null || query.isEmpty) return path;
+    return Uri(path: path, queryParameters: query).toString();
+  }
+
+  /// Tanım listesi. [kind] ve [active] verilmezse süzgeç yok.
+  Future<List<FeeDefinition>> listFeeDefinitions({
+    required String token,
+    required int siteCode,
+    FeeKind? kind,
+    bool? active,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'definitions', {
+        if (kind != null && kind != FeeKind.unknown) 'kind': kind.apiValue,
+        'active': ?active?.toString(),
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Tanımlar', () {
+      final raw = payload['items'];
+      if (raw is! List) return const <FeeDefinition>[];
+      return List<FeeDefinition>.unmodifiable(
+        raw.whereType<Map>().map((e) => FeeDefinition.fromJson(Map<String, dynamic>.from(e))),
+      );
+    });
+  }
+
+  Future<FeeDefinition> createFeeDefinition({
+    required String token,
+    required int siteCode,
+    required FeeDefinitionInput input,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'definitions'),
+      token: token,
+      body: input.toJson(),
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Tanım', () => FeeDefinition.fromJson(_unwrapKey(payload, 'definition')));
+  }
+
+  /// Tanımı günceller: yalnız [fields] içindekiler gönderilir. Borçlandırılmış tanımda yalnız `name`,
+  /// `end_period`, `is_active`, `due_day` kabul edilir (sunucu zorlar).
+  Future<FeeDefinition> updateFeeDefinition({
+    required String token,
+    required int siteCode,
+    required int definitionId,
+    required Map<String, Object?> fields,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: _financePath(siteCode, 'definitions/$definitionId'),
+      token: token,
+      body: Map<String, dynamic>.of(fields),
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Tanım', () => FeeDefinition.fromJson(_unwrapKey(payload, 'definition')));
+  }
+
+  /// Borçlandırma önizlemesi (YAZMAZ). Aylık tanımda [period], tek seferlikte isteğe bağlı [dueDate].
+  Future<FeePreview> previewFeeRun({
+    required String token,
+    required int siteCode,
+    required int definitionId,
+    FinancePeriod? period,
+    DateTime? dueDate,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'definitions/$definitionId/preview'),
+      token: token,
+      body: {
+        if (period != null) 'period': period.toApi(),
+        if (dueDate != null) 'due_date': crmDateParam(dueDate),
+      },
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Önizleme', () => FeePreview.fromJson(payload));
+  }
+
+  /// Borçlandırır: sunucu önizlemeyle aynı hesabı yeniden yapar; toplam / daire sayısı uyuşmazsa 409
+  /// `PREVIEW_STALE` (hiçbir şey yazılmaz). [idempotencyKey] yeniden denemede AYNI verilir.
+  Future<FeePostResult> postFeeRun({
+    required String token,
+    required int siteCode,
+    required int definitionId,
+    FinancePeriod? period,
+    DateTime? dueDate,
+    required int expectedTotalMinor,
+    required int expectedApartmentCount,
+    bool skipMissing = false,
+    String? idempotencyKey,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'definitions/$definitionId/post'),
+      token: token,
+      body: {
+        if (period != null) 'period': period.toApi(),
+        if (dueDate != null) 'due_date': crmDateParam(dueDate),
+        'expected_total_minor': expectedTotalMinor,
+        'expected_apartment_count': expectedApartmentCount,
+        if (skipMissing) 'skip_missing': true,
+        'idempotency_key': ?idempotencyKey,
+      },
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Borçlandırma', () => FeePostResult.fromJson(payload));
+  }
+
+  /// Ek borç önizlemesi (YAZMAZ).
+  Future<FeePreview> previewExtraCharge({
+    required String token,
+    required int siteCode,
+    required ExtraChargeInput input,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'charges/preview'),
+      token: token,
+      body: input.toJson(),
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Önizleme', () => FeePreview.fromJson(payload));
+  }
+
+  /// Ek borcu yazar (tek işlemde tek seferlik tanım + önizleme doğrulaması + borçlandırma).
+  Future<FeePostResult> postExtraCharge({
+    required String token,
+    required int siteCode,
+    required ExtraChargeInput input,
+    required int expectedTotalMinor,
+    required int expectedApartmentCount,
+    bool skipMissing = false,
+    String? idempotencyKey,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'charges'),
+      token: token,
+      body: {
+        ...input.toJson(),
+        'expected_total_minor': expectedTotalMinor,
+        'expected_apartment_count': expectedApartmentCount,
+        if (skipMissing) 'skip_missing': true,
+        'idempotency_key': ?idempotencyKey,
+      },
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Ek borç', () => FeePostResult.fromJson(payload));
+  }
+
+  /// Daire bakiyeleri. [status]: `debtor|credit|all`.
+  Future<BalancePage> listFinanceBalances({
+    required String token,
+    required int siteCode,
+    String status = 'all',
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'balances', {
+        'status': status,
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        'limit': '$limit',
+        'offset': '$offset',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Bakiyeler', () => BalancePage.fromJson(payload));
+  }
+
+  /// Daire ekstresi; sonraki sayfa için önceki yanıttaki `next_before_id` [beforeId] olarak verilir.
+  Future<AccountView> getFinanceAccount({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    int limit = 50,
+    int? beforeId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'apartments/$apartmentId/account', {
+        'limit': '$limit',
+        if (beforeId != null) 'before_id': '$beforeId',
+      }),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Ekstre', () => AccountView.fromJson(payload));
+  }
+
+  /// Tahsilat kaydı. [amountMinor] POZİTİF kuruş (defter −); [entryDate] takvim günü (gelecek olamaz).
+  Future<LedgerWriteResult> recordFeePayment({
+    required String token,
+    required int siteCode,
+    required int apartmentId,
+    required int amountMinor,
+    required DateTime entryDate,
+    required PaymentMethod method,
+    String? description,
+    required String idempotencyKey,
+  }) async {
+    final note = description?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'payments'),
+      token: token,
+      body: {
+        'apartment_id': apartmentId,
+        'amount_minor': amountMinor,
+        'entry_date': crmDateParam(entryDate),
+        'method': method.apiValue,
+        if (note != null && note.isNotEmpty) 'description': note,
+        'idempotency_key': idempotencyKey,
+      },
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Tahsilat', () => LedgerWriteResult.fromJson(payload));
+  }
+
+  /// Kaydı iptal eder (karşı işaretli ters kayıt; silme YOK).
+  Future<LedgerWriteResult> reverseFinanceEntry({
+    required String token,
+    required int siteCode,
+    required int entryId,
+    String? reason,
+    String? idempotencyKey,
+  }) async {
+    final text = reason?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'entries/$entryId/reverse'),
+      token: token,
+      body: {
+        if (text != null && text.isNotEmpty) 'reason': text,
+        'idempotency_key': ?idempotencyKey,
+      },
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('İptal', () => LedgerWriteResult.fromJson(payload));
+  }
+
+  /// Tahsilatı düzeltir: TEK işlemde ters kayıt + yeni tahsilat.
+  Future<LedgerWriteResult> correctFinancePayment({
+    required String token,
+    required int siteCode,
+    required int entryId,
+    required int amountMinor,
+    required DateTime entryDate,
+    required PaymentMethod method,
+    String? description,
+    required String idempotencyKey,
+  }) async {
+    final note = description?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'entries/$entryId/correct'),
+      token: token,
+      body: {
+        'amount_minor': amountMinor,
+        'entry_date': crmDateParam(entryDate),
+        'method': method.apiValue,
+        if (note != null && note.isNotEmpty) 'description': note,
+        'idempotency_key': idempotencyKey,
+      },
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Düzeltme', () => LedgerWriteResult.fromJson(payload));
+  }
+
+  Future<FinancePeriods> getFinancePeriods({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'periods'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Dönemler', () => FinancePeriods.fromJson(payload));
+  }
+
+  /// Ayı kapatır (sıralı; gelecek ay kapatılamaz). Yanıt gövdesi kullanılmaz: dönem listesi yeniden okunur.
+  Future<void> closeFinancePeriod({
+    required String token,
+    required int siteCode,
+    required FinancePeriod period,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'periods/${period.toApi()}/close'),
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureCreatedOrOk(response);
+  }
+
+  /// Kapalı ayı yeniden açar (yalnız süper kullanıcı, yalnız en son kapalı ay).
+  Future<void> reopenFinancePeriod({
+    required String token,
+    required int siteCode,
+    required FinancePeriod period,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: _financePath(siteCode, 'periods/${period.toApi()}/reopen'),
+      token: token,
+      body: const <String, dynamic>{},
+    );
+    _ensureCreatedOrOk(response);
+  }
+
+  Future<FinanceSummary> getFinanceSummary({
+    required String token,
+    required int siteCode,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: _financePath(siteCode, 'summary'),
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Finans özeti', () => FinanceSummary.fromJson(payload));
+  }
+
+  /// Sakinin kendi dairelerinin borç durumu (`GET /app/my-finance`).
+  Future<MyFinance> getMyFinance({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/my-finance',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Borcum', () => MyFinance.fromJson(payload));
+  }
+
+  /// `{ "definition": {...} }` gibi sarmalı açar; yoksa gövdenin kendisi.
+  Map<String, dynamic> _unwrapKey(Map<String, dynamic> payload, String key) {
+    final inner = payload[key];
+    return inner is Map ? Map<String, dynamic>.from(inner) : payload;
   }
 
   Future<ApartmentRecord> upsertApartmentResident({
@@ -3047,6 +3424,40 @@ class AuthApi {
         return 'Son 24 saatte en fazla 5 başvuru yapabilirsiniz. Daha sonra tekrar deneyin.';
       case 'PAYMENT_NOT_AVAILABLE':
         return 'Ödeme ile site açma yakında.';
+      // Aidat ve Finans (Faz 4a). MODULE_DISABLED ve FORBIDDEN_ROLE yukarıda eşlidir; INVALID_BODY için
+      // sunucunun Türkçe metni (alan adı jargonu temizlenmiş) ya da genel yedek metin kullanılır.
+      case 'PREVIEW_STALE':
+        return 'Veriler önizlemeden sonra değişti. Önizleme yenilendi; kontrol edip yeniden onaylayın.';
+      case 'PREVIEW_INCOMPLETE':
+        return 'Bazı dairelerin bilgisi eksik. Eksikleri tamamlayın ya da bu daireleri atlayarak devam edin.';
+      case 'PERIOD_ALREADY_POSTED':
+        return 'Bu tanım bu dönem için zaten borçlandırılmış. Aynı ay ikinci kez borçlandırılamaz.';
+      case 'PERIOD_CLOSED':
+        return 'Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Ayı açtırmak için sistem yöneticisine başvurun.';
+      case 'PERIOD_NOT_CLOSABLE':
+        return 'Bu ay kapatılamaz. Aylar sırayla kapatılır: önceki ay kapalı olmalı ve gelecek ay kapatılamaz.';
+      case 'PERIOD_NOT_REOPENABLE':
+        return 'Bu ay yeniden açılamaz. Yalnızca en son kapatılan ay açılabilir.';
+      case 'DEFINITION_LOCKED':
+        return 'Borçlandırılmış tanımın tutarı ve dağıtımı değiştirilemez. Yeni bir tanım ekleyin.';
+      case 'ENTRY_NOT_CORRECTABLE':
+        return 'Yalnızca tahsilat düzeltilebilir. Borç için kaydı iptal edin.';
+      case 'NOTHING_TO_POST':
+        return 'Borçlandırılacak daire bulunamadı. Hedefi ve daire bilgilerini kontrol edin.';
+      case 'IDEMPOTENCY_CONFLICT':
+        return 'Bu işlem anahtarı başka bir işlem için kullanılmış. Pencereyi kapatıp işlemi yeniden başlatın.';
+      case 'DEFINITION_INACTIVE':
+        return 'Bu tanım pasif ya da bu dönemde geçerli değil. Tanımı etkinleştirin veya dönemi kontrol edin.';
+      case 'ENTRY_ALREADY_REVERSED':
+        return 'Bu kayıt zaten iptal edilmiş. Listeyi yenileyip kontrol edin.';
+      case 'ENTRY_NOT_REVERSIBLE':
+        return 'Bu kayıt iptal ya da düzeltme için uygun değil. Ters kayıtlar iptal edilemez.';
+      case 'APARTMENT_HAS_FINANCE':
+        return 'Mali kaydı olan daire silinemez.';
+      case 'DEFINITION_NOT_FOUND':
+        return 'Aidat tanımı bulunamadı.';
+      case 'ENTRY_NOT_FOUND':
+        return 'Mali kayıt bulunamadı.';
       default:
         return null;
     }

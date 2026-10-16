@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 
@@ -75,6 +76,7 @@ class AuditLogEntry {
         return peopleActionLabel(action) ??
             announcementActionLabel(action) ??
             siteApplicationActionLabel(action) ??
+            financeActionLabel(action) ??
             'Diğer işlem';
     }
   }
@@ -115,6 +117,8 @@ class AuditLogEntry {
       case 'site_application':
         // Site adı / gerekçe / not denetim kaydına yazılmaz; yalnız başvuru numarası gösterilir.
         return _numbered('Başvuru');
+      case 'finance':
+        return _financeTarget();
       case 'platform_settings':
       case 'platform_setting':
         // Hedef ayar anahtarıdır (örn. `site_onboarding`); ham anahtar gösterilmez. Sunucu hedef türünü
@@ -124,6 +128,22 @@ class AuditLogEntry {
         final id = targetId;
         return id == null || id.isEmpty ? null : id;
     }
+  }
+
+  /// Mali eylemin hedefi (Faz 4a): açıklama / neden metni ve kişi adı denetim kaydına yazılmaz; yalnız numara
+  /// ya da dönem gösterilir. Hedef türü eylemin ön ekinden anlaşılır.
+  String? _financeTarget() {
+    final id = targetId;
+    if (id == null || id.isEmpty) return null;
+    final period = FinancePeriod.tryParse(id);
+    if (action.startsWith('finance.period.') || (period != null && id.contains('-'))) {
+      return period == null ? 'Dönem' : 'Dönem: ${period.label}';
+    }
+    if (action.startsWith('finance.definition.')) return 'Aidat tanımı #$id';
+    if (action.startsWith('finance.run.')) return 'Borçlandırma #$id';
+    if (action.startsWith('finance.charge.')) return 'Ek borç #$id';
+    if (action.startsWith('finance.payment.')) return 'Tahsilat #$id';
+    return 'Mali kayıt #$id';
   }
 
   String? _numbered(String noun) {

@@ -13,6 +13,7 @@ import 'package:site_kapi_kontrol/models/device_record.dart';
 import 'package:site_kapi_kontrol/models/door_access_log_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
+import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
@@ -1652,6 +1653,241 @@ class AuthService extends ChangeNotifier {
         emailAnnouncements: emailAnnouncements,
       ),
     );
+  }
+
+  // --- Aidat ve Finans (Faz 4a) -------------------------------------------------------------
+  // Hata durumunda ApiException FIRLATIR (Türkçe mesajlı); oturum hatası [_runAuthorized] içinde işlenir.
+  // Tutarlar KURUŞ tamsayıdır. Yazma çağrıları otomatik yeniden denenmez; çift kayıt `idempotencyKey` ile
+  // önlenir (aynı anahtar = aynı kayıt).
+
+  Future<List<FeeDefinition>> listFeeDefinitions(int siteCode, {FeeKind? kind, bool? active}) {
+    return _runAuthorized(
+      (token) => api.listFeeDefinitions(
+        token: token,
+        siteCode: siteCode,
+        kind: kind,
+        active: active,
+      ),
+    );
+  }
+
+  Future<FeeDefinition> createFeeDefinition(int siteCode, FeeDefinitionInput input) {
+    return _runAuthorized(
+      (token) => api.createFeeDefinition(token: token, siteCode: siteCode, input: input),
+    );
+  }
+
+  /// Yalnız [fields] içindekiler gönderilir; borçlandırılmış tanımda yalnız `name`, `end_period`,
+  /// `is_active`, `due_day`.
+  Future<FeeDefinition> updateFeeDefinition(
+    int siteCode,
+    int definitionId,
+    Map<String, Object?> fields,
+  ) {
+    return _runAuthorized(
+      (token) => api.updateFeeDefinition(
+        token: token,
+        siteCode: siteCode,
+        definitionId: definitionId,
+        fields: fields,
+      ),
+    );
+  }
+
+  Future<FeePreview> previewFeeRun(
+    int siteCode,
+    int definitionId, {
+    FinancePeriod? period,
+    DateTime? dueDate,
+  }) {
+    return _runAuthorized(
+      (token) => api.previewFeeRun(
+        token: token,
+        siteCode: siteCode,
+        definitionId: definitionId,
+        period: period,
+        dueDate: dueDate,
+      ),
+    );
+  }
+
+  Future<FeePostResult> postFeeRun(
+    int siteCode,
+    int definitionId, {
+    FinancePeriod? period,
+    DateTime? dueDate,
+    required int expectedTotalMinor,
+    required int expectedApartmentCount,
+    bool skipMissing = false,
+    String? idempotencyKey,
+  }) {
+    return _runAuthorized(
+      (token) => api.postFeeRun(
+        token: token,
+        siteCode: siteCode,
+        definitionId: definitionId,
+        period: period,
+        dueDate: dueDate,
+        expectedTotalMinor: expectedTotalMinor,
+        expectedApartmentCount: expectedApartmentCount,
+        skipMissing: skipMissing,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
+  }
+
+  Future<FeePreview> previewExtraCharge(int siteCode, ExtraChargeInput input) {
+    return _runAuthorized(
+      (token) => api.previewExtraCharge(token: token, siteCode: siteCode, input: input),
+    );
+  }
+
+  Future<FeePostResult> postExtraCharge(
+    int siteCode,
+    ExtraChargeInput input, {
+    required int expectedTotalMinor,
+    required int expectedApartmentCount,
+    bool skipMissing = false,
+    String? idempotencyKey,
+  }) {
+    return _runAuthorized(
+      (token) => api.postExtraCharge(
+        token: token,
+        siteCode: siteCode,
+        input: input,
+        expectedTotalMinor: expectedTotalMinor,
+        expectedApartmentCount: expectedApartmentCount,
+        skipMissing: skipMissing,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
+  }
+
+  /// Daire bakiyeleri. [status]: `debtor|credit|all`.
+  Future<BalancePage> listFinanceBalances(
+    int siteCode, {
+    String status = 'all',
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listFinanceBalances(
+        token: token,
+        siteCode: siteCode,
+        status: status,
+        query: query,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  /// Daire ekstresi; sonraki sayfa için `nextBeforeId` [beforeId] olarak verilir.
+  Future<AccountView> getFinanceAccount(
+    int siteCode,
+    int apartmentId, {
+    int limit = 50,
+    int? beforeId,
+  }) {
+    return _runAuthorized(
+      (token) => api.getFinanceAccount(
+        token: token,
+        siteCode: siteCode,
+        apartmentId: apartmentId,
+        limit: limit,
+        beforeId: beforeId,
+      ),
+    );
+  }
+
+  /// Tahsilat kaydı: [amountMinor] POZİTİF kuruş; aynı [idempotencyKey] = aynı kayıt.
+  Future<LedgerWriteResult> recordFeePayment(
+    int siteCode, {
+    required int apartmentId,
+    required int amountMinor,
+    required DateTime entryDate,
+    required PaymentMethod method,
+    String? description,
+    required String idempotencyKey,
+  }) {
+    return _runAuthorized(
+      (token) => api.recordFeePayment(
+        token: token,
+        siteCode: siteCode,
+        apartmentId: apartmentId,
+        amountMinor: amountMinor,
+        entryDate: entryDate,
+        method: method,
+        description: description,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
+  }
+
+  Future<LedgerWriteResult> reverseFinanceEntry(
+    int siteCode,
+    int entryId, {
+    String? reason,
+    String? idempotencyKey,
+  }) {
+    return _runAuthorized(
+      (token) => api.reverseFinanceEntry(
+        token: token,
+        siteCode: siteCode,
+        entryId: entryId,
+        reason: reason,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
+  }
+
+  Future<LedgerWriteResult> correctFinancePayment(
+    int siteCode,
+    int entryId, {
+    required int amountMinor,
+    required DateTime entryDate,
+    required PaymentMethod method,
+    String? description,
+    required String idempotencyKey,
+  }) {
+    return _runAuthorized(
+      (token) => api.correctFinancePayment(
+        token: token,
+        siteCode: siteCode,
+        entryId: entryId,
+        amountMinor: amountMinor,
+        entryDate: entryDate,
+        method: method,
+        description: description,
+        idempotencyKey: idempotencyKey,
+      ),
+    );
+  }
+
+  Future<FinancePeriods> getFinancePeriods(int siteCode) {
+    return _runAuthorized((token) => api.getFinancePeriods(token: token, siteCode: siteCode));
+  }
+
+  Future<void> closeFinancePeriod(int siteCode, FinancePeriod period) async {
+    await _runAuthorized(
+      (token) => api.closeFinancePeriod(token: token, siteCode: siteCode, period: period),
+    );
+  }
+
+  Future<void> reopenFinancePeriod(int siteCode, FinancePeriod period) async {
+    await _runAuthorized(
+      (token) => api.reopenFinancePeriod(token: token, siteCode: siteCode, period: period),
+    );
+  }
+
+  Future<FinanceSummary> getFinanceSummary(int siteCode) {
+    return _runAuthorized((token) => api.getFinanceSummary(token: token, siteCode: siteCode));
+  }
+
+  /// Sakinin kendi dairelerinin borç durumu (`GET /app/my-finance`).
+  Future<MyFinance> getMyFinance() {
+    return _runAuthorized((token) => api.getMyFinance(token: token));
   }
 
   Future<({bool deleted, bool pending, String? message, String? error})> deleteSite({

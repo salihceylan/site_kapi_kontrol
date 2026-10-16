@@ -19,11 +19,18 @@ AppTone auditToneOf(String action) {
     case 'announcement.created':
     case 'announcement.published':
     case 'site_application.approved':
+    case 'finance.definition.created':
+    case 'finance.run.posted':
+    case 'finance.charge.posted':
+    case 'finance.payment.recorded':
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
     case 'apartment.deleted':
     case 'announcement.withdrawn':
+    case 'finance.definition.deactivated':
+    case 'finance.entry.reversed':
+    case 'finance.period.closed':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':
@@ -37,6 +44,9 @@ AppTone auditToneOf(String action) {
     case 'announcement.scheduled':
     case 'site_application.created':
     case 'platform_settings.updated':
+    case 'finance.definition.updated':
+    case 'finance.entry.corrected':
+    case 'finance.period.reopened':
       return AppTone.info;
     case 'module_request.rejected':
     case 'site_application.rejected':

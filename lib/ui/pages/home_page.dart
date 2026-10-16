@@ -131,6 +131,8 @@ import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/announcement_read_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
+import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
@@ -232,6 +234,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
   final GlobalKey<AnnouncementsViewState> _announcementsKey =
       GlobalKey<AnnouncementsViewState>();
+  final GlobalKey<FinanceViewState> _financeViewKey = GlobalKey<FinanceViewState>();
+  final GlobalKey<MyFinanceViewState> _myFinanceViewKey = GlobalKey<MyFinanceViewState>();
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -734,7 +738,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Set<SirketMenuItem> _extraMenuItems(UserRole role) => <SirketMenuItem>{
         if (_moduleAccess.boardMemberSites.isNotEmpty) SirketMenuItem.kisiler,
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
+        if (_canAccessFinance(role)) SirketMenuItem.finans,
+        if (_hasFinanceInbox(role)) SirketMenuItem.borcum,
       };
+
+  // --- Aidat ve Finans (Faz 4a) ---
+
+  /// Finans ekranında listelenen siteler: `finance` modülü AÇIK olan yönetilen siteler (yazma; yalnız yönetici
+  /// modunda) ve kurul üyesi olunan siteler (salt okunur). Süper kullanıcıda boştur (ekran tüm siteleri çeker).
+  ///
+  /// FAIL-OPEN YOK: modül verisi hiç gelmediyse (`!isFiltering`) hiçbir site yoktur ve menü AÇILMAZ; sitede
+  /// `finance` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu yine de her çağrıda yetkiyi ve
+  /// modül durumunu doğrular.
+  List<PeopleSite> _financeSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <PeopleSite>[];
+    final canManage = _canManagePeople(role);
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.finance))
+          if (site.role == 'manager' && canManage)
+            PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true)
+          else if (site.isBoardMember)
+            PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Finans" menüsü: süper kullanıcı ya da `finance` modülü açık bir sitede yönetici / kurul üyesi.
+  bool _canAccessFinance(UserRole role) =>
+      role == UserRole.superUser || _financeSites(role).isNotEmpty;
+
+  /// "Borcum" menüsü (sakin): alıcısı olabilecek ve `finance` modülü AÇIK bir siteye bağlı daire sakini ya da
+  /// sakin modundaki yönetici. Süper kullanıcı ve bireysel kullanıcı için yoktur; modül verisi yokken
+  /// (fail-open) AÇILMAZ.
+  bool _hasFinanceInbox(UserRole role) {
+    if (!_moduleAccess.isFiltering) return false;
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return false;
+      case UserRole.siteManager:
+        if (!_isResidentMode) return false;
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return _moduleAccess.result!.sites.any(
+      (site) => _isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.finance),
+    );
+  }
 
   // --- Duyuru ve Bildirim (Faz 3a) ---
 
@@ -996,6 +1046,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _canAccessAnnouncements(role);
     }
 
+    // Finans / Borcum: `finance` modülü açık siteye bağlı yönetici, kurul (salt okunur) ya da sakin; modül
+    // kapalıyken ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.finans) {
+      return _canAccessFinance(role);
+    }
+    if (item == SirketMenuItem.borcum) {
+      return _hasFinanceInbox(role);
+    }
+
     switch (role) {
 
       case UserRole.superUser:
@@ -1115,6 +1174,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.duyurular:
         return 'Duyurular';
+
+      case SirketMenuItem.finans:
+        return 'Finans';
+
+      case SirketMenuItem.borcum:
+        return 'Borcum';
 
       case SirketMenuItem.siteBasvurulari:
         return 'Site Başvuruları';
@@ -4339,6 +4404,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         unawaited(_announcements.refresh());
         await _announcementsKey.currentState?.reload();
         break;
+      case SirketMenuItem.finans:
+        await _financeViewKey.currentState?.reload();
+        break;
+      case SirketMenuItem.borcum:
+        await _myFinanceViewKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -5185,6 +5256,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           notifier: _announcements,
           preferInbox: _forceAnnouncementInbox,
         );
+
+      case SirketMenuItem.finans:
+        return FinanceView(
+          key: _financeViewKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _financeSites(session.role),
+          canReopen: session.role == UserRole.superUser,
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => setState(() => _selectedMenu = SirketMenuItem.moduller)
+              : null,
+        );
+
+      case SirketMenuItem.borcum:
+        return MyFinanceView(key: _myFinanceViewKey, authService: widget.authService);
 
       case SirketMenuItem.katilimVeKurulum:
         return JoinAndSetupView(

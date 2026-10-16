@@ -2,6 +2,9 @@
 // ve sahte servisi. `_test.dart` ile bitmediği için kendi başına test olarak çalışmaz.
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Switch;
+import 'package:flutter_test/flutter_test.dart' show Finder, find;
+
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
@@ -13,6 +16,7 @@ import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 
 SiteRecord mdSite(int id, String name, {String approval = 'approved'}) =>
     SiteRecord.fromJson(<String, dynamic>{
@@ -27,6 +31,13 @@ SiteModulesState mdState(
   int siteCode,
   String siteName, {
   bool door = true,
+
+  /// true: Faz 4a kataloğu (`finance` = `available`, `toggleable`); false (varsayılan): Faz 1 kataloğu
+  /// (`finance` = `coming_soon`) — Faz 1/1.1 testleri tek açılıp kapanabilir modül (Geçiş Kontrol) varsayar.
+  bool financeAvailable = false,
+
+  /// [financeAvailable] iken `finance` modülü açık mı (varsayılan kapalı).
+  bool finance = false,
   String typeLabel = 'Apartman ve Site',
 
   /// false: site yöneticisi görünümü (Faz 1.1): hiçbir modül `can_toggle` değildir.
@@ -86,6 +97,11 @@ SiteModulesState mdState(
         'finance',
         'Aidat ve Finans',
         'Aidat, borç ve alacak takibi; gelir ve gider kayıtları.',
+        // Faz 4a: sunucu kataloğunda `available` (varsayılan KAPALI, süper açar, yönetici talep eder).
+        // Eski testler Faz 1 kataloğunu ("Yakında…") bekler: yeni katalog [financeAvailable] ile seçilir.
+        status: financeAvailable ? 'available' : 'coming_soon',
+        enabled: financeAvailable && finance,
+        toggleable: financeAvailable,
       ),
       m(
         'reservation',
@@ -560,3 +576,13 @@ mixin ModuleRequestFixtures on AuthService {
     return decided;
   }
 }
+
+/// Geçiş Kontrol kartındaki anahtar. Faz 4a'dan beri `finance` kartında da anahtar vardır (katalogda
+/// `available`); Geçiş Kontrol testleri yalnız kendi kartının anahtarını hedefler.
+Finder get doorModuleSwitch => moduleSwitch('door_control');
+
+/// [code] modülünün kartındaki anahtar.
+Finder moduleSwitch(String code) => find.descendant(
+  of: find.byWidgetPredicate((w) => w is ModuleCard && w.module.code == code),
+  matching: find.byType(Switch),
+);

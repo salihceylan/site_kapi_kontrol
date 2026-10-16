@@ -62,6 +62,15 @@ enum SirketMenuItem {
   /// süper kullanıcı ekranı (yalnız süper kullanıcı; bekleyen sayısı rozetle gösterilir). "Abonelik
   /// Talepleri"nden (site yöneticisi KAYDI onayı) farklıdır.
   siteBasvurulari,
+
+  /// Platform Faz 4a: Finans (aidat, borç, tahsilat, dönemler). Rol listesinde YOKTUR; `finance` modülü AÇIK
+  /// olan sitenin yöneticisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems] ile
+  /// eklenir ("Duyurular"ın hemen altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
+  finans,
+
+  /// Platform Faz 4a: Borcum (sakin). Rol listesinde YOKTUR; alıcısı olabilecek ve `finance` modülü AÇIK sitesi
+  /// olan sakine [YanMenu.additionalItems] ile eklenir.
+  borcum,
 }
 
 class YanMenu extends StatelessWidget {
@@ -368,6 +377,7 @@ class _DrawerHeader extends StatelessWidget {
 
 /// Ek öğeleri rol listesine yerleştirir: "Site Yönetimi" varsa hemen altına (yönetici sırasıyla tutarlı),
 /// yoksa "Panel"in hemen altına; ikisi de yoksa sona. "Duyurular" varsa "Kişiler"in hemen altına gelir.
+/// "Finans" ve "Borcum" "Duyurular"ın (yoksa "Kişiler"in) altına, "Borcum" varsa "Finans"ın altına gelir.
 /// Rol listesinde zaten olan öğe tekrarlanmaz. Birden çok ek öğe numaralandırma sırasıyla eklenir.
 List<SirketMenuItem> _withExtras(
   List<SirketMenuItem> roleItems,
@@ -383,6 +393,12 @@ List<SirketMenuItem> _withExtras(
     var anchor = extra == SirketMenuItem.duyurular
         ? result.indexOf(SirketMenuItem.kisiler)
         : -1;
+    // "Finans" / "Borcum" "Duyurular"ın (yoksa "Kişiler"in) altına gelir; "Borcum" varsa "Finans"ın altına.
+    if (extra == SirketMenuItem.finans || extra == SirketMenuItem.borcum) {
+      if (extra == SirketMenuItem.borcum) anchor = result.indexOf(SirketMenuItem.finans);
+      if (anchor < 0) anchor = result.indexOf(SirketMenuItem.duyurular);
+      if (anchor < 0) anchor = result.indexOf(SirketMenuItem.kisiler);
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -505,6 +521,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Duyurular';
     case SirketMenuItem.siteBasvurulari:
       return 'Site Başvuruları';
+    case SirketMenuItem.finans:
+      return 'Finans';
+    case SirketMenuItem.borcum:
+      return 'Borcum';
   }
 }
 
@@ -550,6 +570,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.campaign_rounded;
     case SirketMenuItem.siteBasvurulari:
       return Icons.domain_add_rounded;
+    case SirketMenuItem.finans:
+      return Icons.account_balance_wallet_rounded;
+    case SirketMenuItem.borcum:
+      return Icons.receipt_long_rounded;
   }
 }
 
