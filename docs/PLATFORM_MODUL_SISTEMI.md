@@ -19,7 +19,7 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 
 | code | Ad | core | status | Varsayılan (satır yoksa) |
 |---|---|---|---|---|
-| `door_control` | Geçiş Kontrol (AHBU) | hayır | `available` | AÇIK |
+| `door_control` | Geçiş Kontrol (JetPass) | hayır | `available` | AÇIK |
 | `people` | Kişi ve Daire Kayıtları | evet | `available` (Faz 2a) | — (hep açık) |
 | `announcements` | Duyuru ve Bildirim | evet | `available` (Faz 3a) | — (hep açık) |
 | `finance` | Aidat ve Finans | hayır | `coming_soon` | KAPALI |
@@ -65,7 +65,7 @@ modülü kapatarak bir kullanıcının uygulamasında kapı menülerini gizletem
 ### `GET /manager/sites/:siteCode/modules` (requireSiteManager + hasSiteManagementAccess; süper kullanıcı geçer)
 ```json
 { "site_code": 1234567890, "site_name": "Gül Sitesi", "management_type": "apartment_site", "management_type_label": "Apartman ve Site",
-  "modules": [ { "code": "door_control", "name": "Geçiş Kontrol (AHBU)", "description": "…", "core": false, "status": "available",
+  "modules": [ { "code": "door_control", "name": "Geçiş Kontrol (JetPass)", "description": "…", "core": false, "status": "available",
                  "enabled": true, "toggleable": true, "updated_at": "ISO|null", "updated_by": "Ad Soyad|null" } ] }
 ```
 Yetkisiz: 403 `FORBIDDEN_SITE`; site yok: 404 `SITE_NOT_FOUND`.
@@ -135,9 +135,9 @@ Karar: site yöneticisi modülü KENDİ açıp kapatmaz. Menüsünde yalnız ken
 Satın alma sistemi yapılana kadar yönetici modül TALEP EDER, talep süper kullanıcıya iletilir, süper kullanıcı onaylarsa modül siteye tanımlanır (satın alma gelince bu akış otomatikleşecek).
 
 ### Ürün adı
-Platformun görünen adı **"Site ve Toplu Yaşam Yönetim Sistemi"**dir. **AHBU artık yalnızca Geçiş Kontrol (kapı açma) modülünün adıdır.**
+Platformun görünen adı **"Site ve Toplu Yaşam Yönetim Sistemi"**dir. **Kapı açma modülünün adı JetPass'tir (eski adı AHBU; 2026-10-16'da JetPass olarak değiştirildi). "AHBU" adı kullanıcıya görünen hiçbir metinde geçmez; yalnız protokol kimlikleri (`AHBU:DOOR:` karekod, `X-AHBU-Device-UID`, `/ahbu/status`, `_ahbu._tcp`, `@ahbu.local`, `AHBU_*` derleme bayrakları) aynen kalır.**
 DEĞİŞİR (platform düzeyi): uygulama/web/pencere başlığı, giriş ekranı başlığı, Panel başlığı, e-posta konu/başlık/imzaları, parola sıfırlama sayfası başlıkları, "uygulamayı açın" gibi uygulama adı geçen metinler, daire giriş bilgileri PDF'i.
-KALIR (kapı modülü): kapı kartı etiketleri ("AHBU AKILLI GEÇİŞ", "AHBU YEREL AĞ GEÇİŞ"), katalogdaki "Geçiş Kontrol (AHBU)", cihaz/BLE ad önekleri, `X-AHBU-Device-UID` başlığı, kapı günlüğü ve cihaz/firmware PDF raporları, firmware ve şirket aracı.
+KALIR (kapı modülü): kapı kartı etiketleri ("JetPass AKILLI GEÇİŞ", "JetPass YEREL AĞ GEÇİŞ"), katalogdaki "Geçiş Kontrol (JetPass)", cihaz/BLE ad önekleri, `X-AHBU-Device-UID` başlığı, kapı günlüğü ve cihaz/firmware PDF raporları, firmware ve şirket aracı.
 
 ### Veritabanı (029'a EK, ayrı migration `030_module_requests.sql` + db.js'te aynı DDL)
 `module_requests(id BIGSERIAL PK, site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE, module_code TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK (pending|approved|rejected|cancelled), requested_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, requested_by_name TEXT, note TEXT, decided_by INTEGER NULL REFERENCES users(user_code) ON DELETE SET NULL, decided_by_name TEXT, decision_note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), decided_at TIMESTAMPTZ NULL)`; aynı (site, modül) için tek bekleyen talep: kısmi tekil indeks `WHERE status='pending'`; indeks `(status, id DESC)`.

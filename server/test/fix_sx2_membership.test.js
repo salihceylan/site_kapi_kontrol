@@ -227,21 +227,35 @@ describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogru
 
   const logHas = (clientLog, regex) => has(clientLog, regex);
 
-  it('cihaz sahiplenmemis bireysel kullanici (cihaz belirtmeden): 400, site/blok/daire HIC olusturulmaz, ROLLBACK', async () => {
-    const { clientLog, client } = install({ clientHandlers: handlers({ role: 'individual', device: null }) });
-    await assert.rejects(
-      () => setupSiteWithClaimedDevice({ ...baseInput }),
-      (err) => err.statusCode === 400 && /cihaz sahiplenmelisiniz/.test(err.message),
-    );
-    assert.equal(logHas(clientLog, /^INSERT INTO sites/), false);
-    assert.equal(logHas(clientLog, /^INSERT INTO apartments/), false);
-    assert.ok(logHas(clientLog, /^ROLLBACK/));
-    assert.equal(logHas(clientLog, /^COMMIT/), false);
-    assert.equal(client.released, true);
+  // Site yoneticisi olma politikasi (docs/PLATFORM_SITE_BASVURUSU.md): bireysel / daire sahibi icin ANLIK kurulum KAPALI
+  // (409 APPLICATION_REQUIRED; eskiden "cihaz sahiplenmelisiniz" 400'u idi). Cihaz artik sart degil: basvuru yolu kullanilir.
+  it('bireysel / daire sahibi (cihazli ya da cihazsiz, cihaz belirtilsin ya da belirtilmesin): 409 APPLICATION_REQUIRED, site/blok/daire HIC olusturulmaz, cihaz kilitlenmez, ROLLBACK', async () => {
+    const device = { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' };
+    for (const role of ['individual', 'apartment_owner']) {
+      for (const [owned, deviceUid] of [[null, undefined], [device, undefined], [device, 'A0B1C2D3E4F5'], [null, 'A0B1C2D3E4F5']]) {
+        const { clientLog, client } = install({ clientHandlers: handlers({ role, device: owned }) });
+        await assert.rejects(
+          () => setupSiteWithClaimedDevice({ ...baseInput, deviceUid }),
+          (err) =>
+            err.statusCode === 409 &&
+            err.code === 'APPLICATION_REQUIRED' &&
+            err.message === 'Site kurmak için başvuru yapmalısınız.' &&
+            err.expose === true,
+          `${role} ${owned ? 'cihazli' : 'cihazsiz'} ${deviceUid ?? '-'}`,
+        );
+        assert.equal(logHas(clientLog, /^INSERT INTO sites/), false);
+        assert.equal(logHas(clientLog, /^INSERT INTO apartments/), false);
+        assert.equal(logHas(clientLog, /^SELECT \* FROM devices/), false, 'cihaz satiri kilitlenmemeli');
+        assert.equal(logHas(clientLog, /^UPDATE users/), false);
+        assert.ok(logHas(clientLog, /^ROLLBACK/));
+        assert.equal(logHas(clientLog, /^COMMIT/), false);
+        assert.equal(client.released, true);
+      }
+    }
   });
 
-  it('belirtilen cihaz kullaniciya ait degil/bulunamadi: 404, site kurulmaz (artik sessizce cihazsiz kurulmaz)', async () => {
-    for (const role of ['individual', 'site_manager']) {
+  it('belirtilen cihaz kullaniciya ait degil/bulunamadi (site yoneticisi): 404, site kurulmaz (artik sessizce cihazsiz kurulmaz)', async () => {
+    for (const role of ['site_manager']) {
       const { clientLog } = install({ clientHandlers: handlers({ role, device: null }) });
       await assert.rejects(
         () => setupSiteWithClaimedDevice({ ...baseInput, deviceUid: 'a0b1c2d3e4f5' }),

@@ -41,7 +41,7 @@ typed=$($PSQL -d "$RDB" -Atc "select count(*) from sites where management_type='
 echo "   aktif daire uyeligi once/sonra: $before_am/$after_am"
 echo "   sonra: sites=$after_sites (apartment_site=$typed) users=$after_users site_memberships=$after_sm"
 echo "   tablolar: $($PSQL -d "$RDB" -Atc "select string_agg(table_name, ',') from information_schema.tables where table_schema='public' and table_name in ('site_modules','audit_log')")"
-echo "   site_modules satir: $($PSQL -d "$RDB" -Atc "select count(*) from site_modules") (0 olmali)"
+echo "   site_modules satir: $($PSQL -d "$RDB" -Atc "select count(*) from site_modules") (bilgi: canlida yonetici bir modulu degistirdiyse 0dan buyuk olur)"
 q() { $PSQL -d "$RDB" -Atc "$1" 2>&1 | head -n 1; }
 echo "   [031] tablolar: $(q "select string_agg(table_name, ',' order by table_name) from information_schema.tables where table_schema='public' and table_name in ('site_people','apartment_residencies','vehicles','platform_backfills')")"
 echo "   [031] backfill: $(q "select coalesce(string_agg(code, ','), 'YOK') from platform_backfills")"

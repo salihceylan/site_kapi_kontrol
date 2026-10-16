@@ -1332,6 +1332,94 @@ export async function ensureDbSchema() {
         email_hash TEXT PRIMARY KEY,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- 033: SITE YONETICISI OLMA / SITE BASVURUSU. db.js ile migrations/033_site_applications.sql AYNI DDL; ekleyici ve idempotent.
+      -- Mevcut sitelere abonelik satiri YAZILMAZ (backfill yok); yalniz iki yapilandirma tohumu yazilir (ON CONFLICT DO NOTHING).
+      -- 1. Abonelik planları. Ödeme sağlayıcısı ve fiyatlar YOKTUR: fiyat NULL, "standard" planı kapalı ("Yakında…").
+      CREATE TABLE IF NOT EXISTS subscription_plans (
+        code TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT FALSE,
+        price_minor INTEGER,
+        currency TEXT NOT NULL DEFAULT 'TRY',
+        billing_period TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_subscription_plans_price CHECK (price_minor IS NULL OR price_minor >= 0),
+        CONSTRAINT chk_subscription_plans_billing_period CHECK (billing_period IS NULL OR billing_period IN ('monthly', 'yearly'))
+      );
+      INSERT INTO subscription_plans (code, name, description, is_active)
+      VALUES
+        ('manual_approval', 'Elle Onaylı', 'Süper kullanıcı onayıyla kurulan site.', TRUE),
+        ('standard', 'Standart', 'Yakında…', FALSE)
+      ON CONFLICT (code) DO NOTHING;
+
+      -- 2. Site aboneliği (site başına en çok bir satır). application_id düz kimliktir, site_applications'a FK DEĞİLDİR (döngüsel bağımlılık yok).
+      CREATE TABLE IF NOT EXISTS site_subscriptions (
+        id BIGSERIAL PRIMARY KEY,
+        site_code BIGINT NOT NULL UNIQUE REFERENCES sites(site_code) ON DELETE CASCADE,
+        plan_code TEXT NOT NULL REFERENCES subscription_plans(code),
+        status TEXT NOT NULL,
+        source TEXT NOT NULL,
+        application_id BIGINT,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_site_subscriptions_status CHECK (status IN ('active', 'trial', 'past_due', 'cancelled', 'expired')),
+        CONSTRAINT chk_site_subscriptions_source CHECK (source IN ('manual_approval', 'payment', 'admin'))
+      );
+
+      -- 3. Platform ayarları. site_onboarding.mode: 'approval' (bugün) | 'payment' (ileride; bugün seçilemez).
+      CREATE TABLE IF NOT EXISTS platform_settings (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL
+      );
+      INSERT INTO platform_settings (key, value)
+      VALUES ('site_onboarding', '{"mode":"approval"}'::jsonb)
+      ON CONFLICT (key) DO NOTHING;
+
+      -- 4. Site başvurusu. blocks / doors: normalizeSetupSiteInput çıktısının JSON hâli (onayda TEKRAR doğrulanır).
+      -- Başvuru sırasında cihaz KİLİTLENMEZ (device_uid yalnız bilgidir); onayda sahiplik yeniden doğrulanır. Başvuran silinirse satır kalır
+      -- (applicant_user_code NULL). Kişi başına tek bekleyen başvuru: kısmi tekil indeks.
+      CREATE TABLE IF NOT EXISTS site_applications (
+        id BIGSERIAL PRIMARY KEY,
+        applicant_user_code INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        site_name TEXT NOT NULL,
+        city TEXT,
+        district TEXT,
+        address TEXT,
+        management_type TEXT NOT NULL DEFAULT 'apartment_site',
+        blocks JSONB NOT NULL,
+        doors JSONB NOT NULL,
+        block_count INTEGER NOT NULL,
+        apartment_count INTEGER NOT NULL,
+        door_count INTEGER NOT NULL,
+        device_uid TEXT,
+        note TEXT,
+        plan_code TEXT REFERENCES subscription_plans(code),
+        payment_status TEXT NOT NULL DEFAULT 'not_required',
+        payment_reference TEXT,
+        decision_source TEXT,
+        decided_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        decided_at TIMESTAMPTZ,
+        decision_note TEXT,
+        site_code BIGINT REFERENCES sites(site_code) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_site_applications_status CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
+        CONSTRAINT chk_site_applications_payment_status CHECK (payment_status IN ('not_required', 'pending', 'paid', 'failed', 'refunded')),
+        CONSTRAINT chk_site_applications_decision_source CHECK (decision_source IS NULL OR decision_source IN ('super_user', 'payment', 'system'))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_site_applications_pending
+        ON site_applications (applicant_user_code) WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS idx_site_applications_status_created
+        ON site_applications (status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_site_applications_applicant_created
+        ON site_applications (applicant_user_code, created_at DESC);
     `);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ

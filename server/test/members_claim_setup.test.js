@@ -25,7 +25,7 @@ describe('members: claimDevice atomik koşulu', () => {
     assert.match(sql, /COALESCE\(is_defective, FALSE\) = FALSE/);
   });
 
-  it('rol yükseltme yalnızca individual/apartment_owner için geçerlidir', () => {
+  it('shouldPromoteToSiteManager yalnızca individual/apartment_owner için true (site başvurusu yapabilen roller; artık hiçbir yol otomatik yükseltmez)', () => {
     assert.equal(shouldPromoteToSiteManager('individual'), true);
     assert.equal(shouldPromoteToSiteManager('apartment_owner'), true);
     assert.equal(shouldPromoteToSiteManager('site_manager'), false);
@@ -47,15 +47,22 @@ describe('members: claimDevice atomik koşulu', () => {
   });
 });
 
-describe('members: getMyClaimedDevices salt-okunur, rol yükseltme yalnız claim anında', () => {
+// Ürün kararı (docs/PLATFORM_SITE_BASVURUSU.md): cihaz sahiplenmek kişiyi site yöneticisi YAPMAZ. Eskiden bu blokta "rol yükseltme
+// claim akışında yapılır" doğrulanıyordu; artık tersi doğrulanır (claimDevice kaynağında rol güncellemesi yok). Davranış testleri:
+// platform_claim_device_no_promotion.test.js.
+describe('members: getMyClaimedDevices salt-okunur; claimDevice rol YÜKSELTMEZ', () => {
   it('getMyClaimedDevices kaynağında UPDATE yoktur', async () => {
     const { getMyClaimedDevices, claimDevice } = await import('../src/services/membership_service.js');
     const readOnlySource = getMyClaimedDevices.toString();
     assert.equal(/UPDATE\s+users/i.test(readOnlySource), false);
     assert.equal(/\bUPDATE\b/i.test(readOnlySource), false);
     assert.equal(/\bINSERT\b|\bDELETE\b/i.test(readOnlySource), false);
-    // rol yükseltme claim akışında yapılır
-    assert.match(claimDevice.toString(), /site_manager/);
+    // claim akışında rol yükseltme YOK: users tablosuna yazan hiçbir ifade, 'site_manager' rol ataması yok
+    const claimSource = claimDevice.toString();
+    assert.equal(/UPDATE\s+users/i.test(claimSource), false);
+    assert.equal(/SET\s+role/i.test(claimSource), false);
+    assert.equal(/role\s*=\s*'site_manager'/.test(claimSource), false);
+    assert.equal(/promoteIfNeeded/.test(claimSource), false);
   });
 
   it('claimDevice oturum kodu geçersizse DB\'ye gitmeden 401 verir', async () => {

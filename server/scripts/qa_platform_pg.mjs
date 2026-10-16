@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Platform cekirdegi (modul sistemi Faz 1/1.1 + Kisi ve Daire Kayitlari Faz 2a + Duyuru ve Bildirim Faz 3a) icin GERCEK PostgreSQL dogrulamasi.
+// Platform cekirdegi (modul sistemi Faz 1/1.1 + Kisi ve Daire Kayitlari Faz 2a + Duyuru ve Bildirim Faz 3a + Site basvurusu) icin GERCEK PostgreSQL dogrulamasi.
 // `npm test` ICINDE DEGILDIR (node --test yalnizca test/ dizinini tarar); elle / CI'da bilincli olarak calistirilir.
 //
 // NE YAPAR (bolumler, her biri ayri bir surec ve ayri bir tek kullanimlik veritabani):
@@ -31,6 +31,13 @@
 //             sinir, yeniden baslama devami, 3 deneme, SMTP yok -> failed, yavas SMTP istegi bekletmez, CRLF/HTML), zamanlayici
 //             (tek calisan, sizinti yok), audit gizliligi, 3000 daireli sitede yayin suresi ve kilit sirasi turlari (CRM yazmalari,
 //             uye cikarma, hesap silme, site silme, zamanlayici x elle; 40P01 OLMAMALI).
+//   site_applications  Site yoneticisi olma (site basvurusu): sema kisitlari ve tohum, yetki matrisi (yalniz individual/apartment_owner basvurur;
+//             yonetici/super basvuramaz; yalniz super onaylar; baskasinin basvurusuna IDOR 404), basvuru -> onay -> site/blok/daire/kapi +
+//             site_manager_sites + SITE_OWNER + rol + site_subscriptions + cihaz baglama, cihaz artik basvuranin degilse cihazsiz kurulum, red/iptal,
+//             cift basvuru, ESZAMANLI cift basvuru/cift onay/onay x iptal x red, gunluk 5 siniri, odeme kipi, setup-site 409 APPLICATION_REQUIRED
+//             (yonetici/super aynen), bozuk saklanan veri (422, kalinti yok), yarida hata enjeksiyonu (ROLLBACK, kalinti yok), hesap silme/pasif,
+//             e-posta (yavas/hatali SMTP istegi bozmaz, adres loga yazilmaz), audit gizliligi, 3000 daireli onay suresi, kilit sirasi turlari
+//             (onay x hesap silme, onay x cihaz sahiplenme, onay x yeni basvuru; 40P01 OLMAMALI). QA_ONLY=site_applications ile ayri kosulur.
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -115,6 +122,10 @@ const CATALOG_TABLES = [
   'announcements',
   'announcement_recipients',
   'notification_preferences',
+  'subscription_plans',
+  'site_subscriptions',
+  'platform_settings',
+  'site_applications',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -156,7 +167,12 @@ async function readCatalog(client) {
   const functions = await client.query(
     `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname = 'trg_users_preserve_site_people' ORDER BY 1`,
   );
-  return { columns: columns.rows, constraints: constraints.rows, indexes: indexes.rows, triggers: triggers.rows, functions: functions.rows };
+  // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
+  const seeds = {
+    plans: (await client.query(`SELECT code, name, description, is_active, price_minor, currency, billing_period FROM subscription_plans ORDER BY code`)).rows,
+    settings: (await client.query(`SELECT key, value FROM platform_settings ORDER BY key`)).rows,
+  };
+  return { columns: columns.rows, constraints: constraints.rows, indexes: indexes.rows, triggers: triggers.rows, functions: functions.rows, seeds: [seeds] };
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -227,6 +243,7 @@ async function runParent() {
     people: `${prefix}_people`,
     locks: `${prefix}_locks`,
     announcements: `${prefix}_announcements`,
+    site_applications: `${prefix}_site_applications`,
   };
   const admin = new pg.Client(connectConfig(process.env.QA_ADMIN_DB || 'postgres'));
   await admin.connect();
@@ -250,7 +267,7 @@ async function runParent() {
   };
   const compareCatalogs = (label, a, b) => {
     let ok = true;
-    for (const key of ['columns', 'constraints', 'indexes', 'triggers', 'functions']) {
+    for (const key of ['columns', 'constraints', 'indexes', 'triggers', 'functions', 'seeds']) {
       const equal = same(a[key], b[key]);
       ok = ok && equal;
       console.log(`${equal ? 'PASS' : 'FAIL'}  sema esitligi (${label}) ${key}: ${a[key].length} nesne`);
@@ -282,7 +299,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -295,7 +312,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -506,6 +523,12 @@ async function sectionChain() {
   check('bos DB: ensureDbSchema veri yazmadi', counts.rows[0].p === 0 && counts.rows[0].r === 0 && counts.rows[0].m === 0);
   const announcementCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM announcements)::int AS a, (SELECT COUNT(*) FROM announcement_recipients)::int AS r, (SELECT COUNT(*) FROM notification_preferences)::int AS p`);
   check('bos DB: duyuru tablolari (032) var ve BOS', announcementCounts.rows[0].a === 0 && announcementCounts.rows[0].r === 0 && announcementCounts.rows[0].p === 0);
+  const applicationCounts = await pool.query(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c`);
+  check('bos DB: site basvurusu tablolari (033) var; basvuru ve abonelik BOS; 2 plan + 1 ayar tohumu', applicationCounts.rows[0].a === 0 && applicationCounts.rows[0].s === 0 && applicationCounts.rows[0].p === 2 && applicationCounts.rows[0].c === 1, applicationCounts.rows[0]);
+  const seedRows = await pool.query(`SELECT code, is_active, price_minor, billing_period FROM subscription_plans ORDER BY code`);
+  check('tohum planlar: manual_approval ACIK, standard KAPALI, ikisi de fiyatsiz', same(seedRows.rows.map((r) => [r.code, r.is_active, r.price_minor, r.billing_period]), [['manual_approval', true, null, null], ['standard', false, null, null]]), seedRows.rows);
+  const seedSetting = await pool.query(`SELECT value FROM platform_settings WHERE key = 'site_onboarding'`);
+  check('tohum ayar: site_onboarding = {"mode":"approval"}', same(seedSetting.rows[0]?.value, { mode: 'approval' }), seedSetting.rows);
   await finishChild(pool);
 }
 
@@ -616,17 +639,23 @@ async function sectionUpgrade() {
   check(`${scenario}: baslangic semasi beklenen asamada (site_modules ${scenario === 'live' ? 'VAR' : 'YOK'})`, hasModules === (scenario === 'live'));
   check(`${scenario}: baslangicta kisi tablolari YOK`, (await q(`SELECT to_regclass('public.site_people') AS t`)).rows[0].t === null);
   check(`${scenario}: baslangicta duyuru tablolari (032) YOK`, (await q(`SELECT to_regclass('public.announcements') AS t`)).rows[0].t === null);
+  check(`${scenario}: baslangicta site basvurusu tablolari (033) YOK`, (await q(`SELECT to_regclass('public.site_applications') AS a, to_regclass('public.subscription_plans') AS p`)).rows[0].a === null);
   const beforeDoors = hasModules ? Object.fromEntries(await Promise.all(Object.keys(EXPECTED_DOORS).map(async (u) => [u, await doorNamesFor(doorSvc, q, Number(u))]))) : null;
   const beforeDumps = await legacyDumps(q);
 
   await ensureDbSchema();
   const afterFirst = await crmDump(q);
+  const settingsFirst = (await q(`SELECT key, value, updated_at FROM platform_settings ORDER BY key`)).rows;
+  const plansFirst = (await q(`SELECT * FROM subscription_plans ORDER BY code`)).rows;
   await ensureDbSchema();
   const afterSecond = await crmDump(q);
+  check(`${scenario}: ikinci ensureDbSchema tohumu DEGISTIRMEDI (ayar ve planlar, zaman damgalari dahil)`, same(settingsFirst, (await q(`SELECT key, value, updated_at FROM platform_settings ORDER BY key`)).rows) && same(plansFirst, (await q(`SELECT * FROM subscription_plans ORDER BY code`)).rows));
   check(`${scenario}: ensureDbSchema iki kez hatasiz`, true);
   const announcementTables = await q(`SELECT to_regclass('public.announcements') AS a, to_regclass('public.announcement_recipients') AS r, to_regclass('public.notification_preferences') AS p`);
   const announcementRows = (await q(`SELECT (SELECT COUNT(*) FROM announcements)::int + (SELECT COUNT(*) FROM announcement_recipients)::int + (SELECT COUNT(*) FROM notification_preferences)::int AS n`)).rows[0].n;
   check(`${scenario}: 032 tablolari (announcements, announcement_recipients, notification_preferences) olustu ve BOS (eski veriye satir yazilmadi)`, announcementTables.rows[0].a !== null && announcementTables.rows[0].r !== null && announcementTables.rows[0].p !== null && announcementRows === 0);
+  const applicationTables = (await q(`SELECT (SELECT COUNT(*) FROM site_applications)::int AS a, (SELECT COUNT(*) FROM site_subscriptions)::int AS s, (SELECT COUNT(*) FROM subscription_plans)::int AS p, (SELECT COUNT(*) FROM platform_settings)::int AS c, (SELECT COUNT(*) FROM sites)::int AS sites`)).rows[0];
+  check(`${scenario}: 033 tablolari olustu; MEVCUT sitelere abonelik satiri YAZILMADI (backfill yok); basvuru BOS; yalniz 2 plan + 1 ayar tohumu`, applicationTables.sites >= 3 && applicationTables.a === 0 && applicationTables.s === 0 && applicationTables.p === 2 && applicationTables.c === 1, applicationTables);
 
   // --- people_v1 sonucu
   const backfill = await q(`SELECT code FROM platform_backfills`);
@@ -5031,6 +5060,918 @@ async function sectionAnnouncements() {
 }
 
 // --------------------------------------------------------------------------------------------------------------
+// CHILD bolum: site_applications (Site yoneticisi olma / site basvurusu; docs/PLATFORM_SITE_BASVURUSU.md)
+// --------------------------------------------------------------------------------------------------------------
+
+/** Gercek authRequired + gercek JWT; hiz sinirlayicilar devre disi (birim testlerinde sinanir), requireSuperUser KALIR. */
+async function startSiteApplicationHttp(pool) {
+  const express = (await import('express')).default;
+  const { signAccessToken } = await import('../src/jwt.js');
+  const { requireSuperUser } = await import('../src/middlewares/auth_middleware.js');
+  const { siteApplicationRouter } = await import('../src/modules/site_application_routes.js');
+  const { membershipRouter } = await import('../src/routes/membership_routes.js');
+  const { adminRouter } = await import('../src/routes/admin_routes.js');
+  const keep = new Set([requireSuperUser]);
+  for (const router of [siteApplicationRouter, membershipRouter, adminRouter]) {
+    for (const layer of router.stack) {
+      if (!layer.route) continue;
+      const stack = layer.route.stack;
+      for (let i = 1; i < stack.length - 1; i += 1) {
+        if (!keep.has(stack[i].handle)) stack[i].handle = (_req, _res, next) => next();
+      }
+    }
+  }
+  const app = express();
+  app.use(express.json());
+  app.use(siteApplicationRouter);
+  app.use(membershipRouter);
+  app.use(adminRouter);
+  const server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tokens = new Map();
+  const tokenFor = async (userCode) => {
+    if (!tokens.has(userCode)) {
+      const row = (await pool.query(`SELECT user_code AS id, email, role, password_hash FROM users WHERE user_code = $1`, [userCode])).rows[0];
+      tokens.set(userCode, signAccessToken({ id: row.id, email: row.email, role: row.role }, { passwordHash: row.password_hash }));
+    }
+    return tokens.get(userCode);
+  };
+  async function call(method, urlPath, userCode, body) {
+    const headers = { 'content-type': 'application/json' };
+    if (userCode !== null) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
+    const response = await fetch(`${base}${urlPath}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    let json = null;
+    try {
+      json = await response.json();
+    } catch (_e) {
+      // govdesiz yanit
+    }
+    return { status: response.status, body: json };
+  }
+  return { call, close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }) };
+}
+
+async function sectionSiteApplications() {
+  await childEnv();
+  const { pool } = await import('../src/db.js');
+  const q = (sql, params = []) => pool.query(sql, params);
+  const hooks = installPoolHooks(pool);
+  const http = await startSiteApplicationHttp(pool);
+  const { call } = http;
+  const nodemailer = (await import('nodemailer')).default;
+  const { normalizeSetupSiteInput } = await import('../src/services/membership_rules.js');
+  const SUPER = 10001;
+  const MANAGER = 10002; // site_manager (S1 yoneticisi)
+  const MANAGER2 = 10003; // site_manager (S2 SITE_ADMIN)
+  const failCode = async (sql, params = []) => {
+    try {
+      await q(sql, params);
+      return null;
+    } catch (error) {
+      return error.code ?? String(error.message);
+    }
+  };
+
+  let nextUser = 11000;
+  const mkUser = async (name, role = 'individual', options = {}) => {
+    nextUser += 1;
+    const code = nextUser; // eszamanli cagrilarda paylasilan sayac await sonrasi degismesin
+    await q(
+      `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number)
+       VALUES ($1, $2, $3, $4, 'x', $5, TRUE, 'approved', $6)`,
+      [code, name, options.email ?? `qa${code}@qa.example`, role, options.active ?? true, options.phone ?? null],
+    );
+    return code;
+  };
+  // JSONB anahtar sirasini degistirir (uzunluga gore): karsilastirma anahtar sirasindan bagimsiz
+  const canon = (value) => JSON.stringify(value, (_key, item) => (item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item));
+  const sameShape = (a, b) => canon(a) === canon(b);
+  let nextDevice = 0;
+  const mkDevice = async (ownerCode, options = {}) => {
+    nextDevice += 1;
+    const uid = options.uid ?? `QAAPP${String(nextDevice).padStart(6, '0')}`;
+    await q(
+      `INSERT INTO devices (device_uid, hardware_type, local_control_token, owner_user_id, assigned_user_code, claimed_at, site_code, gate_name)
+       VALUES ($1, 'esp32_wroom', $2, (SELECT id FROM users WHERE user_code = $3), $3, NOW(), $4, $5)`,
+      [uid, `tok-${uid}`, ownerCode, options.siteCode ?? null, options.siteCode ? 'Eski Kapi' : null],
+    );
+    return uid;
+  };
+  const appBody = (extra = {}) => ({
+    name: 'QA Sitesi',
+    city: 'Ankara',
+    district: 'Cankaya',
+    address: 'Cadde 1',
+    blocks: [{ name: 'A Blok', apartmentCount: 12 }, { name: 'B Blok', apartmentCount: 8 }],
+    doors: [{ name: 'Ana Kapi' }, { name: 'Yan Kapi' }],
+    note: '  Hizli olursa sevinirim  ',
+    ...extra,
+  });
+  const applicantBodies = [];
+  const seen = async (promise) => {
+    const result = await promise;
+    applicantBodies.push(JSON.stringify(result.body));
+    return result;
+  };
+  const apply = (user, extra) => seen(call('POST', '/membership/site-applications', user, appBody(extra)));
+  const mine = (user) => seen(call('GET', '/membership/site-applications/mine', user));
+  const approve = (id, note) => call('POST', `/admin/site-applications/${id}/approve`, SUPER, note === undefined ? {} : { note });
+  const reject = (id, reason) => call('POST', `/admin/site-applications/${id}/reject`, SUPER, reason === undefined ? {} : { reason });
+  const cancel = (user, id) => seen(call('POST', `/membership/site-applications/${id}/cancel`, user, {}));
+  const detail = (id) => call('GET', `/admin/site-applications/${id}`, SUPER);
+  const mkApp = async (userCode, extra) => {
+    const res = await apply(userCode, extra);
+    if (res.status !== 201) throw new Error(`basvuru olusturulamadi: ${res.status} ${JSON.stringify(res.body)}`);
+    return res.body.application.id;
+  };
+  const appRow = async (id) => (await q(`SELECT * FROM site_applications WHERE id = $1`, [id])).rows[0];
+  const roleOf = async (code) => (await q(`SELECT role FROM users WHERE user_code = $1`, [code])).rows[0]?.role ?? null;
+  const world = async () =>
+    (
+      await q(`SELECT
+        (SELECT COUNT(*) FROM sites)::int AS sites, (SELECT COUNT(*) FROM site_blocks)::int AS blocks,
+        (SELECT COUNT(*) FROM apartments)::int AS apartments, (SELECT COUNT(*) FROM site_doors)::int AS doors,
+        (SELECT COUNT(*) FROM site_manager_sites)::int AS managers, (SELECT COUNT(*) FROM site_memberships)::int AS memberships,
+        (SELECT COUNT(*) FROM site_subscriptions)::int AS subscriptions,
+        (SELECT COUNT(*) FROM audit_log WHERE action = 'site_application.approved')::int AS approved_audit,
+        (SELECT COUNT(*) FROM devices WHERE site_code IS NOT NULL)::int AS bound_devices`)
+    ).rows[0];
+  const waitMail = async (predicate) => waitFor(() => mails.some(predicate), 4000);
+  const sentTo = (address, subject) => mails.filter((m) => m.to === address && (subject === undefined || m.subject === subject));
+  const SUBJECT_NEW = 'Site ve Toplu Yaşam Yönetim Sistemi - Yeni Site Başvurusu';
+  const SUBJECT_APPROVED = 'Site ve Toplu Yaşam Yönetim Sistemi - Site Başvurunuz Onaylandı';
+  const SUBJECT_REJECTED = 'Site ve Toplu Yaşam Yönetim Sistemi - Site Başvurunuz Reddedildi';
+  // bir kullanicinin yanitlarinda BULUNMAMASI gereken alanlar
+  const SECRET_KEYS = ['decision_source', 'decided_by', 'payment_reference', 'applicant', 'device_available'];
+
+  // ============================================================================================================
+  // A. Sema kisitlari, tohum, FK davranislari (gercek PG)
+  // ============================================================================================================
+  const planNames = (await q(`SELECT code, is_active FROM subscription_plans ORDER BY code`)).rows;
+  check('tohum: manual_approval ACIK, standard KAPALI; ayar site_onboarding = approval', same(planNames.map((r) => [r.code, r.is_active]), [['manual_approval', true], ['standard', false]]) && (await q(`SELECT value->>'mode' AS mode FROM platform_settings WHERE key = 'site_onboarding'`)).rows[0].mode === 'approval');
+  check('abonelik satiri olmayan mevcut siteler "eski" sayilir: site_subscriptions BOS', (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions`)).rows[0].n === 0);
+
+  const schemaUser = await mkUser('Sema Kullanici');
+  const baseApp = `INSERT INTO site_applications (applicant_user_code, site_name, blocks, doors, block_count, apartment_count, door_count`;
+  const valuesOf = (extraCols = '', extraVals = '') => `${baseApp}${extraCols}) VALUES ($1, 'S', '[]'::jsonb, '[]'::jsonb, 1, 1, 1${extraVals})`;
+  check('CHECK: gecersiz plan fiyati (negatif) 23514', (await failCode(`INSERT INTO subscription_plans (code, name, price_minor) VALUES ('qa_neg', 'x', -1)`)) === '23514');
+  check('CHECK: gecersiz faturalama donemi (weekly) 23514', (await failCode(`INSERT INTO subscription_plans (code, name, billing_period) VALUES ('qa_wk', 'x', 'weekly')`)) === '23514');
+  check('plan: fiyat NULL ve gecerli donem (monthly/yearly) kabul edilir', (await failCode(`INSERT INTO subscription_plans (code, name, price_minor, billing_period) VALUES ('qa_ok', 'x', 0, 'yearly')`)) === null);
+  await q(`DELETE FROM subscription_plans WHERE code = 'qa_ok'`);
+  const subInsert = (status, source, plan = 'manual_approval') => failCode(`INSERT INTO site_subscriptions (site_code, plan_code, status, source) VALUES (${S3}, $1, $2, $3)`, [plan, status, source]);
+  check('CHECK: abonelik durumu gecersiz 23514; kaynak gecersiz 23514; olmayan plan 23503', (await subInsert('zzz', 'admin')) === '23514' && (await subInsert('active', 'zzz')) === '23514' && (await subInsert('active', 'admin', 'yok_plan')) === '23503');
+  check('abonelik: gecerli satir kabul edilir; AYNI site icin ikinci satir 23505 (site basina tek)', (await subInsert('trial', 'payment')) === null && (await subInsert('active', 'admin')) === '23505');
+  await q(`INSERT INTO sites (site_code, name, approval_status) VALUES (1000000556, 'Abonelik Gecici', 'approved')`);
+  await q(`INSERT INTO site_subscriptions (site_code, plan_code, status, source, application_id) VALUES (1000000556, 'standard', 'active', 'admin', 987654321)`);
+  check('site_subscriptions.application_id FK DEGIL: olmayan basvuru kimligi kabul edilir', (await q(`SELECT application_id FROM site_subscriptions WHERE site_code = 1000000556`)).rows[0].application_id === '987654321');
+  await q(`DELETE FROM sites WHERE site_code = 1000000556`);
+  check('site silinince abonelik satiri CASCADE silinir', (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE site_code = 1000000556`)).rows[0].n === 0);
+  await q(`DELETE FROM site_subscriptions WHERE site_code = ${S3}`);
+  check('CHECK: basvuru durumu / odeme durumu / karar kaynagi gecersiz 23514', (await failCode(valuesOf(', status', ", 'zzz'"), [schemaUser])) === '23514' && (await failCode(valuesOf(', payment_status', ", 'zzz'"), [schemaUser])) === '23514' && (await failCode(valuesOf(', decision_source', ", 'zzz'"), [schemaUser])) === '23514');
+  check('NOT NULL: blocks / doors / site_name zorunlu 23502; olmayan plan 23503', (await failCode(`INSERT INTO site_applications (applicant_user_code, site_name, doors, block_count, apartment_count, door_count) VALUES ($1, 'S', '[]'::jsonb, 1, 1, 1)`, [schemaUser])) === '23502' && (await failCode(`INSERT INTO site_applications (applicant_user_code, blocks, doors, block_count, apartment_count, door_count) VALUES ($1, '[]'::jsonb, '[]'::jsonb, 1, 1, 1)`, [schemaUser])) === '23502' && (await failCode(valuesOf(', plan_code', ", 'yok_plan'"), [schemaUser])) === '23503');
+  const defaults = (await q(valuesOf() + ' RETURNING status, management_type, payment_status, plan_code, decision_source', [schemaUser])).rows[0];
+  check('varsayilanlar: pending, apartment_site, not_required, plan/karar kaynagi NULL', defaults.status === 'pending' && defaults.management_type === 'apartment_site' && defaults.payment_status === 'not_required' && defaults.plan_code === null && defaults.decision_source === null, defaults);
+  check('kismi tekil indeks: AYNI kisi icin ikinci BEKLEYEN 23505', (await failCode(valuesOf(), [schemaUser])) === '23505');
+  check('kismi tekil indeks: bekleyen yanina onayli / reddedilmis satir eklenebilir; applicant NULL bekleyenler birden fazla olabilir', (await failCode(valuesOf(', status', ", 'rejected'"), [schemaUser])) === null && (await failCode(valuesOf(), [null])) === null && (await failCode(valuesOf(), [null])) === null);
+  const onDelete = await mkUser('Silinecek Basvuran');
+  const decidedBy = await mkUser('Silinecek Karar Veren', 'individual');
+  await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, decided_by, site_code) VALUES ($1, 'approved', 'FK', '[]'::jsonb, '[]'::jsonb, 1, 1, 1, $2, ${S1})`, [onDelete, decidedBy]);
+  await q(`DELETE FROM users WHERE user_code IN ($1, $2)`, [onDelete, decidedBy]);
+  const fk = (await q(`SELECT applicant_user_code, decided_by, site_code FROM site_applications WHERE site_name = 'FK'`)).rows[0];
+  check('kullanici silinince basvuru KALIR: applicant_user_code ve decided_by NULL', fk && fk.applicant_user_code === null && fk.decided_by === null, fk);
+  await q(`INSERT INTO sites (site_code, name, approval_status) VALUES (1000000555, 'Gecici', 'approved')`);
+  await q(`UPDATE site_applications SET site_code = 1000000555 WHERE site_name = 'FK'`);
+  await q(`DELETE FROM sites WHERE site_code = 1000000555`);
+  check('site silinince basvuruda site_code NULL olur (basvuru KALIR)', (await q(`SELECT site_code FROM site_applications WHERE site_name = 'FK'`)).rows[0].site_code === null);
+  await q(`DELETE FROM site_applications WHERE site_name IN ('S', 'FK')`);
+
+  // ============================================================================================================
+  // B. Yetki matrisi ve basvuru akisi
+  // ============================================================================================================
+  await mkUser('Pasif Super', 'super_user', { active: false, email: 'pasif-super@qa.example' });
+  await mkUser('Ikinci Super', 'super_user', { email: 'ikinci-super@qa.example' });
+  const a1 = await mkUser('Ayse Basvuran', 'individual', { email: 'ayse.basvuran@qa.example', phone: '+905551112233' });
+  const a2 = await mkUser('Can Sahip', 'apartment_owner', { email: 'can.sahip@qa.example' });
+
+  let res = await call('POST', '/membership/site-applications', null, appBody());
+  check('kimliksiz basvuru 401', res.status === 401);
+  const before = await world();
+  res = await apply(MANAGER);
+  check('site yoneticisi basvuramaz: 409 ALREADY_SITE_MANAGER (Site Ekle kullanir)', res.status === 409 && res.body.code === 'ALREADY_SITE_MANAGER', res.body);
+  res = await apply(SUPER);
+  check('super kullanici basvuramaz: 403 FORBIDDEN_ROLE', res.status === 403 && res.body.code === 'FORBIDDEN_ROLE', res.body);
+  check('reddedilen basvurular HIC satir yazmaz', (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code IN (${MANAGER}, ${SUPER})`)).rows[0].n === 0 && same(await world(), before));
+
+  res = await apply(a1);
+  const app1 = res.body.application;
+  check('bireysel kullanici basvurur: 201 { application } (bekleyen, kirpilmis ad / not, sayilar, bloklar / kapilar, plan / odeme alanlari)',
+    res.status === 201 && app1.status === 'pending' && app1.site_name === 'QA Sitesi' && app1.note === 'Hizli olursa sevinirim' && app1.block_count === 2 && app1.apartment_count === 20 && app1.door_count === 2
+      && same(app1.blocks, [{ name: 'A Blok', apartment_count: 12 }, { name: 'B Blok', apartment_count: 8 }]) && same(app1.doors, [{ name: 'Ana Kapi' }, { name: 'Yan Kapi' }])
+      && app1.management_type === 'apartment_site' && app1.management_type_label === 'Apartman ve Site' && app1.plan_code === null && app1.payment_status === 'not_required' && app1.site_code === null && app1.device_uid === null && app1.decided_at === null, res.body);
+  check('basvuran yanitinda karar kaynagi / karar veren / baska kisi bilgisi / odeme referansi YOK', SECRET_KEYS.every((key) => !(key in app1)) && !JSON.stringify(res.body).includes('qa.example'));
+  const stored1 = await appRow(app1.id);
+  const expectedInput = normalizeSetupSiteInput({ name: 'QA Sitesi', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: appBody().blocks, doors: appBody().doors });
+  check('saklanan blocks / doors = normalizeSetupSiteInput cikti JSON hali; sayilar tutarli; basvuran / durum dogru', sameShape(stored1.blocks, expectedInput.blocks) && sameShape(stored1.doors, expectedInput.doors) && stored1.block_count === 2 && stored1.apartment_count === 20 && stored1.door_count === 2 && stored1.applicant_user_code === a1 && stored1.status === 'pending' && stored1.payment_status === 'not_required', stored1);
+  await waitMail((m) => m.to === 'u10001@example.com' && m.subject === SUBJECT_NEW);
+  check('yeni basvuruda TUM aktif super kullanicilara e-posta (sabit konu); pasif super e-posta ALMAZ; ad / boyut gövdede', sentTo('u10001@example.com', SUBJECT_NEW).length === 1 && sentTo('ikinci-super@qa.example', SUBJECT_NEW).length === 1 && sentTo('pasif-super@qa.example').length === 0 && sentTo('u10001@example.com')[0].text.includes('Ayse Basvuran') && sentTo('u10001@example.com')[0].text.includes('2 blok, 20 daire, 2 kapı'));
+  check('bildirim e-postasinda basvuranin e-posta adresi / telefonu YOK', !sentTo('u10001@example.com')[0].text.includes('qa.example') && !sentTo('u10001@example.com')[0].html.includes('+90555'));
+  const createdAudit = (await q(`SELECT * FROM audit_log WHERE action = 'site_application.created' AND target_id = $1`, [String(app1.id)])).rows;
+  check('audit site_application.created: kim / hedef; details YALNIZ sayilar ve bayraklar (not, ad, e-posta YOK); site_code yok',
+    createdAudit.length === 1 && createdAudit[0].actor_user_code === a1 && createdAudit[0].target_type === 'site_application' && createdAudit[0].site_code === null
+      && same(Object.keys(createdAudit[0].details).sort(), ['apartment_count', 'block_count', 'door_count', 'has_device', 'has_note']) && createdAudit[0].details.has_note === true && createdAudit[0].details.has_device === false && !JSON.stringify(createdAudit[0]).includes('qa.example') && !JSON.stringify(createdAudit[0]).includes('Hizli'), createdAudit[0]);
+
+  res = await apply(a1);
+  check('bekleyen varken ikinci basvuru 409 APPLICATION_PENDING (+ mevcut basvuru, basvuran gorunumu)', res.status === 409 && res.body.code === 'APPLICATION_PENDING' && res.body.application?.id === app1.id && SECRET_KEYS.every((key) => !(key in res.body.application)), res.body);
+  res = await mine(a1);
+  check('GET mine: { pending, items } (son 10, yeniden eskiye)', res.status === 200 && res.body.pending?.id === app1.id && res.body.items.length === 1 && res.body.items[0].id === app1.id && SECRET_KEYS.every((key) => !(key in res.body.items[0])), res.body);
+  res = await apply(a2, { name: 'Can Sitesi' });
+  const app2 = res.body.application;
+  check('daire sahibi (apartment_owner) de basvurur: 201', res.status === 201 && app2.site_name === 'Can Sitesi');
+  res = await mine(a2);
+  check('mine yalniz KENDI kayitlarini dondurur', res.body.items.length === 1 && res.body.items[0].id === app2.id && res.body.pending.id === app2.id);
+
+  // dogrulama: ust sinirlar ve hatalar (satir yazilmaz)
+  const a3 = await mkUser('Dogrulama Kullanici');
+  const invalidCases = [
+    ['101 blok', { blocks: Array.from({ length: 101 }, (_, i) => ({ name: `B${i}`, apartmentCount: 1 })) }],
+    ['toplam 5001 daire', { blocks: [{ name: 'A', apartmentCount: 2501 }, { name: 'B', apartmentCount: 2500 }] }],
+    ['tek blok 5001 daire', { blocks: [{ name: 'A', apartmentCount: 5001 }] }],
+    ['101 kapi', { doors: Array.from({ length: 101 }, (_, i) => ({ name: `K${i}` })) }],
+    ['doorCount 101', { doors: undefined, doorCount: 101 }],
+    ['bos site adi', { name: '   ' }],
+    ['121 karakterlik ad', { name: 'x'.repeat(121) }],
+    ['yinelenen blok adi', { blocks: [{ name: 'A', apartmentCount: 2 }, { name: 'a', apartmentCount: 2 }] }],
+    ['daire sayisi 0', { blocks: [{ name: 'A', apartmentCount: 0 }] }],
+    ['501 karakterlik not', { note: 'x'.repeat(501) }],
+    ['metin olmayan not', { note: 5 }],
+  ];
+  const rowsBeforeInvalid = (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n;
+  for (const [label, extra] of invalidCases) {
+    res = await apply(a3, extra);
+    check(`gecersiz girdi (${label}): 400 + Turkce mesaj, satir yazilmaz`, res.status === 400 && typeof res.body.error === 'string' && /[a-zçğıöşü]/i.test(res.body.error) && res.body.code === 'INVALID_BODY', res.body);
+  }
+  for (const type of ['residence', 'business_center', 'cooperative', 'shopping_mall']) {
+    res = await apply(a3, { managementType: type });
+    check(`yonetim turu ${type}: 400 MANAGEMENT_TYPE_COMING_SOON`, res.status === 400 && res.body.code === 'MANAGEMENT_TYPE_COMING_SOON');
+  }
+  res = await apply(a3, { management_type: 'otel' });
+  check('bilinmeyen yonetim turu: 400 MANAGEMENT_TYPE_INVALID', res.status === 400 && res.body.code === 'MANAGEMENT_TYPE_INVALID');
+  check('tum gecersiz denemelerden sonra satir sayisi DEGISMEDI', (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n === rowsBeforeInvalid);
+  res = await apply(a3, { blocks: [{ name: 'A', apartmentCount: 100 }], doors: undefined, doorCount: 100, name: 'x'.repeat(120) });
+  check('sinirdaki degerler (120 karakter ad, 100 kapi, 100 daire) kabul edilir', res.status === 201 && res.body.application.door_count === 100);
+  await cancel(a3, res.body.application.id);
+
+  // cihaz: basvuruda KILITLENMEZ / AYRILMAZ; baskasinin cihazi 404
+  const deviceOwner = await mkUser('Cihaz Sahibi');
+  const otherOwner = await mkUser('Baska Cihaz Sahibi');
+  const devUid = await mkDevice(deviceOwner);
+  const foreignUid = await mkDevice(otherOwner);
+  res = await apply(deviceOwner, { deviceUid: foreignUid });
+  check('baskasinin cihazi: 404 DEVICE_NOT_FOUND (Turkce), satir yazilmaz', res.status === 404 && res.body.code === 'DEVICE_NOT_FOUND' && /cihaz/i.test(res.body.error) && (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [deviceOwner])).rows[0].n === 0, res.body);
+  res = await apply(deviceOwner, { deviceUid: 'OLMAYAN-CIHAZ' });
+  check('olmayan cihaz: 404 DEVICE_NOT_FOUND', res.status === 404 && res.body.code === 'DEVICE_NOT_FOUND');
+  const devBefore = (await q(`SELECT * FROM devices WHERE device_uid = $1`, [devUid])).rows[0];
+  res = await apply(deviceOwner, { deviceUid: ` ${devUid.toLowerCase()} ` });
+  const appDev = res.body.application;
+  const devAfter = (await q(`SELECT * FROM devices WHERE device_uid = $1`, [devUid])).rows[0];
+  check('kendi cihazi: 201, device_uid BUYUK harfle saklanir; cihaz satiri DEGISMEZ (site / kapi / sahip), kilitlenmez', res.status === 201 && appDev.device_uid === devUid && same(devBefore, devAfter), res.body);
+  const lockClient = new pg.Client(connectConfig(process.env.DB_NAME));
+  await lockClient.connect();
+  let lockFree = true;
+  try {
+    await lockClient.query('BEGIN');
+    await lockClient.query(`SELECT id FROM devices WHERE device_uid = $1 FOR UPDATE NOWAIT`, [devUid]);
+  } catch (_e) {
+    lockFree = false;
+  } finally {
+    await lockClient.query('ROLLBACK').catch(() => {});
+    await lockClient.end().catch(() => {});
+  }
+  check('basvurudan sonra cihaz satiri kilitli DEGIL (FOR UPDATE NOWAIT alinabilir)', lockFree);
+  const devDetail = await detail(appDev.id);
+  check('super ayrintisi: device_available = true (cihaz hala basvuranin)', devDetail.status === 200 && devDetail.body.device_available === true, devDetail.body);
+
+  // eszamanli cift basvuru: tek kayit
+  const racer = await mkUser('Yarisci Basvuran');
+  const raced = await Promise.all(Array.from({ length: 6 }, () => apply(racer)));
+  check('ES ZAMANLI 6 basvuru (ayni kisi): tam 1 tane 201, digerleri 409 APPLICATION_PENDING', raced.filter((r) => r.status === 201).length === 1 && raced.filter((r) => r.status === 409 && r.body.code === 'APPLICATION_PENDING').length === 5, raced.map((r) => [r.status, r.body?.code]));
+  check('ES ZAMANLI cift basvuru tek KAYIT birakir (bekleyen 1)', (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [racer])).rows[0].n === 1 && (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [racer])).rows[0].n === 1);
+  const parallelUsers = await Promise.all(Array.from({ length: 5 }, (_, i) => mkUser(`Paralel ${i}`)));
+  const parallel = await Promise.all(parallelUsers.map((u) => apply(u)));
+  check('FARKLI kisilerin esanli basvurulari birbirini engellemez (5 x 201)', parallel.every((r) => r.status === 201), parallel.map((r) => r.status));
+
+  // IDOR / yetki
+  res = await cancel(a2, app1.id);
+  check('IDOR: baskasinin basvurusunu iptal 404 APPLICATION_NOT_FOUND (varlik sizmaz); basvuru bekleyen KALIR', res.status === 404 && res.body.code === 'APPLICATION_NOT_FOUND' && (await appRow(app1.id)).status === 'pending');
+  res = await cancel(a2, 999999999);
+  check('olmayan basvuruyu iptal de AYNI 404 (varlik ayrimi yok)', res.status === 404 && res.body.code === 'APPLICATION_NOT_FOUND');
+  for (const [label, method, path] of [
+    ['liste', 'GET', '/admin/site-applications'],
+    ['ozet', 'GET', '/admin/site-applications/summary'],
+    ['ayrinti', 'GET', `/admin/site-applications/${app1.id}`],
+    ['onay', 'POST', `/admin/site-applications/${app1.id}/approve`],
+    ['red', 'POST', `/admin/site-applications/${app1.id}/reject`],
+    ['ayar okuma', 'GET', '/admin/platform-settings/site-onboarding'],
+    ['ayar yazma', 'PUT', '/admin/platform-settings/site-onboarding'],
+  ]) {
+    for (const [who, user] of [['basvuran', a1], ['baska bireysel', a2], ['site yoneticisi', MANAGER]]) {
+      const denied = await call(method, path, user, method === 'GET' ? undefined : { mode: 'approval' });
+      check(`yetki: ${who} ${label} -> 403`, denied.status === 403, denied.status);
+    }
+  }
+  check('yetkisizlerin denemeleri bekleyen basvuruyu DEGISTIRMEDI', (await appRow(app1.id)).status === 'pending' && (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'QA Sitesi'`)).rows[0].n === 0);
+
+  // super ayrinti / liste / ozet
+  res = await detail(app1.id);
+  check('super ayrinti: applicant (kod, ad, e-posta, telefon, rol), decision_source, decided_by_name, device_available eklenir',
+    res.status === 200 && res.body.id === app1.id && same(res.body.applicant, { user_code: a1, full_name: 'Ayse Basvuran', email: 'ayse.basvuran@qa.example', phone: '+905551112233', role: 'individual' }) && res.body.decision_source === null && res.body.decided_by_name === null && res.body.device_available === false, res.body);
+  res = await call('GET', '/admin/site-applications/abc', SUPER);
+  check('gecersiz kimlik 404 APPLICATION_NOT_FOUND; olmayan kimlik 404', res.status === 404 && (await call('GET', '/admin/site-applications/999999999', SUPER)).body.code === 'APPLICATION_NOT_FOUND');
+  const pendingTotal = (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE status = 'pending'`)).rows[0].n;
+  res = await call('GET', '/admin/site-applications', SUPER);
+  check('liste: varsayilan pending; { items, total }; her satir super alanlariyla', res.status === 200 && res.body.total === pendingTotal && res.body.items.length === Math.min(30, pendingTotal) && res.body.items.every((i) => i.status === 'pending' && i.applicant !== undefined), [res.body.total, pendingTotal]);
+  res = await call('GET', '/admin/site-applications/summary', SUPER);
+  check('ozet: { pending } = bekleyen sayisi', res.status === 200 && res.body.pending === pendingTotal && same(Object.keys(res.body), ['pending']), res.body);
+  for (const [label, qs, expectIds] of [
+    ['site adi', 'q=Can%20Sitesi', [app2.id]],
+    ['basvuran adi', 'q=ayse%20basvuran', [app1.id]],
+    ['basvuran e-postasi', 'q=can.sahip%40qa', [app2.id]],
+    ['sehir', 'q=ankara&limit=100', null],
+  ]) {
+    res = await call('GET', `/admin/site-applications?${qs}`, SUPER);
+    const ids = res.body.items.map((i) => i.id);
+    check(`arama (${label})`, res.status === 200 && (expectIds ? same(ids, expectIds) : ids.includes(app1.id) && ids.includes(app2.id)), ids);
+  }
+  res = await call('GET', '/admin/site-applications?q=%25', SUPER);
+  check('arama joker karakter ILE ESLESMEZ (% yalniz % arar)', res.status === 200 && res.body.items.length === 0 && res.body.total === 0, res.body.total);
+  res = await call('GET', "/admin/site-applications?q=' OR 1=1 --", SUPER);
+  check('arama SQL enjeksiyonu etkisiz (parametreli): 200 ve 0 sonuc', res.status === 200 && res.body.total === 0);
+  const page1 = await call('GET', '/admin/site-applications?status=all&limit=3&offset=0', SUPER);
+  const page2 = await call('GET', '/admin/site-applications?status=all&limit=3&offset=3', SUPER);
+  const allTotal = (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n;
+  check('sayfalama: limit / offset ayrik sayfalar, total sabit (status=all), yeniden eskiye',
+    page1.body.total === allTotal && page2.body.total === allTotal && page1.body.items.length === 3 && page2.body.items.length === 3 && page1.body.items.every((a) => !page2.body.items.some((b) => b.id === a.id))
+      && page1.body.items[0].created_at >= page1.body.items[2].created_at && page1.body.items[2].created_at >= page2.body.items[0].created_at);
+  check('gecersiz status / offset / limit: 400 INVALID_QUERY (limit sikistirilir)',
+    (await call('GET', '/admin/site-applications?status=bilinmeyen', SUPER)).body.code === 'INVALID_QUERY' && (await call('GET', '/admin/site-applications?offset=-1', SUPER)).status === 400 && (await call('GET', '/admin/site-applications?limit=9999', SUPER)).status === 200);
+
+  // iptal
+  const a5 = await mkUser('Iptal Eden');
+  const app5 = await mkApp(a5);
+  res = await cancel(a5, app5);
+  const cancelledRow = await appRow(app5);
+  check('kendi bekleyen basvurusunu iptal: 200 { application } cancelled; decided_at dolu; karar kaynagi / veren yok', res.status === 200 && res.body.application.status === 'cancelled' && res.body.application.decided_at !== null && SECRET_KEYS.every((key) => !(key in res.body.application)) && cancelledRow.decision_source === null && cancelledRow.decided_by === null, res.body);
+  res = await cancel(a5, app5);
+  check('ikinci iptal 409 APPLICATION_NOT_PENDING', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING');
+  res = await approve(app5);
+  check('iptal edilmis basvuru onaylanamaz: 409 APPLICATION_NOT_PENDING, site kurulmaz', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'QA Sitesi'`)).rows[0].n === 0);
+  const cancelAudit = (await q(`SELECT details, actor_user_code FROM audit_log WHERE action = 'site_application.cancelled' AND target_id = $1`, [String(app5)])).rows;
+  check('audit site_application.cancelled: basvuran yazdi; details yalniz sayilar', cancelAudit.length === 1 && cancelAudit[0].actor_user_code === a5 && same(Object.keys(cancelAudit[0].details).sort(), ['apartment_count', 'block_count', 'door_count']));
+  res = await apply(a5, { name: 'Yeniden Basvuru' });
+  check('iptal sonrasi YENI basvuru yapilabilir', res.status === 201);
+  await cancel(a5, res.body.application.id);
+
+  // ============================================================================================================
+  // C. Onay: site / blok / daire / kapi + uyelikler + rol + abonelik + cihaz + audit
+  // ============================================================================================================
+  const b1 = await mkUser('Onay Bir', 'individual', { email: 'onay.bir@qa.example' });
+  const b1Device = await mkDevice(b1);
+  const b1App = await mkApp(b1, { name: 'Onayli Site', deviceUid: b1Device, note: 'GIZLI-NOT-OLUSTURMA' });
+  const worldBeforeApprove = await world();
+  const mailMark = mails.length;
+  res = await approve(b1App, '  Uygun  GIZLI-NOT-KARAR ');
+  const approved = res.body;
+  const siteCode = approved?.site?.site_code;
+  check('onay: 200 { application, site }; application approved; karar kaynagi super_user; veren adi; not kirpildi',
+    res.status === 200 && approved.application.status === 'approved' && approved.application.decision_source === 'super_user' && approved.application.decided_by_name === 'Super Kisi' && approved.application.decision_note === 'Uygun  GIZLI-NOT-KARAR' && Number.isInteger(siteCode) && approved.application.site_code === siteCode && approved.application.decided_at !== null, res.body);
+  check('onay yaniti: site ozeti (ad, sayilar, yonetim turu) ve device_attached true (site icinde ve ust duzeyde)', approved.site.name === 'Onayli Site' && approved.site.block_count === 2 && approved.site.apartment_count === 20 && approved.site.door_count === 2 && approved.site.management_type === 'apartment_site' && approved.site.approval_status === 'approved' && approved.site.device_attached === true && approved.device_attached === true && approved.site.assigned_device?.device_uid === b1Device, approved.site);
+  const siteRow = (await q(`SELECT * FROM sites WHERE site_code = $1`, [siteCode])).rows[0];
+  check('sites: approved + approved_at, mqtt_site_id dolu, yonetim turu, blok / daire / kapi sayilari, ozellik bayraklari acik',
+    siteRow.approval_status === 'approved' && siteRow.approved_at !== null && siteRow.mqtt_site_id && siteRow.management_type === 'apartment_site' && siteRow.block_count === 2 && siteRow.apartment_count === 20 && siteRow.door_count === 2 && same(siteRow.block_apartment_counts, [12, 8])
+      && siteRow.city === 'Ankara' && siteRow.district === 'Cankaya' && siteRow.address === 'Cadde 1' && siteRow.feature_qr_enabled && siteRow.feature_remote_open_enabled && siteRow.feature_local_udp_enabled && siteRow.feature_guest_pass_enabled && siteRow.qr_entry_active, siteRow);
+  const blocks = (await q(`SELECT id, block_name, sort_order FROM site_blocks WHERE site_code = $1 ORDER BY sort_order`, [siteCode])).rows;
+  const aptCounts = (await q(`SELECT block_id, COUNT(*)::int AS n, MIN(unit_label) AS first, bool_and(is_active) AS active FROM apartments WHERE site_code = $1 GROUP BY block_id ORDER BY block_id`, [siteCode])).rows;
+  check('bloklar (ad, sira) ve daireler (12 + 8, "Daire n", aktif) olustu', same(blocks.map((b) => [b.block_name, b.sort_order]), [['A Blok', 1], ['B Blok', 2]]) && same(aptCounts.map((r) => r.n), [12, 8]) && aptCounts.every((r) => r.active === true));
+  const doors = (await q(`SELECT id, door_name, door_index, is_active, assigned_device_id FROM site_doors WHERE site_code = $1 ORDER BY door_index`, [siteCode])).rows;
+  check('kapilar (ad, sira, aktif) olustu', same(doors.map((d) => [d.door_name, d.door_index, d.is_active]), [['Ana Kapi', 1, true], ['Yan Kapi', 2, true]]));
+  check('site_manager_sites + SITE_OWNER uyeligi (aktif) basvuran icin eklendi; rol site_manager oldu',
+    (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`, [siteCode, b1])).rows[0].n === 1
+      && (await q(`SELECT role, is_active FROM site_memberships WHERE site_code = $1 AND user_code = $2`, [siteCode, b1])).rows.every((r) => r.role === 'SITE_OWNER' && r.is_active === true) && (await roleOf(b1)) === 'site_manager');
+  const sub = (await q(`SELECT * FROM site_subscriptions WHERE site_code = $1`, [siteCode])).rows;
+  check('site_subscriptions: manual_approval / active / source manual_approval / application_id = basvuru; sure sinirsiz', sub.length === 1 && sub[0].plan_code === 'manual_approval' && sub[0].status === 'active' && sub[0].source === 'manual_approval' && Number(sub[0].application_id) === b1App && sub[0].expires_at === null && sub[0].started_at !== null, sub);
+  const decided = await appRow(b1App);
+  check('basvuru satiri: approved, decision_source super_user, decided_by = super, decided_at, site_code, decision_note', decided.status === 'approved' && decided.decision_source === 'super_user' && decided.decided_by === SUPER && decided.decided_at !== null && Number(decided.site_code) === siteCode && decided.decision_note === 'Uygun  GIZLI-NOT-KARAR' && decided.plan_code === null, decided);
+  const dev = (await q(`SELECT id, site_code, gate_name, owner_user_id FROM devices WHERE device_uid = $1`, [b1Device])).rows[0];
+  check('cihaz hala basvuranin: siteye baglandi (gate_name = 1. kapi adi) ve 1. kapiya atandi; 2. kapi bos', Number(dev.site_code) === siteCode && dev.gate_name === 'Ana Kapi' && doors[0].assigned_device_id === dev.id && doors[1].assigned_device_id === null, [dev, doors]);
+  const approvedAudit = (await q(`SELECT * FROM audit_log WHERE action = 'site_application.approved' AND target_id = $1`, [String(b1App)])).rows;
+  check('audit site_application.approved: super yazdi, site_code DOLU; details yalniz sayilar + device_attached; not / e-posta YOK',
+    approvedAudit.length === 1 && approvedAudit[0].actor_user_code === SUPER && approvedAudit[0].actor_role === 'super_user' && Number(approvedAudit[0].site_code) === siteCode && same(Object.keys(approvedAudit[0].details).sort(), ['apartment_count', 'block_count', 'device_attached', 'door_count']) && approvedAudit[0].details.device_attached === true && !JSON.stringify(approvedAudit[0]).includes('GIZLI') && !JSON.stringify(approvedAudit[0]).includes('qa.example'), approvedAudit[0]);
+  await waitMail((m) => m.to === 'onay.bir@qa.example');
+  const decisionMail = sentTo('onay.bir@qa.example', SUBJECT_APPROVED);
+  check('basvurana onay e-postasi: sabit konu, "site yoneticisisiniz" + "yenileyin"; gerekce / not sizmaz', decisionMail.length === 1 && /site yöneticisisiniz/.test(decisionMail[0].text) && /yenileyin/.test(decisionMail[0].text) && !JSON.stringify(decisionMail[0]).includes('GIZLI'), decisionMail[0]?.text);
+  check('onay SADECE yeni siteyi etkiledi: +1 site, +2 blok, +20 daire, +2 kapi, +1 yonetici, +1 uyelik, +1 abonelik, +1 audit; mevcut sitelere abonelik YAZILMADI',
+    same(Object.entries(await world()).map(([k, v]) => [k, v - worldBeforeApprove[k]]), [['sites', 1], ['blocks', 2], ['apartments', 20], ['doors', 2], ['managers', 1], ['memberships', 1], ['subscriptions', 1], ['approved_audit', 1], ['bound_devices', 1]])
+      && (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE site_code IN (${S1}, ${S3})`)).rows[0].n === 0);
+  res = await approve(b1App);
+  check('ikinci onay 409 APPLICATION_NOT_PENDING; veri CIFTLENMEZ', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && same(await world(), { ...worldBeforeApprove, sites: worldBeforeApprove.sites + 1, blocks: worldBeforeApprove.blocks + 2, apartments: worldBeforeApprove.apartments + 20, doors: worldBeforeApprove.doors + 2, managers: worldBeforeApprove.managers + 1, memberships: worldBeforeApprove.memberships + 1, subscriptions: worldBeforeApprove.subscriptions + 1, approved_audit: worldBeforeApprove.approved_audit + 1, bound_devices: worldBeforeApprove.bound_devices + 1 }));
+  res = await reject(b1App, 'artik gecmis');
+  check('onaylanmis basvuru reddedilemez: 409 APPLICATION_NOT_PENDING', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && (await appRow(b1App)).status === 'approved');
+  res = await apply(b1);
+  check('onaydan sonra basvuran artik YONETICI: yeni basvuru 409 ALREADY_SITE_MANAGER', res.status === 409 && res.body.code === 'ALREADY_SITE_MANAGER');
+  res = await mine(b1);
+  check('mine onaylanan basvuruyu gosterir (pending null, site_code dolu, karar kaynagi yok)', res.status === 200 && res.body.pending === null && res.body.items[0].status === 'approved' && res.body.items[0].site_code === siteCode && SECRET_KEYS.every((key) => !(key in res.body.items[0])));
+  res = await call('GET', '/admin/site-applications?status=approved&limit=100', SUPER);
+  check('liste status=approved: onayli basvuru karar ayrintisiyla', res.body.items.some((i) => i.id === b1App && i.decision_source === 'super_user' && i.decided_by_name === 'Super Kisi' && i.site_code === siteCode));
+
+  // anlik kurulumla yapisal denklik (davranis birebir)
+  const equivUser = await mkUser('Denklik', 'individual');
+  const equivApp = await mkApp(equivUser, { name: 'Denklik Sitesi' });
+  const equivApproved = await approve(equivApp);
+  const instant = await call('POST', '/membership/setup-site', MANAGER2, appBody({ name: 'Denklik Sitesi' }));
+  const instantCode = instant.body?.site?.id;
+  const shapeOf = async (code) => ({
+    site: (await q(`SELECT name, address, city, district, block_count, apartment_count, door_count, block_apartment_counts, approval_status, feature_qr_enabled, feature_remote_open_enabled, feature_local_udp_enabled, feature_guest_pass_enabled, qr_entry_active, require_geofence, management_type, (mqtt_site_id IS NOT NULL) AS has_mqtt, (approved_at IS NOT NULL) AS has_approved_at FROM sites WHERE site_code = $1`, [code])).rows[0],
+    blocks: (await q(`SELECT block_name, sort_order FROM site_blocks WHERE site_code = $1 ORDER BY sort_order`, [code])).rows,
+    apartments: (await q(`SELECT b.block_name, a.unit_label, a.sort_order, a.is_active FROM apartments a JOIN site_blocks b ON b.id = a.block_id WHERE a.site_code = $1 ORDER BY b.sort_order, a.sort_order`, [code])).rows,
+    doors: (await q(`SELECT door_name, door_index, is_active, assigned_device_id, access_scope FROM site_doors WHERE site_code = $1 ORDER BY door_index`, [code])).rows,
+    managers: (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1`, [code])).rows[0].n,
+    memberships: (await q(`SELECT role, is_active FROM site_memberships WHERE site_code = $1`, [code])).rows,
+    modules: (await q(`SELECT COUNT(*)::int AS n FROM site_modules WHERE site_code = $1`, [code])).rows[0].n,
+  });
+  check('ANLIK kurulum (setup-site, site_manager) hala 201 ve onayla kurulan siteyle YAPISAL OLARAK AYNI (site, bloklar, daireler, kapilar, uyelik)',
+    instant.status === 201 && equivApproved.status === 200 && same(await shapeOf(instantCode), await shapeOf(equivApproved.body.site.site_code)), [instant.status, equivApproved.status]);
+  check('anlik kurulum abonelik satiri YAZMAZ (davranis degismedi); onayli site yazar', (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE site_code = $1`, [instantCode])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE site_code = $1`, [equivApproved.body.site.site_code])).rows[0].n === 1);
+
+  // ============================================================================================================
+  // D. setup-site (anlik kurulum) politikasi
+  // ============================================================================================================
+  const indDevice = await mkUser('Cihazli Bireysel');
+  await mkDevice(indDevice);
+  const ownerSetup = await mkUser('Daire Sahibi Setup', 'apartment_owner');
+  const sitesBeforeSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
+  for (const [label, user, extra] of [['bireysel (cihazli)', indDevice, {}], ['bireysel (cihazli, cihaz belirtilmis)', indDevice, { deviceUid: 'QAAPP000001' }], ['bireysel (cihazsiz)', a2, {}], ['daire sahibi', ownerSetup, {}]]) {
+    res = await call('POST', '/membership/setup-site', user, appBody(extra));
+    check(`setup-site ${label}: 409 APPLICATION_REQUIRED "Site kurmak için başvuru yapmalısınız."`, res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && res.body.error === 'Site kurmak için başvuru yapmalısınız.', res.body);
+  }
+  check('APPLICATION_REQUIRED hicbir site / blok olusturmadi, cihaz baglanmadi', (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeSetup && (await q(`SELECT COUNT(*)::int AS n FROM devices WHERE owner_user_id = (SELECT id FROM users WHERE user_code = $1) AND site_code IS NOT NULL`, [indDevice])).rows[0].n === 0);
+  res = await call('POST', '/membership/setup-site', MANAGER2, appBody({ name: 'Yonetici Anlik Sitesi' }));
+  check('site_manager anlik kurulumu AYNEN calisir (201, ok, bloklar / kapilar, cihazsiz)', res.status === 201 && res.body.ok === true && res.body.site.blocks.length === 2 && res.body.site.doors.length === 2 && res.body.site.assignedDevice === null && res.body.site.approval_status === 'approved');
+  res = await call('POST', '/membership/setup-site', SUPER, appBody({ name: 'Super Anlik Sitesi' }));
+  check('super kullanici anlik kurulumu AYNEN calisir (201, rol super kalir)', res.status === 201 && res.body.ok === true && (await roleOf(SUPER)) === 'super_user');
+  res = await call('POST', '/membership/setup-site', MANAGER2, appBody({ name: 'Yonetici Bos', deviceUid: 'YOK-BOYLE-CIHAZ' }));
+  check('anlik kurulum: sahip olunmayan cihaz hala 404 (site kurulmaz)', res.status === 404 && /cihaz/i.test(res.body.error));
+  res = await call('GET', '/admin/subscription-requests', SUPER);
+  check('mevcut uclar bozulmadi: GET /admin/subscription-requests (site yoneticisi KAYIT onayi) hala 200', res.status === 200 && Array.isArray(res.body.items ?? res.body.requests ?? res.body.data ?? []), Object.keys(res.body ?? {}));
+
+  // ============================================================================================================
+  // D2. Cihaz sahiplenmek kisiyi YONETICI YAPMAZ (urun karari): sahiplen -> rol ayni -> setup-site 409 -> basvuru + cihaz -> onay
+  // ============================================================================================================
+  const claimer = await mkUser('Cihaz Sahiplenen', 'individual', { email: 'sahiplenen@qa.example' });
+  const claimerOwner = await mkUser('Cihaz Sahiplenen Daire Sahibi', 'apartment_owner');
+  await q(`INSERT INTO devices (device_uid, hardware_type, local_control_token) VALUES ('QACLAIM00001', 'esp32_wroom', 'tok-claim-1'), ('QACLAIM00002', 'esp32_wroom', 'tok-claim-2')`);
+  const claimerId = (await q(`SELECT id FROM users WHERE user_code = $1`, [claimer])).rows[0].id;
+  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'GD-C3-QACLAIM00001' });
+  const claimedRow = (await q(`SELECT owner_user_id, assigned_user_code, site_code, claimed_at FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0];
+  check('cihaz sahiplenme (bireysel): 200, cihaz kullaniciya atandi; yanitta ve DB\'de rol HALA individual (yonetici OLMADI)',
+    res.status === 200 && res.body.ok === true && res.body.role === 'individual' && String(claimedRow.owner_user_id) === String(claimerId) && claimedRow.assigned_user_code === claimer && claimedRow.claimed_at !== null && claimedRow.site_code === null && (await roleOf(claimer)) === 'individual', res.body);
+  check('sahiplenme yanitindaki mesaj basvuruya yonlendirir ("yonetici oldunuz" / anlik kurulum vaadi yok)', /başvuru yapabilir/.test(res.body.message) && !/Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz/.test(res.body.message), res.body.message);
+  check('sahiplenme yonetici KAYDI olusturmadi: site_manager_sites / SITE_OWNER-SITE_ADMIN uyeligi yok', (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [claimer])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [claimer])).rows[0].n === 0);
+  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'QACLAIM00001' });
+  check('ayni cihazi yeniden okutmak (idempotent): 200 already_owned, rol hala individual', res.status === 200 && res.body.already_owned === true && res.body.role === 'individual' && (await roleOf(claimer)) === 'individual');
+  res = await call('GET', '/membership/my-devices', claimer);
+  check('GET my-devices: sahiplenilen cihaz listelenir, rol individual', res.status === 200 && res.body.role === 'individual' && res.body.devices.some((d) => d.device_uid === 'QACLAIM00001'), res.body);
+  res = await call('POST', '/membership/claim-device', claimerOwner, { deviceInput: 'QACLAIM00002' });
+  check('cihaz sahiplenme (daire sahibi): 200, rol HALA apartment_owner', res.status === 200 && res.body.role === 'apartment_owner' && (await roleOf(claimerOwner)) === 'apartment_owner');
+  res = await call('POST', '/membership/claim-device', claimer, { deviceInput: 'QACLAIM00002' });
+  check('baska kullanicinin cihazi hala 409 (sahiplenme kurallari degismedi)', res.status === 409);
+  const sitesBeforeClaimSetup = (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n;
+  res = await call('POST', '/membership/setup-site', claimer, appBody({ name: 'Sahiplenen Anlik', deviceUid: 'QACLAIM00001' }));
+  check('cihazini sahiplenmis bireysel icin ANLIK kurulum yine KAPALI: 409 APPLICATION_REQUIRED; site / baglama olusmaz', res.status === 409 && res.body.code === 'APPLICATION_REQUIRED' && (await q(`SELECT COUNT(*)::int AS n FROM sites`)).rows[0].n === sitesBeforeClaimSetup && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
+  res = await call('GET', '/admin/site-applications', claimer);
+  check('sahiplenen kisinin yonetici yetkisi YOK: super uclari 403', res.status === 403);
+  res = await apply(claimer, { name: 'Sahiplenen Site', deviceUid: 'QACLAIM00001' });
+  const claimApp = res.body.application?.id;
+  check('sahiplenen cihazla BASVURU: 201, device_uid kayitli; onaya kadar rol individual ve cihaz bagli degil', res.status === 201 && res.body.application.device_uid === 'QACLAIM00001' && (await roleOf(claimer)) === 'individual' && (await q(`SELECT site_code FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0].site_code === null);
+  res = await approve(claimApp);
+  const claimSite = res.body?.site?.site_code;
+  const claimDoors = (await q(`SELECT door_index, assigned_device_id FROM site_doors WHERE site_code = $1 ORDER BY door_index`, [claimSite])).rows;
+  const claimDev = (await q(`SELECT id, site_code, gate_name FROM devices WHERE device_uid = 'QACLAIM00001'`)).rows[0];
+  check('super onaylar: site kurulur, sahiplenilen cihaz 1. kapiya BAGLANIR (device_attached true), rol ANCAK simdi site_manager',
+    res.status === 200 && res.body.device_attached === true && Number(claimDev.site_code) === claimSite && claimDev.gate_name === 'Ana Kapi' && claimDoors[0].assigned_device_id === claimDev.id && claimDoors[1].assigned_device_id === null && (await roleOf(claimer)) === 'site_manager', res.body);
+  check('sahiplenme + basvuru + onay sonunda yonetici kaydi tam: site_manager_sites 1, SITE_OWNER uyeligi 1', (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [claimer])).rows[0].n === 1 && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1 AND role = 'SITE_OWNER'`, [claimer])).rows[0].n === 1);
+
+  // ============================================================================================================
+  // E. Cihaz onay aninda yeniden dogrulanir
+  // ============================================================================================================
+  const d1 = await mkUser('Cihaz Devredilen');
+  const thief = await mkUser('Cihaz Yeni Sahip');
+  const d1Uid = await mkDevice(d1);
+  const d1App = await mkApp(d1, { name: 'Devir Sitesi', deviceUid: d1Uid });
+  check('onaydan once cihaz basvuranin: device_available true', (await detail(d1App)).body.device_available === true);
+  await q(`UPDATE devices SET owner_user_id = (SELECT id FROM users WHERE user_code = $1), assigned_user_code = $1 WHERE device_uid = $2`, [thief, d1Uid]);
+  check('cihaz baskasina gecince device_available false', (await detail(d1App)).body.device_available === false);
+  const devSnapshot = (await q(`SELECT * FROM devices WHERE device_uid = $1`, [d1Uid])).rows[0];
+  res = await approve(d1App);
+  const d1Site = res.body?.site?.site_code;
+  check('onayda cihaz artik basvuranin degil: 200, site CIHAZSIZ kurulur, device_attached false (yanitta)', res.status === 200 && res.body.device_attached === false && res.body.site.device_attached === false && res.body.site.assigned_device === null && Number.isInteger(d1Site), res.body);
+  check('baskasinin cihazina DOKUNULMADI (sahip, site, kapi atamasi); kapilarda cihaz yok; audit device_attached false', same(devSnapshot, (await q(`SELECT * FROM devices WHERE device_uid = $1`, [d1Uid])).rows[0]) && (await q(`SELECT COUNT(*)::int AS n FROM site_doors WHERE site_code = $1 AND assigned_device_id IS NOT NULL`, [d1Site])).rows[0].n === 0 && (await q(`SELECT details FROM audit_log WHERE action = 'site_application.approved' AND target_id = $1`, [String(d1App)])).rows[0].details.device_attached === false);
+
+  const d2 = await mkUser('Cihaz Baska Sitede');
+  const d2Uid = await mkDevice(d2, { siteCode: S1 });
+  const d2Door = await q(`UPDATE site_doors SET assigned_device_id = (SELECT id FROM devices WHERE device_uid = $1) WHERE site_code = ${S1} AND door_index = 2 RETURNING id`, [d2Uid]);
+  const d2App = await mkApp(d2, { name: 'Baska Sitedeki Cihaz', deviceUid: d2Uid });
+  check('baska siteye bagli cihaz: device_available false (kapidan KOPARILMAZ)', (await detail(d2App)).body.device_available === false);
+  res = await approve(d2App);
+  const d2Row = (await q(`SELECT site_code, gate_name FROM devices WHERE device_uid = $1`, [d2Uid])).rows[0];
+  check('baska siteye bagli cihaz onayda yeniden baglanmaz: 200, device_attached false, eski site / kapi atamasi AYNEN', res.status === 200 && res.body.device_attached === false && Number(d2Row.site_code) === S1 && d2Row.gate_name === 'Eski Kapi' && (await q(`SELECT assigned_device_id FROM site_doors WHERE id = $1`, [d2Door.rows[0].id])).rows[0].assigned_device_id !== null);
+
+  const d3 = await mkUser('Arada Yonetici Oldu');
+  const d3Uid = await mkDevice(d3);
+  const d3App = await mkApp(d3, { name: 'Arada Yonetici', deviceUid: d3Uid });
+  await q(`UPDATE users SET role = 'site_manager' WHERE user_code = $1`, [d3]);
+  res = await approve(d3App);
+  check('basvuran arada yonetici olmus (or. mevcut bir yoneticinin daveti): onay yine de 200; rol site_manager kalir; cihaz baglanir; ek site olusur',
+    res.status === 200 && res.body.device_attached === true && (await roleOf(d3)) === 'site_manager' && (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [d3])).rows[0].n === 1);
+
+  // ============================================================================================================
+  // F. Basvuran kullanilamaz / silinmis
+  // ============================================================================================================
+  const e1 = await mkUser('Pasiflesen');
+  const e1App = await mkApp(e1);
+  await q(`UPDATE users SET is_active = FALSE WHERE user_code = $1`, [e1]);
+  const worldE = await world();
+  res = await approve(e1App);
+  check('pasif basvuran: 409 APPLICANT_UNAVAILABLE; site kurulmaz; basvuru BEKLEYEN kalir', res.status === 409 && res.body.code === 'APPLICANT_UNAVAILABLE' && same(await world(), worldE) && (await appRow(e1App)).status === 'pending', res.body);
+  res = await reject(e1App, 'Hesap pasif');
+  check('pasif basvuranin bekleyen basvurusu REDDEDILEBILIR', res.status === 200 && res.body.application.status === 'rejected');
+  const e2 = await mkUser('Silinen', 'individual', { email: 'silinen@qa.example' });
+  const e2App = await mkApp(e2);
+  await q(`DELETE FROM users WHERE user_code = $1`, [e2]);
+  const e2Row = await appRow(e2App);
+  check('hesap silinince basvuru KALIR (applicant NULL, bekleyen)', e2Row.applicant_user_code === null && e2Row.status === 'pending');
+  res = await detail(e2App);
+  check('silinmis basvuranli basvurunun ayrintisi okunur (applicant null)', res.status === 200 && res.body.applicant === null && res.body.id === e2App);
+  const worldE2 = await world();
+  res = await approve(e2App);
+  check('silinmis basvuran: 409 APPLICANT_UNAVAILABLE, kalinti yok', res.status === 409 && res.body.code === 'APPLICANT_UNAVAILABLE' && same(await world(), worldE2));
+  const mailsBeforeE2 = mails.length;
+  res = await reject(e2App);
+  check('silinmis basvuranli basvuru reddedilebilir; e-posta gonderilmez (alici yok)', res.status === 200 && res.body.application.status === 'rejected' && (await (async () => { await sleep(150); return mails.length === mailsBeforeE2; })()));
+
+  // ============================================================================================================
+  // G. Bozuk saklanan veri: kontrollu hata, kalinti yok
+  // ============================================================================================================
+  const corruptions = [
+    ['blocks bos dizi', `UPDATE site_applications SET blocks = '[]'::jsonb WHERE id = $1`],
+    ['blocks nesne', `UPDATE site_applications SET blocks = '{"a":1}'::jsonb WHERE id = $1`],
+    ['doors null', `UPDATE site_applications SET doors = 'null'::jsonb WHERE id = $1`],
+    ['doors bos dizi', `UPDATE site_applications SET doors = '[]'::jsonb WHERE id = $1`],
+    ['blok adi sayi', `UPDATE site_applications SET blocks = '[{"name":5,"apartmentCount":3,"sortOrder":1}]'::jsonb, block_count = 1, apartment_count = 3 WHERE id = $1`],
+    ['daire sayisi metin', `UPDATE site_applications SET blocks = '[{"name":"A","apartmentCount":"3","sortOrder":1}]'::jsonb, block_count = 1, apartment_count = 3 WHERE id = $1`],
+    ['daire sayisi ust sinir ustu', `UPDATE site_applications SET blocks = '[{"name":"A","apartmentCount":5001,"sortOrder":1}]'::jsonb, block_count = 1, apartment_count = 5001 WHERE id = $1`],
+    ['101 blok', `UPDATE site_applications SET blocks = (SELECT jsonb_agg(jsonb_build_object('name', 'B' || i, 'apartmentCount', 1, 'sortOrder', i)) FROM generate_series(1, 101) AS i), block_count = 101, apartment_count = 101 WHERE id = $1`],
+    ['101 kapi', `UPDATE site_applications SET doors = (SELECT jsonb_agg(jsonb_build_object('name', 'K' || i, 'doorIndex', i)) FROM generate_series(1, 101) AS i), door_count = 101 WHERE id = $1`],
+    ['sayilar tutarsiz', `UPDATE site_applications SET apartment_count = 99 WHERE id = $1`],
+    ['kapi sayisi tutarsiz', `UPDATE site_applications SET door_count = 7 WHERE id = $1`],
+    ['site adi bos', `UPDATE site_applications SET site_name = '   ' WHERE id = $1`],
+    ['yonetim turu yakinda', `UPDATE site_applications SET management_type = 'residence' WHERE id = $1`],
+  ];
+  for (const [label, sql] of corruptions) {
+    const owner = await mkUser(`Bozuk ${label}`);
+    const id = await mkApp(owner, { name: `Bozuk Site ${label}` });
+    await q(sql, [id]);
+    const worldBefore = await world();
+    res = await approve(id);
+    check(`bozuk veri (${label}): 422 APPLICATION_DATA_INVALID (409 / 500 degil); kalinti yok; basvuru bekleyen; rol ayni`,
+      res.status === 422 && res.body.code === 'APPLICATION_DATA_INVALID' && same(await world(), worldBefore) && (await appRow(id)).status === 'pending' && (await roleOf(owner)) === 'individual' && (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [`Bozuk Site ${label}`])).rows[0].n === 0, res.body);
+    const shown = await detail(id);
+    if (label === 'blocks bos dizi') {
+      check('bozuk veri okumayi COKERTMEZ: ayrinti 200', shown.status === 200 && shown.body.id === id);
+    }
+  }
+
+  // ============================================================================================================
+  // H. Yarida hata: ROLLBACK, kalinti yok, yeniden onay calisir
+  // ============================================================================================================
+  const failPoints = [
+    [/INSERT INTO sites\b/, 'sites'],
+    [/INSERT INTO site_manager_sites/, 'site_manager_sites'],
+    [/INSERT INTO site_memberships/, 'site_memberships'],
+    [/UPDATE users SET role/, 'rol guncelleme'],
+    [/INSERT INTO site_blocks/, 'bloklar'],
+    [/INSERT INTO apartments/, 'daireler'],
+    [/INSERT INTO site_doors/, 'kapilar'],
+    [/UPDATE devices SET site_code/, 'cihaz baglama'],
+    [/UPDATE site_doors SET assigned_device_id/, '1. kapiya atama'],
+    [/INSERT INTO site_subscriptions/, 'abonelik'],
+    [/UPDATE site_applications\s+SET status = 'approved'/, 'basvuru guncelleme'],
+  ];
+  for (const [match, label] of failPoints) {
+    const owner = await mkUser(`Yarida ${label}`);
+    const uid = await mkDevice(owner);
+    const name = `Yarida Hata ${label}`;
+    const id = await mkApp(owner, { name, deviceUid: uid });
+    const worldBefore = await world();
+    const deviceBefore = (await q(`SELECT * FROM devices WHERE device_uid = $1`, [uid])).rows[0];
+    hooks.failOnce = { match, code: 'XX000' };
+    res = await approve(id);
+    const injected = hooks.failOnce === null;
+    hooks.failOnce = null;
+    const afterFail = await world();
+    check(`yarida hata (${label}): 500 genel mesaj + errorId (ayrinti sizmaz); HICBIR kalinti yok (site, blok, daire, kapi, uyelik, rol, abonelik, cihaz, audit); basvuru bekleyen`,
+      injected && res.status === 500 && res.body.errorId && !JSON.stringify(res.body).includes('enjekte') && same(afterFail, worldBefore) && (await roleOf(owner)) === 'individual' && same(deviceBefore, (await q(`SELECT * FROM devices WHERE device_uid = $1`, [uid])).rows[0]) && (await appRow(id)).status === 'pending' && (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [name])).rows[0].n === 0, { injected, status: res.status, afterFail, worldBefore });
+    res = await approve(id);
+    check(`yarida hata (${label}) sonrasi yeniden onay BASARILI (kilit / kalinti sorunu yok)`, res.status === 200 && res.body.device_attached === true && (await roleOf(owner)) === 'site_manager', res.body);
+  }
+
+  // ============================================================================================================
+  // I. Red
+  // ============================================================================================================
+  const r1 = await mkUser('Reddedilen', 'individual', { email: 'reddedilen@qa.example' });
+  const r1App = await mkApp(r1, { name: 'Reddedilecek' });
+  const worldR = await world();
+  res = await reject(r1App, '  Eksik bilgi GIZLI-GEREKCE ');
+  const rejectedRow = await appRow(r1App);
+  check('red: 200 { application } rejected; gerekce kirpilip decision_note; karar kaynagi super_user; veren super; site KURULMAZ',
+    res.status === 200 && res.body.application.status === 'rejected' && res.body.application.decision_note === 'Eksik bilgi GIZLI-GEREKCE' && res.body.application.decision_source === 'super_user' && rejectedRow.decided_by === SUPER && rejectedRow.decided_at !== null && rejectedRow.site_code === null && same(await world(), worldR) && (await roleOf(r1)) === 'individual', res.body);
+  const rejectAudit = (await q(`SELECT details, site_code FROM audit_log WHERE action = 'site_application.rejected' AND target_id = $1`, [String(r1App)])).rows;
+  check('audit site_application.rejected: details YALNIZ { has_reason }; gerekce metni YOK', rejectAudit.length === 1 && same(rejectAudit[0].details, { has_reason: true }) && rejectAudit[0].site_code === null);
+  await waitMail((m) => m.to === 'reddedilen@qa.example');
+  const rejectMail = sentTo('reddedilen@qa.example', SUBJECT_REJECTED);
+  check('basvurana red e-postasi: sabit konu + gerekce + yeniden basvuru bilgisi', rejectMail.length === 1 && /Gerekçe: Eksik bilgi GIZLI-GEREKCE/.test(rejectMail[0].text) && /yeniden başvurabilirsiniz/.test(rejectMail[0].text));
+  res = await mine(r1);
+  check('reddedilen: mine pending null; gerekce gorunur; karar kaynagi gizli', res.body.pending === null && res.body.items[0].status === 'rejected' && res.body.items[0].decision_note === 'Eksik bilgi GIZLI-GEREKCE' && SECRET_KEYS.every((key) => !(key in res.body.items[0])));
+  res = await apply(r1, { name: 'Yeniden Basvuru Sitesi' });
+  check('reddedilen kisi YENIDEN basvurabilir (201)', res.status === 201);
+  res = await reject(r1App);
+  check('reddedilmis basvuru tekrar reddedilemez / iptal edilemez: 409', res.status === 409 && res.body.code === 'APPLICATION_NOT_PENDING' && (await cancel(r1, r1App)).status === 409);
+  res = await reject(r1App, 'x'.repeat(301));
+  check('gerekce 301 karakter: 400 INVALID_BODY', res.status === 400 && res.body.code === 'INVALID_BODY');
+  res = await call('POST', `/admin/site-applications/999999999/reject`, SUPER, {});
+  check('olmayan basvuruyu reddet / onayla: 404', res.status === 404 && (await approve(999999999)).status === 404);
+  const rejectNoReason = await mkUser('Gerekcesiz Red');
+  const rejectNoReasonApp = await mkApp(rejectNoReason);
+  res = await reject(rejectNoReasonApp);
+  check('gerekcesiz red: decision_note null; audit has_reason false', res.status === 200 && res.body.application.decision_note === null && (await q(`SELECT details FROM audit_log WHERE action = 'site_application.rejected' AND target_id = $1`, [String(rejectNoReasonApp)])).rows[0].details.has_reason === false);
+
+  // ============================================================================================================
+  // J. Gunluk sinir (5) ve odeme kipi / platform ayari
+  // ============================================================================================================
+  const h = await mkUser('Gunluk Sinir');
+  const hIds = [];
+  for (let i = 0; i < 5; i += 1) {
+    const id = await mkApp(h, { name: `Gunluk ${i}` });
+    hIds.push(id);
+    await cancel(h, id);
+  }
+  res = await apply(h, { name: 'Altinci' });
+  check('24 saatte 5 basvuru (iptal edilenler dahil) sonrasi 6. basvuru: 409 APPLICATION_DAILY_LIMIT', res.status === 409 && res.body.code === 'APPLICATION_DAILY_LIMIT' && /5/.test(res.body.error), res.body);
+  check('sinir asilinca satir yazilmaz (5 satir)', (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [h])).rows[0].n === 5);
+  await q(`UPDATE site_applications SET created_at = NOW() - INTERVAL '25 hours' WHERE id = ANY($1::bigint[])`, [hIds.slice(0, 2)]);
+  res = await apply(h, { name: 'Pencere Kaydi' });
+  check('24 saatten eski basvurular sayilmaz: 3 sayilir -> yeni basvuru 201', res.status === 201);
+  await cancel(h, res.body.application.id);
+
+  const mode0 = await call('GET', '/admin/platform-settings/site-onboarding', SUPER);
+  check('ayar okuma: { mode: approval, payment_available: false, plans[] (kod, ad, is_active, price_minor, currency, billing_period) }',
+    mode0.status === 200 && mode0.body.mode === 'approval' && mode0.body.payment_available === false && same(mode0.body.plans.map((p) => [p.code, p.name, p.is_active, p.price_minor, p.currency, p.billing_period]), [['manual_approval', 'Elle Onaylı', true, null, 'TRY', null], ['standard', 'Standart', false, null, 'TRY', null]]), mode0.body);
+  res = await call('PUT', '/admin/platform-settings/site-onboarding', SUPER, { mode: 'payment' });
+  check('PUT payment: 409 PAYMENT_NOT_AVAILABLE "Ödeme sistemi Yakında…"; ayar DEGISMEZ', res.status === 409 && res.body.code === 'PAYMENT_NOT_AVAILABLE' && res.body.error === 'Ödeme sistemi Yakında…' && (await q(`SELECT value->>'mode' AS mode FROM platform_settings WHERE key = 'site_onboarding'`)).rows[0].mode === 'approval');
+  for (const bad of [{}, { mode: 'bilinmeyen' }, { mode: 5 }, { mode: '' }]) {
+    res = await call('PUT', '/admin/platform-settings/site-onboarding', SUPER, bad);
+    check(`PUT gecersiz mode ${JSON.stringify(bad)}: 400`, res.status === 400);
+  }
+  res = await call('PUT', '/admin/platform-settings/site-onboarding', SUPER, { mode: 'approval' });
+  const settingAudit = (await q(`SELECT details, actor_user_code FROM audit_log WHERE action = 'platform_settings.updated' ORDER BY id DESC LIMIT 1`)).rows[0];
+  check('PUT approval: 200 ayni govde; updated_by = super; audit platform_settings.updated { key, mode, previous_mode }', res.status === 200 && res.body.mode === 'approval' && (await q(`SELECT updated_by FROM platform_settings WHERE key = 'site_onboarding'`)).rows[0].updated_by === SUPER && sameShape(settingAudit.details, { key: 'site_onboarding', mode: 'approval', previous_mode: 'approval' }) && settingAudit.actor_user_code === SUPER, settingAudit);
+  await q(`UPDATE platform_settings SET value = '{"mode":"payment"}'::jsonb WHERE key = 'site_onboarding'`);
+  const payer = await mkUser('Odeme Kipi');
+  res = await apply(payer);
+  check('platform_settings.site_onboarding.mode = payment iken basvuru: 409 PAYMENT_NOT_AVAILABLE, satir yazilmaz', res.status === 409 && res.body.code === 'PAYMENT_NOT_AVAILABLE' && (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [payer])).rows[0].n === 0);
+  res = await call('GET', '/admin/platform-settings/site-onboarding', SUPER);
+  check('payment kipinde bile payment_available false', res.body.mode === 'payment' && res.body.payment_available === false);
+  await call('PUT', '/admin/platform-settings/site-onboarding', SUPER, { mode: 'approval' });
+  await q(`UPDATE platform_settings SET value = '{"mode":"bozuk"}'::jsonb WHERE key = 'site_onboarding'`);
+  res = await apply(payer);
+  check('bozuk ayar degeri guvenli varsayilana (approval) duser: basvuru 201', res.status === 201);
+  await q(`UPDATE platform_settings SET value = '{"mode":"approval"}'::jsonb WHERE key = 'site_onboarding'`);
+  await cancel(payer, res.body.application.id);
+
+  // ============================================================================================================
+  // K. Eszamanli cift onay / onay x iptal x red
+  // ============================================================================================================
+  const c1 = await mkUser('Cift Onay');
+  const c1Uid = await mkDevice(c1);
+  const c1App = await mkApp(c1, { name: 'Cift Onay Sitesi', deviceUid: c1Uid });
+  const doubles = await Promise.all([approve(c1App), approve(c1App), approve(c1App), approve(c1App)]);
+  check('ES ZAMANLI 4 onay: tam 1 tane 200, digerleri 409 APPLICATION_NOT_PENDING', doubles.filter((r) => r.status === 200).length === 1 && doubles.filter((r) => r.status === 409 && r.body.code === 'APPLICATION_NOT_PENDING').length === 3, doubles.map((r) => [r.status, r.body?.code]));
+  const doubleSite = (await q(`SELECT site_code FROM sites WHERE name = 'Cift Onay Sitesi'`)).rows;
+  check('ES ZAMANLI cift onay TEK site birakir (veri CIFTLENMEZ): 1 site, 2 blok, 20 daire, 2 kapi, 1 yonetici, 1 uyelik, 1 abonelik', doubleSite.length === 1
+    && (await q(`SELECT COUNT(*)::int AS n FROM site_blocks WHERE site_code = $1`, [doubleSite[0].site_code])).rows[0].n === 2
+    && (await q(`SELECT COUNT(*)::int AS n FROM apartments WHERE site_code = $1`, [doubleSite[0].site_code])).rows[0].n === 20
+    && (await q(`SELECT COUNT(*)::int AS n FROM site_doors WHERE site_code = $1`, [doubleSite[0].site_code])).rows[0].n === 2
+    && (await q(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [c1])).rows[0].n === 1
+    && (await q(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1 AND role = 'SITE_OWNER'`, [c1])).rows[0].n === 1
+    && (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE application_id = $1`, [c1App])).rows[0].n === 1
+    && (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'site_application.approved' AND target_id = $1`, [String(c1App)])).rows[0].n === 1);
+
+  let raceOk = true;
+  const raceLog = [];
+  const winners = { approved: 0, cancelled: 0, rejected: 0 };
+  for (let round = 0; round < 12; round += 1) {
+    const owner = await mkUser(`Yaris ${round}`);
+    const name = `Yaris Sitesi ${round}`;
+    const id = await mkApp(owner, { name });
+    // her turda farkli gecikme: onay da, iptal de, red de kazanabilsin (hepsi ayni anda baslarsa hafif olan iptal / red hep onayi geçer)
+    const out = await Promise.all([
+      approve(id),
+      sleep((round % 6) * 6).then(() => cancel(owner, id)),
+      sleep(((round + 3) % 6) * 6).then(() => reject(id, 'yaris')),
+    ]);
+    const final = (await appRow(id)).status;
+    const successes = out.filter((r) => r.status === 200).length;
+    const sites = (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [name])).rows[0].n;
+    const subs = (await q(`SELECT COUNT(*)::int AS n FROM site_subscriptions WHERE application_id = $1`, [id])).rows[0].n;
+    const consistent = successes === 1 && out.filter((r) => r.status === 409 && r.body.code === 'APPLICATION_NOT_PENDING').length === 2 && ['approved', 'cancelled', 'rejected'].includes(final)
+      && (final === 'approved' ? sites === 1 && subs === 1 && (await roleOf(owner)) === 'site_manager' : sites === 0 && subs === 0 && (await roleOf(owner)) === 'individual');
+    winners[final] += 1;
+    if (!consistent) {
+      raceOk = false;
+      raceLog.push({ round, final, statuses: out.map((r) => [r.status, r.body?.code]), sites, subs });
+    }
+  }
+  check(`ES ZAMANLI onay x iptal x red (12 tur): her turda tam 1 kazanan, kaybedenler 409, durum / site / abonelik / rol tutarli (kazananlar ${JSON.stringify(winners)})`, raceOk, raceLog);
+
+  // ============================================================================================================
+  // L. E-posta: yavas / hatali SMTP istegi bozmaz, adres loga yazilmaz
+  // ============================================================================================================
+  const originalTransport = nodemailer.createTransport;
+  const smtpUser = await mkUser('Smtp Yavas', 'individual', { email: 'smtp.yavas@qa.example' });
+  nodemailer.createTransport = () => ({ sendMail: async () => { await sleep(4000); } });
+  let started = Date.now();
+  res = await apply(smtpUser);
+  const slowApplyMs = Date.now() - started;
+  check(`yavas SMTP (4 sn): basvuru istegi BEKLEMEZ (${slowApplyMs} ms) ve 201`, res.status === 201 && slowApplyMs < 2000, slowApplyMs);
+  started = Date.now();
+  const slowApproved = await approve(res.body.application.id);
+  const slowApproveMs = Date.now() - started;
+  check(`yavas SMTP: onay istegi BEKLEMEZ (${slowApproveMs} ms) ve 200`, slowApproved.status === 200 && slowApproveMs < 3000, slowApproveMs);
+  const errorsBeforeSmtp = serverErrors.length;
+  nodemailer.createTransport = () => ({ sendMail: async (message) => { throw Object.assign(new Error(`550 <${message.to}>: Recipient address rejected`), { code: 'EENVELOPE' }); } });
+  const smtpFail = await mkUser('Smtp Hatali', 'individual', { email: 'smtp.hatali@qa.example' });
+  res = await apply(smtpFail);
+  check('SMTP hatasi basvuruyu BOZMAZ: 201', res.status === 201);
+  const failApp = res.body.application.id;
+  res = await reject(failApp, 'Hata sinama');
+  check('SMTP hatasi reddi BOZMAZ: 200', res.status === 200 && res.body.application.status === 'rejected');
+  await sleep(300);
+  const smtpLogs = serverErrors.slice(errorsBeforeSmtp).join('\n');
+  check('SMTP hatalari loglandi (yalniz kod) ama e-posta ADRESI log\'a YAZILMADI', smtpLogs.includes('EENVELOPE') && !/@qa\.example|@example\.com/.test(smtpLogs), smtpLogs.slice(0, 300));
+  nodemailer.createTransport = originalTransport;
+
+  // ============================================================================================================
+  // M. Audit ve log gizliligi (tum site_application.* satirlari)
+  // ============================================================================================================
+  const allAudit = (await q(`SELECT action, details, target_type, site_code FROM audit_log WHERE action LIKE 'site_application.%' OR action = 'platform_settings.updated'`)).rows;
+  const auditText = JSON.stringify(allAudit);
+  check('TUM site_application.* / platform_settings.updated audit satirlari: e-posta, not, gerekce, ad YOK', allAudit.length >= 20 && !/@/.test(auditText) && !/GIZLI|Hizli|Eksik|Uygun/.test(auditText), allAudit.length);
+  check('audit eylemleri yalniz sozlesmedeki dort + ayar', same([...new Set(allAudit.map((a) => a.action))].sort(), ['platform_settings.updated', 'site_application.approved', 'site_application.cancelled', 'site_application.created', 'site_application.rejected']));
+  check('onay audit satirlarinin TAMAMINDA site_code dolu; diger site_application audit satirlarinda bos', allAudit.filter((a) => a.action === 'site_application.approved').every((a) => a.site_code !== null) && allAudit.filter((a) => ['site_application.created', 'site_application.cancelled', 'site_application.rejected'].includes(a.action)).every((a) => a.site_code === null));
+  check('sunucu hata gunlugunde bu bolumun kullanici notlari / gerekceleri yok', !serverErrors.join('\n').includes('GIZLI'));
+  const leaked = applicantBodies.filter((text) => /decision_source|decided_by|payment_reference|"applicant"|device_available|u10001@example\.com|ikinci-super|pasif-super/.test(text));
+  check(`BASVURAN yanitlari (${applicantBodies.length} adet: olusturma, mine, iptal, hatalar): karar kaynagi, karar veren, super e-postasi, baska kisi bilgisi, odeme referansi, device_available HICBIRINDE yok`, applicantBodies.length > 20 && leaked.length === 0, leaked.slice(0, 2));
+
+  // ============================================================================================================
+  // N. Buyuk site: 3000 daireli onay suresi
+  // ============================================================================================================
+  const big = await mkUser('Buyuk Site');
+  const bigApp = await mkApp(big, { name: 'Buyuk Site 3000', blocks: Array.from({ length: 30 }, (_, i) => ({ name: `Blok ${i + 1}`, apartmentCount: 100 })), doors: Array.from({ length: 6 }, (_, i) => ({ name: `Kapi ${i + 1}` })) });
+  started = Date.now();
+  res = await approve(bigApp);
+  const bigMs = Date.now() - started;
+  check(`3000 daireli (30 blok x 100) basvuru onayi makul surede (${bigMs} ms < 10000)`, res.status === 200 && bigMs < 10000 && res.body.site.apartment_count === 3000, [res.status, bigMs]);
+  check('3000 daire / 30 blok / 6 kapi DB\'de tam', (await q(`SELECT (SELECT COUNT(*) FROM apartments WHERE site_code = $1)::int AS a, (SELECT COUNT(*) FROM site_blocks WHERE site_code = $1)::int AS b, (SELECT COUNT(*) FROM site_doors WHERE site_code = $1)::int AS d`, [res.body.site.site_code])).rows[0].a === 3000);
+
+  // ============================================================================================================
+  // O. Kilit sirasi turlari: deadlock (40P01) OLMAMALI
+  // ============================================================================================================
+  hooks.deadlocks = 0;
+  const lockRounds = Number(process.env.QA_LOCK_ROUNDS || 12);
+  // O1. onay x basvuran hesabinin silinmesi
+  let o1Ok = true;
+  const o1Log = [];
+  for (let round = 0; round < lockRounds; round += 1) {
+    const owner = await mkUser(`Silme Yarisi ${round}`);
+    const name = `Silme Yarisi Sitesi ${round}`;
+    const id = await mkApp(owner, { name });
+    const out = await Promise.all([approve(id), q(`DELETE FROM users WHERE user_code = $1`, [owner]).then(() => 'silindi', (e) => `hata:${e.code}`)]);
+    const sites = (await q(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [name])).rows[0].n;
+    const okOutcome = (out[0].status === 200 && sites === 1) || (out[0].status === 409 && out[0].body.code === 'APPLICANT_UNAVAILABLE' && sites === 0) || (out[0].status === 409 && out[0].body.code === 'APPLICATION_NOT_PENDING');
+    if (!okOutcome || String(out[1]).includes('40P01') || out[0].status === 500) {
+      o1Ok = false;
+      o1Log.push({ round, approve: [out[0].status, out[0].body?.code], del: out[1], sites });
+    }
+  }
+  check(`KILIT SIRASI: onay x basvuran hesabi silme (${lockRounds} tur): sonuc tutarli, 500 / 40P01 YOK`, o1Ok && hooks.deadlocks === 0, { o1Log, deadlocks: hooks.deadlocks });
+  // O2. onay x cihaz sahiplenme benzeri (cihaz satiri -> kullanici satiri) islemi
+  let o2Ok = true;
+  const o2Log = [];
+  for (let round = 0; round < lockRounds; round += 1) {
+    const owner = await mkUser(`Cihaz Yarisi ${round}`);
+    const uid = await mkDevice(owner);
+    const id = await mkApp(owner, { name: `Cihaz Yarisi Sitesi ${round}`, deviceUid: uid });
+    const claimLike = (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`UPDATE devices SET claimed_at = NOW() WHERE device_uid = $1`, [uid]);
+        await sleep(15);
+        await client.query(`UPDATE users SET full_name = full_name WHERE user_code = $1`, [owner]);
+        await client.query('COMMIT');
+        return 'tamam';
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        return `hata:${error.code}`;
+      } finally {
+        client.release();
+      }
+    })();
+    const out = await Promise.all([approve(id), claimLike]);
+    if (out[0].status !== 200 || out[1] !== 'tamam') {
+      o2Ok = false;
+      o2Log.push({ round, approve: [out[0].status, out[0].body?.code], claim: out[1] });
+    }
+  }
+  check(`KILIT SIRASI: onay x cihaz sahiplenme (cihaz -> kullanici sirasi, ${lockRounds} tur): ikisi de basarili, 40P01 YOK`, o2Ok && hooks.deadlocks === 0, { o2Log, deadlocks: hooks.deadlocks });
+  // O3. onay x ayni kisinin yeni basvurusu
+  let o3Ok = true;
+  const o3Log = [];
+  for (let round = 0; round < lockRounds; round += 1) {
+    const owner = await mkUser(`Yeni Basvuru Yarisi ${round}`);
+    const id = await mkApp(owner, { name: `Yeni Basvuru Yarisi ${round}` });
+    const out = await Promise.all([approve(id), apply(owner, { name: 'Ikinci' }), apply(owner, { name: 'Ucuncu' })]);
+    const pendingNow = (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [owner])).rows[0].n;
+    const total = (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [owner])).rows[0].n;
+    const conflict = (r) => r.status === 409 && ['APPLICATION_PENDING', 'ALREADY_SITE_MANAGER'].includes(r.body.code);
+    if (out[0].status !== 200 || !conflict(out[1]) || !conflict(out[2]) || pendingNow !== 0 || total !== 1) {
+      o3Ok = false;
+      o3Log.push({ round, approve: out[0].status, a2: [out[1].status, out[1].body?.code], a3: [out[2].status, out[2].body?.code], pendingNow, total });
+    }
+  }
+  check(`KILIT SIRASI: onay x ayni kisinin yeni basvurulari (${lockRounds} tur): onay 200, yenileri 409 (PENDING / ALREADY_SITE_MANAGER); ikinci bekleyen / ikinci kayit YOK`, o3Ok && hooks.deadlocks === 0, { o3Log, deadlocks: hooks.deadlocks });
+  // O4. farkli kisilerin esanli onaylari (mqtt_site_id uretimi dahil)
+  const mass = await Promise.all(Array.from({ length: 8 }, async (_, i) => {
+    const owner = await mkUser(`Toplu Onay ${i}`);
+    return { owner, id: await mkApp(owner, { name: `Toplu Onay Sitesi ${i}` }) };
+  }));
+  const massOut = await Promise.all(mass.map((m) => approve(m.id)));
+  const mqttIds = (await q(`SELECT mqtt_site_id FROM sites WHERE name LIKE 'Toplu Onay Sitesi %'`)).rows.map((r) => r.mqtt_site_id);
+  check('8 farkli basvurunun ESZAMANLI onayi: hepsi 200, mqtt_site_id\'ler benzersiz, 40P01 YOK', massOut.every((r) => r.status === 200) && mqttIds.length === 8 && new Set(mqttIds).size === 8 && hooks.deadlocks === 0, { statuses: massOut.map((r) => r.status), deadlocks: hooks.deadlocks });
+  // O5. basvuranin iptali x ayni hesabin silinmesi (audit FK kilidi: kullanici satiri -> basvuru satiri sirasi)
+  let o5Ok = true;
+  const o5Log = [];
+  for (let round = 0; round < lockRounds; round += 1) {
+    const owner = await mkUser(`Iptal Silme Yarisi ${round}`);
+    const id = await mkApp(owner, { name: `Iptal Silme Yarisi ${round}` });
+    const out = await Promise.all([cancel(owner, id), sleep((round % 4) * 4).then(() => q(`DELETE FROM users WHERE user_code = $1`, [owner])).then(() => 'silindi', (e) => `hata:${e.code}`)]);
+    // iptal: 200 (silmeden once), 404 (hesap / satir arada gitti) ya da 401 (hesap oturum dogrulamasindan once silindi); 500 / 40P01 OLMAMALI
+    if (![200, 401, 404].includes(out[0].status) || String(out[1]).includes('40P01') || out[0].status === 500) {
+      o5Ok = false;
+      o5Log.push({ round, cancel: [out[0].status, out[0].body?.code], del: out[1] });
+    }
+  }
+  check(`KILIT SIRASI: basvuran iptali x hesap silme (${lockRounds} tur): iptal 200 / 404 / 401, 500 / 40P01 YOK`, o5Ok && hooks.deadlocks === 0, { o5Log, deadlocks: hooks.deadlocks });
+  check('tum kilit turlari boyunca toplam 40P01 sayisi 0', hooks.deadlocks === 0, hooks.deadlocks);
+  // KONTROL DENEYI: ESKI (hatali) sira — once basvuru satiri, sonra kullanici satiri — hesap silme (users -> basvuruda SET NULL) ile
+  // deadlock uretir. Bu, yukaridaki "40P01 YOK" sonuclarinin anlamli oldugunu (yarisin gercekten kilit cakismasi urettigini) kanitlar.
+  const controlOwner = await mkUser('Kontrol Deneyi');
+  const controlApp = await mkApp(controlOwner, { name: 'Kontrol Deneyi Sitesi' });
+  const oldOrder = await pool.connect();
+  const deleter = await pool.connect();
+  let controlOutcomes = [];
+  try {
+    await oldOrder.query('BEGIN');
+    await oldOrder.query(`SELECT id FROM site_applications WHERE id = $1 FOR UPDATE`, [controlApp]);
+    await deleter.query('BEGIN');
+    const deleting = deleter.query(`DELETE FROM users WHERE user_code = $1`, [controlOwner]).then(() => 'tamam', (e) => `hata:${e.code}`);
+    await sleep(300);
+    const promoting = oldOrder.query(`UPDATE users SET role = 'site_manager' WHERE user_code = $1`, [controlOwner]).then(() => 'tamam', (e) => `hata:${e.code}`);
+    controlOutcomes = await Promise.all([deleting, promoting]);
+  } finally {
+    await oldOrder.query('ROLLBACK').catch(() => {});
+    await deleter.query('ROLLBACK').catch(() => {});
+    oldOrder.release();
+    deleter.release();
+  }
+  check('KONTROL DENEYI: ESKI sira (basvuru satiri -> kullanici satiri) hesap silme ile 40P01 URETIR; yeni sira (kullanici -> basvuru) uretmez', controlOutcomes.includes('hata:40P01'), controlOutcomes);
+
+  await http.close();
+  await finishChild(pool);
+}
+
+// --------------------------------------------------------------------------------------------------------------
 
 const SECTIONS = {
   chain: sectionChain,
@@ -5039,6 +5980,7 @@ const SECTIONS = {
   locks: sectionLocks,
   people: sectionPeople,
   announcements: sectionAnnouncements,
+  site_applications: sectionSiteApplications,
 };
 
 if (SECTION === '') {

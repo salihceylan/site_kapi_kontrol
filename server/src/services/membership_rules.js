@@ -282,7 +282,9 @@ export const SQL_CLAIM_DEVICE_ATOMIC = `
 `;
 
 /**
- * Rol yükseltme yalnızca sahiplenme anında yapılır (getMyClaimedDevices artık salt-okunurdur).
+ * Bireysel / daire sahibi rolü mü? (site yöneticisi OLMAMIŞ, başvuru yapabilecek roller.)
+ * Ürün kararı (docs/PLATFORM_SITE_BASVURUSU.md): HİÇBİR yol bu rolleri kendiliğinden site_manager'a yükseltmez — cihaz sahiplenme de
+ * yükseltmez; yönetici olmanın yolu site başvurusu + süper kullanıcı onayıdır. İşlev adı eski davranıştan kalmadır (testler ona bağlı).
  */
 export function shouldPromoteToSiteManager(role) {
   return role === 'individual' || role === 'apartment_owner';

@@ -495,6 +495,137 @@ export async function sendModuleRequestNotificationEmail({
 }
 
 /**
+ * Yeni site başvurusu bildirimi (bireysel kullanıcı -> sistem yöneticisi/süper kullanıcı). Konu SABİTTİR (kullanıcı verisi içermez: başlık
+ * satır sonu enjeksiyonu olmaz); site adı, başvuran adı ve not gövdeye yazılır (HTML'de kaçırılır, düz metinde tek satıra indirilir).
+ * Başvuranın e-posta adresi / telefonu e-postaya YAZILMAZ (süper kullanıcı bunları yalnız uygulamadaki başvuru ayrıntısında görür).
+ */
+export const SITE_APPLICATION_EMAIL_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Yeni Site Başvurusu';
+
+export async function sendSiteApplicationNotificationEmail({
+  to,
+  fullName,
+  siteName,
+  applicantName,
+  blockCount,
+  apartmentCount,
+  doorCount,
+  note,
+}) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+
+  const transporter = createTransporter();
+  const recipientName = singleLine(fullName, 120) || 'Sistem Yöneticisi';
+  const site = singleLine(siteName, 200);
+  const applicant = singleLine(applicantName, 120) || 'Bir kullanıcı';
+  const noteText = String(note ?? '').trim();
+  const sizeText = `${Number(blockCount) || 0} blok, ${Number(apartmentCount) || 0} daire, ${Number(doorCount) || 0} kapı`;
+
+  const text =
+    `Merhaba ${recipientName}, ${applicant} '${site}' adlı bir site kurmak için başvurdu (${sizeText}).` +
+    `${noteText ? ` Not: ${noteText}` : ''} ` +
+    'Başvuruyu uygulamadaki Site Başvuruları ekranından onaylayabilir veya reddedebilirsiniz.';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #111827; margin: 0;">Site ve Toplu Yaşam Yönetim Sistemi</h2>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Yeni Site Başvurusu</p>
+      </div>
+      <p style="color: #374151; font-size: 16px;">Merhaba <strong>${escapeHtml(recipientName)}</strong>,</p>
+      <p style="color: #4b5563; font-size: 15px; line-height: 1.5;">
+        Site yöneticisi olmak isteyen bir kullanıcı yeni bir site başvurusu yaptı.
+      </p>
+      <div style="padding: 16px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 20px 0;">
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>Site:</strong> ${escapeHtml(site)}</p>
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>Başvuran:</strong> ${escapeHtml(applicant)}</p>
+        <p style="color: #334155; margin: 0 0 8px 0; font-size: 14px;"><strong>Boyut:</strong> ${escapeHtml(sizeText)}</p>
+        ${noteText ? `<p style="color: #334155; margin: 0; font-size: 14px; white-space: pre-line;"><strong>Not:</strong> <em>"${escapeHtml(noteText)}"</em></p>` : ''}
+      </div>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.5;">
+        Başvuruyu uygulamadaki <strong>Site Başvuruları</strong> ekranından onaylayabilir veya reddedebilirsiniz.
+      </p>
+      <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası Site ve Toplu Yaşam Yönetim Sistemi tarafından otomatik olarak gönderilmiştir.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: SITE_APPLICATION_EMAIL_SUBJECT,
+    text,
+    html,
+  });
+}
+
+/**
+ * Site başvurusu karar bildirimi (süper kullanıcı -> başvuran). Konu karara göre SABİTTİR (kullanıcı verisi içermez).
+ * Onay: "site yöneticisi oldunuz, uygulamayı yenileyin"; red: gerekçe (varsa) ve yeniden başvurma bilgisi. Gerekçe HTML'de kaçırılır.
+ */
+export const SITE_APPLICATION_APPROVED_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Site Başvurunuz Onaylandı';
+export const SITE_APPLICATION_REJECTED_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Site Başvurunuz Reddedildi';
+
+export async function sendSiteApplicationDecisionEmail({ to, fullName, siteName, approved, reason }) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+
+  const transporter = createTransporter();
+  const recipientName = singleLine(fullName, 120) || 'Kullanıcı';
+  const site = singleLine(siteName, 200);
+  const isApproved = approved === true;
+  const reasonText = isApproved ? '' : String(reason ?? '').trim();
+
+  const text = isApproved
+    ? `Merhaba ${recipientName}, '${site}' sitesi için yaptığınız başvuru onaylandı. Artık site yöneticisisiniz. ` +
+      'Uygulamayı yenileyin (kapatıp yeniden açın) ve yönetici ekranlarını kullanmaya başlayın.'
+    : `Merhaba ${recipientName}, '${site}' sitesi için yaptığınız başvuru reddedildi.` +
+      `${reasonText ? ` Gerekçe: ${reasonText}` : ''} ` +
+      'Bilgileri düzenleyerek uygulamadan yeniden başvurabilirsiniz.';
+
+  const headline = isApproved ? 'Site Başvurunuz Onaylandı' : 'Site Başvurunuz Reddedildi';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #111827; margin: 0;">Site ve Toplu Yaşam Yönetim Sistemi</h2>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">${headline}</p>
+      </div>
+      <p style="color: #374151; font-size: 16px;">Merhaba <strong>${escapeHtml(recipientName)}</strong>,</p>
+      ${
+        isApproved
+          ? `<p style="color: #4b5563; font-size: 15px; line-height: 1.5;">
+        '<strong>${escapeHtml(site)}</strong>' sitesi için yaptığınız başvuru <strong>onaylandı</strong>. Artık site yöneticisisiniz.
+      </p>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.5;">
+        Uygulamayı yenileyin (kapatıp yeniden açın) ve yönetici ekranlarını kullanmaya başlayın.
+      </p>`
+          : `<p style="color: #4b5563; font-size: 15px; line-height: 1.5;">
+        '<strong>${escapeHtml(site)}</strong>' sitesi için yaptığınız başvuru <strong>reddedildi</strong>.
+      </p>
+      ${reasonText ? `<div style="padding: 16px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 20px 0; white-space: pre-line; color: #334155; font-size: 14px;"><strong>Gerekçe:</strong> <em>"${escapeHtml(reasonText)}"</em></div>` : ''}
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.5;">
+        Bilgileri düzenleyerek uygulamadan yeniden başvurabilirsiniz.
+      </p>`
+      }
+      <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası Site ve Toplu Yaşam Yönetim Sistemi tarafından otomatik olarak gönderilmiştir.</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: isApproved ? SITE_APPLICATION_APPROVED_SUBJECT : SITE_APPLICATION_REJECTED_SUBJECT,
+    text,
+    html,
+  });
+}
+
+/**
  * SMTP yapılandırılmış mı (sunucu, kullanıcı, parola ve gönderen adresi dolu). Duyuru e-posta kuyruğu yapılandırma yokken satırları
  * dürüstçe 'failed' yapar (sessiz kayıp yok).
  */

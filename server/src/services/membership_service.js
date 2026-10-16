@@ -12,6 +12,7 @@ import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
 import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
+import { createSiteWithStructure } from './site_setup_core.js';
 import {
   SQL_BULK_APARTMENT_USERS,
   SQL_BULK_BLOCK_USERS,
@@ -519,8 +520,11 @@ export async function resendIndividualVerificationCode({ email }) {
  * Cihaz Ambalaj Kutusundaki QR Kod / Seri No / UID ile Cihaz Sahiplenme
  *
  * Sahiplenme ATOMİKTİR: `UPDATE devices ... WHERE id = $ AND owner_user_id IS NULL RETURNING`
- * (0 satır -> başka biri sahiplenmiş -> 409). Kullanıcının rolü (individual/apartment_owner -> site_manager)
- * yalnızca sahiplenme anında yükseltilir; getMyClaimedDevices salt-okunurdur.
+ * (0 satır -> başka biri sahiplenmiş -> 409).
+ *
+ * ROL DEĞİŞMEZ (ürün kararı, docs/PLATFORM_SITE_BASVURUSU.md): cihaz sahiplenmek kişiyi site yöneticisi YAPMAZ. Eskiden bireysel /
+ * daire sahibi kullanıcı sahiplenmede anında site_manager olurdu; artık yönetici olmanın tek yolu site BAŞVURUSU + süper kullanıcı
+ * onayıdır (site_applications). Sahiplenen cihaz başvuruda seçilebilir ve onayda 1. kapıya bağlanır. getMyClaimedDevices salt-okunurdur.
  */
 export async function claimDevice({ userCode, deviceInput }) {
   const code = parseUserCode(userCode);
@@ -592,19 +596,8 @@ export async function claimDevice({ userCode, deviceInput }) {
       throw ownedByOther();
     }
 
-    const promoteIfNeeded = async () => {
-      if (shouldPromoteToSiteManager(user.role)) {
-        await client.query(
-          `UPDATE users SET role = 'site_manager' WHERE id = $1 AND role IN ('individual', 'apartment_owner')`,
-          [user.id],
-        );
-        user.role = 'site_manager';
-      }
-    };
-
     // Zaten bu kullanıcıya ait (idempotent tekrar okutma)
     if (deviceRow.owner_user_id && String(deviceRow.owner_user_id) === String(user.id)) {
-      await promoteIfNeeded();
       await client.query('COMMIT');
       committed = true;
       return {
@@ -627,7 +620,6 @@ export async function claimDevice({ userCode, deviceInput }) {
       );
       const current = recheck.rows[0];
       if (current && current.owner_user_id && String(current.owner_user_id) === String(user.id)) {
-        await promoteIfNeeded();
         await client.query('COMMIT');
         committed = true;
         return {
@@ -644,15 +636,16 @@ export async function claimDevice({ userCode, deviceInput }) {
       throw ownedByOther();
     }
 
-    // Cihaz ekleyen/sahiplenen kullanıcı artık Site Yöneticisidir (rol yükseltme yalnızca burada)
-    await promoteIfNeeded();
+    // Rol DEĞİŞMEZ: sahiplenen kullanıcı yönetici olmaz (bireysel / daire sahibi site kurmak için başvuru yapar)
     await client.query('COMMIT');
     committed = true;
 
     return {
       ok: true,
       role: user.role,
-      message: `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz.`,
+      message: shouldPromoteToSiteManager(user.role)
+        ? `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Site kurmak için başvuru yapabilir ve bu cihazı başvuruda seçebilirsiniz.`
+        : `Cihaz (${deviceRow.device_uid}) başarıyla hesabınıza bağlandı! Artık bu cihaz ile site ve kapı kurulumu yapabilirsiniz.`,
       device: updateRes.rows[0] || deviceRow,
     };
   } catch (error) {
@@ -729,15 +722,7 @@ export async function setupSiteWithClaimedDevice({
 
   // Blok/kapı listelerini doğrula, sınırla ve normalize et (parseInt güvenli, üst sınırlı)
   const input = normalizeSetupSiteInput({ name, city, district, address, blocks, doors, doorCount });
-  const {
-    siteName,
-    blocks: normalizedBlocks,
-    doors: doorList,
-    totalBlockCount,
-    totalApartmentCount,
-    totalDoorCount,
-    blockApartmentCounts,
-  } = input;
+  const { totalApartmentCount } = input;
 
   const client = await pool.connect();
   let committed = false;
@@ -757,10 +742,18 @@ export async function setupSiteWithClaimedDevice({
     }
     const user = userRes.rows[0];
 
+    // 1a. Site yöneticisi olma politikası (docs/PLATFORM_SITE_BASVURUSU.md): bireysel / daire sahibi kullanıcı için ANLIK kurulum
+    // kapalıdır; site kurmak için BAŞVURU yapar (POST /membership/site-applications), süper kullanıcı onaylayınca site kurulur.
+    // Rol, istek başındaki oturumdan değil bu transaction'da DB'den okunur. Site yöneticisi ("Site Ekle") ve süper kullanıcı etkilenmez.
+    if (shouldPromoteToSiteManager(user.role)) {
+      const applicationRequired = httpError(409, 'Site kurmak için başvuru yapmalısınız.');
+      applicationRequired.code = 'APPLICATION_REQUIRED';
+      throw applicationRequired;
+    }
+
     // 1b. Cihaz sahipliği (site kurulmadan ÖNCE doğrulanır; cihaz satırı kilitlenir: eşzamanlı atama/sahiplenme
-    // yarışı olmaz). Aşama 4 kuralı: "Cihazı ekleyen kişi Site Sahibi olur" -> cihaz sahiplenmemiş bireysel
-    // kullanıcı site kuramaz; belirtilen cihaz kullanıcıya ait değilse site HİÇ kurulmaz (ROLLBACK, 4xx).
-    // Zaten site yöneticisi olan kullanıcı ("Site Ekle", cihaz belirtmeden) ve süper kullanıcı cihazsız kurabilir.
+    // yarışı olmaz). Belirtilen cihaz kullanıcıya ait değilse site HİÇ kurulmaz (ROLLBACK, 4xx).
+    // Site yöneticisi ("Site Ekle", cihaz belirtmeden) ve süper kullanıcı cihazsız kurabilir.
     const targetDeviceUid = deviceUid ? String(deviceUid).trim().toUpperCase().slice(0, 64) : null;
 
     let devQuery;
@@ -779,162 +772,20 @@ export async function setupSiteWithClaimedDevice({
       if (targetDeviceUid) {
         throw httpError(404, 'Belirtilen cihaz hesabınıza ait değil.');
       }
-      if (shouldPromoteToSiteManager(user.role)) {
-        throw httpError(400, 'Site kurmak için önce bir cihaz sahiplenmelisiniz.');
-      }
     }
 
-    // 2. Yeni Siteyi oluştur (Bireysel site sahibi için anında onaylı)
-    const siteRes = await client.query(
-      `
-        INSERT INTO sites (
-          name,
-          address,
-          city,
-          district,
-          block_count,
-          apartment_count,
-          door_count,
-          block_apartment_counts,
-          mqtt_site_id,
-          approval_status,
-          approved_at,
-          feature_qr_enabled,
-          feature_remote_open_enabled,
-          feature_local_udp_enabled,
-          feature_guest_pass_enabled,
-          qr_entry_active,
-          management_type
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, generate_unique_mqtt_site_id(), 'approved', NOW(),
-          TRUE, TRUE, TRUE, TRUE, TRUE, $9
-        )
-        RETURNING
-          site_code AS id,
-          name,
-          address,
-          city,
-          district,
-          block_count,
-          apartment_count,
-          door_count,
-          approval_status,
-          approved_at,
-          mqtt_site_id,
-          management_type,
-          created_at
-      `,
-      [
-        siteName,
-        input.address,
-        input.city,
-        input.district,
-        totalBlockCount,
-        totalApartmentCount,
-        totalDoorCount,
-        blockApartmentCounts,
-        managementType.value,
-      ],
-    );
-    const site = siteRes.rows[0];
-    const siteCode = Number(site.id);
-
-    // 3. Kullanıcıyı site yöneticisi olarak ekle
-    await client.query(
-      `
-        INSERT INTO site_manager_sites (site_code, manager_user_code)
-        VALUES ($1, $2)
-        ON CONFLICT (site_code, manager_user_code) DO NOTHING
-      `,
-      [siteCode, user.user_code],
-    );
-
-    // 4. Kullanıcıyı SITE_OWNER rolüyle site_memberships tablosuna ekle
-    await client.query(
-      `
-        INSERT INTO site_memberships (site_code, user_code, role, is_active)
-        VALUES ($1, $2, 'SITE_OWNER', TRUE)
-        ON CONFLICT (site_code, user_code)
-        DO UPDATE SET role = 'SITE_OWNER', is_active = TRUE, updated_at = NOW()
-      `,
-      [siteCode, user.user_code],
-    );
-
-    // 5. Kullanıcının genel rolünü site_manager olarak güncelle
-    if (user.role !== 'super_user') {
-      await client.query(
-        `UPDATE users SET role = 'site_manager' WHERE id = $1`,
-        [user.id],
-      );
-    }
-
-    // 6. Dinamik Blokları ve altındaki Daireleri optimize (bulk) oluştur
-    const createdBlocks = [];
-    for (const b of normalizedBlocks) {
-      const blockRes = await client.query(
-        `
-          INSERT INTO site_blocks (site_code, block_name, sort_order)
-          VALUES ($1, $2, $3)
-          RETURNING id, site_code, block_name, sort_order
-        `,
-        [siteCode, b.name, b.sortOrder],
-      );
-      const blockRow = blockRes.rows[0];
-      const blockId = Number(blockRow.id);
-
-      // Bloğun tüm dairelerini PostgreSQL generate_series ile tek sorguda mikrosaniyeler içinde oluştur
-      await client.query(
-        `
-          INSERT INTO apartments (site_code, block_id, unit_label, sort_order, is_active)
-          SELECT $1, $2, ('Daire ' || s.i), s.i, TRUE
-          FROM generate_series(1, $3::int) AS s(i)
-        `,
-        [siteCode, blockId, b.apartmentCount],
-      );
-
-      createdBlocks.push({
-        ...blockRow,
-        apartmentCount: b.apartmentCount,
-      });
-    }
-
-    // 7. Kapıları oluştur
-    const createdDoors = [];
-    for (const d of doorList) {
-      const doorRes = await client.query(
-        `
-          INSERT INTO site_doors (site_code, door_name, door_index, is_active)
-          VALUES ($1, $2, $3, TRUE)
-          RETURNING id, site_code, door_name, door_index, is_active
-        `,
-        [siteCode, d.name, d.doorIndex],
-      );
-      createdDoors.push(doorRes.rows[0]);
-    }
-
-    // 8. Cihazı bu siteye ve 1. kapıya ata (cihaz satırı 1b'de kilitlenmiş ve sahipliği doğrulanmıştır)
-    let assignedDevice = null;
-    if (dev) {
-      // Cihazı bu siteye bağla
-      await client.query(
-        `UPDATE devices SET site_code = $1, gate_name = $2 WHERE id = $3`,
-        [siteCode, createdDoors[0]?.door_name || 'Kapı 1', dev.id],
-      );
-      // 1. Kapıya bu cihazı bağla
-      if (createdDoors.length > 0) {
-        await client.query(
-          `UPDATE site_doors SET assigned_device_id = $1 WHERE id = $2`,
-          [dev.id, createdDoors[0].id],
-        );
-        createdDoors[0].assigned_device_id = dev.id;
-      }
-      assignedDevice = {
-        id: dev.id,
-        device_uid: dev.device_uid,
-        hardware_type: dev.hardware_type,
-      };
-    }
+    // 2-8. Site + sahiplik + bloklar/daireler/kapılar + cihaz bağlama: ORTAK çekirdek (site başvurusu onayı da aynısını kullanır;
+    // services/site_setup_core.js). Davranış, SQL ve sıra birebir aynıdır. Cihaz satırı 1b'de kilitlenmiş ve sahipliği doğrulanmıştır.
+    const created = await createSiteWithStructure(client, {
+      user,
+      input,
+      managementType: managementType.value,
+      device: dev,
+    });
+    const site = created.site;
+    const createdBlocks = created.blocks;
+    const createdDoors = created.doors;
+    const assignedDevice = created.assignedDevice;
 
     await client.query('COMMIT');
     committed = true;
