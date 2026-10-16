@@ -2,9 +2,10 @@ import './_dev_guard.js';
 import { pool } from '../src/db.js';
 import { signAccessToken } from '../src/jwt.js';
 
-const res = await pool.query("SELECT user_code AS id, email, role FROM users WHERE role = 'super_user' LIMIT 1");
+const res = await pool.query("SELECT user_code AS id, email, role, password_hash FROM users WHERE role = 'super_user' AND deleted_at IS NULL LIMIT 1");
 const admin = res.rows[0];
-const token = signAccessToken(admin);
+// pv (parola surumu) zorunlu: token parola ozetine baglanarak imzalanir.
+const token = signAccessToken(admin, { passwordHash: admin.password_hash });
 
 // Create a temp test user
 const createRes = await pool.query(`

@@ -113,8 +113,9 @@ Derleme sırasında BAŞKA bir `flutter` komutu (özellikle `flutter test`, `flu
 eklenti kayıt dosyasını (`GeneratedPluginRegistrant.java`) yeniden yazıp release derlemesini
 `integration_test` bulunamadı hatasıyla düşürebilir (2026-10-16'da yaşandı).
 
-İmza doğrulama (Windows): `keytool -printcert -jarfile app-release.apk` çıktısındaki SHA-256, bölüm 3'teki
-yükleme sertifikasıyla AYNI olmalıdır; debug sertifikası (`CN=Android Debug`) görünüyorsa paket yayına UYGUN DEĞİLDİR.
+İmza doğrulama (Windows): `apksigner verify --print-certs app-release.apk` (Android SDK `build-tools\<sürüm>\apksigner.bat`)
+çıktısındaki sertifika SHA-256'sı, bölüm 3'teki yükleme sertifikasıyla AYNI olmalıdır (`keytool -printcert -jarfile` v2/v3-only
+APK'da "Not a signed jar file" verir; kullanmayın); debug sertifikası (`CN=Android Debug`) görünüyorsa paket yayına UYGUN DEĞİLDİR.
 
 iOS (yalnız macOS + Xcode; Windows'ta derlenemez ve bu çalışmada DERLENMEDİ):
 ```
@@ -269,7 +270,7 @@ Ekran görüntülerinde gerçek kişi verisi (ad, telefon, plaka, adres) olması
 
 1. `flutter analyze` (tüm proje) ve `flutter test` (tüm süit) temiz.
 2. `flutter build appbundle --release` `key.properties` ile; çıktıda "UYARI: key.properties bulunamadı" YOK.
-3. `keytool -printcert -jarfile <apk>` SHA-256 = bölüm 3'teki yükleme sertifikası.
+3. `apksigner verify --print-certs <apk>` SHA-256 = bölüm 3'teki yükleme sertifikası (debug sertifikası `CN=Android Debug` görünüyorsa YENİDEN derleyin; `build/app/outputs/flutter-apk/app-release.apk` anahtar oluşturulmadan önce üretilmişse debug imzalıdır).
 4. Cihazda (R8'li release): giriş, kapı açma (bulut), QR okuma, ses, BLE kurulum, ana ekran widget'ı, deep link.
 5. Sunucuda `GET /public/app-config` yanıtı (`min_supported_version` <= yüklenen sürüm), `GET /legal/privacy` ve
    `GET /legal/account-deletion` HTTP 200 ve "tamamlanmamış" yer tutucu içermiyor.

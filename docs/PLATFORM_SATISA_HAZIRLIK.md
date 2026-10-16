@@ -110,6 +110,13 @@ class AppConfigService {
 ```
 F2 destek bilgisini `AppConfigService.instance.current` / `load()` ile okur, yoksa "Destek bilgisi yakında" gösterir.
 
+### 1.6.1 Uygulamada eklenen hata kodları (sözleşmeye ek, hepsi geriye uyumlu)
+- `POST /me/data-export`: `413 EXPORT_TOO_LARGE` (kısaltılamayan bölüm 5 MB'ı aşarsa; hak iade edilir).
+- `POST /me/account-deletion`: `409 ACCOUNT_DELETE_BUSY` (kapsam üç denemede durulmadı), `400 CONFIRM_REQUIRED`; silinmiş hesabın her isteği `401 ACCOUNT_DELETED`.
+- `PATCH /me` ve daire şifre değiştirme yarışında hesap silinmişse `401 ACCOUNT_DELETED`; parola değişince yanıta ek `device_token` (yeni parola sürümüne bağlı güvenilir cihaz belirteci).
+- Yönetici: `DELETE /admin/users/:id` silinmiş (kimliksizleştirilmiş) hesapta `409 ACCOUNT_ALREADY_DELETED`; `PATCH /admin/users/:id` ve aktivasyon silinmiş hesapta `409 ACCOUNT_DELETED`; `GET /admin/users` silinmişleri varsayılan gizler (`include_deleted=true` ile görünür).
+- `POST /auth/login`: yanıta `device_token`, isteğe bağlı gövde/`X-Device-Token`; geçici kilitte kısa `Retry-After` (≤2 sn), gerçek kilitte 900 sn ve artan süre; `WEAK_PASSWORD.reason ∈ required|too_short|too_long|same_as_email|same_as_name|common` (en çok 128 karakter VE 72 bayt).
+
 ### 1.7 Parola ve oturum (S-C)
 Yeni/değişen/sıfırlanan parola: **en az 8**, en çok 128 karakter; e-posta/ad ile aynı olamaz; küçük bir yaygın parola listesinde olamaz → `400 {"code":"WEAK_PASSWORD","error":"…"}`. Mevcut kullanıcıların eski parolaları girişte çalışmaya devam eder. İstemci doğrulayıcı sahibi: F2 (`lib/ui/helpers/password_policy.dart`).
 

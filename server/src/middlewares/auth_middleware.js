@@ -75,7 +75,7 @@ export async function authRequired(req, res, next) {
       return res.status(401).json({ error: 'Bu hesap silinmis.', code: 'ACCOUNT_DELETED' });
     }
 
-    // pv claim'i varsa parola degisimi sonrasi eski tokenlar reddedilir; claim'siz eski tokenlar gecerli kalir.
+    // pv zorunlu (JWT_REQUIRE_PV=0 ile kapatilmadikca): parola degisimi sonrasi eski tokenlar ve pv'siz tokenlar reddedilir.
     if (!isPasswordVersionValid(claims, passwordHash)) {
       return res
         .status(401)

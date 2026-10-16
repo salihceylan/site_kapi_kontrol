@@ -72,6 +72,14 @@ class AuditLogEntry {
         return 'Talep reddedildi';
       case 'module_request.cancelled':
         return 'Talep geri çekildi';
+      case 'platform_config.updated':
+        return 'Platform ayarları güncellendi';
+      case 'account.deleted':
+        return 'Hesap silindi';
+      case 'account.data_exported':
+        return 'Kişisel veri dışa aktarıldı';
+      case 'account.key_rotation_failed':
+        return 'Silinen hesabın cihaz anahtarı yenilenemedi';
       default:
         return peopleActionLabel(action) ??
             announcementActionLabel(action) ??
