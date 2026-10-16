@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sunucu ici izleme (cron: her 5 dk). Kontroller: API sagligi (yerel + genel), PM2 kapi-api (+ yeniden baslama),
 # Postgres kapsayicisi + sorgu, disk, bellek, son yedek yasi + son yedek/geri yukleme/dis kopya durumu,
-# sifreleme anahtari parmak izi, TLS sertifika bitisi (origin / kenar / MQTT), MQTT TCP uclari.
+# sifreleme anahtari parmak izi, TLS sertifika bitisi (origin / kenar / MQTT / ev otomasyonu 443+8884), MQTT TCP uclari.
 #
 # Uyari tekillestirme (durum dosyasi ~/ops/state/health.state): ayni sorun icin
 #   - gecici kesintilere karsi ardisik N basarisizlik (cogu kontrol icin 2) sonrasi,
@@ -52,6 +52,11 @@ TLS_API_HOST="${TLS_API_HOST:-api.gudeteknoloji.com.tr}"
 MQTT_LOCAL="${MQTT_LOCAL:-127.0.0.1:8883}"
 MQTT_PUBLIC="${MQTT_PUBLIC:-mqtt.gudeteknoloji.com.tr:8883}"
 CHECK_MQTT_PUBLIC="${CHECK_MQTT_PUBLIC:-1}"
+# Ayni sunucudaki ev otomasyonu: nginx (443) ve EMQX (8884) ayni Let's Encrypt sertifikasini sunar; EMQX yenilenen
+# dosyayi almazsa yalniz 8884 eski kalir (yenileme kancasi: /etc/letsencrypt/renewal-hooks/deploy/60-emqx-evotomasyon-cert.sh)
+TLS_EV_HOST="${TLS_EV_HOST:-evotomasyon.gudeteknoloji.com.tr}"
+TLS_EV_MQTT_PORT="${TLS_EV_MQTT_PORT:-8884}"
+CHECK_EV_TLS="${CHECK_EV_TLS:-1}"
 SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-178.210.161.55}"
 PM2_APP="${PM2_APP:-kapi-api}"
 PM2_LOOP_RESTARTS="$(num "${PM2_LOOP_RESTARTS:-6}" 6)"
@@ -347,14 +352,19 @@ check_offsite() {
 
 check_tls() {
   local d name host port sni desc warn_days spec
-  for spec in "tls_origin|127.0.0.1|443|$TLS_API_HOST|nginx/Let's Encrypt (origin)" \
-              "tls_edge|$TLS_API_HOST|443|$TLS_API_HOST|genel (Cloudflare kenar)" \
-              "tls_mqtt|${MQTT_LOCAL%%:*}|${MQTT_LOCAL##*:}|${MQTT_PUBLIC%%:*}|MQTT (8883)"; do
+  local -a specs=("tls_origin|127.0.0.1|443|$TLS_API_HOST|nginx/Let's Encrypt (origin)"
+                  "tls_edge|$TLS_API_HOST|443|$TLS_API_HOST|genel (Cloudflare kenar)"
+                  "tls_mqtt|${MQTT_LOCAL%%:*}|${MQTT_LOCAL##*:}|${MQTT_PUBLIC%%:*}|MQTT (8883)")
+  if [ "$CHECK_EV_TLS" = "1" ]; then
+    specs+=("tls_ev_web|127.0.0.1|443|$TLS_EV_HOST|ev otomasyonu web/API (443)"
+            "tls_ev_mqtt|127.0.0.1|$TLS_EV_MQTT_PORT|$TLS_EV_HOST|ev otomasyonu MQTT/EMQX ($TLS_EV_MQTT_PORT)")
+  fi
+  for spec in "${specs[@]}"; do
     IFS='|' read -r name host port sni desc <<<"$spec"
     d="$(cert_days "$host" "$port" "$sni")"
     warn_days="$TLS_WARN_DAYS"
-    # MQTT sertifikasi icin daha erken uyar
-    [ "$name" = "tls_mqtt" ] && warn_days="$TLS_WARN_DAYS_MQTT"
+    # MQTT sertifikalari icin daha erken uyar (cihazlar elle mudahale olmadan kopar)
+    case "$name" in tls_mqtt|tls_ev_mqtt) warn_days="$TLS_WARN_DAYS_MQTT" ;; esac
     if [ "$d" = "ERR" ]; then
       result "$name" WARN "$desc sertifikasi okunamadi" 2
     elif [ "$d" -lt "$TLS_CRIT_DAYS" ]; then
