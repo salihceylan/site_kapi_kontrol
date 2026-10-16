@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Sırada: Faz 4b (makbuz, gecikme tazminatı, gider, kasa/banka, raporlar, borç hatırlatma), Faz 2b (Excel'den toplu yükleme), Faz 3b (belgeler ve telefon bildirimi; Firebase kurulumu sizden gerekecek). Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Sırada: Faz 4b (makbuz, gecikme tazminatı, gider, kasa/banka, raporlar, borç hatırlatma), Faz 2b (Excel'den toplu yükleme), Faz 3b (belgeler ve telefon bildirimi; Firebase kurulumu sizden gerekecek). Yönetim türleri ile banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin.",
   "bolumler": [
     {
       "id": "F0",
@@ -1294,6 +1294,1052 @@
           "on_kosul": "Borçlandırılmış bir site",
           "yeni": true,
           "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F12",
+      "baslik": "Satışa hazırlık",
+      "durum": "planli",
+      "ozet": "Satışa hazırlık paketi: hesabı silme ve verileri indirme, yasal metinler ve onaylar, giriş güvenliği ve şifre ilkesi, Yardım ve ilk kullanım turu, Platform Ayarları ve İstemci Hataları, bakım ve sürüm kapısı, yedek ve izleme (sizin adımlarınız) ve mağaza hazırlığı. Aynı konular SAHA_KONTROL_LISTESI.md 64–71. bölümlerindedir. Sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır — bu maddeleri sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin. Yasal belgeler hukuk incelemesi bitene dek taslak (tamamlanmamış) görünür; “Güncellenen Koşullar” kapısı, zorunlu güncelleme ekranı ve mağaza/iOS maddeleri bu yüzden planlıdır. (Operasyon) ve (Yayın) etiketli maddeleri siz yaparsınız; kritik olan: şifreleme anahtarının kopyası, dış kopya hedefi, release imzası.",
+      "maddeler": [
+        {
+          "id": "F12.01",
+          "baslik": "Gizlilik ve Veri Bölümü Her Rolde Görünür",
+          "adimlar": [
+            "Bireysel kullanıcı, daire sakini, site yöneticisi ve süper kullanıcı hesaplarıyla sırayla çekmeceden \"Profilim\"i açın.",
+            "Sayfanın en altına kaydırın."
+          ],
+          "beklenen": "Her rolde \"Gizlilik ve Veri\" kartı vardır; altında \"Kişisel verilerinizin bir kopyasını alabilir veya hesabınızı kalıcı olarak silebilirsiniz.\" yazar ve iki blok görünür: \"Verilerimi İndir\" ve \"Hesabımı Sil\" (her birinin açıklaması ve tam genişlikte düğmesiyle).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.02",
+          "baslik": "Şifre Penceresi: Boş ve Yanlış Şifre",
+          "adimlar": [
+            "\"Verilerimi İndir\" düğmesine dokunun ve pencere metnini okuyun.",
+            "Şifre alanı boşken \"Verilerimi Hazırla\"ya basın.",
+            "Yanlış bir şifre yazıp tekrar \"Verilerimi Hazırla\"ya basın."
+          ],
+          "beklenen": "\"Verilerimi İndir\" başlıklı pencere açılır: \"Hesabınıza ait kişisel verilerin bir kopyasını JSON dosyası olarak hazırlarız. Devam etmek için şifrenizi girin. Bu işlem 24 saat içinde en fazla 3 kez yapılabilir.\" Boş şifrede alan altında \"Devam etmek için şifrenizi girin.\" ve \"Lütfen işaretli alanları düzeltin.\" görünür. Yanlış şifrede pencere AÇIK kalır, hata kutusunda \"Mevcut şifreniz hatalı. Lütfen kontrol edip tekrar deneyin.\" yazar ve şifre alanı temizlenir; dosya hazırlanmaz, oturum kapanmaz. \"Vazgeç\" pencereyi kapatır.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.03",
+          "baslik": "Doğru Şifre: Veri Dosyası Hazırlanır ve Paylaşılır",
+          "adimlar": [
+            "\"Verilerimi İndir\"de doğru şifreyi yazıp \"Verilerimi Hazırla\"ya basın.",
+            "Açılan telefon paylaşım menüsünden dosyayı \"Dosyalar\"a/Drive'a kaydedin ya da kendi e-postanıza gönderin."
+          ],
+          "beklenen": "Düğmede \"Hazırlanıyor...\" görünür, ardından paylaşım menüsü açılır. Ekranda yeşil bildirim çıkar: \"Veri dosyanız hazır: kisisel-veri-<kullanıcı kodu>-<YYYYAAGG>.json (<boyut>). Dosya kişisel verilerinizi içerir; güvenli bir yerde saklayın ve başkalarıyla paylaşmayın.\" Dosya adındaki tarih İstanbul gününe göredir.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.04",
+          "baslik": "Paylaşım Menüsü Kapatılırsa Dosya Kartı Kalır",
+          "adimlar": [
+            "Paylaşım menüsünü bir şey seçmeden kapatın.",
+            "Kart üzerindeki \"Paylaş / Kaydet\"e dokunun.",
+            "İşiniz bitince \"Kapat (dosyayı bellekten at)\"a dokunun."
+          ],
+          "beklenen": "Menü kapansa da dosya kartı ekranda kalır; \"Paylaş / Kaydet\" menüyü yeniden açar (şifre yeniden sorulmaz, yeni indirme hakkı harcanmaz). \"Kapat (dosyayı bellekten at)\" kartı kaldırır; dosyayı yeniden almak için \"Verilerimi İndir\" ve şifre gerekir. Menü açılamazsa \"Paylaşım menüsü açılamadı. Dosya hazır; \"Paylaş / Kaydet\" ile yeniden deneyebilirsiniz.\" uyarısı çıkar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Bir önceki maddedeki hazır dosya kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.05",
+          "baslik": "Dosya İçeriği: Yalnız Kendi Verim",
+          "adimlar": [
+            "Kaydettiğiniz JSON dosyasını bilgisayara aktarıp bir metin düzenleyicide açın.",
+            "Üstteki alanlara ve \"excluded\" listesine bakın; \"password_hash\" sözcüğünü aratın."
+          ],
+          "beklenen": "Dosyada \"format_version\", \"generated_at\", \"notice\", \"user\", \"memberships\", \"consents\", \"finance_statements\", \"door_events\" ve \"excluded\" gibi alanlar vardır; kendi ad ve e-postanız \"user\" içindedir. \"excluded\" listesi dışarıda bırakılanları Türkçe açıklar (parola özeti ve belirteçler, aynı dairedeki başkalarının kişisel bilgileri, yönetici iç notları, cihaz sırları). \"password_hash\" bulunmaz; başka bir kişinin adı, telefonu ya da e-postası görünmez. Çok büyük veride bölümler kısaltılır ve \"truncated\": true ile \"truncated_sections\" yazılır (sessiz kayıp yok).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.06",
+          "baslik": "Dışa Aktarma Şifre Kilidi (5 Yanlış Şifre)",
+          "adimlar": [
+            "\"Verilerimi İndir\"de art arda 5 kez yanlış şifre girin.",
+            "Hemen ardından doğru şifreyi yazın."
+          ],
+          "beklenen": "5. denemede \"Mevcut şifre için çok fazla hatalı deneme yapıldı. 15 dakika sonra tekrar deneyin.\" çıkar ve gönder düğmesi kısa süre pasif olur; kilit sürerken doğru şifre de reddedilir. Yaklaşık 15 dakika sonra (ya da \"Şifremi Unuttum?\" ile şifre sıfırlanınca) yeniden çalışır.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Test hesabı (kilit, Profilim'deki şifre değişikliği ve hesap silme ile ORTAK bütçedir)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.07",
+          "baslik": "Günlük Sınır: 24 Saatte En Fazla 3 Dışa Aktarma",
+          "adimlar": [
+            "Aynı hesapla dördüncü kez \"Verilerimi İndir\"i açıp doğru şifreyi girin."
+          ],
+          "beklenen": "\"Kişisel veri dışa aktarma sınırına ulaştınız (24 saatte en fazla 3). Daha sonra tekrar deneyin.\" çıkar; dosya hazırlanmaz. Sınır kullanıcı başınadır; başka hesap etkilenmez.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Aynı hesapla 24 saat içinde 3 başarılı dışa aktarma yapılmış olmalı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.08",
+          "baslik": "Silme Sayfası: Neler Silinir, Neler Saklanır",
+          "adimlar": [
+            "\"Hesabımı Sil\" düğmesine dokunun.",
+            "Sayfayı sonuna kadar kaydırıp okuyun."
+          ],
+          "beklenen": "\"Hesabımı Sil\" başlıklı sayfada sarı uyarı çıkar: \"Hesabınızı silmek geri alınamaz. Devam etmeden önce aşağıda nelerin silineceğini ve nelerin saklanacağını okuyun.\" Altında \"Silinecekler\" kartı (hesabınız \"Silinmiş Kullanıcı\" olur, e-posta/telefon/parola kaldırılır, üyelikler ve kapı yetkileri kalkar, misafir geçişleri ve karekodlar iptal edilir...) ve \"Saklanacaklar\" kartı (site yönetiminin yasal saklama kayıtları, aidat/borç/ekstre kayıtları, denetim kayıtları...) bulunur. Altta \"Silmeye Devam Et\" ve \"Vazgeç\" düğmeleri vardır. İnternet yokken kart yerine hata ve \"Tekrar Dene\" çıkar; bilgi yüklenmeden silme AÇILMAZ.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Silinmesinde sakınca olmayan TEST hesabı (feda edilebilir)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.09",
+          "baslik": "Silme Engeli: Süper Kullanıcı ve Tek Yönetici",
+          "adimlar": [
+            "Süper kullanıcı hesabıyla Profilim → \"Hesabımı Sil\" sayfasını açın.",
+            "Aynı sayfayı tek yönetici olan site yöneticisi hesabıyla açın."
+          ],
+          "beklenen": "Kırmızı \"Hesabınız şu anda silinemez\" kartı çıkar. Süper kullanıcıda: \"Süper kullanıcı hesabı bu ekrandan silinemez. Hesabın kaldırılması için başka bir süper kullanıcıyla iletişime geçin.\" Site yöneticisinde: \"\\\"<site adı>\\\" sitesinde aktif üyeler varken tek yöneticisiniz. Önce siteye başka bir yönetici atayın veya siteyi kaldırın.\" ve \"Site kodu: N\". \"Yukarıdaki engeller kalkmadan hesabınız silinemez.\" yazar ve \"Silmeye Devam Et\" PASİF kalır.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi",
+          "on_kosul": "Süper kullanıcı hesabı ve aktif üyesi olan bir sitenin TEK yöneticisi olan site yöneticisi hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.10",
+          "baslik": "Silme Onayı: SİL Yazma ve Yanlış Şifre",
+          "adimlar": [
+            "\"Silmeye Devam Et\"e dokunun.",
+            "Şifre alanına doğru şifreyi yazın, \"Onaylamak için SİL yazın\" alanını boş bırakıp düğmenin durumuna bakın.",
+            "Yanlış şifreyle SİL yazıp \"Hesabımı Sil\"e basın."
+          ],
+          "beklenen": "\"Hesabı kalıcı olarak sil\" penceresi açılır: \"Bu işlem geri alınamaz. Hesabınız silinecek ve oturumunuz kapanacak. Onaylamak için şifrenizi girin ve SİL yazın.\" SİL yazılmadan \"Hesabımı Sil\" düğmesi pasiftir ve alanın altında \"SİL yazdığınızda düğme açılır.\" görünür (büyük/küçük harf ve SIL/SİL ayrımı gözetilmez). Yanlış şifrede \"Mevcut şifreniz hatalı. Lütfen kontrol edip tekrar deneyin.\" çıkar ve hesap SİLİNMEZ.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Silinmesinde sakınca olmayan, engeli olmayan TEST hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.11",
+          "baslik": "Hesap Silinir, Aynı E-postayla Yeniden Kayıt Olunur",
+          "adimlar": [
+            "Doğru şifre ve SİL ile \"Hesabımı Sil\"e basın.",
+            "Giriş ekranındaki bilgi mesajını okuyun.",
+            "Silinen hesabın eski e-posta ve şifresiyle giriş yapmayı deneyin.",
+            "Birkaç dakika sonra o adresin e-posta kutusuna bakın.",
+            "\"Yeni Hesap Oluştur\" ile aynı e-posta adresiyle kayıt başlatın."
+          ],
+          "beklenen": "\"Siliniyor...\" sonrası giriş ekranına dönülür ve yaklaşık 8 saniye \"Hesabınız silindi ve bu cihazdaki verileriniz temizlendi. İsterseniz aynı e-posta adresiyle yeniden kayıt olabilirsiniz.\" bildirimi görünür; giriş alanında eski e-posta kalmaz. Eski bilgilerle giriş reddedilir. E-posta kutusuna \"Site ve Toplu Yaşam Yönetim Sistemi - Hesabınız Silindi\" konulu bilgilendirme gelir (SMTP'ye bağlı, gecikebilir). Aynı e-postayla kayıt \"zaten kayıtlı\" denmeden kabul edilir ve 6 haneli doğrulama kodu gelir; eski hesabın üyelikleri yeni hesaba geçmez.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Silinmesinde sakınca olmayan TEST hesabı; e-posta kodu alınabilen adres",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.12",
+          "baslik": "Kayıt Formunda Yasal Onay Kutusu",
+          "adimlar": [
+            "Çıkış yapın; giriş ekranında \"Yeni Hesap Oluştur\"a dokunun.",
+            "Ad, Soyad, E-Posta ve geçerli şifre alanlarını doldurun ama onay kutusunu işaretlemeyin.",
+            "Formu aşağı kaydırıp \"Kayıt Ol\" düğmesine ve üstündeki yazıya bakın; sonra kutuyu işaretleyin."
+          ],
+          "beklenen": "Formda \"Kullanım Koşulları, Gizlilik Politikası ve KVKK Aydınlatma Metni'ni okudum.\" etiketli kutu ve altında üç bağlantı düğmesi vardır: \"Kullanım Koşulları metnini oku\", \"Gizlilik Politikası metnini oku\", \"KVKK Aydınlatma Metni metnini oku\". Kutu işaretlenmeden \"Kayıt Ol\" pasiftir ve üstünde \"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\" yazar; işaretleyince düğme açılır. Belgeler yüklenirken \"Belgeler yükleniyor...\" görünür.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.13",
+          "baslik": "Belge Okuma Ekranı",
+          "adimlar": [
+            "Kayıt formunda \"Gizlilik Politikası metnini oku\"ya dokunun.",
+            "Başlığa, çiplere ve gövdeye bakın; sonuna kadar kaydırın; geri dönün."
+          ],
+          "beklenen": "Ekran başlığı \"Gizlilik Politikası\" olur; \"Sürüm: 2026-10-16\" ve \"Yürürlük: 16.10.2026\" çipleri görünür (değerler belge sürümüne göre değişir); metin başlık, liste ve kalın yazıyla okunur biçimdedir (tablo yok). Belge tamamlanmamışsa sarı kutuda \"Bu belgedeki köşeli parantezli [……] alanlar henüz doldurulmamıştır. Belge taslak niteliğindedir.\" yazar (hukuk onayı bitene dek BEKLENEN durum). Geri dönünce form alanları ve kutu durumu korunur.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.14",
+          "baslik": "Giriş Ekranı Altındaki Yasal Bağlantılar",
+          "adimlar": [
+            "Çıkış yapıp giriş ekranına gelin; en alttaki \"Kullanım Koşulları · Gizlilik · KVKK\" satırından her bağlantıya sırayla dokunun.",
+            "Yazı boyutunu en büyüğe alıp aynı satıra tekrar bakın."
+          ],
+          "beklenen": "Oturum açmadan sırasıyla \"Kullanım Koşulları\", \"Gizlilik Politikası\" ve \"KVKK Aydınlatma Metni\" belgeleri açılır (başlık, sürüm ve yürürlük çipleri görünür). En büyük yazıda bağlantılar alt alta dizilir, taşma olmaz.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.15",
+          "baslik": "Yardım Ekranında Yasal Belgeler Listesi",
+          "adimlar": [
+            "Çekmeceden \"Yardım ve Destek\"i açıp \"Yasal belgeler\" bölümüne inin.",
+            "Listedeki her belgeye dokunun."
+          ],
+          "beklenen": "Beş belge listelenir: Kullanım Koşulları, Gizlilik Politikası, KVKK Aydınlatma Metni, Veri İşleme Sözleşmesi, Hesap ve Veri Silme. Her satırda \"Sürüm: … · Yürürlük: …\" yazar ve dokununca belge açılır. Liste yüklenemezse \"Şu an yayımlanmış bir belge yok.\" DENMEZ; hata ve \"Yeniden dene\" görünür.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.16",
+          "baslik": "Site Başvurusunda Veri İşleme Sözleşmesi Onayı",
+          "adimlar": [
+            "\"Daireye Katıl & Cihaz Ekle\" ekranında \"Site Kurmak İçin Başvur\"a dokunun.",
+            "Formu \"Not (İsteğe Bağlı)\" alanının altına kadar kaydırın.",
+            "Onay kutusunu işaretlemeden \"Başvuruyu Gönder\"e bakın; sonra \"Veri İşleme Sözleşmesi metnini oku\"ya dokunup kutuyu işaretleyin."
+          ],
+          "beklenen": "Notun altında \"Veri İşleme Sözleşmesi'ni okudum ve kabul ediyorum.\" kutusu ve \"Veri İşleme Sözleşmesi metnini oku\" bağlantısı vardır. Kutu işaretlenmeden \"Başvuruyu Gönder\" pasiftir ve nedeni (\"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\") yazar; belge açılır ve kapatılınca form korunur.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "Cihazı olmayan bireysel hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.17",
+          "baslik": "Güncellenen Koşullar Kapısı",
+          "adimlar": [
+            "Hesapla giriş yapın (ya da uygulamayı kapatıp açın).",
+            "\"Güncellenen Koşullar\" ekranında belgenin \"metnini oku\" düğmesine dokunun, kutuyu işaretleyin ve \"Kabul Et ve Devam Et\"e basın.",
+            "Başka bir denemede \"Kabul etmiyorum, oturumu kapat\"a dokunun."
+          ],
+          "beklenen": "Ana sayfanın üstüne tam ekran \"Güncellenen Koşullar\" biner: \"Hizmet koşullarımız güncellendi. Uygulamayı kullanmaya devam etmek için aşağıdaki belgeleri okuyup onaylamanız gerekir.\" Belge satırlarında ad, \"Sürüm: …\" ve \"… metnini oku\" bulunur; \"Yukarıdaki belgeyi okudum ve kabul ediyorum.\" kutusu işaretlenmeden \"Kabul Et ve Devam Et\" pasiftir (\"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\"). Kabulden sonra kapı kalkar ve ana sayfa (ilk kullanımda ilk kullanım turu) açılır. \"Kabul etmiyorum, oturumu kapat\" \"Oturum kapatılsın mı?\" penceresini açar (\"Güncel koşulları kabul etmezseniz uygulamayı kullanamazsınız...\"): \"Oturumu Kapat\" çıkış yapar, \"Vazgeç\" geri döner. Ağ/sunucu hatasında kullanıcı KİLİTLENMEZ. Belgeler tamamlanmadan bu ekran hiç çıkmaz (sunucu yalnız tamamlanmış belgeyi bekleyen sayar).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "En az bir belge TAMAMLANMIŞ olmalı (hukuk incelemesi bitip belge dosyasındaki `complete: false` satırı kalkmış ve şirket bilgileri doldurulmuş); hesap o belgenin güncel sürümünü daha önce onaylamamış olmalı",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.18",
+          "baslik": "Yasal Web Sayfaları",
+          "adimlar": [
+            "Telefon tarayıcısında sırayla açın: `https://api.gudeteknoloji.com.tr/legal/privacy`, `/legal/terms`, `/legal/kvkk-notice`, `/legal/dpa`, `/legal/account-deletion`.",
+            "Olmayan bir adres açın: `/legal/yok`."
+          ],
+          "beklenen": "Her adres oturumsuz, sade ve telefona uygun bir sayfa açar: üstte belge adı (örn. \"Gizlilik Politikası\"), altında \"Sürüm: 2026-10-16 · Yürürlük tarihi: 2026-10-16\". Belge tamamlanmamışsa sarı kutuda \"Bu belgede henüz doldurulmamış veya doğrulanmamış bölümler bulunuyor; belge taslak niteliğindedir.\" görünür (hukuk onayı bitene dek BEKLENEN durum). Olmayan adres \"Belge bulunamadı\" / \"İstediğiniz belge bulunamadı.\" sayfasını (404) verir. Bu adresler mağaza formlarına yazılacağı için tamamlanmış hâlleri, \"Yasal Sayfalar Mağaza İçin Hazır mı (Son Kapı)\" maddesindeki son kapıdır.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.19",
+          "baslik": "Şirket Bilgileri Belgelere Yansır",
+          "adimlar": [
+            "Platform Ayarları → \"Şirket ve Yasal Bilgiler\" kartında \"Şirket unvanı\"nı doldurup \"Değişiklikleri Kaydet\"e basın.",
+            "Bir dakika bekleyip `https://api.gudeteknoloji.com.tr/legal/privacy` sayfasını yenileyin."
+          ],
+          "beklenen": "Belgede şirket adının geçtiği yerlerde girdiğiniz unvan görünür; doldurulmayan alanlar (adres, MERSİS, KEP, e-posta, telefon) \"[……]\" olarak kalır. Sayfa en çok ~60 sn önbellekte tutulabilir. Tüm alanlar dolsa bile belgeler, içlerindeki `[KARAR/BİLGİ GEREKLİ ...]` ve `[AVUKAT DOĞRULASIN ...]` işaretleri çözülüp `complete: false` satırı kalkana dek taslak sayılır.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "Şirket unvanı, adres, MERSİS, KEP ve iletişim bilgilerinin gerçek değerleri elinizde",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.20",
+          "baslik": "Kayıtta Kısa Şifre (8 Karakter Kuralı)",
+          "adimlar": [
+            "\"Yeni Hesap Oluştur\" formunda Ad, Soyad ve E-Posta'yı doldurun; yasal onay kutusunu işaretleyin.",
+            "\"Şifre\" alanının ipucuna bakın; 7 karakterlik \"abc1234\" yazın, \"Şifre Tekrar\"a aynısını yazıp \"Kayıt Ol\"a basın."
+          ],
+          "beklenen": "\"Şifre\" alanında \"En az 8 karakter\" ipucu vardır. 7 karakterde alan altında \"Şifre çok kısa: en az 8 karakter olmalı. Birkaç sözcüğü art arda yazabilirsiniz.\" görünür ve kayıt gönderilmez (e-posta kodu istenmez).",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.21",
+          "baslik": "Yaygın Şifre Reddi",
+          "adimlar": [
+            "Aynı formda şifre olarak sırayla \"12345678\", \"password1\", \"Fenerbahce1907\" ve \"sifre2024\" yazıp (Şifre Tekrar aynı) \"Kayıt Ol\"a basın.",
+            "Sonra \"Mavi-Balon-Kapi-2026\" gibi uzun ve özgün bir ifade deneyin."
+          ],
+          "beklenen": "İlk dört şifrenin her biri \"Bu şifre çok yaygın ve kolay tahmin edilir. Daha özgün bir şifre seçin.\" hatasını verir. Özgün ifade şifre alanında hata vermez ve kayıt ilerler (e-posta doğrulama kodu ekranı).",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.22",
+          "baslik": "E-posta ya da Adla Aynı Şifre Reddi",
+          "adimlar": [
+            "E-Posta alanına ornek.kisi@example.com, Ad'a \"Deneme\", Soyad'a \"Kullanici\" yazın.",
+            "Şifre olarak sırayla \"ornek.kisi@example.com\", \"ornekkisi\" ve \"Deneme Kullanici\" yazıp (Şifre Tekrar aynı) her birinde \"Kayıt Ol\"a basın."
+          ],
+          "beklenen": "İlk ikisinde \"Şifre e-posta adresinizle aynı olamaz. Farklı bir şifre seçin.\" görünür (büyük/küçük harf, Türkçe harf ve nokta/boşluk farkı yok sayılır). Üçüncüde \"Şifre adınızla ya da kullanıcı adınızla aynı olamaz. Farklı bir şifre seçin.\" görünür.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.23",
+          "baslik": "Profilim'de Şifre Değiştirme Kuralları",
+          "adimlar": [
+            "Profilim'de \"Mevcut Şifre\"yi boş bırakıp \"Yeni Şifre (opsiyonel)\"e özgün bir şifre yazın, \"Profili Kaydet\"e basın.",
+            "\"Mevcut Şifre\"ye doğru şifreyi yazın; \"Yeni Şifre (opsiyonel)\"e sırayla \"1234567\" ve \"12345678\" yazıp kaydetmeyi deneyin.",
+            "Özgün 8+ karakterli yeni şifreyle kaydedin."
+          ],
+          "beklenen": "Mevcut şifre yokken \"Şifre değiştirmek için mevcut şifrenizi girin.\" çıkar. Yeni şifre alanında ipucu \"En az 8 karakter\"dir; \"1234567\" için \"Şifre çok kısa...\", \"12345678\" için \"Bu şifre çok yaygın...\" hatası görünür. Geçerli şifrede \"Profil bilgileri güncellendi.\" görünür, oturum açık kalır; çıkış yapıp yeni şifreyle girilebilir, eski şifre girmez.",
+          "rol_notu": "Site yöneticisi / Bireysel kullanıcı / Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.24",
+          "baslik": "Şifremi Unuttum: Web Sayfasında Aynı Kurallar",
+          "adimlar": [
+            "Giriş ekranında \"Şifremi Unuttum?\"a dokunun, e-postayı yazıp \"Bağlantı Gönder\"e basın; gelen bağlantıyı telefon tarayıcısında açın.",
+            "\"Yeni Şifre\" alanına 7 karakter yazıp \"Şifremi Güncelle\"ye basın; sonra \"12345678\" deneyin; en sonda özgün bir şifre girin."
+          ],
+          "beklenen": "Uygulamada \"Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi...\" bildirimi çıkar (kayıtlı olmayan adreste de AYNI mesaj). \"Yeni Şifre Belirleyin\" sayfası 7 karakterde \"Şifreniz en az 8 karakter olmalıdır.\", eşleşmeyen tekrar için \"Girdiğiniz şifreler birbiriyle eşleşmiyor.\", yaygın şifre için \"Bu şifre çok yaygın ve kolay tahmin edilir. Daha özgün bir şifre seçin.\" der. Geçerli şifrede \"Şifreniz Güncellendi!\" görünür; bağlantı ikinci kez kullanılamaz.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "E-posta kutusuna erişilebilen hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.25",
+          "baslik": "Eski Şifreler Girişte Çalışmaya Devam Eder",
+          "adimlar": [
+            "Bu hesapla giriş yapın."
+          ],
+          "beklenen": "Giriş SORUNSUZ olur: parola ilkesi yalnız YENİ belirlenen şifrelerde uygulanır, girişte uygulanmaz.",
+          "rol_notu": "Daire sakini / Hepsi",
+          "on_kosul": "Güncellemeden önce kurulmuş, 8 karakterden kısa şifreli bir hesap (örn. 4 haneli şifreli daire sakini hesabı)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.26",
+          "baslik": "Giriş Kilidi: 5 Yanlış Şifre",
+          "adimlar": [
+            "Giriş ekranında doğru e-posta ve yanlış şifreyle art arda 5 kez giriş deneyin.",
+            "Hemen ardından DOĞRU şifreyle girmeyi deneyin.",
+            "Aynı telefonda başka bir hesapla doğru bilgilerle girin."
+          ],
+          "beklenen": "İlk 4 denemede giriş reddedilir. 5. denemede \"Çok fazla hatalı deneme yapıldı. 15 dakika sonra tekrar deneyin.\" çıkar (Retry-After ≈ 900 sn). Kilitliyken doğru şifre de aynı iletiyi alır. Başka hesap normal girer (kilit hesap × cihaz/IP çiftine uygulanır).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "TEST hesabı (gerçek kullanıcıyı kilitlemeyin); sunucu yeniden başlatılmışsa sayaçlar sıfırdır",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.27",
+          "baslik": "Kilit Artar; Şifremi Unuttum Kilidi Açar",
+          "adimlar": [
+            "Kilit bitince yeniden 5 kez yanlış şifre girin.",
+            "İkinci kilit sürerken \"Şifremi Unuttum?\" ile şifreyi sıfırlayın ve yeni şifreyle girmeyi deneyin."
+          ],
+          "beklenen": "İkinci kilitte ileti \"30 dakika\" der (sonraki kilitler 60 dakika, en çok 2 saat; 24 saat hatasız geçince seviye sıfırlanır). Şifre sıfırlama tamamlanınca hesap kilidi açılır ve yeni şifreyle hemen giriş yapılır (kilit süresi beklenmez).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Bir önceki maddedeki kilit bitmiş (≈15 dk) TEST hesabı; e-posta kutusuna erişim",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.28",
+          "baslik": "Şifre Değişince Diğer Cihazın Oturumu Düşer",
+          "adimlar": [
+            "Aynı hesapla iki telefonda (A ve B) oturum açın.",
+            "A telefonunda Profilim'den şifreyi değiştirin.",
+            "B telefonunda uygulamayı açın ya da bir ekranı yenileyin."
+          ],
+          "beklenen": "A'da oturum sürer. B giriş ekranına döner ve \"Şifreniz değiştirildiği için oturumunuz sonlandırıldı. Lütfen yeniden giriş yapın.\" gösterir. B'de eski şifre girmez, yeni şifre girer. Parola sürümü (pv) artık zorunludur: bu değişiklikten önce açılmış eski belirteçler de bir kez yeniden giriş ister.",
+          "rol_notu": "Site yöneticisi / Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.29",
+          "baslik": "(Operasyon) Oturum Süresi ve Gizli Anahtar Ayarları",
+          "adimlar": [
+            "Sunucuda `pm2 logs kapi-api --lines 200 --nostream` çıktısında son yeniden başlatmadaki \"[ENV] UYARI:\" satırlarına bakın (değer değil yalnız uyarı metni).",
+            "`server/.env` içinde `JWT_EXPIRES_IN` ve `JWT_SECRET` uzunluğu kararını verin (değerleri sohbete/depoya yazmayın)."
+          ],
+          "beklenen": "`JWT_EXPIRES_IN` 90 günden uzunsa (canlıda 365d idi) \"JWT_EXPIRES_IN ust siniri asiyor; tokenlar 90 gune kirpilarak uretiliyor. Oneri: JWT_EXPIRES_IN=30d.\" uyarısı çıkar; öneri 30d. `JWT_SECRET` 32 karakterden kısaysa \"JWT_SECRET N karakter; en az 32 karakter onerilir...\" uyarısı çıkar (sunucu yine açılır); döndürmek için yeni ≥64 karakterlik sır `JWT_SECRET`'a, eskisi `JWT_SECRET_PREVIOUS` + `JWT_SECRET_PREVIOUS_UNTIL`'e yazılır (tüm oturumlar düşebilir; kullanıcılara duyurun). Kararlar `BEKLEYEN_ISLER.md` içinde sizde bekliyor.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.30",
+          "baslik": "Yardım ve Destek Girişi ve Ekran Yapısı",
+          "adimlar": [
+            "Her rolle çekmeceyi açın; listenin sonuna bakın.",
+            "\"Yardım ve Destek\"e dokunun ve ekranı baştan sona kaydırın."
+          ],
+          "beklenen": "\"Yardım ve Destek\", \"Çıkış Yap\"ın hemen üstündedir (her rolde). Dokununca çekmece kapanır ve tam ekran \"Yardım ve Destek\" açılır: \"Size nasıl yardımcı olabiliriz?\" kartı, \"Tanıtım turunu göster\", \"Nasıl yapılır\", \"Sık sorulan sorular\", \"Destek\", \"Hesabım ve verilerim\", \"Yasal belgeler\" bölümleri ve en altta \"Uygulama sürümü: 1.0.0 (1)\" (derleme numarası parantez içinde) yazar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.31",
+          "baslik": "Nasıl Yapılır: Role Göre ve Gerçek Menü Adlarıyla",
+          "adimlar": [
+            "\"Nasıl yapılır\" bölümünden bir konuya dokunup açın.",
+            "Adımlarda “…” içinde geçen menü ve düğme adlarını uygulamada tek tek bulun.",
+            "Başka bir rolle aynı bölümü açıp konuları karşılaştırın."
+          ],
+          "beklenen": "Konular role göre değişir (örn. bireysel: \"Cihazımı hesabıma nasıl eklerim?\", \"Site yöneticisi olmak için nasıl başvururum?\", \"Daireme nasıl katılırım?\", \"Profilimi ve şifremi nasıl değiştiririm?\"; sakin: \"Kapıyı nasıl açarım?\"; site yöneticisi: \"Duyuru nasıl yayınlarım?\"; süper kullanıcı: \"Uygulama ayarlarını ve hata raporlarını nerede görürüm?\"). Adımlar 1., 2., ... diye numaralıdır ve adımlarda geçen her menü/düğme adı (örn. “Daireye Katıl & Cihaz Ekle”, “QR / Kod ile Daireye Katıl”, “Platform Ayarları”) gerçekten vardır; bulamadığınız ad bir yardım metni hatasıdır, bildirin.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.32",
+          "baslik": "Sık Sorulan Sorular",
+          "adimlar": [
+            "\"Sık sorulan sorular\" bölümündeki beş soruyu sırayla açın."
+          ],
+          "beklenen": "Sorular: \"Şifremi unuttum, ne yapmalıyım?\", \"Doğrulama kodu e-postama gelmedi.\", \"Kapı açılmıyor.\", \"Oturumum neden kapandı?\" ve \"Kişisel verilerim nasıl korunuyor?\". Cevaplar uygulamadaki gerçek adlarla uyumludur (“Şifremi Unuttum?”, “Kodu Tekrar Gönder”; kod 30 dakika geçerli; oturum şifre değişince/süre dolunca kapanır); son soru “Yasal belgeler” bölümüne yönlendirir.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.33",
+          "baslik": "Destek Bölümü: Bilgi Yokken ve Doluyken",
+          "adimlar": [
+            "Destek alanları BOŞKEN \"Destek\" bölümüne bakın.",
+            "Süper kullanıcıyla \"Destek e-postası\", \"Destek telefonu\", \"Çalışma saatleri\" ve \"Destek web adresi\"ni doldurup kaydedin.",
+            "Yardım ekranında aşağı çekerek yenileyin; \"E-posta gönder\", \"Kopyala\", \"Ara\" ve \"Web sitesini aç\" düğmelerini deneyin."
+          ],
+          "beklenen": "Boşken \"Destek bilgisi yakında\" yazar. Doluyken satırlar görünür: \"E-posta\" (+ \"E-posta gönder\", \"Kopyala\"), \"Telefon\" (+ \"Ara\", \"Kopyala\"), \"Çalışma saatleri\", \"Web sitesi\" (+ \"Web sitesini aç\"). \"Kopyala\" \"Panoya kopyalandı.\" der; dış uygulama açılamazsa \"Uygulama açılamadı; bilgi panoya kopyalandı.\" çıkar. Bilgi önbellekte 15 dakika tutulur: yenilemek için aşağı çekin ya da uygulamayı yeniden açın. Bilgi alınamazsa \"Destek bilgisi alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.\" ve \"Yeniden dene\" çıkar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Önce Platform Ayarları'nda destek alanları boş, sonra dolu olmalı (bkz. Platform Ayarları bölümü)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.34",
+          "baslik": "Hesabım ve Verilerim Kartı",
+          "adimlar": [
+            "\"Hesabım ve verilerim\" bölümündeki \"Profilim ekranına git\"e dokunun."
+          ],
+          "beklenen": "Kartta \"Kişisel verilerinizin bir kopyasını almak ve hesabınızı silmek için “Profilim” ekranındaki hesap ve veri bölümünü kullanın. Hesap silme geri alınamaz; silmeden önce ekrandaki uyarıları okuyun.\" yazar. Düğme Yardım'ı kapatır ve çekmecede \"Profilim\" seçili açılır; orada \"Gizlilik ve Veri\" kartı vardır.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.35",
+          "baslik": "İlk Kullanım Turu: İlk Girişte Bir Kez",
+          "adimlar": [
+            "Giriş yapın (varsa \"Güncellenen Koşullar\" kapısını geçin).",
+            "Açılan tam ekran turda \"İleri\" ile dört adımı gezin; ikinci adımdan itibaren \"Geri\"yi deneyin; son adımda \"Başla\"ya basın.",
+            "Uygulamayı kapatıp aynı hesapla yeniden açın."
+          ],
+          "beklenen": "Tur otomatik açılır; her adımda ikon, başlık ve metin vardır. Son adımın başlığı hep \"Yardım her zaman yanınızda\"dır; öncekiler rolü anlatır (bireysel: \"Hoş geldiniz\", \"Daireye katılın\", \"Cihaz ekleyin ya da site kurun\"; sakin: \"Kapınız cebinizde\", \"QR, sesli komut ve misafir geçişi\", \"Duyurular ve borcunuz\"; site yöneticisi: \"Sitenizi yönetin\", \"Kayıtlar ve duyurular\", \"Modüller\"; süper kullanıcı: \"Platform yönetimi\", \"Başvurular ve talepler\", \"Cihazlar ve denetim\"). \"Başla\" turu kapatır; aynı hesapta tur bir daha kendiliğinden açılmaz (bu cihazda \"görüldü\" tutulur).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Turu daha önce görmemiş hesap/cihaz (yeni hesap ya da uygulama verisi temizlenmiş telefon)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.36",
+          "baslik": "Turu Atlama ve Yeniden Açma",
+          "adimlar": [
+            "Yeni bir hesapla girişte açılan turda \"Atla\"ya dokunun (ya da geri tuşuna basın).",
+            "Çekmece → \"Yardım ve Destek\" → \"Tanıtım turunu göster\"e dokunun."
+          ],
+          "beklenen": "\"Atla\" ve geri tuşu turu kapatır ve \"görüldü\" sayılır (yeniden girişte tekrar açılmaz). \"Tanıtım turunu göster\" turu her durumda yeniden açar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.37",
+          "baslik": "Yardım ve Tur Küçük Ekranda, Büyük Yazıda ve Ekran Okuyucuyla",
+          "adimlar": [
+            "Yazı boyutunu en büyüğe alıp telefonu yatay çevirerek Yardım ekranını ve turu gezin.",
+            "TalkBack/VoiceOver ile turun adımlarını ve Yardım başlıklarını dolaşın."
+          ],
+          "beklenen": "Taşma ve kırpılma yoktur; tur düğmeleri satıra sığmazsa alta iner, dokunma hedefleri ≥ 48 dp'dir. Adım değişince \"Adım 2 / 4: <başlık>\" duyurulur; ilerleme noktaları ekran okuyucuya okunmaz (süstür).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.38",
+          "baslik": "Çevrimdışı Yardım Ekranı",
+          "adimlar": [
+            "Uygulama açıkken telefonu uçak moduna alın; \"Yardım ve Destek\"i açın.",
+            "Uçak modunu kapatıp \"Yeniden dene\"ye dokunun."
+          ],
+          "beklenen": "\"Nasıl yapılır\" ve \"Sık sorulan sorular\" internetsiz de görünür (uygulama içinde yazılıdır). \"Yasal belgeler\" bölümü \"Şu an yayımlanmış bir belge yok.\" DEMEZ; \"Belgeler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.\" ve \"Yeniden dene\" gösterir. Destek bilgisi önceden yüklenmişse önbellekten görünür, yoksa hata + \"Yeniden dene\" çıkar. Bağlantı gelince \"Yeniden dene\" listeyi yükler.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.39",
+          "baslik": "Menü Girişi Yalnız Süper Kullanıcıda",
+          "adimlar": [
+            "Süper kullanıcı hesabıyla çekmecede \"Platform Ayarları\" ve \"İstemci Hataları\" girişlerini bulun (listenin sonunda, \"Denetim Kaydı\"nın altında).",
+            "Site yöneticisi, daire sakini ve bireysel kullanıcı hesaplarının çekmecesine bakın."
+          ],
+          "beklenen": "İki giriş yalnız süper kullanıcıdadır; diğer rollerde yoktur.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.40",
+          "baslik": "Platform Ayarları Ekranı ve Alanlar",
+          "adimlar": [
+            "\"Platform Ayarları\"nı açın ve ekranı baştan sona kaydırın."
+          ],
+          "beklenen": "Başlık \"Platform Ayarları\"; açıklama \"Uygulama sürümü, bakım modu, destek iletişimi ve şirket / yasal bilgiler. Boş bıraktığınız alan \"ayarsız\" sayılır.\" Üç kart: \"Uygulama Sürümü ve Bakım\" (\"En düşük desteklenen sürüm\", \"Son sürüm\", \"Android güncelleme bağlantısı\", \"iOS güncelleme bağlantısı\", \"Bakım modu\" anahtarı, \"Bakım iletisi\"), \"Destek İletişim\" (\"Destek e-postası\", \"Destek telefonu\", \"Çalışma saatleri\", \"Destek web adresi\") ve \"Şirket ve Yasal Bilgiler\" (\"Şirket unvanı\", \"Şirket adresi\", \"MERSİS numarası\", \"KEP adresi\", \"İletişim e-postası\", \"İletişim telefonu\", \"Onayları zorunlu kıl\" anahtarı). Değişiklik yokken \"Değişiklikleri Kaydet\" pasiftir ve \"Kaydedilecek değişiklik yok.\" yazar.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.41",
+          "baslik": "Alan Doğrulamaları",
+          "adimlar": [
+            "\"En düşük desteklenen sürüm\"e \"1.2\" yazın (alan yalnız rakam ve nokta kabul eder).",
+            "\"Android güncelleme bağlantısı\"na \"http://ornek.com\", \"Destek e-postası\"na \"abc\", \"MERSİS numarası\"na 15 rakam, \"Şirket unvanı\"na \"A<B\" yazın.",
+            "\"Değişiklikleri Kaydet\"e basın."
+          ],
+          "beklenen": "Alan altlarında sırayla: \"En düşük desteklenen sürüm 1.2.3 biçiminde olmalı (üç sayı, noktalarla).\", \"Android güncelleme bağlantısı https:// ile başlayan geçerli bir adres olmalı (boşluk ve özel işaret içeremez).\", \"Destek e-postası geçerli bir e-posta adresi olmalı.\", \"MERSİS numarası 16 haneli olmalı.\", \"Şirket unvanı köşeli parantez, < >, ters eğik çizgi, ters tırnak veya ** içeremez; #, -, +, *, > ile başlayamaz.\" Üstte \"Lütfen işaretli alanları düzeltin.\" çıkar ve hiçbir şey kaydedilmez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.42",
+          "baslik": "Kendini Kilitleme Koruması: Sürüm Eşikleri",
+          "adimlar": [
+            "\"Son sürüm\"ü boş bırakın; \"En düşük desteklenen sürüm\"e uygulamanızın sürümünden YÜKSEK bir değer (örn. 9.0.0) yazıp kaydetmeyi deneyin.",
+            "\"Son sürüm\"e 1.0.0, \"En düşük desteklenen sürüm\"e 2.0.0 yazıp kaydetmeyi deneyin."
+          ],
+          "beklenen": "İlkinde \"En düşük desteklenen sürüm (9.0.0), bu uygulamanın sürümünden (1.0.0) yüksek olamaz: kaydederseniz kendi uygulamanız da güncelleme ekranına düşer.\" çıkar. İkincisinde \"En düşük desteklenen sürüm, son sürümden büyük olamaz.\" çıkar. İkisinde de kayıt gönderilmez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.43",
+          "baslik": "Kaydedilmemiş Değişiklik Uyarısı",
+          "adimlar": [
+            "Herhangi bir alana bir şey yazın ve sayfanın üstüne bakın.",
+            "Kaydetmeden çekmeceden \"Panel\"e geçmeyi deneyin; önce \"Düzenlemeye Dön\"ü, sonra aynı geçişte \"Değişiklikleri Sil\"i seçin.",
+            "Platform Ayarları'na dönüp bir alanı değiştirin ve \"Değişiklikleri Geri Al\"a basın."
+          ],
+          "beklenen": "Sarı \"Kaydedilmemiş değişiklikleriniz var.\" kutusu çıkar ve \"Değişiklikleri Kaydet\" açılır. Menü değişiminde \"Kaydedilmemiş değişiklikler\" penceresi çıkar: \"Platform ayarlarında kaydedilmemiş değişiklikleriniz var. Devam ederseniz bu değişiklikler kaybolur.\" \"Düzenlemeye Dön\" ekranda bırakır; \"Değişiklikleri Sil\" menüyü değiştirir ve yazılanlar kaybolur. \"Değişiklikleri Geri Al\" alanları kayıtlı değerlere döndürür ve \"Kaydedilecek değişiklik yok.\" yazar.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.44",
+          "baslik": "Kaydetme ve Kalıcılık",
+          "adimlar": [
+            "\"Destek e-postası\", \"Destek telefonu\" ve \"Çalışma saatleri\"ni gerçek bilgilerle doldurup \"Değişiklikleri Kaydet\"e basın.",
+            "Başka bir menüye gidip dönün; uygulamayı kapatıp yeniden açın ve Platform Ayarları'nı açın."
+          ],
+          "beklenen": "Yeşil \"Ayarlar kaydedildi.\" bildirimi çıkar. Alanlar yeniden açılışta aynı değerlerle gelir ve \"Kaydedilecek değişiklik yok.\" yazar. Aşırı sık kayıtta (60/saat) 429 iletisi çıkar ve kaydet düğmesi kısa süre kilitlenir. Destek bilgisi Yardım ekranında görünür (bkz. Yardım bölümü).",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.45",
+          "baslik": "Riskli Değişiklik Onay Penceresi",
+          "adimlar": [
+            "\"Bakım modu\" anahtarını açıp \"Değişiklikleri Kaydet\"e basın; çıkan pencerede \"Vazgeç\"i seçin (bakımı AÇMAYIN).",
+            "\"Onayları zorunlu kıl\" anahtarını açıp kaydetmeyi deneyin; yine \"Vazgeç\"."
+          ],
+          "beklenen": "\"Bu değişiklikleri kaydet?\" penceresi riski madde madde söyler: \"Bakım modu AÇILACAK: kullanıcılar bakım iletisini görür ve uygulamayı kullanamayabilir.\" ve \"Onaylar ZORUNLU kılınacak: tamamlanmış yasal belgeleri onaylamayan kullanıcılar kayıt olamaz ve site başvurusu yapamaz.\" \"Vazgeç\" kaydı iptal eder (sunucuya hiçbir şey gitmez); \"Kaydet\" uygular. Yasal belgeler tamamlanmadan zorunluluk fiilen etkisizdir. Sürüm eşiği yükseltirken de \"En düşük desteklenen sürüm X olacak: bu sürümün altındaki uygulamalar güncellenmeden kullanılamaz (şu an kullandığınız sürüm: …, etkilenmez).\" notu çıkar.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.46",
+          "baslik": "Değişiklik Denetim Kaydına Düşer",
+          "adimlar": [
+            "Bir ayarı değiştirip kaydettikten sonra çekmeceden \"Denetim Kaydı\"nı açın; \"Tümü\" süzgeciyle en üstteki kayda bakın."
+          ],
+          "beklenen": "Yeni bir kayıt eklenir (başlığı şimdilik \"Diğer işlem\" görünür: bu eylem için ayrı Türkçe etiket tanımlı değildir). Kayıtta adres, telefon, e-posta gibi DEĞERLER görünmez; sunucu yalnız değişen alan adlarını saklar.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.47",
+          "baslik": "İstemci Hataları Ekranı",
+          "adimlar": [
+            "\"İstemci Hataları\"nı açın.",
+            "Kayıt varsa bir karttaki \"Örnek yığını göster\" ve \"Ayrıntıyı kopyala\"yı deneyin; \"Yenile\" ikonuna basın.",
+            "Telefonu uçak moduna alıp \"Yenile\"ye basın."
+          ],
+          "beklenen": "Başlık \"İstemci Hataları\"; açıklama \"Uygulamalardan gelen hata raporları. Aynı hata tek kayıtta toplanır; kişisel veriler sunucuda maskelenir ve kayıtlar 90 gün sonra silinir.\" Kayıt yoksa \"Kayıtlı istemci hatası yok.\" ve \"Uygulamalardan gelen hata raporları (90 gün) burada listelenir.\" yazar. Kayıt varsa kartta \"Çökme\" ya da \"Hata\", \"N kez\", platform ve \"v<sürüm>\" çipleri, hata türü ve iletisi, \"İlk görülme:\" / \"Son görülme:\" (İstanbul saati) bulunur; \"Ayrıntıyı kopyala\" \"Hata ayrıntısı panoya kopyalandı.\" der. İnternet yokken \"kayıt yok\" DEĞİL, hata ve \"Tekrar Dene\" görünür. Hata iletilerinde gerçek e-posta, telefon veya belirteç görünmez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.48",
+          "baslik": "Bakım Ekranı (Sıradan Kullanıcı)",
+          "adimlar": [
+            "Süper kullanıcı telefonunda Platform Ayarları'nda \"Bakım iletisi\"ne \"Deneme bakımı: 5 dakika sonra döneceğiz.\" yazın.",
+            "\"Bakım modu\"nu açıp \"Değişiklikleri Kaydet\"e basın; onay penceresinde \"Kaydet\"i seçin.",
+            "Diğer telefonda uygulamayı tamamen kapatıp yeniden açın."
+          ],
+          "beklenen": "Diğer telefonda tam ekran \"Bakım çalışması\" çıkar; altında yazdığınız ileti (boş bırakılsaydı \"Sistemimiz kısa süreli bakımda. Lütfen birkaç dakika sonra tekrar deneyin.\"), \"Yeniden dene\" ve \"Yönetici girişi\" düğmeleri bulunur; destek bilgisi tanımlıysa en altta \"Destek: …\" satırı da görünür. Geri tuşu uygulamadan çıkar (altındaki ekrana dönmez).",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "İki telefon: biri süper kullanıcı, diğeri site yöneticisi ya da sakin oturumuyla",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.49",
+          "baslik": "Bakımda Süper Kullanıcı Engellenmez",
+          "adimlar": [
+            "Bakım modu açıkken süper kullanıcı telefonunda uygulamayı kapatıp yeniden açın."
+          ],
+          "beklenen": "Uygulama normal açılır; altta \"Bakım modu açık (yönetici görünümü). Diğer kullanıcılar bakım ekranını görür.\" şeridi görünür ve Platform Ayarları'na girilebilir (bakımı kapatabilirsiniz).",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.50",
+          "baslik": "Yeniden Dene ve Bakımın Kalkması",
+          "adimlar": [
+            "Diğer telefondaki bakım ekranında bakım hâlâ açıkken \"Yeniden dene\"ye basın.",
+            "Süper kullanıcıyla bakım modunu kapatıp kaydedin; diğer telefonda \"Yeniden dene\"ye basın."
+          ],
+          "beklenen": "Bakım sürerken \"Sistem hâlâ bakımda. Lütfen biraz sonra tekrar deneyin.\" çıkar (sunucuya ulaşılamazsa \"Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.\"). Bakım kapanınca ekran kalkar ve uygulama oturum ve ekran kaybı olmadan kaldığı yerden devam eder.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.51",
+          "baslik": "Bakım Ekranında Yönetici Girişi",
+          "adimlar": [
+            "Oturumu kapalı telefonda bakım ekranındaki \"Yönetici girişi\"ne dokunup önce site yöneticisi, sonra süper kullanıcı hesabıyla girin.",
+            "Oturumu açık sıradan kullanıcı telefonunda aynı düğmeye dokunun."
+          ],
+          "beklenen": "Oturum yokken giriş ekranı geçici açılır ve altta \"Yönetici girişi: yalnızca süper kullanıcı hesabıyla devam edilebilir.\" şeridi (\"Vazgeç\") görünür. Site yöneticisiyle girilirse bakım ekranı geri gelir ve \"Bu hesap süper kullanıcı değil; bakım/güncelleme sırasında yalnızca yönetici hesabı kullanılabilir.\" yazar. Süper kullanıcıyla girilirse engel kalkar (yönetici görünümü). Sıradan oturum açıkken düğme \"Yönetici girişi yalnızca süper kullanıcı hesabıyla yapılabilir. Bu cihazda başka bir hesabın oturumu açık.\" yazar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Bakım modu açık; bir telefonda oturum KAPALI, diğerinde sıradan kullanıcı oturumu AÇIK",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.52",
+          "baslik": "Yumuşak Güncelleme Uyarısı (Son Sürüm)",
+          "adimlar": [
+            "Süper kullanıcıyla \"Son sürüm\"e 9.9.9 yazıp kaydedin; uygulamayı kapatıp açın.",
+            "Çıkan kartta \"Tamam\"a (bağlantı tanımsızsa) ya da \"Sonra\"ya dokunun; uygulamayı yeniden açın.",
+            "\"Android güncelleme bağlantısı\"na bir https adresi girip kaydedin; yeniden açıp \"Güncelle\"ye dokunun."
+          ],
+          "beklenen": "Altta kapatılabilir \"Yeni sürüm hazır (9.9.9)\" kartı çıkar; uygulama ENGELLENMEZ. Bağlantı yokken \"Uygulamayı mağazadan güncelleyebilirsiniz.\" ve \"Tamam\", bağlantı varken \"Yeni özellikler ve düzeltmeler için güncelleyin.\" ile \"Sonra\" ve \"Güncelle\" düğmeleri görünür. Kapatılan sürüm için kart yeniden açılışta çıkmaz. \"Güncelle\" bağlantıyı açar. Testten sonra \"Son sürüm\"ü gerçek değerine (ya da boşa) çevirin.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Bakım modu KAPALI; \"En düşük desteklenen sürüm\" boş ya da kurulu sürümden düşük",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.53",
+          "baslik": "Zorunlu Güncelleme Ekranı",
+          "adimlar": [
+            "Süper kullanıcıyla \"En düşük desteklenen sürüm\"ü eski telefondaki sürümden yüksek bir değere (örn. 1.0.1) ayarlayıp \"Android güncelleme bağlantısı\"nı girerek kaydedin.",
+            "Eski sürümlü telefonda uygulamayı kapatıp açın ve \"Güncelle\"ye dokunun."
+          ],
+          "beklenen": "Tam ekran \"Güncelleme gerekli\" çıkar: \"Uygulamanın bu sürümü (1.0.0) artık desteklenmiyor. Devam etmek için lütfen 1.0.1 veya daha yeni bir sürüme güncelleyin.\" \"Güncelle\" mağaza bağlantısını açar; bağlantı tanımsızsa \"Uygulamayı mağazadan (Google Play veya App Store) güncelleyebilirsiniz.\" yazar ve düğme çıkmaz; açılamazsa \"Mağaza bağlantısı açılamadı. Lütfen uygulamayı mağazadan elle güncelleyin.\" uyarısı gelir. Güncel sürümlü telefonlar ve süper kullanıcı etkilenmez. Eşiği yalnız yeni sürüm iki mağazada da yayındayken yükseltin.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Kurulu sürümü, ayarlayacağınız \"En düşük desteklenen sürüm\"den DÜŞÜK ikinci bir telefon (yeni sürüm iki mağazada da yayınlandıktan sonra eski sürümlü telefon); süper kullanıcı kendi uygulamasından yüksek eşik kaydedemez",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.54",
+          "baslik": "Yapılandırma Okunamazsa Uygulama Engellenmez",
+          "adimlar": [
+            "Telefonu uçak moduna alıp uygulamayı kapatın ve yeniden açın."
+          ],
+          "beklenen": "\"Bakım çalışması\" ya da \"Güncelleme gerekli\" ekranı AÇILMAZ (yapılandırma 4 sn içinde okunamazsa engel konmaz); uygulama kendi çevrimdışı akışıyla (\"internet yok\" ekranı ya da oturumlu ana sayfa) açılır. İnternet gelince bakım açıksa bir sonraki denetimde bakım ekranı çıkar.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.55",
+          "baslik": "(Operasyon) Şifreleme Anahtarını Güvenli Yere Alın",
+          "adimlar": [
+            "`deploy/ops/pull_backups_windows.ps1` dosyasının klasöründe PowerShell'de `powershell -NoProfile -ExecutionPolicy Bypass -File .\\pull_backups_windows.ps1 -FetchKey` çalıştırın.",
+            "`%LOCALAPPDATA%\\kapi-anahtar-tasi\\kapi-backup.key` dosyasının içeriğini parola yöneticinize (ya da çevrimdışı bir USB'ye) kaydedip `kapi-anahtar-tasi` klasörünü silin."
+          ],
+          "beklenen": "Anahtar yedeklerin klasörünün DIŞINA iner ve içeriği ekrana yazdırılmaz. Anahtar OneDrive/Dropbox/Google Drive gibi eşitlenen bir klasörde ve yedeklerle aynı yerde DURMAZ. Anahtar yalnız sunucuda kalırsa sunucu giderse şifreli yedeklerin (dış kopyalar dahil) hiçbiri açılamaz: bu madde en önemlisidir.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "Windows'ta OpenSSH istemcisi ve sunucuya parolasız ssh erişimi (`ssh -p 22667 -o BatchMode=yes salihceylan@<sunucu> echo tamam` çalışmalı)",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.56",
+          "baslik": "(Operasyon) Anahtar Parmak İzini Doğrulayın",
+          "adimlar": [
+            "Sunucuda `cut -c1-12 ~/ops/state/key.sha256` çıktısını not edin.",
+            "Windows'ta kopyaladığınız anahtar dosyası için `certutil -hashfile <dosya> SHA256` çıktısının ilk 12 hanesini karşılaştırın."
+          ],
+          "beklenen": "İlk 12 hane aynıdır. Farklıysa yanlış dosya kopyalanmıştır. (Anahtar sunucuda kaybolur ya da değişirse `healthcheck.sh` CRIT uyarısı verir; yeni anahtar bilerek `install_ops.sh --new-key` ile üretilir.)",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.57",
+          "baslik": "(Operasyon) Yedekleri Bilgisayara Çekin",
+          "adimlar": [
+            "`... .\\pull_backups_windows.ps1 -ListOnly` ile sunucudaki dosyaları listeleyin.",
+            "Aynı komutu `-ListOnly` olmadan çalıştırın; sonra bir kez daha çalıştırın."
+          ],
+          "beklenen": "İlk çalıştırmada `%USERPROFILE%\\kapi-yedek` içine yalnız şifreli dosyalar iner (`kapi_<tarih>.sql.gz.enc`, `kapi_config_<tarih>.tgz.enc`, `kapi_firmware_<tarih>.tgz.enc`); her dosyanın SHA-256'sı sunucudakiyle eşleşir; `pull.log` ve `LAST_OK.txt` oluşur. İkinci çalıştırmada yeni dosya inmez. Sunucuda hiçbir şey yazılmaz/silinmez. Yerel dosyalar 210 günden sonra silinir (`-PruneDays 210`; 0 = silme).",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.58",
+          "baslik": "(Operasyon) Zamanlanmış Görev Kurun (Yerel Dış Kopya)",
+          "adimlar": [
+            "Betiği sabit bir yere (örn. `C:\\kapi-ops\\pull_backups_windows.ps1`) kopyalayın; yönetici olmayan PowerShell'de `docs/OPERASYON_YEDEK_IZLEME.md` bölüm 7 adım 4'teki `Register-ScheduledTask` komutuyla 'KapiYedekCek' görevini (günlük 11:00, `-StartWhenAvailable`) kurun.",
+            "Görev Zamanlayıcı'da görevi elle çalıştırıp \"Son çalıştırma sonucu\"na bakın."
+          ],
+          "beklenen": "Sonuç `0x0`; `pull.log`'a yeni satır eklenir ve `LAST_OK.txt` güncellenir (1 ise `pull.log`'a bakın). Bilgisayar o saatte kapalıysa açılışta çalışır.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.59",
+          "baslik": "(Operasyon) Yedeğin Açılıp Sağlam Olduğunu Doğrulayın",
+          "adimlar": [
+            "Çektiğiniz bir dosyayı Git Bash'te açın: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:ANAHTAR -in kapi_<tarih>.sql.gz.enc -out kapi_<tarih>.sql.gz` (ANAHTAR = parola yöneticisinden bir dosyaya yazdığınız kopya).",
+            "`gzip -t kapi_<tarih>.sql.gz && echo \"yedek saglam\"` çalıştırın; işiniz bitince açılmış dosyayı ve anahtar kopyasını silin."
+          ],
+          "beklenen": "\"yedek saglam\" yazar. `bad decrypt` büyük olasılıkla yanlış anahtardır; ancak AES-CBC kimlik doğrulamasızdır ve yanlış anahtarda bazen hata vermeden çöp üretir: asıl doğrulayıcı `gzip -t`'dir (yapılandırma yedeği için `tar -tzf`).",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.60",
+          "baslik": "(Operasyon) Sunucu Sağlık Kontrolü (Elle)",
+          "adimlar": [
+            "Sunucuya ssh ile bağlanıp `bash ~/ops/healthcheck.sh --dry-run -v` çalıştırın."
+          ],
+          "beklenen": "Kontrol tablosu (api, mqtt_bridge, api_public, pm2, postgres, disk, memory, backup_age, backup_run, backup_key, restore_test, offsite, tls_origin, tls_edge, tls_mqtt, mqtt_local, mqtt_public) hepsi OK görünür; yalnız bilinen uyarılar olabilir (örn. dış kopya yapılandırılmadı). E-posta gitmez, durum/sayaç dosyaları değişmez. `mqtt_public` uyarısında \"DNS proxy açık olabilir (MQTT için 'DNS only' gerekir)\" yazarsa `mqtt` kaydı turuncu buluttadır (bkz. 59.16).",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.61",
+          "baslik": "(Operasyon) Uyarı E-postası Testi",
+          "adimlar": [
+            "Sunucuda `bash ~/ops/healthcheck.sh --test-alert` çalıştırın.",
+            "Süper kullanıcı e-posta kutusuna bakın."
+          ],
+          "beklenen": "Komut `TEST_ALERT_SENT` yazar ve kutuya \"[KAPI-OPS] TEST uyarisi\" konulu e-posta gelir. `TEST_ALERT_FAILED` ise SMTP ayarına ve `~/ops/logs/healthcheck.log` ile `~/ops/state/ALERT_UNSENT` dosyalarına bakın. Alıcı varsayılan olarak aktif süper kullanıcı hesaplarıdır; değiştirmek için `~/.config/kapi-ops.env` içine `ALERT_EMAIL=...` yazılır.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.62",
+          "baslik": "(Operasyon) Elle Yedek ve Geri Yükleme Provası",
+          "adimlar": [
+            "Sunucuda `bash ~/ops/backup_db.sh` çalıştırın; ardından `cat ~/ops/state/backup.status`.",
+            "`bash ~/ops/restore_test.sh` çalıştırın; ardından `cat ~/ops/state/restore_test.status`."
+          ],
+          "beklenen": "`backup.status` içinde `result=OK` (tablolar ≥ 30, users > 0) görünür. `restore_test.status` içinde `result=PASS`, `errors=0` ve tablo/satır sayıları yazar (`files_tested`: düz + şifreli dış kopya varsa 2); geçici `kapi_restoretest_*` veritabanı silinir. Aylık otomatik prova ayın 2'sinde 04:15 (İstanbul) çalışır; yeni sürümün canlıdaki ilk tam çalışması 2026-11-02'dedir [denenmedi]. Yedek dosyası `\\connect`/`DROP DATABASE` gibi satırlar içeriyorsa betik yüklemeyi REDDEDER.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.63",
+          "baslik": "(Operasyon) Dış Kopya Hedefi: Karar ve Kurulum",
+          "adimlar": [
+            "B ya da C için sunucuda `~/.config/kapi-offsite.env` dosyasını `deploy/ops/kapi-offsite.env.example`'a göre oluşturun (`chmod 600`).",
+            "`bash ~/ops/offsite_push.sh --check`, sonra `bash ~/ops/offsite_push.sh --all` çalıştırın; `cat ~/ops/state/offsite.status`."
+          ],
+          "beklenen": "`--check` hedefe bağlanabildiğini söyler. `--all` yalnız şifreli (`Salted__` başlıklı) dosyaları gönderir; `offsite.status` içinde `result=OK` yazar. Yapılandırma yokken durum `UNCONFIGURED` olur ve izleme 24 saatte bir \"dış kopya yapılandırılmadı\" hatırlatır. Dış kopyalar en çok ~210 gün tutulur (gizlilik metniyle uyumlu). Yedek yalnız aynı sunucuda durursa sunucuyla birlikte kaybolur.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "Bir dış kopya hedefi seçilmiş olmalı (A: kendi bilgisayarınıza çekme [yukarıdaki adımlar]; B: ikinci sunucuya rsync; C: Cloudflare R2/Backblaze B2 + rclone; D: Drive/OneDrive + rclone). Önerilen: hemen A, kısa sürede C.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.64",
+          "baslik": "(Operasyon) Ölü Adam Anahtarı (Heartbeat) Kurun",
+          "adimlar": [
+            "healthchecks.io'da (ya da UptimeRobot \"Heartbeat\") \"Add Check\" ile `kapi healthcheck` adında, Period 5 minutes ve Grace Time 10 minutes ayarlı bir kontrol oluşturup e-posta entegrasyonu ekleyin; ping adresini kopyalayın.",
+            "Sunucuda `umask 077; printf 'HEARTBEAT_URL=%s\\n' '<ping adresi>' >> ~/.config/kapi-ops.env; chmod 600 ~/.config/kapi-ops.env` çalıştırın ve 5 dakika bekleyin."
+          ],
+          "beklenen": "Panelde ilk ping görünür. Adres günlüklere yazılmaz ve GİZLİDİR (sohbete/depoya yazmayın). Sunucu ya da cron ölürse içeriden e-posta gelemeyeceği hâlde bu yöntem sizi uyarır [gerçek hizmetle denenmedi].",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.65",
+          "baslik": "(Operasyon) Harici İzleme Kurun (UptimeRobot)",
+          "adimlar": [
+            "UptimeRobot'ta \"Add New Monitor\" ile HTTP(s) anahtar sözcük monitörü oluşturun: URL `https://api.gudeteknoloji.com.tr/health`, anahtar sözcük `\"ok\":true`, \"Alert when keyword does not exist\", aralık 5 dk.",
+            "İsteğe bağlı: sunucu IP'si ve 8883 portu için \"Port\" monitörü ve SSL bitiş uyarısı ekleyin; uyarı iletişimi olarak e-posta tanımlayın."
+          ],
+          "beklenen": "Monitör \"Up\" olur ve kesintide e-posta gelir. MQTT portu Cloudflare'dan geçmediği için IP ile izlenir. Plan limitleri ve ticari kullanım koşulları kayıt sırasında kontrol edilmelidir.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.66",
+          "baslik": "(Operasyon) GitHub Actions \"Uptime\" İş Akışını Çalıştırın",
+          "adimlar": [
+            "`.github/workflows/uptime.yml` dosyasını `main` dalına push edin (zamanlanmış işler yalnız varsayılan daldan çalışır).",
+            "GitHub → Actions → \"Uptime\" → \"Run workflow\" ile bir kez elle çalıştırın; GitHub → Settings → Notifications → \"Actions\" bölümünde başarısız çalışma e-postasını açın."
+          ],
+          "beklenen": "\"API saglik ucu\" işi yeşil biter (sağlık ucu 3 denemeyle `ok:true` ve `database:connected` döner). Çıktıda `HTTP 403` varsa Cloudflare GitHub IP'lerini engelliyordur: `/health` yolu için WAF \"skip\" kuralı ekleyin. İş akışı 30 dakikada bir çalışır (≈1440 dk/ay); özel depoda ücretsiz plan 2000 dk/ay'dır ve `ci.yml` aynı kotayı kullanır. Bu çalışma GitHub üzerinde henüz denenmedi.",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.67",
+          "baslik": "(Operasyon) Eski Elle (Dağıtım) Yedek Klasörleri Kararı",
+          "adimlar": [
+            "Sunucuda `ls -1dt ~/backups/kapi_2* | tail -n +11` ve `find ~/backups -maxdepth 1 -name 'kapi_2*' -mtime +30` çalıştırın (bunlar SİLMEZ)."
+          ],
+          "beklenen": "10'dan eski ve 30 günden eski dağıtım yedekleri aday olarak listelenir. Bu klasörler şifrelenmez ve süresiz kalır (gizlilik metnindeki saklama süresiyle çelişir); öneri en son 10 dağıtım yedeği ve en çok 30 gündür, karar sizindir. Elle silerken yalnız `kapi_<tarih>` klasörlerini seçin (`ev_*`, `emqx_*` başka projelerindir).",
+          "rol_notu": "Operasyon (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.68",
+          "baslik": "(Yayın) Yükleme Anahtarını İki Yere Yedekleyin",
+          "adimlar": [
+            "`G:\\site\\_anahtarlar\\siteyonetim-upload.jks` ve `android\\key.properties` dosyalarını parola yöneticinize ve şifreli bir harici yedeğe (iki AYRI güvenli konum) kopyalayın."
+          ],
+          "beklenen": "Her iki dosya da en az iki konumda vardır; `key.properties` git'e girmez (`android/.gitignore`), dosyalar sohbete/e-postaya konmaz. Parolalar yalnız `android\\key.properties` içindedir. Anahtar kaybolursa Play App Signing açıksa Play Console'dan \"Yükleme anahtarı sıfırlama\" istenir (günler sürebilir); Play App Signing kullanılmazsa uygulama güncellenemez hâle gelir.",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.69",
+          "baslik": "(Yayın) İmzalı Paket Derleme",
+          "adimlar": [
+            "Başka hiçbir `flutter` komutu çalıştırmadan proje kökünde `flutter build appbundle --release` çalıştırın (test için `flutter build apk --release`)."
+          ],
+          "beklenen": "`build\\app\\outputs\\bundle\\release\\app-release.aab` (APK: `build\\app\\outputs\\flutter-apk\\app-release.apk`) üretilir ve çıktıda \"android/key.properties bulunamadı\" UYARISI görünmez (görünürse paket debug anahtarıyla imzalanmıştır, yayına uygun değildir). `key.properties` var ama eksik/bozuksa derleme HATA verir. Derleme sırasında `flutter test` veya `flutter pub get` çalıştırmayın (eklenti kaydını bozup derlemeyi düşürebilir). Not: `build\\app\\outputs\\flutter-apk\\app-release.apk` dosyası anahtar oluşturulmadan önce (16.10 15:23) üretildi ve `CN=Android Debug` ile imzalıdır: yayın için yeniden derleyin.",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.70",
+          "baslik": "(Yayın) İmza Doğrulama (Debug İmzası Olmamalı)",
+          "adimlar": [
+            "APK için Android SDK'daki `apksigner verify --print-certs build\\app\\outputs\\flutter-apk\\app-release.apk` çalıştırın (JAVA_HOME gerekir; örn. `...\\Android\\Sdk\\build-tools\\36.0.0\\apksigner.bat`).",
+            "AAB için `keytool -printcert -jarfile build\\app\\outputs\\bundle\\release\\app-release.aab` çalıştırın.",
+            "SHA-256 değerini `docs/YAYIN_HAZIRLIGI.md` bölüm 3'teki yükleme sertifikasıyla karşılaştırın."
+          ],
+          "beklenen": "Sertifika sahibi `CN=Android Debug` DEĞİLDİR ve SHA-256 `4E:9C:66:FD:…` ile başlayan yükleme sertifikasıyla (bölüm 3'teki tam değer) aynıdır. Not: APK yalnız v2/v3 imzalıysa `keytool -printcert -jarfile <apk>` \"Not a signed jar file\" der (16.10'daki APK'da böyle görüldü); APK için `apksigner` kullanın. AAB için `keytool -printcert -jarfile` komutu `docs/YAYIN_HAZIRLIGI.md` §4'te önerilir; bu çalışmada AAB üretilmediği için denenmedi (olmazsa `jarsigner -verify -verbose -certs <aab>` deneyin).",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.71",
+          "baslik": "(Yayın) R8'li Release Paketi Cihazda Açılıyor mu",
+          "adimlar": [
+            "Debug paketini kaldırıp `app-release.apk`'yı telefona kurun (`adb install -r` ya da dosyadan).",
+            "Giriş yapın; \"Panel\"de kapı kartından \"KAPIYI AÇ\" ile kapıyı bulut yolundan açın."
+          ],
+          "beklenen": "Uygulama çökmeden açılır; giriş ve kapı açma çalışır. R8 küçültme açıktır (`android/app/proguard-rules.pro`) ve R8'li paket cihazda DENENMEDİ: kural eksikliği ancak cihazda görülür.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Anahtarla imzalı `app-release.apk`",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.72",
+          "baslik": "(Yayın) Release Paketinde İzinli Özellikler (Kamera, Mikrofon, Bluetooth)",
+          "adimlar": [
+            "QR kod okuma akışını açın (kamera izni).",
+            "\"Sesli Kapı Açma\"yı açın (mikrofon izni).",
+            "\"Bluetooth ile Wi-Fi Kur\"u açın (Bluetooth/konum izni)."
+          ],
+          "beklenen": "Her akışta sistem izin penceresi gelir, izin verilince özellik çalışır, reddedilince uygulama çökmez ve açıklayıcı ileti verir. Uygulama arka plan konumu, SMS, arama kaydı gibi gereksiz izin istemez (izin gerekçeleri `docs/YAYIN_HAZIRLIGI.md` bölüm 5).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Anahtarla imzalı `app-release.apk` telefonda kurulu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.73",
+          "baslik": "(Yayın) Release Paketinde Ana Ekran Widget'ı ve Kısayollar",
+          "adimlar": [
+            "Ana ekrana uygulamanın kapı widget'ını ekleyin ve dokunun.",
+            "Uygulama simgesine uzun basıp çıkan kısayolları (\"sitekapi://\" bağlantılarına dayanır) deneyin."
+          ],
+          "beklenen": "Widget ve kısayollar uygulamayı çökmeden açar; kapı açma onay penceresi gelir. Bakım ya da zorunlu güncelleme ekranı açıkken kısayol/derin bağlantı YOK SAYILIR.",
+          "rol_notu": "Hepsi",
+          "on_kosul": "Anahtarla imzalı `app-release.apk` telefonda kurulu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.74",
+          "baslik": "(Yayın) Sürüm Numarası Tutarlılığı",
+          "adimlar": [
+            "Çekmecenin altındaki sürüm satırına ve \"Yardım ve Destek\" altındaki \"Uygulama sürümü\"ne bakın.",
+            "`pubspec.yaml` içindeki `version:` ve `lib/config/app_config.dart` içindeki `appVersion` / `buildNumber` değerleriyle karşılaştırın."
+          ],
+          "beklenen": "Çekmecede \"v1.0.0 (Build 1)\", Yardım'da \"Uygulama sürümü: 1.0.0 (1)\" yazar. `pubspec.yaml` `version: 1.0.0+1`'dir (+ öncesi kullanıcıya görünen sürüm, sonrası Android `versionCode` / iOS `CFBundleVersion`). Çekmece sürümü `lib/config/app_config.dart` sabitlerinden, Yardım ve sürüm kapısı paket bilgisinden (`pubspec.yaml`) okur: ikisini birlikte güncelleyin. Her mağaza yüklemesinde derleme numarası ARTMALIDIR (örn. 1.0.1+2). Sunucudaki `min_supported_version`/`latest_version` ile `major.minor.patch` olarak karşılaştırılır (derleme numarası yok sayılır).",
+          "rol_notu": "Hepsi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F12.75",
+          "baslik": "(Yayın) Yasal Sayfalar Mağaza İçin Hazır mı (Son Kapı)",
+          "adimlar": [
+            "PowerShell'de `curl.exe -s -o NUL -w \"%{http_code}\" https://api.gudeteknoloji.com.tr/legal/privacy` ve aynısını `/legal/account-deletion` için çalıştırın.",
+            "İki sayfayı tarayıcıda açıp \"[……]\" ve sarı \"taslak\" kutusu arayın."
+          ],
+          "beklenen": "İkisi HTTP 200 verir ve sayfada \"[……]\" yer tutucusu ile \"Bu belgede henüz doldurulmamış veya doğrulanmamış bölümler bulunuyor; belge taslak niteliğindedir.\" kutusu YOKTUR. Belgeler şu an taslak olduğundan bu madde hukuk incelemesi (`docs/yasal/AVUKAT_KONTROL_LISTESI.md`) ve şirket bilgileri girilene kadar BAŞARISIZ olması beklenir; mağaza incelemesi taslak sayfayı reddedebilir.",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "Hukuk incelemesi bitmiş, belgelerdeki `complete: false` satırları kalkmış ve Platform Ayarları'nda şirket bilgileri doldurulmuş olmalı",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.76",
+          "baslik": "(Yayın) Google Play Console Formları",
+          "adimlar": [
+            "Play Console'da uygulamayı oluşturun (varsayılan dil Türkçe, \"Uygulama\", \"Ücretsiz\"); Play App Signing'i kabul edin.",
+            "\"Uygulama içeriği\"nde gizlilik politikası URL'sine `https://api.gudeteknoloji.com.tr/legal/privacy`, veri silme URL'sine `https://api.gudeteknoloji.com.tr/legal/account-deletion` girin; reklam: Hayır; uygulamaya erişim: test hesabı bilgisi; hedef kitle: 18 yaş ve üzeri.",
+            "Veri güvenliği formunu `docs/YAYIN_HAZIRLIGI.md` bölüm 5'teki tabloya göre doldurun ve AAB'yi yükleyin."
+          ],
+          "beklenen": "Form yanıtları belgeyle uyumludur (izinler ve gerekçeleri, \"finansal özellik yok\" beyanı, veri satılmaz/reklam yok). Hesap silme yolu uygulamada \"Profilim → Gizlilik ve Veri → Hesabımı Sil\" olarak ve web URL'siyle vardır. Play'in güncel hedef-API şartı, alan uzunlukları ve ekran görüntüsü boyutları belgede doğrulanmadı: konsolda kontrol edin (şu an `compileSdk 36`, `targetSdk 36`, `minSdk 24`).",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "Google Play geliştirici hesabı (kurumsal hesapta D-U-N-S istenebilir; yeni kişisel hesaplarda yayın öncesi kapalı test şartı olabilir: konsolda doğrulayın)",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.77",
+          "baslik": "(Yayın) App Store Connect ve iOS Derlemesi",
+          "adimlar": [
+            "Xcode'da Runner hedefinde Signing → Team seçin; `flutter build ipa --release` çalıştırın; Transporter/Organizer ile yükleyin.",
+            "App Store Connect'te gizlilik URL'sini (`https://api.gudeteknoloji.com.tr/legal/privacy`), destek URL'sini, yaş derecelendirmesini (4+), hesap silme bilgisini ve \"Uygulama gizliliği\" etiketlerini girin; inceleme bilgisine demo hesap ve donanım notunu yazın."
+          ],
+          "beklenen": "iOS projesi Windows'ta DERLENMEDİ (yalnız biçim/çapraz referans denetimi yapıldı); `ios/Runner/PrivacyInfo.xcprivacy` Apple doğrulamasını yükleme sırasında geçmelidir. Yerel kapı kontrolü UDP yayını için iOS 14+ `com.apple.developer.networking.multicast` yetkisi (Apple'a başvuru) gerekebilir: yetkisiz iPhone'da yerel keşif çalışmayabilir, bulut/MQTT yolu etkilenmez; yayından önce gerçek iPhone'da yerel kapı açmayı deneyin. iPad desteklendiği için iPad ekran görüntüsü seti de gerekir (kaçınmak için `TARGETED_DEVICE_FAMILY` = 1).",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "Apple Developer üyeliği ve Team ID (depoya yazılmadı, `DEVELOPMENT_TEAM` boş); macOS + Xcode",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.78",
+          "baslik": "(Yayın) Mağaza Varlıkları ve Demo Hesaplar",
+          "adimlar": [
+            "Simge (512×512 PNG), öne çıkan görsel (1024×500), telefon ekran görüntüleri (Play için en az 2; App Store için iPhone 6.9\" seti, iPad destekleniyorsa 13\" seti) ve kısa/tam açıklama metinlerini hazırlayın.",
+            "Her rol için gerçek veri içermeyen demo hesaplar oluşturun."
+          ],
+          "beklenen": "Ekran görüntülerinde gerçek kişi verisi (ad, telefon, plaka, adres) yoktur; demo hesap bilgileri (e-posta/parola/rol) yalnız inceleme formuna yazılır. Boyutlar ve karakter sınırları belgede doğrulanmadı: konsolda kontrol edin.",
+          "rol_notu": "Yayın (siz)",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F12.79",
+          "baslik": "(Yayın) Yayından Sonra: Güncelleme Bağlantıları ve Sürüm Eşikleri",
+          "adimlar": [
+            "Platform Ayarları'nda \"Android güncelleme bağlantısı\"na `https://play.google.com/store/apps/details?id=tr.com.gudeteknoloji.siteyonetim` yazın; iOS yayınlanınca \"iOS güncelleme bağlantısı\"na `https://apps.apple.com/app/id<UYGULAMA_NO>` yazın.",
+            "\"Son sürüm\"e yayınlanan sürümü yazıp kaydedin."
+          ],
+          "beklenen": "Eski sürüm kullanıcıları \"Yeni sürüm hazır\" kartında \"Güncelle\" ile mağazaya gider. \"En düşük desteklenen sürüm\"ü YALNIZ yeni sürüm iki mağazada da kullanıcıya ulaştıktan sonra yükseltin; aksi hâlde kullanıcılar güncelleyemeyecekleri bir ekranda kilitlenir.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "Uygulama mağazada yayında",
+          "yeni": true,
+          "gelistirme": "planli"
         }
       ]
     },
