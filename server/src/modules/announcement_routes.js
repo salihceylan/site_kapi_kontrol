@@ -67,11 +67,13 @@ export const announcementReadLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
-// Bildirim özeti (uygulama yoklar, ~20 sn): kullanıcı başına 600/saat.
+// Bildirim özeti (uygulama yoklar, ~20 sn = 180/saat/cihaz): kullanıcı başına 1500/saat. Dahili daire hesabı birkaç cihazda (4 x 180 = 720) ve
+// sekme/arka plan yenilemeleriyle paylaşılabildiği için 600 yetmiyordu. IP sınırı 40000/saat: apartman / site NAT'ı ve CGNAT'ta onlarca
+// hesap aynı IP'den çıkar (örn. 200 hesap x 180 = 36000); eski 12000 toplu 429 üretirdi. Kötüye kullanım yine kullanıcı sınırıyla yakalanır.
 export const announcementSummaryLimiter = createRuleLimiter({
   rules: [
-    { windowMs: HOUR_MS, max: 600, key: userKey },
-    { windowMs: HOUR_MS, max: 12000, key: ipKey },
+    { windowMs: HOUR_MS, max: 1500, key: userKey },
+    { windowMs: HOUR_MS, max: 40000, key: ipKey },
   ],
   message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,

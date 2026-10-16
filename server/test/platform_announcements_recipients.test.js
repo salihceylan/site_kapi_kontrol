@@ -1,16 +1,24 @@
-// Duyuru kitlesi (DB'siz): günlük sınır ortam değişkeni, e-posta sayaçları, hedef SQL'i, anlık görüntü adımları ve sınırları.
-// SQL'in ANLAMI (hangi kişi kitleye girer, adres seçimi, tekilleştirme) gerçek-PG betiğinde sınanır.
+// Duyuru kitlesi (DB'siz): günlük sınır ortam değişkeni, e-posta sayaçları, hedef SQL'i, anlık görüntü (TEK INSERT ... SELECT) ve sınırları.
+// SQL'in ANLAMI (hangi kişi kitleye girer, adres seçimi, tekilleştirme, adres başına sınır) gerçek-PG betiğinde sınanır.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertDeliverableAddressLimit,
   assertTargetBelongsToSite,
   emailCountsFromRows,
   emailDailyLimit,
+  emailHashSql,
+  emailUsageToday,
   emptyEmailCounts,
   previewAudience,
   snapshotRecipients,
   targetClause,
 } from '../src/modules/announcement_recipients.js';
+import { hashEmail, emailHashSalt } from '../src/modules/announcement_email_security.js';
+import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from '../src/modules/announcement_lock.js';
+import { istanbulDayRange } from '../src/modules/announcement_common.js';
+
+process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef';
 
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = [], rowCount = rows.length) => ({ rows, rowCount });
@@ -92,55 +100,149 @@ describe('previewAudience', () => {
   });
 });
 
+describe('emailHashSql / adres özeti', () => {
+  it('SQL özeti JS özetiyle AYNI tanımdır: sha256(tuz || ":" || küçük harfli adres) -> hex; tuz parametredir', () => {
+    assert.equal(emailHashSql('$4', 'b.email'), "encode(sha256(convert_to($4::TEXT || ':' || b.email, 'UTF8')), 'hex')");
+    assert.match(hashEmail('Sakin@Example.com'), /^[0-9a-f]{64}$/);
+    assert.equal(hashEmail('Sakin@Example.com'), hashEmail('  sakin@example.COM '));
+    assert.notEqual(hashEmail('a@example.com'), hashEmail('b@example.com'));
+    assert.doesNotMatch(hashEmail('sakin@example.com'), /sakin/);
+  });
+});
+
+describe('emailUsageToday', () => {
+  it('pending + sent sayılır, failed ve none SAYILMAZ; site kapsamlı; gün başlangıcı İstanbul takvim günüdür', async () => {
+    const db = fakeDb([[/^SELECT COUNT\(\*\)::INTEGER AS used FROM announcement_recipients r/, () => ok([{ used: 7 }])]]);
+    const now = new Date('2026-10-16T21:30:00.000Z'); // İstanbul 17 Ekim 00:30
+    assert.equal(await emailUsageToday(db, 5, now), 7);
+    assert.match(db.log[0].sql, /WHERE a\.site_code = \$1 AND a\.published_at >= \$2::TIMESTAMPTZ AND r\.email_status IN \('pending', 'sent'\)$/);
+    assert.doesNotMatch(db.log[0].sql, /failed|'none'/);
+    assert.deepEqual(db.log[0].params, [5, istanbulDayRange(now).start.toISOString()]);
+    assert.equal(db.log[0].params[1], '2026-10-16T21:00:00.000Z');
+  });
+});
+
+describe('assertDeliverableAddressLimit (kilitsiz erken kapı)', () => {
+  const target = { type: 'site', blockIds: [], apartmentIds: [] };
+
+  it('teslim edilecek TEKİL adres > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT; <= 1000 ise sayıyı döner; yalnız SELECT (kilit ve yazma yok)', async () => {
+    const make = (n) => fakeDb([[/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)::INTEGER AS n FROM hashed h/, () => ok([{ n }])]]);
+    const db = make(1000);
+    assert.equal(await assertDeliverableAddressLimit(db, 5, target, 'normal'), 1000);
+    assert.equal(db.log.length, 1);
+    assert.doesNotMatch(db.log[0].sql, /pg_advisory|INSERT|UPDATE|FOR (SHARE|UPDATE)/);
+    await assert.rejects(() => assertDeliverableAddressLimit(make(1001), 5, target, 'normal'), (e) => e.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && e.statusCode === 400);
+  });
+
+  it('bastırılmış adresler ve (normal duyuruda) tercihi kapalı hesaplılar sayılmaz; parametreler: site, tuz, önem', async () => {
+    const db = fakeDb([[/^WITH audience AS/, () => ok([{ n: 3 }])]]);
+    await assertDeliverableAddressLimit(db, 5, { type: 'blocks', blockIds: [2], apartmentIds: [] }, 'urgent');
+    assert.match(db.log[0].sql, /LEFT JOIN announcement_email_suppressions sup ON sup\.email_hash = h\.email_hash/);
+    assert.match(db.log[0].sql, /sup\.email_hash IS NULL/);
+    assert.match(db.log[0].sql, /NOT \(h\.has_account AND h\.email_pref = FALSE AND \$4::TEXT = 'normal'\)/);
+    assert.deepEqual(db.log[0].params, [5, [2], emailHashSalt(), 'urgent']);
+  });
+});
+
 describe('snapshotRecipients', () => {
   const insertRegex = /^WITH audience AS .* INSERT INTO announcement_recipients/;
+  const lockRegex = /^SELECT pg_advisory_xact_lock\(\$1::int, \$2::int\)$/;
+  const usageRegex = /^SELECT COUNT\(\*\)::INTEGER AS used FROM announcement_recipients r/;
+  const countsRegex = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 GROUP BY email_status$/;
+  const siteTarget = { type: 'site', blockIds: [], apartmentIds: [] };
+  const NOW = new Date('2026-10-16T10:00:00.000Z');
+  const DAY_START = '2026-10-15T21:00:00.000Z';
 
-  it('e-posta istenmediyse: günlük kullanım okunmaz, tekilleştirme/sınır sorguları yok, tek INSERT', async () => {
+  it('e-posta istenmediyse: kilit YOK, günlük kullanım okunmaz, tek INSERT (TEK ifade; tüm durumlar none); özet sorgusu yok', async () => {
     const db = fakeDb([[insertRegex, () => ok([], 12)]]);
-    const result = await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: { type: 'site', blockIds: [], apartmentIds: [] }, importance: 'normal', sendEmail: false, enforceEmailLimit: true });
+    const result = await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: false, enforceEmailLimit: true, now: NOW });
     assert.equal(result.total, 12);
+    assert.deepEqual(result.email, emptyEmailCounts());
     assert.equal(db.log.length, 1);
-    assert.deepEqual(db.log[0].params, [5, 3, false, 'normal']);
+    assert.deepEqual(db.log[0].params, [5, 3, false, 'normal', emailHashSalt(), DAY_START, 3, 0]);
   });
 
-  it('kitle 0: tek INSERT, e-posta adımları atlanır', async () => {
-    const db = fakeDb([[/FROM announcement_recipients r INNER JOIN announcements a/, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 0)]]);
-    const result = await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: { type: 'site', blockIds: [], apartmentIds: [] }, importance: 'normal', sendEmail: true, enforceEmailLimit: true });
+  it('hedef parametreleri site kodundan hemen sonra gelir (blocks: $2); duyuru kimliği ve diğer parametreler onları izler', async () => {
+    const db = fakeDb([[insertRegex, () => ok([], 2)]]);
+    await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: { type: 'blocks', blockIds: [7, 9], apartmentIds: [] }, importance: 'urgent', sendEmail: false, enforceEmailLimit: false, now: NOW });
+    assert.deepEqual(db.log[0].params, [5, [7, 9], 3, false, 'urgent', emailHashSalt(), DAY_START, 3, 0]);
+    assert.match(db.log[0].sql, /a\.block_id = ANY\(\$2::BIGINT\[\]\)/);
+    assert.match(db.log[0].sql, /\$3::BIGINT, f\.person_id/);
+  });
+
+  it('e-postalı yayın: ÖNCE küresel iki-int işlem kilidi, SONRA günlük kullanım, SONRA tek INSERT, en sonda durum özeti', async () => {
+    const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 120 }])], [insertRegex, () => ok([], 4)], [countsRegex, () => ok([{ email_status: 'pending', n: 3 }, { email_status: 'no_address', n: 1 }])]]);
+    const result = await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: true, dailyLimit: 500, now: NOW });
+    const kind = (sql) => [['lock', lockRegex], ['usage', usageRegex], ['insert', insertRegex], ['counts', countsRegex]].find(([, pattern]) => pattern.test(sql))?.[0] ?? '?';
+    assert.deepEqual(db.log.map((q) => kind(q.sql)), ['lock', 'usage', 'insert', 'counts']);
+    assert.deepEqual(db.log[0].params, [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
+    assert.deepEqual(db.log[1].params, [5, DAY_START]);
+    assert.deepEqual(db.log[2].params, [5, 8, true, 'normal', emailHashSalt(), DAY_START, 3, 380]);
+    assert.equal(result.total, 4);
+    assert.equal(result.email.pending, 3);
+    assert.equal(result.email.no_address, 1);
+    assert.equal(result.email.requested, 4);
+  });
+
+  it('INSERT tek ifadedir: UPDATE yok; pencere fonksiyonlarıyla tekilleştirme + adres başına sınır + site kotası; failed sayıma girmez; bastırma listesi; acil yalnız KİŞİ tercihini atlar', async () => {
+    const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
+    await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: false, now: NOW });
+    const insert = db.log.find((q) => insertRegex.test(q.sql)).sql;
+    assert.equal(db.log.filter((q) => /^UPDATE/.test(q.sql)).length, 0, 'karesel UPDATE ... FROM (ROW_NUMBER) kalıbı yok');
+    assert.match(insert, /ROW_NUMBER\(\) OVER \(PARTITION BY CASE WHEN c\.st = 'eligible' THEN c\.email_hash END ORDER BY c\.person_id\) AS addr_rn/);
+    assert.match(insert, /ROW_NUMBER\(\) OVER \(PARTITION BY f\.in_quota ORDER BY f\.person_id\) AS cap_rn/);
+    assert.match(insert, /LEFT JOIN announcement_email_suppressions sup ON sup\.email_hash = h\.email_hash/);
+    assert.match(insert, /WHEN sup\.email_hash IS NOT NULL THEN 'skipped_pref'/);
+    assert.match(insert, /WHEN h\.has_account AND h\.email_pref = FALSE AND \$\d+::TEXT = 'normal' THEN 'skipped_pref'/);
+    // adres başına günlük sayım: indeks yoklayan ilişkili alt sorgu (karesel plan riski yok); yalnız pending + sent; İstanbul günü
+    assert.match(insert, /SELECT COUNT\(\*\) FROM announcement_recipients r WHERE r\.email_hash = k\.email_hash AND r\.email_status IN \('pending', 'sent'\) AND \(SELECT an\.published_at FROM announcements an WHERE an\.id = r\.announcement_id\) >= \$\d+::TIMESTAMPTZ/);
+    assert.doesNotMatch(insert, /'failed'/);
+    // yalnız pending satırlara adres + özet yazılır; kalanlarda NULL
+    assert.match(insert, /CASE WHEN f\.final_status = 'pending' THEN f\.email END, CASE WHEN f\.final_status = 'pending' THEN f\.email_hash END, f\.final_status/);
+    assert.match(insert, /WHEN n\.addr_rn > 1 THEN 'duplicate' WHEN NOT n\.in_quota THEN 'capped' WHEN n\.cap_rn <= \$\d+::INTEGER THEN 'pending' ELSE 'capped'/);
+  });
+
+  it('kitle 0: INSERT 0 satır -> özet sorgusu atlanır', async () => {
+    const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 0)]]);
+    const result = await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: true, now: NOW });
     assert.equal(result.total, 0);
-    assert.equal(db.log.filter((q) => /duplicate|capped/.test(q.sql)).length, 0);
+    assert.deepEqual(result.email, emptyEmailCounts());
+    assert.equal(db.log.filter((q) => countsRegex.test(q.sql)).length, 0);
   });
 
-  it('günlük kullanım sınırı: allowance = min(1000, günlük - kullanılan); 0\'ın altına inmez; fazlası capped', async () => {
-    const run = async ({ dailyLimit, used, pending }) => {
-      const db = fakeDb([
-        [/FROM announcement_recipients r INNER JOIN announcements a/, () => ok([{ used }])],
-        [insertRegex, () => ok([], pending)],
-        [/^UPDATE announcement_recipients r SET email_status = 'duplicate'/, () => ok([], 0)],
-        [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 AND email_status = 'pending'$/, () => ok([{ n: pending }])],
-        [/^UPDATE announcement_recipients r SET email_status = 'capped'/, () => ok([], 0)],
-        [/^SELECT email_status, COUNT/, () => ok([{ email_status: 'pending', n: 1 }])],
-      ]);
-      await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: { type: 'site', blockIds: [], apartmentIds: [] }, importance: 'normal', sendEmail: true, enforceEmailLimit: false, dailyLimit });
-      return db.log.find((q) => /SET email_status = 'capped'/.test(q.sql))?.params ?? null;
+  it('günlük kullanım sınırı: allowance = min(1000, günlük - kullanılan); 0\'ın altına inmez; parametre olarak INSERT\'e verilir', async () => {
+    const run = async ({ dailyLimit, used }) => {
+      const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
+      await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: false, dailyLimit, now: NOW });
+      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-1);
     };
-    assert.deepEqual(await run({ dailyLimit: 500, used: 0, pending: 600 }), [8, 500]);
-    assert.deepEqual(await run({ dailyLimit: 500, used: 450, pending: 600 }), [8, 50]);
-    assert.deepEqual(await run({ dailyLimit: 500, used: 900, pending: 10 }), [8, 0], 'kota doldu -> hepsi capped');
-    assert.deepEqual(await run({ dailyLimit: 5000, used: 0, pending: 1500 }), [8, 1000], 'tek yayın üst sınırı 1000');
-    assert.equal(await run({ dailyLimit: 500, used: 0, pending: 40 }), null, 'sınır altında kırpma yok');
+    assert.equal(await run({ dailyLimit: 500, used: 0 }), 500);
+    assert.equal(await run({ dailyLimit: 500, used: 450 }), 50);
+    assert.equal(await run({ dailyLimit: 500, used: 900 }), 0, 'kota doldu -> hepsi capped');
+    assert.equal(await run({ dailyLimit: 5000, used: 0 }), 1000, 'tek yayın üst sınırı 1000');
+    assert.equal(await run({ dailyLimit: 0, used: 0 }), 0);
   });
 
-  it('yönetici yayınında (enforceEmailLimit) 1000\'den fazla teslim edilecek adres 400 ANNOUNCEMENT_EMAIL_LIMIT; zamanlayıcıda hata yok', async () => {
-    const responders = (pending) => [
-      [/FROM announcement_recipients r INNER JOIN announcements a/, () => ok([{ used: 0 }])],
-      [insertRegex, () => ok([], pending)],
-      [/^UPDATE announcement_recipients r SET email_status = 'duplicate'/, () => ok([], 0)],
-      [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 AND email_status = 'pending'$/, () => ok([{ n: pending }])],
-      [/^UPDATE announcement_recipients r SET email_status = 'capped'/, () => ok([], 0)],
-      [/^SELECT email_status, COUNT/, () => ok([])],
+  it('adres başına sınır parametresi verilir (varsayılan ortamdan 3; açıkça verilirse o)', async () => {
+    const run = async (perAddressLimit) => {
+      const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
+      await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: false, now: NOW, ...(perAddressLimit === undefined ? {} : { perAddressLimit }) });
+      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-2);
+    };
+    assert.equal(await run(undefined), 3);
+    assert.equal(await run(1), 1);
+  });
+
+  it('yönetici yayınında (enforceEmailLimit) pending + capped > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT; 1000 geçer; zamanlayıcıda hata yok', async () => {
+    const responders = (pending, capped = 0) => [
+      [lockRegex, () => ok()],
+      [usageRegex, () => ok([{ used: 0 }])],
+      [insertRegex, () => ok([], pending + capped)],
+      [countsRegex, () => ok([{ email_status: 'pending', n: pending }, { email_status: 'capped', n: capped }])],
     ];
-    const args = { announcementId: 1, siteCode: 5, target: { type: 'site', blockIds: [], apartmentIds: [] }, importance: 'normal', sendEmail: true };
+    const args = { announcementId: 1, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, now: NOW };
     await assert.rejects(() => snapshotRecipients(fakeDb(responders(1001)), { ...args, enforceEmailLimit: true }), (e) => e.code === 'ANNOUNCEMENT_EMAIL_LIMIT' && e.statusCode === 400);
+    await assert.rejects(() => snapshotRecipients(fakeDb(responders(900, 101)), { ...args, enforceEmailLimit: true }), (e) => e.code === 'ANNOUNCEMENT_EMAIL_LIMIT');
     await snapshotRecipients(fakeDb(responders(1000)), { ...args, enforceEmailLimit: true });
     await snapshotRecipients(fakeDb(responders(5000)), { ...args, enforceEmailLimit: false });
   });

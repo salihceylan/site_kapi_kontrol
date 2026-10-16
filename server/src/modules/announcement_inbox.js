@@ -47,7 +47,16 @@ export async function listMyAnnouncements(authUser, query = {}, db = pool) {
   }
   if (filters.beforeId !== null) {
     params.push(filters.beforeId);
-    clauses.push(`(a.published_at, a.id) < (SELECT c.published_at, c.id FROM announcements c WHERE c.id = $${params.length})`);
+    // İmleç satırı ÇAĞIRANIN alıcı olduğu duyuruya bağlıdır (geri çekilmiş olsa da: sayfa dolaşımı kopmasın). Başkasının / başka sitenin
+    // duyurusunun varlığı ve yayın zamanı bu yolla sızmaz: eşleşme yoksa alt sorgu NULL döner ve sayfa boş kalır.
+    clauses.push(`(a.published_at, a.id) < (
+      SELECT c.published_at, c.id
+      FROM announcements c
+      INNER JOIN announcement_recipients cr ON cr.announcement_id = c.id
+      INNER JOIN site_people cs ON cs.id = cr.person_id AND cs.user_code = $1
+      WHERE c.id = $${params.length} AND c.status IN ('published', 'withdrawn')
+      LIMIT 1
+    )`);
   }
   params.push(filters.limit + 1);
   const result = await db.query(
@@ -113,10 +122,11 @@ export async function markAnnouncementRead(authUser, rawId, db = pool) {
     `
       UPDATE announcement_recipients r
       SET read_at = NOW()
-      FROM site_people sp, announcements a
+      FROM site_people sp, announcements a, sites s
       WHERE r.announcement_id = $1
         AND sp.id = r.person_id AND sp.user_code = $2
         AND a.id = r.announcement_id AND a.status = 'published'
+        AND s.site_code = a.site_code AND s.approval_status = 'approved'
         AND r.read_at IS NULL
       RETURNING r.read_at
     `,
@@ -158,9 +168,10 @@ export async function markAllAnnouncementsRead(authUser, body = {}, db = pool) {
     `
       UPDATE announcement_recipients r
       SET read_at = NOW()
-      FROM site_people sp, announcements a
+      FROM site_people sp, announcements a, sites s
       WHERE sp.id = r.person_id AND sp.user_code = $1
         AND a.id = r.announcement_id AND a.status = 'published'
+        AND s.site_code = a.site_code AND s.approval_status = 'approved'
         AND r.read_at IS NULL
         AND ($2::BIGINT IS NULL OR a.site_code = $2::BIGINT)
     `,

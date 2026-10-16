@@ -17,6 +17,7 @@ import { SYNC_STEPS } from '../src/modules/people_sync_sql.js';
 import { resetPeopleSyncThrottle } from '../src/modules/people_sync.js';
 
 process.env.PEOPLE_SYNC_MIN_INTERVAL_MS = '0';
+process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef'; // e-posta adres özeti tuzu sırdan türetilir
 
 const SITE_1 = 1000000001;
 const SITE_2 = 1000000002;
@@ -111,6 +112,12 @@ function installFakeDb() {
     if (a) return a;
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || /^SELECT pg_advisory_xact_lock/.test(sql) || /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(sql) || /^INSERT INTO audit_log/.test(sql)) return ok();
     if (STEP_SQLS.has(sql)) return ok();
+    // kötüye kullanım sınırları ve çift POST koruması: varsayılan "izin verilir" (sınırları sınayan testler kendi işleyicisini ekler)
+    if (/^SELECT COUNT\(\*\)::INTEGER AS total, COUNT\(\*\) FILTER \(WHERE importance = 'urgent' AND send_email\)/.test(sql)) return ok([{ total: 0, urgent_email: 0 }]);
+    if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1/.test(sql)) return ok([{ n: 0 }]);
+    if (/^SELECT 1 FROM announcements WHERE site_code = \$1 AND created_by = \$2 AND status = 'published'/.test(sql)) return ok();
+    if (/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)/.test(sql)) return ok([{ n: 10 }]);
+    if (/^SELECT importance, target_type, target_block_ids, target_apartment_ids, send_email FROM announcements WHERE id = \$1 AND site_code = \$2 AND status IN/.test(sql)) return ok();
     if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return ok([{ locked: true }]);
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 220)}`);
   };
@@ -200,7 +207,7 @@ async function call(method, path, { user = users.mgrA, body } = {}) {
 const base = (site = SITE_1) => `/manager/sites/${site}/announcements`;
 
 // --- yanıt işleyicileri -------------------------------------------------------------------------------------
-const SITE_SHARE = /^SELECT site_code FROM sites WHERE site_code = \$1 FOR SHARE$/;
+const SITE_SHARE = /^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/;
 const DETAIL = /^SELECT a\.id, a\.title, a\.body, a\.importance, a\.status, a\.target_type, a\.target_block_ids, a\.target_apartment_ids, a\.send_email, .* WHERE a\.id = \$1 AND a\.site_code = \$2 LIMIT 1$/;
 const DETAIL_STATS = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n, COUNT\(\*\) FILTER/;
 const LIST_COUNT = /^SELECT COUNT\(\*\)::INTEGER AS total FROM announcements a/;
@@ -225,9 +232,6 @@ function publishFlow({ sendEmail = false, total = 3, pending = 0 } = {}) {
     [/^SELECT COUNT\(\*\)::INTEGER AS used/, () => ok([{ used: 0 }])],
     [/FROM announcement_recipients r INNER JOIN announcements a ON a\.id = r\.announcement_id WHERE a\.site_code = \$1/, () => ok([{ used: 0 }])],
     [SNAPSHOT, () => ok([], total)],
-    [/^UPDATE announcement_recipients r SET email_status = 'duplicate'/, () => ok([], 0)],
-    [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 AND email_status = 'pending'$/, () => ok([{ n: pending }])],
-    [/^UPDATE announcement_recipients r SET email_status = 'capped'/, () => ok([], 0)],
     [/^SELECT email_status, COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 GROUP BY email_status$/, () => ok(pending > 0 ? [{ email_status: 'pending', n: pending }] : [])],
     [FINAL, () => ok([], 1)],
     [DETAIL, () => ok([annRow({ send_email: sendEmail })])],
@@ -271,7 +275,7 @@ describe('duyuru rotaları: zincir', () => {
     }
   });
 
-  it('hız sınırları: yazma 120/saat, okuma 1200/saat, özet 600/saat (kullanıcı başına); 429 + Retry-After', () => {
+  it('hız sınırları: yazma 120/saat, okuma 1200/saat, özet 1500/saat (kullanıcı başına); 429 + Retry-After', () => {
     const run = (limiter, code) => {
       const res = {
         statusCode: 200,
@@ -294,7 +298,7 @@ describe('duyuru rotaları: zincir', () => {
       });
       return { res, passed };
     };
-    for (const [limiter, max] of [[announcementWriteLimiter, 120], [announcementSummaryLimiter, 600], [announcementReadLimiter, 1200]]) {
+    for (const [limiter, max] of [[announcementWriteLimiter, 120], [announcementSummaryLimiter, 1500], [announcementReadLimiter, 1200]]) {
       for (let i = 0; i < max; i += 1) assert.equal(run(limiter, 7).passed, true, `${max}/${i}`);
       const blocked = run(limiter, 7);
       assert.equal(blocked.res.statusCode, 429, `${max}`);
@@ -302,6 +306,48 @@ describe('duyuru rotaları: zincir', () => {
       assert.ok(blocked.res.body.retry_after_seconds > 0);
       assert.equal(run(limiter, 8).passed, true, 'başka kullanıcı etkilenmez');
     }
+  });
+
+  it('D15 özet sınırı: kullanıcı başına 1500/saat (paylaşılan dahili daire hesabı: 4 cihaz x 180 + sekme yenilemeleri), IP başına 40000/saat (apartman / CGNAT NAT\'ı); eski 600 / 12000 değerleri aşılabilir', () => {
+    const run = (limiter, code, ip = '1.2.3.4') => {
+      const res = {
+        statusCode: 200,
+        headers: {},
+        setHeader() {},
+        status(c) {
+          this.statusCode = c;
+          return this;
+        },
+        json() {
+          return this;
+        },
+      };
+      let passed = false;
+      limiter({ authUser: { id: code }, ip, path: '/x' }, res, () => {
+        passed = true;
+      });
+      return { res, passed };
+    };
+    // eski sınırlar: tek hesap 601., IP başına 12001. istek artık 429 DEĞİL
+    for (let i = 0; i < 1200; i += 1) assert.equal(run(announcementSummaryLimiter, 7).passed, true, `kullanıcı ${i}`);
+    assert.equal(run(announcementSummaryLimiter, 7).passed, true, '1201. istek (eski sınır 600 aşıldı) geçer');
+    announcementSummaryLimiter.reset();
+    // 200 hesap x 180 istek = 36000 (aynı NAT arkasında): hiçbiri 429 almaz
+    for (let user = 1; user <= 200; user += 1) {
+      for (let i = 0; i < 180; i += 1) assert.equal(run(announcementSummaryLimiter, user, '9.9.9.9').passed, true, `hesap ${user}/${i}`);
+    }
+    // IP sınırı yine vardır: 40000. isteğe kadar geçer, sonrası 429
+    let sent = 36000;
+    let last = true;
+    for (let user = 201; sent < 40000; user += 1) {
+      for (let i = 0; i < 180 && sent < 40000; i += 1) {
+        last = run(announcementSummaryLimiter, user, '9.9.9.9').passed;
+        sent += 1;
+      }
+    }
+    assert.equal(last, true, '40000. istek geçer');
+    assert.equal(run(announcementSummaryLimiter, 9999, '9.9.9.9').res.statusCode, 429, '40001. istek IP sınırına takılır');
+    assert.equal(run(announcementSummaryLimiter, 9999, '8.8.8.8').passed, true, 'başka IP etkilenmez');
   });
 });
 
@@ -402,6 +448,30 @@ describe('kurul üyesi yanıtları', () => {
       assert.equal(board.recipient_count, 3);
     }
   });
+
+  it('D6 küçük hedef (1-4 alıcı): kurul için okunma / okunmamış / e-posta sayıları NULL (anahtarlar kalır), recipients sayısı kalır; yönetici gerçek sayıları görür; 5+ alıcıda kurul da görür', async () => {
+    const stats = [{ email_status: 'sent', n: 1, read_n: 1 }, { email_status: 'no_address', n: 1, read_n: 0 }];
+    handlers.push(...listHandlers(), [DETAIL, () => ok([annRow({ recipient_count: 2 })])], [DETAIL_STATS, () => ok(stats)]);
+    handlers.unshift([LIST_PAGE, () => ok([annRow({ recipient_count: 2, read_count: 1 })])]);
+    const asBoard = await call('GET', `${base()}/41`, { user: users.board });
+    const asManager = await call('GET', `${base()}/41`, { user: users.mgrA });
+    assert.equal(asBoard.status, 200);
+    assert.equal(asBoard.body.stats.recipients, 2);
+    assert.equal(asBoard.body.stats.read, null);
+    assert.equal(asBoard.body.stats.unread, null);
+    assert.deepEqual(Object.keys(asBoard.body.stats.email).sort(), Object.keys(asManager.body.stats.email).sort(), 'anahtarlar kalır');
+    assert.ok(Object.values(asBoard.body.stats.email).every((value) => value === null));
+    assert.equal(asBoard.body.read_count, null);
+    assert.equal(asManager.body.stats.read, 1);
+    assert.equal(asManager.body.stats.email.sent, 1);
+    const listBoard = await call('GET', base(), { user: users.board });
+    assert.equal(listBoard.body.items[0].read_count, null);
+    assert.equal(listBoard.body.items[0].recipient_count, 2);
+    assert.equal((await call('GET', base(), { user: users.mgrA })).body.items[0].read_count, 1);
+    handlers.length = 0;
+    handlers.push([DETAIL, () => ok([annRow({ recipient_count: 5 })])], [DETAIL_STATS, () => ok(stats)]);
+    assert.equal((await call('GET', `${base()}/41`, { user: users.board })).body.stats.read, 1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -437,6 +507,31 @@ describe('hata biçimleri', () => {
     const empty = await call('POST', base(), { body: { title: 'x', body: 'y', target: { type: 'site' }, publish: 'now' } });
     assert.equal(empty.status, 409);
     assert.equal(empty.body.code, 'NO_RECIPIENTS');
+  });
+
+  it('yeni kötüye kullanım hata kodları: DUPLICATE_ANNOUNCEMENT / ANNOUNCEMENT_DAILY_LIMIT / ANNOUNCEMENT_HOURLY_LIMIT 409, ANNOUNCEMENT_EMAIL_LIMIT 400 ({error, code}, Türkçe mesaj, errorId YOK)', async () => {
+    const create = (extra = {}) => call('POST', base(), { body: { title: 'x', body: 'y', target: { type: 'site' }, publish: 'now', ...extra } });
+    handlers.push(...publishFlow(), [/^SELECT 1 FROM announcements WHERE site_code = \$1 AND created_by = \$2 AND status = 'published'/, () => ok([{ x: 1 }])]);
+    const duplicate = await create();
+    assert.deepEqual([duplicate.status, duplicate.body.code], [409, 'DUPLICATE_ANNOUNCEMENT']);
+    assert.match(duplicate.body.error, /az önce/);
+    handlers.length = 0;
+    handlers.push(...publishFlow(), [/^SELECT COUNT\(\*\)::INTEGER AS total, COUNT\(\*\) FILTER/, () => ok([{ total: 30, urgent_email: 0 }])]);
+    const daily = await create();
+    assert.deepEqual([daily.status, daily.body.code], [409, 'ANNOUNCEMENT_DAILY_LIMIT']);
+    assert.match(daily.body.error, /günlük/);
+    handlers.length = 0;
+    handlers.push(...publishFlow({ sendEmail: true, pending: 2 }), [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1/, () => ok([{ n: 10 }])]);
+    const hourly = await create({ send_email: true });
+    assert.deepEqual([hourly.status, hourly.body.code], [409, 'ANNOUNCEMENT_HOURLY_LIMIT']);
+    handlers.length = 0;
+    handlers.push(...publishFlow({ sendEmail: true }), [/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)/, () => ok([{ n: 1001 }])]);
+    const tooMany = await create({ send_email: true });
+    assert.deepEqual([tooMany.status, tooMany.body.code], [400, 'ANNOUNCEMENT_EMAIL_LIMIT']);
+    for (const res of [duplicate, daily, hourly, tooMany]) {
+      assert.equal(res.body.errorId, undefined);
+      assert.doesNotMatch(res.body.error, /[a-z]+_[a-z_]+/);
+    }
   });
 
   it('beklenmeyen DB hatası 500: genel mesaj + errorId; DB ayrıntısı istemciye SIZMAZ', async () => {
@@ -518,8 +613,8 @@ describe('sakin uçları (kimliği doğrulanmış her kullanıcı)', () => {
     handlers.push(
       [/^SELECT a\.id, a\.site_code, s\.name AS site_name, a\.title, left/, () => ok([{ id: '2', site_code: String(SITE_1), site_name: 'Gül', title: 'T', body_head: 'B', body_length: '1', importance: 'normal', published_at: new Date('2026-10-16T08:00:00.000Z'), edited_at: null, read_at: null }])],
       [/^SELECT a\.id, a\.site_code, s\.name AS site_name, a\.title, a\.body,/, () => ok([{ id: '2', site_code: String(SITE_1), site_name: 'Gül', title: 'T', body: 'B', importance: 'normal', published_at: new Date('2026-10-16T08:00:00.000Z'), edited_at: null, read_at: null }])],
-      [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a WHERE r\.announcement_id = \$1/, () => ok([{ read_at: new Date('2026-10-16T10:00:00.000Z') }])],
-      [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a WHERE sp\.id = r\.person_id/, () => ok([], 2)],
+      [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE r\.announcement_id = \$1/, () => ok([{ read_at: new Date('2026-10-16T10:00:00.000Z') }])],
+      [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE sp\.id = r\.person_id/, () => ok([], 2)],
       [/^WITH mine AS/, () => ok([{ unread: 2, unread_urgent: 0, latest_id: '2', latest_published_at: new Date('2026-10-16T08:00:00.000Z'), server_time: new Date('2026-10-16T09:00:00.000Z') }])],
       [/^SELECT email_announcements, push_announcements FROM notification_preferences/, () => ok()],
       [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: false, push_announcements: true }])],

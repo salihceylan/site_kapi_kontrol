@@ -3,25 +3,32 @@
 // Sözleşme: docs/PLATFORM_DUYURU.md ("Zamanlayıcı").
 //  - startAnnouncementScheduler() sunucu açılışında (server.js) başlar; 30 sn'de bir tikler; setInterval unref'lidir (süreci tutmaz) ve
 //    stopAnnouncementScheduler() ile temiz durur (kapanışta çalışan tikin bitmesi beklenir).
-//  - Süreçler arası TEK ÇALIŞAN: pg_try_advisory_lock (announcement_lock.js). Kilit başka yerdeyse tik atlanır.
+//  - Süreçler arası TEK ÇALIŞAN: pg_try_advisory_lock (iki-int anahtar, announcement_lock.js). Kilit başka yerdeyse tik atlanır.
 //  - Her tikte en çok 20 duyuru yayınlanır (yayınlayan "Sistem"); kitle 0 ise duyuru yine `published` olur (recipient_count 0).
-//    Her duyuru kendi transaction'ındadır: biri başarısız olursa (loglanır) diğerleri etkilenmez, sunucu düşmez.
+//    Her duyuru kendi transaction'ındadır: biri başarısız olursa diğerleri etkilenmez, sunucu düşmez. Başarısız kayıt için sayaç +1 ve üstel
+//    geri çekilme (publish_attempts / next_attempt_at) yazılır: kalıcı hatalı (zehirli) kayıt her tikte yeniden denenip LIMIT sırasını tıkamaz,
+//    log şişmez (yalnız 1. ve son başarısızlık loglanır); 10. başarısızlıktan sonra otomatik denenmez (elle yayın ucu çalışır).
 //  - Ardından bekleyen e-posta varsa kuyruk ARKA PLANDA tetiklenir (tik beklemez).
 //  - ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile (testler) hiç başlamaz.
 
 import { pool } from '../db.js';
 import { hasPendingEmails, kickEmailQueue, resumeEmailQueue, stopEmailQueue } from './announcement_email_queue.js';
-import { acquireSessionLock } from './announcement_lock.js';
-import { publishDueAnnouncement } from './announcement_service.js';
+import { MAX_PUBLISH_ATTEMPTS } from './announcement_common.js';
+import { purgeStaleEmailHashes } from './announcement_email_queue.js';
+import { ANNOUNCEMENT_LOCK_JOBS, acquireSessionLock } from './announcement_lock.js';
+import { publishDueAnnouncement, recordPublishFailure } from './announcement_service.js';
 
 export const SCHEDULER_INTERVAL_MS = 30 * 1000;
 export const SCHEDULER_FIRST_TICK_DELAY_MS = 5 * 1000;
-export const SCHEDULER_LOCK_KEY = 'announcement_scheduler';
+export const SCHEDULER_LOCK_JOB = ANNOUNCEMENT_LOCK_JOBS.scheduler;
+const HASH_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 export const MAX_PUBLISH_PER_TICK = 20;
 
 /** Test / QA için değiştirilebilir bağımlılıklar. */
 export const schedulerHooks = {
   publishDue: (args) => publishDueAnnouncement(args),
+  recordFailure: (args) => recordPublishFailure(args),
+  purgeHashes: () => purgeStaleEmailHashes(),
   hasPendingEmails: () => hasPendingEmails(),
   kickEmailQueue: () => kickEmailQueue(),
 };
@@ -30,10 +37,12 @@ let intervalTimer = null;
 let firstTickTimer = null;
 let tickPromise = null;
 let stopped = false;
+let lastPurgeAt = 0;
 
 /** Test yardımcısı: durdurma işaretlerini (zamanlayıcı + e-posta kuyruğu) sıfırlar; zamanlayıcıyı BAŞLATMAZ. */
 export function resetSchedulerState() {
   stopped = false;
+  lastPurgeAt = 0;
   resumeEmailQueue();
 }
 
@@ -46,7 +55,7 @@ async function doTick() {
   const summary = { locked: false, published: 0, skipped: 0, failed: 0 };
   let lock = null;
   try {
-    lock = await acquireSessionLock(SCHEDULER_LOCK_KEY);
+    lock = await acquireSessionLock(SCHEDULER_LOCK_JOB);
     if (!lock) {
       summary.locked = true;
       return summary;
@@ -56,10 +65,11 @@ async function doTick() {
         SELECT id, site_code
         FROM announcements
         WHERE status = 'scheduled' AND publish_at <= NOW()
+          AND publish_attempts < $2 AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
         ORDER BY publish_at, id
         LIMIT $1
       `,
-      [MAX_PUBLISH_PER_TICK],
+      [MAX_PUBLISH_PER_TICK, MAX_PUBLISH_ATTEMPTS],
     );
     for (const row of due.rows ?? []) {
       if (stopped) {
@@ -74,8 +84,13 @@ async function doTick() {
         }
       } catch (error) {
         summary.failed += 1;
-        // eslint-disable-next-line no-console
-        console.error(`[announcement-scheduler] yayin basarisiz (id=${row.id}):`, error?.code || error?.message || 'hata');
+        const code = error?.code || error?.message || 'hata';
+        const attempts = await schedulerHooks.recordFailure({ id: Number(row.id), siteCode: Number(row.site_code), code });
+        // Log oran sınırlı: yalnız ilk ve son (otomatik denemenin bırakıldığı) başarısızlık; aradakiler sayaçta.
+        if (attempts <= 1 || attempts >= MAX_PUBLISH_ATTEMPTS) {
+          // eslint-disable-next-line no-console
+          console.error(`[announcement-scheduler] yayin basarisiz (id=${row.id}, deneme=${attempts}):`, code);
+        }
       }
     }
   } catch (error) {
@@ -85,6 +100,16 @@ async function doTick() {
   } finally {
     if (lock) {
       await lock.release().catch(() => {});
+    }
+  }
+  // Eski adres özetleri saatte en çok bir kez temizlenir (gizlilik; hata tiki bozmaz).
+  if (!stopped && Date.now() - lastPurgeAt >= HASH_PURGE_INTERVAL_MS) {
+    lastPurgeAt = Date.now();
+    try {
+      await schedulerHooks.purgeHashes();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[announcement-scheduler] ozet temizligi basarisiz:', error?.code || error?.message || 'hata');
     }
   }
   // E-posta kuyruğu: yayınlar bittikten ve zamanlayıcı kilidi açıldıktan sonra arka planda (kendi tek-çalışan kilidi vardır).

@@ -19,6 +19,8 @@ const SENSITIVE_QUERY_KEYS = [
   'otp',
   'signature',
   'sig',
+  // duyuru e-postasindaki "abonelikten cik" baglantisi: /public/announcement-unsubscribe?t=<adres ozeti>.<imza>
+  't',
 ];
 
 // Sorgu parametresi degerleri: ?token=abc&x=1 -> ?token=***&x=1

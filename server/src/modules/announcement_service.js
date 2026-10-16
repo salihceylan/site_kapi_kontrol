@@ -3,10 +3,15 @@
 // Sözleşme: docs/PLATFORM_DUYURU.md.
 //  - Yayınlama ATOMİK ve İDEMPOTENTTİR: `UPDATE announcements ... WHERE status IN ('draft','scheduled') RETURNING` + kitle ekleme tek
 //    transaction'da; çift tıklama / zamanlayıcı yarışında ikinci istek 409 INVALID_STATE (veri çiftlenmez).
-//  - KİLİT SIRASI (Faz 2 ile uyumlu): sites FOR SHARE (site silme ile sıra) -> site kişi advisory kilidi (people_sync:<site>; CRM yazmaları
-//    ve eşitleme ile AYNI anahtar; yalnız yayınlarda) -> announcements satırı -> announcement_recipients. apartments/users kilidi
-//    gerekmez: yayın bu tablolara yazmaz; kişi eşitlemesi (runSyncSteps) CRM yazma yolundaki gibi kilit altında çalışır. Nadir 40P01'de
-//    işlem TEK SEFER baştan denenir.
+//  - KİLİT SIRASI (Faz 2 ile uyumlu): sites FOR KEY SHARE (site silme ile sıra) -> site kişi advisory kilidi (people_sync:<site>; CRM
+//    yazmaları ve eşitleme ile AYNI anahtar) -> announcements satırı -> announcement_recipients -> (e-postalıysa) küresel e-posta kilidi.
+//    `FOR KEY SHARE`, `FOR SHARE` DEĞİL: yapı düzenleme akışı (site_service.syncSiteStructureCounts) önce people_sync advisory kilidini alıp
+//    sonra `UPDATE sites` (FOR NO KEY UPDATE) yapar; FOR SHARE bu UPDATE ile çakışır ve ters sıra bir deadlock (40P01) döngüsü kapatırdı.
+//    FOR KEY SHARE yalnız site SİLME / anahtar değişimi (FOR UPDATE) ile çakışır, sıradan UPDATE sites'ı beklemez.
+//    apartments/users kilidi gerekmez: yayın bu tablolara yazmaz; kişi eşitlemesi (runSyncSteps) CRM yazma yolundaki gibi kilit altında
+//    çalışır. Nadir 40P01'de işlem TEK SEFER baştan denenir.
+//  - Kötüye kullanım sınırları (siteye günlük toplam / acil+e-postalı yayın, yöneticiye saatlik e-postalı yayın, adres başına günlük
+//    e-posta) yayın/zamanlama anında, kilit altında denetlenir; çift POST (aynı içerik 60 sn) 409 DUPLICATE_ANNOUNCEMENT.
 //  - Her sorguda site_code vardır (IDOR yok). Audit `details` yalnız sayı/alan adı içerir: başlık, metin ve e-posta adresi ASLA yazılmaz.
 
 import { pool } from '../db.js';
@@ -24,10 +29,17 @@ import { runSyncSteps } from './people_sync_sql.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 import {
   BODY_HEAD_CHARS,
+  DUPLICATE_WINDOW_SECONDS,
+  MAX_PUBLISH_ATTEMPTS,
+  announcementLimits,
   announcementNotFound,
+  dailyLimitReached,
+  duplicateAnnouncement,
+  hourlyLimitReached,
   idArray,
   invalidSchedule,
   invalidState,
+  istanbulDayRange,
   mapSummaryRow,
   noRecipients,
   normalizeSendEmail,
@@ -39,6 +51,7 @@ import {
   siteNotFound,
 } from './announcement_common.js';
 import {
+  assertDeliverableAddressLimit,
   assertTargetBelongsToSite,
   emailCountsFromRows,
   previewAudience,
@@ -58,8 +71,9 @@ async function runTransactionOnce(siteCode, work, { people }) {
   try {
     await client.query('BEGIN');
     began = true;
-    // 1) site satırı FOR SHARE: site silme ile sıraya girer (silme sürerken yeni duyuru/yayın yazmaz, kilit döngüsü olmaz)
-    const site = await client.query(`SELECT site_code FROM sites WHERE site_code = $1 FOR SHARE`, [siteCode]);
+    // 1) site satırı FOR KEY SHARE: site silme ile sıraya girer (silme sürerken yeni duyuru/yayın yazmaz) ama sıradan UPDATE sites'ı
+    //    (yapı düzenleme: advisory kilit -> UPDATE sites) BEKLETMEZ; bkz. dosya başı notu (deadlock D1).
+    const site = await client.query(`SELECT site_code FROM sites WHERE site_code = $1 FOR KEY SHARE`, [siteCode]);
     if (!site.rows?.[0]) {
       throw siteNotFound();
     }
@@ -158,18 +172,28 @@ export async function listAnnouncements(siteCode, query = {}, db = pool) {
   };
 }
 
+/**
+ * Hedefin okunur gösterimi (yalnız bu siteye ait kayıtlar): `labels` blok / daire sırasıyla ad listesi (eski alan, değişmedi);
+ * `blocks` [{ id, name }] ve `apartments` [{ id, label }] kimlikle eşleşen EKLEMELİ listeler (form kayıtlı hedefi seçili çip olarak gösterebilsin).
+ * Silinmiş / başka sitenin kimlikleri sessizce düşer. Blok ve daire adları kişisel veri değildir (kurula da verilir).
+ */
 async function loadTargetLabels(db, siteCode, row) {
   if (row.target_type === 'blocks') {
     const result = await db.query(
-      `SELECT block_name FROM site_blocks WHERE site_code = $1 AND id = ANY($2::BIGINT[]) ORDER BY sort_order, id`,
+      `SELECT id, block_name FROM site_blocks WHERE site_code = $1 AND id = ANY($2::BIGINT[]) ORDER BY sort_order, id`,
       [siteCode, idArray(row.target_block_ids)],
     );
-    return (result.rows ?? []).map((entry) => entry.block_name);
+    const rows = result.rows ?? [];
+    return {
+      labels: rows.map((entry) => entry.block_name),
+      blocks: rows.map((entry) => ({ id: Number(entry.id), name: entry.block_name })),
+      apartments: [],
+    };
   }
   if (row.target_type === 'apartments') {
     const result = await db.query(
       `
-        SELECT b.block_name, a.unit_label
+        SELECT a.id, b.block_name, a.unit_label
         FROM apartments a
         INNER JOIN site_blocks b ON b.id = a.block_id
         WHERE a.site_code = $1 AND a.id = ANY($2::BIGINT[])
@@ -177,9 +201,11 @@ async function loadTargetLabels(db, siteCode, row) {
       `,
       [siteCode, idArray(row.target_apartment_ids)],
     );
-    return (result.rows ?? []).map((entry) => apartmentLabel(entry.block_name, entry.unit_label));
+    const rows = result.rows ?? [];
+    const apartments = rows.map((entry) => ({ id: Number(entry.id), label: apartmentLabel(entry.block_name, entry.unit_label) }));
+    return { labels: apartments.map((entry) => entry.label), blocks: [], apartments };
   }
-  return ['Tüm site'];
+  return { labels: ['Tüm site'], blocks: [], apartments: [] };
 }
 
 /** AnnouncementDetail (yönetici/kurul; kurul yanıtı route katmanında temizlenir). Yok / başka sitenin kaydı -> null. */
@@ -213,7 +239,7 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
   const statRows = stats.rows ?? [];
   const recipients = statRows.reduce((sum, entry) => sum + Number(entry.n ?? 0), 0);
   const read = statRows.reduce((sum, entry) => sum + Number(entry.read_n ?? 0), 0);
-  const labels = await loadTargetLabels(db, siteCode, row);
+  const targetView = await loadTargetLabels(db, siteCode, row);
   return {
     ...mapSummaryRow({ ...row, read_count: read }),
     body: row.body,
@@ -223,7 +249,10 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
       type: row.target_type,
       block_ids: idArray(row.target_block_ids),
       apartment_ids: idArray(row.target_apartment_ids),
-      labels,
+      labels: targetView.labels,
+      // EKLEMELİ (D18): kimlikle eşleşen gösterim; labels blok / daire sırasıyla gelir, kimlikle eşleşmez
+      blocks: targetView.blocks,
+      apartments: targetView.apartments,
     },
     stats: {
       recipients,
@@ -357,6 +386,104 @@ const PUBLISH_STATE_MESSAGES = Object.freeze({
   withdrawn: 'Geri çekilen duyuru yeniden yayınlanamaz.',
 });
 
+// --- Kötüye kullanım sınırları ---------------------------------------------------------------------------------
+
+/**
+ * Yönetici yayını / zamanlaması öncesi sınır denetimi (çağıranın transaction'ında, site kişi kilidi altında; yarışsız):
+ *  - siteye günlük toplam: `when` anının İstanbul gününde yayınlanmış (geri çekilenler dahil: yayınla-geri çek döngüsü kota yer) + o güne
+ *    zamanlanmış duyurular >= sınır ise 409 ANNOUNCEMENT_DAILY_LIMIT
+ *  - siteye günlük acil + e-postalı: aynı sayım, yalnız acil + send_email (varsayılan 3)
+ *  - yöneticiye saatlik e-postalı yayın (`hourly`, yalnız elle yayında): son 1 saatte bu yöneticinin yayınladığı e-postalı duyuru >= sınır
+ *    ise 409 ANNOUNCEMENT_HOURLY_LIMIT
+ * Zamanlayıcı yayınları ENGELLENMEZ (sınır, zamanlama anında denetlendi).
+ */
+export async function assertPublishAllowed(client, { id, siteCode, importance, sendEmail, when, actorUserCode, hourly }) {
+  const limits = announcementLimits();
+  const day = istanbulDayRange(when);
+  const counts = await client.query(
+    `
+      SELECT
+        COUNT(*)::INTEGER AS total,
+        COUNT(*) FILTER (WHERE importance = 'urgent' AND send_email)::INTEGER AS urgent_email
+      FROM announcements
+      WHERE site_code = $1 AND id <> $2
+        AND (
+          (status IN ('published', 'withdrawn') AND published_at >= $3::TIMESTAMPTZ AND published_at < $4::TIMESTAMPTZ)
+          OR (status = 'scheduled' AND publish_at >= $3::TIMESTAMPTZ AND publish_at < $4::TIMESTAMPTZ)
+        )
+    `,
+    [siteCode, id, day.start.toISOString(), day.end.toISOString()],
+  );
+  const row = counts.rows?.[0] ?? {};
+  if (Number(row.total ?? 0) >= limits.siteDailyTotal) {
+    throw dailyLimitReached(`Bu site için günlük ${limits.siteDailyTotal} duyuru sınırına ulaşıldı. Yarın tekrar deneyin.`);
+  }
+  if (importance === 'urgent' && sendEmail === true && Number(row.urgent_email ?? 0) >= limits.siteDailyUrgentEmail) {
+    throw dailyLimitReached(
+      `Bu site için günlük ${limits.siteDailyUrgentEmail} acil e-postalı duyuru sınırına ulaşıldı. Acil duyuruyu e-postasız yayınlayın ya da yarın deneyin.`,
+    );
+  }
+  if (hourly === true && sendEmail === true && actorUserCode !== null && actorUserCode !== undefined) {
+    const recent = await client.query(
+      `
+        SELECT COUNT(*)::INTEGER AS n
+        FROM announcements
+        WHERE published_by = $1 AND send_email = TRUE AND id <> $2
+          AND status IN ('published', 'withdrawn') AND published_at > NOW() - INTERVAL '1 hour'
+      `,
+      [actorUserCode, id],
+    );
+    if (Number(recent.rows?.[0]?.n ?? 0) >= limits.managerHourlyEmail) {
+      throw hourlyLimitReached();
+    }
+  }
+}
+
+/** Çift POST koruması: aynı site + yazar + başlık + metin + hedef son DUPLICATE_WINDOW_SECONDS içinde yayınlanmışsa 409. */
+async function assertNotDuplicate(client, { siteCode, userCode, input }) {
+  if (userCode === null || userCode === undefined) {
+    return;
+  }
+  const result = await client.query(
+    `
+      SELECT 1
+      FROM announcements
+      WHERE site_code = $1 AND created_by = $2 AND status = 'published'
+        AND published_at > NOW() - make_interval(secs => $3::DOUBLE PRECISION)
+        AND title = $4 AND body = $5 AND target_type = $6
+        AND target_block_ids = $7::BIGINT[] AND target_apartment_ids = $8::BIGINT[]
+      LIMIT 1
+    `,
+    [siteCode, userCode, DUPLICATE_WINDOW_SECONDS, input.title, input.body, input.target.type, input.target.blockIds, input.target.apartmentIds],
+  );
+  if (result.rows?.[0]) {
+    throw duplicateAnnouncement();
+  }
+}
+
+/** Zamanlanmış duyurunun oluşturanı hâlâ bu sitede yönetim yetkisine sahip ve etkin mi (süper kullanıcı her zaman yetkili sayılır). */
+async function creatorStillAuthorized(client, { createdBy, siteCode }) {
+  if (createdBy === null || createdBy === undefined) {
+    return false;
+  }
+  const result = await client.query(
+    `
+      SELECT
+        (u.role = 'super_user') AS is_super,
+        EXISTS (SELECT 1 FROM site_manager_sites WHERE site_code = $2 AND manager_user_code = u.user_code) AS is_manager,
+        EXISTS (
+          SELECT 1 FROM site_memberships
+          WHERE site_code = $2 AND user_code = u.user_code AND role IN ('SITE_OWNER', 'SITE_ADMIN') AND is_active = TRUE
+        ) AS is_member
+      FROM users u
+      WHERE u.user_code = $1 AND u.is_active = TRUE
+    `,
+    [createdBy, siteCode],
+  );
+  const row = result.rows?.[0];
+  return Boolean(row && (row.is_super === true || row.is_manager === true || row.is_member === true));
+}
+
 /**
  * Çağıranın transaction'ında (site kişi kilidi alınmış olmalı) duyuruyu yayınlar:
  *   1) UPDATE ... WHERE status IN ('draft','scheduled') RETURNING (talep; yarışta ikinci istek 0 satır alır)
@@ -368,19 +495,24 @@ const PUBLISH_STATE_MESSAGES = Object.freeze({
  * duyuru yine yayınlanır (recipient_count 0); e-posta sınırı aşılırsa fazlası 'capped' olur.
  * @returns {Promise<{ skipped: true, status: string } | { published: true, recipientCount: number, email: object }>}
  */
-export async function publishWithinTransaction(client, { id, siteCode, actor, scheduled = false, dailyLimit }) {
+export async function publishWithinTransaction(
+  client,
+  { id, siteCode, actor, scheduled = false, dailyLimit, now = new Date(), publishedBy },
+) {
+  const actorUserCode = scheduled ? (publishedBy ?? null) : actorFromAuthUser(actor).userCode;
   const claim = await client.query(
     `
       UPDATE announcements
       SET status = 'published',
           published_at = NOW(),
           publish_at = CASE WHEN $3::BOOLEAN THEN publish_at ELSE NULL END,
+          published_by = $4::INTEGER,
           updated_at = NOW()
       WHERE id = $1 AND site_code = $2 AND status IN ('draft', 'scheduled')
         AND ($3::BOOLEAN = FALSE OR (status = 'scheduled' AND publish_at <= NOW()))
       RETURNING importance, target_type, target_block_ids, target_apartment_ids, send_email
     `,
-    [id, siteCode, scheduled === true],
+    [id, siteCode, scheduled === true, actorUserCode],
   );
   const row = claim.rows?.[0];
   if (!row) {
@@ -395,6 +527,18 @@ export async function publishWithinTransaction(client, { id, siteCode, actor, sc
     throw invalidState(PUBLISH_STATE_MESSAGES[current]);
   }
 
+  if (!scheduled) {
+    // Yönetici yayını: kötüye kullanım sınırları (aşılırsa claim geri alınır). Zamanlayıcı yayını zamanlama anında denetlenmişti.
+    await assertPublishAllowed(client, {
+      id,
+      siteCode,
+      importance: row.importance,
+      sendEmail: row.send_email === true,
+      when: now,
+      actorUserCode,
+      hourly: true,
+    });
+  }
   await runSyncSteps(client, { siteCode, userCode: null });
   const target = {
     type: row.target_type,
@@ -408,6 +552,7 @@ export async function publishWithinTransaction(client, { id, siteCode, actor, sc
     importance: row.importance,
     sendEmail: row.send_email === true,
     enforceEmailLimit: scheduled !== true,
+    now,
     ...(dailyLimit === undefined ? {} : { dailyLimit }),
   });
   if (snapshot.total === 0 && scheduled !== true) {
@@ -436,13 +581,93 @@ export async function publishWithinTransaction(client, { id, siteCode, actor, sc
   return { published: true, recipientCount: snapshot.total, email: snapshot.email };
 }
 
-/** Zamanlayıcı: zamanı gelmiş TEK duyuruyu yayınlar (kendi transaction'ı). */
-export async function publishDueAnnouncement({ id, siteCode }) {
+/**
+ * Zamanlayıcı: zamanı gelmiş TEK duyuruyu yayınlar (kendi transaction'ı). Yayından önce OLUŞTURANIN yetkisi yeniden denetlenir: yetkisi
+ * alınmış / hesabı silinmiş ya da pasifleşmiş yöneticinin zamanlanmış duyurusu "Sistem" adıyla yayınlanmaz; taslağa döndürülür ve
+ * `announcement.publish_skipped` audit'i yazılır (süper kullanıcı her zaman yetkilidir).
+ * @returns {Promise<{ skipped: true, status: string, reason?: string } | { published: true, recipientCount: number, email: object }>}
+ */
+export async function publishDueAnnouncement({ id, siteCode, now = new Date() }) {
   return withAnnouncementTransaction(
     siteCode,
-    (client) => publishWithinTransaction(client, { id, siteCode, actor: SYSTEM_ACTOR, scheduled: true }),
+    async (client) => {
+      // Satır kilidi (kişi kilidinden SONRA: kilit sırası) - oluşturan yetkisi ve zamanı geldi mi bu satır üzerinden okunur.
+      const due = await client.query(
+        `
+          SELECT created_by
+          FROM announcements
+          WHERE id = $1 AND site_code = $2 AND status = 'scheduled' AND publish_at <= NOW()
+          FOR UPDATE
+        `,
+        [id, siteCode],
+      );
+      const row = due.rows?.[0];
+      if (!row) {
+        const state = await client.query(`SELECT status FROM announcements WHERE id = $1 AND site_code = $2`, [id, siteCode]);
+        if (!state.rows?.[0]) {
+          throw announcementNotFound();
+        }
+        return { skipped: true, status: state.rows[0].status };
+      }
+      if (!(await creatorStillAuthorized(client, { createdBy: row.created_by, siteCode }))) {
+        await client.query(
+          `
+            UPDATE announcements
+            SET status = 'draft', publish_at = NULL, publish_attempts = 0, next_attempt_at = NULL, updated_at = NOW()
+            WHERE id = $1 AND site_code = $2 AND status = 'scheduled'
+          `,
+          [id, siteCode],
+        );
+        await audit(client, SYSTEM_ACTOR, 'announcement.publish_skipped', siteCode, id, { reason: 'creator_unauthorized' });
+        return { skipped: true, status: 'draft', reason: 'creator_unauthorized' };
+      }
+      return publishWithinTransaction(client, {
+        id,
+        siteCode,
+        actor: SYSTEM_ACTOR,
+        scheduled: true,
+        now,
+        publishedBy: row.created_by,
+      });
+    },
     { people: true },
   );
+}
+
+/**
+ * Zamanlanmış yayın BAŞARISIZ oldu (zamanlayıcı çağırır): sayaç artar ve üstel geri çekilme (1, 2, 4 ... en çok 60 dk) başlar; böylece
+ * kalıcı hatalı kayıt her tikte yeniden denenip LIMIT 20 sırasını tıkamaz. MAX_PUBLISH_ATTEMPTS'ta `announcement.publish_failed` audit'i
+ * BİR kez yazılır ve zamanlayıcı kaydı otomatik denemeyi bırakır (elle `publish` ucu çalışmaya devam eder).
+ * @returns {Promise<number>} yeni başarısızlık sayısı (kayıt zamanlanmış değilse / hata olursa 0)
+ */
+export async function recordPublishFailure({ id, siteCode, code }) {
+  try {
+    const result = await pool.query(
+      `
+        UPDATE announcements
+        SET publish_attempts = publish_attempts + 1,
+            next_attempt_at = NOW() + make_interval(mins => LEAST(POWER(2, publish_attempts)::INTEGER, 60)),
+            updated_at = NOW()
+        WHERE id = $1 AND site_code = $2 AND status = 'scheduled'
+        RETURNING publish_attempts
+      `,
+      [id, siteCode],
+    );
+    const attempts = Number(result.rows?.[0]?.publish_attempts ?? 0);
+    if (attempts === MAX_PUBLISH_ATTEMPTS) {
+      await recordAudit(pool, {
+        actor: SYSTEM_ACTOR,
+        action: 'announcement.publish_failed',
+        siteCode,
+        targetType: 'announcement',
+        targetId: String(id),
+        details: { attempts, code: String(code ?? '').slice(0, 40) },
+      });
+    }
+    return attempts;
+  } catch (_error) {
+    return 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -453,11 +678,28 @@ export async function publishDueAnnouncement({ id, siteCode }) {
 export async function createAnnouncement({ siteCode, body, actor, now = new Date() }) {
   const input = parseCreateInput(body, now);
   await assertTargetBelongsToSite(pool, siteCode, input.target);
+  if (input.publish === 'now' && input.sendEmail) {
+    // Erken ve kilitsiz kapı: > 1000 adres varsa reddedilen yayın site kişi kilidini hiç tutmaz (kesin denetim işlem içinde de yapılır).
+    await assertDeliverableAddressLimit(pool, siteCode, input.target, input.importance);
+  }
   const actorInfo = actorFromAuthUser(actor);
   const id = await withAnnouncementTransaction(
     siteCode,
     async (client) => {
       const status = input.publish === 'schedule' ? 'scheduled' : 'draft';
+      if (input.publish === 'now') {
+        await assertNotDuplicate(client, { siteCode, userCode: actorInfo.userCode, input });
+      } else if (status === 'scheduled') {
+        await assertPublishAllowed(client, {
+          id: 0,
+          siteCode,
+          importance: input.importance,
+          sendEmail: input.sendEmail,
+          when: input.publishAt,
+          actorUserCode: actorInfo.userCode,
+          hourly: false,
+        });
+      }
       const inserted = await client.query(
         `
           INSERT INTO announcements (
@@ -494,11 +736,12 @@ export async function createAnnouncement({ siteCode, body, actor, now = new Date
         await audit(client, actor, 'announcement.scheduled', siteCode, createdId, { publish_at: input.publishAt.toISOString() });
       }
       if (input.publish === 'now') {
-        await publishWithinTransaction(client, { id: createdId, siteCode, actor });
+        await publishWithinTransaction(client, { id: createdId, siteCode, actor, now });
       }
       return createdId;
     },
-    { people: input.publish === 'now' },
+    // Yayın ve zamanlama kişi kilidi altında (sınır sayımı yarışsız); taslak kilit almaz.
+    { people: input.publish !== 'draft' },
   );
   return loadAnnouncementDetail(pool, siteCode, id);
 }
@@ -637,6 +880,24 @@ export async function updateAnnouncement({ siteCode, id: rawId, body, actor, now
           fields.push('publish_at');
         }
         rescheduled = nextStatus === 'scheduled' && (row.status !== 'scheduled' || publishAtChanged);
+        if (nextStatus !== row.status || publishAtChanged) {
+          // Yeniden zamanlama / taslağa dönüş: başarısızlık sayacı ve geri çekilme sıfırlanır (zehirli kayıt düzeltildiyse yeniden denensin).
+          sets.push('publish_attempts = 0', 'next_attempt_at = NULL');
+        }
+        const limitRelevant =
+          nextStatus === 'scheduled' &&
+          (rescheduled || fields.includes('importance') || fields.includes('send_email'));
+        if (limitRelevant) {
+          await assertPublishAllowed(client, {
+            id,
+            siteCode,
+            importance: patch.importance ?? row.importance,
+            sendEmail: patch.sendEmail ?? row.send_email === true,
+            when: nextPublishAt,
+            actorUserCode: actorFromAuthUser(actor).userCode,
+            hourly: false,
+          });
+        }
       }
       if (sets.length > 0) {
         sets.push('updated_at = NOW()');
@@ -649,10 +910,11 @@ export async function updateAnnouncement({ siteCode, id: rawId, body, actor, now
         await audit(client, actor, 'announcement.scheduled', siteCode, id, { publish_at: nextPublishAt.toISOString() });
       }
       if (mode === 'now') {
-        await publishWithinTransaction(client, { id, siteCode, actor });
+        await publishWithinTransaction(client, { id, siteCode, actor, now });
       }
     },
-    { people: patch.publish === 'now' },
+    // Kilit sırası (kişi advisory -> duyuru satırı) her düzenlemede aynıdır; zamanlama / yayın sınır sayımı bu kilit altında yapılır.
+    { people: true },
   );
   const detail = await loadAnnouncementDetail(pool, siteCode, id);
   if (!detail) {
@@ -667,13 +929,39 @@ export async function publishAnnouncement({ siteCode, id: rawId, actor }) {
   if (id === null) {
     throw announcementNotFound();
   }
+  // Erken ve kilitsiz kapı: e-postalı yayında > 1000 adres varsa reddedilen yayın site kişi kilidini hiç tutmaz.
+  const pre = await pool.query(
+    `
+      SELECT importance, target_type, target_block_ids, target_apartment_ids, send_email
+      FROM announcements
+      WHERE id = $1 AND site_code = $2 AND status IN ('draft', 'scheduled')
+    `,
+    [id, siteCode],
+  );
+  const candidate = pre.rows?.[0];
+  if (candidate && candidate.send_email === true) {
+    await assertDeliverableAddressLimit(
+      pool,
+      siteCode,
+      {
+        type: candidate.target_type,
+        blockIds: idArray(candidate.target_block_ids),
+        apartmentIds: idArray(candidate.target_apartment_ids),
+      },
+      candidate.importance,
+    );
+  }
   await withAnnouncementTransaction(siteCode, (client) => publishWithinTransaction(client, { id, siteCode, actor }), {
     people: true,
   });
   return loadAnnouncementDetail(pool, siteCode, id);
 }
 
-/** POST announcements/:id/withdraw (yalnız published). Beklemedeki e-postalar iptal edilir (gönderilmez, adres silinir). */
+/**
+ * POST announcements/:id/withdraw (yalnız published). Gönderimi HİÇ başlamamış (kuyruk işçisinin talep etmediği) bekleyen e-postalar
+ * iptal edilir (gönderilmez, adres ve özet silinir); yoldaki (talep edilmiş) satırlar iptal edilmez: işçi onları sent / failed olarak
+ * sonlandırır, istatistik ve günlük kota gerçeği yansıtır. Audit'e iptal edilen ve yoldaki e-posta sayısı yazılır.
+ */
 export async function withdrawAnnouncement({ siteCode, id: rawId, actor }) {
   const id = parsePositiveId(rawId);
   if (id === null) {
@@ -699,17 +987,25 @@ export async function withdrawAnnouncement({ siteCode, id: rawId, actor }) {
         state.rows[0].status === 'withdrawn' ? 'Duyuru zaten geri çekilmiş.' : 'Yalnız yayındaki duyuru geri çekilebilir.',
       );
     }
+    // Yalnız HİÇ talep edilmemiş (gönderimi başlamamış) e-postalar iptal edilir. Kuyruk işçisinin talep ettiği (yoldaki) satırlar
+    // 'pending' kalır: işçi sonucu sent / failed olarak yazar, istatistik ve günlük kota gerçeği yansıtır (talep anı satır kilidiyle
+    // sıralıdır: bu UPDATE talebi bekler, talep commit olunca koşulu yeniden değerlendirir).
     const cancelled = await client.query(
       `
         UPDATE announcement_recipients
-        SET email_status = 'none', email = NULL
-        WHERE announcement_id = $1 AND email_status = 'pending'
+        SET email_status = 'none', email = NULL, email_hash = NULL, email_next_at = NULL
+        WHERE announcement_id = $1 AND email_status = 'pending' AND email_claimed_at IS NULL
       `,
+      [id],
+    );
+    const inFlight = await client.query(
+      `SELECT COUNT(*)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = $1 AND email_status = 'pending'`,
       [id],
     );
     await audit(client, actor, 'announcement.withdrawn', siteCode, id, {
       recipient_count: Number(row.recipient_count ?? 0),
       email_cancelled: Number(cancelled.rowCount ?? 0),
+      email_in_flight: Number(inFlight.rows?.[0]?.n ?? 0),
     });
   });
   return loadAnnouncementDetail(pool, siteCode, id);

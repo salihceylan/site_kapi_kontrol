@@ -4,15 +4,22 @@
 // dairelerdeki GÜNCEL ilişkilere sahip AKTİF site_people kişileri, kişi başına TEK satır. E-posta adresi Faz 2'nin "etkin iletişim
 // e-postası" mantığıyla (people_service.js CONTACT_EMAIL_SQL) bulunur; dahili @ahbu.local adresi hiçbir zaman adres sayılmaz.
 // Bu dosya yalnız verilen db/client üzerinde çalışır (transaction'ı ÇAĞIRAN yönetir).
+//
+// E-posta durumları TEK bir INSERT ... SELECT içinde pencere fonksiyonlarıyla hesaplanır (UPDATE ... FROM (SELECT ... ROW_NUMBER())
+// kalıbı büyük sitede karesel plan üretiyordu): kişi başına durum -> aynı adres tek kez -> adres başına günlük sınır -> site günlük kotası.
 
 import { HAS_ACCOUNT_SQL } from './people_common.js';
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { emailHashSalt } from './announcement_email_security.js';
+import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from './announcement_lock.js';
 import {
   DEFAULT_EMAIL_DAILY_LIMIT,
   EMAIL_PER_PUBLISH_LIMIT,
+  announcementLimits,
   emailLimitExceeded,
   invalidTarget,
+  istanbulDayRange,
 } from './announcement_common.js';
 
 /** Site başına günlük e-posta sınırı (env ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE; geçersizse 500). */
@@ -45,7 +52,7 @@ export function emailCountsFromRows(rows) {
     if (status === 'none') {
       continue;
     }
-    if (status in counts && status !== 'requested') {
+    if (Object.hasOwn(counts, status) && status !== 'requested') {
       counts[status] += n;
       counts.requested += n;
     }
@@ -70,7 +77,7 @@ export function targetClause(target, startIndex) {
 const SAFE_EMAIL_PATTERN = `'^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'`;
 
 /** Ham iletişim e-postası -> teslim edilebilir adres (küçük harf) ya da NULL (dahili @ahbu.local / biçim hatalı / çok uzun). */
-const deliverableEmailSql = (column) => `(
+export const deliverableEmailSql = (column) => `(
   CASE
     WHEN ${column} IS NULL THEN NULL
     WHEN lower(btrim(${column})) LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN NULL
@@ -79,6 +86,10 @@ const deliverableEmailSql = (column) => `(
     ELSE lower(btrim(${column}))
   END
 )`;
+
+/** Adresin tuzlu özeti (announcement_email_security.js hashEmail ile birebir aynı): tuz parametresi $saltIndex. */
+export const emailHashSql = (saltParam, column) =>
+  `encode(sha256(convert_to(${saltParam}::TEXT || ':' || ${column}, 'UTF8')), 'hex')`;
 
 /**
  * Kitle CTE'leri: $1 = site_code; hedef kimlikleri $2'den (hedef türüne göre). `base` (person_id, has_account, email_pref, email).
@@ -173,18 +184,53 @@ export async function previewAudience(db, siteCode, target) {
   };
 }
 
-/** Sitenin bugün (İstanbul takvim günü) kuyruğa alınmış/gönderilmiş e-posta sayısı (pending + sent + failed). */
-export async function emailUsageToday(db, siteCode) {
+/**
+ * Yayından ÖNCE (kilit almadan) e-posta alıcı sınırı ön denetimi: teslim edilecek TEKİL adres sayısı (tercihi kapalı ve bastırılmış
+ * adresler hariç, adres başına/site günlük kotası öncesi). Yönetici yayınında > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT: reddedilen yayın
+ * site kişi kilidini hiç tutmaz. Kesin denetim yine işlem içinde (snapshotRecipients) yapılır; bu yalnız erken ve ucuz bir kapıdır.
+ * @returns {Promise<number>} teslim edilecek tekil adres sayısı
+ */
+export async function assertDeliverableAddressLimit(db, siteCode, target, importance) {
+  const audience = audienceCtes(target);
+  const saltIndex = audience.params.length + 2;
+  const result = await db.query(
+    `
+      WITH ${audience.sql},
+      hashed AS (
+        SELECT b.person_id, b.has_account, b.email_pref, b.email, ${emailHashSql(`$${saltIndex}`, 'b.email')} AS email_hash
+        FROM base b
+      )
+      SELECT COUNT(DISTINCT h.email)::INTEGER AS n
+      FROM hashed h
+      LEFT JOIN announcement_email_suppressions sup ON sup.email_hash = h.email_hash
+      WHERE h.email IS NOT NULL
+        AND sup.email_hash IS NULL
+        AND NOT (h.has_account AND h.email_pref = FALSE AND $${saltIndex + 1}::TEXT = 'normal')
+    `,
+    [siteCode, ...audience.params, emailHashSalt(), importance],
+  );
+  const deliverable = Number(result.rows?.[0]?.n ?? 0);
+  if (deliverable > EMAIL_PER_PUBLISH_LIMIT) {
+    throw emailLimitExceeded();
+  }
+  return deliverable;
+}
+
+/**
+ * Sitenin bugün (İstanbul takvim günü) kuyruğa alınmış/gönderilmiş e-posta sayısı: pending (gönderimi süren dahil) + sent.
+ * failed SAYILMAZ (gönderilemeyen e-posta kotayı tüketmez); 'none' (iptal edilen) sayılmaz.
+ */
+export async function emailUsageToday(db, siteCode, now = new Date()) {
   const result = await db.query(
     `
       SELECT COUNT(*)::INTEGER AS used
       FROM announcement_recipients r
       INNER JOIN announcements a ON a.id = r.announcement_id
       WHERE a.site_code = $1
-        AND a.published_at >= (date_trunc('day', NOW() AT TIME ZONE 'Europe/Istanbul') AT TIME ZONE 'Europe/Istanbul')
-        AND r.email_status IN ('pending', 'sent', 'failed')
+        AND a.published_at >= $2::TIMESTAMPTZ
+        AND r.email_status IN ('pending', 'sent')
     `,
-    [siteCode],
+    [siteCode, istanbulDayRange(now).start.toISOString()],
   );
   return Number(result.rows?.[0]?.used ?? 0);
 }
@@ -198,84 +244,131 @@ export async function loadEmailStatusCounts(db, announcementId) {
 }
 
 /**
- * Yayın anı alıcı anlık görüntüsü (çağıranın transaction'ında, site kişi kilidi ve eşitleme sonrası).
- *  1) kişi başına tek satır: e-posta istenmediyse 'none'; adres yok -> 'no_address'; hesabı olan ve tercihi kapalı ve duyuru
- *     'normal' -> 'skipped_pref' (acil tercihi yok sayar); aksi 'pending' + adres satıra yazılır
- *  2) aynı adres tek kez: ilk kişi (person_id sırası) 'pending' kalır, diğerleri 'duplicate' olur
- *  3) yönetici yayınında (enforceEmailLimit) teslim edilecek adres > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT (transaction geri alınır)
- *  4) günlük site sınırı / tek yayın sınırı aşan 'pending' satırlar 'capped' olur (e-posta NULL)
+ * Yayın anı alıcı anlık görüntüsü (çağıranın transaction'ında, site kişi kilidi ve eşitleme sonrası), TEK INSERT ... SELECT:
+ *  1) kişi başına tek satır: e-posta istenmediyse 'none'; adres yok -> 'no_address'; adres bastırma listesinde (alıcı e-postadaki bağlantıyla
+ *     çıkmış) ya da hesabı olan ve tercihi kapalı ve duyuru 'normal' -> 'skipped_pref' (acil, KİŞİ tercihini yok sayar; bastırmayı sayMAZ)
+ *  2) aynı adres tek kez: ilk kişi (person_id sırası) devam eder, diğerleri 'duplicate'
+ *  3) adres başına günlük sınır (TÜM siteler genelinde; pending + sent sayılır, İstanbul günü): dolu adres 'capped'. Sayım, adres başına
+ *     indeks yoklayan ilişkili alt sorgudur (idx_announcement_recipients_email_hash), yayın günü kontrolü satır başına birincil anahtar
+ *     araması yapan skaler alt sorgudur: gruplayıp birleştirmek ya da announcements ile JOIN etmek planlayıcının yanlış tahminle iç kolu her
+ *     satır için yeniden çalıştırdığı karesel bir plana (QA'da ~1 sn; announcements büyüdükçe daha kötü) yol açtı, bu biçim plan seçimine bağlı değil.
+ *  4) site günlük kotası / tek yayın sınırı: kalan kotayı aşan adresler 'capped'; kalanlar 'pending' (+ adres ve tuzlu özet satıra yazılır)
+ *  5) yönetici yayınında (enforceEmailLimit) teslim edilecek adres (pending + capped) > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT (işlem geri alınır)
+ * Adres sayımının yarışsız olması için e-postalı yayınlar küresel bir işlem kilidiyle sıralanır (kilit sırası: site kişi kilidi -> küresel).
  * @returns {Promise<{ total: number, email: object }>}
  */
 export async function snapshotRecipients(
   db,
-  { announcementId, siteCode, target, importance, sendEmail, enforceEmailLimit, dailyLimit = emailDailyLimit() },
+  {
+    announcementId,
+    siteCode,
+    target,
+    importance,
+    sendEmail,
+    enforceEmailLimit,
+    dailyLimit = emailDailyLimit(),
+    perAddressLimit = announcementLimits().perAddressDaily,
+    now = new Date(),
+  },
 ) {
-  // Günlük kullanım, bu duyurunun satırları EKLENMEDEN önce okunur (aynı site için yayınlar kişi kilidiyle sıralıdır).
-  const used = sendEmail ? await emailUsageToday(db, siteCode) : 0;
+  const send = sendEmail === true;
+  let allowance = 0;
+  if (send) {
+    await db.query('SELECT pg_advisory_xact_lock($1::int, $2::int)', [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
+    // Günlük kullanım, bu duyurunun satırları EKLENMEDEN önce okunur (e-postalı yayınlar küresel kilitle sıralıdır).
+    const used = await emailUsageToday(db, siteCode, now);
+    allowance = Math.max(0, Math.min(EMAIL_PER_PUBLISH_LIMIT, dailyLimit - used));
+  }
   const audience = audienceCtes(target);
-  const nextParam = audience.params.length + 2;
+  const next = audience.params.length + 2;
+  const [pAnnouncement, pSend, pImportance, pSalt, pDayStart, pPerAddress, pAllowance] = [0, 1, 2, 3, 4, 5, 6].map((i) => `$${next + i}`);
   const insert = await db.query(
     `
-      WITH ${audience.sql}
-      INSERT INTO announcement_recipients (announcement_id, person_id, email, email_status)
+      WITH ${audience.sql},
+      hashed AS (
+        SELECT
+          b.person_id, b.has_account, b.email_pref, b.email,
+          CASE WHEN b.email IS NULL OR NOT ${pSend}::BOOLEAN THEN NULL ELSE ${emailHashSql(pSalt, 'b.email')} END AS email_hash
+        FROM base b
+      ),
+      classified AS (
+        SELECT
+          h.person_id, h.email, h.email_hash,
+          CASE
+            WHEN NOT ${pSend}::BOOLEAN THEN 'none'
+            WHEN h.email IS NULL THEN 'no_address'
+            WHEN sup.email_hash IS NOT NULL THEN 'skipped_pref'
+            WHEN h.has_account AND h.email_pref = FALSE AND ${pImportance}::TEXT = 'normal' THEN 'skipped_pref'
+            ELSE 'eligible'
+          END AS st
+        FROM hashed h
+        LEFT JOIN announcement_email_suppressions sup ON sup.email_hash = h.email_hash
+      ),
+      ranked AS (
+        SELECT
+          c.*,
+          ROW_NUMBER() OVER (PARTITION BY CASE WHEN c.st = 'eligible' THEN c.email_hash END ORDER BY c.person_id) AS addr_rn
+        FROM classified c
+      ),
+      firsts AS (
+        SELECT
+          k.person_id, k.email, k.email_hash, k.st, k.addr_rn,
+          CASE
+            WHEN k.st = 'eligible' AND k.addr_rn = 1 THEN (
+              SELECT COUNT(*)
+              FROM announcement_recipients r
+              WHERE r.email_hash = k.email_hash
+                AND r.email_status IN ('pending', 'sent')
+                AND (SELECT an.published_at FROM announcements an WHERE an.id = r.announcement_id) >= ${pDayStart}::TIMESTAMPTZ
+            ) < ${pPerAddress}::INTEGER
+            ELSE FALSE
+          END AS in_quota
+        FROM ranked k
+      ),
+      numbered AS (
+        SELECT f.*, ROW_NUMBER() OVER (PARTITION BY f.in_quota ORDER BY f.person_id) AS cap_rn
+        FROM firsts f
+      ),
+      final AS (
+        SELECT
+          n.person_id, n.email, n.email_hash,
+          CASE
+            WHEN n.st <> 'eligible' THEN n.st
+            WHEN n.addr_rn > 1 THEN 'duplicate'
+            WHEN NOT n.in_quota THEN 'capped'
+            WHEN n.cap_rn <= ${pAllowance}::INTEGER THEN 'pending'
+            ELSE 'capped'
+          END AS final_status
+        FROM numbered n
+      )
+      INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status)
       SELECT
-        $${nextParam}::BIGINT,
-        b.person_id,
-        CASE
-          WHEN $${nextParam + 1}::BOOLEAN AND b.email IS NOT NULL
-               AND NOT (b.has_account AND b.email_pref = FALSE AND $${nextParam + 2}::TEXT = 'normal') THEN b.email
-        END,
-        CASE
-          WHEN NOT $${nextParam + 1}::BOOLEAN THEN 'none'
-          WHEN b.email IS NULL THEN 'no_address'
-          WHEN b.has_account AND b.email_pref = FALSE AND $${nextParam + 2}::TEXT = 'normal' THEN 'skipped_pref'
-          ELSE 'pending'
-        END
-      FROM base b
+        ${pAnnouncement}::BIGINT,
+        f.person_id,
+        CASE WHEN f.final_status = 'pending' THEN f.email END,
+        CASE WHEN f.final_status = 'pending' THEN f.email_hash END,
+        f.final_status
+      FROM final f
     `,
-    [siteCode, ...audience.params, announcementId, sendEmail === true, importance],
+    [
+      siteCode,
+      ...audience.params,
+      announcementId,
+      send,
+      importance,
+      emailHashSalt(),
+      istanbulDayRange(now).start.toISOString(),
+      perAddressLimit,
+      allowance,
+    ],
   );
   const total = Number(insert.rowCount ?? 0);
-  if (total === 0 || sendEmail !== true) {
+  if (total === 0 || !send) {
     return { total, email: emptyEmailCounts() };
   }
-
-  await db.query(
-    `
-      UPDATE announcement_recipients r
-      SET email_status = 'duplicate', email = NULL
-      FROM (
-        SELECT person_id, ROW_NUMBER() OVER (PARTITION BY email ORDER BY person_id) AS rn
-        FROM announcement_recipients
-        WHERE announcement_id = $1 AND email_status = 'pending'
-      ) d
-      WHERE r.announcement_id = $1 AND r.person_id = d.person_id AND d.rn > 1
-    `,
-    [announcementId],
-  );
-  const pendingResult = await db.query(
-    `SELECT COUNT(*)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = $1 AND email_status = 'pending'`,
-    [announcementId],
-  );
-  const deliverable = Number(pendingResult.rows?.[0]?.n ?? 0);
-  if (enforceEmailLimit === true && deliverable > EMAIL_PER_PUBLISH_LIMIT) {
+  const email = emailCountsFromRows(await loadEmailStatusCounts(db, announcementId));
+  if (enforceEmailLimit === true && email.pending + email.capped > EMAIL_PER_PUBLISH_LIMIT) {
     throw emailLimitExceeded();
   }
-  const allowance = Math.max(0, Math.min(EMAIL_PER_PUBLISH_LIMIT, dailyLimit - used));
-  if (deliverable > allowance) {
-    await db.query(
-      `
-        UPDATE announcement_recipients r
-        SET email_status = 'capped', email = NULL
-        FROM (
-          SELECT person_id, ROW_NUMBER() OVER (ORDER BY person_id) AS rn
-          FROM announcement_recipients
-          WHERE announcement_id = $1 AND email_status = 'pending'
-        ) c
-        WHERE r.announcement_id = $1 AND r.person_id = c.person_id AND c.rn > $2
-      `,
-      [announcementId, allowance],
-    );
-  }
-  return { total, email: emailCountsFromRows(await loadEmailStatusCounts(db, announcementId)) };
+  return { total, email };
 }

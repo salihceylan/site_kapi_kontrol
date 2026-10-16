@@ -81,7 +81,21 @@ describe('gelen kutusu: liste', () => {
     const query = log[0];
     assert.deepEqual(query.params, [20004, 1000000007, 42, 11]);
     assert.match(query.sql, /a\.site_code = \$2/);
-    assert.match(query.sql, /\(a\.published_at, a\.id\) < \(SELECT c\.published_at, c\.id FROM announcements c WHERE c\.id = \$3\)/);
+    // D5: imleç satırı ÇAĞIRANIN alıcı olduğu duyuruya bağlıdır (başkasının / başka sitenin duyurusunun varlığı ve yayın zamanı sızmaz)
+    assert.match(
+      query.sql,
+      /\(a\.published_at, a\.id\) < \( SELECT c\.published_at, c\.id FROM announcements c INNER JOIN announcement_recipients cr ON cr\.announcement_id = c\.id INNER JOIN site_people cs ON cs\.id = cr\.person_id AND cs\.user_code = \$1 WHERE c\.id = \$3 AND c\.status IN \('published', 'withdrawn'\) LIMIT 1 \)/,
+    );
+  });
+
+  it('D5: imleç alt sorgusu çağıranın user_code\'una ($1) bağlıdır ve alt sorgu satırı bulamazsa karşılaştırma NULL olur (sayfa boş, varlık sızmaz)', async () => {
+    handlers.push([/^SELECT a\.id/, () => ok()]);
+    await listMyAnnouncements(user, { before_id: '999' });
+    const cursor = /\(a\.published_at, a\.id\) < \( (SELECT c\.published_at.*?LIMIT 1) \)/.exec(log[0].sql)?.[1] ?? '';
+    assert.match(cursor, /cs\.user_code = \$1/);
+    assert.doesNotMatch(cursor, /^SELECT c\.published_at, c\.id FROM announcements c WHERE c\.id = \$\d$/);
+    // geri çekilmiş kendi duyurusu imleç olarak geçerli kalır (sayfa dolaşımı kopmaz); taslak / zamanlanmış hiçbir zaman imleç olamaz
+    assert.match(cursor, /c\.status IN \('published', 'withdrawn'\)/);
   });
 
   it('geçersiz imleç / site kodu -> 400 INVALID_QUERY ve DB yok; kullanıcı kodu yoksa boş', async () => {
@@ -115,7 +129,8 @@ describe('gelen kutusu: ayrıntı ve okundu', () => {
 
   it('okundu: UPDATE yalnız okunmamış + çağıranın satırı + yayında; ilk okuma zamanı döner', async () => {
     const readAt = new Date('2026-10-16T10:00:00.000Z');
-    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a WHERE r\.announcement_id = \$1 AND sp\.id = r\.person_id AND sp\.user_code = \$2 AND a\.id = r\.announcement_id AND a\.status = 'published' AND r\.read_at IS NULL RETURNING r\.read_at$/, () => ok([{ read_at: readAt }])]);
+    // D11: okundu da liste / ayrıntı / özet ile AYNI süzgeci uygular (yayında + onaylı site)
+    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE r\.announcement_id = \$1 AND sp\.id = r\.person_id AND sp\.user_code = \$2 AND a\.id = r\.announcement_id AND a\.status = 'published' AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL RETURNING r\.read_at$/, () => ok([{ read_at: readAt }])]);
     assert.deepEqual(await markAnnouncementRead(user, '7'), { ok: true, read_at: '2026-10-16T10:00:00.000Z' });
     assert.deepEqual(log[0].params, [7, 20004]);
   });
@@ -134,7 +149,7 @@ describe('gelen kutusu: ayrıntı ve okundu', () => {
   });
 
   it('tümünü okundu yap: yalnız çağıranın okunmamış + yayındaki satırları; site_code isteğe bağlı; marked = etkilenen satır', async () => {
-    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a WHERE sp\.id = r\.person_id AND sp\.user_code = \$1 AND a\.id = r\.announcement_id AND a\.status = 'published' AND r\.read_at IS NULL AND \(\$2::BIGINT IS NULL OR a\.site_code = \$2::BIGINT\)$/, () => ok([], 4)]);
+    handlers.push([/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE sp\.id = r\.person_id AND sp\.user_code = \$1 AND a\.id = r\.announcement_id AND a\.status = 'published' AND s\.site_code = a\.site_code AND s\.approval_status = 'approved' AND r\.read_at IS NULL AND \(\$2::BIGINT IS NULL OR a\.site_code = \$2::BIGINT\)$/, () => ok([], 4)]);
     assert.deepEqual(await markAllAnnouncementsRead(user, {}), { ok: true, marked: 4 });
     assert.deepEqual(log[0].params, [20004, null]);
     await markAllAnnouncementsRead(user, { site_code: '1000000001' });

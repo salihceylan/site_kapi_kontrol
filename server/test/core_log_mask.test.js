@@ -17,6 +17,15 @@ describe('maskSensitiveUrl', () => {
     assert.equal(maskSensitiveUrl('/x?password=p%40ss&api_key=k1'), '/x?password=***&api_key=***');
   });
 
+  it('duyuru abonelikten cik belirteci (?t=<ozet>.<imza>) maskelenir; t ile baslayan baska parametreler etkilenmez', () => {
+    const token = `${HEX_TOKEN}.AbCdEf_-123456789012345678901234567890123`;
+    const masked = maskSensitiveUrl(`/public/announcement-unsubscribe?t=${token}`);
+    assert.ok(masked.endsWith('?t=***'), masked);
+    assert.equal(masked.includes(HEX_TOKEN), false);
+    assert.equal(maskSensitiveUrl(`/x?x=1&t=${token}&lang=tr`), '/x?x=1&t=***&lang=tr');
+    assert.equal(maskSensitiveUrl('/x?tab=2&title=1'), '/x?tab=2&title=1');
+  });
+
   it('/guest/<tok> ve /public/guest-pass/<tok>[/open] yol token lari maskelenir', () => {
     assert.equal(maskSensitiveUrl('/guest/AbCdEf123456'), '/guest/***');
     assert.equal(maskSensitiveUrl(`/guest/${HEX_TOKEN}`), '/guest/***');

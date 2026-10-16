@@ -32,6 +32,49 @@ export const EMAIL_PER_PUBLISH_LIMIT = 1000;
 /** ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE yoksa/geçersizse site başına günlük e-posta sınırı. */
 export const DEFAULT_EMAIL_DAILY_LIMIT = 500;
 export const MAX_EMAIL_ATTEMPTS = 3;
+/** Gönderim denemeleri arası geri çekilme (sn): 1. hatadan sonra 1 dk, 2.'den sonra 5 dk (3. hata kalıcı failed). */
+export const EMAIL_RETRY_DELAYS_SECONDS = Object.freeze([60, 300, 1200]);
+/** Bir grup talep edildikten sonra bu süre sonuç yazılmazsa (süreç çökmüş) satır yeniden talep edilebilir. */
+export const EMAIL_CLAIM_STALE_MINUTES = 10;
+/** Zamanlanmış yayın üst üste bu kadar başarısız olursa otomatik denenmez (elle yayın ucu çalışmaya devam eder). */
+export const MAX_PUBLISH_ATTEMPTS = 10;
+/** Kurul üyesine (salt okuma) bu sayıdan AZ alıcılı duyurularda okunma / e-posta sayıları gösterilmez (kişisel veri olur). */
+export const BOARD_SMALL_TARGET_MIN = 5;
+/** Aynı yazarın aynı içeriği bu süre içinde yeniden yayınlaması (çift POST) engellenir. */
+export const DUPLICATE_WINDOW_SECONDS = 60;
+
+const parseLimit = (raw, fallback, { min = 0 } = {}) => {
+  if (raw === undefined || String(raw).trim() === '') {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed >= min ? parsed : fallback;
+};
+
+/**
+ * Kötüye kullanım sınırları (ortam değişkeniyle ayarlanabilir; geçersiz değer varsayılana döner).
+ *  - siteDailyTotal: sitede bir İstanbul gününde yayınlanan + o güne zamanlanan duyuru sayısı (varsayılan 30)
+ *  - siteDailyUrgentEmail: aynı sayım, yalnız acil + e-postalı duyurular (varsayılan 3)
+ *  - managerHourlyEmail: bir yöneticinin son 1 saatte yayınladığı e-postalı duyuru sayısı (varsayılan 10)
+ *  - perAddressDaily: tek e-posta adresine TÜM sitelerde bir İstanbul gününde gidecek duyuru e-postası (varsayılan 3)
+ */
+export function announcementLimits(env = process.env) {
+  return {
+    siteDailyTotal: parseLimit(env.ANNOUNCEMENT_MAX_PER_DAY_PER_SITE, 30, { min: 1 }),
+    siteDailyUrgentEmail: parseLimit(env.ANNOUNCEMENT_URGENT_EMAIL_MAX_PER_DAY_PER_SITE, 3, { min: 1 }),
+    managerHourlyEmail: parseLimit(env.ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER, 10, { min: 1 }),
+    perAddressDaily: parseLimit(env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS, 3, { min: 1 }),
+  };
+}
+
+const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Verilen anın İstanbul takvim günü [başlangıç, bitiş) (Türkiye UTC+03:00 sabit; yaz saati uygulaması yok). */
+export function istanbulDayRange(moment = new Date()) {
+  const startMs = Math.floor((moment.getTime() + ISTANBUL_OFFSET_MS) / DAY_MS) * DAY_MS - ISTANBUL_OFFSET_MS;
+  return { start: new Date(startMs), end: new Date(startMs + DAY_MS) };
+}
 
 export const SCHEDULE_MIN_MS = 60 * 1000;
 
@@ -54,6 +97,20 @@ export const invalidField = (message) => new PlatformError(400, 'INVALID_BODY', 
 export const invalidSchedule = (message) =>
   new PlatformError(400, 'INVALID_SCHEDULE', message ?? 'Yayın zamanı geçersiz.');
 export const invalidQuery = () => new PlatformError(400, 'INVALID_QUERY', 'Geçersiz sorgu parametresi.');
+export const dailyLimitReached = (message) =>
+  new PlatformError(409, 'ANNOUNCEMENT_DAILY_LIMIT', message ?? 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.');
+export const hourlyLimitReached = () =>
+  new PlatformError(
+    409,
+    'ANNOUNCEMENT_HOURLY_LIMIT',
+    'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.',
+  );
+export const duplicateAnnouncement = () =>
+  new PlatformError(
+    409,
+    'DUPLICATE_ANNOUNCEMENT',
+    'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.',
+  );
 export const emailLimitExceeded = () =>
   new PlatformError(
     400,
@@ -173,7 +230,8 @@ function parseIdList(value, emptyMessage, label) {
   if (ids.length > TARGET_IDS_MAX) {
     throw invalidTarget(`En fazla ${TARGET_IDS_MAX} ${label} seçilebilir.`);
   }
-  return ids;
+  // Artan sıra: aynı küme her zaman aynı dizi olur (çift POST koruması dizi eşitliğiyle karşılaştırır; [8,7] ile [7,8] aynı hedeftir).
+  return ids.sort((a, b) => a - b);
 }
 
 /**
@@ -445,17 +503,40 @@ export function mapSummaryRow(row) {
   };
 }
 
-/** Kurul üyesine verilmeyen alanlar: kullanıcı kodları (redactForReadOnlyRole) + oluşturan yöneticinin adı. */
+/**
+ * Kurul üyesine verilmeyen alanlar: kullanıcı kodları (redactForReadOnlyRole) + oluşturan yöneticinin adı. KÜÇÜK HEDEF (1-4 alıcı):
+ * okunma / okunmamış / e-posta sayıları tek bir daireyi ele verir -> null (anahtarlar kalır, istemci "—" gösterir).
+ */
 export function redactForBoard(value) {
   const base = redactForReadOnlyRole(value);
+  const isSmallTarget = (entry) => {
+    const count = Number(entry.recipient_count);
+    return Number.isFinite(count) && count >= 1 && count < BOARD_SMALL_TARGET_MIN;
+  };
+  const nullAll = (entry) => {
+    const out = {};
+    for (const key of Object.keys(entry)) {
+      out[key] = null;
+    }
+    return out;
+  };
   const clear = (entry) => {
     if (Array.isArray(entry)) {
       return entry.map(clear);
     }
     if (entry && typeof entry === 'object' && !(entry instanceof Date)) {
+      const small = isSmallTarget(entry);
       const out = {};
       for (const [key, inner] of Object.entries(entry)) {
-        out[key] = key === 'created_by_name' ? null : clear(inner);
+        if (key === 'created_by_name') {
+          out[key] = null;
+        } else if (small && key === 'read_count') {
+          out[key] = null;
+        } else if (small && key === 'stats' && inner && typeof inner === 'object') {
+          out[key] = { ...inner, read: null, unread: null, email: inner.email && typeof inner.email === 'object' ? nullAll(inner.email) : inner.email };
+        } else {
+          out[key] = clear(inner);
+        }
       }
       return out;
     }

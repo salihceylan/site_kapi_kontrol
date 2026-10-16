@@ -21,6 +21,36 @@ describe('buildAnnouncementEmail', () => {
     assert.ok(message.html.includes(footer));
   });
 
+  it('D4c alt bilgi alıcı türüne göre: hesaplıya "uygulamadan" (bağlantı YOK), hesapsıza abonelikten çık bağlantısı ("uygulamadan" YOK), bağlantısız hesapsıza yalnız gönderen cümlesi', () => {
+    const link = 'https://api.example.com/public/announcement-unsubscribe?t=abc.def&x=1';
+    const withAccount = buildAnnouncementEmail(input({ hasAccount: true, unsubscribeUrl: link }));
+    assert.ok(withAccount.text.includes('Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.'));
+    assert.ok(!withAccount.text.includes(link));
+    assert.ok(!withAccount.html.includes('Abonelikten çık'));
+    const guest = buildAnnouncementEmail(input({ hasAccount: false, unsubscribeUrl: link }));
+    assert.ok(guest.text.endsWith(`Bu e-posta Gül Sitesi yönetimi tarafından gönderildi. Bu e-postaları almak istemiyorsanız şu bağlantıdan çıkabilirsiniz: ${link}`));
+    assert.ok(!guest.text.includes('uygulamadan') && !guest.html.includes('uygulamadan'));
+    assert.ok(guest.html.includes('href="https://api.example.com/public/announcement-unsubscribe?t=abc.def&amp;x=1"'), 'HTML bağlantısı kaçırılır');
+    assert.ok(guest.html.includes('Abonelikten çık</a>'));
+    const bare = buildAnnouncementEmail(input({ hasAccount: false, unsubscribeUrl: null }));
+    assert.ok(bare.text.endsWith('Bu e-posta Gül Sitesi yönetimi tarafından gönderildi.'));
+    assert.ok(!bare.text.includes('uygulamadan') && !bare.text.includes('bağlantı'));
+  });
+
+  it('D4c List-Unsubscribe + List-Unsubscribe-Post: List-Unsubscribe=One-Click (RFC 8058) HER alıcıya (hesaplı da); yalnız http(s) bağlantı kabul edilir', () => {
+    const link = 'https://api.example.com/public/announcement-unsubscribe?t=abc.def';
+    for (const hasAccount of [true, false]) {
+      const message = buildAnnouncementEmail(input({ hasAccount, unsubscribeUrl: link }));
+      assert.deepEqual(message.headers, { 'List-Unsubscribe': `<${link}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
+      assert.doesNotMatch(JSON.stringify(message.headers), /sakin@example\.com/, 'başlıkta düz adres yok');
+    }
+    for (const bad of [null, undefined, '', 'javascript:alert(1)', 'ftp://x.com/y', 'bağlantı değil']) {
+      const message = buildAnnouncementEmail(input({ hasAccount: false, unsubscribeUrl: bad }));
+      assert.equal('headers' in message, false, String(bad));
+      assert.doesNotMatch(message.text, /javascript|ftp:/);
+    }
+  });
+
   it('başlık / site adı satır başı enjeksiyonuna (CRLF) karşı temizlenir: konuda CR/LF yok', () => {
     const message = buildAnnouncementEmail(input({ title: 'Konu\r\nBcc: kurban@example.com', siteName: 'Site\nCc: x@y.com' }));
     assert.doesNotMatch(message.subject, /[\r\n]/);
@@ -102,6 +132,14 @@ describe('sendAnnouncementEmail (sahte taşıyıcı)', () => {
     assert.equal(sent[0].subject, '[Gül Sitesi] Başlık Bcc: z@y.com');
     assert.ok(typeof sent[0].text === 'string' && typeof sent[0].html === 'string');
     assert.equal('bcc' in sent[0] || 'cc' in sent[0], false);
+  });
+
+  it('abonelikten çık başlıkları taşıyıcıya iletilir (hesapsız alıcı: bağlantı + başlıklar)', async () => {
+    const link = 'https://api.example.com/public/announcement-unsubscribe?t=abc.def';
+    await sendAnnouncementEmail(input({ hasAccount: false, unsubscribeUrl: link }));
+    assert.equal(sent[0].headers['List-Unsubscribe'], `<${link}>`);
+    assert.equal(sent[0].headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
+    assert.ok(sent[0].text.includes(link));
   });
 
   it('geçersiz alıcı taşıyıcıya ULAŞMADAN reddedilir; SMTP ortamı eksikse hata verir (kuyruk bunu başarısızlık sayar)', async () => {

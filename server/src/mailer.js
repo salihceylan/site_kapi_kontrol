@@ -507,11 +507,15 @@ export function isSmtpConfigured(env = process.env) {
 const ANNOUNCEMENT_RECIPIENT_PATTERN = /^[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[^\s@,;<>"()]+$/;
 
 /**
- * Duyuru e-postasını (konu, düz metin, HTML) hazırlar; ağ kullanmaz. Konu `[Site Adı] Başlık` (acil: `ACİL: ` öneki); başlık, site adı ve
- * alıcı satır başı enjeksiyonuna (CRLF) karşı temizlenir; gövde düz yazıdır, HTML'de kaçırılır ve satır sonları korunur.
+ * Duyuru e-postasını (konu, düz metin, HTML, başlıklar) hazırlar; ağ kullanmaz. Konu `[Site Adı] Başlık` (acil: `ACİL: ` öneki); başlık,
+ * site adı ve alıcı satır başı enjeksiyonuna (CRLF) karşı temizlenir; gövde düz yazıdır, HTML'de kaçırılır ve satır sonları korunur.
  * Geçersiz alıcı adresi { code: 'INVALID_RECIPIENT' } hatası verir.
+ *
+ * Altbilgi alıcı türüne göre doğrudur: hesabı olan alıcıya "tercihlerinizi uygulamadan değiştirebilirsiniz" (hesapsız alıcının uygulaması
+ * yok); hesapsız alıcıya abonelikten çık bağlantısı. `unsubscribeUrl` (http/https) verilirse RFC 8058 uyumlu `List-Unsubscribe` ve
+ * `List-Unsubscribe-Post: List-Unsubscribe=One-Click` başlıkları HER alıcıya eklenir.
  */
-export function buildAnnouncementEmail({ to, siteName, title, body, importance }) {
+export function buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount = true, unsubscribeUrl = null }) {
   const recipient = String(to ?? '').trim();
   if (recipient.length > 254 || !ANNOUNCEMENT_RECIPIENT_PATTERN.test(recipient)) {
     const error = new Error('Gecersiz alici adresi.');
@@ -527,27 +531,42 @@ export function buildAnnouncementEmail({ to, siteName, title, body, importance }
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
     .trim();
-  const footer = `Bu e-posta ${site} yönetimi tarafından gönderildi. Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.`;
-  const text = `${urgent ? 'ACİL DUYURU\n\n' : ''}${titleText}\n\n${bodyText}\n\n--\n${footer}`;
+  const link = safeHttpUrl(unsubscribeUrl);
+  const sentBy = `Bu e-posta ${site} yönetimi tarafından gönderildi.`;
+  let footerText = sentBy;
+  let footerHtml = escapeHtml(sentBy);
+  if (hasAccount !== false) {
+    footerText = `${sentBy} Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.`;
+    footerHtml = escapeHtml(footerText);
+  } else if (link) {
+    const prompt = 'Bu e-postaları almak istemiyorsanız şu bağlantıdan çıkabilirsiniz:';
+    footerText = `${sentBy} ${prompt} ${link}`;
+    footerHtml = `${escapeHtml(sentBy)} ${escapeHtml(prompt)} <a href="${escapeHtml(link)}" style="color: #6b7280;">Abonelikten çık</a>`;
+  }
+  const text = `${urgent ? 'ACİL DUYURU\n\n' : ''}${titleText}\n\n${bodyText}\n\n--\n${footerText}`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
       ${urgent ? '<p style="color: #b91c1c; font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 0 0 8px 0;">ACİL DUYURU</p>' : ''}
       <h2 style="color: #111827; margin: 0 0 16px 0; font-size: 20px;">${escapeHtml(titleText)}</h2>
       <div style="color: #374151; font-size: 15px; line-height: 1.6;">${escapeHtml(bodyText).replace(/\n/g, '<br />')}</div>
       <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
-      <p style="color: #9ca3af; font-size: 12px; margin: 0;">${escapeHtml(footer)}</p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">${footerHtml}</p>
     </div>
   `;
-  return { to: recipient, subject, text, html };
+  const message = { to: recipient, subject, text, html };
+  if (link) {
+    message.headers = { 'List-Unsubscribe': `<${link}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
+  }
+  return message;
 }
 
 /** Site yönetiminin duyurusunu bir sakine e-postayla gönderir (düz yazı; HTML kaçırılır). Kuyruk işçisi çağırır; SMTP'yi yavaş varsayar. */
-export async function sendAnnouncementEmail({ to, siteName, title, body, importance }) {
+export async function sendAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl }) {
   const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!from) {
     throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
   }
-  const message = buildAnnouncementEmail({ to, siteName, title, body, importance });
+  const message = buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl });
   const transporter = createTransporter();
   await transporter.sendMail({ from, ...message });
 }

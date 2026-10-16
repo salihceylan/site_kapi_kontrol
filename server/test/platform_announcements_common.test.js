@@ -5,9 +5,20 @@ import assert from 'node:assert/strict';
 import {
   BODY_HEAD_CHARS,
   BODY_MAX,
+  BOARD_SMALL_TARGET_MIN,
+  DUPLICATE_WINDOW_SECONDS,
+  EMAIL_CLAIM_STALE_MINUTES,
+  EMAIL_RETRY_DELAYS_SECONDS,
+  MAX_EMAIL_ATTEMPTS,
+  MAX_PUBLISH_ATTEMPTS,
   PREVIEW_MAX,
   TITLE_MAX,
+  announcementLimits,
+  dailyLimitReached,
+  duplicateAnnouncement,
+  hourlyLimitReached,
   idArray,
+  istanbulDayRange,
   mapInboxRow,
   mapSummaryRow,
   normalizeBody,
@@ -108,6 +119,15 @@ describe('duyuru: hedef', () => {
   it('blocks / apartments: kimlikler tekilleştirilir, sayıya çevrilir, diğer liste boşaltılır', () => {
     assert.deepEqual(parseTargetInput({ type: 'blocks', block_ids: [3, '4', 3], apartment_ids: [9] }), { type: 'blocks', blockIds: [3, 4], apartmentIds: [] });
     assert.deepEqual(parseTargetInput({ type: 'apartments', apartment_ids: [7, 7, 8] }), { type: 'apartments', blockIds: [], apartmentIds: [7, 8] });
+  });
+
+  it('kimlikler ARTAN sırada saklanır: aynı küme her zaman aynı dizi (çift POST koruması dizi eşitliğiyle karşılaştırır)', () => {
+    assert.deepEqual(parseTargetInput({ type: 'apartments', apartment_ids: [8, 7, 10, 9] }).apartmentIds, [7, 8, 9, 10]);
+    assert.deepEqual(parseTargetInput({ type: 'blocks', block_ids: ['12', 3, 12] }).blockIds, [3, 12]);
+    assert.deepEqual(
+      parseTargetInput({ type: 'apartments', apartment_ids: [3, 1, 2] }),
+      parseTargetInput({ type: 'apartments', apartment_ids: [2, 3, 1] }),
+    );
   });
 
   it('boş / geçersiz / çok kimlik -> 400 INVALID_TARGET; bilinmeyen tür veya biçim -> 400 INVALID_BODY', () => {
@@ -289,5 +309,92 @@ describe('duyuru: yanıt eşleyicileri', () => {
     const out = redactForBoard(input);
     assert.deepEqual(out, { items: [{ id: 1, created_by_name: null, title: 'T', nested: { created_by_name: null } }], total: 1 });
     assert.equal(JSON.stringify(input), snapshot);
+  });
+
+  it('redactForBoard (D6): 1-4 alıcılı hedefte okunma / okunmamış / e-posta sayıları NULL (anahtarlar kalır), recipients sayısı ve büyük hedefler aynen', () => {
+    const emailStats = { requested: 2, sent: 1, failed: 0, no_address: 1, skipped_pref: 0, capped: 0, duplicate: 0, pending: 0 };
+    const detail = (count) => ({ id: 1, recipient_count: count, read_count: 1, stats: { recipients: count, read: 1, unread: count - 1, email: { ...emailStats } } });
+    const small = redactForBoard(detail(2));
+    assert.deepEqual(small, {
+      id: 1,
+      recipient_count: 2,
+      read_count: null,
+      stats: { recipients: 2, read: null, unread: null, email: Object.fromEntries(Object.keys(emailStats).map((key) => [key, null])) },
+    });
+    // liste satırı (read_count)
+    assert.deepEqual(redactForBoard({ items: [{ id: 3, recipient_count: 4, read_count: 2 }, { id: 4, recipient_count: 5, read_count: 2 }] }), {
+      items: [{ id: 3, recipient_count: 4, read_count: null }, { id: 4, recipient_count: 5, read_count: 2 }],
+    });
+    const big = detail(BOARD_SMALL_TARGET_MIN);
+    assert.deepEqual(redactForBoard(big), big);
+    // alıcı yok (0): kişisel veri yok, sayılar aynen
+    const none = detail(0);
+    assert.deepEqual(redactForBoard({ ...none, stats: { ...none.stats, read: 0, unread: 0 } }).stats.read, 0);
+    assert.equal(BOARD_SMALL_TARGET_MIN, 5);
+  });
+});
+
+describe('duyuru: kötüye kullanım sınırları ve İstanbul günü', () => {
+  it('announcementLimits: varsayılanlar 30 / 3 / 10 / 3; ortamdan ayarlanır; geçersiz ya da < 1 değer varsayılana döner', () => {
+    assert.deepEqual(announcementLimits({}), { siteDailyTotal: 30, siteDailyUrgentEmail: 3, managerHourlyEmail: 10, perAddressDaily: 3 });
+    assert.deepEqual(
+      announcementLimits({
+        ANNOUNCEMENT_MAX_PER_DAY_PER_SITE: '5',
+        ANNOUNCEMENT_URGENT_EMAIL_MAX_PER_DAY_PER_SITE: '2',
+        ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER: '7',
+        ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS: '1',
+      }),
+      { siteDailyTotal: 5, siteDailyUrgentEmail: 2, managerHourlyEmail: 7, perAddressDaily: 1 },
+    );
+    for (const bad of ['0', '-4', 'abc', '1.5', '', '  ', 'Infinity']) {
+      assert.deepEqual(announcementLimits({ ANNOUNCEMENT_MAX_PER_DAY_PER_SITE: bad, ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS: bad }), {
+        siteDailyTotal: 30,
+        siteDailyUrgentEmail: 3,
+        managerHourlyEmail: 10,
+        perAddressDaily: 3,
+      }, `değer ${JSON.stringify(bad)}`);
+    }
+  });
+
+  it('istanbulDayRange: gün UTC+3 gece yarısında başlar ve biter ([başlangıç, bitiş) 24 saat); 20:59:59.999Z önceki, 21:00:00Z yeni gün', () => {
+    const before = istanbulDayRange(new Date('2026-10-16T20:59:59.999Z'));
+    const after = istanbulDayRange(new Date('2026-10-16T21:00:00.000Z'));
+    assert.equal(before.start.toISOString(), '2026-10-15T21:00:00.000Z');
+    assert.equal(before.end.toISOString(), '2026-10-16T21:00:00.000Z');
+    assert.equal(after.start.toISOString(), '2026-10-16T21:00:00.000Z');
+    assert.equal(before.end.getTime(), after.start.getTime());
+    assert.equal(after.end.getTime() - after.start.getTime(), 24 * 60 * 60 * 1000);
+    const noon = istanbulDayRange(new Date('2026-10-16T09:00:00.000Z'));
+    assert.equal(noon.start.toISOString(), '2026-10-15T21:00:00.000Z');
+    // yıl başı: 31 Aralık 23:59:59 İstanbul = 20:59:59Z aynı gün, 1 Ocak 00:00 İstanbul = 21:00:00Z
+    assert.equal(istanbulDayRange(new Date('2026-12-31T21:00:00.000Z')).start.toISOString(), '2026-12-31T21:00:00.000Z');
+  });
+
+  it('yeni hata kodları: ANNOUNCEMENT_DAILY_LIMIT / ANNOUNCEMENT_HOURLY_LIMIT / DUPLICATE_ANNOUNCEMENT -> 409, Türkçe mesaj (alan adı yok)', () => {
+    const daily = dailyLimitReached();
+    assert.equal(daily.statusCode, 409);
+    assert.equal(daily.code, 'ANNOUNCEMENT_DAILY_LIMIT');
+    assert.match(daily.message, /günlük/);
+    assert.equal(dailyLimitReached('Özel mesaj.').message, 'Özel mesaj.');
+    const hourly = hourlyLimitReached();
+    assert.equal(hourly.statusCode, 409);
+    assert.equal(hourly.code, 'ANNOUNCEMENT_HOURLY_LIMIT');
+    assert.match(hourly.message, /saat/);
+    const duplicate = duplicateAnnouncement();
+    assert.equal(duplicate.statusCode, 409);
+    assert.equal(duplicate.code, 'DUPLICATE_ANNOUNCEMENT');
+    assert.match(duplicate.message, /az önce/);
+    for (const error of [daily, hourly, duplicate]) {
+      assert.doesNotMatch(error.message, /[a-z]+_[a-z_]+/, error.message);
+    }
+  });
+
+  it('sabitler: çift POST penceresi 60 sn; e-posta denemesi 3, geri çekilme 1/5/20 dk, talep bayatlığı 10 dk; yayın denemesi 10', () => {
+    assert.equal(DUPLICATE_WINDOW_SECONDS, 60);
+    assert.equal(MAX_EMAIL_ATTEMPTS, 3);
+    assert.deepEqual([...EMAIL_RETRY_DELAYS_SECONDS], [60, 300, 1200]);
+    assert.equal(EMAIL_RETRY_DELAYS_SECONDS.length, MAX_EMAIL_ATTEMPTS);
+    assert.equal(EMAIL_CLAIM_STALE_MINUTES, 10);
+    assert.equal(MAX_PUBLISH_ATTEMPTS, 10);
   });
 });

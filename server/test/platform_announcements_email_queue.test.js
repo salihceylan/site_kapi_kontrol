@@ -1,27 +1,39 @@
-// Duyuru e-posta kuyruğu (DB'siz): bellek içi sahte alıcı tablosu üzerinde grup boyutu, gruplar arası bekleme, deneme sayacı, 3 denemede
-// failed, SMTP yok -> failed, tek çalışan kilidi, kapanış, log gizliliği. Gerçek SMTP'ye ASLA bağlanılmaz (gönderim kancası sahte).
+// Duyuru e-posta kuyruğu (DB'siz): bellek içi sahte alıcı tablosu üzerinde grup boyutu, gruplar arası bekleme, talep (claim) işareti,
+// deneme sayacı + geri çekilme, kalıcı/geçici SMTP hatası, talep anı denetimi (kişi etkin mi / adres aynı mı / bastırıldı mı), yayından
+// kalkmış duyuru, bayat talep, SMTP yok -> failed, tek çalışan kilidi (iki-int), kapanış, log gizliliği. Gerçek SMTP'ye ASLA bağlanılmaz
+// (gönderim kancası sahte). Sahte talep sorgusu gerçek koşulları UYGULAR (a.status = 'published', talep işareti, geri çekilme, deneme sınırı).
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
 import {
   EMAIL_BATCH_DELAY_MS,
   EMAIL_BATCH_SIZE,
-  EMAIL_QUEUE_LOCK_KEY,
+  EMAIL_HASH_RETENTION_DAYS,
+  EMAIL_QUEUE_LOCK_JOB,
+  EMAIL_SEND_CONCURRENCY,
   emailQueueHooks,
+  failStaleRows,
   hasPendingEmails,
+  isPermanentSendError,
   kickEmailQueue,
+  purgeStaleEmailHashes,
   resumeEmailQueue,
   runEmailQueue,
   stopEmailQueue,
 } from '../src/modules/announcement_email_queue.js';
+import { hashEmail } from '../src/modules/announcement_email_security.js';
+import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from '../src/modules/announcement_lock.js';
+
+process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef';
 
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = [], rowCount = rows.length) => ({ rows, rowCount });
 
-let rows; // { aid, pid, email, attempts, status }
+let rows; // sahte alıcı tablosu (aşağıdaki makeRows biçimi)
 let log;
 let lockHeldElsewhere;
 let lockOps;
+let lockParams;
 let sent;
 let sleeps;
 let sendImpl;
@@ -29,14 +41,38 @@ let savedHooks;
 const savedEnv = {};
 
 const ENV_NAMES = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
+const MINUTE = 60 * 1000;
 
-function makeRows(count, { aid = 1, startPid = 1 } = {}) {
-  return Array.from({ length: count }, (_, i) => ({ aid, pid: startPid + i, email: `kisi${startPid + i}@example.com`, attempts: 0, status: 'pending' }));
+function makeRows(count, { aid = 1, startPid = 1, annStatus = 'published' } = {}) {
+  return Array.from({ length: count }, (_, i) => {
+    const pid = startPid + i;
+    const email = `kisi${pid}@example.com`;
+    return {
+      aid,
+      pid,
+      email,
+      hash: hashEmail(email),
+      attempts: 0,
+      status: 'pending',
+      claimedAt: null,
+      nextAt: null,
+      annStatus,
+      personActive: true,
+      currentEmail: email,
+      suppressed: false,
+      hasAccount: false,
+    };
+  });
 }
+
+const find = (aid, pid) => rows.find((r) => String(r.aid) === String(aid) && String(r.pid) === String(pid));
+const staleBefore = (mins) => Date.now() - mins * MINUTE;
+const isStale = (claimedAt, mins) => claimedAt !== null && claimedAt.getTime() < staleBefore(mins);
 
 function emulate(sql, params) {
   if (/^SELECT pg_try_advisory_lock/.test(sql)) {
     lockOps.push('try');
+    lockParams.push(params);
     return ok([{ locked: !lockHeldElsewhere }]);
   }
   if (/^SELECT pg_advisory_unlock/.test(sql)) {
@@ -47,38 +83,96 @@ function emulate(sql, params) {
   if (/^SELECT 1 FROM announcement_recipients WHERE email_status = 'pending' LIMIT 1$/.test(sql)) {
     return ok(rows.filter((r) => r.status === 'pending').slice(0, 1).map(() => ({ '?column?': 1 })));
   }
-  if (/^UPDATE announcement_recipients SET email_status = 'failed', email = NULL WHERE email_status = 'pending' AND \(email_attempts >= \$1 OR email IS NULL\)$/.test(sql)) {
-    const hit = rows.filter((r) => r.status === 'pending' && (r.attempts >= params[0] || r.email === null));
-    hit.forEach((r) => Object.assign(r, { status: 'failed', email: null }));
+  // failStaleRows (1): adresi olmayan + denemesi tükenmiş (taze talepler hariç)
+  if (/^UPDATE announcement_recipients SET email_status = 'failed', email = NULL, email_claimed_at = NULL, email_next_at = NULL WHERE email_status = 'pending' AND \( email IS NULL OR \(email_attempts >= \$1 AND \(email_claimed_at IS NULL OR email_claimed_at < NOW\(\) - make_interval\(mins => \$2::INTEGER\)\)\) \)$/.test(sql)) {
+    const [maxAttempts, staleMins] = params;
+    const hit = rows.filter((r) => r.status === 'pending' && (r.email === null || (r.attempts >= maxAttempts && (r.claimedAt === null || isStale(r.claimedAt, staleMins)))));
+    hit.forEach((r) => Object.assign(r, { status: 'failed', email: null, claimedAt: null, nextAt: null }));
     return ok([], hit.length);
   }
-  if (/^UPDATE announcement_recipients SET email_status = 'failed', email = NULL WHERE email_status = 'pending'$/.test(sql)) {
+  // failStaleRows (2): yayından kalkmış duyurunun bayat talepleri
+  if (/^UPDATE announcement_recipients r SET email_status = 'failed', email = NULL, email_claimed_at = NULL, email_next_at = NULL FROM announcements a WHERE a\.id = r\.announcement_id AND a\.status <> 'published' AND r\.email_status = 'pending' AND r\.email_claimed_at < NOW\(\) - make_interval\(mins => \$1::INTEGER\)$/.test(sql)) {
+    const hit = rows.filter((r) => r.status === 'pending' && r.annStatus !== 'published' && isStale(r.claimedAt, params[0]));
+    hit.forEach((r) => Object.assign(r, { status: 'failed', email: null, claimedAt: null, nextAt: null }));
+    return ok([], hit.length);
+  }
+  // SMTP yapılandırılmamış: bekleyen her satır failed
+  if (/^UPDATE announcement_recipients SET email_status = 'failed', email = NULL, email_claimed_at = NULL, email_next_at = NULL WHERE email_status = 'pending'$/.test(sql)) {
     const hit = rows.filter((r) => r.status === 'pending');
-    hit.forEach((r) => Object.assign(r, { status: 'failed', email: null }));
+    hit.forEach((r) => Object.assign(r, { status: 'failed', email: null, claimedAt: null, nextAt: null }));
     return ok([], hit.length);
   }
-  if (/^SELECT r\.announcement_id, r\.person_id, r\.email, r\.email_attempts, a\.title, a\.body, a\.importance, s\.name AS site_name FROM announcement_recipients r/.test(sql)) {
-    const [maxAttempts, doneA, doneP, limit] = params;
+  // talep sorgusu (GERÇEK koşullar uygulanır)
+  if (/^SELECT r\.announcement_id, r\.person_id, r\.email, r\.email_hash, r\.email_attempts, a\.title, a\.body, a\.importance, s\.name AS site_name, pc\.person_active, pc\.has_account, pc\.current_email, \(sup\.email_hash IS NOT NULL\) AS suppressed FROM announcement_recipients r/.test(sql)) {
+    const [maxAttempts, doneA, doneP, limit, staleMins] = params;
     const done = new Set(doneA.map((a, i) => `${a}:${doneP[i]}`));
     const picked = rows
-      .filter((r) => r.status === 'pending' && r.email !== null && r.attempts < maxAttempts && !done.has(`${r.aid}:${r.pid}`))
+      .filter(
+        (r) =>
+          r.status === 'pending' &&
+          r.email !== null &&
+          r.attempts < maxAttempts &&
+          r.annStatus === 'published' &&
+          (r.claimedAt === null || isStale(r.claimedAt, staleMins)) &&
+          (r.nextAt === null || r.nextAt.getTime() <= Date.now()) &&
+          !done.has(`${r.aid}:${r.pid}`),
+      )
       .sort((a, b) => a.aid - b.aid || a.pid - b.pid)
       .slice(0, limit);
-    return ok(picked.map((r) => ({ announcement_id: String(r.aid), person_id: String(r.pid), email: r.email, email_attempts: r.attempts, title: 'Başlık', body: 'Metin', importance: 'normal', site_name: 'Gül Sitesi' })));
+    return ok(
+      picked.map((r) => ({
+        announcement_id: String(r.aid),
+        person_id: String(r.pid),
+        email: r.email,
+        email_hash: r.hash,
+        email_attempts: r.attempts,
+        title: 'Başlık',
+        body: 'Metin',
+        importance: 'normal',
+        site_name: 'Gül Sitesi',
+        person_active: r.personActive,
+        has_account: r.hasAccount,
+        current_email: r.currentEmail,
+        suppressed: r.suppressed,
+      })),
+    );
   }
-  if (/^UPDATE announcement_recipients r SET email_attempts = r\.email_attempts \+ 1 FROM unnest/.test(sql)) {
+  // talep anı: gönderilmeyecek satırlar (kişi pasif / adres değişti -> none; bastırılmış -> skipped_pref)
+  if (/^UPDATE announcement_recipients r SET email_status = v\.st, email = NULL, email_hash = NULL, email_claimed_at = NULL, email_next_at = NULL FROM unnest\(\$1::BIGINT\[\], \$2::BIGINT\[\], \$3::TEXT\[\]\) AS v\(aid, pid, st\)/.test(sql)) {
     params[0].forEach((aid, i) => {
-      const row = rows.find((r) => String(r.aid) === String(aid) && String(r.pid) === String(params[1][i]));
-      if (row) row.attempts += 1;
+      const row = find(aid, params[1][i]);
+      if (row) Object.assign(row, { status: params[2][i], email: null, hash: null, claimedAt: null, nextAt: null });
     });
     return ok([], params[0].length);
   }
-  if (/^UPDATE announcement_recipients r SET email_status = v\.st, email = NULL FROM unnest/.test(sql)) {
+  // talep işareti: deneme + 1, talep zamanı
+  if (/^UPDATE announcement_recipients r SET email_attempts = r\.email_attempts \+ 1, email_claimed_at = NOW\(\), email_next_at = NULL FROM unnest\(\$1::BIGINT\[\], \$2::BIGINT\[\]\) AS v\(aid, pid\)/.test(sql)) {
     params[0].forEach((aid, i) => {
-      const row = rows.find((r) => String(r.aid) === String(aid) && String(r.pid) === String(params[1][i]) && r.status === 'pending');
-      if (row) Object.assign(row, { status: params[2][i], email: null });
+      const row = find(aid, params[1][i]);
+      if (row) Object.assign(row, { attempts: row.attempts + 1, claimedAt: new Date(), nextAt: null });
     });
     return ok([], params[0].length);
+  }
+  // sonuç yazımı: yalnız hâlâ pending olan satırlar
+  if (/^UPDATE announcement_recipients r SET email_status = v\.st, email = CASE WHEN v\.st = 'pending' THEN r\.email END, email_claimed_at = NULL, email_next_at = CASE WHEN v\.st = 'pending' THEN NOW\(\) \+ make_interval\(secs => v\.delay::DOUBLE PRECISION\) END FROM unnest\(\$1::BIGINT\[\], \$2::BIGINT\[\], \$3::TEXT\[\], \$4::INTEGER\[\]\) AS v\(aid, pid, st, delay\) WHERE r\.announcement_id = v\.aid AND r\.person_id = v\.pid AND r\.email_status = 'pending'$/.test(sql)) {
+    params[0].forEach((aid, i) => {
+      const row = find(aid, params[1][i]);
+      if (!row || row.status !== 'pending') return;
+      const state = params[2][i];
+      Object.assign(row, {
+        status: state,
+        email: state === 'pending' ? row.email : null,
+        claimedAt: null,
+        nextAt: state === 'pending' ? new Date(Date.now() + params[3][i] * 1000) : null,
+      });
+    });
+    return ok([], params[0].length);
+  }
+  // özet temizliği (gizlilik)
+  if (/^UPDATE announcement_recipients r SET email_hash = NULL FROM announcements a WHERE a\.id = r\.announcement_id AND r\.email_hash IS NOT NULL AND r\.email_status <> 'pending' AND a\.published_at < NOW\(\) - make_interval\(days => \$1::INTEGER\)$/.test(sql)) {
+    const hit = rows.filter((r) => r.hash !== null && r.status !== 'pending' && r.old === true);
+    hit.forEach((r) => Object.assign(r, { hash: null }));
+    return ok([], hit.length);
   }
   throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 200)}`);
 }
@@ -88,6 +182,7 @@ beforeEach(() => {
   log = [];
   lockHeldElsewhere = false;
   lockOps = [];
+  lockParams = [];
   sent = [];
   sleeps = [];
   sendImpl = async () => {};
@@ -109,6 +204,8 @@ beforeEach(() => {
   pool.query = async (text, params) => run(text, params);
   pool.connect = async () => ({
     query: async (text, params) => run(text, params),
+    on() {},
+    off() {},
     release() {},
   });
   resumeEmailQueue();
@@ -130,29 +227,38 @@ afterEach(async () => {
 });
 
 describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
-  it('sabitler: 20\'lik gruplar, gruplar arası >= 150 ms', () => {
+  it('sabitler: 20\'lik gruplar, gruplar arası >= 150 ms, paralellik 4, özet saklama 3 gün, kilit işi iki-int uzayında', () => {
     assert.equal(EMAIL_BATCH_SIZE, 20);
     assert.ok(EMAIL_BATCH_DELAY_MS >= 150);
+    assert.equal(EMAIL_SEND_CONCURRENCY, 4);
+    assert.equal(EMAIL_HASH_RETENTION_DAYS, 3);
+    assert.equal(EMAIL_QUEUE_LOCK_JOB, ANNOUNCEMENT_LOCK_JOBS.emailQueue);
   });
 
-  it('45 bekleyen satır -> 3 grup (20 + 20 + 5); her grup sonrası >= 150 ms bekleme; hepsi sent ve email NULL; deneme sayısı 1', async () => {
+  it('45 bekleyen satır -> 3 grup (20 + 20 + 5); her grup sonrası >= 150 ms bekleme; hepsi sent, email NULL, talep işareti kalkar; deneme sayısı 1', async () => {
     rows = makeRows(45);
     const summary = await runEmailQueue();
     assert.equal(summary.batches, 3);
     assert.equal(summary.sent, 45);
     assert.equal(sent.length, 45);
     assert.deepEqual(sleeps, [150, 150, 150]);
-    assert.ok(rows.every((r) => r.status === 'sent' && r.email === null && r.attempts === 1));
+    assert.ok(rows.every((r) => r.status === 'sent' && r.email === null && r.attempts === 1 && r.claimedAt === null && r.nextAt === null));
+    assert.ok(rows.every((r) => r.hash !== null), 'günlük adres sayımı için özet kalır');
     const claims = log.filter((q) => /^SELECT r\.announcement_id/.test(q.sql));
     assert.deepEqual(claims.slice(0, 3).map((q) => q.params[3]), [20, 20, 20]);
     assert.match(claims[0].sql, /FOR UPDATE OF r SKIP LOCKED/);
     assert.match(claims[0].sql, /a\.status = 'published'/);
     assert.match(claims[0].sql, /r\.email_attempts < \$1/);
+    assert.match(claims[0].sql, /\(r\.email_claimed_at IS NULL OR r\.email_claimed_at < NOW\(\) - make_interval\(mins => \$5::INTEGER\)\)/);
+    assert.match(claims[0].sql, /\(r\.email_next_at IS NULL OR r\.email_next_at <= NOW\(\)\)/);
+    assert.match(claims[0].sql, /LEFT JOIN announcement_email_suppressions sup ON sup\.email_hash = r\.email_hash/);
     assert.equal(claims[0].params[0], 3);
+    assert.equal(claims[0].params[4], 10);
   });
 
-  it('gönderilen ileti: alıcı, site adı, başlık, metin, önem kancaya iletilir; paralellik en çok 4', async () => {
+  it('gönderilen ileti: alıcı, site adı, başlık, metin, önem, hesap var mı ve abonelikten çık bağlantısı (adres ÖZETİNE bağlı) kancaya iletilir; paralellik en çok 4', async () => {
     rows = makeRows(8);
+    rows[0].hasAccount = true;
     let active = 0;
     let peak = 0;
     sendImpl = async () => {
@@ -162,13 +268,19 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
       active -= 1;
     };
     await runEmailQueue();
-    assert.deepEqual(Object.keys(sent[0]).sort(), ['body', 'importance', 'siteName', 'title', 'to']);
+    assert.deepEqual(Object.keys(sent[0]).sort(), ['body', 'hasAccount', 'importance', 'siteName', 'title', 'to', 'unsubscribeUrl']);
     assert.equal(sent[0].siteName, 'Gül Sitesi');
     assert.equal(sent[0].to, 'kisi1@example.com');
+    assert.equal(sent[0].hasAccount, true);
+    assert.equal(sent.find((m) => m.to === 'kisi2@example.com').hasAccount, false);
+    const url = new URL(sent[0].unsubscribeUrl);
+    assert.equal(url.pathname, '/public/announcement-unsubscribe');
+    assert.ok(url.searchParams.get('t').startsWith(hashEmail('kisi1@example.com')));
+    assert.ok(!sent[0].unsubscribeUrl.includes('kisi1'), 'bağlantıda düz adres yok');
     assert.ok(peak <= 4 && peak >= 2, `paralellik ${peak}`);
   });
 
-  it('SMTP hatası: satır pending kalır (adres korunur), deneme artar; AYNI turda yeniden denenmez; 3. turda failed + email NULL', async () => {
+  it('geçici SMTP hatası: satır pending kalır (adres korunur), deneme artar, 1 dk geri çekilme; AYNI turda ve geri çekilme dolmadan yeniden denenmez; 2. hata 5 dk; 3. hata failed + email NULL', async () => {
     rows = makeRows(3);
     sendImpl = async () => {
       throw Object.assign(new Error('adres a@b.com reddedildi'), { code: 'ECONNECTION' });
@@ -176,28 +288,68 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
     let summary = await runEmailQueue();
     assert.equal(sent.length, 3, 'her satır turda BİR kez denenir');
     assert.equal(summary.pendingRetry, 3);
-    assert.ok(rows.every((r) => r.status === 'pending' && r.attempts === 1 && r.email !== null));
+    assert.ok(rows.every((r) => r.status === 'pending' && r.attempts === 1 && r.email !== null && r.claimedAt === null));
+    const firstDelay = rows[0].nextAt.getTime() - Date.now();
+    assert.ok(firstDelay > 55_000 && firstDelay <= 60_000, `1. geri çekilme ~60 sn: ${firstDelay}`);
+    sent.length = 0;
+    summary = await runEmailQueue();
+    assert.equal(sent.length, 0, 'geri çekilme dolmadan yeniden denenmez (SMTP kesintisinde 3 deneme saniyeler içinde yanmaz)');
+    assert.equal(summary.batches, 0);
+    rows.forEach((r) => { r.nextAt = new Date(Date.now() - 1000); });
     await runEmailQueue();
     assert.ok(rows.every((r) => r.status === 'pending' && r.attempts === 2));
+    const secondDelay = rows[0].nextAt.getTime() - Date.now();
+    assert.ok(secondDelay > 295_000 && secondDelay <= 300_000, `2. geri çekilme ~300 sn: ${secondDelay}`);
+    rows.forEach((r) => { r.nextAt = new Date(Date.now() - 1000); });
     summary = await runEmailQueue();
-    assert.ok(rows.every((r) => r.status === 'failed' && r.attempts === 3 && r.email === null));
+    assert.ok(rows.every((r) => r.status === 'failed' && r.attempts === 3 && r.email === null && r.nextAt === null));
     assert.equal(summary.failed, 3);
     sent.length = 0;
     await runEmailQueue();
     assert.equal(sent.length, 0, 'failed satırlar yeniden denenmez');
   });
 
-  it('geçersiz alıcı adresi (INVALID_RECIPIENT) beklemeden failed olur', async () => {
-    rows = makeRows(2);
+  it('KALICI SMTP hatası (alıcı reddi / 5xx) tek denemede failed olur; geçici 4xx ve kimlik doğrulama hatası (EAUTH) yeniden denenir', async () => {
+    for (const code of ['INVALID_RECIPIENT', 'EENVELOPE']) {
+      rows = makeRows(2);
+      sendImpl = async () => {
+        throw Object.assign(new Error('x'), { code });
+      };
+      const summary = await runEmailQueue();
+      assert.ok(rows.every((r) => r.status === 'failed' && r.email === null && r.attempts === 1), code);
+      assert.equal(summary.failed, 2);
+    }
+    rows = makeRows(1);
     sendImpl = async () => {
-      throw Object.assign(new Error('x'), { code: 'INVALID_RECIPIENT' });
+      throw Object.assign(new Error('mailbox unavailable'), { code: 'EMESSAGE', responseCode: 550 });
     };
-    const summary = await runEmailQueue();
-    assert.ok(rows.every((r) => r.status === 'failed' && r.email === null));
-    assert.equal(summary.failed, 2);
+    await runEmailQueue();
+    assert.equal(rows[0].status, 'failed');
+    for (const error of [{ code: 'EMESSAGE', responseCode: 451 }, { code: 'EAUTH', responseCode: 535 }, { code: 'ETIMEDOUT' }, { code: 'ECONNECTION' }]) {
+      rows = makeRows(1);
+      sendImpl = async () => {
+        throw Object.assign(new Error('x'), error);
+      };
+      await runEmailQueue();
+      assert.equal(rows[0].status, 'pending', JSON.stringify(error));
+      assert.equal(rows[0].attempts, 1);
+    }
   });
 
-  it('karışık sonuç: başarılılar sent, başarısızlar pending (deneme 1); sonraki tur yalnız kalanları sürdürür (yeniden başlama)', async () => {
+  it('isPermanentSendError: INVALID_RECIPIENT, EENVELOPE ve 5xx kalıcı; EAUTH, 4xx, ağ hataları ve boş hata kalıcı DEĞİL', () => {
+    assert.equal(isPermanentSendError({ code: 'INVALID_RECIPIENT' }), true);
+    assert.equal(isPermanentSendError({ code: 'EENVELOPE' }), true);
+    assert.equal(isPermanentSendError({ responseCode: 550 }), true);
+    assert.equal(isPermanentSendError({ responseCode: 599 }), true);
+    assert.equal(isPermanentSendError({ code: 'EAUTH', responseCode: 535 }), false);
+    assert.equal(isPermanentSendError({ responseCode: 451 }), false);
+    assert.equal(isPermanentSendError({ responseCode: 600 }), false);
+    assert.equal(isPermanentSendError({ code: 'ETIMEDOUT' }), false);
+    assert.equal(isPermanentSendError(null), false);
+    assert.equal(isPermanentSendError(undefined), false);
+  });
+
+  it('karışık sonuç: başarılılar sent, başarısızlar pending (deneme 1, geri çekilmede); sonraki tur geri çekilme dolunca YALNIZ kalanları sürdürür', async () => {
     rows = makeRows(5);
     let calls = 0;
     sendImpl = async () => {
@@ -208,18 +360,72 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
     assert.deepEqual(rows.map((r) => r.status), ['sent', 'sent', 'pending', 'pending', 'pending']);
     sendImpl = async () => {};
     sent.length = 0;
-    // süreç bir grubu talep edip öldü: deneme artmış ama sonuç yok
-    rows[2].attempts += 1;
+    rows.forEach((r) => { r.nextAt = null; });
     await runEmailQueue();
     assert.deepEqual(rows.map((r) => r.status), ['sent', 'sent', 'sent', 'sent', 'sent']);
     assert.equal(sent.length, 3, 'yalnız kalan 3 satır gönderildi, ilk ikisi tekrarlanmadı');
   });
 
-  it('denemesi tükenmiş (çökme artığı) ve adresi olmayan bekleyen satırlar tur başında failed yapılır', async () => {
-    rows = [...makeRows(1), { aid: 1, pid: 9, email: 'x@example.com', attempts: 3, status: 'pending' }, { aid: 1, pid: 10, email: null, attempts: 0, status: 'pending' }];
+  it('talep anı denetimi (D8): kişi artık etkin değil -> none; iletişim adresi değişti -> none; adres bastırıldı -> skipped_pref; hiçbiri gönderilmez, adres + özet silinir', async () => {
+    rows = makeRows(5);
+    rows[0].personActive = false;
+    rows[1].currentEmail = 'yeni.adres@example.com';
+    rows[2].currentEmail = null;
+    rows[3].suppressed = true;
+    const summary = await runEmailQueue();
+    assert.deepEqual(rows.map((r) => r.status), ['none', 'none', 'none', 'skipped_pref', 'sent']);
+    assert.ok(rows.slice(0, 4).every((r) => r.email === null && r.hash === null && r.attempts === 0), 'gönderilmeyen satırlar adres ve özet taşımaz');
+    assert.deepEqual(sent.map((m) => m.to), ['kisi5@example.com']);
+    assert.equal(summary.sent, 1);
+    assert.equal(summary.dropped, 4);
+  });
+
+  it('sahte talep sorgusu gerçek koşulu uygular: yayında olmayan (geri çekilmiş) duyurunun satırları talep edilmez ve gönderilmez', async () => {
+    rows = [...makeRows(2, { aid: 1 }), ...makeRows(3, { aid: 2, startPid: 10, annStatus: 'withdrawn' })];
+    const summary = await runEmailQueue();
+    assert.equal(summary.sent, 2);
+    assert.deepEqual(sent.map((m) => m.to).sort(), ['kisi1@example.com', 'kisi2@example.com']);
+    assert.ok(rows.filter((r) => r.aid === 2).every((r) => r.status === 'pending' && r.attempts === 0 && r.claimedAt === null));
+  });
+
+  it('talep işareti: yoldaki (taze talep edilmiş) satır başka tur tarafından ALINMAZ; 10 dk\'dan eski talep (süreç çökmüş) yeniden talep edilip gönderilir', async () => {
+    rows = makeRows(3);
+    rows[0].attempts = 1;
+    rows[0].claimedAt = new Date();
+    rows[1].attempts = 1;
+    rows[1].claimedAt = new Date(Date.now() - 11 * MINUTE);
+    const summary = await runEmailQueue();
+    assert.deepEqual(rows.map((r) => r.status), ['pending', 'sent', 'sent']);
+    assert.equal(rows[1].attempts, 2);
+    assert.equal(summary.sent, 2);
+    assert.equal(rows[0].attempts, 1, 'taze talep dokunulmadan kaldı');
+  });
+
+  it('sonuç yazımı yalnız hâlâ pending satırlara işler (geri çekme / başka yazım sonrası ezilmez)', async () => {
+    rows = makeRows(2);
+    sendImpl = async () => {
+      rows[0].status = 'none'; // gönderim sürerken satır başka yoldan kapatıldı
+      rows[0].email = null;
+    };
     await runEmailQueue();
-    assert.deepEqual(rows.map((r) => r.status), ['sent', 'failed', 'failed']);
-    assert.ok(rows.every((r) => r.email === null));
+    assert.equal(rows[0].status, 'none');
+    assert.equal(rows[1].status, 'sent');
+  });
+
+  it('failStaleRows: adresi olmayan ve denemesi tükenmiş (taze talep HARİÇ) bekleyenler failed; yayından kalkmış duyurunun bayat talepleri failed', async () => {
+    rows = [
+      ...makeRows(1),
+      { ...makeRows(1, { startPid: 2 })[0], attempts: 3 }, // tükenmiş, talep yok
+      { ...makeRows(1, { startPid: 3 })[0], attempts: 3, claimedAt: new Date() }, // tükenmiş ama yoldaki gönderim olabilir (taze)
+      { ...makeRows(1, { startPid: 4 })[0], attempts: 3, claimedAt: new Date(Date.now() - 11 * MINUTE) }, // tükenmiş + bayat talep
+      { ...makeRows(1, { startPid: 5 })[0], email: null },
+      { ...makeRows(1, { startPid: 6, annStatus: 'withdrawn' })[0], attempts: 1, claimedAt: new Date(Date.now() - 11 * MINUTE) },
+      { ...makeRows(1, { startPid: 7, annStatus: 'withdrawn' })[0], attempts: 1, claimedAt: new Date() },
+    ];
+    const count = await failStaleRows(pool);
+    assert.deepEqual(rows.map((r) => r.status), ['pending', 'failed', 'pending', 'failed', 'failed', 'failed', 'pending']);
+    assert.equal(count, 4);
+    assert.ok(rows.filter((r) => r.status === 'failed').every((r) => r.email === null && r.claimedAt === null));
   });
 
   it('SMTP yapılandırılmamış: bekleyen satırlar failed olur (sessiz kayıp yok), hiçbir gönderim denenmez', async () => {
@@ -230,6 +436,16 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
     assert.equal(sent.length, 0);
     assert.ok(rows.every((r) => r.status === 'failed' && r.email === null));
     assert.equal(summary.failed, 4);
+  });
+
+  it('purgeStaleEmailHashes: 3 günden eski, pending olmayan satırların özeti silinir (sorgu saklama süresini parametre alır); sayı döner', async () => {
+    rows = makeRows(3);
+    rows.forEach((r) => Object.assign(r, { status: 'sent', email: null }));
+    rows[0].old = true;
+    rows[1].old = true;
+    assert.equal(await purgeStaleEmailHashes(), 2);
+    assert.deepEqual(rows.map((r) => r.hash === null), [true, true, false]);
+    assert.deepEqual(log.at(-1).params, [EMAIL_HASH_RETENTION_DAYS]);
   });
 });
 
@@ -245,12 +461,12 @@ describe('e-posta kuyruğu: tek çalışan, kick, kapanış', () => {
     assert.equal(log.some((q) => /^UPDATE|^SELECT r\.announcement_id/.test(q.sql)), false);
   });
 
-  it('kilit anahtarı sabit; tur sonunda (hata olsa bile) kilit AÇILIR', async () => {
-    assert.equal(EMAIL_QUEUE_LOCK_KEY, 'announcement_email_queue');
+  it('kilit İKİ-int anahtardır (sınıf + iş); tur sonunda (hata olsa bile) kilit AÇILIR', async () => {
     rows = makeRows(2);
     await runEmailQueue();
     assert.deepEqual(lockOps, ['try', 'unlock']);
-    assert.equal(log.find((q) => /pg_try_advisory_lock/.test(q.sql)).params[0], EMAIL_QUEUE_LOCK_KEY);
+    assert.deepEqual(lockParams[0], [ANNOUNCEMENT_LOCK_CLASS, EMAIL_QUEUE_LOCK_JOB]);
+    assert.match(log.find((q) => /pg_try_advisory_lock/.test(q.sql)).sql, /pg_try_advisory_lock\(\$1::int, \$2::int\)/);
     lockOps.length = 0;
     const realQuery = pool.query;
     pool.query = async (text, params) => {
@@ -285,6 +501,30 @@ describe('e-posta kuyruğu: tek çalışan, kick, kapanış', () => {
     assert.ok(!logged.includes('@'), logged);
   });
 
+  it('sonuç yazımı (finalize) başarısız olursa tur { error } ile biter, sunucu düşmez; satırlar talep edilmiş pending kalır ve taze talep OLDUĞU için hemen yeniden gönderilmez (çift e-posta yok)', async () => {
+    rows = makeRows(3);
+    const realQuery = pool.query;
+    let failed = false;
+    pool.query = async (text, params) => {
+      if (!failed && /email_status = v\.st, email = CASE WHEN v\.st = 'pending'/.test(norm(text))) {
+        failed = true;
+        throw Object.assign(new Error('bağlantı koptu'), { code: '57P01' });
+      }
+      return realQuery(text, params);
+    };
+    const result = await kickEmailQueue();
+    assert.deepEqual(result, { error: '57P01' });
+    assert.equal(sent.length, 3, 'e-postalar gitti');
+    assert.ok(rows.every((r) => r.status === 'pending' && r.attempts === 1 && r.claimedAt !== null));
+    const again = await runEmailQueue();
+    assert.equal(again.sent, 0);
+    assert.equal(sent.length, 3, 'taze talep yeniden gönderilmez');
+    rows.forEach((r) => { r.claimedAt = new Date(Date.now() - 11 * MINUTE); });
+    const recovered = await runEmailQueue();
+    assert.equal(recovered.sent, 3, 'bayatlayınca yeniden talep edilip gönderilir (en az bir kez teslim)');
+    assert.ok(rows.every((r) => r.status === 'sent' && r.attempts === 2));
+  });
+
   it('gönderim hatası logu yalnız kod içerir (adres / başlık yok)', async () => {
     rows = makeRows(2);
     sendImpl = async () => {
@@ -296,7 +536,7 @@ describe('e-posta kuyruğu: tek çalışan, kick, kapanış', () => {
     assert.ok(!logged.includes('@') && !logged.includes('Başlık'), logged);
   });
 
-  it('stopEmailQueue: çalışan tur grup sonunda durur (kalanlar pending kalır); durdurulmuşsa yeni tur başlamaz; resume ile devam', async () => {
+  it('stopEmailQueue: çalışan tur grup sonunda durur (kalanlar pending ve TALEP EDİLMEMİŞ kalır); durdurulmuşsa yeni tur başlamaz; resume ile devam', async () => {
     rows = makeRows(50);
     let calls = 0;
     sendImpl = async () => {
@@ -306,7 +546,9 @@ describe('e-posta kuyruğu: tek çalışan, kick, kapanış', () => {
     const run = kickEmailQueue();
     const summary = await run;
     assert.equal(summary.batches, 1, 'ilk gruptan sonra durdu');
-    assert.equal(rows.filter((r) => r.status === 'pending').length, 30);
+    const waiting = rows.filter((r) => r.status === 'pending');
+    assert.equal(waiting.length, 30);
+    assert.ok(waiting.every((r) => r.claimedAt === null && r.attempts === 0), 'yarıda kalan (talep edilmiş) satır yok');
     assert.deepEqual(await kickEmailQueue(), { skipped: 'stopping' });
     resumeEmailQueue();
     const resumed = await kickEmailQueue();

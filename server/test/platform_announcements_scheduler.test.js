@@ -6,7 +6,7 @@ import { pool } from '../src/db.js';
 import {
   MAX_PUBLISH_PER_TICK,
   SCHEDULER_INTERVAL_MS,
-  SCHEDULER_LOCK_KEY,
+  SCHEDULER_LOCK_JOB,
   isSchedulerDisabled,
   resetSchedulerState,
   runSchedulerTick,
@@ -14,6 +14,7 @@ import {
   startAnnouncementScheduler,
   stopAnnouncementScheduler,
 } from '../src/modules/announcement_scheduler.js';
+import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from '../src/modules/announcement_lock.js';
 
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = [], rowCount = rows.length) => ({ rows, rowCount });
@@ -26,6 +27,10 @@ let savedHooks;
 let published;
 let kicks;
 let pendingEmails;
+let failures;
+let failureAttempts;
+let purges;
+let purgeImpl;
 
 beforeEach(() => {
   resetSchedulerState();
@@ -36,10 +41,22 @@ beforeEach(() => {
   published = [];
   kicks = 0;
   pendingEmails = false;
+  failures = [];
+  failureAttempts = 1;
+  purges = 0;
+  purgeImpl = async () => 0;
   savedHooks = { ...schedulerHooks };
   schedulerHooks.publishDue = async (args) => {
     published.push(args);
     return { published: true, recipientCount: 1, email: {} };
+  };
+  schedulerHooks.recordFailure = async (args) => {
+    failures.push(args);
+    return failureAttempts;
+  };
+  schedulerHooks.purgeHashes = async () => {
+    purges += 1;
+    return purgeImpl();
   };
   schedulerHooks.hasPendingEmails = async () => pendingEmails;
   schedulerHooks.kickEmailQueue = () => {
@@ -57,13 +74,13 @@ beforeEach(() => {
       lockOps.push('unlock');
       return ok([{}]);
     }
-    if (/^SELECT id, site_code FROM announcements WHERE status = 'scheduled' AND publish_at <= NOW\(\) ORDER BY publish_at, id LIMIT \$1$/.test(sql)) {
+    if (/^SELECT id, site_code FROM announcements WHERE status = 'scheduled' AND publish_at <= NOW\(\) AND publish_attempts < \$2 AND \(next_attempt_at IS NULL OR next_attempt_at <= NOW\(\)\) ORDER BY publish_at, id LIMIT \$1$/.test(sql)) {
       return ok(due);
     }
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 200)}`);
   };
   pool.query = async (text, params) => run(text, params);
-  pool.connect = async () => ({ query: async (text, params) => run(text, params), release() {} });
+  pool.connect = async () => ({ query: async (text, params) => run(text, params), on() {}, off() {}, release() {} });
   mock.method(console, 'error', () => {});
   mock.method(console, 'log', () => {});
 });
@@ -87,10 +104,11 @@ describe('zamanlayıcı: kapatma ve sabitler', () => {
     }
   });
 
-  it('sözleşme sabitleri: 30 sn aralık, tik başına en çok 20', () => {
+  it('sözleşme sabitleri: 30 sn aralık, tik başına en çok 20; kilit işi iki-int uzayında (sınıf "ANNC", iş 1)', () => {
     assert.equal(SCHEDULER_INTERVAL_MS, 30_000);
     assert.equal(MAX_PUBLISH_PER_TICK, 20);
-    assert.equal(SCHEDULER_LOCK_KEY, 'announcement_scheduler');
+    assert.equal(SCHEDULER_LOCK_JOB, ANNOUNCEMENT_LOCK_JOBS.scheduler);
+    assert.equal(ANNOUNCEMENT_LOCK_CLASS, 0x414e4e43);
   });
 });
 
@@ -101,8 +119,10 @@ describe('zamanlayıcı: tik', () => {
     assert.deepEqual(summary, { locked: false, published: 2, skipped: 0, failed: 0 });
     assert.deepEqual(published, [{ id: 5, siteCode: 1000000001 }, { id: 6, siteCode: 1000000002 }]);
     assert.deepEqual(lockOps, ['try', 'unlock']);
-    assert.equal(log.find((q) => /pg_try_advisory_lock/.test(q.sql)).params[0], SCHEDULER_LOCK_KEY);
-    assert.deepEqual(log.find((q) => /^SELECT id, site_code FROM announcements/.test(q.sql)).params, [20]);
+    assert.deepEqual(log.find((q) => /pg_try_advisory_lock/.test(q.sql)).params, [ANNOUNCEMENT_LOCK_CLASS, SCHEDULER_LOCK_JOB]);
+    assert.match(log.find((q) => /pg_try_advisory_lock/.test(q.sql)).sql, /pg_try_advisory_lock\(\$1::int, \$2::int\)/);
+    // [tik başına sınır, otomatik denemenin bırakıldığı başarısızlık sayısı]
+    assert.deepEqual(log.find((q) => /^SELECT id, site_code FROM announcements/.test(q.sql)).params, [20, 10]);
   });
 
   it('kilit başka yerdeyse (ikinci sunucu) tik ATLANIR: duyuru sorgusu da yayın da yok', async () => {
@@ -130,6 +150,74 @@ describe('zamanlayıcı: tik', () => {
     assert.match(logged, /23503/);
     assert.ok(!logged.includes('@') && !logged.includes('gizli'), logged);
     assert.deepEqual(lockOps, ['try', 'unlock']);
+  });
+
+  it('D7 başarısız yayın: sayaç kancası {id, siteCode, code} ile çağrılır; log ORAN SINIRLI (yalnız 1. ve 10. başarısızlık); aradakiler (2-9) loglanmaz', async () => {
+    due = [{ id: '6', site_code: '1000000001' }];
+    schedulerHooks.publishDue = async () => {
+      throw Object.assign(new Error('veri: gizli başlık a@b.com'), { code: '23503' });
+    };
+    const logLines = () => console.error.mock.calls.map((call) => call.arguments.join(' ')).filter((line) => line.includes('yayin basarisiz'));
+    const logged = {};
+    for (const attempts of [1, 2, 5, 9, 10]) {
+      failureAttempts = attempts;
+      const before = logLines().length;
+      await runSchedulerTick();
+      logged[attempts] = logLines().length - before;
+    }
+    assert.deepEqual(logged, { 1: 1, 2: 0, 5: 0, 9: 0, 10: 1 });
+    assert.equal(failures.length, 5);
+    assert.deepEqual(failures[0], { id: 6, siteCode: 1000000001, code: '23503' });
+    assert.ok(logLines().every((line) => !line.includes('@') && !line.includes('gizli')), 'log yalnız kimlik + deneme + kod');
+  });
+
+  it('D7 zehirli kayıt sırayı TIKAMAZ: aynı tikte ondan sonra gelen duyurular yayınlanır; kancası olmayan hata bile tiki düşürmez', async () => {
+    due = [{ id: '1', site_code: '1' }, { id: '2', site_code: '1' }, { id: '3', site_code: '1' }];
+    schedulerHooks.publishDue = async (args) => {
+      published.push(args);
+      if (args.id === 1) throw Object.assign(new Error('kalıcı'), { code: 'XX000' });
+      return { published: true };
+    };
+    const summary = await runSchedulerTick();
+    assert.deepEqual(summary, { locked: false, published: 2, skipped: 0, failed: 1 });
+    assert.deepEqual(failures.map((f) => f.id), [1]);
+  });
+
+  it('D7 hata kodu yoksa ileti ya da "hata" kullanılır (kod alanı boş kalmaz); sayaç kancası da hata fırlatsa tik düşmez', async () => {
+    due = [{ id: '1', site_code: '1' }];
+    schedulerHooks.publishDue = async () => {
+      throw new Error('kodsuz hata');
+    };
+    await runSchedulerTick();
+    assert.equal(failures[0].code, 'kodsuz hata');
+    schedulerHooks.recordFailure = async () => {
+      throw new Error('sayaç yazılamadı');
+    };
+    const summary = await runSchedulerTick();
+    assert.equal(summary.failed, 2, 'sayaç kancası hatası dış tik hatası olarak sayılır ama tik düşmez');
+    assert.deepEqual(lockOps, ['try', 'unlock', 'try', 'unlock']);
+  });
+
+  it('D9 özet temizliği: saatte en çok bir kez çağrılır (ilk tikte, sonra bir saat dolana dek değil); hata verirse tik bozulmaz', async () => {
+    await runSchedulerTick();
+    await runSchedulerTick();
+    await runSchedulerTick();
+    assert.equal(purges, 1, 'saatte bir');
+    resetSchedulerState();
+    purgeImpl = async () => {
+      throw Object.assign(new Error('x'), { code: '57P01' });
+    };
+    const summary = await runSchedulerTick();
+    assert.equal(purges, 2);
+    assert.equal(summary.failed, 0, 'temizlik hatası tik sonucunu bozmaz');
+    const logged = console.error.mock.calls.map((call) => call.arguments.join(' ')).join('\n');
+    assert.match(logged, /ozet temizligi basarisiz: 57P01/);
+  });
+
+  it('kilit alınamayan tikte özet temizliği de sürer (yalnız yayın / kuyruk kilitle korunur); kilit alınamazsa yayın sorgusu yok', async () => {
+    lockBusy = true;
+    await runSchedulerTick();
+    assert.equal(log.some((q) => /FROM announcements/.test(q.sql)), false);
   });
 
   it('DB hatası (duyuru sorgusu) tiki düşürmez; kilit yine açılır', async () => {
