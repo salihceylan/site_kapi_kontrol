@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a ve “Site yöneticisi olma (site başvurusu)” canlıda ve denemeye hazır. Sırada: Faz 2b (Excel'den toplu yükleme ve dışa aktarma), Faz 3b (Belgeler ve uygulama kapalıyken telefon bildirimi; telefon bildirimi için sizden Firebase kurulumu gerekecek). Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Sırada: Faz 4b (makbuz, gecikme tazminatı, gider, kasa/banka, raporlar, borç hatırlatma), Faz 2b (Excel'den toplu yükleme), Faz 3b (belgeler ve telefon bildirimi; Firebase kurulumu sizden gerekecek). Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
   "bolumler": [
     {
       "id": "F0",
@@ -1017,35 +1017,36 @@
     {
       "id": "F4",
       "baslik": "Aidat ve finans (temel)",
-      "durum": "planli",
-      "ozet": "Aidatın tanımlanması, otomatik borçlandırma, elle tahsilat kaydı, gelir-gider ve raporlar. Online kart ödemesi ve banka bağlantısı bu fazda YOK, Yakında… (F8). Bu modül siteye göre açılıp kapatılır.",
+      "durum": "hazir",
+      "ozet": "Aidatın tanımlanması, önizlemeli borçlandırma, ek borç, daire hesabı, elle tahsilat kaydı, düzeltme (silme yok, ters kayıt) ve ay kapatma. Makbuz, gecikme tazminatı, gider kaydı, kasa/banka hesapları, raporlar ve borç hatırlatma bir sonraki adımdadır. Online kart ödemesi ve banka bağlantısı bu fazda YOK, Yakında… (F8). Bu modül siteye göre açılıp kapatılır (varsayılan KAPALI).",
       "maddeler": [
         {
           "id": "F4.01",
           "baslik": "Aidat tanımı",
           "adimlar": [
-            "Finans menüsünden “Aidat Tanımları”nı açın.",
-            "Yeni tanım ekleyin: ad (ör. Aylık aidat), tutar, dağıtım yöntemi, kimden alınacağı, başlangıç ayı."
+            "Finans menüsünden “Tanımlar” sekmesini açın.",
+            "“Yeni Tanım”: ad (ör. Aylık aidat), tür (aylık), dağıtım yöntemi, tutar, her ayın kaçında vade, başlangıç ayı, hedef (tüm site / bloklar / daireler).",
+            "Dağıtım yöntemlerini deneyin: daire başı sabit tutar, eşit pay (toplam bölünür), daire tipine göre (her tip için ayrı tutar), arsa payına göre, m²'ye göre (brüt/net)."
           ],
-          "beklenen": "Dağıtım yöntemi olarak eşit pay, daire tipine göre, arsa payına göre ve m²’ye göre seçilebilir. Tutarı kimin ödeyeceği (malik, kiracı) seçilir. Kaydedince önizlemede her dairenin payı görünür.",
+          "beklenen": "Tanım kaydedilir ve listede görünür. Tutar kutusunun altında girdiğiniz tutar okunuşuyla gösterilir (ör. 1.250,50 ₺); virgülden sonra en çok 2 hane, “1,250” gibi belirsiz giriş reddedilir. Tutarı kimin ödeyeceği tanımda değil, dairenin “borç ve bildirimler kime gitsin” ayarında (Kişi ve Daire Kayıtları → daire düzenle) belirlenir. Borçlandırılmış bir tanımın tutarı ve dağıtımı değiştirilemez (kilitli panelde açıklanır); yalnız ad, bitiş, vade günü ve etkin/pasif değişir.",
           "rol_notu": "Site yöneticisi",
-          "on_kosul": "Aidat ve Finans modülü açık",
+          "on_kosul": "Aidat ve Finans modülü bir test sitesinde AÇIK (süper kullanıcı açar)",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.02",
           "baslik": "Aylık otomatik borçlandırma",
           "adimlar": [
-            "Tanımı kaydedin ve “Şimdi borçlandır”a dokunun (ya da ay başını bekleyin).",
-            "Önizleme listesini inceleyip onaylayın.",
-            "Daire borç listesine bakın."
+            "Aylık tanımda “Borçlandır”: dönemi seçin.",
+            "Önizleme listesini (daire • kim öder • tutar • toplam) inceleyip “Onayla ve Borçlandır”.",
+            "Daireler sekmesinde bakiyelere bakın; aynı dönemi tekrar borçlandırmayı deneyin."
           ],
-          "beklenen": "Önizlemeyi onaylamadan hiçbir borç oluşmaz. Onaydan sonra her daireye o ayın aidatı borç olarak yazılır. Aynı ay ikinci kez borçlandırılamaz.",
+          "beklenen": "Onaylamadan hiçbir borç oluşmaz. Onaydan sonra her aktif daireye o ayın aidatı borç olarak yazılır, toplam önizlemeyle aynıdır (paylar kuruşuna kadar toplamı tutturur). Aynı ay ikinci kez borçlandırılamaz (“zaten borçlandırılmış”). Kapatılmış aya borçlandırılamaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.03",
@@ -1054,11 +1055,11 @@
             "“Ek Borç Ekle”ye dokunun.",
             "Ad (ör. Asansör bakımı), toplam tutar ve hedef (tüm site, blok, seçili daireler) girin."
           ],
-          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır ve her dairenin hesabına ayrı satır olarak düşer.",
+          "beklenen": "Tutar seçilen dağıtım yöntemine göre daireler arasında paylaşılır (önizleme + onay) ve her dairenin hesabına ayrı satır olarak düşer. Aynı ek borcu kısa sürede tekrar kaydetmeye çalışırsanız “aynı ek borç kısa süre önce kaydedilmiş görünüyor” uyarısı çıkar; bilerek “Yine de ekle” diyebilirsiniz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.04",
@@ -1070,7 +1071,7 @@
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.05",
@@ -1078,11 +1079,11 @@
           "adimlar": [
             "Sakin hesabıyla “Borcum”u açın."
           ],
-          "beklenen": "Toplam borç, vadesi gelen tutar ve ödeme geçmişi görünür. Sakin yalnızca kendi dairesini görür. Borcun kime yazılacağı F2.05’teki ayara uyar.",
+          "beklenen": "Toplam borç (ya da alacak), vadesi gelen tutar, sıradaki vade ve hareketler görünür; birden çok dairede toplamlar ayrı gösterilir. Sakin yalnızca kendi dairesini görür. Borç, dairenin “borç kime gitsin” ayarına uyar (malik / kiracı / ikisi); aile üyesi borç görmez. Yönetici notu ve kaydı yapan kişi görünmez. Bağlantı hatasında “Borcunuz yok” denmez, hata ve “Tekrar Dene” çıkar.",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.06",
@@ -1092,15 +1093,15 @@
             "Daire, tutar, tarih, yöntem (nakit, havale, çek) ve açıklama girip kaydedin.",
             "Sakin hesabıyla borcu kontrol edin."
           ],
-          "beklenen": "Daire borcu düşer. Fazla ödeme alacak olarak görünür. Sakin ekranında yenileyince değişiklik görünür.",
+          "beklenen": "Daire borcu düşer. Fazla ödeme alacak olarak görünür. Çift tıklama ya da bağlantı kopması aynı tahsilatı iki kez yazmaz. Gelecek tarih ve 5 yıldan eski tarih reddedilir; kapalı aya tahsilat girilemez. Sakin ekranında yenileyince değişiklik görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.07",
-          "baslik": "Makbuz",
+          "baslik": "Makbuz (sonraki adım)",
           "adimlar": [
             "Bir tahsilat kaydından “Makbuz”a dokunun."
           ],
@@ -1112,7 +1113,7 @@
         },
         {
           "id": "F4.08",
-          "baslik": "Gecikme tazminatı",
+          "baslik": "Gecikme tazminatı (sonraki adım)",
           "adimlar": [
             "Finans ayarlarında gecikme oranını tanımlayın.",
             "Vadesi geçmiş borcu olan bir dairenin hesabına bakın."
@@ -1125,7 +1126,7 @@
         },
         {
           "id": "F4.09",
-          "baslik": "Gider kaydı",
+          "baslik": "Gider kaydı (sonraki adım)",
           "adimlar": [
             "“Gider Ekle”ye dokunun.",
             "Kategori (elektrik, su, personel, bakım…), tutar, tarih ve ödeme yöntemi girin; faturanın fotoğrafını ekleyin."
@@ -1138,7 +1139,7 @@
         },
         {
           "id": "F4.10",
-          "baslik": "Kasa ve banka hesapları",
+          "baslik": "Kasa ve banka hesapları (sonraki adım)",
           "adimlar": [
             "Bir kasa ve bir banka hesabı tanımlayın.",
             "Hesaplar arasında aktarım yapın."
@@ -1151,7 +1152,7 @@
         },
         {
           "id": "F4.11",
-          "baslik": "Raporlar",
+          "baslik": "Raporlar (sonraki adım)",
           "adimlar": [
             "“Raporlar”ı açın.",
             "Aylık gelir-gider özeti, borçlular listesi, tahsilat oranı ve bir daire ekstresine bakın.",
@@ -1172,26 +1173,27 @@
           ],
           "beklenen": "Raporlar ve hesaplar görünür; ekleme, düzeltme ve silme düğmeleri yoktur.",
           "rol_notu": "Yönetim kurulu",
-          "on_kosul": "F1.11 onaylanırsa",
+          "on_kosul": "Yönetim kurulu üyesi tanımlı bir site, modül açık",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.13",
           "baslik": "Silme yok, düzeltme var",
           "adimlar": [
-            "Yanlış girilmiş bir tahsilatı “İptal et / Düzelt” ile düzeltin.",
+            "Ekstrede yanlış girilmiş bir tahsilatı “Düzelt” ile düzeltin (tek adımda ters kayıt + yeni tahsilat).",
+            "Bir borç satırında “İptal Et”: özet ekranını ve nedeni onaylayın.",
             "Daire hesabına ve denetim kaydına bakın."
           ],
-          "beklenen": "Eski kayıt silinmez; ters bir kayıt oluşur ve bakiye düzelir. Kim, ne zaman düzeltti denetim kaydında görünür.",
+          "beklenen": "Eski kayıt silinmez; “İptal edildi” rozetiyle kalır ve karşı işaretli ters kayıt eklenir, bakiye düzelir. Aynı kaydı ikinci kez iptal etmek ve ters kaydı iptal etmek reddedilir. Denetim kaydında kim ne zaman düzeltti görünür (neden metni ve kişi adı denetim satırında yoktur).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
         },
         {
           "id": "F4.14",
-          "baslik": "Borç hatırlatması",
+          "baslik": "Borç hatırlatması (sonraki adım)",
           "adimlar": [
             "Vadesi geçmiş borcu olan dairelerde “Hatırlat”ı seçin."
           ],
@@ -1205,14 +1207,93 @@
           "id": "F4.15",
           "baslik": "Ay kapatma",
           "adimlar": [
-            "Geçmiş bir ayı “Kapat” olarak işaretleyin.",
-            "O aya tahsilat eklemeyi deneyin."
+            "Dönemler sekmesinde “Kapatılacak ay” listesinden bir ay seçin ve “Ayı Kapat”a basıp onaylayın.",
+            "O aya ve ondan önceki aylara tahsilat/borç eklemeyi deneyin.",
+            "Süper kullanıcıyla “Yeniden Aç” deneyin."
           ],
-          "beklenen": "Kapatılan ayın kayıtları değiştirilemez. Düzeltme gerekirse açık dönemde ters kayıtla yapılır.",
+          "beklenen": "Seçilen ay VE ondan önceki tüm aylar değiştirilemez olur; bu aylara kayıt eklenemez (“dönem kapatılmış”). Düzeltme açık dönemde ters kayıtla yapılır. Sonraki kapatma yalnız bir sonraki aydır (sırayla). Yeniden açmayı yalnız süper kullanıcı yapar ve yalnız en son kapatılan ayı açar; ilk kapatma açılırsa ona bağlı önceki aylar da açılır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "planli"
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.16",
+          "baslik": "Modül kapalıyken Finans görünmez; süper açar, yönetici talep eder",
+          "adimlar": [
+            "Aidat ve Finans kapalı bir sitede yönetici ve sakin hesabıyla çekmeceye bakın.",
+            "Yönetici olarak Modüller → “Aidat ve Finans” → “Modül Talep Et”; süper kullanıcı talebi onaylasın (ya da doğrudan açsın).",
+            "Modül açılınca yönetici ve sakin hesaplarında menüye bakın; modülü tekrar kapatın."
+          ],
+          "beklenen": "Kapalıyken “Finans” ve “Borcum” menüleri yoktur. Açılınca yöneticide “Finans”, alıcısı olan sakinde “Borcum” görünür; kapatınca yeniden kalkar, veriler silinmez.",
+          "rol_notu": "Site yöneticisi / süper kullanıcı",
+          "on_kosul": "Bir test sitesi",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.17",
+          "baslik": "Eksik bilgili daireler",
+          "adimlar": [
+            "Arsa payına göre bir ek borç yazın; bir dairenin arsa payını boş bırakın.",
+            "Önizlemeye ve “Onayla” düğmesine bakın; “eksik daireleri atla”yı işaretleyip onaylayın."
+          ],
+          "beklenen": "Önizlemede “N dairenin bilgisi eksik” ve nedeni (ör. arsa payı tanımlı değil) görünür; işaretlemeden onay açılmaz. Atlanan dairelerin payı kalan dairelere yeniden paylaştırılır ve bu önizlemede yazılıdır; toplam tam tutarı tutturur.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Arsa payı dolu ve boş daireler karışık",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.18",
+          "baslik": "Önizleme sonrası veri değişirse onay güncellenir",
+          "adimlar": [
+            "Önizleme açıkken başka bir cihazdan bir dairenin arsa payını/kategorisini değiştirin.",
+            "İlk cihazda “Onayla” düğmesine basın."
+          ],
+          "beklenen": "“Veriler değişti, önizleme yenilendi” uyarısı çıkar, yeni toplam görünür ve eski onayla yazılmaz; yeni toplamı gördükten sonra tekrar onaylarsınız.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.19",
+          "baslik": "Çift kayıt koruması (bağlantı kopması)",
+          "adimlar": [
+            "Tahsilat/ek borç onaylarken bağlantıyı kesin ya da hızlıca iki kez dokunun; sonra tekrar deneyin.",
+            "Ekstreye ve Daireler listesine bakın."
+          ],
+          "beklenen": "Aynı tahsilat veya aynı ek borç iki kez yazılmaz. “Kayıt oluşmuş olabilir; aynı bilgilerle tekrar denerseniz çift kayıt oluşmaz” denir.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.20",
+          "baslik": "Para girişi ve ekran okuyucu",
+          "adimlar": [
+            "Tutar alanına 1.234,56; 1,250; 12₺50; 1,5E3 ve 1234.5 yazın veya yapıştırın.",
+            "TalkBack/VoiceOver ile toplam borç ve tutar satırlarını dolaşın."
+          ],
+          "beklenen": "1.234,56 ve 1234.5 kabul edilir; 1,250 (belirsiz), 12₺50 ve 1,5E3 görünür hata verir, alan sessizce değiştirilmez. Tutarlar “bin iki yüz otuz dört lira elli altı kuruş” gibi tek kez okunur.",
+          "rol_notu": "Site yöneticisi / sakin",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.21",
+          "baslik": "Mali kaydı olan daire silinemez",
+          "adimlar": [
+            "Bir sitede daire sayısını azaltmayı deneyin (mali kaydı olan ve olmayan daireler)."
+          ],
+          "beklenen": "Mali kaydı olan daire silinmez, “Mali kaydı olan daire silinemez” uyarısı çıkar ve hiçbir daire silinmez; mali kaydı olmayan dairelerde daire azaltma eskisi gibi çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Borçlandırılmış bir site",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

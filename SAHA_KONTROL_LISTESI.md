@@ -1474,3 +1474,55 @@ Bireysel kullanıcı site için başvurur; süper kullanıcı onaylayınca site 
 - [ ] **62.13. (Operasyon) Dağıtım Doğrulaması:**
   - **Nasıl Test Edilir:** Sunucuda: `SELECT count(*) FROM site_applications;` (0), `SELECT count(*) FROM site_subscriptions;` (0, mevcut sitelere satır yazılmaz), `\d site_manager_sites` (link_source sütunu), pm2 logunda DDL hatası ve `?q=***` maskesi.
   - **Beklenen Sonuç:** Tablolar boş, `link_source` sütunu vardır, mevcut yönetici bağları NULL (sahip sayılır) olduğundan canlıdaki yönetici "Site Ekle"yi anlık kullanmaya devam eder. Eski uygulama sürümü bireysel "Site Kur"da 409 alır, bu yüzden yeni uygulama sürümü sunucuyla birlikte yayınlanmalıdır.
+
+---
+
+## 63. 💰 Aidat ve Finans — Faz 4a: Tanım, Borçlandırma, Tahsilat, Düzeltme, Ay Kapatma (2026-10-16)
+
+Siteye göre açılıp kapanan finans modülü (varsayılan KAPALI). Para tamsayı kuruş; defter eklemelidir (silme yok, ters kayıt). Sözleşme: `docs/PLATFORM_FINANS.md` (sonundaki kararlar öncelikli). Bu sürümde makbuz, gecikme tazminatı, gider, kasa/banka, raporlar ve borç hatırlatma YOK (Faz 4b); online ödeme ve banka bağlantısı "Yakında…".
+
+- [ ] **63.1. Modül Varsayılan KAPALI; Açma ve Talep:**
+  - **Nasıl Test Edilir:** Aidat ve Finans kapalı bir test sitesinde yönetici ve sakin hesabıyla çekmeceye bakın; yöneticiyle Modüller → "Aidat ve Finans" → "Modül Talep Et"; süper kullanıcıyla talebi onaylayın ya da doğrudan açın; yeniden bakın; modülü kapatın.
+  - **Beklenen Sonuç:** Kapalıyken "Finans" ve "Borcum" yoktur ("Modül Talep Et" görünür, yönetici kendi açamaz). Açılınca yöneticide "Finans", alıcısı olan sakinde "Borcum" çıkar; kapatınca kalkar, veriler silinmez. Canlıda mevcut siteler açılışta etkilenmez (varsayılan kapalı).
+- [ ] **63.2. Aidat Tanımı ve Para Girişi:**
+  - **Nasıl Test Edilir:** Finans → Tanımlar → Yeni Tanım: "Aylık aidat", aylık, her ayın 15'i, sabit tutar; tutar alanına 1.250,50 yazın; 1,250 ve 12₺50 ve 1,5E3 deneyin; dağıtım yöntemlerini (sabit, eşit pay, daire tipine göre, arsa payı, m²) ve hedefi (tüm site/bloklar/daireler) gezin.
+  - **Beklenen Sonuç:** Tutar altında okunuşuyla gösterilir (1.250,50 ₺); 1,250 / 12₺50 / 1,5E3 görünür hata verir, alan sessizce değişmez. Tutarı kimin ödeyeceği tanımda yoktur: dairenin "borç ve bildirimler kime gitsin" ayarına uyar. Borçlandırılmış tanımın tutarı/dağıtımı değişmez.
+- [ ] **63.3. Önizlemeli Borçlandırma:**
+  - **Nasıl Test Edilir:** Aylık tanımda "Borçlandır" → dönem seç → önizleme listesi → "Onayla ve Borçlandır"; sonra Daireler'e bakın; aynı dönemi tekrar önizleyin.
+  - **Beklenen Sonuç:** Önizleme anında hiçbir borç yazılmaz. Onaydan sonra her aktif daireye borç düşer; toplam önizlemedekiyle aynı (paylar kuruşuna kadar tutar). Aynı dönem ikinci kez borçlandırılamaz; onay pasiftir ve nedeni yazar.
+- [ ] **63.4. Eksik Bilgi ve Yeniden Dağıtım:**
+  - **Nasıl Test Edilir:** Arsa payına göre ek borç yazın (toplam 60.000 ₺), bir dairenin arsa payını boş bırakın; önizlemeye, "eksik daireleri atla" seçeneğine ve toplama bakın.
+  - **Beklenen Sonuç:** "N dairenin bilgisi eksik" ve nedeni görünür; atla işaretlenmeden onay açılmaz. Atlananın payı kalanlara yeniden paylaştırıldığı onaydan önce yazılır; toplam tam 60.000,00 ₺. Arsa payı 0 olan daire eksik sayılmaz (satır almaz).
+- [ ] **63.5. Ek Borç ve Tekrar Koruması:**
+  - **Nasıl Test Edilir:** "Ek Borç Ekle"yi kaydedin; hemen aynısını yeniden kaydetmeyi deneyin; bağlantıyı kesip tekrar deneyin.
+  - **Beklenen Sonuç:** Aynı ek borç kısa süre önce kaydedilmişse "Aynı ek borç kısa süre önce kaydedilmiş görünüyor" uyarısı çıkar ve çift borç yazılmaz; bilerek "Yine de ekle" dersek bir kez daha yazar. Bağlantı kopmasında çift kayıt oluşmaz.
+- [ ] **63.6. Tahsilat, Fazla Ödeme ve Düzeltme:**
+  - **Nasıl Test Edilir:** Daire ekstresinden "Tahsilat Ekle" (tutar, tarih, yöntem); borçtan fazla ödeyin; yanlış tahsilatı "Düzelt" ile düzeltin; bir borç satırını "İptal Et" (özet ve neden onayı).
+  - **Beklenen Sonuç:** Bakiye düşer, fazlası alacak olur. Düzeltme tek adımda ters kayıt + yeni tahsilattır; eski kayıt "İptal edildi" rozetiyle kalır, silinmez. İkinci iptal ve ters kaydın iptali reddedilir. Gelecek ve 5 yıldan eski tarih reddedilir.
+- [ ] **63.7. Ay Kapatma:**
+  - **Nasıl Test Edilir:** Dönemler sekmesinde "Kapatılacak ay" listesinden bir ay seçip kapatın; o aya ve öncesine tahsilat/borç eklemeyi deneyin; sonraki ayı kapatın; süper kullanıcıyla "Yeniden Aç".
+  - **Beklenen Sonuç:** Seçilen ay ve öncesi değiştirilemez olur (kayıt eklenemez); sonraki kapatma sırayla bir sonraki aydır; ters kayıt açık dönemde yazılır. Yeniden açmayı yalnız süper kullanıcı yapar ve yalnız en son kapatılanı açar; yönetici "Yeniden Aç" görmez.
+- [ ] **63.8. Önizleme Sonrası Veri Değişimi:**
+  - **Nasıl Test Edilir:** Önizleme açıkken başka cihazdan bir dairenin arsa payını ya da "kim öder" ayarını değiştirin; ilk cihazda "Onayla"ya basın.
+  - **Beklenen Sonuç:** "Veriler değişti, önizleme yenilendi" uyarısı ve yeni toplam çıkar; eski önizlemeyle yazılmaz, yeni toplamı görüp tekrar onaylarsınız.
+- [ ] **63.9. Yönetim Kurulu: Salt Okunur:**
+  - **Nasıl Test Edilir:** Kurul üyesi hesabıyla Finans'ı açın; bakiyelere, ekstreye ve tanımlara bakın; tahsilat/borç eklemeyi deneyin.
+  - **Beklenen Sonuç:** Bakiyeler ve ekstre görünür; hiçbir yazma düğmesi yoktur ("yalnızca görüntüleyebilirsiniz"); kaydı yapan kişi ve yönetici notu görünmez. Görevli hesapta Finans yoktur.
+- [ ] **63.10. Sakin: Borcum:**
+  - **Nasıl Test Edilir:** Sakin hesabıyla "Borcum"u açın; kiracı/malik/aile üyesi hesaplarıyla ve "borç kime gitsin" ayarının üç değeriyle deneyin; interneti kapatıp yenileyin; sıfır bakiyede bakın.
+  - **Beklenen Sonuç:** Toplam borç/alacak, vadesi gelen, sıradaki vade ve hareketler görünür; yalnız kendi dairesi. Borç ayara uyar (malik/kiracı/ikisi); aile üyesi görmez. Hata ve yükleme durumunda "Borcunuz yok" DENMEZ; yalnız gerçekten sıfırken yazılır. Yönetici notu, iptal nedeni ve kaydeden adı görünmez.
+- [ ] **63.11. Mali Kaydı Olan Daire Silinemez:**
+  - **Nasıl Test Edilir:** Borçlandırılmış sitede daire sayısını azaltmayı deneyin (hem mali kaydı olan hem olmayan daireler için).
+  - **Beklenen Sonuç:** "Mali kaydı olan daire silinemez" uyarısı çıkar ve hiçbir daire silinmez; mali kaydı olmayan dairelerde azaltma eskisi gibi çalışır.
+- [ ] **63.12. Denetim Kaydı:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla Denetim Kaydı → eylem süzgeci: tanım, borçlandırma, tahsilat, ters kayıt, ay kapatma/açma.
+  - **Beklenen Sonuç:** Finans olayları Türkçe etiketlidir ("Tahsilat kaydedildi", "Ay kapatıldı"…); dönem/tutar sayıları vardır, açıklama/neden metni ve kişi adı yoktur.
+- [ ] **63.13. Küçük Ekran, Klavye ve Ekran Okuyucu:**
+  - **Nasıl Test Edilir:** Yazı boyutunu en büyüğe alıp telefonu yatay çevirerek tahsilat ve borçlandırma pencerelerini açın; TalkBack/VoiceOver ile sekmeleri, tutarları ve "Onayla" düğmesini dolaşın.
+  - **Beklenen Sonuç:** Taşma yoktur; hata uyarısı görünür bölgededir; tutarlar tek kez ve sözcüklerle okunur ("bin iki yüz elli lira"); sekmeler "sekme, seçili" diye okunur; pasif "Onayla"nın nedeni okunur.
+- [ ] **63.14. (Geliştirici) Gerçek Veritabanı Doğrulaması:**
+  - **Nasıl Test Edilir:** server klasöründe `node scripts/qa_platform_pg.mjs` komutunu `QA_CONFIRM_DISPOSABLE_DB=yes` ile çalıştırın (PG 16 ve 18).
+  - **Beklenen Sonuç:** finance bölümü ≈278 kontrol yeşil: dağıtım toplam eşitliği, append-only defter, idempotans ve parmak izi, ay kapatma sırası, ters kayıt, yarışlar (40P01 = 0), 034'ün canlı benzeri şemada eşzamanlı uygulanması. Not: PG 16'da eski `people/T6` EXPLAIN kontrolü kırmızıdır (finans dışı).
+- [ ] **63.15. (Operasyon) Dağıtım Doğrulaması:**
+  - **Nasıl Test Edilir:** Sunucuda: `\d ledger_entries`, `SELECT tgname FROM pg_trigger WHERE tgname LIKE 'trg_ledger%' OR tgname LIKE 'trg_fee_runs%'`, `SELECT count(*) FROM site_modules WHERE module_code='finance' AND enabled`.
+  - **Beklenen Sonuç:** Tablolar ve 6 değişmezlik tetikleyicisi vardır; `finance` açık site sayısı 0 (varsayılan kapalı). Dağıtım trafiksizken yapılır (açılış DDL'i yoğun yazma altında 40P01 alabilir; yeniden başlatma yeter).
