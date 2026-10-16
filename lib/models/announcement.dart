@@ -769,25 +769,36 @@ class NotificationPrefs {
     this.emailAnnouncements = true,
     this.pushAnnouncements = true,
     this.pushAvailable = false,
+    this.emailSuppressed = false,
   });
 
+  /// ETKİN e-posta tercihi: saklanan tercih VE adresin e-postadaki "abonelikten çık" bağlantısıyla
+  /// bastırılmamış olması. [emailSuppressed] iken her zaman false.
   final bool emailAnnouncements;
   final bool pushAnnouncements;
   final bool pushAvailable;
 
+  /// Adres e-postadaki "abonelikten çık" bağlantısıyla bastırılmış mı? Alan yoksa (eski sunucu) false.
+  final bool emailSuppressed;
+
   /// Alan yoksa e-posta tercihi [fallbackEmail] (PUT yanıtında istenen değer), o da yoksa açık.
   factory NotificationPrefs.fromJson(Map<String, dynamic> json, {bool? fallbackEmail}) {
+    final suppressed = _flag(json['email_suppressed']);
     return NotificationPrefs(
-      emailAnnouncements: _flag(json['email_announcements'], fallback: fallbackEmail ?? true),
+      // Bastırılmışken etkin değer ASLA açık değildir (sunucu da öyle döner; savunmacı).
+      emailAnnouncements:
+          !suppressed && _flag(json['email_announcements'], fallback: fallbackEmail ?? true),
       pushAnnouncements: _flag(json['push_announcements'], fallback: true),
       pushAvailable: _flag(json['push_available']),
+      emailSuppressed: suppressed,
     );
   }
 
-  NotificationPrefs copyWith({bool? emailAnnouncements}) => NotificationPrefs(
+  NotificationPrefs copyWith({bool? emailAnnouncements, bool? emailSuppressed}) => NotificationPrefs(
     emailAnnouncements: emailAnnouncements ?? this.emailAnnouncements,
     pushAnnouncements: pushAnnouncements,
     pushAvailable: pushAvailable,
+    emailSuppressed: emailSuppressed ?? this.emailSuppressed,
   );
 }
 

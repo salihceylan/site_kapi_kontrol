@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
+import 'package:site_kapi_kontrol/ui/design/tokens.dart' show AppTone;
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/notification_prefs_section.dart';
 
@@ -57,6 +59,29 @@ void main() {
       expect(find.widgetWithText(StatusChip, 'Yakında…'), findsOneWidget);
       expect(find.byType(Switch), findsOneWidget, reason: 'telefon bildirimi için anahtar yok');
       expect(_switch(t).value, isTrue);
+    });
+
+    listMatrix('bastırılmış adres: kapalı anahtar + not + bilgi notu', (t, w, h, s, dark) async {
+      final auth = _auth()
+        ..prefsSuppressed = true
+        ..prefsSuppressionPersists = true;
+      // Profil sayfasında bölüm kaydırılan sayfanın içindedir: burada da kaydırılabilir kabuk.
+      await pumpList(
+        t,
+        SingleChildScrollView(child: NotificationPrefsSection(authService: auth)),
+        width: w,
+        height: h,
+        scale: s,
+        dark: dark,
+      );
+      await settleFor(t, 100);
+      expect(find.text('E-posta bildirimleri e-postadaki bağlantıyla durduruldu.'), findsOneWidget);
+      await t.ensureVisible(find.byType(Switch));
+      await t.pump();
+      await t.tap(find.byType(Switch));
+      await settleFor(t);
+      expect(find.text('Bu adres için e-posta bildirimleri yönetici/destek ile açılabilir.'), findsOneWidget);
+      expect(_switch(t).value, isFalse);
     });
 
     listMatrix('yükleniyor: iskelet, anahtar yok', (t, w, h, s, dark) async {
@@ -126,6 +151,84 @@ void main() {
       await settleFor(t);
       expect(find.text('Tercih kaydedilemedi (deneme).'), findsNothing);
       expect(_switch(t).value, isFalse);
+    });
+
+    testWidgets('bastırılmış adres (email_suppressed): anahtar KAPALI ve altında not; PUT gitmez, bilgi notu yok', (t) async {
+      final auth = _auth()
+        ..prefsEmail = true
+        ..prefsSuppressed = true;
+      await _pump(t, auth);
+      expect(_switch(t).value, isFalse, reason: 'etkin değer false: bastırılmış adrese e-posta gitmez');
+      expect(find.text('E-posta bildirimleri e-postadaki bağlantıyla durduruldu.'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('notification_support_note')), findsNothing);
+      expect(auth.prefsSetCalls, isEmpty);
+    });
+
+    testWidgets('bastırılmışken anahtarı AÇINCA PUT true gider, bastırma kalkar: anahtar açık kalır, not kaybolur', (t) async {
+      final auth = _auth()..prefsSuppressed = true;
+      await _pump(t, auth);
+      await t.tap(find.byType(Switch));
+      await settleFor(t);
+      expect(auth.prefsSetCalls, <bool>[true]);
+      expect(_switch(t).value, isTrue);
+      expect(find.text('E-posta bildirimleri e-postadaki bağlantıyla durduruldu.'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('notification_support_note')), findsNothing);
+      expect(find.byType(Switch), findsOneWidget);
+      // Sunucu tarafında da kalktı: yeniden yüklenince açık.
+      await t.state<NotificationPrefsSectionState>(find.byType(NotificationPrefsSection)).reload();
+      await settleFor(t);
+      expect(_switch(t).value, isTrue);
+    });
+
+    testWidgets('bastırılmışken AÇ -> yanıt HÂLÂ bastırılmış (dahili hesap adresi): anahtar kapalı kalır, hata değil BİLGİ notu', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = _auth()
+        ..prefsSuppressed = true
+        ..prefsSuppressionPersists = true;
+      await _pump(t, auth);
+      await t.tap(find.byType(Switch));
+      await settleFor(t);
+      expect(auth.prefsSetCalls, <bool>[true]);
+      expect(_switch(t).value, isFalse, reason: 'sunucu hâlâ bastırılmış: anahtar kapalı kalır');
+      expect(find.text('E-posta bildirimleri e-postadaki bağlantıyla durduruldu.'), findsOneWidget);
+      final info = find.byKey(const ValueKey<String>('notification_support_note'));
+      expect(info, findsOneWidget);
+      expect(
+        find.descendant(of: info, matching: find.text('Bu adres için e-posta bildirimleri yönetici/destek ile açılabilir.')),
+        findsOneWidget,
+      );
+      expect(t.widget<InlineNotice>(info).tone, AppTone.info, reason: 'hata tonu değil, bilgi tonu');
+      expect(find.byIcon(Icons.error_outline_rounded), findsNothing, reason: 'hata simgesi yok');
+      // Anahtar tekrar kullanılabilir (kilitli değil).
+      expect(_switch(t).onChanged, isNotNull);
+      semantics.dispose();
+    });
+
+    testWidgets('bastırılmışken AÇ ama kayıt BAŞARISIZ: eski duruma döner (kapalı + not), hata görünür', (t) async {
+      final auth = _auth()
+        ..prefsSuppressed = true
+        ..prefsSaveError = ApiException('Tercih kaydedilemedi (deneme).');
+      await _pump(t, auth);
+      await t.tap(find.byType(Switch));
+      await settleFor(t);
+      expect(_switch(t).value, isFalse);
+      expect(find.text('E-posta bildirimleri e-postadaki bağlantıyla durduruldu.'), findsOneWidget);
+      expect(find.text('Tercih kaydedilemedi (deneme).'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('notification_support_note')), findsNothing);
+      expect(auth.prefsSuppressed, isTrue);
+    });
+
+    testWidgets('eski sunucu (email_suppressed alanı yok): not hiç çıkmaz, mevcut davranış', (t) async {
+      final auth = _auth()
+        ..prefsLegacy = true
+        ..prefsEmail = true;
+      await _pump(t, auth);
+      expect(_switch(t).value, isTrue);
+      expect(find.textContaining('durduruldu'), findsNothing);
+      await t.tap(find.byType(Switch));
+      await settleFor(t);
+      expect(_switch(t).value, isFalse);
+      expect(find.byKey(const ValueKey<String>('notification_support_note')), findsNothing);
     });
 
     testWidgets('hesap değişince (yeni servis) önceki hesabın tercihi sızmaz, yeniden yüklenir', (t) async {

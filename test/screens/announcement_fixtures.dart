@@ -225,6 +225,15 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   Object? prefsError;
   Object? prefsSaveError;
   bool prefsEmail = true;
+
+  /// Adres e-postadaki "abonelikten çık" bağlantısıyla bastırılmış (sunucu `email_suppressed`).
+  bool prefsSuppressed = false;
+
+  /// true: dahili daire hesabının iletişim adresi — kullanıcı açsa da bastırma kalkmaz.
+  bool prefsSuppressionPersists = false;
+
+  /// true: eski sunucu — yanıtta `email_suppressed` alanı yoktur.
+  bool prefsLegacy = false;
   final List<Completer<void>> inboxGates = <Completer<void>>[];
   Completer<void>? myDetailGate;
   Completer<void>? readGate;
@@ -794,6 +803,14 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     });
   }
 
+  /// Sunucunun `email_announcements` = saklanan tercih VE bastırılmamış kuralı.
+  Map<String, dynamic> _prefsJson() => <String, dynamic>{
+    'email_announcements': prefsEmail && !prefsSuppressed,
+    'push_announcements': true,
+    'push_available': false,
+    if (!prefsLegacy) 'email_suppressed': prefsSuppressed,
+  };
+
   @override
   Future<NotificationPrefs> getNotificationPreferences() async {
     prefsGetCalls++;
@@ -801,11 +818,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     if (gate != null) await gate.future;
     final error = prefsError;
     if (error != null) throw error;
-    return NotificationPrefs.fromJson(<String, dynamic>{
-      'email_announcements': prefsEmail,
-      'push_announcements': true,
-      'push_available': false,
-    });
+    return NotificationPrefs.fromJson(_prefsJson());
   }
 
   @override
@@ -816,11 +829,9 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     final error = prefsSaveError;
     if (error != null) throw error;
     prefsEmail = emailAnnouncements;
-    return NotificationPrefs.fromJson(<String, dynamic>{
-      'email_announcements': prefsEmail,
-      'push_announcements': true,
-      'push_available': false,
-    });
+    // Açmak, gerçek hesap e-postasının bastırmasını kaldırır; dahili hesap adresinde kalkmaz.
+    if (emailAnnouncements && prefsSuppressed && !prefsSuppressionPersists) prefsSuppressed = false;
+    return NotificationPrefs.fromJson(_prefsJson(), fallbackEmail: emailAnnouncements);
   }
 }
 

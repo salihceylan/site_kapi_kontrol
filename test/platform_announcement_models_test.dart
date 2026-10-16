@@ -569,6 +569,45 @@ void main() {
     });
   });
 
+  group('bildirim tercihleri (email_suppressed)', () {
+    test('etkin değer: bastırılmışken email_announcements ASLA açık değil; alan yoksa (eski sunucu) bastırma yok', () {
+      final suppressed = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': false,
+        'push_announcements': true,
+        'push_available': false,
+        'email_suppressed': true,
+      });
+      expect(suppressed.emailAnnouncements, isFalse);
+      expect(suppressed.emailSuppressed, isTrue);
+      // Savunmacı: sunucu çelişkili dönse bile bastırılmış adres "açık" gösterilmez.
+      final contradictory = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': true,
+        'email_suppressed': true,
+      });
+      expect(contradictory.emailAnnouncements, isFalse);
+      final normal = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': true,
+        'email_suppressed': false,
+      });
+      expect(normal.emailAnnouncements, isTrue);
+      expect(normal.emailSuppressed, isFalse);
+      final legacy = NotificationPrefs.fromJson(<String, dynamic>{'email_announcements': true});
+      expect(legacy.emailAnnouncements, isTrue);
+      expect(legacy.emailSuppressed, isFalse);
+      final off = NotificationPrefs.fromJson(<String, dynamic>{'email_announcements': false});
+      expect(off.emailAnnouncements, isFalse);
+      expect(off.emailSuppressed, isFalse);
+    });
+
+    test('copyWith: açarken bastırma bayrağı ayrıca kaldırılabilir', () {
+      const prefs = NotificationPrefs(emailAnnouncements: false, emailSuppressed: true);
+      expect(prefs.copyWith(emailAnnouncements: true).emailSuppressed, isTrue);
+      final opened = prefs.copyWith(emailAnnouncements: true, emailSuppressed: false);
+      expect(opened.emailAnnouncements, isTrue);
+      expect(opened.emailSuppressed, isFalse);
+    });
+  });
+
   group('modül kartı: Duyuru ve Bildirim', () {
     test('sunucu kataloğunda status: available -> "Her sitede açık", simgesi duyuru, varsayılan olarak açık', () {
       final module = PlatformModule.fromJson(<String, dynamic>{

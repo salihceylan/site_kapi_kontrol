@@ -18,6 +18,10 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 ///   DÖNER ve hata görünür kalır. Yanıt eski bir bölümü ezmez (jeton).
 /// - Açıklama: kapalıyken normal duyurular e-postayla gelmez; ACİL duyurunun e-postası bu tercihten etkilenmez
 ///   (uygulamada her zaman görünür).
+/// - E-posta adresi e-postadaki "abonelikten çık" bağlantısıyla bastırılmışsa (`email_suppressed`) anahtar KAPALI
+///   gösterilir ve altında notu yazar. Kullanıcı anahtarı AÇARSA bastırma kalkar (yanıt `email_suppressed:false`).
+///   Açtıktan sonra yanıt HÂLÂ bastırılmış dönerse (dahili hesabın iletişim adresi) anahtar kapalı kalır ve
+///   hata değil BİLGİ olarak "yönetici/destek ile açılabilir" yazılır. Alan yoksa (eski sunucu) eski davranış.
 /// - Hesap değişince (yeni [authService]) yeniden yüklenir.
 class NotificationPrefsSection extends StatefulWidget {
   const NotificationPrefsSection({super.key, required this.authService});
@@ -34,7 +38,12 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
   bool _saving = false;
   String? _error;
   String? _saveError;
+  String? _saveInfo;
   int _token = 0;
+
+  static const String suppressedNote = 'E-posta bildirimleri e-postadaki bağlantıyla durduruldu.';
+  static const String supportNote =
+      'Bu adres için e-posta bildirimleri yönetici/destek ile açılabilir.';
 
   @override
   void initState() {
@@ -50,6 +59,7 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
       _prefs = null;
       _saving = false;
       _saveError = null;
+      _saveInfo = null;
       unawaited(reload());
     }
   }
@@ -95,7 +105,12 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
     setState(() {
       _saving = true;
       _saveError = null;
-      _prefs = before.copyWith(emailAnnouncements: value);
+      _saveInfo = null;
+      // Açarken bastırma kalkacağı varsayılır (yanıt kesinleştirir); kapatırken bastırma durumu değişmez.
+      _prefs = before.copyWith(
+        emailAnnouncements: value,
+        emailSuppressed: value ? false : null,
+      );
     });
     try {
       final saved = await widget.authService.setNotificationPreferences(
@@ -105,6 +120,8 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
       setState(() {
         _prefs = saved;
         _saving = false;
+        // Açılmak istendi ama adres hâlâ bastırılmış: anahtar kapalı kalır, bu bir HATA değil bilgidir.
+        _saveInfo = value && saved.emailSuppressed && !saved.emailAnnouncements ? supportNote : null;
       });
     } catch (e) {
       if (!mounted || token != _token) return;
@@ -141,6 +158,14 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
             InlineNotice(message: _saveError!),
             const SizedBox(height: AppSpace.md),
           ],
+          if (_saveInfo != null) ...[
+            InlineNotice(
+              key: const ValueKey<String>('notification_support_note'),
+              message: _saveInfo!,
+              tone: AppTone.info,
+            ),
+            const SizedBox(height: AppSpace.md),
+          ],
           SwitchListTile(
             key: const ValueKey<String>('notification_email_switch'),
             contentPadding: EdgeInsets.zero,
@@ -152,6 +177,18 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
             value: prefs.emailAnnouncements,
             onChanged: _saving ? null : _setEmail,
           ),
+          if (prefs.emailSuppressed) ...[
+            const SizedBox(height: AppSpace.xs),
+            Row(
+              key: const ValueKey<String>('notification_suppressed_note'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 18, color: p.textSecondary),
+                const SizedBox(width: AppSpace.sm),
+                Expanded(child: Text(suppressedNote, style: th.bodySmall)),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpace.sm),
           MergeSemantics(
             child: Row(
