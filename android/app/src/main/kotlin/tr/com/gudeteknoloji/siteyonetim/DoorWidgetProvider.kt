@@ -1,4 +1,4 @@
-package com.example.site_kapi_kontrol
+package tr.com.gudeteknoloji.siteyonetim
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

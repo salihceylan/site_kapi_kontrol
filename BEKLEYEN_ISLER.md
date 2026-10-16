@@ -141,7 +141,7 @@ Kapsamlı kod incelemesi (sunucu, Flutter, ESP32 firmware, ekran yazılımı, al
 - Sunucu tasarım kararı: koordinatsız sitede C3 statik QR için geofence kontrolü atlanır (fail-open; sahadaki C3 cihazlarını bloklamamak için korundu).
 - Sunucu: hız sınırlayıcılar ve giriş kilidi bellek içidir (PM2 cluster'da Redis/DB gerekir); refresh-token/iptal listesi yok (`pv` yalnız parola değişimini iptal eder).
 - Firmware: BLE eşleştirme/PIN (bonding); MQTT bağlantı denemesi ana döngüde ≤ ~15 sn bloklayabilir (röle `esp_timer` ile bağımsız bırakılır); yerel kontrol HTTP/UDP düz metin (token LAN'da dinlenebilir); süre bazlı zorla rollback yok; sunucudan PIN üretimi/arayüzü yok.
-- Android: `com.example` applicationId ve debug imza (yayın kararı); biyometrik onay yok; iOS widget kaynağı depoda yok.
+- Android/iOS: kalıcı kimlik `tr.com.gudeteknoloji.siteyonetim` ve Android release imzası (`android/key.properties`) hazır; anahtar yedeği, Apple Team ID ve mağaza hesapları kullanıcıda (bkz. `docs/YAYIN_HAZIRLIGI.md`); biyometrik onay yok; iOS widget kaynağı depoda yok.
 - Kapı geçiş kayıtlarında cihaz saati yoksa (epoch=0) kayıtlar saat gelince düzeltilir.
 
 **Bilinçli olarak bu turun dışında (kullanıcı kararı veya ayrı iş gerektirir)**

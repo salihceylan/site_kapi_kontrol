@@ -1,4 +1,4 @@
-package com.example.site_kapi_kontrol
+package tr.com.gudeteknoloji.siteyonetim
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -11,7 +11,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.site_kapi_kontrol/wifi_helper"
+    private val CHANNEL = "tr.com.gudeteknoloji.siteyonetim/wifi_helper"
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 

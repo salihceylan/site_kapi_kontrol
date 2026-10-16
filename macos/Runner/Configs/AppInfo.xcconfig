@@ -8,7 +8,7 @@
 PRODUCT_NAME = site_kapi_kontrol
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.siteKapiKontrol
+PRODUCT_BUNDLE_IDENTIFIER = tr.com.gudeteknoloji.siteyonetim
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Güde Teknoloji. All rights reserved.

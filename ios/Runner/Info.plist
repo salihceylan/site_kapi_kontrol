@@ -26,16 +26,26 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>mailto</string>
+		<string>tel</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Aynı ağdaki kapı kontrol cihazını bulmak ve kapıyı yerel ağ üzerinden açmak için yerel ağa erişilir.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>QR kod okuyarak cihazi sisteme eklemek icin kamera kullanilir.</string>
+	<string>Cihaz, kapı ve site katılım QR kodlarını okumak için kamera kullanılır.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Sesli komutla kapıyı açmak için mikrofon kullanılır.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Sesli komut ile kapı açmak için konuşma tanıma izni gereklidir.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
+	<string>Kurulmamış cihaza Bluetooth ile bağlanıp Wi-Fi ayarı yapmak için Bluetooth kullanılır.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Kurulmamış cihaza Bluetooth ile baglanip Wi-Fi ayari yapmak icin Bluetooth kullanilir.</string>
+	<string>Kurulmamış cihaza Bluetooth ile bağlanıp Wi-Fi ayarı yapmak için Bluetooth kullanılır.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Kapı yanında olup olmadığınızı doğrulamak ve güvenli QR kod oluşturmak için konum izni gereklidir.</string>
 	<key>CFBundleURLTypes</key>
@@ -44,7 +54,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.gudeteknoloji.sitekapikontrol</string>
+			<string>tr.com.gudeteknoloji.siteyonetim</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>sitekapi</string>
@@ -86,6 +96,8 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>
