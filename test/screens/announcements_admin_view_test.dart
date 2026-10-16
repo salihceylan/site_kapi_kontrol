@@ -7,12 +7,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
+import 'package:site_kapi_kontrol/ui/design/buttons.dart' show PrimaryActionButton;
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/announcement_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/announcement_manage_dialog.dart';
@@ -376,7 +378,10 @@ void main() {
       await t.tap(find.byType(DropdownButtonFormField<int>));
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
-      await t.tap(find.text('Mavi Park (12)').last);
+      // G18d: seçicide yalnız site ADI görünür; site kodu "(12)" yazılmaz.
+      expect(find.textContaining('(12)'), findsNothing);
+      expect(find.textContaining('(11)'), findsNothing);
+      await t.tap(find.text('Mavi Park').last);
       await t.pump();
       await t.pump(const Duration(milliseconds: 450));
       await settleFor(t);
@@ -388,6 +393,25 @@ void main() {
       expect(find.text('Asansör bakımı'), findsNothing, reason: 'eski sitenin geç yanıtı yeni ekrana yazılamaz');
       expect(find.byType(AnnouncementAdminCard), findsOneWidget);
       expect(find.text('Mavi Park duyurusu'), findsOneWidget);
+    });
+  });
+
+  group('site seçici etiketi (G18d)', () {
+    testWidgets('aynı adlı siteler sıra numarasıyla ayrılır; site kodu hiçbir yerde yazılmaz', (t) async {
+      final auth = AnnouncementFakeAuth.seeded()
+        ..sites = <SiteRecord>[pplSite(11, 'Gül Sitesi'), pplSite(12, 'Gül Sitesi'), pplSite(13, 'Mavi Park')];
+      await _pump(t, auth);
+      expect(find.text('Gül Sitesi (1)'), findsWidgets);
+      await t.tap(find.byType(DropdownButtonFormField<int>));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('Gül Sitesi (1)'), findsWidgets);
+      expect(find.text('Gül Sitesi (2)'), findsOneWidget);
+      expect(find.text('Mavi Park'), findsOneWidget);
+      for (final code in const ['(11)', '(12)', '(13)']) {
+        expect(find.text('Gül Sitesi $code'), findsNothing, reason: code);
+        expect(find.text('Mavi Park $code'), findsNothing, reason: code);
+      }
     });
   });
 
@@ -772,10 +796,18 @@ void main() {
         readOnly: const <PeopleSite>[PeopleSite(code: 11, name: 'Gül Sitesi')],
       );
       await _open(t, 'Asansör bakımı');
-      // Sayılar ve içerik görünür.
-      expect(find.text('1/3 kişi okudu'), findsOneWidget);
+      // Gerçek sunucu davranışı (redactForBoard): kurul + 3 alıcı (< 5) -> okunma / e-posta sayıları GİZLİ.
+      expect(find.byKey(const ValueKey<String>('announcement_read_hidden')), findsOneWidget);
+      expect(_inDialog(find.text('Okunma: —')), findsOneWidget);
+      expect(find.textContaining('Gizli: küçük hedef'), findsWidgets);
+      expect(find.text('Alıcı sayısı: 3'), findsOneWidget);
+      expect(find.text('1/3 kişi okudu'), findsNothing);
+      expect(find.text('0/3 kişi okudu'), findsNothing);
+      expect(find.textContaining('Okuyan:'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('announcement_read_ratio')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('announcement_email_summary')), findsNothing);
+      // İçerik görünür.
       expect(find.text('Yarın 10:00-12:00 arası asansör hizmet vermeyecek.'), findsWidgets);
-      expect(find.text('Okuyan: 1 • Okumayan: 2'), findsOneWidget);
       // Yazma ve alıcı adları yok.
       for (final key in const [
         'announcement_action_edit',
@@ -791,6 +823,56 @@ void main() {
       expect(find.text('Ayşe Yılmaz'), findsNothing);
       expect(auth.recipientCalls, isEmpty);
       expect(auth.previewCalls, isEmpty);
+    });
+
+    testWidgets('G3: kurul + 5 ve daha çok alıcı: sayılar görünür (gizleme yalnız 1-4 alıcıda)', (t) async {
+      final auth = AnnouncementFakeAuth.seeded(role: UserRole.apartmentOwner)..boardReadOnly = true;
+      auth.rows[41]!['recipients'] = <Map<String, dynamic>>[
+        annRecipient(1, 'Ayşe Yılmaz', readAt: DateTime.utc(2026, 10, 16, 5, 15), emailStatus: 'sent'),
+        annRecipient(2, 'Mehmet Demir', readAt: DateTime.utc(2026, 10, 16, 6)),
+        annRecipient(3, 'Zeynep Kaya'),
+        annRecipient(4, 'Ali Veli'),
+        annRecipient(5, 'Fatma Öz'),
+      ];
+      await _pump(
+        t,
+        auth,
+        manage: false,
+        readOnly: const <PeopleSite>[PeopleSite(code: 11, name: 'Gül Sitesi')],
+      );
+      await _open(t, 'Asansör bakımı');
+      expect(find.byKey(const ValueKey<String>('announcement_read_hidden')), findsNothing);
+      expect(find.text('2/5 kişi okudu'), findsOneWidget);
+      expect(find.text('Okuyan: 2 • Okumayan: 3'), findsOneWidget);
+      expect(auth.recipientCalls, isEmpty);
+    });
+
+    testWidgets('G3: yönetici küçük hedefte de sayıları görür (gizleme yalnız kurul içindir)', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      await _open(t, 'Asansör bakımı');
+      expect(find.text('1/3 kişi okudu'), findsOneWidget);
+      expect(find.text('Okuyan: 1 • Okumayan: 2'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('announcement_read_hidden')), findsNothing);
+    });
+
+    testWidgets('G3: liste kartında gizli okunma "Okunma: —" olur, "0/3" yazılmaz; ekran okuyucu etiketi gizliyi söyler', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = AnnouncementFakeAuth.seeded(role: UserRole.apartmentOwner)..boardReadOnly = true;
+      await _pump(
+        t,
+        auth,
+        manage: false,
+        readOnly: const <PeopleSite>[PeopleSite(code: 11, name: 'Gül Sitesi')],
+      );
+      expect(find.text('Okunma: —'), findsWidgets);
+      expect(find.textContaining('Okunma: 0/'), findsNothing);
+      expect(find.textContaining('Okunma: 1/'), findsNothing);
+      expect(
+        find.bySemanticsLabel(RegExp('Okunma sayısı gizli \\(küçük hedef\\), toplam 3 alıcı')),
+        findsWidgets,
+      );
+      semantics.dispose();
     });
 
     testWidgets('sunucu kurulda oluşturan adını gönderse bile (savunmacı) gösterilmez', (t) async {
@@ -852,4 +934,105 @@ void main() {
       expect(AnnouncementStatusChip.iconOf(AnnouncementStatus.scheduled), Icons.schedule_rounded);
     });
   });
+
+  group('inceleme düzeltmeleri: uzun başlık, anlam ağacı, çift dokunuş, düzenleme sayısı', () {
+    const longTitle =
+        'Sitemizin tüm bloklarında yapılacak yıllık periyodik asansör bakım ve kontrol çalışmaları hakkında önemli bilgilendirme';
+
+    testWidgets('G11: uzun başlık ayrıntıda gövdenin başında SEÇİLEBİLİR tam metin olarak da bulunur (2,0 yazıda taşmaz)', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      auth.rows[50] = annRow(50, title: longTitle, publishedAt: DateTime.utc(2026, 10, 16, 8));
+      await _pump(t, auth, width: 320, height: 640, scale: 2.0);
+      await _open(t, longTitle);
+      final full = find.byKey(const ValueKey<String>('announcement_full_title'));
+      expect(full, findsOneWidget);
+      expect(t.widget<SelectableText>(full).data, longTitle);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('G11: kısa başlıkta tekrar eden başlık bloğu YOK', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      await _open(t, 'Asansör bakımı');
+      expect(find.byKey(const ValueKey<String>('announcement_full_title')), findsNothing);
+    });
+
+    testWidgets('G11: liste kartında başlık en çok 3 satır; tam başlık ekran okuyucu etiketinde', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = AnnouncementFakeAuth.seeded();
+      auth.rows[50] = annRow(50, title: longTitle, publishedAt: DateTime.utc(2026, 10, 16, 8));
+      await _pump(t, auth, width: 320, height: 640, scale: 2.0);
+      final titleText = t.widget<Text>(
+        find.descendant(of: _card(longTitle), matching: find.text(longTitle)),
+      );
+      expect(titleText.maxLines, 3);
+      expect(titleText.overflow, TextOverflow.ellipsis);
+      expect(
+        semanticLabels(t).where((l) => l.contains(longTitle)),
+        hasLength(1),
+        reason: 'tam başlık kartın TEK etiketinde, kesilmeden',
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('G12: kart ekran okuyucuya TEK kez okunur (etiket + içerik çift okunmaz)', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      final labels = semanticLabels(t);
+      for (final title in const ['Asansör bakımı', 'Aidat hatırlatması', 'Bahçe düzenlemesi', 'Yanlış duyuru']) {
+        expect(labels.where((l) => l.contains(title)), hasLength(1), reason: title);
+      }
+      final card = labels.singleWhere((l) => l.contains('Asansör bakımı'));
+      expect(card, contains('Acil'));
+      expect(card, contains('Yayında'));
+      expect(card, contains('1 kişi okudu, toplam 3 alıcı'));
+      expect(card, contains('E-posta da gönderilir'));
+      // Kart bir düğmedir: dokunma eylemi korunur.
+      final node = t.getSemantics(_card('Asansör bakımı'));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('G15: karta çift dokunuş iki ayrıntı penceresi açmaz', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      // Aynı karede iki dokunuş (kare çizilmeden): ikinci çağrı koruma bayrağıyla yok sayılır.
+      final onTap = t.widget<AnnouncementAdminCard>(_card('Asansör bakımı')).onTap;
+      onTap();
+      onTap();
+      await settleFor(t);
+      expect(find.byType(AnnouncementManageDialog), findsOneWidget);
+      await tapText(t, 'Kapat');
+      expect(find.byType(AnnouncementManageDialog), findsNothing, reason: 'tek Kapat tüm pencereyi kapatır');
+    });
+
+    testWidgets('G15: "Yeni Duyuru"ya çift dokunuş iki form açmaz', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      final onPressed = t
+          .widget<PrimaryActionButton>(find.byKey(const ValueKey<String>('announcement_create')))
+          .onPressed!;
+      onPressed();
+      onPressed();
+      await settleFor(t);
+      expect(find.byType(AnnouncementFormDialog), findsOneWidget);
+      await tapText(t, 'Vazgeç');
+      expect(find.byType(AnnouncementFormDialog), findsNothing);
+    });
+
+    testWidgets('G20: sunucu edit_count gönderir: 1 kez -> "Düzenlendi: ...", 3 kez -> "(3 kez düzenlendi)"', (t) async {
+      final auth = AnnouncementFakeAuth.seeded();
+      await _pump(t, auth);
+      await _open(t, 'Asansör bakımı');
+      expect(find.textContaining('Düzenlendi: '), findsOneWidget);
+      expect(find.textContaining('kez düzenlendi'), findsNothing);
+      await tapText(t, 'Kapat');
+
+      auth.rows[41]!['edit_count'] = 3;
+      await _open(t, 'Asansör bakımı');
+      expect(find.textContaining('(3 kez düzenlendi)'), findsOneWidget);
+    });
+  });
+
 }

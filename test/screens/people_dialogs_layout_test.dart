@@ -113,7 +113,130 @@ Future<void> _pickApartment(WidgetTester t, String fieldKey, String label) async
   await settleFor(t);
 }
 
+
+/// Formun içeriğini (kaydırılabilir bölge) en alta kaydırır.
+Future<void> _scrollFormToBottom(WidgetTester t) async {
+  final scrollable = find
+      .descendant(of: find.byType(AlertDialog).last, matching: find.byType(Scrollable))
+      .first;
+  await t.drag(scrollable, const Offset(0, -3000));
+  await t.pump(const Duration(milliseconds: 500));
+}
+
+/// G1: Kaydet'e basılınca özet bildirimi çıkar; ilk geçersiz metin alanı pencerenin GÖRÜNÜR bölgesine
+/// kaydırılır ve odaklanır (kaydırılmış uzun formda hata ekran dışında gizli kalmaz).
+Future<void> _expectFirstInvalidRevealed(WidgetTester t) async {
+  await settleFor(t);
+  expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
+  final viewport = t.getRect(
+    find.descendant(of: find.byType(AlertDialog).last, matching: find.byType(Scrollable)).first,
+  );
+  Element? firstInvalid;
+  for (final element in find.byType(TextFormField).evaluate()) {
+    if (element is StatefulElement) {
+      final state = element.state;
+      if (state is FormFieldState<dynamic> && state.hasError) {
+        firstInvalid = element;
+        break;
+      }
+    }
+  }
+  expect(firstInvalid, isNotNull, reason: 'doğrulama hatası olan bir alan bekleniyordu');
+  final rect = t.getRect(find.byElementPredicate((e) => identical(e, firstInvalid)));
+  expect(rect.top, greaterThanOrEqualTo(viewport.top - 1), reason: 'ilk geçersiz alan görünür bölgede (üst)');
+  expect(rect.top, lessThan(viewport.bottom), reason: 'ilk geçersiz alan görünür bölgede (alt)');
+  final editable = find.descendant(
+    of: find.byElementPredicate((e) => identical(e, firstInvalid)),
+    matching: find.byType(EditableText),
+  );
+  expect(t.widget<EditableText>(editable).focusNode.hasFocus, isTrue, reason: 'ilk geçersiz alan odaklanır');
+}
+
 void main() {
+
+  group('G1: doğrulama hatası görünür bölgeye gelir (5 kaydetme penceresi, 320x640 x2,0)', () {
+    testWidgets('kişi formu: formun altındayken Kaydet -> ilk geçersiz alan (Ad Soyad) görünür ve odaklı, özet bildirimi', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)), width: 320, height: 640, scale: 2.0);
+      await _scrollFormToBottom(t);
+      await t.tap(find.text('Kaydet').last);
+      await t.pump();
+      await _expectFirstInvalidRevealed(t);
+      expect(auth.createPersonCalls, isEmpty);
+    });
+
+    testWidgets('daire düzenleme: ortadaki geçersiz alan (Net alan) görünür bölgeye gelir', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      final detail = await auth.getApartment(11, 301);
+      await _open(
+        t,
+        (c) => ApartmentEditDialog.show(c, scope: _scope(auth), apartment: detail),
+        width: 320,
+        height: 640,
+        scale: 2.0,
+      );
+      await _enter(t, 'apartment_net', 'abc');
+      await _scrollFormToBottom(t);
+      await t.tap(find.text('Kaydet').last);
+      await t.pump();
+      await _expectFirstInvalidRevealed(t);
+      expect(auth.updateApartmentCalls, isEmpty);
+    });
+
+    testWidgets('ilişki ekle: geçersiz tarih görünür bölgeye gelir; daire seçilmediği de bildirilir', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      await _open(
+        t,
+        (c) => ResidencyDialog.show(c, scope: _scope(auth), personId: 1, personName: 'Ayşe Yılmaz'),
+        width: 320,
+        height: 640,
+        scale: 2.0,
+      );
+      await _enter(t, 'residency_move_in', '31022024');
+      await _scrollFormToBottom(t);
+      await t.tap(find.text('Kaydet').last);
+      await t.pump();
+      await _expectFirstInvalidRevealed(t);
+      expect(find.text('Bir daire seçin.'), findsOneWidget);
+    });
+
+    testWidgets('araç ekle: geçersiz plaka görünür bölgeye gelir; kişi seçilmediği de bildirilir', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      await _open(t, (c) => VehicleDialog.show(c, scope: _scope(auth)), width: 320, height: 640, scale: 2.0);
+      await _enter(t, 'vehicle_plate', '??');
+      await _scrollFormToBottom(t);
+      await t.tap(find.text('Ekle').last);
+      await t.pump();
+      await _expectFirstInvalidRevealed(t);
+      expect(find.text('Araç sahibini seçin.'), findsOneWidget);
+      expect(auth.createVehicleCalls, isEmpty);
+    });
+
+    testWidgets('taşındı: geçersiz tarih görünür bölgede, odaklı ve özet bildirimi var', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      final detail = await auth.getPerson(11, 2);
+      await _open(
+        t,
+        (c) => EndResidencyDialog.show(
+          c,
+          scope: _scope(auth),
+          residency: detail.currentResidencies.single,
+          personName: detail.fullName,
+          hasAccount: true,
+        ),
+        width: 320,
+        height: 640,
+        scale: 2.0,
+      );
+      await _enter(t, 'end_residency_date', '31022024');
+      await _scrollFormToBottom(t);
+      await t.tap(find.text('Taşındı Olarak İşaretle').last);
+      await t.pump();
+      await _expectFirstInvalidRevealed(t);
+      expect(auth.endResidencyCalls, isEmpty);
+    });
+  });
+
   group('taşma matrisi: kişi kartı', () {
     layoutMatrix('dolu (bilgiler, ilişkiler, araçlar, tüm yazma düğmeleri)', (t, w, h, s, dark) async {
       final auth = PeopleFakeAuth.seeded();
@@ -271,7 +394,13 @@ void main() {
 
       await _enter(t, 'end_residency_date', '31022024');
       await _tapButton(t, 'Taşındı Olarak İşaretle');
-      expect(find.text('Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).'), findsOneWidget);
+      // G13: 31.02.2024 biçim olarak doğru ama gerçek bir gün değil -> "Geçersiz tarih" (biçim mesajı değil).
+      expect(
+        find.text('Geçersiz tarih. Gerçek bir gün ve ay ile 1900-2100 arası yıl girin (örn. 05.03.2024).'),
+        findsOneWidget,
+      );
+      // G1: üstte özet bildirimi de görünür (kaydırılmış formda alan hatası gizli kalmasın).
+      expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
       expect(auth.endResidencyCalls, isEmpty);
 
       await tapText(t, 'Vazgeç');
@@ -556,7 +685,13 @@ void main() {
       await _pickApartment(t, 'person_apartment', 'B Blok - 2');
       await _enter(t, 'person_move_in', '31022024');
       await _tapButton(t, 'Kaydet');
-      expect(find.text('Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).'), findsOneWidget);
+      // G13: 31.02.2024 biçim olarak doğru ama gerçek bir gün değil -> "Geçersiz tarih" (biçim mesajı değil).
+      expect(
+        find.text('Geçersiz tarih. Gerçek bir gün ve ay ile 1900-2100 arası yıl girin (örn. 05.03.2024).'),
+        findsOneWidget,
+      );
+      // G1: üstte özet bildirimi de görünür (kaydırılmış formda alan hatası gizli kalmasın).
+      expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
       expect(auth.createPersonCalls, isEmpty);
 
       await _enter(t, 'person_move_in', '');

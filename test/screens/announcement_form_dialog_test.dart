@@ -43,6 +43,7 @@ Future<_Out> _openForm(
   AnnouncementFakeAuth auth, {
   AnnouncementDetail? announcement,
   VoidCallback? onRefreshNeeded,
+  DateTime? now,
   double width = 400,
   double height = 1000,
   double scale = 1.0,
@@ -56,7 +57,7 @@ Future<_Out> _openForm(
         context,
         scope: _scope(auth),
         announcement: announcement,
-        now: () => _now,
+        now: () => now ?? _now,
         onRefreshNeeded: onRefreshNeeded,
       );
       out.closed = true;
@@ -179,17 +180,50 @@ void main() {
       expect(find.text('Başlık boş olamaz.'), findsOneWidget, reason: 'yalnız boşluk geçersiz');
     });
 
-    testWidgets('karakter sayaçları (başlık 120, metin 5000) ve sınır aşılamaz', (t) async {
+    testWidgets('karakter sayaçları (başlık 120, metin 5000); sınırı aşan giriş KIRPILMAZ, gönderim engellenir (G14)', (t) async {
       final auth = _auth();
       await _openForm(t, auth);
       await _enter(t, 'announcement_title', 'Merhaba');
       await _enter(t, 'announcement_body', 'Metin içeriği');
       expect(find.text('7/120'), findsOneWidget);
       expect(find.text('13/5000'), findsOneWidget);
+      expect(t.widget<Text>(find.text('7/120')).style?.fontWeight, isNot(FontWeight.w800));
 
+      // Yapıştırılan fazlalık sessizce kesilmez: tamamı alanda görünür, sayaç kırmızı ve kalın.
       await _enter(t, 'announcement_title', 'a' * 150);
-      expect(_fieldText(t, 'announcement_title').length, 120, reason: 'sınırı aşan giriş sessizce değil, sayaçla kısıtlanır');
+      expect(_fieldText(t, 'announcement_title').length, 150, reason: 'sessiz kırpma yok');
+      expect(find.text('150/120'), findsOneWidget);
+      expect(t.widget<Text>(find.text('150/120')).style?.fontWeight, FontWeight.w800, reason: 'aşım yalnız renkle değil kalınlıkla da');
+      expect(find.text('Başlık en çok 120 karakter olabilir.'), findsOneWidget, reason: 'doğrulayıcı hata');
+
+      await _enter(t, 'announcement_body', 'b' * 5001);
+      expect(_fieldText(t, 'announcement_body').length, 5001);
+      expect(find.text('5001/5000'), findsOneWidget);
+      expect(find.text('Metin en çok 5000 karakter olabilir.'), findsOneWidget);
+
+      await _submit(t, 'Taslağı Kaydet');
+      expect(auth.announcementCreateCalls, isEmpty, reason: 'sınırı aşan metin gönderilmez');
+      expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
+
+      await _enter(t, 'announcement_title', 'a' * 120);
+      await _enter(t, 'announcement_body', 'b' * 5000);
       expect(find.text('120/120'), findsOneWidget);
+      expect(find.text('Başlık en çok 120 karakter olabilir.'), findsNothing);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(auth.announcementCreateCalls, hasLength(1));
+    });
+
+    testWidgets('G14: sayaç ve sınır AYNI birimle (kod noktası) sayar: 100 emoji = 100/120, hata yok', (t) async {
+      final auth = _auth();
+      await _openForm(t, auth);
+      final emoji = String.fromCharCodes(<int>[0x1F600]) * 100; // UTF-16 uzunluğu 200, kod noktası 100
+      expect(emoji.length, 200);
+      await _enter(t, 'announcement_title', emoji);
+      await _enter(t, 'announcement_body', 'Metin');
+      expect(find.text('100/120'), findsOneWidget);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(find.text('Başlık en çok 120 karakter olabilir.'), findsNothing);
+      expect(auth.announcementCreateCalls, hasLength(1));
     });
 
     testWidgets('SMS ve WhatsApp "Yakında…" etiketli PASİF: anahtar yok, e-posta anahtarı tek', (t) async {
@@ -223,6 +257,31 @@ void main() {
       expect(_emailSwitch(t).value, isTrue);
       await _tapKey(t, 'announcement_importance_normal');
       expect(_emailSwitch(t).value, isTrue, reason: 'Normal\'e dönünce kullanıcının seçimi sessizce değişmez');
+    });
+
+    testWidgets('G18c: e-posta anahtarının açıklaması "acil duyuru her zaman gönderilir" DEMEZ; acil e-postanın tercihten etkilenmediğini söyler', (t) async {
+      final auth = _auth();
+      await _openForm(t, auth);
+      await scrollTo(t, find.byKey(const ValueKey<String>('announcement_send_email')));
+      expect(find.textContaining('her zaman gönderilir'), findsNothing);
+      expect(find.textContaining('acil duyurunun e-postası bu tercihten etkilenmez'), findsOneWidget);
+    });
+
+    testWidgets('G9: seçili Acil çipine yeniden dokunmak e-posta tercihini ZORLA açmaz; yalnız Normal->Acil değişiminde açılır', (t) async {
+      final auth = _auth();
+      await _openForm(t, auth);
+      await _tapKey(t, 'announcement_importance_urgent');
+      expect(_emailSwitch(t).value, isTrue);
+      // Kullanıcı e-postayı bilerek kapatır.
+      await _tapKey(t, 'announcement_send_email');
+      expect(_emailSwitch(t).value, isFalse);
+      // Seçili Acil çipine yeniden dokunuş: değişiklik YOK, tercih korunur.
+      await _tapKey(t, 'announcement_importance_urgent');
+      expect(_emailSwitch(t).value, isFalse, reason: 'aynı seçeneğe yeniden dokunuş tercihi sıfırlamaz');
+      // Gerçek değişim (Normal -> Acil) varsayılanı yine açar.
+      await _tapKey(t, 'announcement_importance_normal');
+      await _tapKey(t, 'announcement_importance_urgent');
+      expect(_emailSwitch(t).value, isTrue);
     });
   });
 
@@ -393,9 +452,54 @@ void main() {
       await _enter(t, 'announcement_publish_date', '31022026');
       await _enter(t, 'announcement_publish_time', '2560');
       await _submit(t, 'Zamanla');
+      // G13: biçim doğru ama değer gerçek değil (31.02, 25:60) -> "Geçersiz ..." (biçim mesajı değil).
+      expect(
+        find.text('Geçersiz tarih. Gerçek bir gün ve ay ile 1900-2100 arası yıl girin (örn. 05.03.2024).'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Geçersiz saat. Saat 00-23, dakika 00-59 olmalı (örn. 14:30).'),
+        findsOneWidget,
+      );
+      expect(auth.previewCalls, isEmpty);
+
+      // Biçim bozuksa biçim söylenir.
+      await _enter(t, 'announcement_publish_date', '1');
+      await _enter(t, 'announcement_publish_time', '9');
+      await _submit(t, 'Zamanla');
       expect(find.text('Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).'), findsOneWidget);
       expect(find.text('Saati SS:DD biçiminde girin (örn. 14:30).'), findsOneWidget);
-      expect(auth.previewCalls, isEmpty);
+    });
+
+    testWidgets('G10: saat alanına "9:30" / "930" / "9.30" yapıştırılınca 09:30 olur; geçersiz yapıştırma reddedilir', (t) async {
+      final auth = _auth();
+      await _openForm(t, auth);
+      await _tapKey(t, 'announcement_mode_schedule');
+      for (final pasted in const ['9:30', '930', '9.30', '0930']) {
+        await _enter(t, 'announcement_publish_time', '');
+        await _enter(t, 'announcement_publish_time', pasted);
+        expect(_fieldText(t, 'announcement_publish_time'), '09:30', reason: pasted);
+      }
+      await _enter(t, 'announcement_publish_time', '14:30');
+      await _enter(t, 'announcement_publish_time', 'abc');
+      expect(_fieldText(t, 'announcement_publish_time'), '14:30', reason: 'harf içeren yapıştırma alanı değiştirmez');
+    });
+
+    testWidgets('G17: üst sınır TAKVİM olarak 1 yıl (İstanbul): artık yıl aşan aralıkta 366. gün de geçerli, sınırın 1 dk ötesi geçersiz', (t) async {
+      // 16.10.2027 12:00 İstanbul: bir yıl sonrası 16.10.2028 12:00 (aradaki 29 Şubat 2028 nedeniyle 366 gün).
+      final later = DateTime.utc(2027, 10, 16, 9);
+      final auth = _auth()..clock = () => later;
+      await _openForm(t, auth, now: later);
+      await schedule(t, '16.10.2028', '12:00');
+      await _submit(t, 'Zamanla');
+      expect(find.text('Yayın zamanı en çok 1 yıl sonrası olabilir.'), findsNothing, reason: 'tam 1 takvim yılı sonrası geçerli');
+      expect(find.text('Zamanlamayı onayla'), findsOneWidget);
+      await _confirm(t, 'Vazgeç');
+
+      await _enter(t, 'announcement_publish_time', '12:01');
+      await _submit(t, 'Zamanla');
+      expect(find.text('Yayın zamanı en çok 1 yıl sonrası olabilir.'), findsOneWidget);
+      expect(auth.announcementCreateCalls, isEmpty);
     });
 
     testWidgets('sunucu zamanlamayı reddederse (INVALID_SCHEDULE) Türkçe mesaj pencerede kalır', (t) async {
@@ -680,8 +784,8 @@ void main() {
       expect(refresh, 1);
     });
 
-    testWidgets('kayıtlı daire seçimi toplu temizlenir; temizlenince yeniden seçim zorunlu', (t) async {
-      final auth = _auth();
+    testWidgets('ESKİ sunucu (target.apartments yok): kayıtlı daire seçimi toplu temizlenir; temizlenince yeniden seçim zorunlu', (t) async {
+      final auth = _auth()..legacyTarget = true;
       auth.rows[45] = annRow(
         45,
         title: 'Daire duyurusu',
@@ -703,6 +807,191 @@ void main() {
       expect(find.text('En az bir daire seçin.'), findsOneWidget);
       expect(auth.announcementUpdateCalls, isEmpty);
       expect(out.closed, isFalse);
+    });
+  });
+
+  group('kayıtlı hedef (G18a): sunucunun eklemeli target.blocks / target.apartments listeleri', () {
+    AnnouncementFakeAuth withApartments() {
+      final auth = _auth();
+      auth.rows[45] = annRow(
+        45,
+        title: 'Daire duyurusu',
+        status: 'draft',
+        targetType: 'apartments',
+        apartmentIds: const <int>[301, 302],
+        labels: const <String>['A Blok - 5', 'A Blok - 6'],
+      );
+      return auth;
+    }
+
+    testWidgets('daireler seçili çip olarak gelir; biri çıkarılınca YALNIZ kalan kimlikler gider', (t) async {
+      final auth = withApartments();
+      final detail = await _detailOf(auth, 45);
+      expect(detail.target.apartments.map((a) => a.id), <int>[301, 302]);
+      await _openForm(t, auth, announcement: detail);
+      await scrollTo(t, find.byKey(const ValueKey<String>('announcement_pick_301')));
+      expect(find.byKey(const ValueKey<String>('announcement_pick_301')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('announcement_pick_302')), findsOneWidget);
+      expect(find.textContaining('Kayıtlı seçim tek tek çıkarılamaz'), findsNothing, reason: 'çipler tek tek çıkarılabilir');
+
+      await scrollTo(t, find.byTooltip('A Blok - 6 hedeften çıkar'));
+      await t.tap(find.byTooltip('A Blok - 6 hedeften çıkar'));
+      await t.pump();
+      await _submit(t, 'Taslağı Kaydet');
+      expect(auth.announcementUpdateCalls.single.fields['target'], <String, dynamic>{
+        'type': 'apartments',
+        'apartment_ids': <int>[301],
+      });
+    });
+
+    testWidgets('bloklar: site yapısı ALINAMASA bile target.blocks adlarıyla çipler görünür', (t) async {
+      final auth = _auth()..structureFails = true;
+      final detail = await _detailOf(auth, 40);
+      expect(detail.target.blocks.map((b) => b.name), <String>['A Blok']);
+      await _openForm(t, auth, announcement: detail);
+      expect(find.byKey(const ValueKey<String>('announcement_pick_1')), findsOneWidget);
+      expect(find.byTooltip('A Blok hedeften çıkar'), findsOneWidget);
+    });
+
+    testWidgets('seçili çipin ✕ düğmesi en az 48x48 dp ve ipucu etiketli (G15)', (t) async {
+      final auth = _auth();
+      final detail = await _detailOf(auth, 40);
+      await _openForm(t, auth, announcement: detail, width: 320, height: 640, scale: 2.0);
+      final remove = find.byTooltip('A Blok hedeften çıkar');
+      await scrollTo(t, remove);
+      final size = t.getSize(remove);
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
+    });
+  });
+
+  group('doğrulama görünürlüğü (G1)', () {
+    testWidgets('320x640 x2,0: formun ALTINDAYKEN Kaydet: ilk geçersiz alan görünür bölgeye gelir, odaklanır, özet bildirimi çıkar', (t) async {
+      final auth = _auth();
+      await _openForm(t, auth, width: 320, height: 640, scale: 2.0);
+      await scrollTo(t, find.text('Yayın').first);
+      await _submit(t, 'Taslağı Kaydet');
+      await settleFor(t);
+
+      final error = find.text('Başlık boş olamaz.');
+      expect(error, findsOneWidget);
+      final viewport = t.getRect(
+        find.descendant(of: find.byType(AlertDialog).last, matching: find.byType(Scrollable)).first,
+      );
+      final rect = t.getRect(error);
+      expect(rect.top, greaterThanOrEqualTo(viewport.top - 1), reason: 'hata görünür bölgede (üst)');
+      expect(rect.bottom, lessThanOrEqualTo(viewport.bottom + 1), reason: 'hata görünür bölgede (alt)');
+      expect(find.text('Lütfen işaretli alanları düzeltin.'), findsOneWidget);
+      final title = t.widget<EditableText>(
+        find.descendant(of: find.byKey(const ValueKey<String>('announcement_title')), matching: find.byType(EditableText)),
+      );
+      expect(title.focusNode.hasFocus, isTrue, reason: 'ilk geçersiz alan odaklanır');
+      expect(auth.announcementCreateCalls, isEmpty);
+    });
+
+    testWidgets('özet bildirimi ekran okuyucuya duyurulur (canlı bölge) ve alan düzelince yeni denemede gider', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = _auth();
+      await _openForm(t, auth);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(find.bySemanticsLabel(RegExp('Lütfen işaretli alanları düzeltin')), findsWidgets);
+      await _fill(t);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(find.text('Lütfen işaretli alanları düzeltin.'), findsNothing);
+      expect(auth.announcementCreateCalls, hasLength(1));
+      semantics.dispose();
+    });
+  });
+
+  group('belirsiz gönderim ve yeni sunucu kodları (G16)', () {
+    testWidgets('zaman aşımı: liste hemen tazelenir; Vazgeç ile kapanırken bir kez daha; kesin hatada (400) hiç', (t) async {
+      final auth = _auth()..announcementWriteError = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
+      var refresh = 0;
+      final out = await _openForm(t, auth, onRefreshNeeded: () => refresh++);
+      await _fill(t);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(find.text('Sunucu yanıt vermedi, tekrar deneyin.'), findsOneWidget);
+      expect(refresh, 1, reason: 'istek sunucuya ulaşmış olabilir: liste tazelenir');
+      expect(out.closed, isFalse);
+
+      await tapText(t, 'Vazgeç');
+      await settleFor(t);
+      expect(out.closed, isTrue);
+      expect(refresh, 2, reason: 'form sonuçsuz kapanırken (Vazgeç) bir kez daha');
+    });
+
+    testWidgets('belirsiz hatadan sonra yeniden deneme başarılı olursa kapanışta ek tazeleme yok (çağıran sonucu işler)', (t) async {
+      final auth = _auth()..announcementWriteError = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
+      var refresh = 0;
+      final out = await _openForm(t, auth, onRefreshNeeded: () => refresh++);
+      await _fill(t);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(refresh, 1);
+      auth.announcementWriteError = null;
+      await _submit(t, 'Taslağı Kaydet');
+      expect(out.result, isNotNull);
+      expect(refresh, 1);
+    });
+
+    testWidgets('5xx de belirsizdir: liste tazelenir', (t) async {
+      final auth = _auth()
+        ..announcementWriteError = ApiException('Sunucu geçici olarak yanıt vermiyor (503).', statusCode: 503);
+      var refresh = 0;
+      await _openForm(t, auth, onRefreshNeeded: () => refresh++);
+      await _fill(t);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(refresh, 1);
+    });
+
+    testWidgets('409 DUPLICATE_ANNOUNCEMENT: sunucunun Türkçe metni görünür; liste tazelenir (ilk istek yayınlamış olabilir)', (t) async {
+      final auth = _auth()
+        ..announcementWriteError = ApiException(
+          'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.',
+          statusCode: 409,
+          code: 'DUPLICATE_ANNOUNCEMENT',
+        );
+      var refresh = 0;
+      final out = await _openForm(t, auth, onRefreshNeeded: () => refresh++);
+      await _fill(t);
+      await _submit(t, 'Taslağı Kaydet');
+      expect(
+        find.text('Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.'),
+        findsOneWidget,
+      );
+      expect(refresh, 1);
+      expect(out.closed, isFalse);
+      await tapText(t, 'Vazgeç');
+      await settleFor(t);
+      expect(refresh, 2);
+    });
+
+    for (final (code, message) in const [
+      ('ANNOUNCEMENT_DAILY_LIMIT', 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.'),
+      ('ANNOUNCEMENT_HOURLY_LIMIT', 'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.'),
+    ]) {
+      testWidgets('409 $code: Türkçe metin görünür, form açık kalır, liste TAZELENMEZ (kesin ret)', (t) async {
+        final auth = _auth()..announcementWriteError = ApiException(message, statusCode: 409, code: code);
+        var refresh = 0;
+        final out = await _openForm(t, auth, onRefreshNeeded: () => refresh++);
+        await _fill(t);
+        await _submit(t, 'Taslağı Kaydet');
+        expect(find.text(message), findsOneWidget);
+        expect(out.closed, isFalse);
+        await tapText(t, 'Vazgeç');
+        await settleFor(t);
+        expect(refresh, 0, reason: 'kesin ret: kayıt oluşmadı');
+      });
+    }
+
+    testWidgets('düzenleme modunda belirsiz hata yeni duyuru tazelemesi yapmaz (yalnız INVALID_STATE / 404)', (t) async {
+      final auth = _auth();
+      final detail = await _detailOf(auth, 40);
+      var refresh = 0;
+      await _openForm(t, auth, announcement: detail, onRefreshNeeded: () => refresh++);
+      auth.announcementWriteError = ApiException('Sunucu yanıt vermedi, tekrar deneyin.');
+      await _enter(t, 'announcement_title', 'Yeni başlık');
+      await _submit(t, 'Taslağı Kaydet');
+      expect(refresh, 0);
     });
   });
 

@@ -44,6 +44,9 @@ class AnnouncementsAdminListState extends State<AnnouncementsAdminList> {
   String _status = 'all';
   String _lastSignature = '|all';
 
+  // Form / ayrıntı penceresi çift dokunuşta iki kez açılmasın.
+  bool _opening = false;
+
   late final PagedLoader<AnnouncementSummary> _loader = PagedLoader<AnnouncementSummary>(
     pageSize: 30,
     fetch: (offset, limit) async {
@@ -109,20 +112,38 @@ class AnnouncementsAdminListState extends State<AnnouncementsAdminList> {
   }
 
   Future<void> _create() async {
-    final result = await AnnouncementFormDialog.show(context, scope: widget.scope);
+    if (_opening) return;
+    _opening = true;
+    final AnnouncementFormResult? result;
+    try {
+      result = await AnnouncementFormDialog.show(
+        context,
+        scope: widget.scope,
+        // İstek sunucuya ulaşmış olabilir (zaman aşımı, yinelenen içerik): form kapanırken liste tazelenir.
+        onRefreshNeeded: () => unawaited(_loader.reload()),
+      );
+    } finally {
+      _opening = false;
+    }
     if (result == null || !mounted) return;
     AppSnack.show(context, result.message, kind: AppSnackKind.success);
     unawaited(_loader.reload());
   }
 
-  Future<void> _open(AnnouncementSummary announcement) {
-    return AnnouncementManageDialog.show(
-      context,
-      scope: widget.scope,
-      announcementId: announcement.id,
-      initialTitle: announcement.title,
-      onChanged: () => unawaited(_loader.reload()),
-    );
+  Future<void> _open(AnnouncementSummary announcement) async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      await AnnouncementManageDialog.show(
+        context,
+        scope: widget.scope,
+        announcementId: announcement.id,
+        initialTitle: announcement.title,
+        onChanged: () => unawaited(_loader.reload()),
+      );
+    } finally {
+      _opening = false;
+    }
   }
 
   bool get _filtered => _query.isNotEmpty || _status != 'all';

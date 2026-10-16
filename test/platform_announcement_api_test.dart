@@ -284,6 +284,10 @@ void main() {
         (400, 'INVALID_SCHEDULE', 'Yayın zamanı geçersiz.', 'Yayın zamanı geçersiz. En az 1 dakika, en çok 1 yıl sonrası seçin.'),
         (400, 'ANNOUNCEMENT_EMAIL_LIMIT', 'E-posta gönderilecek kişi sayısı tek yayında 1000 adresi aşıyor.', 'Tek seferde en çok 1000 kişiye e-posta gönderilebilir. Hedefi bölüp ayrı duyurular oluşturun.'),
         (403, 'FORBIDDEN_ROLE', 'Bu işlem için yetkiniz yok.', 'Bu işlem için yetkiniz yok.'),
+        // G16: yayın sınırları — sunucunun Türkçe metni olduğu gibi gösterilir.
+        (409, 'DUPLICATE_ANNOUNCEMENT', 'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.', 'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.'),
+        (409, 'ANNOUNCEMENT_DAILY_LIMIT', 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.', 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.'),
+        (409, 'ANNOUNCEMENT_HOURLY_LIMIT', 'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.', 'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.'),
       ];
       for (final (status, code, serverText, expected) in cases) {
         final rec = _Recorder();
@@ -295,6 +299,26 @@ void main() {
                 .having((e) => e.message, 'message', expected)
                 .having((e) => e.code, 'code', code)
                 .having((e) => e.statusCode, 'status', status),
+          ),
+          reason: code,
+        );
+      }
+    });
+
+    test('G16: yayın sınırı kodlarında sunucu metin göndermezse Türkçe yedek metin kullanılır (kod adı sızmaz)', () async {
+      for (final (code, expected) in const <(String, String)>[
+        ('DUPLICATE_ANNOUNCEMENT', 'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.'),
+        ('ANNOUNCEMENT_DAILY_LIMIT', 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.'),
+        ('ANNOUNCEMENT_HOURLY_LIMIT', 'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.'),
+      ]) {
+        final rec = _Recorder();
+        final api = _api(rec, (r) => _json(<String, dynamic>{'code': code}, 409));
+        await expectLater(
+          api.publishAnnouncement(token: 'tok', siteCode: 7, announcementId: 1),
+          throwsA(
+            isA<ApiException>()
+                .having((e) => e.message, 'message', expected)
+                .having((e) => e.code, 'code', code),
           ),
           reason: code,
         );

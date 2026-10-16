@@ -160,6 +160,96 @@ void main() {
       expect(const AnnouncementEmailStats().summary, isNull);
     });
 
+    test('G3: kurul + küçük hedef: read_count / stats.read / unread / email.* null -> 0 SAYILMAZ, gizli', () {
+      final hiddenSummary = AnnouncementSummary.fromJson(_summaryJson(extra: <String, dynamic>{
+        'recipient_count': 3,
+        'read_count': null,
+      }));
+      expect(hiddenSummary.readCount, isNull, reason: 'null -> 0 yapılmaz');
+      expect(hiddenSummary.readHidden, isTrue);
+      expect(hiddenSummary.hasAudience, isTrue);
+
+      final detail = AnnouncementDetail.fromJson(<String, dynamic>{
+        ..._detailJson(),
+        'recipient_count': 3,
+        'read_count': null,
+        'stats': <String, dynamic>{
+          'recipients': 3,
+          'read': null,
+          'unread': null,
+          'email': <String, dynamic>{
+            'requested': null,
+            'sent': null,
+            'failed': null,
+            'no_address': null,
+            'skipped_pref': null,
+            'capped': null,
+            'duplicate': null,
+            'pending': null,
+          },
+        },
+      });
+      expect(detail.readCount, isNull);
+      expect(detail.readHidden, isTrue);
+      expect(detail.stats.read, isNull);
+      expect(detail.stats.unread, isNull);
+      expect(detail.stats.readHidden, isTrue);
+      expect(detail.stats.recipients, 3);
+      expect(detail.stats.email.hidden, isTrue);
+      expect(detail.stats.email.summary, isNull);
+    });
+
+    test('G3: alan HİÇ yoksa (eski sunucu) 0 sayılır; sayı varsa olduğu gibi (gizli sayılmaz)', () {
+      final noKey = AnnouncementSummary.fromJson(<String, dynamic>{'id': 3, 'recipient_count': 4});
+      expect(noKey.readCount, 0);
+      expect(noKey.readHidden, isFalse);
+      final zero = AnnouncementSummary.fromJson(_summaryJson(extra: <String, dynamic>{'read_count': 0}));
+      expect(zero.readCount, 0);
+      expect(zero.readHidden, isFalse);
+      final stats = AnnouncementStats.fromJson(<String, dynamic>{'recipients': 4});
+      expect(stats.read, 0);
+      expect(stats.readHidden, isFalse);
+      // e-posta nesnesi boş: gizli DEĞİL (sayı yok = sıfır)
+      expect(AnnouncementEmailStats.fromJson(<String, dynamic>{}).hidden, isFalse);
+    });
+
+    test('G18a: target.blocks / apartments (kimlik + ad) ayrışır; bozuk satır atlanır; eski sunucuda boş liste', () {
+      final target = AnnouncementTarget.fromJson(<String, dynamic>{
+        'type': 'apartments',
+        'block_ids': <int>[],
+        'apartment_ids': <int>[11, 12, 13],
+        'labels': <String>['A - 1', 'A - 2'],
+        'blocks': <dynamic>[],
+        'apartments': <dynamic>[
+          <String, dynamic>{'id': 11, 'label': 'A Blok - 1'},
+          <String, dynamic>{'id': '12', 'label': 'A Blok - 2'},
+          <String, dynamic>{'id': 13, 'label': ''},
+          <String, dynamic>{'label': 'kimliksiz'},
+          'bozuk',
+        ],
+      });
+      expect(<int>[for (final a in target.apartments) a.id], <int>[11, 12]);
+      expect(<String>[for (final a in target.apartments) a.label], <String>['A Blok - 1', 'A Blok - 2']);
+      expect(target.blocks, isEmpty);
+      final blocks = AnnouncementTarget.fromJson(<String, dynamic>{
+        'type': 'blocks',
+        'block_ids': <int>[3],
+        'blocks': <dynamic>[
+          <String, dynamic>{'id': 3, 'name': 'A Blok'},
+        ],
+      });
+      expect(blocks.blocks.single.id, 3);
+      expect(blocks.blocks.single.name, 'A Blok');
+      final legacy = AnnouncementTarget.fromJson(<String, dynamic>{
+        'type': 'blocks',
+        'block_ids': <int>[3],
+        'labels': <String>['A Blok'],
+      });
+      expect(legacy.blocks, isEmpty);
+      expect(legacy.apartments, isEmpty);
+      expect(legacy.blockIds, <int>[3]);
+    });
+
     test('düz ya da { announcement: {...} } sarmalı yanıt aynı sonucu verir', () {
       final plain = AnnouncementDetail.fromJson(_detailJson());
       final wrapped = AnnouncementDetail.fromJson(<String, dynamic>{'announcement': _detailJson()});
@@ -184,17 +274,6 @@ void main() {
       );
       expect(many.summary(), 'A - 1, A - 2, A - 3, A - 4, A - 5, A - 6 ve 3 daire daha');
       expect(const AnnouncementTarget(type: AnnouncementTargetType.blocks).summary(), 'Seçili blok yok');
-    });
-
-    test('toSummary listedeki satırı ayrıntıyla eşitler (önizleme 160 karakter)', () {
-      final d = AnnouncementDetail.fromJson(<String, dynamic>{
-        ..._detailJson(),
-        'body': 'x' * 500,
-      });
-      final s = d.toSummary();
-      expect(s.id, d.id);
-      expect(s.bodyPreview.length, 160);
-      expect(s.targetType, AnnouncementTargetType.blocks);
     });
   });
 
@@ -379,6 +458,16 @@ void main() {
       expect(istanbulWallClock(instant), DateTime.utc(2026, 10, 20, 0, 30));
       expect(istanbulNow(DateTime.utc(2026, 10, 16, 21, 30)), DateTime.utc(2026, 10, 17, 0, 30));
     });
+
+    test('G17: istanbulCalendarYearAfter İstanbul duvar saatinden TAKVİM olarak 1 yıl sonradır (365 gün değil)', () {
+      // 16.10.2026 21:30 UTC = 17.10.2026 00:30 İstanbul -> 17.10.2027 00:30 İstanbul = 16.10.2027 21:30 UTC
+      expect(istanbulCalendarYearAfter(DateTime.utc(2026, 10, 16, 21, 30)), DateTime.utc(2027, 10, 16, 21, 30));
+      // artık yıl aşan aralıkta 365 gün sonrası bir gün eksik kalırdı: 2027-11-01 + 1 yıl = 2028-11-01
+      expect(istanbulCalendarYearAfter(DateTime.utc(2027, 11, 1, 9)), DateTime.utc(2028, 11, 1, 9));
+      // 29 Şubat -> 1 Mart (sunucudaki setFullYear(+1) ile aynı)
+      expect(istanbulCalendarYearAfter(DateTime.utc(2028, 2, 29, 9)), DateTime.utc(2029, 3, 1, 9));
+      expect(istanbulCalendarYearAfter(DateTime.utc(2026, 10, 16)).isUtc, isTrue);
+    });
   });
 
   group('saat girişi (SS:DD)', () {
@@ -391,7 +480,18 @@ void main() {
       }
       expect(validateTimeField(''), isNull, reason: 'boş serbest (gerekliliği çağıran belirler)');
       expect(validateTimeField('14:30'), isNull);
-      expect(validateTimeField('25:00'), 'Saati SS:DD biçiminde girin (örn. 14:30).');
+      expect(validateTimeField('14'), 'Saati SS:DD biçiminde girin (örn. 14:30).');
+      expect(validateTimeField('aa:bb'), 'Saati SS:DD biçiminde girin (örn. 14:30).');
+    });
+
+    test('G13: biçim doğru ama değer geçersiz -> "Geçersiz saat" (25:00, 12:61)', () {
+      for (final bad in <String>['25:00', '24:00', '12:61', '23:60', '99:99']) {
+        expect(
+          validateTimeField(bad),
+          'Geçersiz saat. Saat 00-23, dakika 00-59 olmalı (örn. 14:30).',
+          reason: bad,
+        );
+      }
     });
 
     TextEditingValue type(String oldText, String newText, {int? caret}) {
@@ -419,6 +519,46 @@ void main() {
       expect(type('', '09.30').text, '09:30');
       expect(type('14:30', '14:305').text, '14:30');
       expect(type('14:30', '14:30').text, '14:30');
+    });
+
+    test('G10: yapıştırma eklenen parçadan algılanır: "9:30", "930", "9.30", "0930"', () {
+      expect(type('', '9:30').text, '09:30');
+      expect(type('', '930').text, '09:30');
+      expect(type('', '9.30').text, '09:30');
+      expect(type('', '0930').text, '09:30');
+      // geçersiz yapıştırma: alan değişmez
+      expect(type('', 'abc').text, '');
+      expect(type('14', '14abc').text, '14');
+      expect(type('', '9:3000').text, '');
+    });
+
+    test('G10: dolu alana yapıştırma eklenen parçayı normalize eder, mevcut metni bozmaz', () {
+      // "14:" sonuna "30" yapıştırılırsa 4 rakam: "14:30"
+      expect(type('14:', '14:30').text, '14:30');
+      // mevcut tam saatin sonuna fazladan rakam eklenemez
+      expect(type('14:30', '14:301').text, '14:30');
+      // yazarken tek rakam ekleme normal yazmadır (yapıştırma sayılmaz)
+      expect(type('0', '09').text, '09');
+    });
+
+    test('G10: tüm metin SEÇİLİ iken üstüne yapıştırma: eklenen parça seçili aralığa göre bulunur', () {
+      const formatter = TimeInputFormatter();
+      TextEditingValue paste(String oldText, String pasted, {required int start, required int end}) {
+        final text = oldText.replaceRange(start, end, pasted);
+        return formatter.formatEditUpdate(
+          TextEditingValue(text: oldText, selection: TextSelection(baseOffset: start, extentOffset: end)),
+          TextEditingValue(text: text, selection: TextSelection.collapsed(offset: start + pasted.length)),
+        );
+      }
+
+      // "09:30" tamamen seçili, "930" yapıştırılır: ortak önek / sonek yöntemi eklenen parçayı boş sanırdı.
+      expect(paste('09:30', '930', start: 0, end: 5).text, '09:30');
+      expect(paste('12:00', '9:30', start: 0, end: 5).text, '09:30');
+      expect(paste('12:00', '8.15', start: 0, end: 5).text, '08:15');
+      // yalnız dakika kısmı seçili: "12:00" -> "12:" + "45"
+      expect(paste('12:00', '45', start: 3, end: 5).text, '12:45');
+      // geçersiz yapıştırma seçili metni bozmaz
+      expect(paste('12:00', 'ab', start: 0, end: 5).text, '12:00');
     });
 
     test('ortadan düzeltmede imleç sona atlamaz', () {

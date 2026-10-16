@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
@@ -524,4 +525,89 @@ void main() {
       semantics.dispose();
     });
   });
+
+  group('inceleme düzeltmeleri: bekleyen yenileme, anlam ağacı, çift dokunuş, uzun başlık', () {
+    const longTitle =
+        'Sitemizin tüm bloklarında yapılacak yıllık periyodik asansör bakım ve kontrol çalışmaları hakkında önemli bilgilendirme';
+
+    testWidgets('G7: liste YÜKLENİRKEN özet imzası değişirse yeniden yükleme ertelenir, yükleme bitince BİR kez yapılır', (t) async {
+      final auth = _auth();
+      final notifier = _notifier(auth);
+      await notifier.refresh();
+      final gate = Completer<void>();
+      auth.inboxGates.add(gate);
+      await _pump(t, auth, notifier: notifier);
+      expect(find.byType(AnnouncementInboxCard), findsNothing, reason: 'ilk yükleme sürüyor');
+
+      // Yükleme sürerken yeni duyuru yayınlanır ve yoklama bunu bildirir.
+      auth.inboxRows.add(inboxRow(40, title: 'Yeni toplantı'));
+      await notifier.refresh();
+      await settleFor(t);
+      final callsWhileLoading = auth.inboxCalls.length;
+
+      gate.complete();
+      await settleFor(t);
+      await settleFor(t);
+      expect(find.text('Yeni toplantı'), findsOneWidget, reason: 'bekleyen yenileme yükleme bitince çalıştı');
+      expect(auth.inboxCalls.length, greaterThan(callsWhileLoading));
+      // Bir kez: ek bir yenileme döngüsü yok.
+      final settled = auth.inboxCalls.length;
+      await settleFor(t);
+      await settleFor(t);
+      expect(auth.inboxCalls.length, settled);
+      notifier.dispose();
+    });
+
+    testWidgets('G12: kart ekran okuyucuya TEK kez okunur (etiket + içerik çift okunmaz)', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = _auth();
+      await _pump(t, auth);
+      final labels = semanticLabels(t);
+      for (final title in const ['Su kesintisi', 'Asansör bakımı', 'Aidat hatırlatması']) {
+        expect(labels.where((l) => l.contains(title)), hasLength(1), reason: title);
+      }
+      final urgent = labels.singleWhere((l) => l.contains('Su kesintisi'));
+      expect(urgent, contains('Okunmamış'));
+      expect(urgent, contains('Acil'));
+      expect(t.getSemantics(_card('Su kesintisi')).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('G15: karta çift dokunuş iki okuma penceresi açmaz; okundu isteği tek gider', (t) async {
+      final auth = _auth();
+      await _pump(t, auth);
+      final onTap = t.widget<AnnouncementInboxCard>(_card('Su kesintisi')).onTap;
+      onTap();
+      onTap();
+      await settleFor(t);
+      expect(find.byType(AnnouncementReadDialog), findsOneWidget);
+      expect(auth.readCalls, <int>[12]);
+      await tapText(t, 'Kapat');
+      expect(find.byType(AnnouncementReadDialog), findsNothing);
+    });
+
+    testWidgets('G11: uzun başlık okuma penceresinde gövdede SEÇİLEBİLİR tam metin olarak da yer alır (2,0 yazıda taşmaz)', (t) async {
+      final auth = _auth(rows: <Map<String, dynamic>>[inboxRow(30, title: longTitle)]);
+      await _pump(t, auth, width: 320, height: 640, scale: 2.0);
+      await _open(t, longTitle);
+      final full = find.byKey(const ValueKey<String>('announcement_full_title'));
+      expect(full, findsOneWidget);
+      expect(t.widget<SelectableText>(full).data, longTitle);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('G11: kısa başlıkta tekrar eden başlık bloğu yok; kartta başlık en çok 3 satır, tam metin etiketinde', (t) async {
+      final semantics = t.ensureSemantics();
+      final auth = _auth(rows: <Map<String, dynamic>>[inboxRow(30, title: longTitle), inboxRow(31, title: 'Kısa başlık')]);
+      await _pump(t, auth, width: 320, height: 640, scale: 2.0);
+      final text = t.widget<Text>(find.descendant(of: _card(longTitle), matching: find.text(longTitle)));
+      expect(text.maxLines, 3);
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(semanticLabels(t).where((l) => l.contains(longTitle)), hasLength(1));
+      await _open(t, 'Kısa başlık');
+      expect(find.byKey(const ValueKey<String>('announcement_full_title')), findsNothing);
+      semantics.dispose();
+    });
+  });
+
 }

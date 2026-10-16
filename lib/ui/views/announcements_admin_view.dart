@@ -153,6 +153,14 @@ class AnnouncementsAdminViewState extends State<AnnouncementsAdminView> {
     _listKey = GlobalKey<AnnouncementsAdminListState>();
   }
 
+  /// Seçicide yalnız site adı görünür (site kodu teknik bir ifadedir). Aynı ad birden çok sitede varsa
+  /// ayırt etmek için sıra numarası eklenir ("Gül Sitesi (2)").
+  String _siteLabel(PeopleSite site) {
+    final same = _sites.where((s) => s.label == site.label).toList();
+    if (same.length < 2) return site.label;
+    return '${site.label} (${same.indexOf(site) + 1})';
+  }
+
   void _selectSite(int code) {
     if (code == _siteCode) return;
     setState(() => _resetList(code));
@@ -210,7 +218,7 @@ class AnnouncementsAdminViewState extends State<AnnouncementsAdminView> {
                   DropdownMenuItem<int>(
                     value: s.code,
                     child: Text(
-                      '${s.label} (${s.code})',
+                      _siteLabel(s),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -33,6 +33,9 @@ abstract final class AppSnack {
   /// - [action]: verilirse etiket rengi (belirtilmemişse) tonlu dolguda okunur beyaz olur.
   /// - [replace]: false (varsayılan) iken mevcut kuyruklama davranışı değişmez (mesaj sıraya girer);
   ///   true iken ekrandaki SnackBar HEMEN kaldırılır, sıradakiler atılır ve bu mesaj hemen gösterilir.
+  /// - [persist]: null (varsayılan) iken Flutter'ın kuralı geçerlidir: [action] varsa SnackBar süre dolsa da
+  ///   KALIR (kullanıcı dokunana dek) ve sıradaki mesajları engeller. Süresi dolunca kapanması gereken
+  ///   eylemli SnackBar için `false` verin.
   /// - [maxLines]: çok uzun metni sınırlar (varsayılan 4); ekran okuyucu her zaman TAM metni okur.
   ///   Uzun bir cümleyi (örn. 140 karakter) büyük yazıda kısaltmak istemeyen çağıran artırabilir.
   ///
@@ -48,6 +51,7 @@ abstract final class AppSnack {
     Duration? duration,
     SnackBarAction? action,
     bool replace = false,
+    bool? persist,
     int maxLines = 4,
   }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -58,6 +62,7 @@ abstract final class AppSnack {
       kind: kind,
       duration: duration,
       action: action,
+      persist: persist,
       maxLines: maxLines,
     );
     if (replace) {
@@ -73,6 +78,7 @@ abstract final class AppSnack {
     required AppSnackKind kind,
     required Duration? duration,
     required SnackBarAction? action,
+    required bool? persist,
     required int maxLines,
   }) {
     final (Color? background, IconData icon) = switch (kind) {
@@ -90,6 +96,7 @@ abstract final class AppSnack {
       behavior: SnackBarBehavior.floating,
       backgroundColor: background,
       duration: duration ?? defaultDuration,
+      persist: persist,
       action: action == null || background == null
           ? action
           : _readableAction(action),

@@ -56,6 +56,13 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
   final RetryLock _retry = RetryLock();
   String? _actionError;
 
+  // Duyuru penceresi çift dokunuşta iki kez açılmasın.
+  bool _opening = false;
+
+  // Liste yüklenirken "en son duyuru" imzası değişirse yeniden yükleme ertelenir ve yükleme bitince BİR kez
+  // daha çekilir (aksi halde yeni duyuru sonraki özet değişimine dek listeye girmezdi).
+  bool _reloadPending = false;
+
   late final CursorLoader<ResidentAnnouncement> _loader = CursorLoader<ResidentAnnouncement>(
     fetch: (before) async {
       final page = await widget.authService.listMyAnnouncements(
@@ -67,7 +74,9 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
     },
     keyOf: (a) => a.id,
     notify: () {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      _flushPendingReload();
     },
     isAlive: () => mounted,
     errorFallback: 'Duyurular yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
@@ -121,10 +130,22 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
         _knownLatest = latest;
       } else if (latest != _knownLatest) {
         _knownLatest = latest;
-        if (!_loader.loading) unawaited(_loader.reload());
+        if (_loader.loading) {
+          _reloadPending = true;
+        } else {
+          unawaited(_loader.reload());
+        }
       }
     }
     if (mounted) setState(() {});
+  }
+
+  /// Bekleyen yenileme varsa ve yükleme bittiyse bir kez daha çeker.
+  void _flushPendingReload() {
+    if (_reloadPending && !_loader.loading) {
+      _reloadPending = false;
+      unawaited(_loader.reload());
+    }
   }
 
   /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi).
@@ -141,7 +162,17 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
     unawaited(_loader.reload());
   }
 
-  Future<void> _open(ResidentAnnouncement announcement) {
+  Future<void> _open(ResidentAnnouncement announcement) async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      await _showRead(announcement);
+    } finally {
+      _opening = false;
+    }
+  }
+
+  Future<void> _showRead(ResidentAnnouncement announcement) {
     return AnnouncementReadDialog.show(
       context,
       authService: widget.authService,

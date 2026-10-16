@@ -175,7 +175,10 @@ class AnnouncementSummary {
   final DateTime? editedAt;
   final bool sendEmail;
   final int recipientCount;
-  final int readCount;
+
+  /// Okuyan sayısı. Kurul üyesine KÜÇÜK HEDEFTE (1-4 alıcı) sunucu `null` döndürür (tek bir daireyi ele
+  /// vermesin): `null` "gizli" demektir, ASLA 0 sayılmaz.
+  final int? readCount;
   final DateTime? createdAt;
 
   /// Kurul üyesine arayüzde gösterilmez ([AnnouncementSummary] sunucudan gelse bile).
@@ -186,6 +189,9 @@ class AnnouncementSummary {
   /// Okunma sayıları anlamlı mı (yalnız yayınlanmış ya da geri çekilmiş duyuruda alıcı vardır).
   bool get hasAudience =>
       status == AnnouncementStatus.published || status == AnnouncementStatus.withdrawn;
+
+  /// Alıcısı olan duyuruda okunma sayısı sunucu tarafından gizlendi mi (kurul + küçük hedef)?
+  bool get readHidden => hasAudience && readCount == null;
 
   factory AnnouncementSummary.fromJson(Map<String, dynamic> raw) {
     final json = _unwrap(raw);
@@ -201,7 +207,8 @@ class AnnouncementSummary {
       editedAt: announcementInstant(json['edited_at']),
       sendEmail: _flag(json['send_email']),
       recipientCount: crmInt(json['recipient_count']),
-      readCount: crmInt(json['read_count']),
+      // Anahtar var ve null: gizli (kurul + küçük hedef). Anahtar hiç yoksa (eski sunucu): 0.
+      readCount: json.containsKey('read_count') ? crmIntOrNull(json['read_count']) : 0,
       createdAt: announcementInstant(json['created_at']),
       createdByName: crmText(json['created_by_name']),
     );
@@ -236,7 +243,27 @@ class AnnouncementPage {
   }
 }
 
-/// Duyurunun hedefi (`target`). [labels]: blok adları ya da daire etiketleri (sunucu doldurur).
+/// Hedefteki bir blok (kimlik + ad). Sunucunun EKLEMELİ `target.blocks` listesinden gelir.
+@immutable
+class TargetBlock {
+  const TargetBlock({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
+
+/// Hedefteki bir daire (kimlik + etiket). Sunucunun EKLEMELİ `target.apartments` listesinden gelir.
+@immutable
+class TargetApartment {
+  const TargetApartment({required this.id, required this.label});
+
+  final int id;
+  final String label;
+}
+
+/// Duyurunun hedefi (`target`). [labels]: blok adları ya da daire etiketleri (sunucu doldurur; SIRASI
+/// kimlik sırasıyla aynı DEĞİLDİR, yalnız görüntü içindir). [blocks] / [apartments]: kimlikle eşleşen
+/// EKLEMELİ listeler (eski sunucuda boş): form kayıtlı hedefi tek tek çıkarılabilir çip olarak gösterir.
 @immutable
 class AnnouncementTarget {
   const AnnouncementTarget({
@@ -244,20 +271,44 @@ class AnnouncementTarget {
     this.blockIds = const <int>[],
     this.apartmentIds = const <int>[],
     this.labels = const <String>[],
+    this.blocks = const <TargetBlock>[],
+    this.apartments = const <TargetApartment>[],
   });
 
   final AnnouncementTargetType type;
   final List<int> blockIds;
   final List<int> apartmentIds;
   final List<String> labels;
+  final List<TargetBlock> blocks;
+  final List<TargetApartment> apartments;
 
   factory AnnouncementTarget.fromJson(Object? raw) {
     if (raw is! Map) return const AnnouncementTarget();
+    final blocks = <TargetBlock>[];
+    final rawBlocks = raw['blocks'];
+    if (rawBlocks is List) {
+      for (final item in rawBlocks.whereType<Map>()) {
+        final id = crmIntOrNull(item['id']);
+        final name = crmText(item['name']);
+        if (id != null && name != null) blocks.add(TargetBlock(id: id, name: name));
+      }
+    }
+    final apartments = <TargetApartment>[];
+    final rawApartments = raw['apartments'];
+    if (rawApartments is List) {
+      for (final item in rawApartments.whereType<Map>()) {
+        final id = crmIntOrNull(item['id']);
+        final label = crmText(item['label']);
+        if (id != null && label != null) apartments.add(TargetApartment(id: id, label: label));
+      }
+    }
     return AnnouncementTarget(
       type: AnnouncementTargetType.fromApi(raw['type']),
       blockIds: _intList(raw['block_ids']),
       apartmentIds: _intList(raw['apartment_ids']),
       labels: _stringList(raw['labels']),
+      blocks: List<TargetBlock>.unmodifiable(blocks),
+      apartments: List<TargetApartment>.unmodifiable(apartments),
     );
   }
 
@@ -304,7 +355,11 @@ class AnnouncementEmailStats {
     this.capped = 0,
     this.duplicate = 0,
     this.pending = 0,
+    this.hidden = false,
   });
+
+  /// Sunucu sayıları gizledi mi (kurul + küçük hedef: tüm alanlar `null`)? Gizliyken özet gösterilmez.
+  final bool hidden;
 
   /// Duyuruda "e-posta da gönder" seçilmiş mi?
   final bool requested;
@@ -318,6 +373,9 @@ class AnnouncementEmailStats {
 
   factory AnnouncementEmailStats.fromJson(Object? raw) {
     if (raw is! Map) return const AnnouncementEmailStats();
+    if (raw.isNotEmpty && raw.values.every((value) => value == null)) {
+      return const AnnouncementEmailStats(hidden: true);
+    }
     final requested = raw['requested'];
     final sent = crmInt(raw['sent']);
     final failed = crmInt(raw['failed']);
@@ -343,6 +401,7 @@ class AnnouncementEmailStats {
 
   /// Sayısı sıfırdan büyük durumların okunur özeti: "32 gönderildi, 4 e-postası yok". Hiç yoksa null.
   String? get summary {
+    if (hidden) return null;
     final parts = <String>[
       if (sent > 0) '$sent gönderildi',
       if (pending > 0) '$pending sırada',
@@ -356,7 +415,8 @@ class AnnouncementEmailStats {
   }
 }
 
-/// Okunma ve e-posta istatistiği (`stats`).
+/// Okunma ve e-posta istatistiği (`stats`). [read] / [unread] `null`: sunucu gizledi (kurul + küçük hedef,
+/// 1-4 alıcı); ASLA 0 sayılmaz.
 @immutable
 class AnnouncementStats {
   const AnnouncementStats({
@@ -367,20 +427,27 @@ class AnnouncementStats {
   });
 
   final int recipients;
-  final int read;
-  final int unread;
+  final int? read;
+  final int? unread;
   final AnnouncementEmailStats email;
+
+  /// Okunma sayıları gizli mi?
+  bool get readHidden => read == null;
 
   factory AnnouncementStats.fromJson(Object? raw) {
     if (raw is! Map) return const AnnouncementStats();
     final recipients = crmInt(raw['recipients']);
-    final read = crmInt(raw['read']);
+    final int? read = raw.containsKey('read') ? crmIntOrNull(raw['read']) : 0;
+    final int? unread;
+    if (raw.containsKey('unread')) {
+      unread = crmIntOrNull(raw['unread']);
+    } else {
+      unread = read == null ? null : (recipients - read).clamp(0, recipients).toInt();
+    }
     return AnnouncementStats(
       recipients: recipients,
       read: read,
-      unread: raw['unread'] == null
-          ? (recipients - read).clamp(0, recipients).toInt()
-          : crmInt(raw['unread']),
+      unread: unread,
       email: AnnouncementEmailStats.fromJson(raw['email']),
     );
   }
@@ -436,7 +503,7 @@ class AnnouncementDetail extends AnnouncementSummary {
       editedAt: base.editedAt,
       sendEmail: json['send_email'] == null ? stats.email.requested : base.sendEmail,
       recipientCount: json['recipient_count'] == null ? stats.recipients : base.recipientCount,
-      readCount: json['read_count'] == null ? stats.read : base.readCount,
+      readCount: json.containsKey('read_count') ? base.readCount : stats.read,
       createdAt: base.createdAt,
       createdByName: base.createdByName,
       body: body,
@@ -445,24 +512,6 @@ class AnnouncementDetail extends AnnouncementSummary {
       editCount: crmInt(json['edit_count']),
     );
   }
-
-  /// Listedeki satırı ayrıntıyla eşitler (liste yenilenene dek kart güncel görünür).
-  AnnouncementSummary toSummary() => AnnouncementSummary(
-    id: id,
-    title: title,
-    bodyPreview: body.length <= 160 ? body : body.substring(0, 160),
-    importance: importance,
-    status: status,
-    targetType: target.type,
-    publishAt: publishAt,
-    publishedAt: publishedAt,
-    editedAt: editedAt,
-    sendEmail: sendEmail,
-    recipientCount: recipientCount,
-    readCount: readCount,
-    createdAt: createdAt,
-    createdByName: createdByName,
-  );
 }
 
 /// Alıcılar sekmesindeki satır (`GET .../:id/recipients` -> `items[]`). Yalnız yazma yetkisi olana verilir.

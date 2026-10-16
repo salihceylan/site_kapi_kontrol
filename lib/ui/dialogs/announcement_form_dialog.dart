@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/models/apartment_crm.dart' show ApartmentSummary;
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -11,6 +13,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
@@ -215,6 +218,13 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
   List<String> _keptApartmentLabels = const <String>[];
 
   bool _submitting = false;
+
+  // Seçici pencereleri çift dokunuşta iki kez açılmasın.
+  bool _picking = false;
+
+  // Yeni duyuru gönderimi sonucu BELİRSİZ kaldı (ağ zaman aşımı, 5xx, DUPLICATE_ANNOUNCEMENT): ilk istek
+  // yayınlamış olabilir; form kapanırken (Vazgeç dahil) çağıran listeyi tazelesin.
+  bool _needsRefreshOnClose = false;
   final RetryLock _retry = RetryLock();
   String? _error;
   String? _targetError;
@@ -233,11 +243,25 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
     final initial = widget.announcement;
     if (initial == null) return;
     if (initial.target.type == AnnouncementTargetType.blocks) {
-      _keptBlockIds = initial.target.blockIds;
-      _keptBlockLabels = initial.target.labels;
+      // Sunucu `target.blocks` ([{id, name}]) gönderiyorsa kayıtlı bloklar tek tek çıkarılabilir çip olarak
+      // seçili gelir; eşleşmeyen kimlikler (silinmiş blok) ve eski sunucu için kayıtlı seçim kalır.
+      final known = <int>{for (final b in initial.target.blocks) b.id};
+      _blocks = <_Picked>[for (final b in initial.target.blocks) (id: b.id, label: b.name)];
+      _keptBlockIds = <int>[
+        for (final id in initial.target.blockIds)
+          if (!known.contains(id)) id,
+      ];
+      _keptBlockLabels = known.isEmpty ? initial.target.labels : const <String>[];
     } else if (initial.target.type == AnnouncementTargetType.apartments) {
-      _keptApartmentIds = initial.target.apartmentIds;
-      _keptApartmentLabels = initial.target.labels;
+      final known = <int>{for (final a in initial.target.apartments) a.id};
+      _apartments = <_Picked>[
+        for (final a in initial.target.apartments) (id: a.id, label: a.label),
+      ];
+      _keptApartmentIds = <int>[
+        for (final id in initial.target.apartmentIds)
+          if (!known.contains(id)) id,
+      ];
+      _keptApartmentLabels = known.isEmpty ? initial.target.labels : const <String>[];
     }
     if (initial.status == AnnouncementStatus.scheduled && initial.publishAt != null) {
       _mode = AnnouncementPublishMode.schedule;
@@ -297,7 +321,35 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
   // --- Hedef seçimi ----------------------------------------------------------------------------
 
   Future<void> _pickBlock() async {
-    final picked = await CrmPickerDialog.show<SiteBlockRecord>(
+    if (_picking) return;
+    _picking = true;
+    SiteBlockRecord? result;
+    try {
+      result = await _showBlockPicker();
+    } finally {
+      _picking = false;
+    }
+    final picked = result;
+    if (picked == null || !mounted) return;
+    if (_blockIds.contains(picked.id)) return;
+    if (_blockIds.length >= AnnouncementFormDialog.maxTargetItems) {
+      setState(() => _targetError = _tooMany);
+      return;
+    }
+    setState(() {
+      _targetError = null;
+      _blocks = <_Picked>[
+        ..._blocks,
+        (
+          id: picked.id,
+          label: picked.blockName.trim().isEmpty ? 'Adsız blok' : picked.blockName.trim(),
+        ),
+      ];
+    });
+  }
+
+  Future<SiteBlockRecord?> _showBlockPicker() {
+    return CrmPickerDialog.show<SiteBlockRecord>(
       context,
       CrmPickerDialog<SiteBlockRecord>(
         title: 'Blok Ekle',
@@ -321,26 +373,18 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
         titleOf: (b) => b.blockName.trim().isEmpty ? 'Adsız blok' : b.blockName.trim(),
       ),
     );
-    if (picked == null || !mounted) return;
-    if (_blockIds.contains(picked.id)) return;
-    if (_blockIds.length >= AnnouncementFormDialog.maxTargetItems) {
-      setState(() => _targetError = _tooMany);
-      return;
-    }
-    setState(() {
-      _targetError = null;
-      _blocks = <_Picked>[
-        ..._blocks,
-        (
-          id: picked.id,
-          label: picked.blockName.trim().isEmpty ? 'Adsız blok' : picked.blockName.trim(),
-        ),
-      ];
-    });
   }
 
   Future<void> _pickApartment() async {
-    final picked = await showApartmentPicker(context, widget.scope, title: 'Daire Ekle');
+    if (_picking) return;
+    _picking = true;
+    ApartmentSummary? result;
+    try {
+      result = await showApartmentPicker(context, widget.scope, title: 'Daire Ekle');
+    } finally {
+      _picking = false;
+    }
+    final picked = result;
     if (picked == null || !mounted) return;
     if (_apartmentIds.contains(picked.id)) return;
     if (_apartmentIds.length >= AnnouncementFormDialog.maxTargetItems) {
@@ -393,7 +437,9 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
     if (!instant.isAfter(now.add(const Duration(minutes: 1)))) {
       return 'Yayın zamanı şu andan en az 1 dakika sonra olmalı (İstanbul saati).';
     }
-    if (instant.isAfter(now.add(const Duration(days: 365)))) {
+    // Üst sınır TAKVİM olarak 1 yıl (İstanbul): sunucudaki `setFullYear(+1)` ile aynı (29 Şubat'lı aralıkta
+    // 366 gün olabilir).
+    if (instant.isAfter(istanbulCalendarYearAfter(now))) {
       return 'Yayın zamanı en çok 1 yıl sonrası olabilir.';
     }
     return null;
@@ -419,7 +465,11 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
 
   Future<void> _submit() async {
     if (_submitting || _retry.locked) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!validateForm(_formKey)) {
+      // Özet bildirimi (canlı bölge) + ilk geçersiz alana kaydırma / odak (validateForm).
+      setState(() => _error = kFixFieldsMessage);
+      return;
+    }
     final locked = _locked;
     DateTime? instant;
     if (!locked) {
@@ -537,6 +587,7 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
         result = current;
       }
       if (!mounted) return;
+      _needsRefreshOnClose = false; // sonuçla kapanır: çağıran zaten günceller
       popIfCurrent(
         context,
         AnnouncementFormResult(detail: result, message: _messageFor(result, wasPublished: locked)),
@@ -545,6 +596,11 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
       if (e is ApiException &&
           (e.code == 'INVALID_STATE' || e.code == 'ANNOUNCEMENT_NOT_FOUND')) {
         // Duyuru başka yerden değişmiş / silinmiş: çağıran ayrıntı ve listeyi tazelesin.
+        widget.onRefreshNeeded?.call();
+      } else if (initial == null && _outcomeUncertain(e)) {
+        // Yeni duyuru: istek sunucuya ulaşmış olabilir (zaman aşımı / 5xx / aynı içerik yinelendi). Liste
+        // şimdi ve form kapanırken tazelenir; kullanıcı duyuruyu listede görebilir.
+        _needsRefreshOnClose = true;
         widget.onRefreshNeeded?.call();
       }
       if (!mounted) return;
@@ -561,6 +617,22 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
         _submitting = false;
       });
     }
+  }
+
+  /// İstek sunucuya ulaşmış olabilir mi (sonuç belirsiz)? Ağ/zaman aşımı (durum kodu yok), 5xx ya da aynı
+  /// içeriğin yinelenmesi (`DUPLICATE_ANNOUNCEMENT`: ilk istek yayınlamış olabilir).
+  static bool _outcomeUncertain(Object error) {
+    if (error is! ApiException) return true;
+    return error.statusCode == null ||
+        error.isServerError ||
+        error.code == 'DUPLICATE_ANNOUNCEMENT';
+  }
+
+  /// Form sonuçsuz kapanırken (Vazgeç / geri tuşu) belirsiz gönderim varsa çağıranı bir kez haberdar eder.
+  void _notifyRefreshOnClose() {
+    if (!_needsRefreshOnClose) return;
+    _needsRefreshOnClose = false;
+    widget.onRefreshNeeded?.call();
   }
 
   /// Düzenlemede yalnız değişen alanlar. Yayınlanmış duyuruda YALNIZ başlık / metin.
@@ -629,6 +701,9 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
     return PopScope(
       // Gönderim sürerken geri tuşu pencereyi kapatmaz (işlem yarıda kalmış gibi görünmesin).
       canPop: !_submitting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _notifyRefreshOnClose();
+      },
       child: AppDialog(
         title: _editing ? 'Duyuruyu Düzenle' : 'Yeni Duyuru',
         subtitle: widget.scope.siteName.isEmpty ? null : widget.scope.siteName,
@@ -657,6 +732,12 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
                 enabled: !_submitting,
                 textCapitalization: TextCapitalization.sentences,
                 maxLength: AnnouncementFormDialog.maxTitleLength,
+                // Sayaç ve doğrulama AYNI birimi (kod noktası; sunucu da öyle sayar) kullanır; sınırı aşan
+                // giriş (yapıştırma) sessizce kırpılmaz: sayaç kırmızıya döner, doğrulayıcı hata verir.
+                maxLengthEnforcement: MaxLengthEnforcement.none,
+                buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
+                    _counter(context, _title.text.runes.length, AnnouncementFormDialog.maxTitleLength),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 decoration: const InputDecoration(
                   labelText: 'Başlık',
                   prefixIcon: Icon(Icons.title_rounded),
@@ -678,6 +759,10 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
                 minLines: 4,
                 maxLines: 10,
                 maxLength: AnnouncementFormDialog.maxBodyLength,
+                maxLengthEnforcement: MaxLengthEnforcement.none,
+                buildCounter: (context, {required currentLength, required isFocused, maxLength}) =>
+                    _counter(context, _body.text.runes.length, AnnouncementFormDialog.maxBodyLength),
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
@@ -714,6 +799,27 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
     );
   }
 
+  /// "n/120" sayacı: sınır aşılınca kırmızı + kalın; ekran okuyucu aşımı söyler.
+  Widget _counter(BuildContext context, int length, int max) {
+    final p = context.palette;
+    final over = length > max;
+    return Semantics(
+      liveRegion: over,
+      label: over
+          ? '$length karakter; en çok $max olabilir, sınır aşıldı'
+          : '$length / $max karakter',
+      child: ExcludeSemantics(
+        child: Text(
+          '$length/$max',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: over ? AppTone.danger.ink(p) : p.textSecondary,
+            fontWeight: over ? FontWeight.w800 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _label(BuildContext context, String text) =>
       Text(text, style: Theme.of(context).textTheme.titleSmall);
 
@@ -741,9 +847,13 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
                 onSelected: _submitting
                     ? null
                     : (_) => setState(() {
+                        // E-posta yalnız önem Normal -> Acil DEĞİŞİNCE kendiliğinden açılır; seçili Acil çipine
+                        // yeniden dokunmak kullanıcının kapattığı tercihi ezmez.
+                        if (importance == AnnouncementImportance.urgent &&
+                            _importance != AnnouncementImportance.urgent) {
+                          _sendEmail = true;
+                        }
                         _importance = importance;
-                        // Acil duyuru varsayılan olarak e-postayla da gider.
-                        if (importance == AnnouncementImportance.urgent) _sendEmail = true;
                       }),
               ),
           ],
@@ -873,11 +983,10 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
           runSpacing: AppSpace.xs,
           children: [
             for (final pick in picks)
-              InputChip(
+              _PickedChip(
                 key: ValueKey<String>('announcement_pick_${pick.id}'),
-                label: Text(pick.label),
-                onDeleted: _submitting ? null : () => onRemove(pick.id),
-                deleteButtonTooltipMessage: '${pick.label} hedeften çıkar',
+                label: pick.label,
+                onRemove: _submitting ? null : () => onRemove(pick.id),
               ),
           ],
         ),
@@ -904,8 +1013,8 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
           title: const Text('E-posta da gönder'),
           subtitle: const Text(
             'Uygulama bildirimine ek olarak e-postası olan alıcılara da gönderilir. E-posta tercihini '
-            'kapatan sakine normal duyuru e-postayla gitmez; acil duyuru her zaman gider. Acil seçilince '
-            'bu seçenek kendiliğinden açılır.',
+            'kapatan sakine normal duyuru e-postayla gitmez; acil duyurunun e-postası bu tercihten '
+            'etkilenmez. Acil seçilince bu seçenek kendiliğinden açılır.',
           ),
           value: _sendEmail,
           onChanged: _submitting ? null : (value) => setState(() => _sendEmail = value),
@@ -1066,6 +1175,49 @@ class _ComingSoonOption extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Hedefte seçili blok / daire çipi: ✕ düğmesi en az 48x48 dp dokunma hedefidir (ipucu etiketli); uzun
+/// etiket sarar (kırpılmaz).
+class _PickedChip extends StatelessWidget {
+  const _PickedChip({super.key, required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: p.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(
+                start: AppSpace.md,
+                top: AppSpace.sm,
+                bottom: AppSpace.sm,
+              ),
+              child: Text(label, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+          ),
+          IconButton(
+            tooltip: '$label hedeften çıkar',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onRemove,
+          ),
+        ],
       ),
     );
   }

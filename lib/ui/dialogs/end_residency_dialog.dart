@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -68,7 +69,10 @@ class _EndResidencyDialogState extends State<EndResidencyDialog> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!validateForm(_formKey)) {
+      setState(() => _error = kFixFieldsMessage);
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;

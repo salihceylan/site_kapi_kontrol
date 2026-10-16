@@ -79,6 +79,9 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
   String? _actionError;
   String? _busyAction;
   bool _gone = false;
+
+  // Düzenleme formu çift dokunuşta iki kez açılmasın.
+  bool _opening = false;
   final RetryLock _retry = RetryLock();
   int _token = 0;
   int _tab = 0;
@@ -182,8 +185,20 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
 
   Future<void> _edit() async {
     final detail = _detail;
-    if (detail == null || _actionsLocked) return;
-    final result = await AnnouncementFormDialog.show(
+    if (detail == null || _actionsLocked || _opening) return;
+    _opening = true;
+    final AnnouncementFormResult? result;
+    try {
+      result = await _showForm(detail);
+    } finally {
+      _opening = false;
+    }
+    if (result == null || !mounted) return;
+    _apply(result.detail, result.message);
+  }
+
+  Future<AnnouncementFormResult?> _showForm(AnnouncementDetail detail) {
+    return AnnouncementFormDialog.show(
       context,
       scope: widget.scope,
       announcement: detail,
@@ -193,8 +208,6 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
         if (mounted) unawaited(_load());
       },
     );
-    if (result == null || !mounted) return;
-    _apply(result.detail, result.message);
   }
 
   Future<void> _publishNow() async {
@@ -398,8 +411,8 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
               key: ValueKey<String>('announcement_recipients_${detail.id}'),
               scope: widget.scope,
               announcementId: detail.id,
-              readCount: detail.stats.read,
-              unreadCount: detail.stats.unread,
+              readCount: detail.stats.read ?? 0,
+              unreadCount: detail.stats.unread ?? 0,
               sendEmail: detail.sendEmail,
             ),
           ),
@@ -414,6 +427,25 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Pencere başlığı en çok 3 satır gösterir; uzun başlık (120 karaktere kadar) 2,0 yazıda kesilebilir:
+        // tam başlık gövdenin başında da bulunur.
+        if (isLongTitle(detail.title)) ...[
+          DialogPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const DialogSectionTitle(icon: Icons.title_rounded, title: 'Başlık'),
+                const SizedBox(height: AppSpace.md),
+                SelectableText(
+                  detail.title.trim(),
+                  key: const ValueKey<String>('announcement_full_title'),
+                  style: th.titleSmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         DialogPanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -458,7 +490,7 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
           const SizedBox(height: AppSpace.md),
           _buildReadPanel(context, detail, th, secondary),
         ],
-        if (detail.sendEmail) ...[
+        if (detail.sendEmail && !detail.stats.email.hidden) ...[
           const SizedBox(height: AppSpace.md),
           DialogPanel(
             child: Column(
@@ -496,10 +528,41 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
     TextStyle? secondary,
   ) {
     final total = detail.stats.recipients > 0 ? detail.stats.recipients : detail.recipientCount;
-    final read = detail.stats.recipients > 0 ? detail.stats.read : detail.readCount;
-    final unread = detail.stats.recipients > 0
+    final int? read = detail.stats.recipients > 0 ? detail.stats.read : detail.readCount;
+    final int? unread = detail.stats.recipients > 0
         ? detail.stats.unread
-        : (total - read).clamp(0, total).toInt();
+        : (read == null ? null : (total - read).clamp(0, total).toInt());
+    // Kurul + küçük hedef (1-4 alıcı): sunucu sayıları gizler (tek bir daireyi ele vermesin). "0/3" YAZILMAZ.
+    if (read == null || unread == null) {
+      return DialogPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const DialogSectionTitle(
+              icon: Icons.mark_email_read_rounded,
+              title: 'Okunma',
+              tone: AppTone.success,
+            ),
+            const SizedBox(height: AppSpace.md),
+            Tooltip(
+              message: 'Gizli: küçük hedef',
+              child: Text(
+                'Okunma: —',
+                key: const ValueKey<String>('announcement_read_hidden'),
+                style: th.titleSmall,
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              'Gizli: küçük hedef. Beşten az alıcısı olan duyurularda okunma sayıları yönetim kuruluna gösterilmez.',
+              style: secondary,
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Text('Alıcı sayısı: $total', style: secondary),
+          ],
+        ),
+      );
+    }
     final ratio = total <= 0 ? 0.0 : (read / total).clamp(0.0, 1.0);
     return DialogPanel(
       child: Column(

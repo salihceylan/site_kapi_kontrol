@@ -416,6 +416,37 @@ void main() {
     );
 
     testWidgets(
+      'persist: eylemli SnackBar Flutter kuralıyla süre dolsa da KALIR; persist:false verilirse süre dolunca kapanır',
+      (t) async {
+        await pumpAt(t, const SizedBox(), scale: 1.0);
+        AppSnack.show(
+          _ctx(t),
+          'Kalıcı',
+          duration: const Duration(seconds: 2),
+          action: SnackBarAction(label: 'Aç', onPressed: () {}),
+        );
+        await _enter(t);
+        await t.pump(const Duration(seconds: 5));
+        await t.pump(const Duration(milliseconds: 600));
+        expect(find.text('Kalıcı'), findsOneWidget, reason: 'varsayılan: eylemli SnackBar kalır');
+
+        AppSnack.show(
+          _ctx(t),
+          'Süreli',
+          replace: true,
+          duration: const Duration(seconds: 2),
+          persist: false,
+          action: SnackBarAction(label: 'Aç', onPressed: () {}),
+        );
+        await _enter(t);
+        expect(find.text('Süreli'), findsOneWidget);
+        await t.pump(const Duration(seconds: 3));
+        await t.pump(const Duration(milliseconds: 600));
+        expect(find.text('Süreli'), findsNothing, reason: 'persist:false: süre dolunca kapanır');
+      },
+    );
+
+    testWidgets(
       'çağıranın verdiği eylem rengi ve etiketi korunur; info tema rengini kullanır',
       (t) async {
         await pumpAt(t, const SizedBox(), scale: 1.0);

@@ -9,10 +9,13 @@
 // bekleyebilir (yanıt çağrı ANINDA hesaplanır, kapı açılınca teslim edilir).
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
+import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 
 import 'people_fixtures.dart';
 
@@ -175,8 +178,12 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   };
   List<Map<String, dynamic>> audienceRecipients = _defaultRecipients();
 
-  /// Kurul üyesi gibi davranır: alıcılar ve önizleme 403 döner, yanıtlarda oluşturan adı yoktur.
+  /// Kurul üyesi gibi davranır: alıcılar ve önizleme 403 döner, yanıtlarda oluşturan adı yoktur ve KÜÇÜK HEDEFTE
+  /// (1-4 alıcı) okunma / e-posta sayıları `null`dır (sunucu `redactForBoard` ile aynı).
   bool boardReadOnly = false;
+
+  /// true: eski sunucu — `target.blocks` / `target.apartments` (kimlikle eşleşen EKLEMELİ listeler) yoktur.
+  bool legacyTarget = false;
 
   /// Sunucunun saati (zamanlama doğrulaması).
   DateTime Function() clock = DateTime.now;
@@ -253,6 +260,12 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   List<Map<String, dynamic>> _recipientsOf(Map<String, dynamic> row) =>
       (row['recipients'] as List).cast<Map<String, dynamic>>();
 
+  /// Kurul + 1-4 alıcı: sunucu okunma / e-posta sayılarını gizler.
+  bool _hiddenForBoard(Map<String, dynamic> row) {
+    final count = _recipientsOf(row).length;
+    return boardReadOnly && count >= 1 && count < 5;
+  }
+
   Map<String, dynamic> _summaryJson(Map<String, dynamic> row) {
     final recipients = _recipientsOf(row);
     final body = row['body'] as String;
@@ -268,7 +281,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       'edited_at': _iso(row['edited_at'] as DateTime?),
       'send_email': row['send_email'],
       'recipient_count': recipients.length,
-      'read_count': recipients.where((r) => r['read_at'] != null).length,
+      'read_count': _hiddenForBoard(row) ? null : recipients.where((r) => r['read_at'] != null).length,
       'created_at': _iso(row['created_at'] as DateTime?),
       'created_by_name': boardReadOnly ? null : row['created_by_name'],
     };
@@ -276,6 +289,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
 
   Map<String, dynamic> _detailJson(Map<String, dynamic> row) {
     final recipients = _recipientsOf(row);
+    final hidden = _hiddenForBoard(row);
     final read = recipients.where((r) => r['read_at'] != null).length;
     final counts = <String, int>{
       'sent': 0,
@@ -302,15 +316,45 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
         'block_ids': row['block_ids'],
         'apartment_ids': row['apartment_ids'],
         'labels': row['labels'],
+        if (!legacyTarget) ...<String, dynamic>{
+          'blocks': <Map<String, dynamic>>[
+            for (final id in row['block_ids'] as List<int>)
+              <String, dynamic>{'id': id, 'name': _blockName(id)},
+          ],
+          'apartments': <Map<String, dynamic>>[
+            for (final id in row['apartment_ids'] as List<int>)
+              <String, dynamic>{'id': id, 'label': _apartmentLabel(id)},
+          ],
+        },
       },
-      'stats': <String, dynamic>{
-        'recipients': recipients.length,
-        'read': read,
-        'unread': recipients.length - read,
-        'email': <String, dynamic>{'requested': requested, ...counts},
-      },
+      'stats': hidden
+          ? <String, dynamic>{
+              'recipients': recipients.length,
+              'read': null,
+              'unread': null,
+              'email': <String, dynamic>{
+                'requested': null,
+                for (final key in counts.keys) key: null,
+              },
+            }
+          : <String, dynamic>{
+              'recipients': recipients.length,
+              'read': read,
+              'unread': recipients.length - read,
+              'email': <String, dynamic>{'requested': requested, ...counts},
+            },
+      'edit_count': row['edit_count'],
     };
   }
+
+  String _blockName(int id) {
+    for (final b in blocks) {
+      if (b.id == id) return b.name;
+    }
+    return 'Blok $id';
+  }
+
+  String _apartmentLabel(int id) => (apartmentsJson[id]?['label'] as String?) ?? 'Daire $id';
 
   AnnouncementDetail _detail(Map<String, dynamic> row) => AnnouncementDetail.fromJson(_detailJson(row));
 
@@ -434,7 +478,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     if (at.difference(now) < const Duration(minutes: 1)) {
       throw _coded('INVALID_SCHEDULE', 400, 'Yayın zamanı en az 1 dakika sonrası olmalıdır.');
     }
-    if (at.isAfter(now.add(const Duration(days: 365)))) {
+    if (at.isAfter(istanbulCalendarYearAfter(now))) {
       throw _coded('INVALID_SCHEDULE', 400, 'Yayın zamanı en fazla 1 yıl sonrası olabilir.');
     }
   }
@@ -495,8 +539,8 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       apartmentIds: target.apartmentIds,
       labels: switch (target.type) {
         AnnouncementTargetType.site => const <String>['Tüm site'],
-        AnnouncementTargetType.blocks => [for (final b in target.blockIds) 'Blok $b'],
-        AnnouncementTargetType.apartments => [for (final a in target.apartmentIds) 'Daire $a'],
+        AnnouncementTargetType.blocks => [for (final b in target.blockIds) _blockName(b)],
+        AnnouncementTargetType.apartments => [for (final a in target.apartmentIds) _apartmentLabel(a)],
       },
       sendEmail: sendEmail,
       publishAt: publish == 'schedule' ? publishAt!.toUtc() : null,
@@ -580,8 +624,8 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       row['block_ids'] = List<int>.of((target['block_ids'] as List?)?.cast<int>() ?? const <int>[]);
       row['apartment_ids'] = List<int>.of((target['apartment_ids'] as List?)?.cast<int>() ?? const <int>[]);
       row['labels'] = switch (target['type']) {
-        'blocks' => [for (final b in row['block_ids'] as List<int>) 'Blok $b'],
-        'apartments' => [for (final a in row['apartment_ids'] as List<int>) 'Daire $a'],
+        'blocks' => [for (final b in row['block_ids'] as List<int>) _blockName(b)],
+        'apartments' => [for (final a in row['apartment_ids'] as List<int>) _apartmentLabel(a)],
         _ => const <String>['Tüm site'],
       };
     }
@@ -778,4 +822,24 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       'push_available': false,
     });
   }
+}
+
+/// Anlam ağacındaki (ekran okuyucunun göreceği) tüm düğüm etiketleri. Üst düğüme BİRLEŞMİŞ düğümler ayrıca
+/// sayılmaz; [WidgetTester.ensureSemantics] açıkken çağrılmalıdır.
+List<String> semanticLabels(WidgetTester t) {
+  final root = t.binding.renderViews.first.owner?.semanticsOwner?.rootSemanticsNode;
+  final labels = <String>[];
+  void visit(SemanticsNode node) {
+    if (!node.isMergedIntoParent) {
+      final label = node.getSemanticsData().label;
+      if (label.isNotEmpty) labels.add(label);
+    }
+    node.visitChildren((child) {
+      visit(child);
+      return true;
+    });
+  }
+
+  if (root != null) visit(root);
+  return labels;
 }

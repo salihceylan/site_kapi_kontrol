@@ -73,6 +73,7 @@ class AnnouncementNotifier extends ChangeNotifier {
   int? _baselineId;
   DateTime? _baselineAt;
   Future<bool?>? _inFlight;
+  bool _degraded = false;
   bool _rerun = false;
   bool _disposed = false;
   int _generation = 0;
@@ -94,6 +95,10 @@ class AnnouncementNotifier extends ChangeNotifier {
 
   /// Son sunucu özeti; hiç alınmadıysa null.
   NotificationSummary? get summary => _server;
+
+  /// Son yoklama başarısız mı? Hatada yoklama aralığı üstel olarak (en çok 2 dk) uzar: "yaklaşık 20 saniyede
+  /// bir" bilgisi o sırada yanlış olur; ekran "Bağlantı sorunu: daha seyrek kontrol ediliyor" yazar.
+  bool get isDegraded => _degraded;
 
   /// Zamanlayıcı kurulu mu.
   bool get isRunning => _poller.isRunning;
@@ -135,11 +140,19 @@ class AnnouncementNotifier extends ChangeNotifier {
       next = await _fetchSummary();
     } catch (_) {
       if (_disposed || generation != _generation) return null;
+      _setDegraded(true);
       return false;
     }
     if (_disposed || generation != _generation) return null;
+    _setDegraded(false);
     _apply(next, generation);
     return true;
+  }
+
+  void _setDegraded(bool value) {
+    if (_degraded == value || _disposed) return;
+    _degraded = value;
+    notifyListeners();
   }
 
   void _apply(NotificationSummary next, int generation) {
@@ -295,6 +308,7 @@ class AnnouncementNotifier extends ChangeNotifier {
     _urgentSignature = '';
     _urgentResolveFailed = false;
     _hasBaseline = false;
+    _degraded = false;
     _baselineId = null;
     _baselineAt = null;
     if (had && !_disposed) notifyListeners();

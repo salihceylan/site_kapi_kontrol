@@ -47,7 +47,10 @@ void main() {
       expect(find.text('Bildirim Tercihleri'), findsOneWidget);
       expect(find.text('E-posta ile duyuru al'), findsOneWidget);
       expect(
-        find.text('Kapalıyken normal duyurular e-postayla gelmez. Acil duyurular her zaman gönderilir.'),
+        find.text(
+          'Kapalıyken normal duyurular e-postayla gelmez. Acil duyuruların e-postası tercihinizden '
+          'etkilenmez; uygulamada her zaman görünürler.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Telefon bildirimi'), findsOneWidget);

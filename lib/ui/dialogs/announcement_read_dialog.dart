@@ -190,6 +190,15 @@ class _AnnouncementReadDialogState extends State<AnnouncementReadDialog> {
           ),
           const SizedBox(height: AppSpace.md),
         ],
+        // Pencere başlığı en çok 3 satırdır; uzun başlık 2,0 yazıda kesilebilir: tam başlık gövdede de bulunur.
+        if (isLongTitle(a.title)) ...[
+          SelectableText(
+            a.title.trim(),
+            key: const ValueKey<String>('announcement_full_title'),
+            style: th.titleMedium,
+          ),
+          const SizedBox(height: AppSpace.sm),
+        ],
         Wrap(
           spacing: AppSpace.sm,
           runSpacing: AppSpace.xs,

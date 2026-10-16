@@ -16,7 +16,8 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 ///   ASLA çizilmez: yanlış değeri doğruymuş gibi göstermesin).
 /// - Anahtar değişince `PUT` gider; sürerken anahtar kilitlidir (çift dokunuş yok). Başarısızsa eski değere
 ///   DÖNER ve hata görünür kalır. Yanıt eski bir bölümü ezmez (jeton).
-/// - Açıklama: kapalıyken normal duyurular e-postayla gelmez; ACİL duyurular her zaman gönderilir.
+/// - Açıklama: kapalıyken normal duyurular e-postayla gelmez; ACİL duyurunun e-postası bu tercihten etkilenmez
+///   (uygulamada her zaman görünür).
 /// - Hesap değişince (yeni [authService]) yeniden yüklenir.
 class NotificationPrefsSection extends StatefulWidget {
   const NotificationPrefsSection({super.key, required this.authService});
@@ -145,7 +146,8 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
             contentPadding: EdgeInsets.zero,
             title: const Text('E-posta ile duyuru al'),
             subtitle: const Text(
-              'Kapalıyken normal duyurular e-postayla gelmez. Acil duyurular her zaman gönderilir.',
+              'Kapalıyken normal duyurular e-postayla gelmez. Acil duyuruların e-postası tercihinizden '
+              'etkilenmez; uygulamada her zaman görünürler.',
             ),
             value: prefs.emailAnnouncements,
             onChanged: _saving ? null : _setEmail,

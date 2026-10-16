@@ -2596,6 +2596,13 @@ class AuthApi {
       case 'SITE_NOT_FOUND':
       case 'INVALID_SITE_CODE':
         return 'Site bulunamadı.';
+      // Duyuru yayın sınırları (Faz 3a): sunucu metni gelirse o kullanılır; gelmezse bu yedek metinler.
+      case 'DUPLICATE_ANNOUNCEMENT':
+        return 'Aynı duyuru az önce yayınlandı. Çift gönderimi önlemek için bir dakika bekleyin.';
+      case 'ANNOUNCEMENT_DAILY_LIMIT':
+        return 'Bu site için günlük duyuru sınırına ulaşıldı. Yarın tekrar deneyin.';
+      case 'ANNOUNCEMENT_HOURLY_LIMIT':
+        return 'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.';
     }
     return null;
   }

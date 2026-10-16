@@ -40,12 +40,17 @@ DateTime? parseDateField(String? text) {
 }
 
 /// Doğrulama: boş serbest (isteğe bağlı tarih); doluysa geçerli tarih olmalı. Hata yoksa null.
+///
+/// Biçim doğru ama değer gerçek bir tarih değilse (31.02.2024, 15.13.2024, yıl aralık dışı) "Geçersiz
+/// tarih" der; biçim bozuksa (eksik hane, harf) biçimi söyler.
 String? validateDateField(String? text) {
   final value = (text ?? '').trim();
   if (value.isEmpty) return null;
-  return parseDateField(value) == null
-      ? 'Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).'
-      : null;
+  if (parseDateField(value) != null) return null;
+  if (RegExp(r'^\d{2}\.\d{2}\.\d{4}$').hasMatch(value)) {
+    return 'Geçersiz tarih. Gerçek bir gün ve ay ile $dateInputMinYear-$dateInputMaxYear arası yıl girin (örn. 05.03.2024).';
+  }
+  return 'Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).';
 }
 
 /// Yazarken noktaları kendisi koyar: "05032024" -> "05.03.2024".

@@ -30,6 +30,7 @@ class AnnouncementsView extends StatefulWidget {
     this.showInbox = false,
     this.inboxSites = const <PeopleSite>[],
     this.notifier,
+    this.preferInbox = false,
   });
 
   final AuthService authService;
@@ -38,6 +39,10 @@ class AnnouncementsView extends StatefulWidget {
   final bool showInbox;
   final List<PeopleSite> inboxSites;
   final AnnouncementNotifier? notifier;
+
+  /// true (şeritten / bildirimden gelindi): her iki görünüm de varsa gelen kutusu AÇILIR. Varsayılan
+  /// (false): gelen kutusu varsa o, yoksa yönetim.
+  final bool preferInbox;
 
   @override
   State<AnnouncementsView> createState() => AnnouncementsViewState();
@@ -51,6 +56,33 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
       GlobalKey<AnnouncementsInboxViewState>();
   final GlobalKey<AnnouncementsAdminViewState> _adminKey =
       GlobalKey<AnnouncementsAdminViewState>();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.notifier?.addListener(_onNotifier);
+    if (widget.preferInbox) _chosen = _Mode.inbox;
+  }
+
+  @override
+  void didUpdateWidget(AnnouncementsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.notifier, widget.notifier)) {
+      oldWidget.notifier?.removeListener(_onNotifier);
+      widget.notifier?.addListener(_onNotifier);
+    }
+    if (widget.preferInbox && !oldWidget.preferInbox) _chosen = _Mode.inbox;
+  }
+
+  @override
+  void dispose() {
+    widget.notifier?.removeListener(_onNotifier);
+    super.dispose();
+  }
+
+  void _onNotifier() {
+    if (mounted) setState(() {});
+  }
 
   bool get _hasManage => widget.manageSites || widget.readOnlySites.isNotEmpty;
   bool get _hasInbox => widget.showInbox;
@@ -106,8 +138,11 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
     }
     final description = switch (mode) {
       _Mode.inbox =>
-        'Yönetimin size gönderdiği duyurular burada görünür. Yeni duyurular uygulama açıkken '
-            'yaklaşık 20 saniyede bir kontrol edilir; uygulama kapalıyken telefon bildirimi gelmez.',
+        (widget.notifier?.isDegraded ?? false)
+            ? 'Yönetimin size gönderdiği duyurular burada görünür. Bağlantı sorunu: yeni duyurular '
+                  'daha seyrek kontrol ediliyor; uygulama kapalıyken telefon bildirimi gelmez.'
+            : 'Yönetimin size gönderdiği duyurular burada görünür. Yeni duyurular uygulama açıkken '
+                  'yaklaşık 20 saniyede bir kontrol edilir; uygulama kapalıyken telefon bildirimi gelmez.',
       _Mode.manage =>
         'Sitenizdeki sakinlere duyuru gönderin, okunma durumunu izleyin. Duyurular uygulamada '
             've (isterseniz) e-postayla iletilir.',

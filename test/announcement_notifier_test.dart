@@ -426,6 +426,34 @@ void main() {
       notifier.dispose();
     });
 
+    testWidgets('G19: isDegraded hatada true olur (dinleyiciler uyarılır), başarıda false; clear() sıfırlar', (t) async {
+      final server = _Server()..summaryError = ApiException('sunucu yok');
+      final notifier = _make(server);
+      var notified = 0;
+      notifier.addListener(() => notified++);
+      expect(notifier.isDegraded, isFalse);
+
+      expect(await notifier.refresh(), isFalse);
+      expect(notifier.isDegraded, isTrue, reason: 'hatada aralık uzar: ekran "yaklaşık 20 sn" demez');
+      expect(notified, 1);
+
+      // Aynı durumda tekrar hata: gereksiz yeniden çizim yok.
+      expect(await notifier.refresh(), isFalse);
+      expect(notified, 1);
+
+      server.summaryError = null;
+      server.summary = _summary(unread: 1, latestId: 1, latestAt: t0);
+      expect(await notifier.refresh(), isTrue);
+      expect(notifier.isDegraded, isFalse);
+
+      server.summaryError = ApiException('sunucu yok');
+      await notifier.refresh();
+      expect(notifier.isDegraded, isTrue);
+      notifier.clear();
+      expect(notifier.isDegraded, isFalse, reason: 'çıkış yapınca bayrak sıfırlanır');
+      notifier.dispose();
+    });
+
     testWidgets('uçuşta tur varken refresh() ikinci istek açmaz, bitince bir tur daha çalıştırır', (t) async {
       final server = _Server();
       final gate = Completer<NotificationSummary>();

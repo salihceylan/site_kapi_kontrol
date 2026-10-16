@@ -12,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
@@ -125,7 +126,14 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!validateForm(_formKey)) {
+      // Özet bildirimi + ilk geçersiz alana kaydırma / odak (kaydırılmış formda hata gizli kalmasın).
+      setState(() {
+        _error = kFixFieldsMessage;
+        _existingPersonId = 0;
+      });
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;

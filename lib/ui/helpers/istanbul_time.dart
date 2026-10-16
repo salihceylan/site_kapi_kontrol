@@ -36,3 +36,11 @@ String formatIstanbulDateTime(DateTime? instant) {
 /// İstanbul duvar saatindeki [date] günü ve [hour]:[minute] saatinin gerçek anı (UTC).
 DateTime istanbulInstantOf(DateTime date, int hour, int minute) =>
     DateTime.utc(date.year, date.month, date.day, hour, minute).subtract(istanbulUtcOffset);
+
+/// [instant]'ın İstanbul duvar saatinden TAKVİM olarak bir yıl sonraki gerçek an (Şubat 29 -> 1 Mart,
+/// sunucudaki `setFullYear(+1)` ile aynı). Zamanlama üst sınırı (en çok 1 yıl sonra) için.
+DateTime istanbulCalendarYearAfter(DateTime instant) {
+  final w = istanbulWallClock(instant);
+  return DateTime.utc(w.year + 1, w.month, w.day, w.hour, w.minute, w.second, w.millisecond)
+      .subtract(istanbulUtcOffset);
+}

@@ -587,6 +587,18 @@ void main() {
       expect(validateDateField('abc'), isNotNull);
     });
 
+    test('G13: validateDateField iki ayrı mesaj verir: biçim bozuk -> biçim, biçim doğru değer geçersiz -> "Geçersiz tarih"', () {
+      const format = 'Tarihi GG.AA.YYYY biçiminde girin (örn. 05.03.2024).';
+      const invalid = 'Geçersiz tarih. Gerçek bir gün ve ay ile 1900-2100 arası yıl girin (örn. 05.03.2024).';
+      for (final bad in const ['abc', '5.3.2024', '05.03.24', '0503', '05/03/2024']) {
+        expect(validateDateField(bad), format, reason: bad);
+      }
+      for (final bad in const ['31.02.2024', '32.01.2024', '00.01.2024', '15.13.2024', '29.02.2023', '01.01.1899', '01.01.2101']) {
+        expect(validateDateField(bad), invalid, reason: bad);
+      }
+      expect(validateDateField('29.02.2024'), isNull, reason: 'artık yıl');
+    });
+
     test('formatCrmDate / formatDateField', () {
       expect(formatCrmDate(DateTime(2024, 3, 5)), '05.03.2024');
       expect(formatCrmDate(null), '-');

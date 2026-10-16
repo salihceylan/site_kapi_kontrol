@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -201,7 +202,10 @@ class _ApartmentEditDialogState extends State<ApartmentEditDialog> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!validateForm(_formKey)) {
+      setState(() => _error = kFixFieldsMessage);
+      return;
+    }
     final shareError = _validateLandShare();
     if (shareError != null) {
       setState(() => _error = shareError);

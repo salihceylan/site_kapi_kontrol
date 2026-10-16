@@ -614,6 +614,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _onModulesChanged() {
     if (!mounted || widget.authService.session == null) return;
     setState(() {});
+    _kickAnnouncements();
     final signature = _doorModuleSignature();
     if (signature != _lastDoorModuleSignature) {
       _lastDoorModuleSignature = signature;
@@ -668,11 +669,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Yazma yetkisi (duyuru oluşturma / yayınlama): süper kullanıcı ve site yöneticisi (yönetici modunda).
   bool _canManageAnnouncements(UserRole role) => _canManagePeople(role);
 
-  /// Kullanıcı en az bir sitede duyuru ALABİLİR mi? Modül verisi yokken (fail-open) daire sakini alıcı
-  /// sayılır; veri varsa yalnız görevli (STAFF) olunan sitelerde alıcı değildir.
+  /// Bu sitede duyuru ALABİLİR mi? `my-modules` sitede kişinin EN YÜKSEK rolünü verir: aynı sitede hem görevli
+  /// (STAFF) hem sakin olan kullanıcı "staff" görünür ama `door_access` TRUE gelir. Yalnız-görevli bağda
+  /// (kapı erişimi yok) alıcı sayılmaz. Menü, rozet, yoklama, şerit, tercih bölümü ve site süzgeci HEP bu
+  /// tek yardımcıyı kullanır.
+  static bool _isRecipientSite(MySiteModules site) => site.role != 'staff' || site.doorAccess;
+
+  /// Sakin sinyali: kapı erişimi olan kapılar yüklendi (yalnız-görevli hesapta kapı olmaz). `my-modules` hiç
+  /// gelmezse (ağ hatası) daire sakini varsayımı YALNIZ bu sinyal varken yapılır.
+  bool get _hasResidentSignal => _doorControlStructure?.doors.isNotEmpty ?? false;
+
+  /// Kullanıcı en az bir sitede duyuru ALABİLİR mi? Rol çözümlenene dek (`my-modules` yüklenmedi) alıcı
+  /// SAYILMAZ: yalnız-görevli hesap ilk yoklamayı atmasın, menüyü görmesin. Modül verisi gelince kesinleşir;
+  /// hiç gelmezse yalnız [_hasResidentSignal] ile sakin varsayılır.
   bool _hasResidentSite() {
-    if (!_moduleAccess.isFiltering) return true;
-    return _moduleAccess.result!.sites.any((s) => s.role != 'staff');
+    if (_moduleAccess.isFiltering) {
+      return _moduleAccess.result!.sites.any(_isRecipientSite);
+    }
+    return _hasResidentSignal;
   }
 
   /// Gelen kutusu (sakin görünümü): daire sakini ve sakin modundaki yönetici. Süper kullanıcı ve bireysel
@@ -720,14 +734,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
-        if (site.role != 'staff') PeopleSite(code: site.siteCode, name: site.siteName),
+        if (_isRecipientSite(site)) PeopleSite(code: site.siteCode, name: site.siteName),
     ];
+  }
+
+  // Alıcılık yoklama aralığını beklemeden başlasın: rol çözümlenince (my-modules / kapılar yüklenince) bir kez.
+  bool _announcementsWereEligible = false;
+
+  void _kickAnnouncements() {
+    final eligible = _isAnnouncementPollingEligible();
+    if (eligible && !_announcementsWereEligible) {
+      _announcements.resetBackoff();
+      unawaited(_announcements.refresh());
+    }
+    _announcementsWereEligible = eligible;
   }
 
   void _initAnnouncements() {
     _announcementAlerts = _announcements.alerts.listen(_onAnnouncementAlert);
     _announcements.addListener(_onAnnouncementsChanged);
     _announcements.start(immediately: true);
+    _announcementsWereEligible = _isAnnouncementPollingEligible();
   }
 
   void _disposeAnnouncements() {
@@ -754,8 +781,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context,
       title.isEmpty ? 'Yeni duyuru var.' : 'Yeni duyuru: $title',
       kind: alert.urgent ? AppSnackKind.warning : AppSnackKind.info,
-      replace: true,
-      duration: const Duration(seconds: 8),
+      // Kuyruğa girer: ekrandaki başka bildirimi ("kapı açılamadı" gibi hataları) silmez. Acil duyuru
+      // bildirimi uzun kalır ("Aç" eylemiyle).
+      duration: Duration(seconds: alert.urgent ? 20 : 8),
+      // Eylemli SnackBar Flutter'da süre dolsa da kalır ve sıradaki mesajları sonsuza dek engeller: süre
+      // dolunca kapansın (kalıcı olan, gövdenin üstündeki acil şerittir).
+      persist: false,
       action: SnackBarAction(
         label: 'Aç',
         onPressed: () => _openAnnouncement(alert.announcementId),
@@ -763,17 +794,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Duyuruyu okuma penceresinde açar (menüden bağımsız; okununca rozet ve şerit güncellenir). Numara
-  /// bilinmiyorsa "Duyurular" ekranına gider.
+  // Duyuru penceresi çift dokunuşta iki kez açılmasın.
+  bool _openingAnnouncement = false;
+
+  // Şerit / bildirimden gelindi: Duyurular ekranı (yönetici modundaki yönetici dahil) GELEN KUTUSUYLA açılır.
+  bool _forceAnnouncementInbox = false;
+
+  /// Duyuruyu açar (şerit ya da bildirimden). Duyurular ekranı DOĞRUDAN gelen kutusu görünümüyle açılır
+  /// (yönetici modundaki yönetici ve kurul üyesinde de; yönetim görünümü seçici ile ayrıdır) ve numara
+  /// biliniyorsa okuma penceresi de açılır; okununca rozet ve şerit güncellenir.
   void _openAnnouncement(int? id, {ResidentAnnouncement? known}) {
     final session = widget.authService.session;
     if (!mounted || session == null) return;
-    if (id == null) {
-      if (_canAccessMenu(SirketMenuItem.duyurular, session.role)) {
-        setState(() => _selectedMenu = SirketMenuItem.duyurular);
-      }
-      return;
+    if (_receivesAnnouncements(session.role)) {
+      setState(() {
+        _forceAnnouncementInbox = true;
+        _selectedMenu = SirketMenuItem.duyurular;
+      });
     }
+    if (id == null || _openingAnnouncement) return;
+    _openingAnnouncement = true;
     void refreshAfterChange() {
       unawaited(_announcements.refresh());
       unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
@@ -789,29 +829,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           refreshAfterChange();
         },
         onGone: refreshAfterChange,
-      ),
+      ).whenComplete(() => _openingAnnouncement = false),
     );
   }
 
-  /// Panel'in üstündeki kalıcı kırmızı şerit: okunmamış ACİL duyuru varken; dokununca duyuruyu açar.
-  Widget _withUrgentBanner(UserSession session, Widget view) {
-    final onPanel =
-        _selectedMenu == SirketMenuItem.dashboard || _selectedMenu == SirketMenuItem.ellerSerbest;
-    if (!onPanel || !_announcements.hasUnreadUrgent || !_receivesAnnouncements(session.role)) {
-      return view;
-    }
+  /// Kalıcı kırmızı şerit: okunmamış ACİL duyuru kaldığı sürece kaydırılan içeriğin DIŞINDA, gövdenin
+  /// en üstünde sabit durur ve (Duyurular ekranının kendisi hariç) TÜM menülerde görünür; dokununca duyuruyu
+  /// açar, okununca kalkar. Gövde `Column` her zaman vardır ve şerit yuvası her zaman bir çocuktur
+  /// (şeritsiz hâl boş `SizedBox`): şerit gelip giderken içerik alt ağacı yeniden kurulmaz (Panel durumu,
+  /// kapı kartları, saat animasyonu korunur).
+  Widget _urgentBannerSlot(UserSession session) {
+    final menu = _canAccessMenu(_selectedMenu, session.role)
+        ? _selectedMenu
+        : SirketMenuItem.dashboard;
+    final visible = _announcements.hasUnreadUrgent &&
+        _receivesAnnouncements(session.role) &&
+        menu != SirketMenuItem.duyurular;
+    if (!visible) return const SizedBox.shrink();
     final urgent = _announcements.urgentAnnouncement;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        UrgentAnnouncementBanner(
-          count: _announcements.unreadUrgent,
-          title: urgent?.title,
-          onTap: () => _openAnnouncement(urgent?.id, known: urgent),
+    final horizontal = MediaQuery.sizeOf(context).width < 600 ? 16.0 : 20.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontal, AppSpace.sm, horizontal, 0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: UrgentAnnouncementBanner(
+            count: _announcements.unreadUrgent,
+            title: urgent?.title,
+            onTap: () => _openAnnouncement(urgent?.id, known: urgent),
+          ),
         ),
-        const SizedBox(height: AppSpace.lg),
-        view,
-      ],
+      ),
     );
   }
 
@@ -1081,6 +1129,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _selectMenu(SirketMenuItem item) {
 
     Navigator.of(context).pop();
+
+    // Çekmeceden seçim: şeritten gelen "doğrudan gelen kutusu" isteği biter.
+    _forceAnnouncementInbox = false;
 
     if (item == SirketMenuItem.ellerSerbest) {
 
@@ -1356,6 +1407,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ? current.id
             : doors.first.id;
       });
+
+      // Sakin sinyali (kapı erişimi) geldi: duyuru yoklaması modül verisini beklemeden de başlayabilir.
+      _kickAnnouncements();
 
       if (doorToSelect != null) {
         _selectDoorControlDoor(doorToSelect!, keepStatus: true);
@@ -4400,38 +4454,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         },
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
-            return RefreshIndicator(
-              onRefresh: _handleGlobalRefresh,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1100),
-                    // RepaintBoundary: SingleChildScrollView içeriği her kaydırma karesinde baştan boyanır;
-                    // yüzlerce daire/kullanıcı kartlı sayfalarda bu kare başına binlerce boyama demekti.
-                    // Sınır sayesinde içerik önbellekteki katman olarak kaydırılır.
-                    child: RepaintBoundary(
-                      // Kapı durumu yoklaması yalnız bu dinleyiciyi yeniden kurar (Scaffold/AppBar/Drawer değil).
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: _doorPanelRevision,
-                        builder: (context, _, _) =>
-                            _buildContent(widget.authService.session ?? session),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _urgentBannerSlot(session),
+            Expanded(child: _buildScrollBody(session)),
+          ],
         ),
       ),
     );
 
+  }
+
+
+
+  /// Kaydırılan sayfa gövdesi (aşağı çek yenile + ortalanmış, en çok 1100 dp içerik).
+  Widget _buildScrollBody(UserSession session) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth < 600 ? 16.0 : 20.0;
+        return RefreshIndicator(
+          onRefresh: _handleGlobalRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 10.0, horizontalPadding, 56.0),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                // RepaintBoundary: SingleChildScrollView içeriği her kaydırma karesinde baştan boyanır;
+                // yüzlerce daire/kullanıcı kartlı sayfalarda bu kare başına binlerce boyama demekti.
+                // Sınır sayesinde içerik önbellekteki katman olarak kaydırılır.
+                child: RepaintBoundary(
+                  // Kapı durumu yoklaması yalnız bu dinleyiciyi yeniden kurar (Scaffold/AppBar/Drawer değil).
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _doorPanelRevision,
+                    builder: (context, _, _) =>
+                        _buildContent(widget.authService.session ?? session),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
 
@@ -4445,8 +4512,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final view = _buildContentView(session);
     return PageEntry(
       key: ValueKey<String>('${_selectedMenu.name}-$_isResidentMode'),
-      // Panel'de okunmamış acil duyuru varsa en üstte kalıcı kırmızı şerit.
-      child: _withUrgentBanner(session, view),
+      child: view,
     );
   }
 
@@ -4895,9 +4961,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
           manageSites: _canManageAnnouncements(session.role),
           readOnlySites: _boardPeopleSites(),
-          showInbox: _hasAnnouncementInbox(session.role),
+          showInbox: _hasAnnouncementInbox(session.role) || _forceAnnouncementInbox,
           inboxSites: _announcementInboxSites(),
           notifier: _announcements,
+          preferInbox: _forceAnnouncementInbox,
         );
 
       case SirketMenuItem.katilimVeKurulum:

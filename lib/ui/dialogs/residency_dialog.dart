@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -93,12 +94,18 @@ class _ResidencyDialogState extends State<ResidencyDialog> {
 
   Future<void> _submit() async {
     if (_submitting) return;
-    final valid = _formKey.currentState?.validate() ?? false;
+    final valid = validateForm(_formKey);
     if (!_editing && _apartment == null) {
-      setState(() => _apartmentError = 'Bir daire seçin.');
+      setState(() {
+        _apartmentError = 'Bir daire seçin.';
+        _error = kFixFieldsMessage;
+      });
       return;
     }
-    if (!valid) return;
+    if (!valid) {
+      setState(() => _error = kFixFieldsMessage);
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
