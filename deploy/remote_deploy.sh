@@ -96,8 +96,56 @@ activate() {
   fi
 }
 
+# .env guvenlik ayarlari (SIR YAZDIRMAZ; yalniz anahtar adi ve uzunluk). prepare'den SONRA calistirilir; sonra pm2 restart gerekir.
+# Idempotent: ayarlar zaten varsa degistirmez; JWT sirri yalniz <32 karakterse ve JWT_SECRET_PREVIOUS tanimli degilse doner.
+# Kullanici onayi: 2026-10-16 ("Hepsini uygula"). Geri alma: cp $BK/env.before_envset $APP/.env && pm2 restart kapi-api --update-env
+envset() {
+  [ -d "$BK" ] || { echo "HATA: yedek klasoru yok (once prepare)"; exit 2; }
+  cd "$APP"
+  # orijinal .env yedegi yalniz BIR kez alinir (ikinci calistirmada ezilmez)
+  [ -f "$BK/env.before_envset" ] || cp -p .env "$BK/env.before_envset"
+  chmod 600 "$BK/env.before_envset" .env
+  # tanimsiz anahtar grep'i 1 doner; set -e + pipefail altinda betigi durdurmasin
+  getv() { grep -m1 "^$1=" .env | cut -d= -f2- | sed -e "s/^[\"']//" -e "s/[\"']\$//" || true; }
+  setv() {
+    if grep -q "^$1=" .env; then
+      sed -i "s|^$1=.*|$1=$2|" .env
+    else
+      printf '%s=%s\n' "$1" "$2" >> .env
+    fi
+  }
+  setv NODE_ENV production
+  setv LISTEN_HOST 127.0.0.1
+  setv TRUST_PROXY loopback,cloudflare
+  setv JWT_EXPIRES_IN 30d
+  OLD=$(getv JWT_SECRET)
+  PREV=$(getv JWT_SECRET_PREVIOUS)
+  if [ "${#OLD}" -lt 32 ] && [ -z "$PREV" ]; then
+    NEW=$(openssl rand -base64 48 | tr '+/' '-_' | tr -d '=\n')
+    # duyuru e-postasi imzasi/ozetleri ayri sirdan turetilir; tanimli degilse eski JWT sirrini ona tasi (abonelikten cik baglantilari bozulmasin)
+    if [ -z "$(getv ANNOUNCEMENT_EMAIL_SECRET)" ]; then
+      setv ANNOUNCEMENT_EMAIL_SECRET "$OLD"
+      echo "ANNOUNCEMENT_EMAIL_SECRET tanimli degildi: eski JWT sirrinden tasindi"
+    fi
+    setv JWT_SECRET_PREVIOUS "$OLD"
+    setv JWT_SECRET_PREVIOUS_UNTIL "$(date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)"
+    setv JWT_SECRET "$NEW"
+    echo "JWT_SECRET dondurulmus (eski uzunluk ${#OLD}, yeni uzunluk ${#NEW}); eski sir 30 gun yalniz dogrulama icin gecerli"
+  else
+    echo "JWT_SECRET dondurulmedi (uzunluk ${#OLD}, previous tanimli: $([ -n "$PREV" ] && echo evet || echo hayir))"
+  fi
+  unset OLD NEW PREV
+  chmod 600 .env
+  echo "-- .env anahtar durumu (yalniz ad/uzunluk):"
+  for k in NODE_ENV LISTEN_HOST TRUST_PROXY JWT_EXPIRES_IN JWT_SECRET JWT_SECRET_PREVIOUS JWT_SECRET_PREVIOUS_UNTIL ANNOUNCEMENT_EMAIL_SECRET; do
+    v=$(getv "$k"); printf '   %s: %s\n' "$k" "$([ -z "$v" ] && echo YOK || echo "tanimli (${#v} karakter)")"
+  done
+  echo ENVSET_OK
+}
+
 case "$PHASE" in
   prepare) prepare ;;
+  envset) envset ;;
   activate) activate ;;
   rollback) rollback ;;
   *) echo "bilinmeyen asama"; exit 1 ;;
