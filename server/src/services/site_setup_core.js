@@ -7,13 +7,43 @@
 // Not: services/site_service.js içindeki aynı adlı `createSiteWithStructure` BAŞKA bir işlevdir (kendi transaction'ını açar, admin
 // "Site Ekle" yolunun parametreleriyle çalışır). Bu işlev ise ÇAĞIRANIN transaction'ında (`client`) çalışır ve COMMIT/ROLLBACK etmez.
 //
+// Her yeni site ABONELİK satırıyla açılır (site_subscriptions): plan manual_approval, durum active; kaynak başvuru onayında
+// 'manual_approval' (+ application_id), anlık yolda 'admin'. Mevcut (bu sürümden önceki) sitelere satır eklenmez: satırı olmayan site "eski"dir.
+// Yönetici bağı `link_source = 'owner'` yazılır: anlık kurulum yetkisi bu bağa bağlıdır (bkz. userHasOwnerLink).
+//
 // ÇAĞIRAN SORUMLULUKLARI (kilit sırası dahil — deadlock olmaması için):
 //  1. BEGIN ve kullanıcı bazlı advisory kilit çağırana aittir.
-//  2. Cihaz (varsa) çağıran tarafından `FOR UPDATE` ile kilitlenmiş ve sahipliği doğrulanmış olmalıdır: sıra cihaz satırı -> kullanıcı satırı
-//     (bu işlev kullanıcı satırını `UPDATE users` ile EN SONA yakın kilitler). Yeni site satırları yeni olduğundan başka kilit gerekmez.
+//  2. Cihaz (varsa) çağıran tarafından `FOR UPDATE` ile kilitlenmiş ve sahipliği doğrulanmış olmalıdır. Sıra CİHAZ -> KULLANICI -> (başvuru):
+//     anlık kurulum ve başvuru onayı aynı sırayı kullanır ve bu sıra gerçek hesap silme akışıyla (DELETE /admin/users/:id: önce devices,
+//     en son users) aynıdır. Bu işlev kullanıcı satırını `UPDATE users` ile kilitler. Yeni site satırları yeni olduğundan başka kilit gerekmez.
 //  3. `input`, normalizeSetupSiteInput çıktısıdır; `managementType` resolveManagementTypeInput(...).value'dur.
 
 import { managementTypeLabel } from '../modules/management_types.js';
+
+export const PLAN_MANUAL_APPROVAL = 'manual_approval';
+
+/**
+ * Kullanıcının "sahip" bağı var mı? Onaylı bir sitede `site_manager_sites.link_source` değeri 'invited' OLMAYAN (NULL = eski kayıt dahil)
+ * en az bir satır. Yalnız bu yöneticiler anlık site kurabilir (setup-site); sahip bağı olmayan site yöneticileri (davetle yönetici olanlar,
+ * cihaz sahiplenerek yönetici olmuş eski hesaplar, sitesi olmayanlar) site için BAŞVURUR. Henüz onaylanmamış sitedeki bağ sayılmaz:
+ * POST /manager/sites (bekleyen site) ile onaysız sahip bağı kazanılamaz.
+ * @param {{ query: Function }} db  pool veya transaction client'ı
+ */
+export async function userHasOwnerLink(db, userCode) {
+  const result = await db.query(
+    `
+      SELECT 1
+      FROM site_manager_sites m
+      INNER JOIN sites s ON s.site_code = m.site_code
+      WHERE m.manager_user_code = $1
+        AND m.link_source IS DISTINCT FROM 'invited'
+        AND s.approval_status = 'approved'
+      LIMIT 1
+    `,
+    [userCode],
+  );
+  return Boolean(result.rows?.[0]);
+}
 
 /**
  * @param {{ query: Function }} client açık transaction'daki bağlantı
@@ -22,10 +52,14 @@ import { managementTypeLabel } from '../modules/management_types.js';
  *   input: ReturnType<typeof import('./membership_rules.js').normalizeSetupSiteInput>,
  *   managementType: string,
  *   device?: { id: number|string, device_uid?: string, hardware_type?: string } | null,
+ *   subscription?: { source: 'manual_approval' | 'admin', applicationId?: number|null },
  * }} params
  * @returns {Promise<{ site: object, blocks: object[], doors: object[], assignedDevice: object|null }>}
  */
-export async function createSiteWithStructure(client, { user, input, managementType, device = null }) {
+export async function createSiteWithStructure(
+  client,
+  { user, input, managementType, device = null, subscription = { source: 'admin', applicationId: null } },
+) {
   const {
     siteName,
     blocks: normalizedBlocks,
@@ -95,8 +129,8 @@ export async function createSiteWithStructure(client, { user, input, managementT
   // 2. Kullanıcıyı site yöneticisi olarak ekle
   await client.query(
     `
-        INSERT INTO site_manager_sites (site_code, manager_user_code)
-        VALUES ($1, $2)
+        INSERT INTO site_manager_sites (site_code, manager_user_code, link_source)
+        VALUES ($1, $2, 'owner')
         ON CONFLICT (site_code, manager_user_code) DO NOTHING
       `,
     [siteCode, user.user_code],
@@ -187,6 +221,15 @@ export async function createSiteWithStructure(client, { user, input, managementT
       hardware_type: device.hardware_type,
     };
   }
+
+  // 8. Abonelik satırı (her yeni site): başvuru onayında source 'manual_approval' + application_id, anlık yolda source 'admin'
+  await client.query(
+    `
+        INSERT INTO site_subscriptions (site_code, plan_code, status, source, application_id)
+        VALUES ($1, $2, 'active', $3, $4)
+      `,
+    [siteCode, PLAN_MANUAL_APPROVAL, subscription.source, subscription.applicationId ?? null],
+  );
 
   return {
     site: { ...site, management_type_label: managementTypeLabel(site.management_type) },

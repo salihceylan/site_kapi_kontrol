@@ -71,6 +71,8 @@ function install(config = {}) {
     pending: null,
     dailyCount: 0,
     deviceOwned: true,
+    ownerLink: false,
+    reloadFails: false,
     row: storedRow(),
     applicant: { id: 7, user_code: 48213, role: 'individual', full_name: 'Ayşe Başvuran', email: 'ayse@example.com', is_active: true, email_verified: true, approval_status: 'approved' },
     device: { id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' },
@@ -88,6 +90,9 @@ function install(config = {}) {
     }
     if (/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)\b/.test(sql)) return ok();
     if (/^SELECT pg_advisory_xact_lock/.test(sql)) return ok();
+    // sahip bağı (userHasOwnerLink) ve mine'ın requires_application rol sorgusu
+    if (/^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/.test(sql)) return ok(state.ownerLink ? [{ x: 1 }] : []);
+    if (/^SELECT role FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ role: state.role }]);
     if (/^SELECT id, user_code, role, full_name FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) {
       return ok([{ id: 7, user_code: Number(params[0]), role: state.role, full_name: 'Ayşe Başvuran' }]);
     }
@@ -100,10 +105,13 @@ function install(config = {}) {
     }
     if (/^INSERT INTO site_applications /.test(sql)) {
       if (state.insertConflict) throw Object.assign(new Error('duplicate key'), { code: '23505' });
-      return ok([{ id: '41' }]);
+      return ok([{ id: '41', created_at: new Date('2026-10-16T07:00:00.000Z') }]);
     }
     if (/^INSERT INTO audit_log/.test(sql)) return ok();
-    // yükleme (sonuç görünümleri)
+    // yükleme (sonuç görünümleri): COMMIT SONRASI yeniden okuma; reloadFails ile hata enjekte edilir
+    if (state.reloadFails && /WHERE a\.id = \$1 LIMIT 1$/.test(sql)) {
+      throw Object.assign(new Error('SECRET_RELOAD_DETAIL'), { code: 'XX000' });
+    }
     if (/FROM site_applications a LEFT JOIN users u ON u\.user_code = a\.applicant_user_code LEFT JOIN users d ON d\.user_code = a\.decided_by WHERE a\.id = \$1 LIMIT 1$/.test(sql)) {
       return ok([{ ...state.row, status: 'approved', applicant_name: 'Ayşe Başvuran', applicant_email: 'ayse@example.com', applicant_phone: null, applicant_role: 'site_manager', decided_by_name: 'Root', decision_source: 'super_user', device_available: false }]);
     }
@@ -115,7 +123,7 @@ function install(config = {}) {
     if (/^SELECT id, user_code FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok(state.applicant ? [{ id: 7, user_code: Number(params[0]) }] : []);
     if (/^SELECT \* FROM devices WHERE UPPER\(device_uid\) = \$1 .* AND site_code IS NULL LIMIT 1 FOR UPDATE$/.test(sql)) return ok(state.deviceOwned ? [state.device] : []);
     if (/FROM users WHERE user_code = \$1 LIMIT 1 FOR NO KEY UPDATE$/.test(sql)) return ok(state.applicant ? [state.applicant] : []);
-    if (/FROM site_applications WHERE id = \$1 FOR UPDATE$/.test(sql)) return ok(state.row ? [state.row] : []);
+    if (/FROM site_applications a WHERE a\.id = \$1 FOR UPDATE OF a$/.test(sql)) return ok(state.row ? [state.row] : []);
     if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: params[0], address: params[1], city: params[2], district: params[3], block_count: params[4], apartment_count: params[5], door_count: params[6], approval_status: 'approved', management_type: params[8] }]);
     if (/^INSERT INTO site_manager_sites/.test(sql) || /^INSERT INTO site_memberships/.test(sql) || /^UPDATE users SET role/.test(sql)) return ok();
     if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 30 + Number(params[2]), site_code: 900, block_name: params[1], sort_order: params[2] }]);
@@ -126,10 +134,9 @@ function install(config = {}) {
     if (/^UPDATE site_applications SET/.test(sql)) return ok();
     if (/^SELECT full_name, email FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ full_name: 'Ayşe Başvuran', email: 'ayse@example.com' }]);
     // iptal
-    if (/^SELECT id, status, block_count, apartment_count, door_count FROM site_applications WHERE id = \$1 AND applicant_user_code = \$2 FOR UPDATE$/.test(sql)) {
+    if (/FROM site_applications a WHERE a\.id = \$1 AND a\.applicant_user_code = \$2 FOR UPDATE OF a$/.test(sql)) {
       return ok(state.row && Number(params[1]) === Number(state.row.applicant_user_code) ? [state.row] : []);
     }
-    if (/^SELECT id, applicant_user_code, status, site_name FROM site_applications WHERE id = \$1 FOR UPDATE$/.test(sql)) return ok(state.row ? [state.row] : []);
     // ayar
     if (/^SELECT value FROM platform_settings WHERE key = \$1 FOR UPDATE$/.test(sql)) return ok([{ value: { mode: 'approval' } }]);
     if (/^INSERT INTO platform_settings/.test(sql)) return ok();
@@ -168,12 +175,16 @@ async function rejectsWith(promise, status, code) {
 }
 
 describe('assertMayApply / isApplicantUnavailable', () => {
-  it('yalnız individual / apartment_owner başvurur; site_manager 409 ALREADY_SITE_MANAGER; süper ve diğerleri 403 FORBIDDEN_ROLE', () => {
+  it('başvurabilen: bireysel / daire sahibi ve SAHİP BAĞI olmayan site yöneticisi; sahip bağı olan yönetici 409 ALREADY_SITE_MANAGER; süper ve diğerleri 403 FORBIDDEN_ROLE', () => {
     assertMayApply('individual');
     assertMayApply('apartment_owner');
-    assert.throws(() => assertMayApply('site_manager'), (e) => e.statusCode === 409 && e.code === 'ALREADY_SITE_MANAGER');
+    assertMayApply('individual', { hasOwnerLink: true });
+    assertMayApply('site_manager'); // ön rol kontrolü: bağ ayrıca denetlenir
+    assertMayApply('site_manager', { hasOwnerLink: false });
+    assert.throws(() => assertMayApply('site_manager', { hasOwnerLink: true }), (e) => e.statusCode === 409 && e.code === 'ALREADY_SITE_MANAGER');
     for (const role of ['super_user', 'staff', undefined, null, '']) {
       assert.throws(() => assertMayApply(role), (e) => e.statusCode === 403 && e.code === 'FORBIDDEN_ROLE', String(role));
+      assert.throws(() => assertMayApply(role, { hasOwnerLink: true }), (e) => e.statusCode === 403 && e.code === 'FORBIDDEN_ROLE', String(role));
     }
   });
 
@@ -188,13 +199,13 @@ describe('assertMayApply / isApplicantUnavailable', () => {
 });
 
 describe('createSiteApplication', () => {
-  it('rol ve girdi hataları veritabanına HİÇ dokunmaz: yönetici 409, süper 403, geçersiz girdi 400 (+Türkçe mesaj)', async () => {
-    const db = install();
+  it('rol ve girdi hataları transaction AÇMAZ (bağlantı alınmaz): sahip bağı olan yönetici 409 (salt-okunur ön kapı), süper 403, geçersiz girdi 400', async () => {
+    const db = install({ ownerLink: true });
     await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
     await rejectsWith(createSiteApplication({ actor: superUser, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'staff' }, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, name: '   ' } }), 400, 'INVALID_BODY');
-    await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, blocks: Array.from({ length: 101 }, (_, i) => ({ name: `B${i}`, apartmentCount: 1 })) } }), 400, 'INVALID_BODY');
+    await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, blocks: Array.from({ length: 101 }, (_, i) => ({ name: 'B' + i, apartmentCount: 1 })) } }), 400, 'INVALID_BODY');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, doors: undefined, doorCount: 101 } }), 400, 'INVALID_BODY');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, note: 'x'.repeat(501) } }), 400, 'INVALID_BODY');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, note: 5 } }), 400, 'INVALID_BODY');
@@ -202,9 +213,73 @@ describe('createSiteApplication', () => {
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, managementType: 'residence' } }), 400, 'MANAGEMENT_TYPE_COMING_SOON');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, management_type: 'otel' } }), 400, 'MANAGEMENT_TYPE_INVALID');
     assert.equal(db.connects(), 0);
-    assert.equal(db.log.length, 0);
+    assert.equal(db.log.length, 0, 'transaction içinde hiçbir ifade yok');
+    // sahip bağı OLMAYAN yönetici ön kapıyı geçer; geçersiz girdi yine bağlantı almadan 400
+    const linkless = install({ ownerLink: false });
+    await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: { ...goodBody, name: '' } }), 400, 'INVALID_BODY');
+    assert.equal(linkless.connects(), 0);
+    assert.equal(linkless.poolLog.filter((e) => /site_manager_sites m INNER JOIN/.test(e.sql)).length, 1, 'yalnız bağ sorgusu (salt-okunur)');
   });
 
+  it('SAHİP BAĞI olmayan site yöneticisi (davetle yönetici olan, sitesi olmayan) başvurur: 201; rol ve bağ transaction içinde TAZE okunur', async () => {
+    const db = install({ role: 'site_manager', ownerLink: false });
+    siteApplicationHooks.notifyCreated = async () => {};
+    const application = await createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody });
+    assert.equal(application.id, 41);
+    const roleAt = indexOfSql(db.log, /^SELECT id, user_code, role, full_name FROM users/);
+    const linkAt = indexOfSql(db.log, /^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/);
+    const insertAt = indexOfSql(db.log, /^INSERT INTO site_applications/);
+    assert.ok(roleAt >= 0 && linkAt > roleAt && insertAt > linkAt, 'sıra: taze rol -> sahip bağı -> INSERT');
+    assert.deepEqual(find(db.log, /site_manager_sites m INNER JOIN/).params, [48213]);
+    assert.ok(has(db.log, /^COMMIT/));
+
+    // ön kapıda bağ yok görünür ama transaction'da sahip bağı çıkmıştır (arada başvuru onayı / site kuruldu) -> 409, ROLLBACK
+    const racing = install({ role: 'site_manager', ownerLink: true });
+    pool.query = async () => ok();
+    await rejectsWith(createSiteApplication({ actor: { ...individual, role: 'site_manager' }, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
+    assert.ok(has(racing.log, /^ROLLBACK/));
+    assert.equal(has(racing.log, /^INSERT INTO site_applications/), false);
+  });
+
+  it('güvenli normalizasyon: NUL, eşsiz vekil, yön / görünmez karakter ad / adres / şehirden atılır (JSONB 22P05 / metin 22021 ASLA); sonuç boşsa 400 INVALID_BODY', async () => {
+    const lone = String.fromCharCode(0xd800);
+    const rlo = String.fromCharCode(0x202e);
+    const nul = String.fromCharCode(0);
+    const db = install();
+    siteApplicationHooks.notifyCreated = async () => {};
+    await createSiteApplication({
+      actor: individual,
+      body: {
+        ...goodBody,
+        name: ' Gül' + nul + ' Sitesi' + rlo + ' ',
+        city: 'Ankara' + lone,
+        district: rlo,
+        address: 'Cadde' + nul + ' 1\r\nKat 2',
+        blocks: [{ name: 'A' + lone + ' Blok' + nul, apartmentCount: 5 }],
+        doors: [{ name: 'Ana' + rlo + ' Kapı' }],
+        note: 'Not' + nul + lone,
+      },
+    });
+    const insert = find(db.log, /^INSERT INTO site_applications/);
+    assert.equal(insert.params[1], 'Gül Sitesi');
+    assert.equal(insert.params[2], 'Ankara');
+    assert.equal(insert.params[3], null, 'yalnız yön karakterinden oluşan ilçe boş sayılır');
+    assert.equal(insert.params[4], 'Cadde 1\nKat 2', 'adreste satır sonu korunur, NUL atılır');
+    assert.deepEqual(JSON.parse(insert.params[6]), [{ name: 'A Blok', apartmentCount: 5, sortOrder: 1 }]);
+    assert.deepEqual(JSON.parse(insert.params[7]), [{ name: 'Ana Kapı', doorIndex: 1 }]);
+    assert.equal(insert.params[12], 'Not');
+    // hiçbir parametrede geçersiz karakter kalmaz
+    const flat = insert.params.filter((v) => typeof v === 'string').join('');
+    assert.equal(Array.from(flat).some((ch) => [0, 0xd800, 0x202e].includes(ch.codePointAt(0))), false);
+    const jsonText = insert.params[6] + insert.params[7];
+    assert.equal(jsonText.includes('\\' + 'ud800') || jsonText.includes('\\' + 'u0000'), false, 'JSONB metninde geçersiz kaçış dizisi yok');
+
+    for (const bad of [nul, rlo, lone + nul + rlo, '   ', nul + ' ' + nul]) {
+      const none = install();
+      await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, name: bad } }), 400, 'INVALID_BODY');
+      assert.equal(none.connects(), 0, 'boş ad: veritabanına dokunulmaz');
+    }
+  });
   it('başarı: advisory kilit -> taze rol -> ödeme kipi -> bekleyen -> günlük sayım -> INSERT -> audit -> COMMIT; JSONB ve sayılar normalizeSetupSiteInput çıktısı', async () => {
     const db = install();
     const mailed = [];
@@ -293,17 +368,19 @@ describe('createSiteApplication', () => {
     assert.ok(has(db.log, /^INSERT INTO site_applications/));
   });
 
-  it('ödeme kipi (bugün olmaz) 409 PAYMENT_NOT_AVAILABLE; taze rol değişmişse (yönetici olmuş) 409 ALREADY_SITE_MANAGER', async () => {
+  it('ödeme kipi (bugün olmaz) 409 PAYMENT_NOT_AVAILABLE; taze rol değişmişse: yönetici + sahip bağı 409 ALREADY_SITE_MANAGER, yönetici bağsız başvurabilir, süper 403', async () => {
+    siteApplicationHooks.notifyCreated = async () => {};
     let db = install({ mode: 'payment' });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'PAYMENT_NOT_AVAILABLE');
     assert.equal(has(db.log, /^INSERT INTO site_applications/), false);
-    db = install({ role: 'site_manager' });
+    db = install({ role: 'site_manager', ownerLink: true });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'ALREADY_SITE_MANAGER');
+    db = install({ role: 'site_manager', ownerLink: false });
+    assert.equal((await createSiteApplication({ actor: individual, body: goodBody })).id, 41);
     db = install({ role: 'super_user' });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 403, 'FORBIDDEN_ROLE');
     assert.ok(db.client.released);
   });
-
   it('tekil indeks ihlali (23505) bekleyen başvuru olarak yanıtlanır; ROLLBACK; bağlantı bırakılır', async () => {
     const db = install({ insertConflict: true, pending: null });
     await rejectsWith(createSiteApplication({ actor: individual, body: goodBody }), 409, 'APPLICATION_PENDING');
@@ -370,27 +447,52 @@ describe('createSiteApplication', () => {
 });
 
 describe('listMyApplications / cancelMyApplication', () => {
-  it('mine: yalnız çağıranın kayıtları (WHERE applicant_user_code = $1), son 10; geçersiz kullanıcı boş', async () => {
+  it('mine: yalnız çağıranın kayıtları (WHERE applicant_user_code = $1), son 10; requires_application; geçersiz kullanıcı boş', async () => {
     const db = install();
     const result = await listMyApplications(48213);
     assert.deepEqual(result.items.length, 0);
     assert.equal(result.pending, null);
+    assert.equal(result.requires_application, true, 'bireysel kullanıcı anlık kuramaz');
+    const listQueries = db.poolLog.filter((entry) => /FROM site_applications a/.test(entry.sql));
+    assert.equal(listQueries.length, 2);
     for (const entry of db.poolLog) {
       assert.deepEqual(entry.params, [48213]);
+    }
+    for (const entry of listQueries) {
       assert.match(entry.sql, /WHERE a\.applicant_user_code = \$1/);
     }
-    assert.match(db.poolLog[0].sql, /ORDER BY a\.created_at DESC, a\.id DESC LIMIT 10$/);
-    assert.deepEqual(await listMyApplications('abc'), { pending: null, items: [] });
+    assert.match(listQueries[0].sql, /ORDER BY a\.created_at DESC, a\.id DESC LIMIT 10$/);
+    assert.deepEqual(await listMyApplications('abc'), { pending: null, items: [], requires_application: false });
   });
 
+  it('mine.requires_application: bireysel / daire sahibi ve sahip bağı olmayan yönetici true; sahip bağı olan yönetici, süper ve uygunsuz roller false', async () => {
+    const cases = [
+      ['individual', false, true],
+      ['apartment_owner', false, true],
+      ['site_manager', false, true],
+      ['site_manager', true, false],
+      ['super_user', false, false],
+      ['super_user', true, false],
+      ['staff', false, false],
+      [undefined, false, false],
+    ];
+    for (const [role, ownerLink, expected] of cases) {
+      const db = install({ role, ownerLink });
+      const result = await listMyApplications(48213);
+      assert.equal(result.requires_application, expected, role + ' ' + ownerLink);
+      assert.deepEqual(Object.keys(result), ['pending', 'items', 'requires_application']);
+      const consultedLink = db.poolLog.some((entry) => /site_manager_sites m INNER JOIN/.test(entry.sql));
+      assert.equal(consultedLink, role === 'site_manager', 'bağ yalnız site_manager için sorgulanır');
+    }
+  });
   it('iptal: kendi bekleyen başvurusu cancelled olur (audit: yalnız sayılar); başkasının / olmayan 404; bekleyen değilse 409; ROLLBACK', async () => {
     let db = install({ row: storedRow() });
     const cancelled = await cancelMyApplication({ applicationId: 41, actor: individual });
     assert.equal(cancelled.id, 41);
-    const select = find(db.log, /FROM site_applications WHERE id = \$1 AND applicant_user_code = \$2 FOR UPDATE$/);
+    const select = find(db.log, /FROM site_applications a WHERE a\.id = \$1 AND a\.applicant_user_code = \$2 FOR UPDATE OF a$/);
     assert.deepEqual(select.params, [41, 48213], 'başvuran kodu sorguda: IDOR 404');
     assert.ok(
-      indexOfSql(db.log, /FROM users WHERE user_code = \$1 LIMIT 1 FOR NO KEY UPDATE$/) < indexOfSql(db.log, /FROM site_applications WHERE id = \$1 AND applicant_user_code = \$2 FOR UPDATE$/),
+      indexOfSql(db.log, /FROM users WHERE user_code = \$1 LIMIT 1 FOR NO KEY UPDATE$/) < indexOfSql(db.log, /FROM site_applications a WHERE a\.id = \$1 AND a\.applicant_user_code = \$2 FOR UPDATE OF a$/),
       'kilit sırası: önce kullanıcı satırı, sonra başvuru satırı (hesap silme ile ters sıra deadlock\'u yok)',
     );
     assert.match(find(db.log, /^UPDATE site_applications SET status = 'cancelled'/).sql, /decided_at = NOW\(\)/);
@@ -414,7 +516,7 @@ describe('listMyApplications / cancelMyApplication', () => {
 });
 
 describe('approveSiteApplication', () => {
-  it('KİLİT SIRASI: advisory -> cihaz FOR UPDATE -> başvuran FOR NO KEY UPDATE -> başvuru FOR UPDATE -> yeni site satırları -> COMMIT', async () => {
+  it('KİLİT SIRASI: advisory -> cihaz FOR UPDATE -> başvuran FOR NO KEY UPDATE -> başvuru FOR UPDATE -> yeni site satırları -> COMMIT (gerçek hesap silme akışıyla aynı: cihaz önce)', async () => {
     const db = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });
     await approveSiteApplication({ applicationId: 41, note: 'Uygun', actor: superUser });
     const sequence = [
@@ -424,7 +526,7 @@ describe('approveSiteApplication', () => {
       /^SELECT id, user_code FROM users WHERE user_code = \$1 LIMIT 1$/,
       /^SELECT \* FROM devices .* FOR UPDATE$/,
       /FROM users WHERE user_code = \$1 LIMIT 1 FOR NO KEY UPDATE$/,
-      /FROM site_applications WHERE id = \$1 FOR UPDATE$/,
+      /FROM site_applications a WHERE a\.id = \$1 FOR UPDATE OF a$/,
       /^INSERT INTO sites/,
       /^INSERT INTO site_manager_sites/,
       /^INSERT INTO site_memberships/,
@@ -443,9 +545,12 @@ describe('approveSiteApplication', () => {
     assert.ok(positions.every((p) => p >= 0), JSON.stringify(positions));
     assert.deepEqual([...positions].sort((a, b) => a - b), positions);
     assert.deepEqual(find(db.log, /^SELECT pg_advisory_xact_lock/).params, ['site_application:48213'], 'oluşturma ile ORTAK anahtar');
+    // cihaz sorgusu başvuranın (kilitsiz okunan) kimliklerini kullanır; kullanıcı satırı cihazdan SONRA kilitlenir
+    assert.deepEqual(find(db.log, /^SELECT \* FROM devices/).params, ['A0B1C2D3E4F5', 7, 48213]);
+    // yönetici bağı 'owner' (ortak çekirdek); abonelik satırı çekirdeğin son ifadesi
+    assert.match(find(db.log, /^INSERT INTO site_manager_sites/).sql, /VALUES \(\$1, \$2, 'owner'\)/);
     assert.ok(db.client.released);
   });
-
   it('başarı: abonelik satırı, başvuru güncellemesi, audit (site_code dolu, details yalnız sayı / bayrak) ve yanıt', async () => {
     const mailed = [];
     install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });
@@ -453,8 +558,8 @@ describe('approveSiteApplication', () => {
     const db = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });
     const result = await approveSiteApplication({ applicationId: 41, note: '  Uygun  ', actor: superUser });
 
-    assert.deepEqual(find(db.log, /^INSERT INTO site_subscriptions/).params, [900, 'manual_approval', 41]);
-    assert.match(find(db.log, /^INSERT INTO site_subscriptions/).sql, /VALUES \(\$1, \$2, 'active', 'manual_approval', \$3\)/);
+    assert.deepEqual(find(db.log, /^INSERT INTO site_subscriptions/).params, [900, 'manual_approval', 'manual_approval', 41]);
+    assert.match(find(db.log, /^INSERT INTO site_subscriptions/).sql, /VALUES \(\$1, \$2, 'active', \$3, \$4\)/);
     const update = find(db.log, /^UPDATE site_applications SET status = 'approved'/);
     assert.deepEqual(update.params, [41, 1, 'Uygun', 900]);
     assert.match(update.sql, /decision_source = 'super_user'/);
@@ -590,15 +695,21 @@ describe('approveSiteApplication', () => {
     assert.equal(db.connects(), 0);
   });
 
-  it('ANLIK KURULUMLA AYNI çekirdek: site..kapı..cihaz SQL ifadeleri ve parametreleri birebir aynı', async () => {
-    const coreRegex = /^(INSERT INTO sites|INSERT INTO site_manager_sites|INSERT INTO site_memberships|UPDATE users SET role|INSERT INTO site_blocks|INSERT INTO apartments|INSERT INTO site_doors|UPDATE devices SET site_code|UPDATE site_doors SET assigned_device_id)/;
+  it('ANLIK KURULUMLA AYNI çekirdek: site..kapı..cihaz..abonelik SQL ifadeleri ve parametreleri birebir aynı (yalnız abonelik kaynağı / başvuru kimliği farklı)', async () => {
+    const coreRegex = /^(INSERT INTO sites|INSERT INTO site_manager_sites|INSERT INTO site_memberships|UPDATE users SET role|INSERT INTO site_blocks|INSERT INTO apartments|INSERT INTO site_doors|UPDATE devices SET site_code|UPDATE site_doors SET assigned_device_id|INSERT INTO site_subscriptions)/;
     const coreOf = (log) => log.filter((entry) => coreRegex.test(entry.sql)).map((entry) => ({ sql: entry.sql, params: entry.params }));
 
     const approved = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }) });
     await approveSiteApplication({ applicationId: 41, actor: superUser });
     const fromApproval = coreOf(approved.log);
 
-    // anlık yol: aynı kullanıcı (site_manager) ve aynı girdi; cihaz sahibi
+    // anlık yol: aynı kullanıcı (sahip bağı olan site_manager) ve aynı girdi; cihaz sahibi
+    pool.query = async (text) => {
+      const sql = norm(text);
+      if (/^SELECT role FROM users/.test(sql)) return ok([{ role: 'site_manager' }]);
+      if (/site_manager_sites m INNER JOIN/.test(sql)) return ok([{ x: 1 }]);
+      return ok();
+    };
     const instantLog = [];
     const instantClient = {
       released: false,
@@ -607,6 +718,7 @@ describe('approveSiteApplication', () => {
         const sql = norm(text);
         instantLog.push({ sql, params });
         if (/^SELECT id, user_code, role, full_name, email FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'site_manager', full_name: 'A', email: 'a@example.com' }]);
+        if (/site_manager_sites m INNER JOIN/.test(sql)) return ok([{ x: 1 }]);
         if (/^SELECT \* FROM devices/.test(sql)) return ok([{ id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' }]);
         if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: params[0], address: params[1], city: params[2], district: params[3], block_count: params[4], apartment_count: params[5], door_count: params[6], approval_status: 'approved', management_type: params[8] }]);
         if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 30 + Number(params[2]), site_code: 900, block_name: params[1], sort_order: params[2] }]);
@@ -626,8 +738,15 @@ describe('approveSiteApplication', () => {
       deviceUid: 'A0B1C2D3E4F5',
     });
     const fromInstant = coreOf(instantLog);
-    assert.ok(fromInstant.length >= 9);
-    assert.deepEqual(fromApproval, fromInstant);
+    assert.ok(fromInstant.length >= 10);
+    const isSubscription = (entry) => /^INSERT INTO site_subscriptions/.test(entry.sql);
+    assert.deepEqual(fromApproval.filter((entry) => !isSubscription(entry)), fromInstant.filter((entry) => !isSubscription(entry)));
+    // abonelik: aynı SQL; anlık yolda source 'admin' ve application_id yok, onayda 'manual_approval' + başvuru kimliği
+    const [approvalSubscription] = fromApproval.filter(isSubscription);
+    const [instantSubscription] = fromInstant.filter(isSubscription);
+    assert.equal(approvalSubscription.sql, instantSubscription.sql);
+    assert.deepEqual(approvalSubscription.params, [900, 'manual_approval', 'manual_approval', 41]);
+    assert.deepEqual(instantSubscription.params, [900, 'manual_approval', 'admin', null]);
   });
 });
 
@@ -668,6 +787,83 @@ describe('rejectSiteApplication', () => {
   });
 });
 
+describe('COMMIT sonrası yeniden okuma hatası işlemi BOZMAZ (asgari başarılı yanıt, bildirim okumaya bağlı değil)', () => {
+  async function withSilencedErrors(run) {
+    const original = console.error;
+    const lines = [];
+    console.error = (...args) => lines.push(args.map(String).join(' '));
+    try {
+      return { result: await run(), lines };
+    } finally {
+      console.error = original;
+    }
+  }
+
+  it('oluşturma: yeniden okuma hatası 500 yapmaz; yanıt COMMIT edilen değerlerden hazırlanır; bildirim yine gider', async () => {
+    const db = install({ reloadFails: true });
+    const mailed = [];
+    siteApplicationHooks.notifyCreated = async (payload) => { mailed.push(payload); };
+    const { result, lines } = await withSilencedErrors(() => createSiteApplication({ actor: individual, body: goodBody }));
+    assert.ok(has(db.log, /^COMMIT/));
+    assert.equal(result.id, 41);
+    assert.equal(result.status, 'pending');
+    assert.equal(result.site_name, 'Gül Sitesi');
+    assert.equal(result.created_at, '2026-10-16T07:00:00.000Z', 'created_at INSERT ... RETURNING değerinden');
+    assert.deepEqual(result.blocks, [{ name: 'A Blok', apartment_count: 12 }, { name: 'B Blok', apartment_count: 8 }]);
+    assert.equal(result.block_count + result.apartment_count + result.door_count, 24);
+    for (const key of ['decision_source', 'decided_by', 'applicant', 'payment_reference', 'device_available']) {
+      assert.equal(key in result, false, key);
+    }
+    await settle();
+    assert.equal(mailed.length, 1, 'bildirim okuma başarısına bağlı değil');
+    assert.equal(mailed[0].id, 41);
+    assert.ok(lines.some((line) => line.includes('XX000')));
+    assert.equal(lines.join('\n').includes('SECRET_RELOAD_DETAIL'), false, 'ayrıntı loga yazılmaz (yalnız kod)');
+  });
+
+  it('iptal: yeniden okuma hatasında cancelled asgari yanıt', async () => {
+    const db = install({ row: storedRow(), reloadFails: true });
+    const { result } = await withSilencedErrors(() => cancelMyApplication({ applicationId: 41, actor: individual }));
+    assert.ok(has(db.log, /^COMMIT/));
+    assert.equal(result.id, 41);
+    assert.equal(result.status, 'cancelled');
+    assert.ok(result.decided_at);
+    assert.equal('decision_source' in result, false);
+  });
+
+  it('onay: yeniden okuma hatasında site + application asgari yanıtla 200 (device_attached dahil), e-posta gider', async () => {
+    const mailed = [];
+    const db = install({ row: storedRow({ device_uid: 'A0B1C2D3E4F5' }), reloadFails: true });
+    siteApplicationHooks.notifyDecided = async (payload) => { mailed.push(payload); };
+    const { result } = await withSilencedErrors(() => approveSiteApplication({ applicationId: 41, note: 'Tamam', actor: superUser }));
+    assert.ok(has(db.log, /^COMMIT/));
+    assert.equal(result.application.status, 'approved');
+    assert.equal(result.application.site_code, 900);
+    assert.equal(result.application.decision_source, 'super_user');
+    assert.equal(result.application.decision_note, 'Tamam');
+    assert.equal(result.application.decided_by_name, 'Root');
+    assert.equal(result.application.applicant.email, 'ayse@example.com');
+    assert.equal(result.site.site_code, 900);
+    assert.equal(result.device_attached, true);
+    await settle();
+    assert.equal(mailed.length, 1);
+    assert.equal(mailed[0].approved, true);
+  });
+
+  it('ret: yeniden okuma hatasında rejected asgari yanıt, e-posta gider', async () => {
+    const mailed = [];
+    const db = install({ row: storedRow(), reloadFails: true });
+    siteApplicationHooks.notifyDecided = async (payload) => { mailed.push(payload); };
+    const { result } = await withSilencedErrors(() => rejectSiteApplication({ applicationId: 41, reason: 'Eksik', actor: superUser }));
+    assert.ok(has(db.log, /^COMMIT/));
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.decision_note, 'Eksik');
+    assert.equal(result.decision_source, 'super_user');
+    await settle();
+    assert.deepEqual(mailed.map((m) => m.approved), [false]);
+  });
+});
+
 describe('süper kullanıcı listeleri ve ayar', () => {
   it('liste: varsayılan pending, 30, offset 0; q yalnız parametre (joker kaçışlı); geçersiz süzgeç 400 (veritabanına dokunmaz)', async () => {
     const db = install();
@@ -694,10 +890,13 @@ describe('süper kullanıcı listeleri ve ayar', () => {
     assert.equal(db.connects(), 0);
   });
 
-  it('özet: { pending } hafif tek sorgu; ayar: payment_available false, planlar; PUT yalnız approval, payment 409, diğer 400', async () => {
+  it('özet: { pending } hafif tek sorgu, başvuranı silinmiş bekleyenleri SAYMAZ (rozet şişmez); ayar: payment_available false, planlar; PUT yalnız approval, payment 409, diğer 400', async () => {
     let db = install();
-    pool.query = async () => ok([{ pending: 4 }]);
+    const seen = [];
+    pool.query = async (text) => { seen.push(norm(text)); return ok([{ pending: 4 }]); };
     assert.deepEqual(await getPendingSummary(), { pending: 4 });
+    assert.equal(seen.length, 1);
+    assert.match(seen[0], /WHERE status = 'pending' AND applicant_user_code IS NOT NULL$/);
 
     db = install();
     const settings = await getSiteOnboardingSettings();

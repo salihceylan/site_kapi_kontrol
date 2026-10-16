@@ -985,6 +985,16 @@ export async function createSiteWithStructure({
       );
     }
 
+    // Her yeni site abonelik satırıyla açılır (satırı olmayan site "eski" sayılır; mevcut sitelere satır eklenmez): admin kaynağı.
+    // Bekleyen (onay bekleyen) site de satır alır; site onayı ayrı bir kavramdır (sites.approval_status).
+    await client.query(
+      `
+        INSERT INTO site_subscriptions (site_code, plan_code, status, source)
+        VALUES ($1, 'manual_approval', 'active', 'admin')
+      `,
+      [siteCode],
+    );
+
     if (approvalStatus !== 'approved') {
       await client.query('COMMIT');
       return getSiteByCode(siteCode);
@@ -2058,11 +2068,12 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
         throw err;
       }
 
-      // site_manager_sites'a ekle
+      // site_manager_sites'a ekle: bag 'invited' (mevcut yöneticinin daveti). Davetle yönetici olan kişi SAHİP bağı kazanmaz; anlık site kuramaz,
+      // site için başvurur (docs/PLATFORM_SITE_BASVURUSU.md). Zaten var olan bağ (ON CONFLICT) olduğu gibi kalır.
       await client.query(
         `
-          INSERT INTO site_manager_sites (site_code, manager_user_code)
-          VALUES ($1, $2)
+          INSERT INTO site_manager_sites (site_code, manager_user_code, link_source)
+          VALUES ($1, $2, 'invited')
           ON CONFLICT (site_code, manager_user_code) DO NOTHING
         `,
         [code, targetUser.user_code],

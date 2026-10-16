@@ -148,8 +148,10 @@ describe('migration 033: site başvurusu', () => {
     assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_site_applications_applicant_created ON site_applications \(applicant_user_code, created_at DESC\)/);
   });
 
-  it('ekleyici ve idempotent: mevcut tabloya dokunmaz; abonelik / başvuru satırı YAZMAZ (backfill yok); yalnız iki tohum', () => {
-    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|ALTER\s+TABLE/i.test(SQL), false);
+  it('ekleyici ve idempotent: mevcut tablolardaki satırlara dokunmaz; tek mevcut-tablo değişikliği site_manager_sites.link_source; abonelik / başvuru satırı YAZMAZ (backfill yok); yalnız iki tohum', () => {
+    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET/i.test(SQL), false);
+    // ALTER yalnız TEK ifade: site_manager_sites'a NULL'lanabilir sütun (mevcut satırlar NULL = eski / sahip kalır)
+    assert.deepEqual(SQL.match(/ALTER\s+TABLE[^;]*/gi), ["ALTER TABLE site_manager_sites ADD COLUMN IF NOT EXISTS link_source TEXT CHECK (link_source IS NULL OR link_source IN ('owner', 'invited'))"]);
     assert.equal(/INSERT INTO site_subscriptions|INSERT INTO site_applications/i.test(SQL), false, 'mevcut sitelere abonelik satırı eklenmez');
     const inserts = SQL.match(/INSERT INTO \w+/g) ?? [];
     assert.deepEqual(inserts, ['INSERT INTO subscription_plans', 'INSERT INTO platform_settings']);
@@ -158,6 +160,19 @@ describe('migration 033: site başvurusu', () => {
     for (const create of SQL.match(/CREATE (UNIQUE )?(TABLE|INDEX)[^(]*/g) ?? []) {
       assert.match(create, /IF NOT EXISTS/, create);
     }
+  });
+
+  it('site_manager_sites.link_source: NULL = eski kayıt (sahip), yalnız owner / invited; ADD COLUMN IF NOT EXISTS (varsa dokunmaz); varsayılan YOK', () => {
+    assert.match(SQL, /ALTER TABLE site_manager_sites ADD COLUMN IF NOT EXISTS link_source TEXT CHECK \(link_source IS NULL OR link_source IN \('owner', 'invited'\)\)/);
+    assert.equal(/link_source TEXT[^,;]*DEFAULT/i.test(SQL), false);
+    const earlier = listMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.number < 33).map((m) => m.sql).join('\n');
+    assert.match(earlier, /CREATE TABLE IF NOT EXISTS site_manager_sites\b/, 'ALTER edilen tablo daha önceki migration\'larda oluşur');
+  });
+
+  it('yabancı anahtar indeksleri: site_applications(site_code), site_applications(decided_by), platform_settings(updated_by) kısmi indeksler', () => {
+    assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_site_applications_site ON site_applications \(site_code\) WHERE site_code IS NOT NULL/);
+    assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_site_applications_decided_by ON site_applications \(decided_by\) WHERE decided_by IS NOT NULL/);
+    assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_platform_settings_updated_by ON platform_settings \(updated_by\) WHERE updated_by IS NOT NULL/);
   });
 
   it('başlıkta db.js ile aynı DDL olduğu ve sözleşme belgesi belirtilir', () => {

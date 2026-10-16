@@ -4,6 +4,7 @@
 // Kaynakta Unicode kaçış dizisi kullanılmaz (araç zinciri bunları görünmez karaktere çevirebilir): kod noktaları sayıyla denetlenir.
 
 import { normalizeSetupSiteInput } from '../services/membership_rules.js';
+import { isDroppedCodePoint } from '../utils/safe_text.js';
 import { managementTypeLabel, normalizeManagementType, resolveManagementTypeInput } from './management_types.js';
 import { PlatformError } from './errors.js';
 
@@ -18,7 +19,6 @@ export const ADMIN_LIST_MAX_LIMIT = 100;
 export const SEARCH_MAX = 100;
 export const OFFSET_MAX = 1000000;
 export const DEVICE_UID_MAX = 64;
-export const PLAN_MANUAL_APPROVAL = 'manual_approval';
 export const ONBOARDING_SETTING_KEY = 'site_onboarding';
 export const ONBOARDING_MODES = Object.freeze(['approval', 'payment']);
 
@@ -46,44 +46,14 @@ export const paymentNotAvailable = () => new PlatformError(409, 'PAYMENT_NOT_AVA
 // Serbest metin (not / gerekçe)
 // ---------------------------------------------------------------------------
 
-const CHAR_TAB = 9;
-const CHAR_LF = 10;
-const CHAR_CR = 13;
-const CHAR_DEL = 127;
-const CHAR_ZERO_WIDTH_SPACE = 0x200b;
-const CHAR_LRM = 0x200e;
-const CHAR_RLM = 0x200f;
-const CHAR_LINE_SEPARATOR = 0x2028;
-const CHAR_PARAGRAPH_SEPARATOR = 0x2029;
-const CHAR_BIDI_EMBEDDING_FIRST = 0x202a;
-const CHAR_BIDI_EMBEDDING_LAST = 0x202e;
-const CHAR_WORD_JOINER = 0x2060;
-const CHAR_BIDI_ISOLATE_FIRST = 0x2066;
-const CHAR_BIDI_ISOLATE_LAST = 0x2069;
-const CHAR_BOM = 0xfeff;
-
-function isDroppedCharacter(code) {
-  if (code < 32) {
-    return code !== CHAR_TAB && code !== CHAR_LF && code !== CHAR_CR;
-  }
-  return (
-    code === CHAR_DEL ||
-    code === CHAR_ZERO_WIDTH_SPACE ||
-    code === CHAR_LRM ||
-    code === CHAR_RLM ||
-    code === CHAR_LINE_SEPARATOR ||
-    code === CHAR_PARAGRAPH_SEPARATOR ||
-    (code >= CHAR_BIDI_EMBEDDING_FIRST && code <= CHAR_BIDI_EMBEDDING_LAST) ||
-    code === CHAR_WORD_JOINER ||
-    (code >= CHAR_BIDI_ISOLATE_FIRST && code <= CHAR_BIDI_ISOLATE_LAST) ||
-    code === CHAR_BOM
-  );
-}
+// Serbest metin: kontrol karakterleri (satır sonu ve sekme hariç), eşsiz vekil (NUL / geçersiz Unicode: PostgreSQL 22021 / 22P05), yön ve
+// görünmez karakterler atılır; emoji bağlayıcıları (ZWJ / ZWNJ) korunur. Ortak kural: utils/safe_text.js.
+const FREE_TEXT_ALLOWED_CONTROLS = [9, 10, 13];
 
 function stripHiddenCharacters(text) {
   let out = '';
   for (const ch of text) {
-    if (!isDroppedCharacter(ch.codePointAt(0))) {
+    if (!isDroppedCodePoint(ch.codePointAt(0), { allowControls: FREE_TEXT_ALLOWED_CONTROLS, keepJoiners: true })) {
       out += ch;
     }
   }

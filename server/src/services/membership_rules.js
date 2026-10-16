@@ -1,4 +1,5 @@
 import { generateNumericCode } from '../utils/helpers.js';
+import { cleanText, clipChars } from '../utils/safe_text.js';
 import { PG_INT4_MAX, SITE_LIMITS, parsePositiveId } from '../utils/validators.js';
 
 /**
@@ -431,11 +432,13 @@ export function parseBoundedInteger(value, { min, max, defaultValue, label }) {
   return parsed;
 }
 
-function optionalText(value, maxLength) {
+// Önce güvenli hâle getir (NUL, eşsiz vekil, yön / görünmez karakter atılır), sonra sınırla, SONRA kırp: sonuç idempotenttir
+// (saklanan değer onayda yeniden normalleştirildiğinde değişmez) ve PostgreSQL'de 22021 / 22P05 hatası üretemez.
+function optionalText(value, maxLength, options) {
   if (value === undefined || value === null) {
     return null;
   }
-  const text = String(value).trim().slice(0, maxLength);
+  const text = clipChars(cleanText(value, options), maxLength);
   return text || null;
 }
 
@@ -448,7 +451,7 @@ export function normalizeSetupSiteInput({
   doors,
   doorCount = 1,
 }) {
-  const siteName = String(name ?? '').trim();
+  const siteName = cleanText(name).trim();
   if (!siteName) {
     throw httpError(400, 'Site adı zorunludur.');
   }
@@ -469,7 +472,7 @@ export function normalizeSetupSiteInput({
   const normalizedBlocks = blockList.map((raw, idx) => {
     const src = raw !== null && typeof raw === 'object' ? raw : {};
     const fallbackName = `Blok ${idx + 1}`;
-    const bName = String(src.name ?? '').trim().slice(0, SETUP_LABEL_MAX) || fallbackName;
+    const bName = clipChars(cleanText(src.name ?? ''), SETUP_LABEL_MAX) || fallbackName;
     const dedupeKey = bName.toLocaleLowerCase('tr-TR');
     if (seenBlockNames.has(dedupeKey)) {
       throw httpError(400, `"${bName}" blok adı birden fazla kez kullanılmış. Blok adları benzersiz olmalıdır.`);
@@ -497,7 +500,7 @@ export function normalizeSetupSiteInput({
     }
     doorList = doors.map((d, idx) => {
       const rawName = d !== null && typeof d === 'object' ? d.name : d;
-      const dName = String(rawName ?? '').trim().slice(0, SETUP_LABEL_MAX);
+      const dName = clipChars(cleanText(rawName ?? ''), SETUP_LABEL_MAX);
       return { name: dName || `Kapı ${idx + 1}`, doorIndex: idx + 1 };
     });
   } else {
@@ -516,7 +519,7 @@ export function normalizeSetupSiteInput({
     siteName,
     city: optionalText(city, SETUP_TEXT_MAX),
     district: optionalText(district, SETUP_TEXT_MAX),
-    address: optionalText(address, SETUP_ADDRESS_MAX),
+    address: optionalText(address, SETUP_ADDRESS_MAX, { multiline: true }),
     blocks: normalizedBlocks,
     doors: doorList,
     totalBlockCount: normalizedBlocks.length,

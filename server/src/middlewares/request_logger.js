@@ -21,6 +21,8 @@ const SENSITIVE_QUERY_KEYS = [
   'sig',
   // duyuru e-postasindaki "abonelikten cik" baglantisi: /public/announcement-unsubscribe?t=<adres ozeti>.<imza>
   't',
+  // arama metni: super kullanicinin site basvurusu listesinde aradigi basvuran e-postasi / adi (kisisel veri) loga duser; tum uclarda maskelenir
+  'q',
 ];
 
 // Sorgu parametresi degerleri: ?token=abc&x=1 -> ?token=***&x=1

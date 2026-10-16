@@ -1,8 +1,9 @@
 -- 033: Site yöneticisi olma (site başvurusu): bireysel kullanıcı site kurmak için BAŞVURU yapar, süper kullanıcı onaylar
 -- Sözleşme: docs/PLATFORM_SITE_BASVURUSU.md
 -- db.js ensureDbSchema ile aynı DDL; yeni kurulumlarda migration runner ile uygulanabilsin diye eklendi.
--- Tamamen ekleyici (additive) ve idempotent: mevcut tabloları/siteleri DEĞİŞTİRMEZ. Mevcut sitelere abonelik satırı YAZILMAZ (backfill yok):
--- satırı olmayan site "eski (abonelik öncesi)" sayılır. Yalnız iki yapılandırma tohumu yazılır (ON CONFLICT DO NOTHING).
+-- Ekleyici (additive) ve idempotent: mevcut tablolardaki satırları DEĞİŞTİRMEZ; tek mevcut-tablo değişikliği site_manager_sites'a NULL'lanabilir
+-- link_source sütunudur (NULL = eski kayıt = sahip bağı). Mevcut sitelere abonelik satırı YAZILMAZ (backfill yok): satırı olmayan site
+-- "eski (abonelik öncesi)" sayılır; bu sürümden sonra kurulan her site satırla açılır. Yalnız iki yapılandırma tohumu yazılır (ON CONFLICT DO NOTHING).
 
 -- 1. Abonelik planları. Ödeme sağlayıcısı ve fiyatlar YOKTUR: fiyat NULL, "standard" planı kapalı ("Yakında…").
 CREATE TABLE IF NOT EXISTS subscription_plans (
@@ -89,3 +90,16 @@ CREATE INDEX IF NOT EXISTS idx_site_applications_status_created
   ON site_applications (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_site_applications_applicant_created
   ON site_applications (applicant_user_code, created_at DESC);
+
+-- 5. Site yöneticisi bağının kaynağı. NULL = eski kayıt (sahip sayılır); 'owner' = site başvurusu onayı / anlık kurulum; 'invited' = mevcut
+-- yöneticinin daveti / ortak yönetici ataması. Anlık site kurulumu yalnız onaylı bir sitede 'invited' OLMAYAN en az bir bağı olan yöneticiye açıktır;
+-- diğer site yöneticileri ve bireysel kullanıcılar site için başvuru yapar.
+ALTER TABLE site_manager_sites ADD COLUMN IF NOT EXISTS link_source TEXT CHECK (link_source IS NULL OR link_source IN ('owner', 'invited'));
+
+-- 6. Yabancı anahtar indeksleri: hesap / site silinirken (ON DELETE SET NULL) sıralı tarama olmasın.
+CREATE INDEX IF NOT EXISTS idx_site_applications_site
+  ON site_applications (site_code) WHERE site_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_site_applications_decided_by
+  ON site_applications (decided_by) WHERE decided_by IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_platform_settings_updated_by
+  ON platform_settings (updated_by) WHERE updated_by IS NOT NULL;

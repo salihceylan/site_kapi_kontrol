@@ -1420,6 +1420,19 @@ export async function ensureDbSchema() {
         ON site_applications (status, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_site_applications_applicant_created
         ON site_applications (applicant_user_code, created_at DESC);
+
+      -- 5. Site yöneticisi bağının kaynağı. NULL = eski kayıt (sahip sayılır); 'owner' = site başvurusu onayı / anlık kurulum; 'invited' = mevcut
+      -- yöneticinin daveti / ortak yönetici ataması. Anlık site kurulumu yalnız onaylı bir sitede 'invited' OLMAYAN en az bir bağı olan yöneticiye açıktır;
+      -- diğer site yöneticileri ve bireysel kullanıcılar site için başvuru yapar.
+      ALTER TABLE site_manager_sites ADD COLUMN IF NOT EXISTS link_source TEXT CHECK (link_source IS NULL OR link_source IN ('owner', 'invited'));
+
+      -- 6. Yabancı anahtar indeksleri: hesap / site silinirken (ON DELETE SET NULL) sıralı tarama olmasın.
+      CREATE INDEX IF NOT EXISTS idx_site_applications_site
+        ON site_applications (site_code) WHERE site_code IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_site_applications_decided_by
+        ON site_applications (decided_by) WHERE decided_by IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_platform_settings_updated_by
+        ON platform_settings (updated_by) WHERE updated_by IS NOT NULL;
     `);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ

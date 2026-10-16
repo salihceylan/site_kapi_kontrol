@@ -12,7 +12,7 @@ import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
 import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
-import { createSiteWithStructure } from './site_setup_core.js';
+import { createSiteWithStructure, userHasOwnerLink } from './site_setup_core.js';
 import {
   SQL_BULK_APARTMENT_USERS,
   SQL_BULK_BLOCK_USERS,
@@ -422,7 +422,7 @@ export async function verifyIndividualEmailCode({ email, code }) {
     if (pendingMgrInvRes.rowCount > 0) {
       for (const inv of pendingMgrInvRes.rows) {
         await client.query(
-          `INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          `INSERT INTO site_manager_sites (site_code, manager_user_code, link_source) VALUES ($1, $2, 'invited') ON CONFLICT DO NOTHING`,
           [Number(inv.site_code), user.user_code],
         );
         await client.query(
@@ -660,7 +660,7 @@ export async function claimDevice({ userCode, deviceInput }) {
 
 /**
  * Kullanıcının Sahiplendiği Cihazları Listele
- * SALT-OKUNUR: rol yükseltme gibi yan etki yoktur (rol yalnızca claimDevice anında yükseltilir).
+ * SALT-OKUNUR: yan etki yoktur. Cihaz sahiplenme (claimDevice) de rolü DEĞİŞTİRMEZ; yönetici olmanın yolu site başvurusu + süper onayıdır.
  */
 export async function getMyClaimedDevices(userCode) {
   const code = parseUserCode(userCode);
@@ -691,6 +691,34 @@ export async function getMyClaimedDevices(userCode) {
   };
 }
 
+function applicationRequiredError() {
+  const error = httpError(409, 'Site kurmak için başvuru yapmalısınız.');
+  error.code = 'APPLICATION_REQUIRED';
+  return error;
+}
+
+/**
+ * Anlık site kurulumu (setup-site) kapısı (docs/PLATFORM_SITE_BASVURUSU.md): bireysel / daire sahibi VE sahip bağı olmayan site yöneticisi
+ * (davetle yönetici olanlar, sitesi olmayanlar; bkz. userHasOwnerLink) için KAPALI -> 409 APPLICATION_REQUIRED. Sahip bağı olan yönetici ve
+ * süper kullanıcı etkilenmez. `knownRole` verilmezse rol DB'den okunur (hesap yoksa sessizce geçer: sonraki adım 404 verir).
+ */
+async function assertInstantSetupAllowed(db, code, knownRole) {
+  let role = knownRole;
+  if (role === undefined) {
+    const roleRes = await db.query(`SELECT role FROM users WHERE user_code = $1 LIMIT 1`, [code]);
+    role = roleRes.rows?.[0]?.role;
+    if (!role) {
+      return;
+    }
+  }
+  if (shouldPromoteToSiteManager(role)) {
+    throw applicationRequiredError();
+  }
+  if (role === 'site_manager' && !(await userHasOwnerLink(db, code))) {
+    throw applicationRequiredError();
+  }
+}
+
 /**
  * ÜYELİK SİSTEMİ AŞAMA 4: Dinamik Site, Blok ve Daire Kurulumu (Site Sahibi / SITE_OWNER)
  * Girdi sınırları: blok <=100, toplam daire <=5000, kapı <=100 (admin uçlarıyla aynı sabitler).
@@ -711,6 +739,10 @@ export async function setupSiteWithClaimedDevice({
   if (code === null) {
     throw httpError(401, 'Kullanıcı oturumu gereklidir.');
   }
+
+  // Rol / sahip bağı kapısı girdi doğrulamasından ÖNCE: kapalı kullanıcıya HER gövdede 409 APPLICATION_REQUIRED döner (400 değil).
+  // Bu ön kapı salt-okunur bir sorgudur; kesin karar aşağıda transaction içinde taze rolle yeniden verilir.
+  await assertInstantSetupAllowed(pool, code);
 
   // Platform: yönetim türü (varsayılan apartment_site; bu fazda diğerleri 400 MANAGEMENT_TYPE_COMING_SOON).
   const managementType = resolveManagementTypeInput(rawManagementType);
@@ -742,14 +774,10 @@ export async function setupSiteWithClaimedDevice({
     }
     const user = userRes.rows[0];
 
-    // 1a. Site yöneticisi olma politikası (docs/PLATFORM_SITE_BASVURUSU.md): bireysel / daire sahibi kullanıcı için ANLIK kurulum
-    // kapalıdır; site kurmak için BAŞVURU yapar (POST /membership/site-applications), süper kullanıcı onaylayınca site kurulur.
-    // Rol, istek başındaki oturumdan değil bu transaction'da DB'den okunur. Site yöneticisi ("Site Ekle") ve süper kullanıcı etkilenmez.
-    if (shouldPromoteToSiteManager(user.role)) {
-      const applicationRequired = httpError(409, 'Site kurmak için başvuru yapmalısınız.');
-      applicationRequired.code = 'APPLICATION_REQUIRED';
-      throw applicationRequired;
-    }
+    // 1a. Site yöneticisi olma politikası (docs/PLATFORM_SITE_BASVURUSU.md): bireysel / daire sahibi ve sahip bağı olmayan site yöneticisi
+    // için ANLIK kurulum kapalıdır; site kurmak için BAŞVURU yapar (POST /membership/site-applications), süper kullanıcı onaylayınca site kurulur.
+    // Rol ve bağ, istek başındaki oturumdan değil bu transaction'da DB'den okunur. Sahip bağı olan yönetici ("Site Ekle") ve süper etkilenmez.
+    await assertInstantSetupAllowed(client, code, user.role);
 
     // 1b. Cihaz sahipliği (site kurulmadan ÖNCE doğrulanır; cihaz satırı kilitlenir: eşzamanlı atama/sahiplenme
     // yarışı olmaz). Belirtilen cihaz kullanıcıya ait değilse site HİÇ kurulmaz (ROLLBACK, 4xx).

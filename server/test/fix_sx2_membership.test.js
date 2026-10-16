@@ -215,8 +215,10 @@ describe('changeApartmentMemberPassword: mevcut parola denemesi sinirli (429 CUR
 describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogrulanir', () => {
   const baseInput = { userCode: 48213, name: 'Yeni Site', city: 'Ankara', district: 'Cankaya', address: 'x' };
 
-  function handlers({ role = 'individual', device = null } = {}) {
+  function handlers({ role = 'individual', device = null, ownerLink = true } = {}) {
     return [
+      // sahip bagi sorgusu (userHasOwnerLink): site yoneticisi anlik kurulum icin onayli sitede 'invited' olmayan bir bag gerektirir
+      [/^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/, ownerLink ? { rowCount: 1, rows: [{ '?column?': 1 }] } : { rowCount: 0, rows: [] }],
       [/^SELECT id, user_code, role, full_name, email FROM users/, { rowCount: 1, rows: [{ id: 7, user_code: 48213, role, full_name: 'A', email: 'a@example.com' }] }],
       [/^SELECT \* FROM devices/, () => (device ? { rowCount: 1, rows: [device] } : { rowCount: 0, rows: [] })],
       [/^INSERT INTO sites/, { rowCount: 1, rows: [{ id: 900, name: 'Yeni Site' }] }],

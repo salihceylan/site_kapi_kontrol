@@ -7,9 +7,10 @@
 //  - başvuru oluşturma:  advisory `site_application:<kullanıcı>` -> (okumalar) -> INSERT. Kişi başına tek bekleyen başvuru ayrıca kısmi
 //    tekil indeksle (uq_site_applications_pending) güvence altındadır.
 //  - başvuru onayı:      (kilitsiz bakış: başvuran + cihaz kodu) -> advisory `site_application:<başvuran>` -> cihaz satırı FOR UPDATE ->
-//    başvuran satırı FOR NO KEY UPDATE -> başvuru satırı FOR UPDATE -> yeni site satırları. Cihaz -> kullanıcı sırası anlık kurulum
-//    (setupSiteWithClaimedDevice) ve cihaz sahiplenme ile AYNIDIR. Kullanıcı satırı başvuru satırından ÖNCE kilitlenir: hesap silme
-//    (DELETE FROM users -> başvuruda ON DELETE SET NULL) ile ters sıra deadlock'u olmaz. FOR NO KEY UPDATE, FK denetimlerinin
+//    başvuran satırı FOR NO KEY UPDATE -> başvuru satırı FOR UPDATE -> yeni site satırları. Sıra CİHAZ -> KULLANICI -> BAŞVURU ve bu,
+//    GERÇEK hesap silme akışıyla (DELETE /admin/users/:id: önce devices UPDATE, sonra site_manager_sites / üyelikler, EN SON users DELETE ->
+//    başvuruda ON DELETE SET NULL) ile anlık kurulumun (cihaz FOR UPDATE -> UPDATE users) sırasıyla AYNIDIR: ters sıra deadlock'u olmaz.
+//    Kullanıcı satırı başvuru satırından ÖNCE kilitlenir (silme de users'tan sonra başvuruya gider). FOR NO KEY UPDATE, FK denetimlerinin
 //    (audit_log / site_applications -> users) KEY SHARE kilidiyle çakışmaz.
 //  - iptal (başvuran):    kullanıcı satırı FOR NO KEY UPDATE -> başvuru satırı FOR UPDATE (aynı sıra; audit FK kilidi hesap silmeyle çakışmasın).
 //  - ret (süper):         yalnız başvuru satırı FOR UPDATE (başvuran satırı kilitsiz okunur).
@@ -21,7 +22,7 @@
 import { pool } from '../db.js';
 import { sendSiteApplicationDecisionEmail, sendSiteApplicationNotificationEmail } from '../mailer.js';
 import { normalizeSetupSiteInput, shouldPromoteToSiteManager } from '../services/membership_rules.js';
-import { createSiteWithStructure } from '../services/site_setup_core.js';
+import { createSiteWithStructure, userHasOwnerLink } from '../services/site_setup_core.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { resolveManagementTypeInput } from './management_types.js';
@@ -32,7 +33,6 @@ import {
   MINE_LIST_LIMIT,
   ONBOARDING_MODES,
   ONBOARDING_SETTING_KEY,
-  PLAN_MANUAL_APPROVAL,
   applicantUnavailable,
   applicationNotFound,
   applicationNotPending,
@@ -76,14 +76,37 @@ const alreadySiteManager = () =>
   new PlatformError(409, 'ALREADY_SITE_MANAGER', 'Zaten site yöneticisisiniz. Yeni site eklemek için Site Ekle seçeneğini kullanın.');
 const forbiddenRole = () => new PlatformError(403, 'FORBIDDEN_ROLE', 'Bu işlem için yetkiniz yok.');
 
-/** Yalnız bireysel / daire sahibi kullanıcı başvurur. site_manager -> 409 ALREADY_SITE_MANAGER; süper kullanıcı ve diğerleri -> 403. */
-export function assertMayApply(role) {
+/**
+ * Kim başvurabilir: bireysel / daire sahibi VE sahip bağı olmayan site yöneticisi (davetle yönetici olan, sitesi olmayan). Sahip bağı olan
+ * site yöneticisi -> 409 ALREADY_SITE_MANAGER (Site Ekle'yi kullanır); süper kullanıcı ve diğer roller -> 403 FORBIDDEN_ROLE.
+ * `hasOwnerLink`: site_manager için bağ durumu (DB'den; bilinmiyorsa verilmez = ön rol kontrolü, bağ ayrıca denetlenir).
+ */
+export function assertMayApply(role, { hasOwnerLink = false } = {}) {
   if (role === 'site_manager') {
-    throw alreadySiteManager();
+    if (hasOwnerLink) {
+      throw alreadySiteManager();
+    }
+    return;
   }
   if (!shouldPromoteToSiteManager(role)) {
     throw forbiddenRole();
   }
+}
+
+/**
+ * Bu kullanıcı şu an anlık site kuramaz, site için BAŞVURMALI mı? Bireysel / daire sahibi ve sahip bağı olmayan site yöneticisi -> true;
+ * sahip bağı olan yönetici, süper kullanıcı ve uygunsuz roller -> false. (GET mine yanıtındaki `requires_application`.)
+ */
+async function requiresApplication(db, userCode) {
+  const roleResult = await db.query(`SELECT role FROM users WHERE user_code = $1 LIMIT 1`, [userCode]);
+  const role = roleResult.rows?.[0]?.role;
+  if (shouldPromoteToSiteManager(role)) {
+    return true;
+  }
+  if (role === 'site_manager') {
+    return !(await userHasOwnerLink(db, userCode));
+  }
+  return false;
 }
 
 /** normalizeSetupSiteInput 400 hatasını platform hata biçimine ({ error, code }) çevirir. */
@@ -138,6 +161,23 @@ async function loadSuperView(applicationId, db = pool) {
   const result = await db.query(`${SELECT_SUPER_VIEW} WHERE a.id = $1 LIMIT 1`, [applicationId]);
   const row = result.rows?.[0];
   return row ? mapApplicationRow(row, { forSuper: true }) : null;
+}
+
+/**
+ * COMMIT SONRASI yeniden okuma: işlem zaten başarıyla işlendi; okuma hatası (bağlantı, zaman aşımı) 500'e çevrilmez. Hata yutulur
+ * (yalnız kod loglanır) ve commit edilmiş verilerden hazırlanan asgari yanıt döner.
+ */
+async function reloadOr(loader, fallback) {
+  try {
+    const loaded = await loader();
+    if (loaded) {
+      return loaded;
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[site_application] sonuc yeniden okunamadi:', error?.code || 'hata');
+  }
+  return fallback();
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +344,10 @@ export async function createSiteApplication({ actor, body }) {
     throw new PlatformError(401, 'UNAUTHORIZED', 'Kullanıcı oturumu gereklidir.');
   }
   assertMayApply(actorInfo.role);
+  if (actorInfo.role === 'site_manager') {
+    // Sahip bağı olan yönetici başvuramaz (Site Ekle'yi kullanır): girdi doğrulamasından ÖNCE, salt-okunur ön kapı.
+    assertMayApply(actorInfo.role, { hasOwnerLink: await userHasOwnerLink(pool, userCode) });
+  }
 
   const source = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const managementType = resolveManagementTypeInput(source.management_type ?? source.managementType);
@@ -330,6 +374,7 @@ export async function createSiteApplication({ actor, body }) {
   const client = await pool.connect();
   let committed = false;
   let applicationId;
+  let createdAt;
   let applicantName = actorInfo.name;
   try {
     await client.query('BEGIN');
@@ -344,7 +389,7 @@ export async function createSiteApplication({ actor, body }) {
     if (!user) {
       throw new PlatformError(404, 'USER_NOT_FOUND', 'Kullanıcı hesabı bulunamadı.');
     }
-    assertMayApply(user.role);
+    assertMayApply(user.role, { hasOwnerLink: user.role === 'site_manager' ? await userHasOwnerLink(client, userCode) : false });
     applicantName = user.full_name ?? applicantName;
 
     if ((await readOnboardingMode(client)) === 'payment') {
@@ -395,7 +440,7 @@ export async function createSiteApplication({ actor, body }) {
           blocks, doors, block_count, apartment_count, door_count, device_uid, note, payment_status
         )
         VALUES ($1, 'pending', $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, 'not_required')
-        RETURNING id
+        RETURNING id, created_at
       `,
       [
         userCode,
@@ -414,6 +459,7 @@ export async function createSiteApplication({ actor, body }) {
       ],
     );
     applicationId = toPositiveInt(insertResult.rows?.[0]?.id);
+    createdAt = insertResult.rows?.[0]?.created_at ?? null;
 
     await recordAudit(
       client,
@@ -460,26 +506,50 @@ export async function createSiteApplication({ actor, body }) {
     client.release();
   }
 
-  const application = await loadApplicantView(applicationId);
-  if (application) {
-    fireAndForget('bildirim basarisiz', 'notifyCreated', {
-      id: application.id,
-      site_name: application.site_name,
-      applicant_name: applicantName,
-      block_count: application.block_count,
-      apartment_count: application.apartment_count,
-      door_count: application.door_count,
-      note: application.note,
-    });
-  }
-  return application;
+  // COMMIT edilmiş değerlerden asgari satır: yeniden okuma başarısız olsa da yanıt ve bildirim bundan hazırlanır (bildirim okumaya BAĞLI değil).
+  const committedRow = {
+    id: applicationId,
+    applicant_user_code: userCode,
+    status: 'pending',
+    site_name: input.siteName,
+    city: input.city,
+    district: input.district,
+    address: input.address,
+    management_type: managementType.value,
+    blocks: input.blocks,
+    doors: input.doors,
+    block_count: input.totalBlockCount,
+    apartment_count: input.totalApartmentCount,
+    door_count: input.totalDoorCount,
+    device_uid: deviceUid,
+    note,
+    plan_code: null,
+    payment_status: 'not_required',
+    decided_at: null,
+    decision_note: null,
+    site_code: null,
+    created_at: createdAt,
+  };
+  fireAndForget('bildirim basarisiz', 'notifyCreated', {
+    id: applicationId,
+    site_name: input.siteName,
+    applicant_name: applicantName,
+    block_count: input.totalBlockCount,
+    apartment_count: input.totalApartmentCount,
+    door_count: input.totalDoorCount,
+    note,
+  });
+  return reloadOr(() => loadApplicantView(applicationId), () => mapApplicationRow(committedRow));
 }
 
-/** GET /membership/site-applications/mine: { pending: Application|null, items: [son 10, yeniden eskiye] }. Yalnız çağıranın kayıtları. */
+/**
+ * GET /membership/site-applications/mine: { pending: Application|null, items: [son 10, yeniden eskiye], requires_application }. Yalnız çağıranın
+ * kayıtları. `requires_application`: kullanıcı şu an anlık site kuramaz, başvurmalıdır (bekleyen başvurusu olsa da true kalır).
+ */
 export async function listMyApplications(userCode, db = pool) {
   const code = toPositiveInt(userCode, INT4_MAX);
   if (code === null) {
-    return { pending: null, items: [] };
+    return { pending: null, items: [], requires_application: false };
   }
   const items = await db.query(
     `${SELECT_APPLICANT_VIEW} WHERE a.applicant_user_code = $1 ORDER BY a.created_at DESC, a.id DESC LIMIT ${MINE_LIST_LIMIT}`,
@@ -492,6 +562,7 @@ export async function listMyApplications(userCode, db = pool) {
   return {
     pending: pending.rows?.[0] ? mapApplicationRow(pending.rows[0]) : null,
     items: (items.rows ?? []).map((row) => mapApplicationRow(row)),
+    requires_application: await requiresApplication(db, code),
   };
 }
 
@@ -509,6 +580,7 @@ export async function cancelMyApplication({ applicationId, actor }) {
 
   const client = await pool.connect();
   let committed = false;
+  let cancelledRow;
   try {
     await client.query('BEGIN');
     // KİLİT SIRASI (onay ve hesap silme ile aynı): önce kullanıcı satırı, sonra başvuru satırı. Audit INSERT'i kullanıcı satırında
@@ -519,7 +591,7 @@ export async function cancelMyApplication({ applicationId, actor }) {
       throw applicationNotFound();
     }
     const found = await client.query(
-      `SELECT id, status, block_count, apartment_count, door_count FROM site_applications WHERE id = $1 AND applicant_user_code = $2 FOR UPDATE`,
+      `SELECT ${APPLICANT_COLUMNS} FROM site_applications a WHERE a.id = $1 AND a.applicant_user_code = $2 FOR UPDATE OF a`,
       [id, userCode],
     );
     const row = found.rows?.[0];
@@ -550,6 +622,7 @@ export async function cancelMyApplication({ applicationId, actor }) {
     );
     await client.query('COMMIT');
     committed = true;
+    cancelledRow = { ...row, status: 'cancelled', decided_at: new Date() };
   } catch (error) {
     if (!committed) {
       await rollbackQuietly(client);
@@ -558,7 +631,7 @@ export async function cancelMyApplication({ applicationId, actor }) {
   } finally {
     client.release();
   }
-  return loadApplicantView(id);
+  return reloadOr(() => loadApplicantView(id), () => mapApplicationRow(cancelledRow));
 }
 
 // ---------------------------------------------------------------------------
@@ -608,9 +681,14 @@ export async function listAdminApplications({ status, q, limit, offset } = {}, d
   };
 }
 
-/** GET /admin/site-applications/summary -> { pending } (çekmece rozeti; hafif). */
+/**
+ * GET /admin/site-applications/summary -> { pending } (çekmece rozeti; hafif). Başvuranı silinmiş (applicant NULL) bekleyen başvurular
+ * ONAYLANAMAZ (APPLICANT_UNAVAILABLE) yalnız reddedilebilir; rozeti şişirmesin diye sayılmaz (liste yine gösterir).
+ */
 export async function getPendingSummary(db = pool) {
-  const result = await db.query(`SELECT COUNT(*)::INTEGER AS pending FROM site_applications WHERE status = 'pending'`);
+  const result = await db.query(
+    `SELECT COUNT(*)::INTEGER AS pending FROM site_applications WHERE status = 'pending' AND applicant_user_code IS NOT NULL`,
+  );
   return { pending: Number(result.rows?.[0]?.pending ?? 0) };
 }
 
@@ -645,7 +723,7 @@ export function isApplicantUnavailable(user) {
 /**
  * POST /admin/site-applications/:id/approve — TEK transaction: başvuruyu kilitler, siteyi + bloklar/daireler/kapıları + yönetici üyeliğini
  * (ortak createSiteWithStructure) kurar, rolü site_manager yapar (süper değilse), cihaz hâlâ başvuranınsa 1. kapıya bağlar (değilse cihazsız),
- * site_subscriptions satırı ekler, başvuruyu approved yapar ve audit yazar. Herhangi bir adım başarısızsa ROLLBACK (kalıntı yok).
+ * site_subscriptions satırını (çekirdek) ekler, başvuruyu approved yapar ve audit yazar. Herhangi bir adım başarısızsa ROLLBACK (kalıntı yok).
  * @returns {Promise<{ application: object, site: object, device_attached: boolean }>}
  */
 export async function approveSiteApplication({ applicationId, note, actor }) {
@@ -661,6 +739,7 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
   let created;
   let applicantMail;
   let siteName;
+  let approvedRow;
   try {
     await client.query('BEGIN');
 
@@ -677,7 +756,8 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
     }
 
     // 2. Cihaz satırı FOR UPDATE (varsa): sahiplik burada YENİDEN doğrulanır; artık başvuranın değilse (veya başka bir siteye bağlıysa)
-    // site cihazsız kurulur. Anlık kurulum (setupSiteWithClaimedDevice) ve cihaz sahiplenme ile AYNI sıra: cihaz -> kullanıcı.
+    // site cihazsız kurulur. Sıra CİHAZ -> KULLANICI: gerçek hesap silme akışı ve anlık kurulumla aynı. Cihaz sorgusu başvuranın kimliğini
+    // (users.id / user_code) gerektirdiğinden kullanıcı satırı burada KİLİTSİZ okunur; kilit bir sonraki adımdadır.
     let device = null;
     if (applicantCode !== null && peeked.device_uid) {
       const owner = await client.query(`SELECT id, user_code FROM users WHERE user_code = $1 LIMIT 1`, [applicantCode]);
@@ -690,7 +770,8 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
       }
     }
 
-    // 3. Başvuran satırı (FOR NO KEY UPDATE: rol güncellemesiyle aynı düzey, FK KEY SHARE kilitleriyle çakışmaz) — başvuru satırından ÖNCE.
+    // 3. Başvuran satırı (FOR NO KEY UPDATE: rol güncellemesiyle aynı düzey, FK KEY SHARE kilitleriyle çakışmaz) — başvuru satırından ÖNCE
+    // (hesap silme de users'tan sonra başvuru satırına gider). Taze kullanıcı durumu burada okunur.
     const userResult =
       applicantCode === null
         ? { rows: [] }
@@ -704,16 +785,15 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
             `,
             [applicantCode],
           );
+    const applicant = userResult.rows?.[0];
 
     // 4. Başvuru satırı FOR UPDATE: çift onay / onay x iptal yarışında ikinci istek burada bekler ve durumu yeniden görür.
     const found = await client.query(
       `
-        SELECT
-          id, applicant_user_code, status, site_name, city, district, address, management_type,
-          blocks, doors, block_count, apartment_count, door_count, device_uid
-        FROM site_applications
-        WHERE id = $1
-        FOR UPDATE
+        SELECT ${APPLICANT_COLUMNS}, a.decision_source
+        FROM site_applications a
+        WHERE a.id = $1
+        FOR UPDATE OF a
       `,
       [id],
     );
@@ -724,28 +804,24 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
     if (row.status !== 'pending') {
       throw applicationNotPending();
     }
-    const applicant = userResult.rows?.[0];
     if (isApplicantUnavailable(applicant) || toPositiveInt(row.applicant_user_code, INT4_MAX) !== applicantCode) {
       throw applicantUnavailable();
     }
-
     // 5. Saklanan yapı TEKRAR doğrulanır (bozuk veri -> 422 APPLICATION_DATA_INVALID, hiçbir şey kurulmaz).
     const { input, managementType } = revalidateStoredStructure(row);
 
-    // 6. Ortak site kurulumu (anlık kurulumla aynı işlev).
-    created = await createSiteWithStructure(client, { user: applicant, input, managementType, device });
+    // 6. Ortak site kurulumu (anlık kurulumla aynı işlev): site, sahip bağı ('owner'), bloklar / daireler / kapılar, cihaz, rol ve
+    // abonelik satırı (source 'manual_approval' + application_id). Rolü zaten site_manager olan başvuranın rolü değişmez.
+    created = await createSiteWithStructure(client, {
+      user: applicant,
+      input,
+      managementType,
+      device,
+      subscription: { source: 'manual_approval', applicationId: id },
+    });
     const siteCode = Number(created.site.id);
 
-    // 7. Abonelik satırı (manuel onay) — yalnız yeni site için; mevcut sitelere satır eklenmez.
-    await client.query(
-      `
-        INSERT INTO site_subscriptions (site_code, plan_code, status, source, application_id)
-        VALUES ($1, $2, 'active', 'manual_approval', $3)
-      `,
-      [siteCode, PLAN_MANUAL_APPROVAL, id],
-    );
-
-    // 8. Başvuru onaylandı.
+    // 7. Başvuru onaylandı.
     await client.query(
       `
         UPDATE site_applications
@@ -778,6 +854,20 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
     committed = true;
     siteName = row.site_name;
     applicantMail = { to: applicant.email, fullName: applicant.full_name };
+    approvedRow = {
+      ...row,
+      status: 'approved',
+      decision_source: 'super_user',
+      decided_at: new Date(),
+      decision_note: decisionNote,
+      site_code: siteCode,
+      applicant_name: applicant.full_name,
+      applicant_email: applicant.email,
+      applicant_phone: null,
+      applicant_role: applicant.role === 'super_user' ? 'super_user' : 'site_manager',
+      decided_by_name: actorInfo.name,
+      device_available: false,
+    };
   } catch (error) {
     if (!committed) {
       await rollbackQuietly(client);
@@ -798,7 +888,7 @@ export async function approveSiteApplication({ applicationId, note, actor }) {
     });
   }
   return {
-    application: await loadSuperView(id),
+    application: await reloadOr(() => loadSuperView(id), () => mapApplicationRow(approvedRow, { forSuper: true })),
     site: mapApprovedSite(created, { deviceAttached }),
     device_attached: deviceAttached,
   };
@@ -820,10 +910,11 @@ export async function rejectSiteApplication({ applicationId, reason, actor }) {
   let committed = false;
   let applicantMail = null;
   let siteName;
+  let rejectedRow;
   try {
     await client.query('BEGIN');
     const found = await client.query(
-      `SELECT id, applicant_user_code, status, site_name FROM site_applications WHERE id = $1 FOR UPDATE`,
+      `SELECT ${APPLICANT_COLUMNS}, a.decision_source FROM site_applications a WHERE a.id = $1 FOR UPDATE OF a`,
       [id],
     );
     const row = found.rows?.[0];
@@ -863,6 +954,19 @@ export async function rejectSiteApplication({ applicationId, reason, actor }) {
     await client.query('COMMIT');
     committed = true;
     siteName = row.site_name;
+    rejectedRow = {
+      ...row,
+      status: 'rejected',
+      decision_source: 'super_user',
+      decided_at: new Date(),
+      decision_note: reasonText,
+      applicant_name: applicantMail?.fullName ?? null,
+      applicant_email: applicantMail?.to ?? null,
+      applicant_phone: null,
+      applicant_role: null,
+      decided_by_name: actorInfo.name,
+      device_available: false,
+    };
   } catch (error) {
     if (!committed) {
       await rollbackQuietly(client);
@@ -881,5 +985,5 @@ export async function rejectSiteApplication({ applicationId, reason, actor }) {
       reason: reasonText,
     });
   }
-  return loadSuperView(id);
+  return reloadOr(() => loadSuperView(id), () => mapApplicationRow(rejectedRow, { forSuper: true }));
 }
