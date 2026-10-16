@@ -167,6 +167,7 @@ export function buildDistributionPlan(definition, apartments) {
   const missingEntry = (apartment, reasonCode) => ({
     apartmentId: apartment.id,
     label: apartment.label,
+    blockName: apartment.blockName ?? null,
     reasonCode,
     reason: MISSING_REASON_CODES[reasonCode],
   });

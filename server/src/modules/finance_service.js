@@ -243,6 +243,7 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
     missing_data: plan.missing.map((entry) => ({
       apartment_id: entry.apartmentId,
       label: entry.label,
+      block_name: entry.blockName ?? null,
       reason: entry.reason,
       reason_code: entry.reasonCode,
     })),
