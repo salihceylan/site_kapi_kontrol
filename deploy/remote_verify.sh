@@ -14,5 +14,15 @@ echo "== sirket ucu anahtarsiz (401 beklenir)"; curl -s -m 8 -o /dev/null -w "%{
 echo "== login bos govde (400/401 + JSON hata)"; curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{}' -w "\nHTTP %{http_code}\n" http://127.0.0.1:8080/auth/login | head -c 300
 echo "== bozuk JSON (400 + errorId yok / guvenli mesaj)"; curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{bozuk' -w "\nHTTP %{http_code}\n" http://127.0.0.1:8080/auth/login | head -c 300
 echo "== OTA manifest (200 + sha256/hedef alanlari)"; curl -s -m 8 "http://127.0.0.1:8080/firmware/esp32-c3/manifest.json?current_version=3.0.0&uid=D4C771A172E0" | head -c 420; echo
+echo "== yeni uclar (satisa hazirlik)"
+echo -n "app-config: "; curl -s -m 8 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/public/app-config
+echo -n "yasal belge listesi: "; curl -s -m 8 http://127.0.0.1:8080/public/legal-documents | head -c 160; echo
+echo -n "/legal/privacy: "; curl -s -m 8 -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8080/legal/privacy
+echo -n "/legal/account-deletion: "; curl -s -m 8 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/legal/account-deletion
+echo -n "istemci hata raporu (bos govde, 400 beklenir; 5xx OLMAMALI): "; curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{}' -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/public/client-errors
+echo -n "hesap silme kimliksiz (401 beklenir): "; curl -s -m 8 -X POST -H 'Content-Type: application/json' -d '{}' -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/me/account-deletion/preview
+echo -n "platform-config kimliksiz (401 beklenir): "; curl -s -m 8 -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/admin/platform-config
+echo "== 8080 dinleme adresi (127.0.0.1 beklenir, LISTEN_HOST ayarliysa)"; ss -ltn | grep -E ":8080 " | awk '{print $4}'
+echo "== ENV uyarilari (pm2 log, yalniz [ENV] satirlari; TRUST_PROXY/GUVENLIK uyarisi kalmamali)"; pm2 logs kapi-api --lines 80 --nostream 2>&1 | grep -E "\[ENV\]" | tail -n 8 | cut -c1-170
 echo "== pm2"; pm2 status 2>&1 | grep -E "kapi-api" | cut -c1-160
 echo "== mosquitto + acl"; systemctl is-active mosquitto; grep -c "logs" /etc/mosquitto/acl

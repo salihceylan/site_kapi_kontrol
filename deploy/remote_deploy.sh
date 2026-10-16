@@ -71,6 +71,14 @@ activate() {
   cp -a "$STAGE/src/." "$APP/src/"
   cp -a "$STAGE/scripts/." "$APP/scripts/"
   cp -a "$STAGE/migrations/." "$APP/migrations/"
+  # Yasal belgeler (server/legal/*.md): /public/legal-documents ve /legal/:id bu dizinden okur.
+  if [ -d "$STAGE/legal" ]; then
+    mkdir -p "$APP/legal"
+    cp -a "$STAGE/legal/." "$APP/legal/"
+    echo "yasal belgeler yerlestirildi: $(ls "$APP/legal" | wc -l) dosya"
+  else
+    echo "UYARI: pakette legal/ yok (yasal belge uclari bos donecek)"
+  fi
   cp -a "$STAGE/package.json" "$STAGE/package-lock.json" "$STAGE/ecosystem.config.cjs" "$STAGE/.env.example" "$APP/"
   mv "$APP/node_modules" "$APP/node_modules.old_$TS"
   mv "$STAGE/node_modules" "$APP/node_modules"

@@ -58,9 +58,18 @@ echo "   [034] tablolar: $(q "select string_agg(table_name, ',' order by table_n
 echo "   [034] tetikleyici: $(q "select count(*) from pg_trigger where not tgisinternal and (tgname like 'trg_ledger_entries%' or tgname like 'trg_fee_runs%' or tgname like 'trg_finance_%')") (6 olmali)"
 echo "   [034] satirlar: tanim=$(q "select count(*) from fee_definitions") calistirma=$(q "select count(*) from fee_runs") defter=$(q "select count(*) from ledger_entries") kapanis=$(q "select count(*) from finance_period_closures") (hepsi 0 olmali)"
 echo "   [034] finans modulu ACIK site (0 olmali): $(q "select count(*) from site_modules where module_code='finance' and enabled")"
+echo "   [035] tablolar: $(q "select string_agg(table_name, ',' order by table_name) from information_schema.tables where table_schema='public' and table_name in ('user_consents','client_error_reports')") (2 olmali)"
+echo "   [035] pending_registrations.accepted_documents: $(q "select count(*) from information_schema.columns where table_name='pending_registrations' and column_name='accepted_documents'") (1 olmali)"
+echo "   [035] satirlar: onay=$(q "select count(*) from user_consents") hata_raporu=$(q "select count(*) from client_error_reports") (hepsi 0 olmali)"
+echo "   [036] users.deleted_at: $(q "select count(*) from information_schema.columns where table_name='users' and column_name='deleted_at'") (1 olmali); silinmis hesap: $(q "select count(*) from users where deleted_at is not null") (0 olmali)"
+echo "   [036] CHECK chk_users_deleted_inactive: $(q "select count(*) from pg_constraint where conname='chk_users_deleted_inactive'") (1 olmali); account_data_exports: $(q "select count(*) from information_schema.tables where table_name='account_data_exports'") (1 olmali)"
+echo "   [036] kismi indeksler (audit_log/door_access_logs): $(q "select count(*) from pg_indexes where tablename in ('audit_log','door_access_logs') and indexdef like '%WHERE%' and (indexname like '%actor%' or indexname like '%user%')") (bilgi)"
+echo "   [yasal] pakette legal/*.md: $(ls "$STAGE/legal" 2>/dev/null | wc -l) dosya (5 olmali)"
+echo "   [modul yukleme] yeni kod ice aktarma (ag/DB yok): $(cd "$STAGE" && SERVER_SKIP_START=1 NODE_ENV=production timeout 60 node --input-type=module -e "await import('./src/server.js'); console.log('IMPORT_OK'); process.exit(0)" 2>&1 | tail -n 1 | cut -c1-120)"
 echo "   site_memberships CHECK: $($PSQL -d "$RDB" -Atc "select string_agg(conname, ',') from pg_constraint where conrelid='site_memberships'::regclass and contype='c'")"
 echo "   rol dagilimi: $($PSQL -d "$RDB" -Atc "select string_agg(role||'='||n, ',') from (select role, count(*) n from site_memberships group by role) t")"
-if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ]; then
+ok035=$(q "select (select count(*) from information_schema.tables where table_schema='public' and table_name in ('user_consents','client_error_reports','account_data_exports'))=3 and (select count(*) from information_schema.columns where table_name='users' and column_name='deleted_at')=1 and (select count(*) from information_schema.columns where table_name='pending_registrations' and column_name='accepted_documents')=1 and (select count(*) from pg_constraint where conname='chk_users_deleted_inactive')=1")
+if [ "$before_sites" = "$after_sites" ] && [ "$before_users" = "$after_users" ] && [ "$before_sm" = "$after_sm" ] && [ "$before_am" = "$after_am" ] && [ "$typed" = "$after_sites" ] && [ "$ok035" = "t" ]; then
   echo "PROVA_OK"
 else
   echo "PROVA_SORUNLU"

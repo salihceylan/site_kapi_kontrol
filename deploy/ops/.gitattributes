@@ -1,0 +1,3 @@
+# Sunucuya (Linux) giden betikler her zaman LF satir sonu ile saklanir.
+* text eol=lf
+*.ps1 text eol=crlf
