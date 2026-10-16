@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 import { pool } from '../src/db.js';
-import { signAccessToken } from '../src/jwt.js';
+import { passwordVersionOf, signAccessToken } from '../src/jwt.js';
 import { authRequired } from '../src/middlewares/auth_middleware.js';
 
 const SECRET = 'k9Fz-test-only-long-secret-value-0123456789abcdef';
@@ -96,15 +96,27 @@ describe('authRequired (C12)', () => {
     assert.equal(nextArg, 'not-called');
   });
 
-  it('pv claim i olmayan eski token suresi dolana kadar gecerli kalir', async () => {
+  it('pv claim i olmayan eski token REDDEDILIR (401 TOKEN_REVOKED); yalniz JWT_REQUIRE_PV=0 iken gecerli (S-C)', async () => {
     const legacy = jwt.sign({ sub: '42', email: 'a@example.com', role: 'individual' }, SECRET, { expiresIn: '1h' });
-    const { req, nextArg } = await run(`Bearer ${legacy}`, userRow({ password_hash: OTHER_HASH }));
-    assert.equal(nextArg, undefined);
-    assert.equal(req.authUser.userCode, 42);
+    const rejected = await run(`Bearer ${legacy}`, userRow({ password_hash: OTHER_HASH }));
+    assert.equal(rejected.res.statusCode, 401);
+    assert.equal(rejected.res.body.code, 'TOKEN_REVOKED');
+    assert.equal(rejected.nextArg, 'not-called');
+
+    const savedRequirePv = process.env.JWT_REQUIRE_PV;
+    process.env.JWT_REQUIRE_PV = '0';
+    try {
+      const { req, nextArg } = await run(`Bearer ${legacy}`, userRow({ password_hash: OTHER_HASH }));
+      assert.equal(nextArg, undefined);
+      assert.equal(req.authUser.userCode, 42);
+    } finally {
+      if (savedRequirePv === undefined) delete process.env.JWT_REQUIRE_PV;
+      else process.env.JWT_REQUIRE_PV = savedRequirePv;
+    }
   });
 
   it('rol token tan DEGIL DB den taze okunur', async () => {
-    const token = jwt.sign({ sub: '42', role: 'super_user' }, SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ sub: '42', role: 'super_user', pv: passwordVersionOf(HASH) }, SECRET, { expiresIn: '1h' });
     const { req } = await run(`Bearer ${token}`, userRow({ role: 'individual' }));
     assert.equal(req.authUser.role, 'individual');
   });

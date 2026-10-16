@@ -49,6 +49,7 @@ export async function authRequired(req, res, next) {
         approval_status,
         phone_number,
         created_at,
+        deleted_at,
         password_hash
       FROM users
       WHERE user_code = $1
@@ -65,6 +66,14 @@ export async function authRequired(req, res, next) {
     const passwordHash = authUser.password_hash;
     // Parola hash'i istek nesnesine tasinmaz (yanlislikla yanita sizmasin).
     delete authUser.password_hash;
+
+    // Silinmis (kimliksizlestirilmis) hesap: pv claim'i olmayan eski tokenlar dahil HER token 401 ile reddedilir (istemci oturumu kapatir).
+    // Hesap ayrica pasif + parola ozeti degismis olur; bu kontrol "Hesap aktif degil" (403) yerine acik bir kod verir.
+    const accountDeleted = Boolean(authUser.deleted_at);
+    delete authUser.deleted_at;
+    if (accountDeleted) {
+      return res.status(401).json({ error: 'Bu hesap silinmis.', code: 'ACCOUNT_DELETED' });
+    }
 
     // pv claim'i varsa parola degisimi sonrasi eski tokenlar reddedilir; claim'siz eski tokenlar gecerli kalir.
     if (!isPasswordVersionValid(claims, passwordHash)) {

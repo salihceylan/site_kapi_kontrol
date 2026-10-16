@@ -4,6 +4,8 @@
 
 import crypto from 'crypto';
 
+import { isReservedEmail } from './reserved_email.js';
+
 // ---------------------------------------------------------------------------
 // Genel yardimcilar
 // ---------------------------------------------------------------------------
@@ -22,6 +24,10 @@ export function isValidEmail(value) {
   }
   const localPart = text.slice(0, text.lastIndexOf('@'));
   if (localPart.length === 0 || localPart.length > 64) {
+    return false;
+  }
+  // Sistemin kendi urettigi alan adlari (hesap silme tombstone e-postasi: deleted.invalid) kabul edilmez.
+  if (isReservedEmail(text)) {
     return false;
   }
   return EMAIL_PATTERN.test(text);

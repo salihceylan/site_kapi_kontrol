@@ -294,7 +294,7 @@ function handle(sql, params, tx) {
       });
     return ok(rows);
   }
-  if (/^SELECT user_code, full_name, email, role, is_active, email_verified, approval_status FROM users WHERE LOWER\(email\) = \$1 LIMIT 1$/.test(sql)) {
+  if (/^SELECT user_code, full_name, email, role, is_active, email_verified, approval_status FROM users WHERE LOWER\(email\) = \$1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE$/.test(sql)) {
     const user = state.users.find((u) => u.email.toLowerCase() === params[0]);
     return ok(user ? [user] : []);
   }

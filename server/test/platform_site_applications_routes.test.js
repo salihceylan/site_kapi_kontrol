@@ -257,6 +257,7 @@ describe('site başvurusu uçları: HTTP', () => {
       if (/^SELECT id, user_code, role, full_name FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'individual', full_name: 'Ayşe Başvuran' }]);
       if (/^SELECT role FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ role: 'individual' }]);
       if (/^SELECT value FROM platform_settings/.test(sql)) return ok([{ value: { mode: 'approval' } }]);
+      if (/^SELECT key, value FROM platform_settings WHERE key = ANY/.test(sql)) return ok(); // yasal onay ayarları (zorunluluk kapalı)
       if (/a\.status = 'pending' LIMIT 1$/.test(sql)) return ok(created ? [stored] : []);
       if (/^SELECT COUNT\(\*\)::INTEGER AS applied/.test(sql)) return ok([{ applied: 0 }]);
       if (/^INSERT INTO site_applications/.test(sql)) { created = true; return ok([{ id: '41', created_at: new Date('2026-10-16T07:00:00.000Z') }]); }

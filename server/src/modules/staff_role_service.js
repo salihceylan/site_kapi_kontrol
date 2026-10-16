@@ -109,8 +109,9 @@ export async function assignStaffRole({ siteCode, email, role, actor }) {
       `
         SELECT user_code, full_name, email, role, is_active, email_verified, approval_status
         FROM users
-        WHERE LOWER(email) = $1
+        WHERE LOWER(email) = $1 AND deleted_at IS NULL
         LIMIT 1
+        FOR KEY SHARE
       `,
       [emailText],
     );

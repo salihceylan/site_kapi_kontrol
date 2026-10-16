@@ -32,6 +32,7 @@ import {
   setSiteOnboardingMode,
 } from './site_application_service.js';
 import { APPLICATION_NOT_FOUND_BODY } from './site_application_common.js';
+import { siteApplicationConsents } from './legal_consent_service.js';
 
 export const siteApplicationRouter = express.Router();
 
@@ -64,7 +65,7 @@ const bodyOf = (req) => (req.body && typeof req.body === 'object' && !Array.isAr
 
 siteApplicationRouter.post('/membership/site-applications', authRequired, siteApplicationWriteLimiter, async (req, res) => {
   try {
-    const application = await createSiteApplication({ actor: req.authUser, body: bodyOf(req) });
+    const application = await createSiteApplication({ actor: req.authUser, body: bodyOf(req), consents: siteApplicationConsents });
     return res.status(201).json({ application });
   } catch (error) {
     return respondError(res, 'create_site_application', error, 'Site başvurusu oluşturulamadı.');

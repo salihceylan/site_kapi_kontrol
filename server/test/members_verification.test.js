@@ -232,7 +232,8 @@ describe('members: bekleyen kayıt SQL metinleri', () => {
 
   it('upsert: e-posta (büyük/küçük harf duyarsız) çakışmasında ad ve parola özetini günceller', () => {
     const sql = flat(SQL_UPSERT_PENDING_REGISTRATION);
-    assert.match(sql, /^INSERT INTO pending_registrations \(email, full_name, password_hash\) SELECT \$1::text, \$2::text, \$3::text/);
+    assert.match(sql, /^INSERT INTO pending_registrations \(email, full_name, password_hash, accepted_documents\) SELECT \$1::text, \$2::text, \$3::text, \$5::jsonb/);
+    assert.match(sql, /accepted_documents = EXCLUDED\.accepted_documents/);
     assert.match(sql, /ON CONFLICT \(\(LOWER\(email\)\)\) DO UPDATE SET/);
     assert.match(sql, /password_hash = EXCLUDED\.password_hash/);
     assert.match(sql, /updated_at = NOW\(\)/);
@@ -255,7 +256,7 @@ describe('members: bekleyen kayıt SQL metinleri', () => {
 
   it('alma: tek DELETE ... RETURNING ile atomik (iki istek aynı kaydı iki kez alamaz)', () => {
     const sql = flat(SQL_TAKE_PENDING_REGISTRATION);
-    assert.match(sql, /^DELETE FROM pending_registrations WHERE LOWER\(email\) = LOWER\(\$1\) RETURNING full_name, password_hash$/);
+    assert.match(sql, /^DELETE FROM pending_registrations WHERE LOWER\(email\) = LOWER\(\$1\) RETURNING full_name, password_hash, accepted_documents$/);
   });
 
   it('eski kodları kapatma: YALNIZCA daha eski satırlar (id < $2); daha yeni bir kod asla iptal edilmez', () => {

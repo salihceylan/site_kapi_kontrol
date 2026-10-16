@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
+import { BCRYPT_COST } from '../security/password_hashing.js';
 
 export async function createUser({
   fullName,
@@ -15,7 +16,7 @@ export async function createUser({
   verificationCodeExpiresAt = null,
   db = pool,
 }) {
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const result = await db.query(
     `
       INSERT INTO users (
@@ -93,7 +94,8 @@ export async function updateUserByCode({
     sets.push(`phone_number = $${values.length}`);
   }
   if (password !== undefined) {
-    values.push(await bcrypt.hash(password, 12));
+    // S-C (R7#4): maliyet giriş sahte özetiyle AYNI (BCRYPT_COST); eskiden 12 idi ve süreden hesap varlığı anlaşılıyordu.
+    values.push(await bcrypt.hash(password, BCRYPT_COST));
     sets.push(`password_hash = $${values.length}`);
   }
   if (isActive !== undefined) {
@@ -118,7 +120,7 @@ export async function updateUserByCode({
     `
       UPDATE users
       SET ${sets.join(', ')}
-      WHERE user_code = $${values.length}
+      WHERE user_code = $${values.length} AND deleted_at IS NULL
       RETURNING
         user_code AS id,
         full_name,
@@ -149,7 +151,7 @@ export async function setUserEmailVerificationCode({
         email_verification_code_hash = $1,
         email_verification_expires_at = $2,
         email_verified = FALSE
-      WHERE user_code = $3
+      WHERE user_code = $3 AND deleted_at IS NULL
     `,
     [codeHash, expiresAt, userCode],
   );

@@ -53,6 +53,8 @@ function siteCreationHandlers({ role = 'site_manager' } = {}) {
       [/^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/, { rowCount: 1, rows: [{ '?column?': 1 }] }],
       [/^SELECT id, user_code, role, full_name, email FROM users/, { rowCount: 1, rows: [{ id: 7, user_code: 48213, role, full_name: 'A', email: 'a@example.com' }] }],
       [/^SELECT \* FROM devices/, { rowCount: 0, rows: [] }],
+      // rol güncellemesi `deleted_at IS NULL` ister: satır dönmezse (silinmiş hesap) kurulum geri alınır; burada hesap var -> 1 satır
+      [/^UPDATE users SET role = 'site_manager' WHERE id = \$1 AND deleted_at IS NULL$/, { rowCount: 1, rows: [] }],
       [
         /^INSERT INTO sites/,
         (sql, params) => {

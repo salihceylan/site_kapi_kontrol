@@ -2,15 +2,16 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db.js';
 import { signAccessToken } from '../jwt.js';
 import { sendIndividualVerificationEmail, sendJoinRequestNotificationEmail } from '../mailer.js';
-import {
-  currentPasswordLockedError,
-  passwordChangeFailureTracker,
-  passwordChangeThrottleKey,
-} from '../middlewares/login_throttle.js';
+import { currentPasswordLockedError } from '../middlewares/login_throttle.js';
+import { verifyCurrentPassword } from '../modules/account_password_guard.js';
 import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.js';
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
 import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
+import { pendingConsentsJson, recordConsents, sanitizeStoredConsents } from '../modules/legal_consent_service.js';
+import { describeErrorForLog } from '../security/log_redact.js';
+import { BCRYPT_COST } from '../security/password_hashing.js';
+import { reissueDeviceToken } from '../security/login_device_token.js';
 import { endResidenciesForMemberRemoval } from '../modules/people_records.js';
 import { createSiteWithStructure, userHasOwnerLink } from './site_setup_core.js';
 import {
@@ -219,7 +220,11 @@ export async function registerIndividualUser({
   lastName,
   email,
   password,
+  // Yasal belge onayları ([{id, version}]; auth_routes resolveAcceptedDocuments çıktısı). Bekleyen kayıtta saklanır, hesap
+  // gerçekten oluşurken aynı işlemde user_consents'a yazılır (verifyIndividualEmailCode).
+  acceptedDocuments = null,
 }) {
+  const consentRecords = Array.isArray(acceptedDocuments) ? acceptedDocuments : [];
   const cleanFirstName = String(firstName || '').trim();
   const cleanLastName = String(lastName || '').trim();
   const cleanEmail = normalizeEmail(email);
@@ -251,7 +256,7 @@ export async function registerIndividualUser({
     [cleanEmail],
   );
 
-  const passwordHash = await bcrypt.hash(cleanPassword, 10);
+  const passwordHash = await bcrypt.hash(cleanPassword, BCRYPT_COST);
 
   // Kimlik bilgileri (ad + parola özeti) kod e-postası GÖNDERİLDİKTEN SONRA yazılır (bkz. issueVerificationCode):
   // reddedilen/başarısız bir deneme, devam eden bir kaydın bekleyen verisini sessizce ezemez.
@@ -267,14 +272,20 @@ export async function registerIndividualUser({
       throw alreadyRegisteredError();
     }
     // Geçiş: bu sürümden önce açılmış doğrulanmamış hesap eskisi gibi güncellenir.
-    persistCredentials = (codeRowId) =>
-      pool.query(SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS, [
+    persistCredentials = async (codeRowId) => {
+      const updated = await pool.query(SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS, [
         fullName,
         passwordHash,
         existing.user_code,
         cleanEmail,
         codeRowId ?? Number.MAX_SAFE_INTEGER,
       ]);
+      // Hesap zaten var (eski doğrulanmamış kayıt): onaylar kimlik bilgileriyle birlikte yazılır (bayat denemede yazılmaz).
+      if (consentRecords.length > 0 && (updated?.rowCount ?? 0) > 0) {
+        await recordConsents(pool, existing.user_code, consentRecords, 'register');
+      }
+      return updated;
+    };
   } else {
     // Hesap YOK: yalnızca bekleyen kayıt yazılır. Aynı e-postaya tekrar kayıt, bekleyen kaydı günceller
     // (tek satır; unique indeks LOWER(email)).
@@ -284,6 +295,7 @@ export async function registerIndividualUser({
         fullName,
         passwordHash,
         codeRowId ?? Number.MAX_SAFE_INTEGER,
+        pendingConsentsJson(consentRecords),
       ]);
   }
 
@@ -410,6 +422,8 @@ export async function verifyIndividualEmailCode({ email, code }) {
         }
         throw insertError;
       }
+      // Kayıtta onaylanan yasal belgeler, hesapla AYNI işlemde yazılır (ya ikisi birden ya hiçbiri).
+      await recordConsents(client, userRes.rows[0].user_code, sanitizeStoredConsents(pending.rows[0].accepted_documents), 'register');
     }
     user = userRes.rows[0];
 
@@ -882,9 +896,16 @@ export async function createJoinRequest({
   try {
     await client.query('BEGIN');
 
-    // Kullanıcıyı ve e-posta doğrulama durumunu kontrol et
+    // KİLİT SIRASI: daire (KEY SHARE) -> kullanıcı (KEY SHARE). Hesap silme önce kendi dairelerini FOR UPDATE ile tutup SONRA kullanıcı satırını günceller;
+    // başvuru sahibi o dairelerden birine (ör. pasif üyelik / CRM'deki güncel ilişki) başvuruyorsa, kullanıcı kilidini ÖNCE alıp daireyi sonra beklemek
+    // 40P01 üretirdi. INSERT'in FK kontrolü zaten aynı daire kilidini alır (yeni bir çakışma yok); daire yoksa satır dönmez, hata aşağıdaki denetimde.
+    await client.query('SELECT id FROM apartments WHERE id = $1 FOR KEY SHARE', [aptId]);
+
+    // Kullanıcıyı ve e-posta doğrulama durumunu kontrol et. FOR KEY SHARE + deleted_at IS NULL: hesap silme (kimliksizleştirme) UPDATE'i bu satırı
+    // bekler; silme commit ettiyse satır dönmez (404) -> tombstone hesaba AKTİF başvuru yazılmaz (R2 F-3). KEY SHARE, INSERT'in FK kilidiyle aynıdır
+    // (yeni bir kilit sırası getirmez); FOR NO KEY UPDATE tutan akışlarla (role güncelleme) çakışmaz.
     const userRes = await client.query(
-      `SELECT user_code, full_name, email, email_verified, is_active FROM users WHERE user_code = $1 LIMIT 1`,
+      `SELECT user_code, full_name, email, email_verified, is_active FROM users WHERE user_code = $1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE`,
       [uCode],
     );
     if (userRes.rowCount === 0) {
@@ -1001,7 +1022,8 @@ export async function createJoinRequest({
           applicantEmail: user.email,
           notes: cleanNotes,
         }).catch((err) => {
-          console.error(`[Mailer] Katılım bildirimi e-postası gönderilemedi (${mgr.email}):`, err.message);
+          // Kişisel veri günlüğe yazılmaz (§0.9): alıcı adresi yok, SMTP mesajı temizlenir.
+          console.error('[Mailer] Katılım bildirimi e-postası gönderilemedi:', describeErrorForLog(err));
         });
       }
     } catch (err) {
@@ -1185,8 +1207,9 @@ export async function approveJoinRequest({ requestId, authUser }) {
         JOIN apartments a ON a.id = jr.apartment_id
         LEFT JOIN site_blocks b ON b.id = jr.block_id
         JOIN users u ON u.user_code = jr.user_code
-        WHERE jr.id = $1
+        WHERE jr.id = $1 AND u.deleted_at IS NULL
         FOR UPDATE OF jr
+        FOR KEY SHARE OF u
       `,
       [reqId],
     );
@@ -1562,8 +1585,10 @@ export async function handOverApartmentResident(
   );
   if (otherAdminRes.rowCount > 0) {
     if (indicatorOwnedByRemoved) {
+      // Gösterge yeni yöneticiye geçerken eski PIN SİLİNİR (R1 B5): PIN'i çıkarılan kişi biliyordu; devredilen göstergeyle birlikte geçerli kalsaydı
+      // daireden çıkarılan kişi PIN ile girmeye devam ederdi (keepPin yalnız göstergenin kimseye geçmediği geri alınabilir pasife alma içindir).
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_code = NULL WHERE id = $2`,
         [Number(otherAdminRes.rows[0].user_code), apartmentId],
       );
     }
@@ -1584,8 +1609,9 @@ export async function handOverApartmentResident(
       [apartmentId, newAdminCode],
     );
     if (indicatorOwnedByRemoved) {
+      // Eski PIN yeni yöneticiye geçerken silinir (yukarıdaki açıklama).
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_code = NULL WHERE id = $2`,
         [newAdminCode, apartmentId],
       );
     }
@@ -1866,6 +1892,13 @@ export async function deleteApartmentMember({ apartmentId, targetUserCode, authU
   };
 }
 
+// Silinmiş (kimliksizleştirilmiş) hesap: auth_middleware ve PATCH /me ile AYNI yanıt (401 ACCOUNT_DELETED; istemci oturumu kapatır).
+function accountDeletedHttpError() {
+  const err = httpError(401, 'Bu hesap silinmis.');
+  err.code = 'ACCOUNT_DELETED';
+  return err;
+}
+
 /**
  * Daire Sakininin Şifresini Değiştir (YALNIZCA kullanıcının kendi şifresi)
  *
@@ -1880,6 +1913,9 @@ export async function changeApartmentMemberPassword({
   newPassword,
   currentPassword,
   authUser,
+  // İsteğin güvenilir cihaz belirteci (body device_token / X-Device-Token; S-C): cihaz kimliği korunarak YENİ parolaya bağlı
+  // belirteç döner (aksi halde parola değişince sahibin hesap kilidi muafiyeti bir sonraki girişe kadar düşerdi).
+  deviceToken = null,
 }) {
   const aptId = parsePositiveId(apartmentId);
   if (aptId === null) {
@@ -1933,57 +1969,64 @@ export async function changeApartmentMemberPassword({
   }
 
   // Mevcut şifre doğrulaması (401/403 değil 400: istemci oturumu kapatmasın).
-  // PATCH /me ile AYNI hesap bazlı sayaç/kilit paylaşılır (5 hata -> 15 dk 429 CURRENT_PASSWORD_LOCKED):
-  // iki uçtan hangisi kullanılırsa kullanılsın mevcut parola sınırsız denenemez.
-  const throttleKey = passwordChangeThrottleKey(tUserCode);
-  const lockState = passwordChangeFailureTracker.check(throttleKey);
-  if (lockState.locked) {
-    throw currentPasswordLockedError(lockState.retryAfterSeconds);
-  }
-  const hashRes = await pool.query(
-    `SELECT password_hash FROM users WHERE user_code = $1 LIMIT 1`,
-    [tUserCode],
-  );
-  if (hashRes.rowCount === 0) {
-    throw httpError(404, 'Kullanıcı hesabı bulunamadı.');
-  }
-  const currentOk = await bcrypt.compare(cleanCurrent, hashRes.rows[0].password_hash);
-  if (!currentOk) {
-    const failure = passwordChangeFailureTracker.recordFailure(throttleKey);
-    if (failure.locked) {
-      throw currentPasswordLockedError(failure.retryAfterSeconds);
+  // PATCH /me, hesap silme ve veri dışa aktarma ile AYNI hesap bazlı sayaç/kilit paylaşılır (5 hata -> 15 dk 429 CURRENT_PASSWORD_LOCKED).
+  // Hata hakkı bcrypt karşılaştırmasından ÖNCE ayrılır (paralel tahmin penceresi yok); doğruda sıfırlanır (verifyCurrentPassword).
+  try {
+    await verifyCurrentPassword({ userCode: tUserCode, currentPassword: cleanCurrent });
+  } catch (guardError) {
+    if (guardError?.code === 'CURRENT_PASSWORD_LOCKED') {
+      throw currentPasswordLockedError(guardError.extra?.retry_after_seconds);
     }
-    const invalidError = httpError(400, 'Mevcut şifre hatalı.');
-    invalidError.code = 'CURRENT_PASSWORD_INVALID';
-    throw invalidError;
+    if (guardError?.code === 'CURRENT_PASSWORD_INVALID') {
+      const invalidError = httpError(400, 'Mevcut şifre hatalı.');
+      invalidError.code = 'CURRENT_PASSWORD_INVALID';
+      throw invalidError;
+    }
+    if (guardError?.code === 'ACCOUNT_DELETED') {
+      throw accountDeletedHttpError();
+    }
+    throw guardError;
   }
-  passwordChangeFailureTracker.recordSuccess(throttleKey);
 
   const passwordHash = await bcrypt.hash(cleanPass, 10);
 
-  // users tablosunu güncelle
+  // users tablosunu güncelle. deleted_at IS NULL: doğrulama ile bu yazma arasında (bcrypt.hash ~70 ms) hesap silme commit ettiyse silinmiş (kimliksizleştirilmiş)
+  // hesaba GERÇEK bcrypt özeti yazılmaz ("kullanılamaz özet" değişmezi: hiçbir parola eşleşmez) ve yeni token imzalanmaz; aşağıda 401 ACCOUNT_DELETED / 404.
   const updatedUserRes = await pool.query(
-    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2
+    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_code = $2 AND deleted_at IS NULL
      RETURNING user_code AS id, email, role`,
     [passwordHash, tUserCode],
   );
   const updatedUser = updatedUserRes.rows[0];
+  if (!updatedUser) {
+    const gone = await pool.query('SELECT deleted_at FROM users WHERE user_code = $1', [tUserCode]);
+    if (gone.rows?.[0]?.deleted_at) {
+      throw accountDeletedHttpError();
+    }
+    throw httpError(404, 'Kullanıcı hesabı bulunamadı.');
+  }
 
-  // Eğer legacy kolonu varsa apartments tablosunda da pin kodunu güncelle (tasarım gereği düz metin)
+  // Legacy daire PIN'i: sakin KENDİ parolasını belirledi -> yöneticinin verdiği PIN artık geçersiz. Yeni parola düz metin
+  // olarak SAKLANMAZ (S-C: yöneticiye görünür / "bilgileri gönder" e-postasıyla gönderilirdi); kolon temizlenir.
   if (isLegacyResident(apt, tUserCode)) {
     await pool.query(
-      `UPDATE apartments SET resident_pin_code = $1 WHERE id = $2`,
-      [cleanPass, apt.id],
+      `UPDATE apartments SET resident_pin_code = NULL WHERE id = $1`,
+      [apt.id],
     );
   }
 
   // Parola değişince (pv claim'i) eski token geçersiz olur; istemci oturumu kesilmesin diye yeni token döner (ek alan).
   const refreshedToken = updatedUser ? signAccessToken(updatedUser, { passwordHash }) : undefined;
+  // Yeni parola sürümüne bağlı güvenilir cihaz belirteci (ek alan; geriye uyumlu).
+  const refreshedDeviceToken = updatedUser
+    ? reissueDeviceToken({ presented: deviceToken, userCode: tUserCode, passwordHash })
+    : null;
 
   return {
     ok: true,
     message: 'Daire sakininin şifresi başarıyla güncellendi.',
     ...(refreshedToken ? { token: refreshedToken } : {}),
+    ...(refreshedDeviceToken ? { device_token: refreshedDeviceToken } : {}),
   };
 }
 
@@ -2334,19 +2377,22 @@ export async function setDoorAccessOverride({
   const boolAllowed = parseBooleanFlag(isAllowed, 'isAllowed');
   const cleanNotes = notes ? String(notes).trim().slice(0, NOTE_MAX_LENGTH) : null;
 
-  const targetRes = await pool.query(`SELECT 1 FROM users WHERE user_code = $1 LIMIT 1`, [targetUserCode]);
-  if (targetRes.rowCount === 0) {
-    throw httpError(404, 'Kullanıcı bulunamadı.');
-  }
-
+  // TEK ifade: hedef hesap CTE'de FOR KEY SHARE ile kilitlenir ve INSERT aynı ifadede ondan beslenir. Ayrı "var mı" okuması + INSERT arasında hesap silme
+  // (kimliksizleştirme) commit edebiliyordu ve tombstone hesaba kapı izni yazılıyordu (R2 F-3); şimdi silme commit ettiyse satır dönmez -> 404.
   const result = await pool.query(
-    `INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code, notes, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `WITH target AS (
+       SELECT user_code FROM users WHERE user_code = $3 AND deleted_at IS NULL FOR KEY SHARE
+     )
+     INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code, notes, updated_at)
+     SELECT $1::BIGINT, $2::BIGINT, target.user_code, $4::BOOLEAN, $5::INTEGER, $6::TEXT, NOW() FROM target
      ON CONFLICT (door_id, user_code)
      DO UPDATE SET is_allowed = $4, granted_by_user_code = $5, notes = $6, updated_at = NOW()
      RETURNING id, site_code, door_id, user_code, is_allowed, notes, updated_at`,
     [Number(door.site_code), Number(door.id), targetUserCode, boolAllowed, reviewerCode, cleanNotes],
   );
+  if (result.rowCount === 0) {
+    throw httpError(404, 'Kullanıcı bulunamadı.');
+  }
 
   if (overrideRevokesAccess(boolAllowed)) {
     await rotateTokensForDevices({

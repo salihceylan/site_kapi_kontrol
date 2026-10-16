@@ -149,10 +149,20 @@ export async function createSiteWithStructure(
 
   // 4. Kullanıcının genel rolünü site_manager olarak güncelle
   if (user.role !== 'super_user') {
-    await client.query(
-      `UPDATE users SET role = 'site_manager' WHERE id = $1`,
+    // deleted_at IS NULL: hesap silme (kimliksizleştirme) kurulumdan ÖNCE commit ettiyse (kullanıcı satırı bu noktaya kadar yalnız FK denetimleriyle
+    // tutulur) tombstone'a rol YAZILMAZ ve site KURULMAZ: hata işlemi geri alır (çağıran ROLLBACK eder). Silme henüz commit etmediyse bu işlem bitene
+    // dek bekler (yukarıdaki INSERT'lerin FK kilidi), sonra kapsam büyümesiyle yeniden dener.
+    const roleUpdate = await client.query(
+      `UPDATE users SET role = 'site_manager' WHERE id = $1 AND deleted_at IS NULL`,
       [user.id],
     );
+    if (roleUpdate.rowCount === 0) {
+      const gone = new Error('Bu hesap silinmis.');
+      gone.statusCode = 401;
+      gone.code = 'ACCOUNT_DELETED';
+      gone.expose = true;
+      throw gone;
+    }
   }
 
   // 5. Dinamik Blokları ve altındaki Daireleri optimize (bulk) oluştur

@@ -151,7 +151,7 @@ describe('JWT imzalama / dogrulama', () => {
     assert.equal(withoutPv.pv, undefined);
   });
 
-  it('pv karsilastirmasi: ayni hash gecerli, degisen hash gecersiz, claim yoksa gecerli (eski token)', () => {
+  it('pv karsilastirmasi: ayni hash gecerli, degisen hash gecersiz, claim yoksa REDDEDILIR (S-C: pv varsayilan zorunlu)', () => {
     const hashA = '$2a$10$AAAAAAAAAAAAAAAAAAAAAA';
     const hashB = '$2a$10$BBBBBBBBBBBBBBBBBBBBBB';
     const claims = verifyAccessToken(signAccessToken(user, { passwordHash: hashA }));
@@ -160,9 +160,17 @@ describe('JWT imzalama / dogrulama', () => {
     assert.equal(isPasswordVersionValid(claims, hashB), false);
     assert.equal(isPasswordVersionValid(claims, null), false);
 
-    // Claim'siz eski token: parola degisse bile suresi dolana kadar gecerli kalir.
+    // Claim'siz eski token: varsayilan olarak reddedilir; yalniz acikca JWT_REQUIRE_PV=0 ise gecerli kalir.
     const legacy = verifyAccessToken(jwt.sign({ sub: '42', email: 'a@example.com', role: 'individual' }, LONG_SECRET, { expiresIn: '1h' }));
-    assert.equal(isPasswordVersionValid(legacy, hashB), true);
+    assert.equal(isPasswordVersionValid(legacy, hashB), false);
+    const savedRequirePv = process.env.JWT_REQUIRE_PV;
+    process.env.JWT_REQUIRE_PV = '0';
+    try {
+      assert.equal(isPasswordVersionValid(legacy, hashB), true);
+    } finally {
+      if (savedRequirePv === undefined) delete process.env.JWT_REQUIRE_PV;
+      else process.env.JWT_REQUIRE_PV = savedRequirePv;
+    }
 
     assert.equal(isPasswordVersionValid({ pv: 12345 }, hashA), false);
   });

@@ -707,3 +707,40 @@ export async function sendAnnouncementEmail({ to, siteName, title, body, importa
   const transporter = createTransporter();
   await transporter.sendMail({ from, ...message });
 }
+
+/**
+ * Hesap silme bildirimi (kullanıcı -> ESKİ e-posta adresi). Konu SABİTTİR (kullanıcı verisi içermez); ad HTML'de kaçırılır, düz metinde tek satıra indirilir.
+ * Silme işlemi bu gönderimden BAĞIMSIZDIR (gönderim hatası silmeyi geri almaz); çağıran hata ayrıntısını / adresi log'a yazmaz.
+ */
+export const ACCOUNT_DELETED_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Hesabınız Silindi';
+
+export async function sendAccountDeletedEmail({ to, fullName, deletedAt = new Date() }) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
+  const transporter = createTransporter();
+  const recipientName = singleLine(fullName, 120) || 'Kullanıcı';
+  const when = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul', dateStyle: 'long', timeStyle: 'short' }).format(deletedAt);
+  const lines = [
+    `Hesabınız ${when} tarihinde, sizin isteğinizle silindi.`,
+    'Adınız, e-posta adresiniz, telefon numaranız ve parolanız sistemden kaldırıldı; site ve daire üyelikleriniz ile kapı erişim yetkileriniz sona erdi.',
+    'Yasal saklama yükümlülükleri nedeniyle site yönetiminin tuttuğu bazı kayıtlar (ör. aidat ve ekstre kayıtları) kimliksizleştirilerek saklanabilir.',
+    'Bu işlemi siz yapmadıysanız lütfen en kısa sürede destek ekibiyle iletişime geçin.',
+    'İsterseniz aynı e-posta adresiyle daha sonra yeniden kayıt olabilirsiniz; eski verileriniz geri gelmez.',
+  ];
+  const text = `Merhaba ${recipientName},\n\n${lines.join('\n\n')}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #111827; margin: 0;">Site ve Toplu Yaşam Yönetim Sistemi</h2>
+        <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Hesabınız Silindi</p>
+      </div>
+      <p style="color: #374151; font-size: 16px;">Merhaba <strong>${escapeHtml(recipientName)}</strong>,</p>
+      ${lines.map((line) => `<p style="color: #4b5563; font-size: 14px; line-height: 1.5;">${escapeHtml(line)}</p>`).join('\n      ')}
+      <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
+      <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">Bu bilgilendirme e-postası Site ve Toplu Yaşam Yönetim Sistemi tarafından otomatik olarak gönderilmiştir.</p>
+    </div>
+  `;
+  await transporter.sendMail({ from, to, subject: ACCOUNT_DELETED_SUBJECT, text, html });
+}

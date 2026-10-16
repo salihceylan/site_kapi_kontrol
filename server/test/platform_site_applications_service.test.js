@@ -93,7 +93,8 @@ function install(config = {}) {
     // sahip bağı (userHasOwnerLink) ve mine'ın requires_application rol sorgusu
     if (/^SELECT 1 FROM site_manager_sites m INNER JOIN sites s/.test(sql)) return ok(state.ownerLink ? [{ x: 1 }] : []);
     if (/^SELECT role FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) return ok([{ role: state.role }]);
-    if (/^SELECT id, user_code, role, full_name FROM users WHERE user_code = \$1 LIMIT 1$/.test(sql)) {
+    // başvuran satırı FOR KEY SHARE + deleted_at IS NULL ile okunur (hesap silme yarışı: silinmiş hesaba başvuru yazılmaz)
+    if (/^SELECT id, user_code, role, full_name FROM users WHERE user_code = \$1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE$/.test(sql)) {
       return ok([{ id: 7, user_code: Number(params[0]), role: state.role, full_name: 'Ayşe Başvuran' }]);
     }
     if (/^SELECT value FROM platform_settings WHERE key = \$1 LIMIT 1$/.test(sql)) return ok([{ value: { mode: state.mode } }]);
@@ -125,7 +126,8 @@ function install(config = {}) {
     if (/FROM users WHERE user_code = \$1 LIMIT 1 FOR NO KEY UPDATE$/.test(sql)) return ok(state.applicant ? [state.applicant] : []);
     if (/FROM site_applications a WHERE a\.id = \$1 FOR UPDATE OF a$/.test(sql)) return ok(state.row ? [state.row] : []);
     if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: params[0], address: params[1], city: params[2], district: params[3], block_count: params[4], apartment_count: params[5], door_count: params[6], approval_status: 'approved', management_type: params[8] }]);
-    if (/^INSERT INTO site_manager_sites/.test(sql) || /^INSERT INTO site_memberships/.test(sql) || /^UPDATE users SET role/.test(sql)) return ok();
+    if (/^UPDATE users SET role/.test(sql)) return { rows: [], rowCount: 1 }; // `deleted_at IS NULL` ister: satır dönmezse (silinmiş hesap) kurulum geri alınır
+    if (/^INSERT INTO site_manager_sites/.test(sql) || /^INSERT INTO site_memberships/.test(sql)) return ok();
     if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 30 + Number(params[2]), site_code: 900, block_name: params[1], sort_order: params[2] }]);
     if (/^INSERT INTO apartments/.test(sql)) return ok();
     if (/^INSERT INTO site_doors/.test(sql)) return ok([{ id: 40 + Number(params[2]), site_code: 900, door_name: params[1], door_index: params[2], is_active: true }]);
@@ -530,7 +532,7 @@ describe('approveSiteApplication', () => {
       /^INSERT INTO sites/,
       /^INSERT INTO site_manager_sites/,
       /^INSERT INTO site_memberships/,
-      /^UPDATE users SET role = 'site_manager' WHERE id = \$1$/,
+      /^UPDATE users SET role = 'site_manager' WHERE id = \$1 AND deleted_at IS NULL$/,
       /^INSERT INTO site_blocks/,
       /^INSERT INTO apartments/,
       /^INSERT INTO site_doors/,
@@ -719,6 +721,7 @@ describe('approveSiteApplication', () => {
         instantLog.push({ sql, params });
         if (/^SELECT id, user_code, role, full_name, email FROM users/.test(sql)) return ok([{ id: 7, user_code: 48213, role: 'site_manager', full_name: 'A', email: 'a@example.com' }]);
         if (/site_manager_sites m INNER JOIN/.test(sql)) return ok([{ x: 1 }]);
+        if (/^UPDATE users SET role/.test(sql)) return { rows: [], rowCount: 1 };
         if (/^SELECT \* FROM devices/.test(sql)) return ok([{ id: 77, device_uid: 'A0B1C2D3E4F5', hardware_type: 'esp32_wroom' }]);
         if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: params[0], address: params[1], city: params[2], district: params[3], block_count: params[4], apartment_count: params[5], door_count: params[6], approval_status: 'approved', management_type: params[8] }]);
         if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 30 + Number(params[2]), site_code: 900, block_name: params[1], sort_order: params[2] }]);

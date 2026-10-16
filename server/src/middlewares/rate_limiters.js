@@ -3,6 +3,8 @@
 // - Bellek icin: periyodik temizlik (unref'li interval) + store basina anahtar ust siniri.
 // Not: PM2 tek surec (fork) varsayimi; cluster modunda sayaclar surec basinadir.
 
+import { requestIpBucket } from '../security/client_ip.js';
+
 const MAX_KEYS_PER_STORE = 50000;
 const SWEEP_INTERVAL_MS = 60 * 1000;
 
@@ -34,8 +36,10 @@ export function sweepAllRateLimitStores(now = Date.now()) {
   }
 }
 
+// Sinirlayici anahtari: IPv4 oldugu gibi, IPv6 /64 kovasi (adres degistiren IPv6 istemci sinirlari atlatamasin).
+// req.ip `trust proxy` ayarina gore hesaplanir (security/trust_proxy.js).
 export function clientIp(req) {
-  return String(req.ip || req.socket?.remoteAddress || 'unknown');
+  return requestIpBucket(req);
 }
 
 export function emailKeyOf(req) {
@@ -277,5 +281,17 @@ export const adminSensitiveLimiter = createRuleLimiter({
     { windowMs: 15 * MIN, max: 60, key: ipKey },
   ],
   message: 'Cok fazla hassas islem denemesi. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
+// PATCH /me (ad / telefon / parola degisimi): authRequired'dan SONRA kullanilir -> kullanici bazli (NAT guvenli), IP kurali genis.
+// Parola degisiminde mevcut parola denemesi ayrica hesap bazli sayacla (5 hata -> 15 dk) sinirlidir; bu sinirlayici bcrypt (CPU) harcayan
+// yanlis-parola isteklerinin toplu gonderilmesini ve profil guncelleme dongulerini keser.
+export const profileUpdateLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: 15 * MIN, max: 30, key: userOrIpKey },
+    { windowMs: 15 * MIN, max: 300, key: ipKey },
+  ],
+  message: 'Cok fazla profil guncelleme istegi. Biraz sonra tekrar deneyin.',
   includeRetryBody: true,
 });

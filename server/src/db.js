@@ -45,6 +45,103 @@ export async function checkDbConnection() {
   }
 }
 
+/** 035: pending_registrations.accepted_documents. migrations/035_platform_services.sql ile AYNI ifade (test: platform_config_schema). */
+export const PENDING_CONSENTS_COLUMN_DDL = `
+  ALTER TABLE pending_registrations
+    ADD COLUMN IF NOT EXISTS accepted_documents JSONB CHECK (accepted_documents IS NULL OR jsonb_typeof(accepted_documents) = 'array')
+`;
+
+/**
+ * 035'in tek ALTER'i. `ADD COLUMN IF NOT EXISTS` sutun VARKEN bile tabloda ACCESS EXCLUSIVE kilit alir; dev ensureDbSchema blogu tek ortuk
+ * islem oldugundan (kilitler sonuna dek birikir) bunu o blokta calistirmak, acilista kayit / dogrulama yazicilariyla 40P01 uretiyordu.
+ * Burada: blok BITTIKTEN sonra (kilit tutulmuyor; tablo artik kesin var), kendi otomatik onayli ifadesiyle ve yalnız katalog sutunun eksik
+ * oldugunu soyluyorsa ALTER calisir. Sutun varsa (her acilis) hic kilit alinmaz.
+ */
+async function ensurePendingConsentsColumn(client) {
+  const found = await client.query(`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_attribute
+      WHERE attrelid = to_regclass('public.pending_registrations') AND attname = 'accepted_documents' AND NOT attisdropped
+    ) AS present
+  `);
+  if (found.rows[0]?.present !== true) {
+    await client.query(PENDING_CONSENTS_COLUMN_DDL);
+  }
+}
+
+/**
+ * 036 (hesap silme + kisisel veri disa aktarma): DDL ifadeleri. migrations/036_account_deletion.sql ile AYNI ifadeler (test: account_schema).
+ * Hesap silme KIMLIKSIZLESTIRMEDIR (users satiri kalir; yabanci anahtarlar bozulmaz); silinen hesabi isaretleyen tek sutun users.deleted_at'tir.
+ *  - deleted_at dolu <=> hesap kimliksizlestirilmistir ve ASLA aktif olamaz (CHECK, kisit ihlali 23514): yonetici "aktif et" yapsa bile silinmis hesap acilamaz.
+ *  - account_data_exports: dis aktarma hiz siniri kaydi (kullanici basina 24 saatte 3); yalniz zaman damgasi, kisisel veri SAKLANMAZ.
+ *  - audit_log(actor_user_code) kismi indeksi: FK'nin (ON DELETE SET NULL) kullanici KALICI silinirken siralı taramaya dusmemesi icin; audit_log hic temizlenmez.
+ *  - door_access_logs(user_code, opened_at DESC) kismi indeksi: kapi gecis kayitlari kullaniciya gore kimliksizlestirilir / disa aktarilir (30 gun saklanir).
+ */
+export const ACCOUNT_DELETION_DDL = Object.freeze({
+  deletedAtColumn: `ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  deletedInactiveCheck: `
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_users_deleted_inactive' AND conrelid = 'users'::regclass
+      ) THEN
+        ALTER TABLE users ADD CONSTRAINT chk_users_deleted_inactive CHECK (deleted_at IS NULL OR is_active = FALSE);
+      END IF;
+    END $$
+  `,
+  exportsTable: `
+    CREATE TABLE IF NOT EXISTS account_data_exports (
+      id BIGSERIAL PRIMARY KEY,
+      user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `,
+  exportsIndex: `CREATE INDEX IF NOT EXISTS idx_account_data_exports_user ON account_data_exports (user_code, requested_at DESC)`,
+  auditActorIndex: `CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log (actor_user_code) WHERE actor_user_code IS NOT NULL`,
+  doorUserIndex: `CREATE INDEX IF NOT EXISTS idx_door_access_logs_user ON door_access_logs (user_code, opened_at DESC) WHERE user_code IS NOT NULL`,
+});
+
+/**
+ * 036'yi uygular. `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` ve `CREATE INDEX IF NOT EXISTS` nesne VARKEN bile tabloda kilit alir (ACCESS EXCLUSIVE /
+ * SHARE); bunlari dev ensureDbSchema blogunun tek ortuk islemine koymak kilitleri sonuna dek biriktirir ve her acilista yazicilarla 40P01 uretir
+ * (R2 F-1). Burada: dev blok BITTIKTEN sonra (kilit tutulmuyor), TEK katalog sorgusuyla (kilitsiz) eksik olanlar belirlenir ve YALNIZ eksikler kendi
+ * otomatik onayli ifadesiyle calisir. Her sey varsa (her normal acilis) hicbir tabloda kilit alinmaz. audit_log / door_access_logs henuz yoksa
+ * (platform oncesi sema) ilgili indeks atlanir; tablo olusunca sonraki acilista yapilir.
+ */
+async function ensureAccountDeletionSchema(client) {
+  const found = await client.query(`
+    SELECT
+      EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.users') AND attname = 'deleted_at' AND NOT attisdropped) AS has_column,
+      EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_deleted_inactive' AND conrelid = to_regclass('public.users')) AS has_check,
+      to_regclass('public.account_data_exports') IS NOT NULL AS has_exports_table,
+      EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_account_data_exports_user') AS has_exports_index,
+      to_regclass('public.audit_log') IS NOT NULL AS has_audit_table,
+      EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_audit_log_actor') AS has_audit_index,
+      to_regclass('public.door_access_logs') IS NOT NULL AS has_door_table,
+      EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_door_access_logs_user') AS has_door_index
+  `);
+  const state = found.rows[0] ?? {};
+  if (state.has_column !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.deletedAtColumn);
+  }
+  if (state.has_check !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.deletedInactiveCheck);
+  }
+  if (state.has_exports_table !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.exportsTable);
+  }
+  if (state.has_exports_index !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.exportsIndex);
+  }
+  if (state.has_audit_table === true && state.has_audit_index !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.auditActorIndex);
+  }
+  if (state.has_door_table === true && state.has_door_index !== true) {
+    await client.query(ACCOUNT_DELETION_DDL.doorUserIndex);
+  }
+}
+
 export async function ensureDbSchema() {
   const client = await pool.connect();
   try {
@@ -1694,7 +1791,60 @@ export async function ensureDbSchema() {
         END IF;
       END $$;
 
+      -- 035: PLATFORM HIZMETLERI (satisa hazirlik). db.js ile migrations/035_platform_services.sql AYNI DDL; ekleyici ve idempotent.
+      -- 1. Kullanici onay kayitlari (yasal belge + surum). Ayni belge + surum bir kullanici icin tek satir.
+      CREATE TABLE IF NOT EXISTS user_consents (
+        id BIGSERIAL PRIMARY KEY,
+        user_code INTEGER NOT NULL REFERENCES users(user_code) ON DELETE CASCADE,
+        document_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        source TEXT NOT NULL DEFAULT 'in_app',
+        CONSTRAINT uq_user_consents_user_document_version UNIQUE (user_code, document_id, version),
+        CONSTRAINT chk_user_consents_document_id CHECK (document_id ~ '^[a-z][a-z0-9_]{1,39}$'),
+        CONSTRAINT chk_user_consents_version CHECK (char_length(version) BETWEEN 1 AND 40),
+        CONSTRAINT chk_user_consents_source CHECK (source ~ '^[a-z][a-z_]{1,39}$')
+      );
+
+      -- 2. Istemci hata raporlari (kisisel veriden temizlenmis, parmak izine gore tekillestirilmis; kullanici / cihaz / IP saklanmaz).
+      CREATE TABLE IF NOT EXISTS client_error_reports (
+        id BIGSERIAL PRIMARY KEY,
+        fingerprint TEXT NOT NULL,
+        error_type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        app_version TEXT NOT NULL,
+        build TEXT,
+        platform TEXT NOT NULL,
+        os_version TEXT,
+        route TEXT,
+        fatal BOOLEAN NOT NULL DEFAULT FALSE,
+        count INTEGER NOT NULL DEFAULT 1,
+        first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        sample_stack TEXT,
+        CONSTRAINT uq_client_error_reports_fingerprint UNIQUE (fingerprint),
+        CONSTRAINT chk_client_error_reports_fingerprint CHECK (char_length(fingerprint) = 64),
+        CONSTRAINT chk_client_error_reports_platform CHECK (platform IN ('android', 'ios', 'web', 'other')),
+        CONSTRAINT chk_client_error_reports_count CHECK (count >= 1),
+        CONSTRAINT chk_client_error_reports_sizes CHECK (
+          char_length(error_type) <= 100 AND char_length(message) <= 500 AND (sample_stack IS NULL OR char_length(sample_stack) <= 8000)
+        )
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_error_reports_last_seen ON client_error_reports (last_seen DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_client_error_reports_first_seen ON client_error_reports (first_seen);
+
+      -- 3. Bekleyen kayitta yasal belge onaylari: pending_registrations.accepted_documents ([{id, version, accepted_at}]; hesap olusurken ayni islemde
+      -- user_consents'a yazilir). ALTER bu dev blokta DEGIL: ensurePendingConsentsColumn (asagida) blok BITTIKTEN sonra, katalog kontroluyle calisir
+      -- (ADD COLUMN IF NOT EXISTS sutun varken bile ACCESS EXCLUSIVE alir; dev blogun tek ortuk islemine konursa acilista yazicilarla 40P01 uretir).
+
+      -- 036 (hesap silme + kisisel veri disa aktarma): DDL bu dev blokta DEGIL; ensureAccountDeletionSchema (yukarida) blok BITTIKTEN sonra, katalog
+      -- kontroluyle ve kendi otomatik onayli ifadeleriyle calisir (ADD COLUMN / CREATE INDEX IF NOT EXISTS nesne varken bile kilit alir; dev blogun tek ortuk
+      -- islemine konursa acilista yazicilarla 40P01 uretir). Ifadeler: ACCOUNT_DELETION_DDL = migrations/036_account_deletion.sql.
+
     `);
+
+    await ensurePendingConsentsColumn(client);
+    await ensureAccountDeletionSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

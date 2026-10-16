@@ -1,7 +1,9 @@
-// Hesap bazli ardisik hata sayaci (giris ve parola degisikligi icin).
-// Anahtar: kucuk harfli kullanici adi / e-posta (IP'den bagimsiz; dagitik kaba kuvveti keser).
-// Varsayilan: pencere icinde 5 hata -> 15 dk kilit (429). Basarili islem sayaci sifirlar.
+// Ardisik hata sayaclari.
+// - Giris: security/login_guard.js (hesap x kaynak, hesap geneli, IP geneli; artan bekleme; guvenilir cihaz muafiyeti).
+// - Mevcut parola denemesi (PATCH /me ve daire sakini change-password): hesap bazli 5 hata -> 15 dk kilit (429).
+//   Bu uclar oturum ister; saldirgan yalnizca calintisi oturumun hesabini kilitleyebilir (hizmet reddi yuzeyi yok).
 
+import { createLoginGuard, loginAccountKey } from '../security/login_guard.js';
 import { registerSweeper } from './rate_limiters.js';
 
 const MAX_KEYS = 50000;
@@ -96,7 +98,37 @@ export function createFailureTracker({
   };
 }
 
-export const loginFailureTracker = createFailureTracker({ maxFailures: 5, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 });
+// Giris kilidi (S-C): hesap x kaynak / hesap geneli / IP geneli, artan bekleme (security/login_guard.js).
+export const loginGuard = createLoginGuard();
+registerSweeper((at) => loginGuard.sweep(at));
+
+const LEGACY_SOURCE_KEY = 'legacy';
+const legacyAttempt = (identifier) => ({
+  accountKey: loginAccountKey({ identifier }),
+  sourceKey: LEGACY_SOURCE_KEY,
+  ipKey: null,
+  trusted: false,
+});
+
+// Geriye donuk uyumlu ince arayuz (eski testler / araclar): tanimlayici bazli check/recordFailure/recordSuccess,
+// reset ve size TUM giris kilidi durumunu kapsar. Giris rotasi dogrudan loginGuard + buildLoginAttempt kullanir.
+export const loginFailureTracker = {
+  check(identifier) {
+    return loginGuard.check(legacyAttempt(identifier));
+  },
+  recordFailure(identifier) {
+    return loginGuard.recordFailure(legacyAttempt(identifier));
+  },
+  recordSuccess(identifier) {
+    loginGuard.clearAccount(loginAccountKey({ identifier }));
+  },
+  reset() {
+    loginGuard.reset();
+  },
+  size() {
+    return loginGuard.size();
+  },
+};
 
 // Mevcut parolayi yanlis giren (PATCH /me ve daire sakini change-password) kullanicilar icin ayri sayac.
 export const passwordChangeFailureTracker = createFailureTracker({ maxFailures: 5, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 });
@@ -127,10 +159,11 @@ export function clearAccountLocks({ email, loginName, userCode } = {}) {
   for (const raw of [email, loginName]) {
     const key = String(raw ?? '').trim().toLowerCase();
     if (key) {
-      loginFailureTracker.recordSuccess(key);
+      loginGuard.clearAccount(loginAccountKey({ identifier: key }));
     }
   }
   if (userCode !== undefined && userCode !== null && userCode !== '') {
+    loginGuard.clearAccount(loginAccountKey({ userCode }));
     passwordChangeFailureTracker.recordSuccess(passwordChangeThrottleKey(userCode));
   }
 }

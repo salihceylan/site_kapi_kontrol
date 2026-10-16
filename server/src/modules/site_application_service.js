@@ -337,7 +337,7 @@ export async function setSiteOnboardingMode({ mode, actor }) {
  * başvuru, günlük sınır, cihaz sahipliği]. Başvuruda cihaz KİLİTLENMEZ / AYRILMAZ (yalnız sahiplik doğrulanır).
  * @returns {Promise<object>} Application (başvuran görünümü)
  */
-export async function createSiteApplication({ actor, body }) {
+export async function createSiteApplication({ actor, body, consents = null }) {
   const actorInfo = actorFromAuthUser(actor);
   const userCode = toPositiveInt(actorInfo.userCode, INT4_MAX);
   if (userCode === null) {
@@ -381,8 +381,10 @@ export async function createSiteApplication({ actor, body }) {
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [applicationLockKey(userCode)]);
 
     // Taze rol (başka oturumda değişmiş / onaylanmış olabilir): oturum başındaki rol yerine bu transaction'da okunur.
+    // FOR KEY SHARE + deleted_at IS NULL: hesap silme (kimliksizleştirme) UPDATE'i bu işlem bitene dek bekler; silme commit ettiyse satır dönmez (404) ->
+    // tombstone hesap adına başvuru yazılmaz (R2 F-3). INSERT'in FK kilidiyle aynı düzey; "users -> başvuru" sırası korunur.
     const userResult = await client.query(
-      `SELECT id, user_code, role, full_name FROM users WHERE user_code = $1 LIMIT 1`,
+      `SELECT id, user_code, role, full_name FROM users WHERE user_code = $1 AND deleted_at IS NULL LIMIT 1 FOR KEY SHARE`,
       [userCode],
     );
     const user = userResult.rows?.[0];
@@ -433,6 +435,9 @@ export async function createSiteApplication({ actor, body }) {
       }
     }
 
+    // Yasal belge onayı (isteğe bağlı kanca; legal_consent_service.siteApplicationConsents): zorunluluk açıkken eksik/eski onay 400 CONSENT_REQUIRED.
+    const consentPlan = consents ? await consents.check(client, source.accepted_documents) : null;
+
     const insertResult = await client.query(
       `
         INSERT INTO site_applications (
@@ -478,6 +483,11 @@ export async function createSiteApplication({ actor, body }) {
       },
       { inTransaction: true },
     );
+
+    // Onaylar başvuruyla AYNI işlemde yazılır.
+    if (consentPlan) {
+      await consents.record(client, userCode, consentPlan);
+    }
 
     await client.query('COMMIT');
     committed = true;

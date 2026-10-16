@@ -398,7 +398,8 @@ guestPassesRouter.post('/public/guest-pass/:token/open', doorCommandRateLimiter,
     try {
       await publishDoorPulse({
         deviceUid: pass.device_uid,
-        requestedBy: `guest_pass:${String(pass.title || '').slice(0, 48)}`,
+        // Misafir başlığı (ad içerebilir) MQTT'ye gitmez (S-C): yalnız geçiş kimliği.
+        requestedBy: `guest:${Number(pass.id)}`,
         doorId: Number(pass.door_id),
         siteCode: Number(pass.site_code),
       });

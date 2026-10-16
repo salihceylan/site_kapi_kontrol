@@ -32,6 +32,8 @@ function install({ poolRole = 'site_manager', txRole = poolRole, ownerLink = fal
       return txRole ? ok([{ id: 7, user_code: 48213, role: txRole, full_name: 'A', email: 'a@example.com' }]) : ok();
     }
     if (/^SELECT \* FROM devices/.test(sql)) return ok();
+    // rol güncellemesi `deleted_at IS NULL` ister: satır dönmezse (silinmiş hesap) kurulum geri alınır; burada hesap var -> 1 satır
+    if (/^UPDATE users SET role = 'site_manager' WHERE id = \$1 AND deleted_at IS NULL$/.test(sql)) return { rows: [], rowCount: 1 };
     if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: params[0], management_type: params[8] }]);
     if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 31, site_code: 900, block_name: 'A Blok', sort_order: 1 }]);
     if (/^INSERT INTO site_doors/.test(sql)) return ok([{ id: 41, site_code: 900, door_name: 'Kapı 1', door_index: 1, is_active: true }]);
@@ -171,6 +173,7 @@ describe('bağ kaynağı yazımı', () => {
         const sql = norm(text);
         log.push({ sql, params });
         if (/^INSERT INTO sites/.test(sql)) return ok([{ id: 900, name: 'S', management_type: 'apartment_site' }]);
+        if (/^UPDATE users SET role/.test(sql)) return { rows: [], rowCount: 1 };
         if (/^INSERT INTO site_blocks/.test(sql)) return ok([{ id: 31, site_code: 900, block_name: 'A', sort_order: 1 }]);
         if (/^INSERT INTO site_doors/.test(sql)) return ok([{ id: 41, site_code: 900, door_name: 'K', door_index: 1, is_active: true }]);
         return ok();

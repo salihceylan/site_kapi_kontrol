@@ -134,9 +134,11 @@ export function verificationIssueError(result) {
 // (429) veya başarısız (503) bir deneme bekleyen kaydı asla değiştirmez. $4 = bu isteğin kod satırı id'si:
 // daha YENİ bir açık kod varsa (bu istek bayatladı) hiçbir şey yazılmaz, yeni isteğin kimlik bilgileri ezilmez.
 // E-posta (büyük/küçük harf duyarsız) başına tek kayıt: tekrar kayıt ad/parola özetini günceller.
+// $5 = kayıtta onaylanan yasal belgeler (JSON dizi ya da NULL; legal_consent_service.js). Tekrar kayıt bunu da yeniler (en son deneme geçerli);
+// hesap açılırken (verifyIndividualEmailCode) aynı işlemde user_consents'a yazılır.
 export const SQL_UPSERT_PENDING_REGISTRATION = `
-  INSERT INTO pending_registrations (email, full_name, password_hash)
-  SELECT $1::text, $2::text, $3::text
+  INSERT INTO pending_registrations (email, full_name, password_hash, accepted_documents)
+  SELECT $1::text, $2::text, $3::text, $5::jsonb
   WHERE NOT EXISTS (
     SELECT 1 FROM email_verifications
     WHERE LOWER(email) = LOWER($1) AND is_verified = FALSE AND id > $4
@@ -144,6 +146,7 @@ export const SQL_UPSERT_PENDING_REGISTRATION = `
   ON CONFLICT ((LOWER(email)))
   DO UPDATE SET full_name = EXCLUDED.full_name,
                 password_hash = EXCLUDED.password_hash,
+                accepted_documents = EXCLUDED.accepted_documents,
                 updated_at = NOW()
 `;
 
@@ -152,7 +155,7 @@ export const SQL_UPSERT_PENDING_REGISTRATION = `
 export const SQL_UPDATE_UNVERIFIED_USER_CREDENTIALS = `
   UPDATE users
   SET full_name = $1, password_hash = $2, updated_at = NOW()
-  WHERE user_code = $3 AND email_verified = FALSE
+  WHERE user_code = $3 AND email_verified = FALSE AND deleted_at IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM email_verifications
       WHERE LOWER(email) = LOWER($4) AND is_verified = FALSE AND id > $5
@@ -168,7 +171,7 @@ export const SQL_FIND_PENDING_LOGIN_HASH = `
 export const SQL_TAKE_PENDING_REGISTRATION = `
   DELETE FROM pending_registrations
   WHERE LOWER(email) = LOWER($1)
-  RETURNING full_name, password_hash
+  RETURNING full_name, password_hash, accepted_documents
 `;
 
 // "Tekrar gönder" için: yalnızca ad (parola özeti gereksiz yere okunmaz).

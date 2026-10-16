@@ -1,5 +1,7 @@
 // Ortam degiskenleri dogrulamasi (sirlari ASLA loglamaz; yalnizca uzunluk/ad bilgisi verir).
 
+import { resolveTrustProxy } from '../security/trust_proxy.js';
+
 export const MIN_RECOMMENDED_JWT_SECRET_LENGTH = 32;
 
 // Acikca "doldurulmamis" oldugu belli yer tutucu degerler (kucuk harfe cevrilip karsilastirilir).
@@ -70,7 +72,8 @@ export function evaluateJwtSecret(secret) {
       ok: true,
       warning:
         `JWT_SECRET ${length} karakter; en az ${MIN_RECOMMENDED_JWT_SECRET_LENGTH} karakter onerilir. ` +
-        'Planli bir bakim penceresinde secret degistirilmeli (mevcut oturumlar gecersiz olur).',
+        'Secret dondurulmeli: eskisi JWT_SECRET_PREVIOUS + JWT_SECRET_PREVIOUS_UNTIL ile gecis suresince dogrulamada kabul edilir ' +
+        '(mevcut oturumlar o ana dek dusmez).',
     };
   }
   return { ok: true };
@@ -96,6 +99,144 @@ export function isValidExpiresIn(value) {
   return /^\d+$/.test(text) || /^\d+\s*(ms|s|m|h|d|w|y|sec|secs|second|seconds|min|mins|minute|minutes|hr|hrs|hour|hours|day|days|week|weeks|year|years)$/i.test(text);
 }
 
+// ---- JWT omru / gecis / pv (S-C sertlestirme) ----------------------------------------------------
+
+export const DEFAULT_JWT_EXPIRES_SECONDS = 30 * 24 * 60 * 60;
+// Ust sinir: daha uzun JWT_EXPIRES_IN degerleri (canlida 365d) bu sureye KIRPILIR. Calinan bir oturumun (kayip telefon)
+// gecerli kaldigi sureyi sinirlar; parola degisimi (pv) disinda sunucu tarafli iptal yoktur.
+export const MAX_JWT_EXPIRES_SECONDS = 90 * 24 * 60 * 60;
+// JWT_SECRET_PREVIOUS_UNTIL bu kadar ileriyse uyarilir (gecis penceresi kisa tutulmali).
+export const MAX_PREVIOUS_SECRET_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+
+const DURATION_UNITS_SECONDS = new Map([
+  ['ms', 0.001],
+  ['s', 1], ['sec', 1], ['secs', 1], ['second', 1], ['seconds', 1],
+  ['m', 60], ['min', 60], ['mins', 60], ['minute', 60], ['minutes', 60],
+  ['h', 3600], ['hr', 3600], ['hrs', 3600], ['hour', 3600], ['hours', 3600],
+  ['d', 86400], ['day', 86400], ['days', 86400],
+  ['w', 604800], ['week', 604800], ['weeks', 604800],
+  ['y', 31557600], ['year', 31557600], ['years', 31557600],
+]);
+
+/**
+ * JWT_EXPIRES_IN -> saniye. Yalnizca rakam = SANIYE (jsonwebtoken'a ham dize verilseydi "3600" milisaniye sayilirdi:
+ * 3,6 saniyelik token). Gecersiz/bos -> null.
+ */
+export function parseExpiresInSeconds(value) {
+  const text = String(value ?? '').trim();
+  if (!isValidExpiresIn(text)) {
+    return null;
+  }
+  if (/^\d+$/.test(text)) {
+    return Number(text);
+  }
+  const match = /^(\d+)\s*([a-z]+)$/i.exec(text);
+  const factor = DURATION_UNITS_SECONDS.get(match[2].toLowerCase());
+  return Math.floor(Number(match[1]) * factor);
+}
+
+/** Imzalamada kullanilacak omur (saniye): gecersiz -> 30 gun, 0 -> 30 gun, ust sinir 90 gun. */
+export function resolveJwtExpiresSeconds(env = process.env) {
+  const parsed = parseExpiresInSeconds(env?.JWT_EXPIRES_IN);
+  if (parsed === null || parsed <= 0) {
+    return DEFAULT_JWT_EXPIRES_SECONDS;
+  }
+  return Math.min(parsed, MAX_JWT_EXPIRES_SECONDS);
+}
+
+/**
+ * pv (parola surumu) claim'i ZORUNLU mu? Varsayilan: HER ZAMAN zorunlu (NODE_ENV'den bagimsiz; canlida NODE_ENV tanimsiz
+ * olabilir). Yalnizca acikca JWT_REQUIRE_PV=0 (false/no/off) ile kapatilir ve acilista uyari verilir. Zorunluyken pv'siz
+ * token reddedilir: sir zayif/sizmis olsa bile sahte token uretmek icin hedef hesabin parola ozeti de bilinmelidir.
+ * (pv 2026-10-02'den beri her girisle uretilir; daha eski pv'siz tokenlar bir kez yeniden giris ister.)
+ */
+const PV_DISABLED_VALUES = ['0', 'false', 'no', 'off'];
+const PV_ENABLED_VALUES = ['1', 'true', 'yes', 'on'];
+
+export function isPasswordVersionRequired(env = process.env) {
+  const raw = String(env?.JWT_REQUIRE_PV ?? '').trim().toLowerCase();
+  return !PV_DISABLED_VALUES.includes(raw);
+}
+
+/**
+ * Sir dondurme gecisi: JWT_SECRET_PREVIOUS yalnizca DOGRULAMA icin ve yalnizca JWT_SECRET_PREVIOUS_UNTIL anina kadar
+ * kabul edilir; yeni tokenlar her zaman JWT_SECRET ile imzalanir. UNTIL yoksa/gecersizse/gecmisse eski sir KULLANILMAZ
+ * (suresiz kabul olmasin). Deger hicbir zaman donmez/loglanmaz; yalnizca durum.
+ * @returns {{ secret: string|null, status: 'none'|'active'|'expired'|'missing_until'|'invalid_until'|'placeholder'|'same_as_current', untilMs: number|null }}
+ */
+export function resolvePreviousJwtSecret(env = process.env, nowMs = Date.now()) {
+  const previous = String(env?.JWT_SECRET_PREVIOUS ?? '').trim();
+  if (!previous) {
+    return { secret: null, status: 'none', untilMs: null };
+  }
+  if (isPlaceholderSecret(previous) || previous.length < 16) {
+    return { secret: null, status: 'placeholder', untilMs: null };
+  }
+  if (previous === String(env?.JWT_SECRET ?? '')) {
+    return { secret: null, status: 'same_as_current', untilMs: null };
+  }
+  const untilText = String(env?.JWT_SECRET_PREVIOUS_UNTIL ?? '').trim();
+  if (!untilText) {
+    return { secret: null, status: 'missing_until', untilMs: null };
+  }
+  const untilMs = Date.parse(untilText);
+  if (!Number.isFinite(untilMs)) {
+    return { secret: null, status: 'invalid_until', untilMs: null };
+  }
+  if (untilMs <= nowMs) {
+    return { secret: null, status: 'expired', untilMs };
+  }
+  return { secret: previous, status: 'active', untilMs };
+}
+
+function jwtHardeningWarnings(env, isProduction) {
+  const warnings = [];
+  const secretLength = String(env.JWT_SECRET ?? '').length;
+  if (isProduction && secretLength > 0 && secretLength < MIN_RECOMMENDED_JWT_SECRET_LENGTH && !isPlaceholderSecret(env.JWT_SECRET)) {
+    warnings.push(
+      `GUVENLIK: uretimde JWT_SECRET en az ${MIN_RECOMMENDED_JWT_SECRET_LENGTH} karakter olmali. Sunucu (kapi erisimi kesilmesin diye) ` +
+        'ACILDI; pv zorunlulugu sahte token uretimini zorlastirir ama sir dondurulmeli: yeni >=64 karakterlik rastgele sir JWT_SECRET\'a, ' +
+        'eskisi JWT_SECRET_PREVIOUS\'a, bitis ani (ISO, en fazla 30-90 gun) JWT_SECRET_PREVIOUS_UNTIL\'e yazilir.',
+    );
+  }
+
+  const previous = resolvePreviousJwtSecret(env);
+  const previousMessages = {
+    placeholder: 'JWT_SECRET_PREVIOUS yer tutucu ya da 16 karakterden kisa; YOK SAYILIYOR.',
+    same_as_current: 'JWT_SECRET_PREVIOUS, JWT_SECRET ile ayni; YOK SAYILIYOR (gereksiz, kaldirin).',
+    missing_until: 'JWT_SECRET_PREVIOUS tanimli ama JWT_SECRET_PREVIOUS_UNTIL yok; eski sir YOK SAYILIYOR (suresiz kabul edilmez).',
+    invalid_until: 'JWT_SECRET_PREVIOUS_UNTIL gecersiz tarih (ornek: 2026-11-30T00:00:00+03:00); eski sir YOK SAYILIYOR.',
+    expired: 'JWT_SECRET_PREVIOUS_UNTIL gecmiste; eski sir artik kabul edilmiyor. JWT_SECRET_PREVIOUS ve _UNTIL satirlarini kaldirin.',
+  };
+  if (previousMessages[previous.status]) {
+    warnings.push(previousMessages[previous.status]);
+  } else if (previous.status === 'active' && previous.untilMs - Date.now() > MAX_PREVIOUS_SECRET_WINDOW_MS) {
+    warnings.push('JWT_SECRET_PREVIOUS_UNTIL 90 gunden ileride; gecis penceresini kisa tutun (eski sirla imzali tokenlar o zamana dek gecerli).');
+  }
+
+  const expiresSeconds = parseExpiresInSeconds(env.JWT_EXPIRES_IN);
+  if (expiresSeconds !== null && expiresSeconds > MAX_JWT_EXPIRES_SECONDS) {
+    warnings.push(
+      `JWT_EXPIRES_IN ust siniri asiyor; tokenlar ${MAX_JWT_EXPIRES_SECONDS / 86400} gune kirpilarak uretiliyor. Oneri: JWT_EXPIRES_IN=30d.`,
+    );
+  } else if (expiresSeconds !== null && expiresSeconds > DEFAULT_JWT_EXPIRES_SECONDS) {
+    warnings.push('JWT_EXPIRES_IN 30 gunden uzun; oneri: JWT_EXPIRES_IN=30d (kayip cihazdaki oturum daha kisa surede duser).');
+  } else if (expiresSeconds === 0) {
+    warnings.push('JWT_EXPIRES_IN=0 gecersiz; varsayilan 30 gun kullaniliyor.');
+  }
+
+  const requirePvRaw = String(env.JWT_REQUIRE_PV ?? '').trim().toLowerCase();
+  if (requirePvRaw && !PV_ENABLED_VALUES.includes(requirePvRaw) && !PV_DISABLED_VALUES.includes(requirePvRaw)) {
+    warnings.push('JWT_REQUIRE_PV gecersiz (1/0 beklenir); varsayilan kullaniliyor (pv ZORUNLU).');
+  } else if (PV_DISABLED_VALUES.includes(requirePvRaw)) {
+    warnings.push(
+      'GUVENLIK: JWT_REQUIRE_PV=0: pv\'siz (parola surumsuz) tokenlar kabul ediliyor; sir zayif/sizmissa sahte token uretilebilir. ' +
+        'Yalniz gecici bir uyumluluk icin kullanin ve kaldirin.',
+    );
+  }
+  return warnings;
+}
+
 /**
  * Baslangic dogrulamasi. { errors: [...], warnings: [...] } doner.
  * errors bos degilse sunucu baslatilmamalidir; warnings yalnizca loglanir.
@@ -112,7 +253,12 @@ export function validateEnv(env = process.env) {
   }
 
   if (isSet(env, 'JWT_EXPIRES_IN') && !isValidExpiresIn(env.JWT_EXPIRES_IN)) {
-    warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); giris tokeni uretimi basarisiz olabilir.');
+    warnings.push('JWT_EXPIRES_IN gecersiz bicimde (ornek: 30d, 12h); varsayilan 30 gun kullaniliyor.');
+  }
+  warnings.push(...jwtHardeningWarnings(env, String(env.NODE_ENV || '').trim() === 'production'));
+  warnings.push(...resolveTrustProxy(env).warnings);
+  if (String(env.NODE_ENV || '').trim() === 'production' && !isSet(env, 'LISTEN_HOST')) {
+    warnings.push('LISTEN_HOST tanimli degil: API tum arayuzlerde dinliyor; nginx ayni makinedeyse LISTEN_HOST=127.0.0.1 onerilir.');
   }
 
   if (env.PORT !== undefined && String(env.PORT).trim() !== '') {

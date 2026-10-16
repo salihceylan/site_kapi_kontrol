@@ -201,7 +201,9 @@ describe('POST /app/doors/:id/open', () => {
     assert.match(pulse.request_id, /^[0-9a-f]{16}$/);
     assert.equal(typeof pulse.requested_at, 'number');
     assert.ok(Math.abs(pulse.requested_at - Math.floor(Date.now() / 1000)) <= 5);
-    assert.equal(Array.from(pulse.requested_by).length, 64);
+    // S-C (R1 B8): requested_by kişisel veri taşımaz (e-posta değil, kullanıcı kodu); 64 karakter sınırı buildPulsePayload testinde.
+    assert.equal(pulse.requested_by, `u:${users.resident.id}`);
+    assert.equal(pulse.requested_by.includes('@'), false);
     assert.equal(pulse.door_id, 10);
     assert.equal(pulse.site_code, 101);
   });

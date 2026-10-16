@@ -26,6 +26,8 @@ import {
 } from '../services/membership_service.js';
 import { getSiteByJoinToken } from '../services/site_service.js';
 import { parsePositiveId } from '../utils/validators.js';
+import { rejectWeakPassword } from '../security/password_policy.js';
+import { readDeviceToken } from '../security/login_device_token.js';
 
 export const membershipRouter = express.Router();
 
@@ -275,12 +277,19 @@ membershipRouter.post(
     try {
       const { apartmentId, targetUserCode } = req.params;
       const { new_password, current_password } = req.body || {};
+      // §1.7 parola ilkesi (S-C): bu uç da kendi parolasını değiştirme yoludur; PATCH /me ile aynı ilke (servisin eski
+      // 4 karakter alt sınırı bu yoldan atlatılamasın). Mevcut parola denemesinden ÖNCE: sayaca yazılmaz.
+      const weakContext = { email: req.authUser?.email, fullName: req.authUser?.full_name, loginName: req.authUser?.login_name };
+      if (rejectWeakPassword(res, String(new_password ?? '').trim(), weakContext)) {
+        return undefined;
+      }
       const result = await changeApartmentMemberPassword({
         apartmentId,
         targetUserCode,
         newPassword: new_password,
         currentPassword: current_password,
         authUser: req.authUser,
+        deviceToken: readDeviceToken(req),
       });
       return res.status(200).json(result);
     } catch (error) {

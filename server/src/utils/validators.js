@@ -1,5 +1,6 @@
 ﻿import crypto from 'crypto';
 import { isClientSafeError } from './site_rules.js';
+import { isReservedEmail } from './reserved_email.js';
 import {
   generateNumericCode,
   normalizeEmail,
@@ -51,6 +52,10 @@ export function isValidEmail(raw) {
   if (text.length < 5 || text.length > 254) {
     return false;
   }
+  // Sistemin kendi ürettiği alan adları (hesap silme tombstone e-postası) kayıt / davet / rol atamada KABUL EDİLMEZ.
+  if (isReservedEmail(text)) {
+    return false;
+  }
   if (/\s/.test(text) || text.includes('..')) {
     return false;
   }
@@ -80,7 +85,7 @@ export function validateCreateInput({
   if (fullName.length < 3) {
     return 'full_name en az 3 karakter olmali.';
   }
-  if (!email.includes('@')) {
+  if ((!email.includes('@') || isReservedEmail(email))) {
     return 'Gecerli email girin.';
   }
   if (password.length < 6) {
@@ -118,7 +123,7 @@ export function validateUpdateInput({
   if (fullName !== undefined && fullName !== null && fullName.length < 3) {
     return 'full_name en az 3 karakter olmali.';
   }
-  if (email !== undefined && email !== null && !email.includes('@')) {
+  if (email !== undefined && email !== null && (!email.includes('@') || isReservedEmail(email))) {
     return 'Gecerli email girin.';
   }
   if (password !== undefined && password !== null && password.length < 6) {
@@ -250,7 +255,7 @@ export function validateApartmentResidentInput({
   if (password && !/^\d{4}$/.test(password)) {
     return 'Sifre 4 haneli sayisal olmali.';
   }
-  if (email && !email.includes('@')) {
+  if (email && (!email.includes('@') || isReservedEmail(email))) {
     return 'Gecerli e-posta girin.';
   }
   if (phoneNumber && !/^\+?[0-9()\-\s]{10,20}$/.test(phoneNumber)) {
@@ -312,7 +317,7 @@ export function validateSiteManagerRegistrationInput({
   if (fullName.length < 3) {
     return 'Ad Soyad en az 3 karakter olmali.';
   }
-  if (!email.includes('@')) {
+  if ((!email.includes('@') || isReservedEmail(email))) {
     return 'Gecerli email girin.';
   }
   if (password.length < 6) {

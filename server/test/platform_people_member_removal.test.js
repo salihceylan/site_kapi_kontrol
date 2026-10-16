@@ -207,16 +207,35 @@ describe('S3: handOverApartmentResident - indicatorOwnedByRemoved', () => {
   it('varsayilan (true) eski davranis: gosterge baska admine devredilir / en eski uye admin+gosterge / kimse yoksa gosterge+PIN temizlenir', async () => {
     let client = scripted([[OTHER_ADMIN, ok([{ user_code: 20001 }])]]);
     await handOverApartmentResident(client, 3, 20000);
-    assert.deepEqual(find(client.log, /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2$/).params, [20001, 3]);
+    assert.deepEqual(find(client.log, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/).params, [20001, 3]);
 
     client = scripted([[REMAINING, ok([{ user_code: 20002 }])]]);
     await handOverApartmentResident(client, 3, 20000);
     assert.ok(has(client.log, /^UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN'/));
-    assert.deepEqual(find(client.log, /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2$/).params, [20002, 3]);
+    assert.deepEqual(find(client.log, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/).params, [20002, 3]);
 
     client = scripted([]);
     await handOverApartmentResident(client, 3, 20000);
     assert.match(find(client.log, /^UPDATE apartments SET resident_user_code = NULL/).sql, /resident_pin_code = NULL/);
+  });
+
+  it('R1 B5: gosterge YENI yoneticiye gecerken eski PIN SILINIR (cikarilan kisi PIN\'i biliyordu); keepPin bile bunu degistirmez; gosterge kimseye gecmiyorsa keepPin PIN\'i korur', async () => {
+    const SET_WITH_PIN_CLEAR = /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/;
+    for (const keepPin of [false, true]) {
+      let client = scripted([[OTHER_ADMIN, ok([{ user_code: 20001 }])]]);
+      await handOverApartmentResident(client, 3, 20000, { keepPin });
+      assert.deepEqual(find(client.log, SET_WITH_PIN_CLEAR).params, [20001, 3], `baska aktif yonetici, keepPin=${keepPin}`);
+
+      client = scripted([[REMAINING, ok([{ user_code: 20002 }])]]);
+      await handOverApartmentResident(client, 3, 20000, { keepPin });
+      assert.deepEqual(find(client.log, SET_WITH_PIN_CLEAR).params, [20002, 3], `kalan uye yonetici yapildi, keepPin=${keepPin}`);
+    }
+    const kept = scripted([]);
+    await handOverApartmentResident(kept, 3, 20000, { keepPin: true });
+    assert.doesNotMatch(find(kept.log, /^UPDATE apartments SET resident_user_code = NULL/).sql, /resident_pin_code/, 'gosterge kimseye gecmiyor: geri alinabilir pasife alma PIN\'i korur');
+    const notOwned = scripted([[OTHER_ADMIN, ok([{ user_code: 20001 }])]]);
+    await handOverApartmentResident(notOwned, 3, 20000, { indicatorOwnedByRemoved: false });
+    assert.equal(has(notOwned.log, /^UPDATE apartments/), false, 'gosterge baskasinindaysa PIN\'e dokunulmaz');
   });
 
   it('indicatorOwnedByRemoved=false: gosterge ve PIN\'e HIC dokunulmaz (admin rolu yine devredilir)', async () => {

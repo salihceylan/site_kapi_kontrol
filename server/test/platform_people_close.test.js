@@ -55,7 +55,7 @@ const MEMBER_OFF = /^UPDATE apartment_memberships SET is_active = FALSE, updated
 const OTHER_ADMIN = /^SELECT user_code FROM apartment_memberships WHERE apartment_id = \$1 AND user_code <> \$2 AND is_active = TRUE AND role = 'APARTMENT_ADMIN'/;
 const REMAINING_MEMBER = /^SELECT user_code FROM apartment_memberships WHERE apartment_id = \$1 AND user_code <> \$2 AND is_active = TRUE ORDER BY created_at ASC, id ASC LIMIT 1$/;
 const PROMOTE = /^UPDATE apartment_memberships SET role = 'APARTMENT_ADMIN', updated_at = NOW\(\) WHERE apartment_id = \$1 AND user_code = \$2$/;
-const INDICATOR_SET = /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2$/;
+const INDICATOR_SET = /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/;
 const INDICATOR_CLEAR = /^UPDATE apartments SET resident_user_code = NULL, resident_pin_code = NULL WHERE id = \$1$/;
 const INTERNAL_OFF = /^UPDATE users SET is_active = FALSE WHERE user_code = \$1 AND email LIKE '%@ahbu\.local'/;
 const OVERRIDE_CLEANUP = /^DELETE FROM door_access_overrides dao WHERE dao\.site_code = \$1 AND dao\.user_code = \$2/;

@@ -217,7 +217,7 @@ export async function provisionApartmentResident({
       // Uyelik sistemiyle gelen gercek kullanicinin (e-postayla kayitli) e-postasi/giris adi ezilmez;
       // onun icin yalnizca apartments.is_active / resident_email guncellenir.
       const existingUserRes = await client.query(
-        `SELECT email FROM users WHERE user_code = $1 LIMIT 1`,
+        `SELECT email FROM users WHERE user_code = $1 AND deleted_at IS NULL LIMIT 1`,
         [userCode],
       );
       const existingEmail = String(existingUserRes.rows?.[0]?.email ?? '').toLowerCase();
@@ -232,7 +232,7 @@ export async function provisionApartmentResident({
               login_name = $3,
               phone_number = $4,
               is_active = $5
-            WHERE user_code = $6
+            WHERE user_code = $6 AND deleted_at IS NULL
           `,
           [fullName, internalEmail, finalLoginName, phoneNumber, isActive, userCode],
         );

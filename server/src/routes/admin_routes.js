@@ -37,6 +37,7 @@ import {
   handleDeviceMutationError,
 } from '../utils/validators.js';
 import { createUser, updateUserByCode, userExists } from '../services/user_service.js';
+import { rejectWeakPassword } from '../security/password_policy.js';
 import { resolveManagementTypeInput } from '../modules/management_types.js';
 import {
   listSitesForAuthUser,
@@ -146,6 +147,16 @@ async function runOptionalStep(client, sql, params) {
   }
 }
 
+// updateUserByCode satır döndürmediyse: kullanıcı yok (404) ya da kullanıcı isteğiyle SİLİNMİŞ / kimliksizleştirilmiş (409 ACCOUNT_DELETED).
+// Silinmiş hesap yeniden etkinleştirilemez / düzenlenemez (updateUserByCode `deleted_at IS NULL` ister; DB'de CHECK chk_users_deleted_inactive).
+async function respondUserNotUpdated(res, userCode) {
+  const found = await pool.query('SELECT deleted_at FROM users WHERE user_code = $1', [userCode]);
+  if (found.rows[0]?.deleted_at) {
+    return res.status(409).json({ error: 'Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); düzenlenemez veya etkinleştirilemez.', code: 'ACCOUNT_DELETED' });
+  }
+  return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+}
+
 // GET /admin/users
 adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res) => {
   const rawRole = String(req.query.role || '').trim();
@@ -171,6 +182,11 @@ adminRouter.get('/admin/users', authRequired, requireSuperUser, async (req, res)
   try {
     const whereClauses = [];
     const countParams = [];
+
+    // Kullanıcı isteğiyle silinmiş (kimliksizleştirilmiş) hesaplar varsayılan olarak LİSTELENMEZ (?include_deleted=true ile görülür).
+    if (String(req.query.include_deleted ?? '').trim().toLowerCase() !== 'true') {
+      whereClauses.push('deleted_at IS NULL');
+    }
 
     if (excludeRole) {
       countParams.push(excludeRole);
@@ -261,6 +277,11 @@ adminRouter.post('/admin/users', authRequired, requireSuperUser, async (req, res
   const isActive =
     rawIsActive ?? (role === 'super_user' ? true : false);
 
+  // §1.7 parola ilkesi (S-C): yönetici tarafından belirlenen ilk parola da ilkeye uyar (400 WEAK_PASSWORD).
+  if (rejectWeakPassword(res, password, { email, fullName })) {
+    return undefined;
+  }
+
   const validationError = validateCreateInput({
     fullName,
     email,
@@ -329,6 +350,11 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
     });
   }
 
+  // §1.7 parola ilkesi (S-C): başka kullanıcıya atanan yeni parola (400 WEAK_PASSWORD).
+  if (password !== undefined && rejectWeakPassword(res, password, { email, fullName })) {
+    return undefined;
+  }
+
   const validationError = validateUpdateInput({
     fullName,
     email,
@@ -383,7 +409,7 @@ adminRouter.patch('/admin/users/:id', authRequired, requireSuperUser, async (req
       emailVerified,
     });
     if (!updated) {
-      return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+      return respondUserNotUpdated(res, userCode);
     }
     return res.status(200).json({ user: mapUserRow(updated) });
   } catch (error) {
@@ -413,7 +439,7 @@ adminRouter.patch(
     try {
       const updated = await updateUserByCode({ userCode, isActive });
       if (!updated) {
-        return res.status(404).json({ error: 'Kullanici bulunamadi.' });
+        return respondUserNotUpdated(res, userCode);
       }
       if (isActive === false) {
         await rotateLocalControlTokensForUserAccess(userCode, 'user_deactivated');
@@ -442,6 +468,14 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
   let client = null;
   try {
+    // Kullanıcı isteğiyle silinmiş (kimliksizleştirilmiş) hesap KALICI silinmez: onay kayıtları ve kimliksiz iz yasal saklama için kalır.
+    const existing = await pool.query('SELECT deleted_at FROM users WHERE user_code = $1', [targetCode]);
+    if (existing.rows[0]?.deleted_at) {
+      return res.status(409).json({
+        error: 'Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez.',
+        code: 'ACCOUNT_ALREADY_DELETED',
+      });
+    }
     client = await pool.connect();
     const affectedSiteCodes = await affectedSiteCodesForUser(targetCode);
     const directDeviceResult = await client.query(
@@ -505,12 +539,20 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     await runOptionalStep(client, 'UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
 
     // 9. Kullanici kaydini sil
+    // deleted_at IS NULL: hesap silme (kimliksizleştirme) bu arada commit ettiyse tombstone KALICI silinmez (yukarıdaki ön kontrolle yarışı kapatır).
     const result = await client.query(
-      `DELETE FROM users WHERE user_code = $1`,
+      `DELETE FROM users WHERE user_code = $1 AND deleted_at IS NULL`,
       [targetCode],
     );
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
+      const still = await pool.query('SELECT deleted_at FROM users WHERE user_code = $1', [targetCode]);
+      if (still.rows[0]?.deleted_at) {
+        return res.status(409).json({
+          error: 'Bu hesap kullanıcının isteğiyle silinmiş (kimliksizleştirilmiş); kayıtları yasal saklama için korunur ve kalıcı silinemez.',
+          code: 'ACCOUNT_ALREADY_DELETED',
+        });
+      }
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
 
@@ -699,6 +741,11 @@ adminRouter.post('/admin/sites', authRequired, requireSuperUser, async (req, res
   const doorCount = normalizeOptionalInteger(req.body.door_count);
   const managerUserCode = normalizeOptionalInteger(req.body.manager_user_code);
   const managerUserInput = parseSiteManagerCreationInput(req.body.manager_user);
+  // §1.7 parola ilkesi (S-C): site ile birlikte açılan yönetici hesabının parolası.
+  const managerUserValue = managerUserInput?.value;
+  if (managerUserValue && rejectWeakPassword(res, managerUserValue.password, { email: managerUserValue.email, fullName: managerUserValue.fullName })) {
+    return undefined;
+  }
 
   if (
     Number.isNaN(blockCount) ||
@@ -1338,7 +1385,7 @@ adminRouter.post('/admin/devices/ota-check', authRequired, requireSuperUser, asy
     });
     const result = await publishOtaCheckToDevices({
       deviceUids,
-      requestedBy: req.authUser.email,
+      requestedBy: `u:${Number(req.authUser.id)}`, // kişisel veri MQTT'ye gitmez (S-C)
       jobId,
     });
     await finishOtaUpdateJob({ jobId, result });

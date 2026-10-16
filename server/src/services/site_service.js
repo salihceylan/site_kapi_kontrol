@@ -11,6 +11,7 @@ import {
 } from './device_service.js';
 import { createUser } from './user_service.js';
 import { sendSuperUserSiteDeletionEmail, sendSiteManagerInvitationEmail } from '../mailer.js';
+import { describeErrorForLog } from '../security/log_redact.js';
 import {
   auditLog,
   blockNameFromIndex,
@@ -2061,7 +2062,7 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
 
   // Kullanıcı sistemde kayıtlı mı?
   const existingUserRes = await pool.query(
-    `SELECT user_code, full_name, email, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    `SELECT user_code, full_name, email, role FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
     [cleanEmail],
   );
 
@@ -2072,6 +2073,26 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // KİLİT SIRASI: (site, hedef) üyelik satırı -> hesap satırı. Hesap silme yönetici üyelik satırlarını FOR UPDATE ile tutup SONRA hesap satırını günceller;
+      // hedef bu sitede zaten (bağsız) SITE_ADMIN/SITE_OWNER üyeliğine sahipse, aşağıdaki ON CONFLICT DO UPDATE o satırı beklerken hesap kilidini TUTMAK
+      // 40P01 üretirdi. Satır yoksa hiçbir şey kilitlenmez.
+      await client.query(
+        `SELECT 1 FROM site_memberships WHERE site_code = $1 AND user_code = $2 FOR UPDATE`,
+        [code, targetUser.user_code],
+      );
+
+      // Hedef hesap bu işlemde KİLİTLENİR (FOR KEY SHARE; yukarıdaki okuma kilitsizdi): hesap silme (kimliksizleştirme) UPDATE'i bu işlem bitene dek
+      // bekler; silme commit ettiyse satır dönmez -> tombstone hesaba yönetici yetkisi YAZILMAZ (R2 F-3). FK denetimlerinin kilidiyle aynı düzey.
+      const lockedTarget = await client.query(
+        `SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE`,
+        [targetUser.user_code],
+      );
+      if (lockedTarget.rowCount === 0) {
+        const err = new Error('Bu e-posta adresine ait hesap artık bulunmuyor.');
+        err.statusCode = 404;
+        throw err;
+      }
 
       // Zaten bu sitenin yöneticisi mi?
       const alreadyManagerRes = await client.query(
@@ -2132,7 +2153,7 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
         isExistingUser: true,
       });
     } catch (mailErr) {
-      console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', mailErr?.message);
+      console.error('[Mailer] Yönetici ekleme bildirimi gönderilemedi:', describeErrorForLog(mailErr));
     }
 
     try {
@@ -2190,7 +2211,7 @@ export async function inviteSiteManager({ siteCode, email, fullName, inviterUser
       isExistingUser: false,
     });
   } catch (mailErr) {
-    console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', mailErr?.message);
+    console.error('[Mailer] Yönetici davet e-postası gönderilemedi:', describeErrorForLog(mailErr));
   }
 
   auditLog('site_manager_invited', {
@@ -2285,8 +2306,12 @@ export async function removeSiteManager({ siteCode, targetUserCode, callerUser }
       `,
       [targetCode],
     );
+    // FOR NO KEY UPDATE (FOR UPDATE DEĞİL): burada yalnız `role` (anahtar olmayan sütun) güncellenir. FOR UPDATE, FK denetimlerinin tuttuğu KEY SHARE kilidiyle
+    // çakışır: katılım talebi onayı (approveJoinRequest: daire üyeliği INSERT'i users KEY SHARE alır -> site_memberships upsert'i) ile
+    // removeSiteManager (site_memberships satırı elde -> users FOR UPDATE) ters sırada kilit bekleyip 40P01 üretiyordu (R2 F-7). NO KEY UPDATE KEY SHARE ile
+    // çakışmaz; hesap silme (users satırında anahtar sütun değiştirir) ile ise hâlâ sıraya girer.
     const userRes = await client.query(
-      `SELECT role FROM users WHERE user_code = $1 FOR UPDATE`,
+      `SELECT role FROM users WHERE user_code = $1 FOR NO KEY UPDATE`,
       [targetCode],
     );
     const nextRole = decideRoleAfterManagerRemoval({

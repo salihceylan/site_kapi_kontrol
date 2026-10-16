@@ -6,15 +6,15 @@ import { signAccessToken } from '../jwt.js';
 import { escapeHtml, sendPasswordResetEmail } from '../mailer.js';
 import { authRequired, getAuthUserCode } from '../middlewares/auth_middleware.js';
 import { newErrorId, respondWithServiceError } from '../middlewares/error_handler.js';
-import {
-  clearAccountLocks,
-  loginFailureTracker,
-  passwordChangeFailureTracker,
-  passwordChangeThrottleKey,
-} from '../middlewares/login_throttle.js';
+import { clearAccountLocks, loginGuard } from '../middlewares/login_throttle.js';
+import { buildLoginAttempt, isBcryptHash, issueLoginDeviceToken, readLoginDevice } from '../security/login_guard.js';
+import { PASSWORD_MAX_LENGTH, rejectWeakPassword } from '../security/password_policy.js';
+import { BCRYPT_COST } from '../security/password_hashing.js';
+import { readDeviceToken, reissueDeviceToken } from '../security/login_device_token.js';
 import {
   forgotPasswordLimiter,
   loginRateLimiter,
+  profileUpdateLimiter,
   registerLimiter,
   resendCodeLimiter,
   resetPasswordLimiter,
@@ -38,21 +38,36 @@ import {
   resendIndividualVerificationCode,
 } from '../services/membership_service.js';
 import { SQL_FIND_PENDING_LOGIN_HASH } from '../services/membership_rules.js';
+import { isPlatformError } from '../modules/errors.js';
+import { verifyCurrentPassword } from '../modules/account_password_guard.js';
+import { resolveAcceptedDocuments } from '../modules/legal_consent_service.js';
 
 export const authRouter = express.Router();
 
 // POST /auth/register-individual (Üyelik Sistemi V2: Bireysel Self-Service Kayıt)
 authRouter.post('/auth/register-individual', registerLimiter, async (req, res) => {
+  // §1.7 parola ilkesi (S-C): zayıf parola 400 WEAK_PASSWORD (servis / DB çağrılmadan). Servis parolayı trim eder.
+  const weakContext = { email: req.body?.email, firstName: req.body?.first_name, lastName: req.body?.last_name };
+  if (rejectWeakPassword(res, String(req.body?.password ?? '').trim(), weakContext)) {
+    return undefined;
+  }
   try {
-    const { first_name, last_name, email, password } = req.body || {};
+    const { first_name, last_name, email, password, accepted_documents } = req.body || {};
+    // Yasal belge onayları: legal.enforce_consents açıksa eksik/eski onay 400 CONSENT_REQUIRED; aksi halde geçerli onaylar bekleyen kayıtla
+    // birlikte saklanır ve hesap gerçekten oluşurken (e-posta kodu doğrulanınca) aynı işlemde user_consents'a yazılır.
+    const consents = await resolveAcceptedDocuments({ raw: accepted_documents, context: 'register' });
     const result = await registerIndividualUser({
       firstName: first_name,
       lastName: last_name,
       email,
       password,
+      acceptedDocuments: consents.records,
     });
     return res.status(201).json(result);
   } catch (error) {
+    if (isPlatformError(error)) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code, ...(error.extra ?? {}) });
+    }
     // Kod e-postayla gönderilemediyse dürüst 503: respondWithServiceError 5xx mesajını gizlediği için burada
     // üretilir (hata, kullanıcıya gösterilebilir tipli hatadır; ayrıntı/SMTP bilgisi içermez).
     if (error?.code === 'EMAIL_DELIVERY_FAILED' && error.expose === true) {
@@ -181,16 +196,16 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
             <div class="form-group">
               <label for="password">Yeni Şifre</label>
               <div class="input-wrap">
-                <input type="password" id="password" required minlength="6" placeholder="En az 6 karakter" autocomplete="new-password">
+                <input type="password" id="password" required minlength="8" maxlength="128" placeholder="En az 8 karakter" autocomplete="new-password">
                 <button type="button" class="toggle-btn" onclick="toggleVisibility('password', this)">👁️</button>
               </div>
-              <p class="hint">Şifreniz en az 6 karakter uzunluğunda olmalıdır.</p>
+              <p class="hint">En az 8 karakter; yaygın şifreler ve e-posta adresiniz ya da adınız kabul edilmez.</p>
             </div>
 
             <div class="form-group">
               <label for="password_confirm">Yeni Şifre (Tekrar)</label>
               <div class="input-wrap">
-                <input type="password" id="password_confirm" required minlength="6" placeholder="Şifrenizi tekrar giriniz" autocomplete="new-password">
+                <input type="password" id="password_confirm" required minlength="8" maxlength="128" placeholder="Şifrenizi tekrar giriniz" autocomplete="new-password">
                 <button type="button" class="toggle-btn" onclick="toggleVisibility('password_confirm', this)">👁️</button>
               </div>
             </div>
@@ -230,8 +245,8 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
 
           alertBox.style.display = 'none';
 
-          if (pass.length < 6) {
-            alertBox.textContent = 'Şifreniz en az 6 karakter olmalıdır.';
+          if (Array.from(pass).length < 8) {
+            alertBox.textContent = 'Şifreniz en az 8 karakter olmalıdır.';
             alertBox.style.display = 'block';
             return;
           }
@@ -272,7 +287,7 @@ function renderResetPasswordHtml({ status, message, token, fullName }) {
 
 const FORGOT_PASSWORD_GENERIC_MESSAGE = 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.';
 const RESET_TOKEN_PATTERN = /^[0-9a-f]{64}$/i;
-const MAX_PASSWORD_LENGTH = 128;
+const MAX_PASSWORD_LENGTH = PASSWORD_MAX_LENGTH;
 
 // Şifre sıfırlama sayfası için sıkı CSP (yalnızca kendi satır içi betik/stil + aynı kökene fetch).
 const RESET_PAGE_CSP =
@@ -290,15 +305,19 @@ async function issuePasswordReset(user) {
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 dakika
 
-  await pool.query(
+  // deleted_at IS NULL: hesap silme (kimliksizlestirme) ile yarisan sifirlama istegi silinmis hesapta jeton uretmez ve e-posta GONDERMEZ.
+  const tokenUpdate = await pool.query(
     `
     UPDATE users
     SET password_reset_token_hash = $1,
         password_reset_expires_at = $2
-    WHERE user_code = $3
+    WHERE user_code = $3 AND deleted_at IS NULL
     `,
     [tokenHash, expiresAt.toISOString(), Number(user.user_code)],
   );
+  if (tokenUpdate.rowCount === 0) {
+    return;
+  }
 
   const baseUrl = String(
     process.env.PUBLIC_APP_URL ||
@@ -417,11 +436,9 @@ authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =
     if (!token) {
       return res.status(400).json({ error: 'Sıfırlama anahtarı (token) eksik.' });
     }
-    if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'Yeni şifreniz en az 6 karakter olmalıdır.' });
-    }
-    if (password.length > MAX_PASSWORD_LENGTH) {
-      return res.status(400).json({ error: `Yeni şifreniz en fazla ${MAX_PASSWORD_LENGTH} karakter olabilir.` });
+    // §1.7 parola ilkesi (S-C): uzunluk + yaygın parola DB'den önce; e-posta/ad eşitliği hesap bulunduktan sonra.
+    if (rejectWeakPassword(res, password)) {
+      return undefined;
     }
     if (!RESET_TOKEN_PATTERN.test(token)) {
       return res.status(400).json({ error: 'Şifre sıfırlama bağlantısı geçersiz veya daha önce kullanılmış.' });
@@ -447,8 +464,11 @@ authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =
     if (isExpired) {
       return res.status(400).json({ error: 'Şifre sıfırlama bağlantısının süresi dolmuş. Lütfen yeni bir talepte bulunun.' });
     }
+    if (rejectWeakPassword(res, password, { email: user.email, fullName: user.full_name })) {
+      return undefined;
+    }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
     // Atomik tek kullanım: aynı token ile eşzamanlı iki istekten yalnızca biri satırı güncelleyebilir.
     // Parola hash'i değişince JWT `pv` claim'i eşleşmez -> mevcut oturumlar (pv'li tokenlar) geçersiz olur.
     const updateRes = await pool.query(
@@ -460,6 +480,7 @@ authRouter.post('/auth/reset-password', resetPasswordLimiter, async (req, res) =
       WHERE user_code = $2
         AND password_reset_token_hash = $3
         AND password_reset_expires_at > NOW()
+        AND deleted_at IS NULL
       RETURNING user_code, login_name
       `,
       [passwordHash, Number(user.user_code), tokenHash],
@@ -646,14 +667,21 @@ authRouter.post('/auth/site-manager/resend-code', async (req, res) => {
   });
 });
 
-// Kullanıcı bulunamadığında da bcrypt maliyeti ödenir (yanıt süresinden kullanıcı varlığı çıkarılamasın).
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
+// Kullanıcı bulunamadığında da bcrypt maliyeti ödenir (yanıt süresinden kullanıcı varlığı çıkarılamasın). Maliyet, yeni
+// parola özetleriyle AYNI sabittir (BCRYPT_COST): var olan ve olmayan hesapta karşılaştırma süresi eşittir.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_COST);
 const MAX_IDENTIFIER_LENGTH = 254;
+// Girişte karşılaştırılan parola üst sınırı (bcrypt yalnız ilk 72 baytı kullanır; sınırsız girdiyle CPU harcatılmasın).
+const MAX_LOGIN_PASSWORD_LENGTH = 1024;
 
+// Tek tip kilit yanıtı: hangi katmanın (hesap/IP/çift) kilitlediği ve hesabın var olup olmadığı yanıttan çıkarılamaz.
 function respondLoginLocked(res, retryAfterSeconds) {
   res.setHeader('Retry-After', String(retryAfterSeconds));
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  // Kısa (geçici) bekleme: eşzamanlı bir giriş sonuçlanıyor; saniye olarak söylenir.
+  const wait = retryAfterSeconds < 60 ? `${retryAfterSeconds} saniye` : `${minutes} dakika`;
   return res.status(429).json({
-    error: 'Çok fazla hatalı giriş denemesi. Hesap geçici olarak kilitlendi; lütfen 15 dakika sonra tekrar deneyin.',
+    error: `Çok fazla hatalı giriş denemesi. Lütfen ${wait} sonra tekrar deneyin ya da "Şifremi unuttum" ile şifrenizi sıfırlayın.`,
     code: 'LOGIN_LOCKED',
     retry_after_seconds: retryAfterSeconds,
   });
@@ -674,11 +702,8 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Gecersiz rol.' });
   }
 
-  // Hesap bazlı ardışık hata sayacı: 5 hata -> 15 dk gecikme (429). Anahtar küçük harfli kullanıcı adı/e-posta.
-  const lockState = loginFailureTracker.check(identifier);
-  if (lockState.locked) {
-    return respondLoginLocked(res, lockState.retryAfterSeconds);
-  }
+  // Güvenilir cihaz belirteci (isteğe bağlı; imza burada, hesap eşleşmesi buildLoginAttempt'te doğrulanır).
+  const loginDevice = readLoginDevice(req);
 
   try {
     const result = await pool.query(
@@ -719,16 +744,30 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
         };
       }
     }
+    // Giriş kilidi (security/login_guard.js): hesap × kaynak (IP ya da güvenilir cihaz), hesap geneli ve IP geneli,
+    // artan bekleme. Var olan hesapta anahtar user_code (e-posta ve kullanıcı adı aynı bütçe), olmayanda tanımlayıcı;
+    // iki durumda da aynı eşikler ve aynı 429 (kullanıcı varlığı sızmaz). Kilitliyken parola karşılaştırılmaz.
+    // Yarış güvenliği: hata hakkı bcrypt'ten ÖNCE ayrılır (reserve; arada await yok); doğru parolada iade edilir.
+    const attempt = buildLoginAttempt({ req, identifier, userCode: row?.id, device: loginDevice, passwordHash: row?.password_hash });
+    const reservation = loginGuard.reserve(attempt);
+    if (reservation.blocked) {
+      return respondLoginLocked(res, reservation.retryAfterSeconds);
+    }
+    // Sabit zaman: saklı özet bcrypt biçiminde değilse (silinmiş hesabın '!<hex>' özeti, boş, bozuk) sahte özetle
+    // karşılaştırılır; bcryptjs biçimsiz özette hemen döner ve süre hesabın durumunu ele verirdi. Aşırı uzun girdi kırpılır.
     const storedHash = row?.password_hash ? String(row.password_hash) : '';
-    const isPasswordMatch = await bcrypt.compare(password, storedHash || DUMMY_PASSWORD_HASH);
-    if (!row || !storedHash || !isPasswordMatch) {
-      const failure = loginFailureTracker.recordFailure(identifier);
+    const usableHash = isBcryptHash(storedHash);
+    const candidate = password.length > MAX_LOGIN_PASSWORD_LENGTH ? password.slice(0, MAX_LOGIN_PASSWORD_LENGTH) : password;
+    const compared = await bcrypt.compare(candidate, usableHash ? storedHash : DUMMY_PASSWORD_HASH);
+    const isPasswordMatch = Boolean(row) && usableHash && compared && password.length <= MAX_LOGIN_PASSWORD_LENGTH;
+    if (!isPasswordMatch) {
+      const failure = loginGuard.commitFailure(reservation);
       if (failure.locked) {
         return respondLoginLocked(res, failure.retryAfterSeconds);
       }
       return res.status(401).json({ error: 'Giris bilgileri hatali.' });
     }
-    loginFailureTracker.recordSuccess(identifier);
+    loginGuard.recordSuccess(attempt, reservation);
 
     if (role && row.role !== role) {
       return res
@@ -749,9 +788,11 @@ authRouter.post('/auth/login', loginRateLimiter, async (req, res) => {
     }
 
     const user = mapUserRow(row);
-    // `pv` claim'i: parola değişince bu token geçersiz olur (claim'siz eski tokenlar süresi dolana dek geçerli).
+    // `pv` claim'i: parola değişince bu token geçersiz olur (pv'siz tokenlar JWT_REQUIRE_PV=0 olmadıkça reddedilir).
     const token = signAccessToken(user, { passwordHash: row.password_hash });
-    return res.status(200).json({ token, user });
+    // Ek alan (geriye uyumlu): istemci saklayıp sonraki girişlerde gönderirse hesap/IP geneli kilitlerden muaf olur.
+    const deviceToken = issueLoginDeviceToken({ userCode: row.id, attempt, passwordHash: row.password_hash });
+    return res.status(200).json(deviceToken ? { token, user, device_token: deviceToken } : { token, user });
   } catch (error) {
     // 5xx sozlesmesi: genel mesaj + errorId; ayrinti (yalnizca kod/mesaj) errorId ile sunucu logunda.
     const errorId = newErrorId();
@@ -768,7 +809,7 @@ authRouter.get('/me', authRequired, async (req, res) => {
 // PATCH /me
 // C8: `password` değişiyorsa `current_password` ZORUNLUDUR (çalınmış oturumla parola değişimi engellenir).
 // Parola değişince eski tokenlar (pv claim'i) geçersiz olur; bu yüzden yanıtta YENİ `token` döner.
-authRouter.patch('/me', authRequired, async (req, res) => {
+authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) => {
   const userCode = getAuthUserCode(req);
   if (userCode == null) {
     return res.status(401).json({ error: 'Yetkisiz erisim.' });
@@ -790,6 +831,18 @@ authRouter.patch('/me', authRequired, async (req, res) => {
       ? undefined
       : normalizePhone(body.phone_number);
   const isActive = normalizeOptionalBool(body.is_active);
+
+  // §1.7 parola ilkesi (S-C): yeni parola zayıfsa 400 WEAK_PASSWORD; mevcut parola doğrulamasından ÖNCE (deneme
+  // sayacına yazılmaz). Ad/e-posta/kullanıcı adı eşitliği oturumdaki hesaba (ve aynı istekte değişen ada) göre.
+  const weakContext = {
+    email: req.authUser?.email,
+    fullName: req.authUser?.full_name,
+    loginName: req.authUser?.login_name,
+    names: fullName ? [fullName] : [],
+  };
+  if (password !== undefined && rejectWeakPassword(res, password, weakContext)) {
+    return undefined;
+  }
 
   const validationError = validateUpdateInput({
     fullName,
@@ -827,40 +880,21 @@ authRouter.patch('/me', authRequired, async (req, res) => {
           code: 'CURRENT_PASSWORD_REQUIRED',
         });
       }
-      const throttleKey = passwordChangeThrottleKey(userCode);
-      const lockState = passwordChangeFailureTracker.check(throttleKey);
-      if (lockState.locked) {
-        res.setHeader('Retry-After', String(lockState.retryAfterSeconds));
-        return res.status(429).json({
-          error: 'Cok fazla hatali mevcut parola denemesi. Biraz sonra tekrar deneyin.',
-          code: 'CURRENT_PASSWORD_LOCKED',
-          retry_after_seconds: lockState.retryAfterSeconds,
-        });
-      }
-
-      const hashRes = await pool.query(
-        'SELECT password_hash FROM users WHERE user_code = $1 LIMIT 1',
-        [userCode],
-      );
-      const storedHash = hashRes.rows[0]?.password_hash ? String(hashRes.rows[0].password_hash) : '';
-      const currentMatches = await bcrypt.compare(currentPassword, storedHash || DUMMY_PASSWORD_HASH);
-      if (!storedHash || !currentMatches) {
-        const failure = passwordChangeFailureTracker.recordFailure(throttleKey);
-        if (failure.locked) {
-          res.setHeader('Retry-After', String(failure.retryAfterSeconds));
-          return res.status(429).json({
-            error: 'Cok fazla hatali mevcut parola denemesi. Biraz sonra tekrar deneyin.',
-            code: 'CURRENT_PASSWORD_LOCKED',
-            retry_after_seconds: failure.retryAfterSeconds,
-          });
+      // Hesap bazlı sayaç `u:<user_code>` (PATCH /me, daire sakini change-password, hesap silme ve veri dışa aktarma ORTAK). Hata hakkı bcrypt
+      // karşılaştırmasından ÖNCE ayrılır (eski "check -> bcrypt -> recordFailure" sırası çalıntı oturumla paralel tahmine açıktı: N paralel istek N tahmin);
+      // doğru parolada sıfırlanır. 400 INVALID (401/403 DEĞİL: istemci oturum hatası sanıp çıkış yapmasın) / 429 LOCKED (+ Retry-After).
+      try {
+        await verifyCurrentPassword({ userCode, currentPassword });
+      } catch (guardError) {
+        if (!isPlatformError(guardError)) {
+          throw guardError;
         }
-        // 401/403 DEGIL (istemci bunu oturum hatasi sanip cikis yapmasin).
-        return res.status(400).json({
-          error: 'Mevcut parola hatali.',
-          code: 'CURRENT_PASSWORD_INVALID',
-        });
+        const retryAfter = Number(guardError.extra?.retry_after_seconds);
+        if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          res.setHeader('Retry-After', String(Math.ceil(retryAfter)));
+        }
+        return res.status(guardError.statusCode).json({ error: guardError.message, code: guardError.code, ...(guardError.extra ?? {}) });
       }
-      passwordChangeFailureTracker.recordSuccess(throttleKey);
     }
 
     const updated = await updateUserByCode({
@@ -871,6 +905,12 @@ authRouter.patch('/me', authRequired, async (req, res) => {
       isActive,
     });
     if (!updated) {
+      // updateUserByCode `deleted_at IS NULL` ister: istek sırasında hesap silindiyse (oturum açıkken eşzamanlı hesap silme) tombstone'a YAZILMAZ;
+      // auth_middleware ile aynı yanıt (401 ACCOUNT_DELETED: istemci oturumu kapatır), aksi halde 404.
+      const gone = await pool.query('SELECT deleted_at FROM users WHERE user_code = $1', [userCode]);
+      if (gone.rows?.[0]?.deleted_at) {
+        return res.status(401).json({ error: 'Bu hesap silinmis.', code: 'ACCOUNT_DELETED' });
+      }
       return res.status(404).json({ error: 'Kullanici bulunamadi.' });
     }
     if (isActive === false) {
@@ -887,6 +927,16 @@ authRouter.patch('/me', authRequired, async (req, res) => {
         { id: updated.id, email: updated.email, role: updated.role },
         { passwordHash: newHashRes.rows[0]?.password_hash },
       );
+      // S-C (R7#2): yeni parola sürümüne bağlı güvenilir cihaz belirteci (ek alan). Gönderilen belirteç aynı hesabınsa cihaz
+      // kimliği korunur; böylece parola değişince sahibin hesap kilidi muafiyeti bir sonraki girişe kadar düşmez.
+      const deviceToken = reissueDeviceToken({
+        presented: readDeviceToken(req),
+        userCode: updated.id,
+        passwordHash: newHashRes.rows[0]?.password_hash,
+      });
+      if (deviceToken) {
+        responseBody.device_token = deviceToken;
+      }
     }
     return res.status(200).json(responseBody);
   } catch (error) {

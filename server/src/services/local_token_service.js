@@ -35,7 +35,7 @@ async function loadDeviceService() {
  * Verilen cihaz kimliklerinin token'ını döndürür. Asla fırlatmaz (ana işlem zaten tamamlanmıştır);
  * başarısızlık sunucu günlüğüne yazılır. Döndürülen cihaz sayısını verir.
  */
-export async function rotateTokensForDevices({ deviceIds, reason }) {
+export async function rotateTokensForDevices({ deviceIds, reason, throwOnError = false }) {
   const ids = normalizeDeviceIdList(deviceIds);
   if (ids.length === 0) {
     return 0;
@@ -46,6 +46,10 @@ export async function rotateTokensForDevices({ deviceIds, reason }) {
     return Array.isArray(rotated) ? rotated.length : 0;
   } catch (error) {
     console.error('[LocalToken] Token döndürme başarısız:', reason, error?.code || error?.name || 'error');
+    // throwOnError: yeniden deneme yapan çağıranlar (hesap silme sonrası) başarısızlığı "0 cihaz"dan ayırt edebilsin. Varsayılan davranış DEĞİŞMEDİ.
+    if (throwOnError) {
+      throw error;
+    }
     return 0;
   }
 }
@@ -54,7 +58,7 @@ export async function rotateTokensForDevices({ deviceIds, reason }) {
  * Sitedeki tüm cihazların token'ını döndürür (daireden çıkarma / üyelik pasifleştirme sonrası:
  * kullanıcı sitedeki birden fazla kapıya erişebiliyor olabilir).
  */
-export async function rotateTokensForSite({ siteCode, reason }) {
+export async function rotateTokensForSite({ siteCode, reason, throwOnError = false }) {
   const code = Number(siteCode);
   if (!Number.isSafeInteger(code) || code <= 0) {
     return 0;
@@ -69,6 +73,9 @@ export async function rotateTokensForSite({ siteCode, reason }) {
     return Array.isArray(rotated) ? rotated.length : 0;
   } catch (error) {
     console.error('[LocalToken] Site token döndürme başarısız:', reason, error?.code || error?.name || 'error');
+    if (throwOnError) {
+      throw error;
+    }
     return 0;
   }
 }

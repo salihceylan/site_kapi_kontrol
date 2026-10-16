@@ -190,7 +190,8 @@ appDoorsRouter.post('/app/doors/:id/open', authRequired, doorCommandRateLimiter,
 
     await publishDoorPulse({
       deviceUid: door.assigned_device_uid,
-      requestedBy: req.authUser.email,
+      // Kişisel veri MQTT'ye gitmez (S-C): yalnız kullanıcı kodu. Firmware requested_by'ı ayrıştırmaz (bilgi amaçlı).
+      requestedBy: `u:${Number(req.authUser.id)}`,
       doorId: Number(door.id),
       siteCode: Number(door.site_code),
     });
@@ -368,7 +369,7 @@ appDoorsRouter.post('/app/doors/scan-qr-open', authRequired, doorCommandRateLimi
     try {
       await publishDoorPulse({
         deviceUid: door.assigned_device_uid,
-        requestedBy: req.authUser.email,
+        requestedBy: `u:${Number(req.authUser.id)}`, // kişisel veri değil (S-C)
         doorId: Number(door.id),
         siteCode: Number(door.site_code),
       });

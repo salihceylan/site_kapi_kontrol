@@ -371,7 +371,7 @@ export async function verifyQrTokenAndOpenDoor({ deviceUid, token }) {
   try {
     await publishDoorPulse({
       deviceUid: cleanUid,
-      requestedBy: tokenRecord.user_name,
+      requestedBy: `u:${Number(tokenRecord.user_code)}`, // ad MQTT'ye gitmez (S-C)
       doorId: deviceDoorId,
       siteCode: deviceSiteCode,
       assumeOnline: true,
@@ -407,7 +407,8 @@ export async function verifyQrTokenAndOpenDoor({ deviceUid, token }) {
     return { allowed: false, reason: 'PULSE_FAILED' };
   }
 
-  console.log(`[QR Dogrulama ONAY] Kullanici: ${tokenRecord.user_name} (${tokenRecord.user_code}) -> Kapi: ${device.assigned_door_name}`);
+  // Kişisel veri günlüğe yazılmaz (§0.9): yalnızca kullanıcı kodu (ad değil).
+  console.log(`[QR Dogrulama ONAY] Kullanici kodu: ${tokenRecord.user_code} -> Kapi: ${device.assigned_door_name}`);
 
   await recordDoorAccessLog({
     siteCode: deviceSiteCode,

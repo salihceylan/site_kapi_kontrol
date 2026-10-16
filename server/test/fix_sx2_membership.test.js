@@ -222,6 +222,8 @@ describe('setupSiteWithClaimedDevice: cihaz sahipligi site kurulmadan ONCE dogru
       [/^SELECT id, user_code, role, full_name, email FROM users/, { rowCount: 1, rows: [{ id: 7, user_code: 48213, role, full_name: 'A', email: 'a@example.com' }] }],
       [/^SELECT \* FROM devices/, () => (device ? { rowCount: 1, rows: [device] } : { rowCount: 0, rows: [] })],
       [/^INSERT INTO sites/, { rowCount: 1, rows: [{ id: 900, name: 'Yeni Site' }] }],
+      // rol güncellemesi `deleted_at IS NULL` ister: satır dönmezse (silinmiş hesap) kurulum geri alınır; burada hesap var -> 1 satır
+      [/^UPDATE users SET role = 'site_manager' WHERE id = \$1 AND deleted_at IS NULL$/, { rowCount: 1, rows: [] }],
       [/^INSERT INTO site_blocks/, { rowCount: 1, rows: [{ id: 31, site_code: 900, block_name: 'A Blok', sort_order: 1 }] }],
       [/^INSERT INTO site_doors/, { rowCount: 1, rows: [{ id: 41, site_code: 900, door_name: 'Kapı 1', door_index: 1, is_active: true }] }],
     ];
@@ -364,7 +366,7 @@ describe('toggleApartmentMemberStatus: aile reisi pasife alinca tum daire pasifl
     assert.equal(result.is_active, false);
     assert.match(result.message, /pasife alındı/);
     assert.equal(has(clientLog, /^UPDATE apartments SET is_active/), false, 'tum daire pasiflesmemeli');
-    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1 WHERE id = \$2$/);
+    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/);
     assert.deepEqual(handOver.params, [20001, 3]);
     assert.ok(has(clientLog, /^COMMIT/));
   });

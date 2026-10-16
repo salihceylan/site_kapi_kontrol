@@ -50,6 +50,18 @@
 //             kapatma/acma x yazma kilit yarislari kontrol deneyleriyle (W), bilgi olcumleri (V9: 250 bin satirli tek site). QA_ONLY=finance ile ayri kosulur.
 //   finance_upgrade  034'un "canli benzeri" 001..033 semasina ESZAMANLI yazicilar (8 yazici, karisik kilit siralari) calisirken uygulanmasi: sunucu acilisi
 //             (ensureDbSchema) ve migrate.js yollari ayri ayri; 10 deneme; 40P01 / yarim nesne / veri kaybi / sema esitligi olcer. QA_ONLY=finance_upgrade.
+//   platform_services  Satisa hazirlik S-B (035): sema kisitlari/FK/CASCADE ve idempotent ensureDbSchema; /admin/platform-config (yetki, kismi guncelleme,
+//             audit yalniz anahtar adlari, eszamanli PUT) ve /public/app-config; yasal belgeler (gercek ayarlarla yer tutucu, HTML sayfasi); /me/consents
+//             (surum yukseltme -> yeniden onay, eszamanli onay); kayit akisi bekleyen kayit -> e-posta kodu -> hesap + onaylar TEK islemde (atomiklik
+//             hata enjeksiyonuyla), zorunluluk acik/kapali, site basvurusu onaylari; istemci hata raporu (kisisel veri temizleme, parmak izi tekillestirme,
+//             eszamanli upsert, satir tavani, imecli sayfalama, 90 gun silme + tek calisan kilidi). QA_ONLY=platform_services ile ayri kosulur.
+//   account   Satisa hazirlik S-A (036): hesap silme (kimliksizlestirme) + kisisel veri disa aktarma. Sema (deleted_at + CHECK, account_data_exports, kismi
+//             indeksler + 60 bin satirda EXPLAIN), users'a referans veren HER FK icin politika katalogu, engelleyiciler (SUPER_USER, LAST_SITE_MANAGER matrisi),
+//             parola / onay / kilit (PATCH /me ile PAYLASILAN izleyici), donanimli sakin silme (devir, CRM, duyuru kuyrugu, basvuru, adres tabanli kayitlar,
+//             ad anlik goruntuleri, kimliksiz denetim, e-posta, eski token, yeniden kayit), belirleyici (silme `UPDATE users` oncesinde bekletilir) ve
+//             rastgele yarislar (cift silme, silme x giris / uye cikarma / admin silme / yonetici cikarma / basvuru onayi / duyuru yayini / kuyruk / CRM),
+//             ters sira KONTROL DENEYI, disa aktarma (sozlesme sekli, SIZDIRMA YOK, izolasyon, IDOR, 5 MB siniri, 24 saatte 3 + paralel + iade),
+//             buyuk ayak izi, degismez defter, FK butunlugu, sunucu gunlugunde kisisel veri yok, 40P01 = 0. QA_ONLY=account ile ayri kosulur.
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -143,6 +155,10 @@ const CATALOG_TABLES = [
   'fee_runs',
   'ledger_entries',
   'finance_period_closures',
+  'user_consents',
+  'client_error_reports',
+  'pending_registrations',
+  'account_data_exports',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -151,6 +167,7 @@ const NAMED_CONSTRAINTS = [
   'chk_apartments_responsible_party',
   'chk_apartments_land_share',
   'chk_apartments_category_length',
+  'chk_users_deleted_inactive',
 ];
 
 async function readCatalog(client) {
@@ -160,6 +177,7 @@ async function readCatalog(client) {
      WHERE table_schema = 'public'
        AND (table_name = ANY($1::text[])
             OR (table_name = 'apartments' AND column_name = ANY($2::text[]))
+            OR (table_name = 'users' AND column_name = 'deleted_at')
             OR (table_name = 'sites' AND column_name = 'management_type'))
      ORDER BY table_name, column_name`,
     [CATALOG_TABLES, APARTMENT_COLUMNS],
@@ -230,6 +248,15 @@ function onlyMigration(number) {
   return dir;
 }
 
+/** Numarasi `number`'dan BUYUK migration dosyalarini gecici bir dizine kopyalar (migrate.js --dir icin; `number` ve oncesi zaten uygulanmis olmali). */
+function migrationsAfter(number) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-migrations-after-'));
+  for (const name of migrationFiles()) {
+    if (Number(name.slice(0, name.indexOf('_'))) > number) fs.copyFileSync(path.join(MIGRATIONS_DIR, name), path.join(dir, name));
+  }
+  return dir;
+}
+
 function firstMigrationNumber(prefix) {
   const match = migrationFiles().find((name) => name.includes(prefix));
   if (!match) throw new Error(`migration bulunamadi: ${prefix}`);
@@ -271,6 +298,8 @@ async function runParent() {
     announcements: `${prefix}_announcements`,
     site_applications: `${prefix}_site_applications`,
     finance: `${prefix}_finance`,
+    platform_services: `${prefix}_platform_services`,
+    account: `${prefix}_account`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -329,7 +358,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('platform_services') || wants('account')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -346,7 +375,9 @@ async function runParent() {
       const financeFirst = firstMigrationNumber('finance');
       const beforeFinance = subsetMigrations(financeFirst);
       const onlyFinance = onlyMigration(financeFirst);
-      dirs.push(beforeFinance, onlyFinance);
+      // 'migrate' senaryosu yalniz 034'u uygular; sonucu TAM zincirle (001..son) karsilastirabilmek icin 034'ten SONRAKI migration'lar (035, 036, ...) ayrica uygulanir.
+      const afterFinance = migrationsAfter(financeFirst);
+      dirs.push(beforeFinance, onlyFinance, afterFinance);
       await recreate(names.finance_upgrade_base);
       const baseOk = runMigrate(names.finance_upgrade_base, beforeFinance);
       console.log(`${baseOk ? 'PASS' : 'FAIL'}  finance_upgrade: migration 001..${String(financeFirst - 1).padStart(3, '0')} uygulandi`);
@@ -354,13 +385,18 @@ async function runParent() {
         const name = names[`finance_upgrade_${scenario}`];
         await recreate(name, names.finance_upgrade_base);
         let ok = baseOk && runSection('finance_upgrade', name, { QA_SCENARIO: scenario, QA_FINANCE_DIR: onlyFinance });
+        if (scenario === 'migrate') {
+          const tailOk = runMigrate(name, afterFinance);
+          console.log(`${tailOk ? 'PASS' : 'FAIL'}  finance_upgrade/migrate: 034 sonrasi migration'lar (035, 036, ...) uygulandi`);
+          ok = ok && tailOk;
+        }
         ok = compareCatalogs(`finance_upgrade/${scenario} = migrate zinciri`, chainAfter, await catalogOf(name)) && ok;
         record(`finance_upgrade/${scenario}`, ok);
       }
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'platform_services', 'account']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -8370,6 +8406,10 @@ async function sectionFinance() {
 //   Her denemede finans nesneleri DUSURULUR (yalniz test veritabaninda), 8 yazici (apartments/sites/users/membership/gecici satirlar) calisirken 034 uygulanir.
 //   Olcer: 40P01 / 55P03 (yazici ve uygulayici tarafinda), yazicilarin en uzun beklemesi, uygulama suresi. Basari: HER denemede sema tam kurulur
 //   (gerekirse sunucu yeniden baslatmasi gibi yeniden uygulanir), yazicilarda beklenmeyen hata yok, veri kaybi yok.
+//   NOT (R2 M-1): bu bolum yalniz 034'un kendi kilit siralarini olcer. 'ensure' olcumu, SONRADAN eklenen 035/036'nin ensureDbSchema ifadelerinden
+//   (ornegin ALTER TABLE ... ADD COLUMN IF NOT EXISTS: sutun varken bile ACCESS EXCLUSIVE alir) kaynaklanan ACILIS DEADLOCK'unu YAKALAMAZ: yazicilar
+//   pending_registrations / users / audit_log kilit siralarini kullanmaz. O regresyon platform_services bolumundeki "ensureDbSchema x eszamanli
+//   yazicilar" kontroluyle (40P01 = 0) korunur. 'migrate' senaryosunda 034 sonrasi migration'lar parent tarafindan ayrica uygulanir (tam zincir karsilastirmasi).
 // --------------------------------------------------------------------------------------------------------------
 
 async function sectionFinanceUpgrade() {
@@ -8587,6 +8627,2259 @@ async function sectionFinanceUpgrade() {
 // <finance-upgrade-end>
 
 // --------------------------------------------------------------------------------------------------------------
+// CHILD bolum: platform_services (Satisa hazirlik S-B: yasal belgeler + onay kayitlari, uygulama yapilandirmasi, platform ayarlari,
+// istemci hata raporu; docs/PLATFORM_SATISA_HAZIRLIK.md 1.1-1.4). QA_ONLY=platform_services ile ayri kosulur.
+// --------------------------------------------------------------------------------------------------------------
+
+/** Gercek authRequired + gercek JWT + gercek servisler; yalnız hız sınırlayıcılar (birim testlerinde sinanir) devre dışı bırakılır. */
+async function startPlatformServicesHttp(pool) {
+  const express = (await import('express')).default;
+  const { signAccessToken } = await import('../src/jwt.js');
+  const { errorHandler } = await import('../src/middlewares/error_handler.js');
+  const { authRouter } = await import('../src/routes/auth_routes.js');
+  const { siteApplicationRouter } = await import('../src/modules/site_application_routes.js');
+  const { platformServicesRouter } = await import('../src/modules/platform_config_routes.js');
+  const { clientErrorBodyParser } = await import('../src/modules/client_error_routes.js');
+  const neutralize = (router) => {
+    for (const layer of router.stack) {
+      if (layer.route) {
+        for (const entry of layer.route.stack) {
+          if (typeof entry.handle.reset === 'function') entry.handle = (_req, _res, next) => next();
+        }
+      } else if (layer.handle?.stack) {
+        neutralize(layer.handle);
+      }
+    }
+  };
+  for (const router of [authRouter, siteApplicationRouter, platformServicesRouter]) neutralize(router);
+  const app = express();
+  app.post('/public/client-errors', clientErrorBodyParser); // server.js ile ayni: kucuk govde siniri genel ayristiriciden ONCE
+  app.use(express.json({ limit: '1mb' }));
+  app.use(authRouter);
+  app.use(siteApplicationRouter);
+  app.use(platformServicesRouter);
+  app.use(errorHandler);
+  const server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tokens = new Map();
+  const tokenFor = async (userCode) => {
+    if (!tokens.has(userCode)) {
+      const row = (await pool.query(`SELECT user_code AS id, email, role, password_hash FROM users WHERE user_code = $1`, [userCode])).rows[0];
+      tokens.set(userCode, signAccessToken({ id: row.id, email: row.email, role: row.role }, { passwordHash: row.password_hash }));
+    }
+    return tokens.get(userCode);
+  };
+  async function call(method, urlPath, userCode, body, options = {}) {
+    const headers = { ...(options.raw ? {} : { 'content-type': 'application/json' }), ...(options.headers ?? {}) };
+    if (userCode !== null && userCode !== undefined) headers.authorization = `Bearer ${await tokenFor(userCode)}`;
+    const response = await fetch(`${base}${urlPath}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : options.raw ? body : JSON.stringify(body),
+    });
+    const text = await response.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (_e) {
+      // JSON olmayan yanit (HTML)
+    }
+    return { status: response.status, body: json, text, headers: response.headers };
+  }
+  return { call, close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }) };
+}
+
+async function sectionPlatformServices() {
+  await childEnv();
+  const LEGAL_FIXTURES = path.join(SERVER_DIR, 'test', 'fixtures', 'legal');
+  process.env.LEGAL_DIR = LEGAL_FIXTURES;
+  process.env.CLIENT_ERROR_MAX_ROWS = '100000';
+  const { pool, ensureDbSchema } = await import('../src/db.js');
+  const q = (sql, params = []) => pool.query(sql, params);
+  const hooks = installPoolHooks(pool);
+  const http = await startPlatformServicesHttp(pool);
+  const { call } = http;
+  const { clearLegalCache } = await import('../src/modules/legal_documents.js');
+  const clientErrors = await import('../src/modules/client_error_service.js');
+  const { PURGE_LOCK_CLASS, PURGE_LOCK_JOB, WRITE_LOCK_JOB, purgeOldReports } = clientErrors;
+  const SUPER = 10001;
+  const failCode = async (sql, params = []) => {
+    try {
+      await q(sql, params);
+      return null;
+    } catch (error) {
+      return error.code ?? String(error.message);
+    }
+  };
+  let nextUser = 31000;
+  const mkUser = async (name, role = 'individual', options = {}) => {
+    nextUser += 1;
+    const code = nextUser;
+    await q(
+      `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status)
+       VALUES ($1, $2, $3, $4, 'x', TRUE, TRUE, 'approved')`,
+      [code, name, options.email ?? `ps${code}@qa.example`, role],
+    );
+    return code;
+  };
+  let injected500 = 0;
+  const expectInjected = () => {
+    injected500 += 1;
+  };
+  const consentRows = async (userCode) =>
+    (await q(`SELECT document_id, version, source, accepted_at FROM user_consents WHERE user_code = $1 ORDER BY document_id`, [userCode])).rows;
+  const lastCode = () => {
+    const mail = [...mails].reverse().find((m) => /\b\d{6}\b/.test(String(m.text)));
+    return mail ? String(mail.text).match(/\b(\d{6})\b/)[1] : null;
+  };
+  const PASSWORD = 'Qa-Parola-7391x';
+  const registerBody = (email, extra = {}) => ({ first_name: 'Ali', last_name: 'Kayit', email, password: PASSWORD, ...extra });
+
+  // ============================================================================================================
+  // A. Sema (gercek PG): kisitlar, FK davranisi, idempotent ensureDbSchema
+  // ============================================================================================================
+  console.log('--- sema ---');
+  const tables = (await q(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('user_consents', 'client_error_reports')`)).rows.map((r) => r.table_name).sort();
+  check('035: user_consents ve client_error_reports tablolari var', same(tables, ['client_error_reports', 'user_consents']), tables);
+  const pendingCol = (await q(`SELECT data_type FROM information_schema.columns WHERE table_name = 'pending_registrations' AND column_name = 'accepted_documents'`)).rows[0];
+  check('035: pending_registrations.accepted_documents JSONB', pendingCol?.data_type === 'jsonb', pendingCol);
+
+  const schemaUser = await mkUser('Sema Kullanici');
+  const consentInsert = (doc, version, source = 'in_app', user = schemaUser) =>
+    failCode(`INSERT INTO user_consents (user_code, document_id, version, source) VALUES ($1, $2, $3, $4)`, [user, doc, version, source]);
+  check('user_consents: gecerli satir kabul edilir; AYNI (kullanici, belge, surum) 23505; baska surum kabul', (await consentInsert('terms', 'v1')) === null && (await consentInsert('terms', 'v1')) === '23505' && (await consentInsert('terms', 'v2')) === null);
+  check('user_consents CHECK: belge kimligi (buyuk harf / ozel karakter / 1 karakter) 23514', (await consentInsert('Terms', 'v1')) === '23514' && (await consentInsert("t'; DROP", 'v1')) === '23514' && (await consentInsert('x', 'v1')) === '23514');
+  check('user_consents CHECK: surum bos / 41 karakter 23514, 40 karakter kabul; kaynak gecersiz 23514', (await consentInsert('dpa', '')) === '23514' && (await consentInsert('dpa', 'x'.repeat(41))) === '23514' && (await consentInsert('dpa', 'x'.repeat(40))) === null && (await consentInsert('privacy', 'v1', 'BAD SOURCE')) === '23514');
+  check('user_consents FK: olmayan kullanici 23503', (await consentInsert('terms', 'v1', 'in_app', 2000000000)) === '23503');
+  await q(`DELETE FROM users WHERE user_code = $1`, [schemaUser]);
+  check('kullanici HAM silinince onay kayitlari CASCADE gider', (await consentRows(schemaUser)).length === 0);
+
+  const reportInsert = (overrides = {}) => {
+    const row = { fingerprint: 'a'.repeat(64), error_type: 'E', message: 'm', app_version: '1.0.0', platform: 'android', count: 1, stack: null, ...overrides };
+    return failCode(
+      `INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, count, sample_stack) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [row.fingerprint, row.error_type, row.message, row.app_version, row.platform, row.count, row.stack],
+    );
+  };
+  check('client_error_reports: gecerli satir; ayni parmak izi 23505', (await reportInsert()) === null && (await reportInsert()) === '23505');
+  check('client_error_reports CHECK: parmak izi 63 karakter / platform gecersiz / count 0 23514', (await reportInsert({ fingerprint: 'b'.repeat(63) })) === '23514' && (await reportInsert({ fingerprint: 'c'.repeat(64), platform: 'windows' })) === '23514' && (await reportInsert({ fingerprint: 'd'.repeat(64), count: 0 })) === '23514');
+  check('client_error_reports CHECK: mesaj 501 / yigin 8001 / tur 101 karakter 23514; sinirda kabul', (await reportInsert({ fingerprint: 'e'.repeat(64), message: 'm'.repeat(501) })) === '23514' && (await reportInsert({ fingerprint: 'f'.repeat(64), stack: 's'.repeat(8001) })) === '23514' && (await reportInsert({ fingerprint: '1'.repeat(64), error_type: 'T'.repeat(101) })) === '23514' && (await reportInsert({ fingerprint: '2'.repeat(64), message: 'm'.repeat(500), stack: 's'.repeat(8000), error_type: 'T'.repeat(100) })) === null);
+  await q(`DELETE FROM client_error_reports`);
+  const pendingInsert = (value) => failCode(`INSERT INTO pending_registrations (email, full_name, password_hash, accepted_documents) VALUES ($1, 'P', 'h', $2::jsonb)`, [`qa-sema-${Math.random().toString(36).slice(2)}@qa.example`, value]);
+  check('pending_registrations.accepted_documents: NULL ve dizi kabul; nesne / metin 23514', (await pendingInsert(null)) === null && (await pendingInsert('[]')) === null && (await pendingInsert('{"a":1}')) === '23514' && (await pendingInsert('"x"')) === '23514');
+  await q(`DELETE FROM pending_registrations WHERE full_name = 'P'`);
+
+  const keepUser = await mkUser('Idempotent Kullanici');
+  await q(`INSERT INTO user_consents (user_code, document_id, version, accepted_at, source) VALUES ($1, 'terms', 'v-ide', '2026-01-02 03:04:05+00', 'register')`, [keepUser]);
+  const beforeEnsure = await consentRows(keepUser);
+  await ensureDbSchema();
+  await ensureDbSchema();
+  check('ensureDbSchema x2: mevcut onay kayitlari DEGISMEZ (idempotent, ekleyici)', same(beforeEnsure, await consentRows(keepUser)) && beforeEnsure.length === 1);
+
+  // ============================================================================================================
+  // B. Platform ayarlari (GET/PUT /admin/platform-config) ve uygulama yapilandirmasi
+  // ============================================================================================================
+  console.log('--- platform ayarlari ve app-config ---');
+  const individual = await mkUser('Sakin Bir');
+  const manager = await mkUser('Yonetici Bir', 'site_manager');
+  let res = await call('GET', '/admin/platform-config', null);
+  check('platform-config: kimliksiz 401', res.status === 401);
+  check('platform-config: bireysel ve site yoneticisi GET/PUT 403', (await call('GET', '/admin/platform-config', individual)).status === 403 && (await call('PUT', '/admin/platform-config', manager, { app: { latest_version: '9.9.9' } })).status === 403);
+  res = await call('GET', '/admin/platform-config', SUPER);
+  check('platform-config GET: bos tabloda sozlesme sekli ("" ve false)', res.status === 200 && res.body.app.latest_version === '' && res.body.legal.enforce_consents === false && Object.keys(res.body.legal).length === 7 && Object.keys(res.body.app).length === 6 && Object.keys(res.body.support).length === 4, res.body);
+  res = await call('GET', '/public/app-config', null);
+  check('app-config: ayar yokken varsayilanlar (1.0.0, bakim kapali), no-store, kimliksiz', res.status === 200 && res.body.min_supported_version === '1.0.0' && res.body.latest_version === '1.0.0' && res.body.maintenance.active === false && res.body.legal_enforced === false && res.headers.get('cache-control') === 'no-store', res.body);
+
+  const putBody = {
+    app: { min_supported_version: '1.2.0', latest_version: '1.4.0', update_url_android: 'https://play.google.com/store/apps/details?id=tr.qa', update_url_ios: 'https://apps.apple.com/tr/app/id1', maintenance_active: false, maintenance_message: 'Bakim yapiliyor' },
+    support: { email: 'destek@qa.example', phone: '+90 212 000 00 00', hours: 'Hafta ici 09:00-18:00', web_url: 'https://qa.example/destek' },
+    legal: { company_name: 'Gizli Unvan QA A.S.', company_address: 'Gizli Mah. 5 Sk. No:9 Ankara', mersis_no: '0123 4567 8901 2345', kep_address: 'qa@hs01.kep.tr', contact_email: 'kvkk@qa.example', contact_phone: '+90 312 000 00 00' },
+  };
+  res = await call('PUT', '/admin/platform-config', SUPER, putBody);
+  check('platform-config PUT: 200, tam yapilandirma doner; MERSIS bosluksuz saklanir', res.status === 200 && res.body.legal.mersis_no === '0123456789012345' && res.body.app.latest_version === '1.4.0' && res.body.support.email === 'destek@qa.example', res.body);
+  const typeRows = (await q(`SELECT key, jsonb_typeof(value) AS t, updated_by FROM platform_settings WHERE key LIKE 'app.%' OR key LIKE 'support.%' OR key LIKE 'legal.%' ORDER BY key`)).rows;
+  check('platform_settings: her anahtar ayri satir (app.* / support.* / legal.*), metinler JSONB string, updated_by = super; site_onboarding korunur', typeRows.length === 15 && typeRows.every((r) => r.t === 'string') && typeRows.every((r) => r.updated_by === SUPER) && (await q(`SELECT value->>'mode' AS mode FROM platform_settings WHERE key = 'site_onboarding'`)).rows[0].mode === 'approval', typeRows.length);
+  const auditRows = (await q(`SELECT actor_user_code, action, details FROM audit_log WHERE action = 'platform_config.updated' ORDER BY id`)).rows;
+  const auditText = JSON.stringify(auditRows);
+  check('denetim: platform_config.updated tek satir, YALNIZ anahtar adlari; hicbir deger (unvan, adres, e-posta, telefon, URL) yok', auditRows.length === 1 && auditRows[0].actor_user_code === SUPER && auditRows[0].details.keys.length === 15 && !/Gizli|qa\.example|\+90|kep\.tr|play\.google/.test(auditText), auditRows);
+  res = await call('GET', '/public/app-config', null);
+  check('app-config: ayarlar yansir (surumler, magaza baglantilari, destek); bakim kapali', res.body.min_supported_version === '1.2.0' && res.body.latest_version === '1.4.0' && res.body.update_url_android.startsWith('https://play.google.com') && res.body.support.email === 'destek@qa.example' && res.body.support.hours === 'Hafta ici 09:00-18:00' && res.body.maintenance.active === false && res.body.maintenance.message === 'Bakim yapiliyor', res.body);
+  res = await call('PUT', '/admin/platform-config', SUPER, { app: { maintenance_active: true } });
+  check('bakim modu aciksa app-config maintenance.active true (kismi guncelleme digerlerine dokunmaz)', res.status === 200 && (await call('GET', '/public/app-config', null)).body.maintenance.active === true && res.body.app.latest_version === '1.4.0');
+  await call('PUT', '/admin/platform-config', SUPER, { app: { maintenance_active: false } });
+
+  const auditCount = async () => (await q(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'platform_config.updated'`)).rows[0].n;
+  const auditBefore = await auditCount();
+  res = await call('PUT', '/admin/platform-config', SUPER, { app: { latest_version: '1.4.0' }, support: { email: 'destek@qa.example' } });
+  check('degisiklik yoksa audit satiri YAZILMAZ', res.status === 200 && (await auditCount()) === auditBefore);
+  res = await call('PUT', '/admin/platform-config', SUPER, { support: { phone: '' }, app: { maintenance_message: null } });
+  check('bos dize / null anahtari SILER (satir yok); GET "" doner', res.status === 200 && res.body.support.phone === '' && (await q(`SELECT COUNT(*)::int AS n FROM platform_settings WHERE key IN ('support.phone', 'app.maintenance_message')`)).rows[0].n === 0);
+  res = await call('PUT', '/admin/platform-config', SUPER, { app: { latest_version: 'v2', update_url_android: 'http://x.example' }, support: { email: 'yanlis' }, legal: { company_name: '**x**', mersis_no: '12' }, yok: {} });
+  check('gecersiz alanlar 400 VALIDATION_FAILED { fields }; hicbir sey yazilmaz', res.status === 400 && res.body.code === 'VALIDATION_FAILED' && Object.keys(res.body.fields).length === 6 && (await call('GET', '/admin/platform-config', SUPER)).body.app.latest_version === '1.4.0');
+  res = await call('PUT', '/admin/platform-config', SUPER, { app: { min_supported_version: '3.0.0' } });
+  check('min > latest 400 INVALID_VERSION_RANGE; yazilmaz', res.status === 400 && res.body.code === 'INVALID_VERSION_RANGE' && (await call('GET', '/admin/platform-config', SUPER)).body.app.min_supported_version === '1.2.0');
+
+  // eszamanli PUT'lar: kilit sirasi (advisory) -> deadlock / bozuk birlesik durum olmamali
+  hooks.deadlocks = 0;
+  const concurrent = await Promise.all(
+    Array.from({ length: 24 }, (_, i) => call('PUT', '/admin/platform-config', SUPER, { support: { hours: `Saat ${i % 6}`, web_url: `https://qa.example/${i % 4}` }, app: { latest_version: `2.${i % 5}.0`, min_supported_version: `1.${i % 3}.0` } })),
+  );
+  const finalConfig = (await call('GET', '/admin/platform-config', SUPER)).body;
+  const [fMajor, fMinor] = finalConfig.app.latest_version.split('.').map(Number);
+  check('24 ESZAMANLI PUT: hepsi 200, deadlock yok, birlesik durum tutarli (min <= latest, son degerler tek bir isteginki)', concurrent.every((r) => r.status === 200) && hooks.deadlocks === 0 && fMajor === 2 && fMinor >= 0 && /^Saat \d$/.test(finalConfig.support.hours) && /^https:\/\/qa\.example\/\d$/.test(finalConfig.support.web_url), { statuses: concurrent.map((r) => r.status), finalConfig });
+  check('eszamanli PUT sonrasi platform_settings anahtar basina TEK satir (PK), audit satirlari yalniz anahtar adi', (await q(`SELECT COUNT(*)::int AS n FROM platform_settings WHERE key = 'support.hours'`)).rows[0].n === 1 && !/Saat \d|qa\.example\/\d/.test(JSON.stringify((await q(`SELECT details FROM audit_log WHERE action = 'platform_config.updated'`)).rows)));
+  await call('PUT', '/admin/platform-config', SUPER, { app: { min_supported_version: '1.2.0', latest_version: '1.4.0' } });
+
+  // ============================================================================================================
+  // C. Yasal belgeler (gercek ayarlarla)
+  // ============================================================================================================
+  console.log('--- yasal belgeler ---');
+  clearLegalCache();
+  res = await call('GET', '/public/legal-documents', null);
+  const docById = (list, id) => list.find((d) => d.id === id);
+  check('belge listesi: kimliksiz 200; terms/privacy/kvkk_notice/dpa tamam (sirket bilgisi PUT ile dolduruldu); yedek account_deletion tamam', res.status === 200 && ['terms', 'privacy', 'kvkk_notice', 'dpa', 'account_deletion'].every((id) => docById(res.body.documents, id)?.complete === true), res.body);
+  check('taslak (complete:false) ve bilgi amacli belgeler listede; draft_notice complete:false', docById(res.body.documents, 'draft_notice')?.complete === false && same(docById(res.body.documents, 'evil')?.required_for, []));
+  res = await call('GET', '/public/legal-documents/privacy', null);
+  check('belge ayrintisi: yer tutucular gercek ayarlarla dolu (unvan, adres, MERSIS, e-posta), "[……]" yok', res.status === 200 && res.body.content_md.includes('Gizli Unvan QA A.S.') && res.body.content_md.includes('0123456789012345') && res.body.content_md.includes('kvkk@qa.example') && !res.body.content_md.includes('[……]'), res.body.content_md);
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { contact_phone: '' } });
+  res = await call('GET', '/public/legal-documents/privacy', null);
+  check('bir yasal ayar silinince belge complete:false ve "[……]" gorunur', res.body.complete === false && res.body.content_md.includes('[……]') && res.body.content_md.includes('- Telefon: [……]'));
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { contact_phone: '+90 312 000 00 00' } });
+  res = await call('GET', '/legal/privacy', null);
+  check('GET /legal/privacy: 200 text/html, sikI CSP, betik yok, unvan kacisli', res.status === 200 && /text\/html/.test(res.headers.get('content-type')) && /default-src 'none'/.test(res.headers.get('content-security-policy')) && !/<script/i.test(res.text) && res.text.includes('<strong>Gizli Unvan QA A.S.</strong>'));
+  res = await call('GET', '/legal/account-deletion', null);
+  check('GET /legal/account-deletion: yedek metin, iletisim e-postasi ayardan', res.status === 200 && res.text.includes('kvkk@qa.example') && res.text.includes('Hesap ve Veri Silme'));
+  res = await call('GET', '/legal/evil', null);
+  check('kotu amacli belge sayfasi: ham HTML / javascript: baglantisi yok', res.status === 200 && !/<script|<img|href="javascript:/i.test(res.text));
+
+  // ============================================================================================================
+  // D. Onaylar: /me/consents, kayit (bekleyen kayit -> hesap), site basvurusu (gercek PG)
+  // ============================================================================================================
+  console.log('--- onaylar ---');
+  const sakin = await mkUser('Onay Sakini');
+  res = await call('GET', '/me/consents', sakin);
+  check('GET /me/consents: onaysiz kullanici -> consents [], pending = terms, privacy, kvkk_notice (dpa/taslak/bilgi sayfasi degil)', res.status === 200 && res.body.consents.length === 0 && same(res.body.pending.map((d) => d.id), ['terms', 'privacy', 'kvkk_notice']), res.body);
+  check('GET /me/consents: kimliksiz 401', (await call('GET', '/me/consents', null)).status === 401);
+  res = await call('POST', '/me/consents', sakin, { documents: [{ id: 'terms', version: 'ESKI' }] });
+  check('POST /me/consents: eski surum 409 CONSENT_VERSION_STALE { stale }', res.status === 409 && res.body.code === 'CONSENT_VERSION_STALE' && res.body.stale[0].current_version === '2026-10-01', res.body);
+  res = await call('POST', '/me/consents', sakin, { documents: [{ id: 'yok', version: 'v1' }] });
+  check('POST /me/consents: bilinmeyen belge 400; bilgi amacli (evil) 400; bos 400', res.status === 400 && (await call('POST', '/me/consents', sakin, { documents: [{ id: 'evil', version: 'x1' }] })).status === 400 && (await call('POST', '/me/consents', sakin, { documents: [] })).status === 400);
+  check('hatali POST hicbir satir yazmaz', (await consentRows(sakin)).length === 0);
+  res = await call('POST', '/me/consents', sakin, { documents: [{ id: 'terms', version: '2026-10-01' }, { id: 'privacy', version: '2026-10-16' }] });
+  check('POST /me/consents: 200 { consents, pending }; kaynak in_app; geriye kvkk_notice pending', res.status === 200 && res.body.consents.length === 2 && same(res.body.pending.map((d) => d.id), ['kvkk_notice']) && same((await consentRows(sakin)).map((r) => r.source), ['in_app', 'in_app']), res.body);
+  const firstAccepted = (await consentRows(sakin)).find((r) => r.document_id === 'terms').accepted_at.toISOString();
+  const racers = await Promise.all(Array.from({ length: 20 }, () => call('POST', '/me/consents', sakin, { documents: [{ id: 'terms', version: '2026-10-01' }, { id: 'kvkk_notice', version: '2026-10-16' }] })));
+  const afterRace = await consentRows(sakin);
+  check('20 ESZAMANLI ayni onay: hepsi 200 (23505 sizmaz), belge basina TEK satir, ilk accepted_at degismez', racers.every((r) => r.status === 200) && afterRace.length === 3 && afterRace.find((r) => r.document_id === 'terms').accepted_at.toISOString() === firstAccepted, racers.map((r) => r.status));
+  check('hepsi onayli: pending []', same((await call('GET', '/me/consents', sakin)).body.pending, []));
+  const otherView = await call('GET', '/me/consents', individual);
+  check('baska kullanicinin onaylari gorunmez (IDOR yok)', otherView.body.consents.length === 0);
+
+  // surum yukseltme: hukuk yeni surum yayinlar -> yeniden onay (pending)
+  const bumpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-legal-'));
+  try {
+    for (const name of fs.readdirSync(LEGAL_FIXTURES)) fs.copyFileSync(path.join(LEGAL_FIXTURES, name), path.join(bumpDir, name));
+    fs.writeFileSync(path.join(bumpDir, 'privacy.md'), fs.readFileSync(path.join(bumpDir, 'privacy.md'), 'utf8').replace(/^version: 2026-10-16$/m, 'version: 2026-11-01'));
+    process.env.LEGAL_DIR = bumpDir;
+    clearLegalCache();
+    res = await call('GET', '/me/consents', sakin);
+    check('belge surumu degisince onay GECERSIZ olur: privacy yeniden pending (yeni surumle), eski kayit kalir', same(res.body.pending.map((d) => `${d.id}@${d.version}`), ['privacy@2026-11-01']) && res.body.consents.some((c) => c.document_id === 'privacy' && c.version === '2026-10-16'), res.body);
+    res = await call('POST', '/me/consents', sakin, { documents: [{ id: 'privacy', version: '2026-10-16' }] });
+    check('eski surumle onay 409 CONSENT_VERSION_STALE', res.status === 409 && res.body.code === 'CONSENT_VERSION_STALE');
+    res = await call('POST', '/me/consents', sakin, { documents: [{ id: 'privacy', version: '2026-11-01' }] });
+    check('yeni surumle onay 200; pending []', res.status === 200 && same(res.body.pending, []) && (await consentRows(sakin)).filter((r) => r.document_id === 'privacy').length === 2);
+  } finally {
+    process.env.LEGAL_DIR = LEGAL_FIXTURES;
+    clearLegalCache();
+    fs.rmSync(bumpDir, { recursive: true, force: true });
+  }
+
+  // --- kayit akisi: bekleyen kayit -> e-posta kodu -> hesap (tek islemde onaylar) ---
+  const regDocs = [{ id: 'terms', version: '2026-10-01' }, { id: 'privacy', version: '2026-10-16' }, { id: 'kvkk_notice', version: '2026-10-16' }];
+  const E1 = 'qa-onay-1@qa.example';
+  res = await call('POST', '/auth/register-individual', null, registerBody(E1, { accepted_documents: regDocs }));
+  check('kayit (zorunluluk kapali): 201; users satiri YOK, user_consents YOK; onaylar bekleyen kayitta', res.status === 201 && (await q(`SELECT COUNT(*)::int AS n FROM users WHERE LOWER(email) = $1`, [E1])).rows[0].n === 0 && (await q(`SELECT COUNT(*)::int AS n FROM user_consents WHERE document_id = 'terms' AND user_code NOT IN (SELECT user_code FROM users)`)).rows[0].n === 0, res.body);
+  const pendingRow = (await q(`SELECT accepted_documents FROM pending_registrations WHERE LOWER(email) = $1`, [E1])).rows[0];
+  check('bekleyen kayit: accepted_documents [{id, version, accepted_at}] x3', Array.isArray(pendingRow?.accepted_documents) && pendingRow.accepted_documents.length === 3 && pendingRow.accepted_documents.every((d) => d.id && d.version && d.accepted_at), pendingRow);
+  const code1 = lastCode();
+  res = await call('POST', '/auth/verify-code', null, { email: E1, code: code1 });
+  check('dogrulama: 200, hesap olustu', res.status === 200 && res.body.ok === true, res.body);
+  const newUser = (await q(`SELECT user_code FROM users WHERE LOWER(email) = $1`, [E1])).rows[0]?.user_code;
+  const created = await consentRows(newUser);
+  check('hesapla birlikte user_consents: 3 satir (terms, privacy, kvkk_notice), kaynak register; bekleyen kayit silindi', created.length === 3 && created.every((r) => r.source === 'register') && same(created.map((r) => r.document_id), ['kvkk_notice', 'privacy', 'terms']) && (await q(`SELECT COUNT(*)::int AS n FROM pending_registrations WHERE LOWER(email) = $1`, [E1])).rows[0].n === 0, created);
+  check('yeni hesap: GET /me/consents pending []', same((await call('GET', '/me/consents', newUser)).body.pending, []));
+
+  // zorunluluk ACIK
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { enforce_consents: true } });
+  const mailsBefore = mails.length;
+  const pendingBefore = (await q(`SELECT COUNT(*)::int AS n FROM pending_registrations`)).rows[0].n;
+  res = await call('POST', '/auth/register-individual', null, registerBody('qa-onay-2@qa.example'));
+  check('zorunluluk ACIK + onaysiz kayit: 400 CONSENT_REQUIRED { missing }; e-posta GITMEZ, bekleyen kayit YOK', res.status === 400 && res.body.code === 'CONSENT_REQUIRED' && same(res.body.missing, ['terms', 'privacy', 'kvkk_notice']) && mails.length === mailsBefore && (await q(`SELECT COUNT(*)::int AS n FROM pending_registrations`)).rows[0].n === pendingBefore, res.body);
+  res = await call('POST', '/auth/register-individual', null, registerBody('qa-onay-2@qa.example', { accepted_documents: [{ id: 'terms', version: 'ESKI' }, ...regDocs.slice(1)] }));
+  check('zorunluluk ACIK + eski surum: 400 CONSENT_REQUIRED missing [terms]', res.status === 400 && same(res.body.missing, ['terms']));
+  const E3 = 'qa-onay-3@qa.example';
+  res = await call('POST', '/auth/register-individual', null, registerBody(E3, { accepted_documents: regDocs }));
+  check('zorunluluk ACIK + guncel onaylar: 201', res.status === 201, res.body);
+  const code3 = lastCode();
+
+  // atomiklik (gercek PG): onay yazimi dusurulurse hesap da, kod tuketimi de GERI ALINIR
+  hooks.failOnce = { match: /INSERT INTO user_consents/, code: 'XX000' };
+  res = await call('POST', '/auth/verify-code', null, { email: E3, code: code3 });
+  const afterFail = {
+    user: (await q(`SELECT COUNT(*)::int AS n FROM users WHERE LOWER(email) = $1`, [E3])).rows[0].n,
+    pending: (await q(`SELECT COUNT(*)::int AS n FROM pending_registrations WHERE LOWER(email) = $1`, [E3])).rows[0].n,
+    verified: (await q(`SELECT is_verified FROM email_verifications WHERE LOWER(email) = $1 ORDER BY id DESC LIMIT 1`, [E3])).rows[0]?.is_verified,
+  };
+  check('ATOMIK: onay yazimi basarisiz -> 500 (genel mesaj); users satiri YOK, bekleyen kayit GERI geldi, kod tuketilmedi', res.status === 500 && res.body.errorId && afterFail.user === 0 && afterFail.pending === 1 && afterFail.verified === false, { status: res.status, afterFail });
+  res = await call('POST', '/auth/verify-code', null, { email: E3, code: code3 });
+  const user3 = (await q(`SELECT user_code FROM users WHERE LOWER(email) = $1`, [E3])).rows[0]?.user_code;
+  check('ayni kodla yeniden deneme basarili: hesap + 3 onay birlikte', res.status === 200 && user3 && (await consentRows(user3)).length === 3);
+
+  // tekrar kayit en son denemeyi gecerli kilar (eski onay silinir)
+  const E4 = 'qa-onay-4@qa.example';
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { enforce_consents: false } });
+  await call('POST', '/auth/register-individual', null, registerBody(E4, { accepted_documents: regDocs }));
+  await q(`UPDATE email_verifications SET created_at = NOW() - INTERVAL '1 hour' WHERE LOWER(email) = $1`, [E4]);
+  res = await call('POST', '/auth/register-individual', null, registerBody(E4));
+  const reset = (await q(`SELECT accepted_documents FROM pending_registrations WHERE LOWER(email) = $1`, [E4])).rows[0];
+  check('tekrar kayit onaysiz: bekleyen kayittaki eski onay SIFIRLANIR (en son deneme gecerli)', res.status === 201 && reset.accepted_documents === null, res.body);
+  const code4 = lastCode();
+  await call('POST', '/auth/verify-code', null, { email: E4, code: code4 });
+  const user4 = (await q(`SELECT user_code FROM users WHERE LOWER(email) = $1`, [E4])).rows[0]?.user_code;
+  check('onaysiz kayit tamamlaninca hesap acilir, user_consents bos (kullanici sonra pending gorur)', user4 && (await consentRows(user4)).length === 0 && (await call('GET', '/me/consents', user4)).body.pending.length === 3);
+
+  // kapali uclar
+  res = await call('POST', '/auth/register', null, { accepted_documents: regDocs });
+  check('/auth/register ve /auth/site-manager/register kapali (410) kalir', res.status === 410 && (await call('POST', '/auth/site-manager/register', null, {})).status === 410);
+
+  // --- site basvurusu ---
+  const applicant = await mkUser('Basvuran Bir', 'individual');
+  const appBody = (extra = {}) => ({ name: 'Onay Sitesi', city: 'Ankara', blocks: [{ name: 'A Blok', apartmentCount: 6 }], doors: [{ name: 'Ana Kapi' }], ...extra });
+  const siteDocs = [{ id: 'terms', version: '2026-10-01' }, { id: 'dpa', version: '2026-10-05' }];
+  const appCount = async () => (await q(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1`, [applicant])).rows[0].n;
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { enforce_consents: true } });
+  res = await call('POST', '/membership/site-applications', applicant, appBody());
+  check('site basvurusu + zorunluluk ACIK + onaysiz: 400 CONSENT_REQUIRED { missing: [terms, dpa] }; basvuru YOK', res.status === 400 && res.body.code === 'CONSENT_REQUIRED' && same(res.body.missing, ['terms', 'dpa']) && (await appCount()) === 0, res.body);
+  hooks.failOnce = { match: /INSERT INTO user_consents/, code: 'XX000' };
+  expectInjected();
+  res = await call('POST', '/membership/site-applications', applicant, appBody({ accepted_documents: siteDocs }));
+  check('ATOMIK: onay yazimi basarisiz -> 500; basvuru satiri da GERI ALINIR', res.status === 500 && (await appCount()) === 0 && (await consentRows(applicant)).length === 0, { status: res.status });
+  res = await call('POST', '/membership/site-applications', applicant, appBody({ accepted_documents: siteDocs }));
+  const siteConsents = await consentRows(applicant);
+  check('site basvurusu + guncel onaylar: 201; onaylar source=site_application ile BASVURUYLA birlikte yazildi', res.status === 201 && (await appCount()) === 1 && same(siteConsents.map((r) => [r.document_id, r.source]), [['dpa', 'site_application'], ['terms', 'site_application']]), res.body);
+  await call('PUT', '/admin/platform-config', SUPER, { legal: { enforce_consents: false } });
+  const lenient = await mkUser('Basvuran Iki', 'individual');
+  res = await call('POST', '/membership/site-applications', lenient, appBody());
+  check('zorunluluk KAPALI iken onaysiz site basvurusu eskisi gibi 201', res.status === 201);
+  res = await call('POST', '/membership/site-applications', await mkUser('Basvuran Uc', 'individual'), appBody({ accepted_documents: 'terms' }));
+  check('site basvurusu: biçimsiz accepted_documents 400 INVALID_ACCEPTED_DOCUMENTS', res.status === 400 && res.body.code === 'INVALID_ACCEPTED_DOCUMENTS');
+  res = await call('GET', '/me/consents', applicant);
+  check('basvuran: kayit belgeleri pending (terms zaten onayli), dpa onayli -> pending [privacy, kvkk_notice]', same(res.body.pending.map((d) => d.id), ['privacy', 'kvkk_notice']), res.body.pending);
+
+  // ============================================================================================================
+  // E. Istemci hata raporu (gercek PG)
+  // ============================================================================================================
+  console.log('--- istemci hata raporu ---');
+  await q(`DELETE FROM client_error_reports`);
+  let counter = 0;
+  const report = (overrides = {}) => {
+    counter += 1;
+    return {
+      install_id: `00000000-0000-4000-8000-${String(counter).padStart(12, '0')}`,
+      app_version: '1.0.0',
+      build: '7',
+      platform: 'android',
+      os_version: '14',
+      error_type: 'FlutterError',
+      message: 'RenderFlex overflowed by 24 pixels',
+      stack: '#0 RenderFlex.performLayout (package:flutter/src/rendering/flex.dart:1000:7)\n#1 main (package:app/main.dart:42:7)',
+      fatal: false,
+      occurred_at: new Date().toISOString(),
+      route: '/home',
+      ...overrides,
+    };
+  };
+  res = await call('POST', '/public/client-errors', null, report());
+  const stored = (await q(`SELECT * FROM client_error_reports`)).rows;
+  check('POST /public/client-errors: kimliksiz 202 { ok: true }; tek satir (count 1)', res.status === 202 && same(res.body, { ok: true }) && stored.length === 1 && stored[0].count === 1 && stored[0].fingerprint.length === 64, stored);
+  for (let i = 0; i < 4; i += 1) await call('POST', '/public/client-errors', null, report({ fatal: i === 2, message: `RenderFlex overflowed by ${30 + i} pixels`, stack: `#0 RenderFlex.performLayout (package:flutter/src/rendering/flex.dart:${1000 + i}:7)\n#1 main (package:app/main.dart:${42 + i}:7)` }));
+  const deduped = (await q(`SELECT count, fatal, last_seen > first_seen AS moved FROM client_error_reports`)).rows;
+  check('parmak izi tekillestirme: 5 rapor (satir/sayi farkli) TEK satir, count 5, fatal OR, last_seen ilerler', deduped.length === 1 && deduped[0].count === 5 && deduped[0].fatal === true && deduped[0].moved === true, deduped);
+  res = await call('POST', '/public/client-errors', null, report({ app_version: '1.0.1' }));
+  check('farkli surum farkli parmak izi (2 satir)', (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports`)).rows[0].n === 2);
+
+  // kisisel veri temizleme: gercek PG satirinda hicbir iz yok
+  const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+  const piiInstall = `99999999-0000-4000-8000-000000000001`;
+  res = await call('POST', '/public/client-errors', null, report({
+    install_id: piiInstall,
+    message: 'Giris hatasi ali.veli@example.com tel 0532 123 45 67 tckn 12345678901',
+    stack: `#0 login (package:app/auth.dart:10:3)\nAuthorization: Bearer ${jwt}\n#2 https://u:p@host/x?token=abc123&page=2 from 192.168.1.20`,
+    route: '/profil/12345678901?email=ali.veli@example.com',
+    error_type: 'Exception(ali.veli@example.com)',
+    os_version: '14 (0532 123 45 67)',
+  }));
+  const piiRow = (await q(`SELECT * FROM client_error_reports WHERE message LIKE 'Giris hatasi%'`)).rows[0];
+  const piiText = JSON.stringify(piiRow);
+  check('KISISEL VERI: e-posta, telefon, TCKN, JWT/Bearer, kimlik bilgisi, token parametresi, IP veritabanina GIRMEZ', res.status === 202 && Boolean(piiRow) && !/ali\.veli|0532|12345678901|eyJhbG|u:p@|abc123|192\.168|\bBearer [A-Za-z0-9]/.test(piiText) && piiText.includes('[email]') && piiText.includes('[phone]') && piiText.includes('Bearer [token]') && piiText.includes('[ip]') && piiText.includes('token=[redacted]'), piiText.slice(0, 400));
+  check('install_id veritabaninda HICBIR tabloda saklanmaz (client_error_reports metin sutunlari)', !JSON.stringify((await q(`SELECT * FROM client_error_reports`)).rows).includes(piiInstall));
+  res = await call('POST', '/public/client-errors', null, report({ stack: 'x'.repeat(40 * 1024) }));
+  check('32 KB ustu govde 413 PAYLOAD_TOO_LARGE; sinirdaki buyuk yigin 202 ve 8000 karaktere kisaltilir', res.status === 413 && res.body.code === 'PAYLOAD_TOO_LARGE');
+  res = await call('POST', '/public/client-errors', null, report({ message: 'buyuk yigin', stack: 'y'.repeat(20 * 1024) }));
+  check('20 KB yigin kabul, saklanan <= 8000', res.status === 202 && (await q(`SELECT length(sample_stack) AS n FROM client_error_reports WHERE message = 'buyuk yigin'`)).rows[0].n === 8000);
+  res = await call('POST', '/public/client-errors', null, { install_id: 'x' });
+  check('gecersiz rapor 400 INVALID_REPORT (5xx degil)', res.status === 400 && res.body.code === 'INVALID_REPORT');
+  res = await call('POST', '/public/client-errors', null, '{"bozuk', { raw: true, headers: { 'content-type': 'application/json' } });
+  check('bozuk JSON 400 INVALID_BODY', res.status === 400 && res.body.code === 'INVALID_BODY');
+
+  // eszamanli ayni hata: upsert yarisi
+  await q(`DELETE FROM client_error_reports`);
+  const sameBody = report({ message: 'Eszamanli hata' });
+  const burst = await Promise.all(Array.from({ length: 40 }, (_, i) => call('POST', '/public/client-errors', null, { ...sameBody, install_id: `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}` })));
+  const burstRow = (await q(`SELECT count FROM client_error_reports WHERE message = 'Eszamanli hata'`)).rows;
+  check('40 ESZAMANLI ayni rapor: hepsi 202, TEK satir, count = 40 (kayip guncelleme / 23505 yok)', burst.every((r) => r.status === 202) && burstRow.length === 1 && burstRow[0].count === 40, burstRow);
+
+  // veritabani hatasinda bile 5xx YOK
+  hooks.failOnce = { match: /INSERT INTO client_error_reports/, code: '57P01' };
+  res = await call('POST', '/public/client-errors', null, report({ message: 'db kesintisi' }));
+  check('veritabani hatasi: yine 202 (uygulamayi bozmaz); rapor atilir', res.status === 202 && (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports WHERE message = 'db kesintisi'`)).rows[0].n === 0);
+
+  // satir tavani: KESIN (advisory kilitli sayim, onbellek yok) + en az gorulen / en eski cikarma (tablo "korlesmez") + eszamanli yaris
+  const letters = (n) => Array.from(String(n), (digit) => 'abcdefghij'[digit]).join('');
+  const junk = (n) => clientErrors.normalizeReport(report({ error_type: `Cop${letters(n)}`, message: 'cop', stack: null })).report;
+  await q(`DELETE FROM client_error_reports`);
+  process.env.CLIENT_ERROR_MAX_ROWS = '100';
+  for (let i = 0; i < 5; i += 1) {
+    await q(
+      `INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, count)
+       VALUES (md5('gercek' || $1::text) || md5('gercek' || $1::text || 'x'), 'GercekCokme', $2, '1.0.0', 'android', 50)`,
+      [i, `gercek cokme ${letters(i)}`],
+    );
+  }
+  // Yazma kilidini BEKLEYEN oturum sayisi (pg_locks, advisory, granted = false): kapi genisse bagliklar bos yere kilit bekler (R7).
+  const lockWaiters = async () =>
+    (await q(`SELECT COUNT(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid::bigint = $1 AND objid::bigint = $2`, [PURGE_LOCK_CLASS, WRITE_LOCK_JOB])).rows[0].n;
+  const withWaiterSampling = async (run) => {
+    let sampling = true;
+    let maxWaiting = 0;
+    const sampler = (async () => {
+      while (sampling) {
+        maxWaiting = Math.max(maxWaiting, await lockWaiters());
+        await new Promise((resolve) => setTimeout(resolve, 2));
+      }
+    })();
+    const result = await run();
+    sampling = false;
+    await sampler;
+    return { result, maxWaiting };
+  };
+  const wide = clientErrors.createWriteGate({ max: 12, queueLimit: 1000 });
+  const wideRun = await withWaiterSampling(() => Promise.allSettled(Array.from({ length: 600 }, (_, n) => clientErrors.storeReport(junk(n), { gate: wide }))));
+  const flood600 = wideRun.result;
+  const count600 = (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports`)).rows[0].n;
+  check('tavan 100: 600 ESZAMANLI farkli rapor sonrasi satir sayisi <= 100 (KESIN; onbellekli surumde 600 satir yazilmisti), hicbiri hata vermez (deadlock / 23505 yok)', count600 <= 100 && flood600.every((r) => r.status === 'fulfilled'), { count600, rejected: flood600.filter((r) => r.status === 'rejected').slice(0, 2).map((r) => r.reason?.code ?? r.reason?.message) });
+  check('tavan 100: tekrarlayan GERCEK cokmeler (sayac 50) cop akisi sirasinda atilmadi (5/5)', (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports WHERE error_type = 'GercekCokme'`)).rows[0].n === 5);
+  check('tavan 100: akis cikarma uretti (>= 5 islemde satir atildi) ve tablo dolu kaldi (>= 90 satir; %5 cikarma payi)', flood600.filter((r) => r.status === 'fulfilled' && r.value.evicted > 0).length >= 5 && count600 >= 90, flood600.filter((r) => r.status === 'fulfilled' && r.value.evicted > 0).length);
+  // R7: VARSAYILAN kapi (modul tekili) TEK yazicidir: yazmalar zaten tek advisory kilitle sirali, fazla yazici yalniz kilit bekleyen bos baglanti demektir.
+  const defaultRun = await withWaiterSampling(() => Promise.allSettled(Array.from({ length: 600 }, (_, n) => clientErrors.storeReport(junk(5000 + n)))));
+  const defaultSettled = defaultRun.result;
+  const defaultDropped = defaultSettled.filter((r) => r.status === 'fulfilled' && r.value.dropped === true).length;
+  const defaultCount = (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports`)).rows[0].n;
+  check(`R7 varsayilan kapi: 600 eszamanli rapor -> kilidi bekleyen oturum 0 (genis kapi OLCUM: en cok ${wideRun.maxWaiting} bekleyen), hata yok, satir <= 100, fazlasi atildi (${defaultDropped} atilan, kuyruk 200)`, defaultRun.maxWaiting === 0 && defaultSettled.every((r) => r.status === 'fulfilled') && defaultCount <= 100 && defaultDropped >= 390 && defaultSettled.filter((r) => r.value.stored).length >= 150, { maxWaiting: defaultRun.maxWaiting, wideMaxWaiting: wideRun.maxWaiting, defaultDropped, defaultCount });
+  check('R7: tekrarlayan 5 GERCEK cokme (sayac 50) varsayilan kapili sel sonrasinda da korundu', (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports WHERE error_type = 'GercekCokme'`)).rows[0].n === 5);
+  const yeni = (stack) => report({ error_type: 'YeniGercek', message: 'yeni gercek cokme', stack });
+  res = await call('POST', '/public/client-errors', null, yeni('#0 yeni_gercek (x.dart:1:1)'));
+  check('tavan DOLU iken yeni parmak izi reddedilmez (tablo korlesmez): rapor kaydedildi', res.status === 202 && (await q(`SELECT count FROM client_error_reports WHERE error_type = 'YeniGercek'`)).rows[0]?.count === 1);
+  await call('POST', '/public/client-errors', null, yeni('#0 yeni_gercek (x.dart:2:2)'));
+  await call('POST', '/public/client-errors', null, yeni('#0 yeni_gercek (x.dart:3:3)'));
+  check('tavan DOLU iken VAR OLAN parmak izinin sayaci artar (3)', (await q(`SELECT count FROM client_error_reports WHERE error_type = 'YeniGercek'`)).rows[0].count === 3);
+  const httpFlood = await Promise.all(Array.from({ length: 150 }, (_, n) => call('POST', '/public/client-errors', null, report({ error_type: `Sel${letters(n)}`, message: 'sel', stack: null }))));
+  const floodCount = (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports`)).rows[0].n;
+  check('150 ESZAMANLI HTTP sel raporu (tavan 100): hepsi 202, satir sayisi <= 100, tekrarlayan 5 gercek cokme + sayaci 3 olan yeni cokme KALDI', httpFlood.every((r) => r.status === 202) && floodCount <= 100 && (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports WHERE error_type IN ('GercekCokme', 'YeniGercek')`)).rows[0].n === 6, { floodCount });
+  process.env.CLIENT_ERROR_MAX_ROWS = '100000';
+
+  // listeleme: yetki + anahtar kumesi sayfalama (ayni last_seen, mikrosaniye farklari)
+  await q(`DELETE FROM client_error_reports`);
+  await q(`INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, last_seen, first_seen)
+           SELECT md5(i::text) || md5(i::text || 'x'), 'E', 'ayni-an ' || i, '1.0.0', 'ios', '2026-10-01 10:00:00.123456+00', '2026-10-01 10:00:00+00' FROM generate_series(1, 25) i`);
+  await q(`INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, last_seen, first_seen)
+           SELECT md5('m' || i::text) || md5('m' || i::text || 'x'), 'E', 'mikro ' || i, '1.0.0', 'ios', '2026-10-02 10:00:00+00'::timestamptz + (i * interval '1 microsecond'), '2026-10-02 10:00:00+00' FROM generate_series(1, 12) i`);
+  check('GET /admin/client-errors: kimliksiz 401; bireysel 403', (await call('GET', '/admin/client-errors', null)).status === 401 && (await call('GET', '/admin/client-errors', individual)).status === 403);
+  const walked = [];
+  let cursor = null;
+  let pages = 0;
+  do {
+    const page = await call('GET', `/admin/client-errors?limit=7${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, SUPER);
+    if (page.status !== 200) break;
+    walked.push(...page.body.items);
+    cursor = page.body.next_cursor;
+    pages += 1;
+  } while (cursor && pages < 20);
+  const walkedMessages = walked.map((i) => i.message);
+  check('imecli sayfalama: 37 satirin TAMAMI, yineleme / atlama yok (ayni last_seen ve 1 mikrosaniye farkli satirlar dahil)', walked.length === 37 && new Set(walked.map((i) => i.fingerprint)).size === 37 && pages === 6, { walked: walked.length, pages });
+  check('siralama: last_seen DESC (mikro satirlar once, 12 -> 1), sonra ayni-an satirlari id DESC', walkedMessages.slice(0, 12).every((m, i) => m === `mikro ${12 - i}`) && walkedMessages.slice(12).every((m) => m.startsWith('ayni-an')));
+  const item = walked[0];
+  check('liste ogesi sozlesme alanlari', same(Object.keys(item), ['fingerprint', 'error_type', 'message', 'app_version', 'platform', 'fatal', 'count', 'first_seen', 'last_seen', 'sample_stack']) && typeof item.first_seen === 'string');
+  check('gecersiz imlec 400; limit 99999 -> en cok 200', (await call('GET', '/admin/client-errors?cursor=bozuk', SUPER)).status === 400 && (await call('GET', '/admin/client-errors?limit=99999', SUPER)).body.items.length === 37);
+
+  // 90 gun silme
+  console.log('--- 90 gun silme ---');
+  await q(`DELETE FROM client_error_reports`);
+  await q(`INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, first_seen, last_seen)
+           SELECT md5('old' || i::text) || md5('old' || i::text || 'x'), 'E', 'eski ' || i, '1.0.0', 'ios', NOW() - INTERVAL '91 days' - (i * interval '1 minute'), NOW() FROM generate_series(1, 5000) i`);
+  await q(`INSERT INTO client_error_reports (fingerprint, error_type, message, app_version, platform, first_seen, last_seen)
+           SELECT md5('new' || i::text) || md5('new' || i::text || 'x'), 'E', 'yeni ' || i, '1.0.0', 'ios', NOW() - INTERVAL '89 days', NOW() FROM generate_series(1, 10) i`);
+  const holder = await pool.connect();
+  await holder.query('SELECT pg_advisory_lock($1::int, $2::int)', [PURGE_LOCK_CLASS, PURGE_LOCK_JOB]);
+  const skipped = await purgeOldReports();
+  check('baska surec kilidi tutuyorsa silme ATLANIR (cift calisma yok): hicbir satir silinmez', skipped.skipped === true && skipped.deleted === 0 && (await q(`SELECT COUNT(*)::int AS n FROM client_error_reports`)).rows[0].n === 5010, skipped);
+  await holder.query('SELECT pg_advisory_unlock($1::int, $2::int)', [PURGE_LOCK_CLASS, PURGE_LOCK_JOB]);
+  holder.release();
+  const started = Date.now();
+  const runs = await Promise.all([purgeOldReports(), purgeOldReports(), purgeOldReports()]);
+  const remaining = (await q(`SELECT COUNT(*)::int AS n, MIN(first_seen) > NOW() - INTERVAL '90 days' AS all_recent FROM client_error_reports`)).rows[0];
+  check('3 ESZAMANLI silme turu: toplam 5000 silinir (tekrar silme yok), hata yok; 89 gunluk 10 satir KALIR', runs.reduce((sum, r) => sum + r.deleted, 0) === 5000 && remaining.n === 10 && remaining.all_recent === true, { runs, remaining });
+  check('5000 satirlik silme makul surede (< 15 sn)', Date.now() - started < 15000, Date.now() - started);
+  check('silme sonrasi tekrar tur: 0 silinir, atlanmaz', same(await purgeOldReports(), { skipped: false, deleted: 0 }));
+
+  // ============================================================================================================
+  // F0. Sunucu acilisi: ensureDbSchema eszamanli yazicilarla (R2 F-1: dev blok icindeki ALTER TABLE ... ADD COLUMN IF NOT EXISTS sutun varken bile
+  //     ACCESS EXCLUSIVE alir; blok tek ortuk islem oldugundan acilista yazicilarla 40P01 uretiyordu). Duzeltme: ALTER blok SONRASI, katalog kontrollu.
+  // ============================================================================================================
+  console.log('--- acilis (ensureDbSchema) x eszamanli yazicilar ---');
+  {
+    const writerPool = new pg.Pool({ ...connectConfig(process.env.DB_NAME), max: 10 });
+    const writers = [];
+    for (let i = 0; i < 8; i += 1) writers.push(await mkUser(`Acilis Yazici ${i}`));
+    const writerErrors = {};
+    let writerOps = 0;
+    let running = false;
+    const sleepFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const inTx = async (fn) => {
+      const client = await writerPool.connect();
+      try {
+        await client.query('BEGIN');
+        await fn(client);
+        await client.query('COMMIT');
+        writerOps += 1;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        const key = error.code || String(error.message).slice(0, 40);
+        writerErrors[key] = (writerErrors[key] ?? 0) + 1;
+      } finally {
+        client.release();
+      }
+    };
+    const touchUser = (client, code) => client.query(`UPDATE users SET full_name = full_name WHERE user_code = $1`, [code]);
+    const audit = (client) => client.query(`INSERT INTO audit_log (actor_name, action) VALUES ('acilis-yazici', 'qa.acilis')`);
+    const pend = (client, code) =>
+      client.query(`INSERT INTO pending_registrations (email, full_name, password_hash) VALUES ($1, 'p', 'x') ON CONFLICT ((LOWER(email))) DO UPDATE SET updated_at = NOW()`, [`acilis-${code}@qa.example`]);
+    // kilit siralari: users->audit, audit->users, pending->users, users->pending, yalniz pending (ensure blogunun tuttugu kilitlerle her iki yonde de kesisir)
+    const mixes = [
+      (client, code) => touchUser(client, code).then(() => audit(client)),
+      (client, code) => audit(client).then(() => touchUser(client, code)),
+      (client, code) => pend(client, code).then(() => touchUser(client, code)),
+      (client, code) => touchUser(client, code).then(() => pend(client, code)),
+      (client, code) => pend(client, code),
+    ];
+    const loops = [];
+    const startWriters = () => {
+      running = true;
+      writers.forEach((code) => {
+        loops.push(
+          (async () => {
+            while (running) {
+              await inTx((client) => mixes[Math.floor(Math.random() * mixes.length)](client, code));
+              await sleepFor(Math.floor(Math.random() * 3));
+            }
+          })(),
+        );
+      });
+    };
+    const stopWriters = async () => {
+      running = false;
+      await Promise.all(loops.splice(0));
+    };
+    const ensureErrors = {};
+    let ensureOk = 0;
+    const TRIALS = 20;
+    for (let trial = 0; trial < TRIALS; trial += 1) {
+      startWriters();
+      await sleepFor(150 + Math.floor(Math.random() * 100));
+      try {
+        await ensureDbSchema();
+        ensureOk += 1;
+      } catch (error) {
+        ensureErrors[error.code || String(error.message).slice(0, 40)] = (ensureErrors[error.code || String(error.message).slice(0, 40)] ?? 0) + 1;
+      }
+      await stopWriters();
+    }
+    await writerPool.end();
+    check(`ensureDbSchema ${TRIALS} deneme x 8 eszamanli yazici (users / audit_log / pending_registrations karisik kilit siralari): her acilis basarili, ensure 40P01 = 0, yazicilarda 40P01 = 0 (${writerOps} yazici islemi)`, ensureOk === TRIALS && Object.keys(ensureErrors).length === 0 && !writerErrors['40P01'], { ensureOk, ensureErrors, writerErrors });
+    check('acilis sonrasi pending_registrations.accepted_documents sutunu tek ve mevcut (katalog)', (await q(`SELECT COUNT(*)::int AS n FROM pg_attribute WHERE attrelid = to_regclass('public.pending_registrations') AND attname = 'accepted_documents' AND NOT attisdropped`)).rows[0].n === 1);
+    await q(`DELETE FROM pending_registrations WHERE email LIKE 'acilis-%@qa.example'`);
+  }
+
+  // ============================================================================================================
+  // F. Son tutarlilik
+  // ============================================================================================================
+  const serverFailures = serverErrors.filter((line) => /errorId=/.test(line));
+  check(`bolum boyunca beklenmeyen sunucu 500 (errorId) hatasi YOK (enjekte edilen ${injected500} haric)`, serverFailures.length === injected500, serverFailures.slice(0, 5));
+  check('hicbir kullanici icin yinelenen onay satiri yok (belge+surum tekil)', (await q(`SELECT user_code, document_id, version FROM user_consents GROUP BY 1, 2, 3 HAVING COUNT(*) > 1`)).rows.length === 0);
+  await http.close();
+  await finishChild(pool);
+}
+
+// <platform-services-end>
+
+// <account-section-start>
+// --------------------------------------------------------------------------------------------------------------
+// CHILD bolum: account (Hesap silme + kisisel veri disa aktarma; docs/PLATFORM_SATISA_HAZIRLIK.md 1.5 / 1.6)
+// QA_ONLY=account ile ayri kosulur. Gercek authRequired + gercek JWT; hiz sinirlayicilar devre disi (birim testlerinde sinanir).
+// --------------------------------------------------------------------------------------------------------------
+
+async function startAccountHttp(pool) {
+  const express = (await import('express')).default;
+  const { signAccessToken } = await import('../src/jwt.js');
+  const { requireSuperUser } = await import('../src/middlewares/auth_middleware.js');
+  const { accountRouter } = await import('../src/modules/account_routes.js');
+  const { authRouter } = await import('../src/routes/auth_routes.js');
+  const { adminRouter } = await import('../src/routes/admin_routes.js');
+  const keep = new Set([requireSuperUser]);
+  for (const router of [accountRouter, authRouter, adminRouter]) {
+    for (const layer of router.stack) {
+      if (!layer.route) continue;
+      const stack = layer.route.stack;
+      // [authRequired, ...ara katmanlar, son isleyici]: yalniz rol korumasi kalir (giris ucundaki ilk katman = giris limiti KALIR)
+      for (let i = 1; i < stack.length - 1; i += 1) {
+        if (!keep.has(stack[i].handle)) stack[i].handle = (_req, _res, next) => next();
+      }
+    }
+  }
+  const app = express();
+  app.use(express.json());
+  app.use(accountRouter);
+  app.use(authRouter);
+  app.use(adminRouter);
+  const server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tokenOf = async (userCode, { pv = true } = {}) => {
+    const row = (await pool.query(`SELECT user_code AS id, password_hash FROM users WHERE user_code = $1`, [userCode])).rows[0];
+    return signAccessToken({ id: row.id }, pv ? { passwordHash: row.password_hash } : {});
+  };
+  async function callWith(method, urlPath, token, body) {
+    const headers = { 'content-type': 'application/json' };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const response = await fetch(`${base}${urlPath}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await response.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (_e) {
+      // JSON olmayan yanit
+    }
+    return { status: response.status, body: json, text, headers: response.headers };
+  }
+  const call = async (method, urlPath, userCode, body) => callWith(method, urlPath, userCode === null ? null : await tokenOf(userCode), body);
+  return { call, callWith, tokenOf, close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }) };
+}
+
+async function sectionAccount() {
+  await childEnv();
+  process.env.DB_STATEMENT_TIMEOUT_MS = process.env.DB_STATEMENT_TIMEOUT_MS || '120000';
+  const { pool, ensureDbSchema } = await import('../src/db.js');
+  const q = (sql, params = []) => pool.query(sql, params);
+  const hooks = installPoolHooks(pool);
+  const bcrypt = (await import('bcryptjs')).default;
+  const http = await startAccountHttp(pool);
+  const { call, callWith, tokenOf } = http;
+  const deletion = await import('../src/modules/account_deletion_service.js');
+  const guard = await import('../src/middlewares/login_throttle.js');
+  const membershipSvc = await import('../src/services/membership_service.js');
+  const siteSvc = await import('../src/services/site_service.js');
+  const appSvc = await import('../src/modules/site_application_service.js');
+  const inbox = await import('../src/modules/announcement_inbox.js');
+  const peopleSvc = await import('../src/modules/people_service.js');
+  const annSvc = await import('../src/modules/announcement_service.js');
+  const queue = await import('../src/modules/announcement_email_queue.js');
+  const { hashEmail } = await import('../src/modules/announcement_email_security.js');
+
+  const realQueueSend = queue.emailQueueHooks.send;
+  const queueSendErrors = [];
+  queue.emailQueueHooks.send = async (message) => {
+    try {
+      return await realQueueSend(message);
+    } catch (error) {
+      queueSendErrors.push(`${error?.code ?? ''} ${String(error?.message ?? '').slice(0, 120)}`);
+      throw error;
+    }
+  };
+
+  const PW = 'Parola-123';
+  const PW_HASH = bcrypt.hashSync(PW, 4);
+  const failCode = async (sql, params = []) => {
+    try {
+      await q(sql, params);
+      return null;
+    } catch (error) {
+      return error.code ?? String(error.message);
+    }
+  };
+  const ok200 = (res) => res.status === 200;
+
+  // --- silme sonrasi isler (anahtar dondurme) kaydedilir; e-posta GERCEK mailer yolundan (sahte tasiyici) gider
+  const rotations = { sites: [], devices: [] };
+  let background = [];
+  deletion.accountHooks.background = (task) => {
+    background.push(task().catch(() => {}));
+  };
+  deletion.accountHooks.rotateTokensForSite = async (arg) => {
+    rotations.sites.push(arg);
+    return 0;
+  };
+  deletion.accountHooks.rotateTokensForDevices = async (arg) => {
+    rotations.devices.push(arg);
+    return 0;
+  };
+  const settle = async () => {
+    await Promise.all(background.splice(0));
+  };
+  const mailsTo = (address) => mails.filter((m) => m.to === address);
+
+  // --- fabrikalar
+  let nextUser = 40000;
+  const mkUser = async (name, role = 'individual', options = {}) => {
+    nextUser += 1;
+    const code = nextUser;
+    const email = options.email ?? `acct${code}@qa.example`;
+    await q(
+      `INSERT INTO users (user_code, full_name, email, role, password_hash, is_active, email_verified, approval_status, phone_number, login_name)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'approved', $7, $8)`,
+      [code, name, email, role, PW_HASH, options.active ?? true, options.phone ?? null, options.loginName ?? null],
+    );
+    return code;
+  };
+  let nextSite = 1000000700;
+  const mkSite = async (name, apartmentCount = 3) => {
+    nextSite += 1;
+    const code = nextSite;
+    await q(`INSERT INTO sites (site_code, name, approval_status, approved_at) VALUES ($1, $2, 'approved', NOW())`, [code, name]);
+    const blockId = Number((await q(`INSERT INTO site_blocks (site_code, block_name, sort_order) VALUES ($1, 'A Blok', 1) RETURNING id`, [code])).rows[0].id);
+    const apts = [];
+    for (let n = 1; n <= apartmentCount; n += 1) {
+      apts.push(Number((await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) VALUES ($1, $2, $3, $4) RETURNING id`, [code, blockId, `Daire ${n}`, n])).rows[0].id));
+    }
+    const doorId = Number((await q(`INSERT INTO site_doors (site_code, door_name, door_index) VALUES ($1, 'Ana Kapi', 1) RETURNING id`, [code])).rows[0].id);
+    return { code, blockId, apts, doorId };
+  };
+  const newApartment = async (site) => {
+    const n = Number((await q(`SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM apartments WHERE block_id = $1`, [site.blockId])).rows[0].n);
+    const id = Number((await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) VALUES ($1, $2, $3, $4) RETURNING id`, [site.code, site.blockId, `Ek ${n}`, n])).rows[0].id);
+    site.apts.push(id);
+    return id;
+  };
+  const linkManager = (site, user) => q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [site, user]);
+  const member = (apartmentId, user, role = 'FAMILY_MEMBER', active = true) =>
+    q(`INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active) VALUES ($1, $2, $3, $4)`, [apartmentId, user, role, active]);
+  const actorOf2 = (code) => actorOf(pool, code);
+  let counter = 0;
+  const uniq = (label) => `${label}-${(counter += 1)}-${Date.now()}`;
+
+  const SUPER = await mkUser('Hesap Super', 'super_user');
+  const superActor = await actorOf2(SUPER);
+  let deadlockTotal = 0; // TUM kosudaki toplam (her yaris bolumu sayaci sifirlamadan once toplanir)
+  const deadlocks = () => hooks.deadlocks;
+  const resetDeadlocks = () => {
+    deadlockTotal += hooks.deadlocks;
+    hooks.deadlocks = 0;
+  };
+
+  // ------------------------------------------------------------------------------------------------------------
+  // "Ada" donanimli sakin: silme / disa aktarma / sizdirma testlerinin ortak tohumu
+  // ------------------------------------------------------------------------------------------------------------
+  const MARK = {
+    boraEmail: 'BORA-GIZLI-EMAIL@qa.example',
+    boraPhone: '+905559998877',
+    boraName: 'Bora Gizli Komsu',
+    personNote: 'NOT-YONETICI-GIZLI',
+    vehicleNote: 'ARAC-NOTU-GIZLI',
+    rejectReason: 'RET-GEREKCE-GIZLI',
+    decisionNote: 'KARAR-NOTU-GIZLI',
+    overrideNote: 'IZIN-NOTU-GIZLI',
+    mqttPassword: 'MQTT-PAROLA-GIZLI',
+    controlToken: 'LCT-ANAHTAR-GIZLI',
+    inventoryNote: 'ENVANTER-NOTU-GIZLI',
+    resetHash: 'RESETHASH-GIZLI',
+    verifyHash: 'VERIFYHASH-GIZLI',
+    ledgerDescription: 'YONETICI-ACIKLAMA-GIZLI',
+    managerName: 'YONETICI-ADI-GIZLI',
+    guestToken: 'MISAFIR-JETON-GIZLI',
+    qrToken: 'KAREKOD-JETON-GIZLI',
+  };
+
+  async function seedAda(site, { heavy = true, name = 'Ada Lovelace', fresh = false } = {}) {
+    // fresh: ayni sitede tekrarli tohumlarda (yarislar) her sakin KENDI dairesinde olsun (daire basina tek guncel malik kurali)
+    const apt1 = fresh ? await newApartment(site) : site.apts[0];
+    const ada = await mkUser(name, 'apartment_owner', { phone: '+905551110001', loginName: null });
+    const adaRow = (await q(`SELECT id, email FROM users WHERE user_code = $1`, [ada])).rows[0];
+    const bora = await mkUser(MARK.boraName, 'apartment_owner', { phone: MARK.boraPhone });
+    await q(`UPDATE users SET email = $2 WHERE user_code = $1`, [bora, `bora${bora}@qa.example`]);
+    await member(apt1, ada, 'APARTMENT_ADMIN');
+    await member(apt1, bora, 'FAMILY_MEMBER');
+    await q(`UPDATE apartments SET resident_user_code = $2, resident_email = $3, resident_pin_code = '4321' WHERE id = $1`, [apt1, ada, `iletisim-${ada}@qa.example`]);
+    await q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, 'RESIDENT')`, [site.code, ada]);
+    const person = Number((await q(`INSERT INTO site_people (site_code, user_code, note) VALUES ($1, $2, $3) RETURNING id`, [site.code, ada, MARK.personNote])).rows[0].id);
+    const boraPerson = Number((await q(`INSERT INTO site_people (site_code, user_code, note) VALUES ($1, $2, 'bora notu') RETURNING id`, [site.code, bora])).rows[0].id);
+    await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin) VALUES ($1, $2, $3, 'owner', TRUE, 'manual'), ($1, $2, $4, 'family_member', TRUE, 'manual')`, [site.code, apt1, person, boraPerson]);
+    const out = { ada, bora, apt1, person, boraPerson, email: adaRow.email, dbId: Number(adaRow.id), site };
+    if (!heavy) return out;
+
+    const mgr = await mkUser(MARK.managerName, 'site_manager');
+    await linkManager(site.code, mgr);
+    out.mgr = mgr;
+    await q(`INSERT INTO vehicles (site_code, person_id, plate, plate_display, note) VALUES ($1, $2, $3, '34 ADA 001', $4)`, [site.code, person, `34ADA${ada}`, MARK.vehicleNote]);
+    // duyuru: Ada okudu (read_at) + bekleyen e-posta; Bora'nin da bekleyen e-postasi (dokunulmamali)
+    const annId = Number((await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by) VALUES ($1, 'Su kesintisi', 'Yarin 10-12 arasi su yok.', 'published', NOW(), $2) RETURNING id`, [site.code, mgr])).rows[0].id);
+    await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status, read_at) VALUES ($1, $2, $3, $4, 'pending', NOW())`, [annId, person, adaRow.email, hashEmail(adaRow.email)]);
+    await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status, read_at) VALUES ($1, $2, $3, $4, 'pending', NULL)`, [annId, boraPerson, `bora${bora}@qa.example`, hashEmail(`bora${bora}@qa.example`)]);
+    const annId2 = Number((await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by) VALUES ($1, 'Eski duyuru', 'Gecmis.', 'published', NOW() - INTERVAL '2 days', $2) RETURNING id`, [site.code, mgr])).rows[0].id);
+    await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status, read_at) VALUES ($1, $2, NULL, 'hash-eski', 'sent', NOW() - INTERVAL '1 day')`, [annId2, person]);
+    out.annId = annId;
+    out.boraHash = hashEmail(`bora${bora}@qa.example`);
+    await q(`INSERT INTO notification_preferences (user_code, email_announcements, push_announcements) VALUES ($1, FALSE, TRUE)`, [ada]);
+    await q(`INSERT INTO guest_passes (site_code, door_id, created_by_user_code, title, token, expires_at) VALUES ($1, $2, $3, 'Misafir Ahmet', $4, NOW() + INTERVAL '1 day')`, [site.code, site.doorId, ada, `${MARK.guestToken}-${ada}`]);
+    await q(`INSERT INTO guest_passes (site_code, door_id, created_by_user_code, title, token, expires_at, is_active) VALUES ($1, $2, $3, 'Eski misafir', $4, NOW() - INTERVAL '3 days', FALSE)`, [site.code, site.doorId, ada, `${MARK.guestToken}-eski-${ada}`]);
+    await q(`INSERT INTO qr_access_tokens (token, site_code, door_id, user_code, user_role, user_name, expires_at, request_latitude, request_longitude, request_accuracy, is_mocked) VALUES ($1, $2, $3, $4, 'apartment_owner', 'Ada Lovelace', NOW() + INTERVAL '1 hour', 41.0123, 28.9784, 12.5, FALSE)`, [`${MARK.qrToken}-${ada}`, site.code, site.doorId, ada]);
+    await q(`INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code, notes) VALUES ($1, $2, $3, TRUE, $4, $5)`, [site.code, site.doorId, ada, mgr, MARK.overrideNote]);
+    await q(`INSERT INTO door_access_logs (site_code, door_id, door_name, user_code, user_name, user_role, apartment_label, trigger_type, ip_address) SELECT $1, $2, 'Ana Kapi', $3, 'Ada Lovelace', 'apartment_owner', 'A Blok - Daire 1', 'qr', '10.1.2.3' FROM generate_series(1, 3)`, [site.code, site.doorId, ada]);
+    await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status, notes) VALUES ($1, $2, $3, $4, 'PENDING', 'KATILIM-NOTU-ADA')`, [site.code, site.blockId, site.apts[1], ada]);
+    await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status, reviewed_by_user_code, rejection_reason) VALUES ($1, $2, $3, $4, 'REJECTED', $5, $6)`, [site.code, site.blockId, site.apts[2], ada, mgr, MARK.rejectReason]);
+    await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, note, decision_note, decided_by, decision_source, decided_at) VALUES ($1, 'rejected', 'Eski Basvuru Sitesi', '[]'::jsonb, '[]'::jsonb, 1, 1, 1, 'BASVURU-NOTU-ESKI', $2, $3, 'super_user', NOW())`, [ada, MARK.decisionNote, mgr]);
+    await q(`INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count, note) VALUES ($1, 'pending', 'Bekleyen Site', '[{"name":"A","apartmentCount":4}]'::jsonb, '[{"name":"Kapi"}]'::jsonb, 1, 4, 1, 'BASVURU-NOTU-ADA')`, [ada]);
+    out.deviceUid = uniq(`QAACC${ada}`).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    await q(`INSERT INTO devices (device_uid, hardware_type, assigned_user_code, owner_user_id, claimed_at, local_control_token, mqtt_username, mqtt_password, inventory_notes, gate_name) VALUES ($1, 'esp32_wroom', $2, $3, NOW(), $4, $5, $6, $7, 'Ada Kapisi')`, [out.deviceUid, ada, out.dbId, MARK.controlToken, `device_${out.deviceUid}`, MARK.mqttPassword, MARK.inventoryNote]);
+    await q(`INSERT INTO audit_log (actor_user_code, actor_name, actor_role, action, site_code) SELECT $1, 'Ada Lovelace', 'apartment_owner', 'qa.ada_islem', $2 FROM generate_series(1, 3)`, [ada, site.code]);
+    await q(`INSERT INTO module_requests (site_code, module_code, status, requested_by, requested_by_name, decided_by, decided_by_name, decision_note) VALUES ($1, 'finance', 'rejected', $2, 'Ada Lovelace', $3, $4, 'karar')`, [site.code, ada, SUPER, 'Hesap Super']);
+    await q(`INSERT INTO ota_update_jobs (requested_by_user_code, requested_by_email) VALUES ($1, $2)`, [ada, adaRow.email]);
+    await q(`INSERT INTO email_verifications (email, code_hash) VALUES ($1, 'x')`, [adaRow.email.toUpperCase()]);
+    await q(`INSERT INTO pending_registrations (email, full_name, password_hash) VALUES ($1, 'Ada Bekleyen', 'x')`, [adaRow.email]);
+    await q(`INSERT INTO site_manager_invitations (site_code, email, full_name, invited_by_user_code, token, status) VALUES ($1, $2, 'Ada Davetli', $3, $4, 'PENDING')`, [site.code, adaRow.email.toUpperCase(), mgr, `inv-${ada}`.padEnd(64, 'a').slice(0, 64)]);
+    await q(`UPDATE users SET password_reset_token_hash = $2, password_reset_expires_at = NOW() + INTERVAL '1 hour', email_verification_code_hash = $3, email_verification_expires_at = NOW() + INTERVAL '1 hour' WHERE user_code = $1`, [ada, MARK.resetHash, MARK.verifyHash]);
+    await q(`INSERT INTO user_consents (user_code, document_id, version, source) VALUES ($1, 'terms', '2026-10-16', 'register')`, [ada]);
+    // finans: modul acik, Ada malik (both): defter satiri + ters kayit (aciklama / neden / olusturan adi ASLA sakine gitmez)
+    await q(`INSERT INTO site_modules (site_code, module_code, enabled) VALUES ($1, 'finance', TRUE) ON CONFLICT (site_code, module_code) DO UPDATE SET enabled = TRUE`, [site.code]);
+    const charge = Number((await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, description, created_by) VALUES ($1, $2, 'charge', 150000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, CURRENT_DATE + 10, 'both', $3, $4) RETURNING id`, [site.code, apt1, MARK.ledgerDescription, mgr])).rows[0].id);
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, reverses_entry_id, reversal_reason, created_by) VALUES ($1, $2, 'reversal', -150000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, CURRENT_DATE + 10, 'both', $3, $4, $5)`, [site.code, apt1, charge, MARK.ledgerDescription, mgr]);
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, description, created_by) VALUES ($1, $2, 'charge', 99900, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, CURRENT_DATE + 10, 'both', $3, $4)`, [site.code, apt1, MARK.ledgerDescription, mgr]);
+    return out;
+  }
+  // Bora'nin ve baskalarinin verisini karsilastirmak icin anlik goruntu
+  const bystanderSnapshot = async (site, bora) =>
+    JSON.stringify({
+      memberships: (await q(`SELECT apartment_id, user_code, role, is_active FROM apartment_memberships WHERE user_code = $1`, [bora])).rows,
+      user: (await q(`SELECT full_name, email, phone_number, is_active FROM users WHERE user_code = $1`, [bora])).rows,
+      person: (await q(`SELECT full_name, user_code, is_active FROM site_people WHERE user_code = $1`, [bora])).rows,
+      recipients: (await q(`SELECT r.email, r.email_status, r.email_hash FROM announcement_recipients r JOIN site_people sp ON sp.id = r.person_id WHERE sp.user_code = $1 ORDER BY r.announcement_id`, [bora])).rows,
+    });
+  const del = (user, body) => call('POST', '/me/account-deletion', user, body ?? { current_password: PW, confirm: true });
+  const preview = (user) => call('POST', '/me/account-deletion/preview', user, {});
+  const exportOf = (user, body) => call('POST', '/me/data-export', user, body ?? { current_password: PW });
+  const tombstone = async (code) => (await q(`SELECT * FROM users WHERE user_code = $1`, [code])).rows[0];
+  const countOf = async (sql, params) => Number((await q(sql, params)).rows[0].n);
+  const resetMail = () => {
+    mails.length = 0;
+  };
+  resetMail();
+
+  const mkManaged = async (name, { managers = 1, members = 1, apartments = 3 } = {}) => {
+    const site = await mkSite(name, apartments);
+    const ms = [];
+    for (let i = 0; i < managers; i += 1) {
+      const m = await mkUser(`${name} Yonetici ${i + 1}`, 'site_manager');
+      await linkManager(site.code, m);
+      ms.push(m);
+    }
+    const rs = [];
+    for (let i = 0; i < members; i += 1) {
+      const r = await mkUser(`${name} Sakin ${i + 1}`, 'apartment_owner');
+      await member(site.apts[i % site.apts.length], r);
+      rs.push(r);
+    }
+    return { site, ms, rs };
+  };
+  const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** Bir islem BEKLIYOR mu (kilit bekliyor) - verilen sure icinde bitmediyse 'blocked'. */
+  const settledState = (promise, ms = 400) =>
+    Promise.race([promise.then(() => 'done', () => 'done'), sleepMs(ms).then(() => 'blocked')]);
+  /** Silmeyi `UPDATE users` oncesinde (tum on kilitler ELDE iken) durdurur; `during` bu sirada calisir. */
+  async function withPausedDeletion(userCode, during) {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    hooks.pause = { match: /UPDATE users\s+SET full_name = \$2/, gate, hit: false };
+    const pauseState = hooks.pause;
+    const deletion = del(userCode);
+    const reached = await waitFor(() => pauseState.hit === true, 15000);
+    let duringResult;
+    try {
+      duringResult = await during(reached);
+    } finally {
+      release();
+      hooks.pause = null;
+    }
+    return { result: await deletion, duringResult, reached };
+  }
+
+  // ============================================================================================================
+  // A. Sema, kisit, indeks ve FK politika katalogu (gercek PG)
+  // ============================================================================================================
+  console.log('--- A. sema ---');
+  const deletedCol = (await q(`SELECT data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'deleted_at'`)).rows[0];
+  check('A1: users.deleted_at TIMESTAMPTZ, NULL olabilir, varsayilansiz', deletedCol && deletedCol.data_type === 'timestamp with time zone' && deletedCol.is_nullable === 'YES' && deletedCol.column_default === null, deletedCol);
+  const probe = await mkUser('Sema Probe');
+  check('A2: CHECK chk_users_deleted_inactive: aktif hesapta deleted_at yazilamaz (23514); pasif + deleted_at kabul edilir', (await failCode(`UPDATE users SET deleted_at = NOW() WHERE user_code = $1`, [probe])) === '23514' && (await failCode(`UPDATE users SET is_active = FALSE, deleted_at = NOW() WHERE user_code = $1`, [probe])) === null);
+  check('A2b: silinmis hesap AKTIF EDILEMEZ (yonetici "aktif et" yapsa bile 23514)', (await failCode(`UPDATE users SET is_active = TRUE WHERE user_code = $1`, [probe])) === '23514');
+  await q(`INSERT INTO account_data_exports (user_code) VALUES ($1)`, [probe]);
+  await q(`DELETE FROM users WHERE user_code = $1`, [probe]);
+  check('A3: account_data_exports -> users(user_code) ON DELETE CASCADE: gercek silmede kayit gider', (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [probe])) === 0);
+  const exportColumns = (await q(`SELECT column_name FROM information_schema.columns WHERE table_name = 'account_data_exports' ORDER BY ordinal_position`)).rows.map((r) => r.column_name);
+  check('A3b: account_data_exports yalniz (id, user_code, requested_at) - kisisel veri / icerik sutunu YOK', same(exportColumns, ['id', 'user_code', 'requested_at']), exportColumns);
+  const indexDefs = Object.fromEntries((await q(`SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('idx_audit_log_actor', 'idx_door_access_logs_user', 'idx_account_data_exports_user')`)).rows.map((r) => [r.indexname, r.indexdef]));
+  check('A4: indeksler: audit_log(actor_user_code) KISMI, door_access_logs(user_code, opened_at DESC) KISMI, account_data_exports(user_code, requested_at DESC)',
+    /\(actor_user_code\) WHERE \(actor_user_code IS NOT NULL\)/.test(indexDefs.idx_audit_log_actor ?? '') && /\(user_code, opened_at DESC\) WHERE \(user_code IS NOT NULL\)/.test(indexDefs.idx_door_access_logs_user ?? '') && /\(user_code, requested_at DESC\)/.test(indexDefs.idx_account_data_exports_user ?? ''), indexDefs);
+
+  // olcek: 60 bin satirlik tablolarda silme / disa aktarma sorgulari indeks kullanir (Seq Scan YOK)
+  const planUser = await mkUser('Plan Kullanicisi');
+  await q(`INSERT INTO audit_log (actor_user_code, actor_name, action) SELECT CASE WHEN g % 100 = 0 THEN $1::int ELSE NULL END, 'x', 'qa.fill' FROM generate_series(1, 60000) g`, [planUser]);
+  await q(`INSERT INTO door_access_logs (site_code, door_name, user_code, user_name, trigger_type) SELECT 1000000001, 'k', CASE WHEN g % 100 = 0 THEN $1::bigint ELSE 20000 + (g % 500) END, 'x', 'qa' FROM generate_series(1, 60000) g`, [planUser]);
+  await q('ANALYZE audit_log');
+  await q('ANALYZE door_access_logs');
+  const planOf = async (sql) => JSON.stringify((await q(`EXPLAIN (FORMAT JSON) ${sql}`)).rows[0]['QUERY PLAN']);
+  const auditPlan = await planOf(`SELECT id FROM audit_log WHERE actor_user_code = ${planUser}`);
+  const doorPlan = await planOf(`UPDATE door_access_logs SET user_name = 'Silinmis', ip_address = NULL WHERE user_code = ${planUser}`);
+  const exportPlan = await planOf(`SELECT id FROM door_access_logs WHERE user_code = ${planUser} ORDER BY opened_at DESC, id DESC LIMIT 5001`);
+  check('A5: 60 bin satirli audit_log / door_access_logs: actor_user_code aramasi (FK SET NULL taramasi), kapi kaydi kimliksizlestirme ve disa aktarma sorgulari INDEKS kullanir (Seq Scan yok)',
+    auditPlan.includes('idx_audit_log_actor') && !auditPlan.includes('"Seq Scan"') && doorPlan.includes('idx_door_access_logs_user') && !doorPlan.includes('"Seq Scan"') && exportPlan.includes('idx_door_access_logs_user'), { auditPlan: auditPlan.slice(0, 200), doorPlan: doorPlan.slice(0, 200) });
+  await q(`DELETE FROM audit_log WHERE action = 'qa.fill'`);
+  await q(`DELETE FROM door_access_logs WHERE trigger_type = 'qa'`);
+  await q(`DELETE FROM users WHERE user_code = $1`, [planUser]);
+
+  // FK politika katalogu: users'a referans veren HER yabanci anahtar karar verilmis olmali (yeni FK eklenirse bu kontrol DUSER)
+  const POLICY = {
+    'apartment_memberships.user_code': 'SIL (yonetici/gosterge devri)',
+    'site_memberships.user_code': 'SIL',
+    'site_manager_sites.manager_user_code': 'SIL (engel: son yonetici)',
+    'join_requests.user_code': 'SIL',
+    'join_requests.reviewed_by_user_code': 'TOMBSTONE',
+    'door_access_overrides.user_code': 'SIL',
+    'door_access_overrides.granted_by_user_code': 'TOMBSTONE',
+    'qr_access_tokens.user_code': 'SIL',
+    'guest_passes.created_by_user_code': 'IPTAL + baslik kimliksiz (satir kalir)',
+    'notification_preferences.user_code': 'SIL',
+    'account_data_exports.user_code': 'SIL',
+    'user_consents.user_code': 'DOKUNMA (tombstone)',
+    'site_people.user_code': 'NULL (kisi kaydi kalir)',
+    'site_people.created_by': 'TOMBSTONE',
+    'devices.assigned_user_code': 'NULL',
+    'devices.owner_user_id': 'NULL',
+    'apartments.resident_user_code': 'NULL / devir',
+    'site_applications.applicant_user_code': 'TOMBSTONE (bekleyen iptal)',
+    'site_applications.decided_by': 'TOMBSTONE',
+    'site_join_tokens.created_by_user_code': 'TOMBSTONE (+ jeton iptal)',
+    'site_manager_invitations.invited_by_user_code': 'SIL',
+    'audit_log.actor_user_code': 'TOMBSTONE (+ ad anonim)',
+    'module_requests.requested_by': 'TOMBSTONE (+ ad anonim)',
+    'module_requests.decided_by': 'TOMBSTONE (+ ad anonim)',
+    'ota_update_jobs.requested_by_user_code': 'TOMBSTONE (+ e-posta NULL)',
+    'platform_settings.updated_by': 'TOMBSTONE',
+    'site_modules.updated_by': 'TOMBSTONE',
+    'announcements.created_by': 'TOMBSTONE',
+    'announcements.published_by': 'TOMBSTONE',
+    'announcements.email_requested_by': 'TOMBSTONE',
+    'fee_definitions.created_by': 'TOMBSTONE (degismez defter)',
+    'fee_runs.posted_by': 'TOMBSTONE (degismez defter)',
+    'finance_period_closures.closed_by': 'TOMBSTONE (degismez defter)',
+    'ledger_entries.created_by': 'TOMBSTONE (degismez defter)',
+  };
+  const fkRows = (
+    await q(`
+      SELECT con.conrelid::regclass::text AS tbl, a.attname AS col, af.attname AS ref_col, con.convalidated AS validated
+      FROM pg_constraint con
+      JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey)
+      JOIN pg_attribute af ON af.attrelid = con.confrelid AND af.attnum = ANY(con.confkey)
+      WHERE con.contype = 'f' AND con.confrelid = 'users'::regclass
+      ORDER BY 1, 2`)
+  ).rows;
+  const foundFks = fkRows.map((r) => `${r.tbl}.${r.col}`).sort();
+  const expectedFks = Object.keys(POLICY).sort();
+  check(`A6: users'a referans veren ${foundFks.length} yabanci anahtarin HEPSI politika tablosunda (eksik / fazla yok); hepsi dogrulanmis`,
+    same(foundFks, expectedFks) && fkRows.every((r) => r.validated === true), { missing: expectedFks.filter((k) => !foundFks.includes(k)), extra: foundFks.filter((k) => !expectedFks.includes(k)) });
+
+  // ============================================================================================================
+  // B. Engelleyiciler ve parola / onay
+  // ============================================================================================================
+  console.log('--- B. engeller, parola, onay ---');
+  let res = await preview(SUPER);
+  check('B1: SUPER_USER onizleme: can_delete false, engel { code: SUPER_USER, message }', ok200(res) && res.body.can_delete === false && res.body.blockers.length === 1 && res.body.blockers[0].code === 'SUPER_USER' && typeof res.body.blockers[0].message === 'string' && Array.isArray(res.body.will_remove) && Array.isArray(res.body.will_keep), res.body);
+  res = await del(SUPER);
+  check('B1b: SUPER_USER silme 409 ACCOUNT_DELETE_BLOCKED + blockers; hesap DOKUNULMAZ', res.status === 409 && res.body.code === 'ACCOUNT_DELETE_BLOCKED' && res.body.blockers[0].code === 'SUPER_USER' && (await tombstone(SUPER)).deleted_at === null && (await tombstone(SUPER)).is_active === true, res.body);
+
+  const blk = async (user) => (await preview(user)).body;
+  // B2 matrisi
+  const m1 = await mkManaged('Engel Tek Yonetici', { managers: 1, members: 1 });
+  let p = await blk(m1.ms[0]);
+  check('B2a: tek yonetici + aktif uye: LAST_SITE_MANAGER, site_id dolu, can_delete false', p.can_delete === false && p.blockers.length === 1 && p.blockers[0].code === 'LAST_SITE_MANAGER' && p.blockers[0].site_id === m1.site.code && /Engel Tek Yonetici/.test(p.blockers[0].message), p);
+  res = await del(m1.ms[0]);
+  check('B2b: silme 409 ACCOUNT_DELETE_BLOCKED + ayni engel; yonetici, bag ve uye DOKUNULMAZ', res.status === 409 && res.body.blockers[0].code === 'LAST_SITE_MANAGER' && res.body.blockers[0].site_id === m1.site.code && (await tombstone(m1.ms[0])).deleted_at === null && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [m1.ms[0]])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = $1`, [m1.rs[0]])) === 1, res.body);
+
+  const m2 = await mkManaged('Engel Pasif Uye', { managers: 1, members: 0 });
+  const inactiveResident = await mkUser('Pasif Sakin', 'apartment_owner');
+  await member(m2.site.apts[0], inactiveResident, 'FAMILY_MEMBER', false);
+  const passiveAccountResident = await mkUser('Pasif Hesapli Sakin', 'apartment_owner', { active: false });
+  await member(m2.site.apts[1], passiveAccountResident);
+  p = await blk(m2.ms[0]);
+  check('B2c: pasif uyelik ve pasif HESAPLI uye "aktif uye" sayilmaz -> tek yonetici silebilir', p.can_delete === true && p.blockers.length === 0, p);
+
+  const m3 = await mkManaged('Engel Bos Site', { managers: 1, members: 0 });
+  check('B2d: uyesi olmayan sitenin tek yoneticisi silebilir (sozlesme: yalniz AKTIF UYE varken engel)', (await blk(m3.ms[0])).can_delete === true);
+
+  const m4 = await mkManaged('Engel Iki Yonetici', { managers: 2, members: 1 });
+  check('B2e: iki aktif yonetici: her biri silebilir', (await blk(m4.ms[0])).can_delete === true && (await blk(m4.ms[1])).can_delete === true);
+  await q(`UPDATE users SET is_active = FALSE WHERE user_code = $1`, [m4.ms[1]]);
+  p = await blk(m4.ms[0]);
+  check('B2f: diger yonetici PASIF hesapsa yonetici sayilmaz -> engel', p.can_delete === false && p.blockers[0].code === 'LAST_SITE_MANAGER', p);
+  await q(`UPDATE users SET is_active = TRUE WHERE user_code = $1`, [m4.ms[1]]);
+
+  const m5 = await mkManaged('Engel Site Admin', { managers: 1, members: 1 });
+  const siteAdmin = await mkUser('Site Admin Uyesi', 'individual');
+  await q(`INSERT INTO site_memberships (site_code, user_code, role, is_active) VALUES ($1, $2, 'SITE_ADMIN', TRUE)`, [m5.site.code, siteAdmin]);
+  check('B2g: aktif SITE_ADMIN uyeligi de "baska yonetici" sayilir -> silebilir', (await blk(m5.ms[0])).can_delete === true);
+  await q(`UPDATE site_memberships SET is_active = FALSE WHERE user_code = $1`, [siteAdmin]);
+  check('B2h: SITE_ADMIN uyeligi pasifse yonetici sayilmaz -> engel', (await blk(m5.ms[0])).can_delete === false);
+
+  const m6 = await mkManaged('Engel Site Uyeligi', { managers: 1, members: 0 });
+  const siteResident = await mkUser('Yalniz Site Uyesi', 'individual');
+  await q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, 'RESIDENT')`, [m6.site.code, siteResident]);
+  check('B2i: yalniz site_memberships (RESIDENT) uyesi de "aktif uye" sayilir -> engel', (await blk(m6.ms[0])).can_delete === false);
+
+  const m7 = await mkManaged('Engel Gosterge', { managers: 1, members: 0 });
+  const legacyResident = await mkUser('Eski Gosterge Sakini', 'apartment_owner');
+  await q(`UPDATE apartments SET resident_user_code = $2 WHERE id = $1`, [m7.site.apts[0], legacyResident]);
+  check('B2j: yalniz eski sakin gostergesi (apartments.resident_user_code) olan sakin da "aktif uye" -> engel', (await blk(m7.ms[0])).can_delete === false);
+
+  // coklu site: yalniz engelleyen site listelenir; esyonetici eklenince acilir
+  const siteA = await mkManaged('Coklu Site A', { managers: 1, members: 1 });
+  const siteB = await mkManaged('Coklu Site B', { managers: 1, members: 1 });
+  const multi = await mkUser('Cok Siteli Yonetici', 'site_manager');
+  await linkManager(siteA.site.code, multi);
+  await linkManager(siteB.site.code, multi);
+  p = await blk(multi);
+  check('B2k: iki sitede yonetici ama diger yonetici var -> engel yok; bir sitede yalniz kendisi yoksa o site listelenir (burada A ve B ikisinde de baska yonetici var)', p.can_delete === true, p);
+  await q(`DELETE FROM site_manager_sites WHERE site_code = $1 AND manager_user_code <> $2`, [siteB.site.code, multi]);
+  p = await blk(multi);
+  check('B2l: yalniz B sitesinin tek yoneticisi kalinca YALNIZ B listelenir (A degil)', p.can_delete === false && p.blockers.length === 1 && p.blockers[0].site_id === siteB.site.code, p);
+  const coManager = await mkUser('Yeni Esyonetici', 'site_manager');
+  await linkManager(siteB.site.code, coManager);
+  check('B2m: esyonetici eklenince engel kalkar ve silme basarili; yoneticilik baglari kalkar, esyonetici kalir', (await blk(multi)).can_delete === true && (await del(multi)).status === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [multi])) === 0 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`, [siteB.site.code, coManager])) === 1);
+
+  // B3: parola / onay
+  const pw1 = await mkUser('Parola Denemesi', 'individual');
+  res = await del(pw1, { confirm: true });
+  check('B3a: parola yok -> 400 CURRENT_PASSWORD_REQUIRED', res.status === 400 && res.body.code === 'CURRENT_PASSWORD_REQUIRED', res.body);
+  res = await del(pw1, { current_password: PW });
+  check('B3b: confirm yok -> 400 CONFIRM_REQUIRED (parola sayaci ilerlemez)', res.status === 400 && res.body.code === 'CONFIRM_REQUIRED' && guard.passwordChangeFailureTracker.check(guard.passwordChangeThrottleKey(pw1)).locked === false, res.body);
+  res = await del(pw1, { current_password: 'yanlis-parola', confirm: true });
+  check('B3c: yanlis parola -> 400 CURRENT_PASSWORD_INVALID (401/403 DEGIL); hesap duruyor', res.status === 400 && res.body.code === 'CURRENT_PASSWORD_INVALID' && (await tombstone(pw1)).deleted_at === null, res.body);
+  const statuses = [];
+  for (let i = 0; i < 4; i += 1) statuses.push((await del(pw1, { current_password: 'yanlis-parola', confirm: true })).status);
+  check('B3d: 5. yanlis denemede 429 CURRENT_PASSWORD_LOCKED + Retry-After + retry_after_seconds (onceki 4. deneme dahil: 400,400,400,400,429)', same(statuses, [400, 400, 400, 429]), statuses);
+  res = await del(pw1);
+  check('B3e: kilitliyken DOGRU parola da reddedilir (429), hesap silinmez; Retry-After basligi var', res.status === 429 && res.body.code === 'CURRENT_PASSWORD_LOCKED' && Number(res.headers.get('retry-after')) >= 1 && res.body.retry_after_seconds >= 1 && (await tombstone(pw1)).deleted_at === null, { status: res.status, retry: res.headers.get('retry-after') });
+  res = await call('PATCH', '/me', pw1, { password: 'Yeni-Parola-77xQ', current_password: PW });
+  check('B3f: kilit PATCH /me ile PAYLASILIR (ayni izleyici): parola degistirme de 429 CURRENT_PASSWORD_LOCKED', res.status === 429 && res.body.code === 'CURRENT_PASSWORD_LOCKED', res.body);
+  guard.clearAccountLocks({ userCode: pw1 });
+  check('B3g: kilit acilinca (parola sifirlama benzeri) dogru parolayla silme basarili', (await del(pw1)).status === 200 && (await tombstone(pw1)).deleted_at !== null);
+
+  // veri dis aktarma da AYNI izleyiciyi paylasir; yanlis parola hak tuketmez
+  const pw2 = await mkUser('Disa Aktarma Parola', 'individual');
+  res = await exportOf(pw2, { current_password: 'yanlis' });
+  check('B3h: disa aktarma yanlis parola 400 CURRENT_PASSWORD_INVALID; eksik parola 400 CURRENT_PASSWORD_REQUIRED; hak TUKETILMEZ (account_data_exports bos)', res.status === 400 && res.body.code === 'CURRENT_PASSWORD_INVALID' && (await exportOf(pw2, {})).body.code === 'CURRENT_PASSWORD_REQUIRED' && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [pw2])) === 0);
+  for (let i = 0; i < 4; i += 1) await exportOf(pw2, { current_password: 'yanlis' });
+  res = await exportOf(pw2);
+  check('B3i: 5 yanlis denemeden (biri yukarida) sonra disa aktarma da kilitli: 429 CURRENT_PASSWORD_LOCKED (EXPORT_RATE_LIMITED degil)', res.status === 429 && res.body.code === 'CURRENT_PASSWORD_LOCKED', res.body);
+  guard.clearAccountLocks({ userCode: pw2 });
+
+  // ============================================================================================================
+  // C. Tam silme: donanimli sakin ("Ada") - kimliksizlestirme, FK politikasi, devir, CRM, duyuru, basvuru, e-posta
+  // ============================================================================================================
+  console.log('--- C. silme (donanimli sakin) ---');
+  const siteC = await mkSite('Hesap Sitesi C', 4);
+  const A = await seedAda(siteC);
+  const adaCode = A.ada;
+  const boraBefore = JSON.parse(await bystanderSnapshot(siteC, A.bora));
+  const adaPhoneBefore = (await tombstone(adaCode)).phone_number;
+  const preAudit = Number((await q(`SELECT COALESCE(MAX(id), 0) AS m FROM audit_log`)).rows[0].m);
+  const adaAuditBefore = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE actor_user_code = $1`, [adaCode]);
+
+  res = await preview(adaCode);
+  check('C1: onizleme: can_delete true, engel yok; will_remove / will_keep dolu Turkce satirlar (sayilar yalniz kendi kayitlarindan); kisisel veri icermez',
+    ok200(res) && res.body.can_delete === true && res.body.blockers.length === 0 && res.body.will_remove.length >= 4 && res.body.will_keep.length >= 4 && res.body.will_remove.concat(res.body.will_keep).every((line) => typeof line === 'string' && line.length > 20)
+      && /misafir geçişleriniz \(1\)/.test(res.body.will_remove.join(' ')) && res.body.will_remove.some((line) => /başvuru/.test(line)) && res.body.will_remove.some((line) => /cihaz/.test(line)) && res.body.will_keep.some((line) => /onay/.test(line))
+      && !JSON.stringify(res.body).includes(A.email) && !JSON.stringify(res.body).includes('Lovelace'), res.body);
+  check('C1b: onizleme YAZMAZ: hesap ve uyelikler ayni, denetim satiri eklenmedi', (await tombstone(adaCode)).deleted_at === null && (await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE id > $1`, [preAudit])) === 0);
+
+  const oldToken = await tokenOf(adaCode);
+  const oldTokenNoPv = await tokenOf(adaCode, { pv: false });
+  const adaDeviceId = Number((await q(`SELECT id FROM devices WHERE device_uid = $1`, [A.deviceUid])).rows[0].id);
+  resetDeadlocks();
+  resetMail();
+  rotations.sites.length = 0;
+  rotations.devices.length = 0;
+  res = await del(adaCode);
+  await settle();
+  const deletionMails = mails.slice(); // kuyruk kosusu mails'i temizlemeden ONCE: silme bildirimi
+  const boraAfter = JSON.parse(await bystanderSnapshot(siteC, A.bora)); // kuyruk kosusundan ONCE komsu anlik goruntusu
+  check('C2: silme 200 { deleted: true }', res.status === 200 && same(res.body, { deleted: true }), res.body);
+
+  const dead = await tombstone(adaCode);
+  check('C3: hesap SATIRI kalir ve kimliksizlesir: ad "Silinmis Kullanici", e-posta deleted-<kod>@deleted.invalid, telefon / kullanici adi NULL, pasif, deleted_at dolu, rol individual, jeton alanlari NULL',
+    dead && dead.full_name === 'Silinmiş Kullanıcı' && dead.email === `deleted-${adaCode}@deleted.invalid` && dead.phone_number === null && dead.login_name === null && dead.is_active === false && dead.deleted_at !== null && dead.role === 'individual'
+      && dead.password_reset_token_hash === null && dead.password_reset_expires_at === null && dead.email_verification_code_hash === null && dead.email_verification_expires_at === null && Number(dead.id) === A.dbId, dead);
+  check('C3b: parola ozeti KULLANILAMAZ rastgele deger: eski parola eslesmez, bcrypt bicimi degil, eski ozetten farkli', dead.password_hash !== PW_HASH && dead.password_hash.length !== 60 && (await bcrypt.compare(PW, dead.password_hash)) === false && (await bcrypt.compare('', dead.password_hash)) === false);
+
+  check('C4: uyelikler / yetkiler / jetonlar SILINDI: daire uyeligi, site uyeligi, katilim talepleri, kapi izni, karekod belirteci, bildirim tercihi',
+    (await countOf(`SELECT (SELECT COUNT(*) FROM apartment_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM join_requests WHERE user_code = $1) + (SELECT COUNT(*) FROM door_access_overrides WHERE user_code = $1) + (SELECT COUNT(*) FROM qr_access_tokens WHERE user_code = $1) + (SELECT COUNT(*) FROM notification_preferences WHERE user_code = $1) + (SELECT COUNT(*) FROM account_data_exports WHERE user_code = $1) AS n`, [adaCode])) === 0);
+
+  const boraMembership = (await q(`SELECT role, is_active FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2`, [A.apt1, A.bora])).rows[0];
+  const apartmentAfter = (await q(`SELECT resident_user_code, resident_email, resident_pin_code FROM apartments WHERE id = $1`, [A.apt1])).rows[0];
+  check('C5: daire yoneticisi / eski sakin gostergesi DEVREDILDI: Bora APARTMENT_ADMIN, gosterge Bora, Ada\'nin iletisim e-postasi temizlendi, eski PIN SILINDI (PIN\'i silinen kisi biliyordu; R1 B5)',
+    boraMembership?.role === 'APARTMENT_ADMIN' && boraMembership.is_active === true && Number(apartmentAfter.resident_user_code) === A.bora && apartmentAfter.resident_email === null && apartmentAfter.resident_pin_code === null, { boraMembership, apartmentAfter });
+
+  const passes = (await q(`SELECT is_active, title, token FROM guest_passes WHERE created_by_user_code = $1 ORDER BY id`, [adaCode])).rows;
+  check('C6: misafir gecisleri IPTAL (satir kalir) ve baslik kimliksizlesir (misafir adi tutulmaz)', passes.length === 2 && passes.every((r) => r.is_active === false && r.title === 'Silinmiş kullanıcının geçişi'), passes.map((r) => [r.is_active, r.title]));
+  const doorLogs = (await q(`SELECT user_name, ip_address, user_code, apartment_label FROM door_access_logs WHERE user_code = $1`, [adaCode])).rows;
+  check('C7: kapi gecis kayitlari KALIR (guvenlik kaydi) ama ad "Silinmis Kullanici" ve IP NULL; kullanici kodu tombstone\'a bagli', doorLogs.length === 3 && doorLogs.every((r) => r.user_name === 'Silinmiş Kullanıcı' && r.ip_address === null && Number(r.user_code) === adaCode), doorLogs);
+  const device = (await q(`SELECT assigned_user_code, owner_user_id, local_control_token FROM devices WHERE device_uid = $1`, [A.deviceUid])).rows[0];
+  check('C8: cihaz sahipligi kalkar (assigned NULL, owner NULL; cihaz satiri kalir); yerel kontrol anahtari donduruldu (cihaz + site)', device && device.assigned_user_code === null && device.owner_user_id === null
+    && rotations.devices.length === 1 && rotations.devices[0].deviceIds.includes(adaDeviceId) && rotations.devices[0].reason === 'account_deleted' && rotations.sites.some((s) => s.siteCode === siteC.code && s.reason === 'account_deleted'), { device, rotations });
+
+  const person = (await q(`SELECT user_code, is_active, full_name, phone, email, note FROM site_people WHERE id = $1`, [A.person])).rows[0];
+  const residency = (await q(`SELECT is_current, move_out_date FROM apartment_residencies WHERE person_id = $1`, [A.person])).rows[0];
+  const vehicle = (await q(`SELECT is_active, plate_display FROM vehicles WHERE person_id = $1`, [A.person])).rows[0];
+  check('C9: CRM kisi kaydi KALIR: pasif, hesaptan KOPAR (user_code NULL), ad korunur (yasal saklama), e-posta NULL, hesaptaki TELEFON KOPYALANMAZ; ilişki biter (move_out dolu); arac pasif (satir kalir)',
+    person && person.user_code === null && person.is_active === false && person.full_name === 'Ada Lovelace' && person.email === null && person.phone === null && person.note === MARK.personNote
+      && residency.is_current === false && residency.move_out_date !== null && vehicle.is_active === false && vehicle.plate_display === '34 ADA 001' && adaPhoneBefore === '+905551110001', { person, residency, vehicle });
+  const boraPersonAfter = (await q(`SELECT user_code, is_active, full_name FROM site_people WHERE id = $1`, [A.boraPerson])).rows[0];
+  check('C9b: komsunun kisi kaydi ve iliskisi DEGISMEZ (Bora hala hesapli, aktif, guncel iliski)', Number(boraPersonAfter.user_code) === A.bora && boraPersonAfter.is_active === true && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_residencies WHERE person_id = $1 AND is_current`, [A.boraPerson])) === 1);
+
+  const adaRecipients = (await q(`SELECT r.announcement_id, r.read_at, r.email, r.email_hash, r.email_status FROM announcement_recipients r WHERE r.person_id = $1 ORDER BY r.announcement_id`, [A.person])).rows;
+  check('C10: duyuru: okundu kayitlari silindi (read_at NULL), bekleyen e-posta girdisi IPTAL (pending -> none, adres ve ozet NULL); gonderilmis satir durumu korunur',
+    adaRecipients.length === 2 && adaRecipients.every((r) => r.read_at === null && r.email === null && r.email_hash === null) && adaRecipients.find((r) => Number(r.announcement_id) === A.annId).email_status === 'none' && adaRecipients.find((r) => Number(r.announcement_id) !== A.annId).email_status === 'sent', adaRecipients);
+  const boraRecipient = (await q(`SELECT email, email_hash, email_status FROM announcement_recipients WHERE person_id = $1`, [A.boraPerson])).rows[0];
+  check('C10b: komsunun bekleyen e-postasi DOKUNULMAZ (pending, adres + ozet duruyor)', boraRecipient.email_status === 'pending' && boraRecipient.email === `bora${A.bora}@qa.example` && boraRecipient.email_hash === A.boraHash, boraRecipient);
+  resetMail();
+  const queueSummary = await queue.runEmailQueue({ batchDelayMs: 0 });
+  const queued = mails.filter((m) => m.subject?.includes('Su kesintisi'));
+  check('C10c: kuyruk silmeden SONRA calisir: Ada\'nin eski adresine duyuru GONDERILMEZ; komsuya 1 e-posta gider', queueSummary.smtp === true && !queued.some((m) => m.to === A.email) && queued.filter((m) => m.to === `bora${A.bora}@qa.example`).length === 1, { queueSummary, to: queued.map((m) => m.to), queueSendErrors });
+
+  const apps = (await q(`SELECT status, decided_at, decision_note, applicant_user_code FROM site_applications WHERE applicant_user_code = $1 ORDER BY id`, [adaCode])).rows;
+  const cancelledAudit = (await q(`SELECT details, actor_user_code FROM audit_log WHERE action = 'site_application.cancelled' AND id > $1`, [preAudit])).rows;
+  check('C11: bekleyen site basvurusu GERI CEKILDI (cancelled, decided_at dolu); eski karar kaydi korunur; denetim sistem adina, gerekce account_deleted',
+    apps.length === 2 && apps.find((r) => r.status === 'cancelled')?.decided_at !== null && apps.some((r) => r.status === 'rejected') && !apps.some((r) => r.status === 'pending')
+      && cancelledAudit.length === 1 && cancelledAudit[0].details.reason === 'account_deleted' && cancelledAudit[0].actor_user_code === null, { apps, cancelledAudit });
+
+  check('C12: adres tabanli kayitlar: email_verifications ve pending_registrations (buyuk/kucuk harf duyarsiz) silindi',
+    (await countOf(`SELECT (SELECT COUNT(*) FROM email_verifications WHERE LOWER(email) = LOWER($1)) + (SELECT COUNT(*) FROM pending_registrations WHERE LOWER(email) = LOWER($1)) AS n`, [A.email])) === 0);
+  const invitation = (await q(`SELECT email, full_name, status FROM site_manager_invitations WHERE invited_by_user_code = $1`, [A.mgr])).rows;
+  check('C12b: eski adrese gelen bekleyen yonetici daveti IPTAL (REVOKED), adres tombstone adresiyle degisti, davetli adi NULL (yeniden kayitta eski davet kullanilamaz)', invitation.length === 1 && invitation[0].status === 'REVOKED' && invitation[0].email === `deleted-${adaCode}@deleted.invalid` && invitation[0].full_name === null, invitation);
+
+  const snapshotAudits = (await q(`SELECT actor_user_code, actor_name FROM audit_log WHERE actor_user_code = $1`, [adaCode])).rows;
+  const modReq = (await q(`SELECT requested_by_name, decided_by_name FROM module_requests WHERE requested_by = $1`, [adaCode])).rows[0];
+  const otaJob = (await q(`SELECT requested_by_user_code, requested_by_email FROM ota_update_jobs WHERE requested_by_user_code = $1`, [adaCode])).rows[0];
+  check('C13: satirlar tombstone\'a BAGLI KALIR: audit_log DEGISMEZ (platform degismezi: sayi ve actor_name aynen; yalniz super kullanici okur), module_requests (yalniz Ada\'nin adi), ota_update_jobs (e-posta NULL)',
+    snapshotAudits.length === adaAuditBefore && snapshotAudits.every((r) => r.actor_name === 'Ada Lovelace') && modReq.requested_by_name === 'Silinmiş Kullanıcı' && modReq.decided_by_name === 'Hesap Super' && otaJob.requested_by_email === null && Number(otaJob.requested_by_user_code) === adaCode, { snapshotAudits: snapshotAudits.length, modReq, otaJob });
+
+  const consent = await countOf(`SELECT COUNT(*)::int AS n FROM user_consents WHERE user_code = $1 AND document_id = 'terms'`, [adaCode]);
+  check('C14: user_consents (S-B) DOKUNULMAZ: onay kaydi tombstone\'a bagli kalir', consent === 1);
+
+  const newAudits = (await q(`SELECT action, actor_user_code, actor_name, target_id, details FROM audit_log WHERE id > $1 ORDER BY id`, [preAudit])).rows;
+  const deletedAudits = newAudits.filter((a) => a.action === 'account.deleted');
+  const leakedInAudit = newAudits.filter((a) => JSON.stringify(a).includes(A.email) || /Lovelace/.test(JSON.stringify(a)) || JSON.stringify(a).includes('+905551110001'));
+  check('C15: TEK "account.deleted" denetimi: actor NULL, target_id = kullanici kodu, details yalniz onceki rol + sayilar; silme sirasinda yazilan HICBIR denetim satirinda ad / e-posta / telefon yok; kisi pasiflesme denetimi sistem adina',
+    deletedAudits.length === 1 && deletedAudits[0].actor_user_code === null && deletedAudits[0].target_id === String(adaCode) && deletedAudits[0].details.previous_role === 'apartment_owner'
+      && Object.values(deletedAudits[0].details).every((v) => typeof v === 'number' || v === 'apartment_owner') && leakedInAudit.length === 0 && newAudits.some((a) => a.action === 'person.deactivated' && a.details.reason === 'account_deleted' && a.actor_name === 'Sistem'), { deletedAudits, leaked: leakedInAudit.length });
+
+  const DELETED_SUBJECT = 'Site ve Toplu Yaşam Yönetim Sistemi - Hesabınız Silindi';
+  const sent = deletionMails.filter((m) => m.to === A.email && m.subject === DELETED_SUBJECT);
+  check('C16: eski adrese TEK "hesabiniz silindi" e-postasi (sabit konu), baska alici yok; govdede adres / telefon yok', sent.length === 1 && deletionMails.filter((m) => m.subject === DELETED_SUBJECT).length === 1 && !sent[0].text.includes(A.email) && !sent[0].text.includes('+905551110001') && /Ada Lovelace/.test(sent[0].text), sent.map((m) => m.subject));
+
+  check('C17: komsunun (Bora) hesabi, kisi kaydi ve duyuru satiri DEGISMEZ (yalnizca dairede yonetici rolu devredildi)', same(boraAfter.user, boraBefore.user) && same(boraAfter.person, boraBefore.person) && same(boraAfter.recipients, boraBefore.recipients) && boraAfter.memberships[0].role === 'APARTMENT_ADMIN', { boraBefore: boraBefore.memberships, boraAfter: boraAfter.memberships });
+  check('C18: 40P01 (deadlock) = 0', deadlocks() === 0, deadlocks());
+
+  // eski token'lar / giris / ikinci silme
+  res = await callWith('GET', '/me', oldToken);
+  const r1 = res;
+  res = await callWith('GET', '/me', oldTokenNoPv);
+  check('C19: silinmis hesabin ESKI token\'lari (parola surumlu ve surumsuz) reddedilir: GET /me 401 (ACCOUNT_DELETED / TOKEN_REVOKED); next cagrilmaz', r1.status === 401 && ['ACCOUNT_DELETED', 'TOKEN_REVOKED'].includes(r1.body?.code) && res.status === 401 && res.body?.code === 'ACCOUNT_DELETED', { r1: r1.body, r2: res.body });
+  res = await callWith('POST', '/me/account-deletion/preview', oldTokenNoPv, {});
+  const r3 = res;
+  res = await callWith('POST', '/me/data-export', oldTokenNoPv, { current_password: PW });
+  check('C19b: eski token ile onizleme ve disa aktarma da 401 (hesap ucu degil authRequired reddeder)', r3.status === 401 && res.status === 401);
+  res = await callWith('POST', '/me/account-deletion', oldTokenNoPv, { current_password: PW, confirm: true });
+  check('C20: ikinci silme (eski token) 401; yeni bir "account.deleted" yazilmaz', res.status === 401 && (await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'account.deleted' AND target_id = $1`, [String(adaCode)])) === 1);
+  res = await call('POST', '/auth/login', null, { email: A.email, password: PW });
+  const loginOld = res;
+  res = await call('POST', '/auth/login', null, { email: `deleted-${adaCode}@deleted.invalid`, password: PW });
+  check('C21: eski e-posta + eski parola ile GIRIS yapilamaz (401); tombstone e-postasiyla da giris yok', loginOld.status === 401 && res.status === 401, { old: loginOld.status, tomb: res.status });
+
+  // aynı e-postayla yeniden kayit
+  let reRegistered;
+  try {
+    resetMail();
+    await membershipSvc.registerIndividualUser({ firstName: 'Ada', lastName: 'Yeni', email: A.email, password: 'Yeni-Parola-9xQ!' });
+    const codeMail = mails.filter((m) => m.to === A.email && /doğrulama kodunuz: (\d{6})/.test(m.text)).at(-1);
+    const code = /doğrulama kodunuz: (\d{6})/.exec(codeMail?.text ?? '')?.[1];
+    await membershipSvc.verifyIndividualEmailCode({ email: A.email, code });
+    reRegistered = (await q(`SELECT user_code, role, is_active, full_name, deleted_at FROM users WHERE LOWER(email) = LOWER($1)`, [A.email])).rows[0];
+  } catch (error) {
+    reRegistered = { error: `${error.code ?? ''} ${error.message}` };
+  }
+  check('C22: AYNI e-postayla yeniden kayit MUMKUN: yeni hesap farkli user_code, aktif, bagsiz (uyelik / kisi yok); eski tombstone degismedi',
+    reRegistered && !reRegistered.error && Number(reRegistered.user_code) !== adaCode && reRegistered.is_active === true && reRegistered.deleted_at === null && (await countOf(`SELECT (SELECT COUNT(*) FROM apartment_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM site_people WHERE user_code = $1) AS n`, [reRegistered.user_code])) === 0 && (await tombstone(adaCode)).email === `deleted-${adaCode}@deleted.invalid`, reRegistered);
+  res = await call('POST', '/auth/login', null, { email: A.email, password: 'Yeni-Parola-9xQ!' });
+  const loginNew = res;
+  res = await call('POST', '/auth/login', null, { email: A.email, password: PW });
+  check('C22b: yeni hesapla giris 200; ESKI parola yeni hesapta calismaz (401)', loginNew.status === 200 && typeof loginNew.body?.token === 'string' && res.status === 401, { new: loginNew.status, old: res.status });
+
+  // sifre sifirlama yolu: silinmis hesapta jeton uretilse bile (yaris) KULLANILAMAZ - parola ozeti degismez
+  {
+    const { createHash } = await import('node:crypto');
+    const resetToken = 'ab'.repeat(32);
+    const before = (await tombstone(adaCode)).password_hash;
+    await q(`UPDATE users SET password_reset_token_hash = $2, password_reset_expires_at = NOW() + INTERVAL '1 hour' WHERE user_code = $1`, [adaCode, createHash('sha256').update(resetToken).digest('hex')]);
+    res = await call('POST', '/auth/reset-password', null, { token: resetToken, password: 'Yeni-Parola-9xQ!' });
+    const after = await tombstone(adaCode);
+    check('C23: silinmis hesapta (yarisla uretilmis) sifre sifirlama jetonu KULLANILAMAZ: 400, parola ozeti degismez, hesap pasif', res.status === 400 && after.password_hash === before && after.is_active === false, res.body);
+    await q(`UPDATE users SET password_reset_token_hash = NULL, password_reset_expires_at = NULL WHERE user_code = $1`, [adaCode]);
+  }
+
+  // ============================================================================================================
+  // D. Yarislar ve kilit sirasi (40P01 = 0)
+  // ============================================================================================================
+  console.log('--- D. yarislar ve kilit sirasi ---');
+  // D1: silme x giris (belirleyici): silme `UPDATE users` oncesinde (on kilitler elde) bekletilirken girisler basarili olur; silme bitince bu tokenlar GECERSIZ
+  {
+    const s = await mkSite('Yaris Giris Sitesi', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Giris Yarisi' });
+    resetDeadlocks();
+    const paused = await withPausedDeletion(L.ada, async () => Promise.all(Array.from({ length: 6 }, () => call('POST', '/auth/login', null, { email: L.email, password: PW }))));
+    const logins = paused.duringResult;
+    check('D1a: silme bekletilirken (on kilitler elde) 6 esizamanli giris BASARILI ve beklemez (silmenin kilitleri girisi engellemez)', paused.reached && logins.every((r) => r.status === 200 && typeof r.body?.token === 'string'), logins.map((r) => r.status));
+    check('D1b: silme tamamlandi (200)', paused.result.status === 200);
+    const afterTokens = await Promise.all(logins.map((r) => callWith('GET', '/me', r.body.token)));
+    check('D1c: silme ile ESZAMANLI alinan tokenlarin HEPSI silme sonrasi reddedilir (401) - yarista verilen oturum gecerli kalmaz', afterTokens.every((r) => r.status === 401), afterTokens.map((r) => r.status));
+    res = await call('POST', '/auth/login', null, { email: L.email, password: PW });
+    check('D1d: silme sonrasi giris 401; 40P01 = 0', res.status === 401 && deadlocks() === 0, deadlocks());
+  }
+
+  // D2: silme x "Daireden cikar" (belirleyici): ayni daire kilidi; silme bekletilirken yonetici cikarma isteyen BEKLER, sonra tutarli biter
+  {
+    const s = await mkSite('Yaris Uye Cikarma', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Cikarma Yarisi' });
+    resetDeadlocks();
+    let removal = null;
+    const paused = await withPausedDeletion(L.ada, async () => {
+      removal = membershipSvc.removeApartmentMember({ apartmentId: L.apt1, targetUserCode: L.ada, authUser: superActor });
+      const state = await settledState(removal, 500);
+      return state;
+    });
+    const removalOutcome = await removal.then(() => 'ok', (error) => `hata:${error.statusCode ?? error.code}`);
+    check('D2a: silme daire kilidini tutarken "Daireden cikar" BEKLER (blocked); silme 200', paused.duringResult === 'blocked' && paused.result.status === 200, { during: paused.duringResult, status: paused.result.status });
+    check('D2b: sonra tutarli: cikarma 404 "bu dairede kayitli degil" (uyelik silinmisti) veya basarili; kalinti yok (Ada uyeligi / gosterge / aktif iliski 0); 40P01 = 0',
+      ['ok', 'hata:404'].includes(removalOutcome) && (await countOf(`SELECT (SELECT COUNT(*) FROM apartment_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM apartments WHERE resident_user_code = $1) + (SELECT COUNT(*) FROM apartment_residencies r JOIN site_people sp ON sp.id = r.person_id WHERE sp.id = $2 AND r.is_current) AS n`, [L.ada, L.person])) === 0 && deadlocks() === 0, { removalOutcome, deadlocks: deadlocks() });
+  }
+
+  // D3: silme x yonetici "kullaniciyi kalici sil" (admin DELETE /admin/users/:id): ayni on kilit (apartments); biri digerini bekler, ikisi de biter
+  {
+    const s = await mkSite('Yaris Admin Silme', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Admin Yarisi' });
+    resetDeadlocks();
+    let adminCall = null;
+    const paused = await withPausedDeletion(L.ada, async () => {
+      adminCall = call('DELETE', `/admin/users/${L.ada}`, SUPER);
+      return settledState(adminCall, 500);
+    });
+    const adminRes = await adminCall;
+    check('D3a: admin kalici silme, hesap silme daire kilidini tutarken BEKLER; sonra silme 200; admin 409 ACCOUNT_ALREADY_DELETED (tombstone kalici silinmez) ya da 204 / 404 (admin once kazanirsa)', paused.duringResult === 'blocked' && paused.result.status === 200 && [204, 404, 409].includes(adminRes.status) && (adminRes.status !== 409 || adminRes.body?.code === 'ACCOUNT_ALREADY_DELETED'), { during: paused.duringResult, silme: paused.result.status, admin: adminRes.status, code: adminRes.body?.code });
+    check('D3b: admin 409 ise tombstone DURUYOR (deleted_at dolu, satir silinmedi); 204 ise yan tablolar tutarli (users satiri yok, uyelik yok); 40P01 = 0', ((adminRes.status === 409 && (await tombstone(L.ada))?.deleted_at !== null) || (adminRes.status === 204 && (await tombstone(L.ada)) === undefined) || adminRes.status === 404) && deadlocks() === 0, { admin: adminRes.status, deadlocks: deadlocks() });
+  }
+
+  // D4: ayni dairenin iki sakini ESZAMANLI silinir (belirleyici): ikinci silme KUCUK sira bekler; sonuc: gosterge ve PIN temiz
+  {
+    const s = await mkSite('Yaris Iki Sakin', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Iki Sakin Yarisi' });
+    resetDeadlocks();
+    let second = null;
+    const paused = await withPausedDeletion(L.ada, async () => {
+      second = del(L.bora);
+      return settledState(second, 500);
+    });
+    const secondRes = await second;
+    const apt = (await q(`SELECT resident_user_code, resident_email, resident_pin_code FROM apartments WHERE id = $1`, [L.apt1])).rows[0];
+    check('D4: iki sakin art arda silinir (kuresel sira): ikincisi bekler (blocked), ikisi de 200; dairede uyelik 0, gosterge NULL, PIN temizlendi; 40P01 = 0',
+      paused.duringResult === 'blocked' && paused.result.status === 200 && secondRes.status === 200 && apt.resident_user_code === null && apt.resident_pin_code === null && apt.resident_email === null && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE apartment_id = $1`, [L.apt1])) === 0 && deadlocks() === 0, { apt, first: paused.result.status, second: secondRes.status });
+  }
+
+  // D5: cift gonderim: AYNI hesap icin esizamanli silme isteklerinden YALNIZ biri basarili
+  {
+    const s = await mkSite('Yaris Cift Silme', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Cift Silme' });
+    resetDeadlocks();
+    resetMail();
+    const results = await Promise.all(Array.from({ length: 4 }, () => del(L.ada)));
+    await settle();
+    const codes = results.map((r) => r.status).sort();
+    check('D5a: 4 esizamanli HTTP silme: tam olarak 1 x 200, 3 x 401 ACCOUNT_DELETED (kaybeden istek "parola hatali" almaz)', same(codes, [200, 401, 401, 401]) && results.filter((r) => r.status === 401).every((r) => r.body?.code === 'ACCOUNT_DELETED'), results.map((r) => [r.status, r.body?.code]));
+    check('D5b: TEK "account.deleted" denetimi ve TEK e-posta; 40P01 = 0', (await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'account.deleted' AND target_id = $1`, [String(L.ada)])) === 1 && mailsTo(L.email).length === 1 && deadlocks() === 0, { mails: mailsTo(L.email).length, deadlocks: deadlocks() });
+    const L2 = await seedAda(s, { heavy: false, fresh: true, name: 'Cift Silme Servis' });
+    const direct = await Promise.allSettled(Array.from({ length: 8 }, () => deletion.performAccountDeletion(L2.ada)));
+    check('D5c: 8 esizamanli servis cagrisi: 1 basarili, 7 ACCOUNT_DELETED; 40P01 = 0', direct.filter((r) => r.status === 'fulfilled').length === 1 && direct.filter((r) => r.status === 'rejected').every((r) => r.reason.code === 'ACCOUNT_DELETED') && deadlocks() === 0, direct.map((r) => r.status === 'fulfilled' ? 'ok' : r.reason.code));
+  }
+
+  // D6: iki / uc yonetici ayni anda kendini siler: site ASLA yonetimsiz kalmaz
+  {
+    resetDeadlocks();
+    const outcomes2 = [];
+    for (let trial = 0; trial < 6; trial += 1) {
+      const g = await mkManaged(`Yaris Iki Yonetici ${trial}`, { managers: 2, members: 1 });
+      const results = await Promise.all(g.ms.map((m) => del(m)));
+      outcomes2.push({ statuses: results.map((r) => r.status).sort(), managers: await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites s JOIN users u ON u.user_code = s.manager_user_code WHERE s.site_code = $1 AND u.deleted_at IS NULL`, [g.site.code]), blockedCode: results.find((r) => r.status === 409)?.body?.blockers?.[0]?.code });
+    }
+    check('D6a: 6 deneme x iki yonetici ESZAMANLI silme: her seferinde [200, 409 LAST_SITE_MANAGER]; sitede tam 1 aktif yonetici kalir', outcomes2.every((o) => same(o.statuses, [200, 409]) && o.managers === 1 && o.blockedCode === 'LAST_SITE_MANAGER'), outcomes2);
+    const outcomes3 = [];
+    for (let trial = 0; trial < 3; trial += 1) {
+      const g = await mkManaged(`Yaris Uc Yonetici ${trial}`, { managers: 3, members: 1 });
+      const results = await Promise.all(g.ms.map((m) => del(m)));
+      outcomes3.push({ statuses: results.map((r) => r.status).sort(), managers: await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites s JOIN users u ON u.user_code = s.manager_user_code WHERE s.site_code = $1 AND u.deleted_at IS NULL`, [g.site.code]) });
+    }
+    check('D6b: 3 deneme x UC yonetici ESZAMANLI silme: [200, 200, 409]; en az 1 aktif yonetici kalir; 40P01 = 0', outcomes3.every((o) => same(o.statuses, [200, 200, 409]) && o.managers === 1) && deadlocks() === 0, { outcomes3, deadlocks: deadlocks() });
+  }
+
+  // D7: yonetici silme x "yoneticiyi siteden cikar" (removeSiteManager): sitenin yonetici sayisi ASLA 0 olmaz
+  {
+    resetDeadlocks();
+    const rows = [];
+    for (let trial = 0; trial < 6; trial += 1) {
+      const g = await mkManaged(`Yaris Yonetici Cikarma ${trial}`, { managers: 2, members: 1 });
+      const [deleted, removed] = await Promise.all([
+        del(g.ms[0]),
+        siteSvc.removeSiteManager({ siteCode: g.site.code, targetUserCode: g.ms[1], callerUser: superActor }).then(() => ({ ok: true }), (error) => ({ ok: false, status: error.statusCode })),
+      ]);
+      const remaining = await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites s JOIN users u ON u.user_code = s.manager_user_code WHERE s.site_code = $1 AND u.deleted_at IS NULL`, [g.site.code]);
+      rows.push({ deleted: deleted.status, removed: removed.ok, remaining, ok: (deleted.status === 200 ? 1 : 0) + (removed.ok ? 1 : 0) });
+    }
+    check(`D7b: OLCUM (bilgi): silme kazandi ${rows.filter((r) => r.deleted === 200).length}/6, cikarma kazandi ${rows.filter((r) => r.removed).length}/6`, true);
+    check('D7: 6 deneme: silme ile yonetici cikarma ESZAMANLI - tam olarak biri basarili, sitede 1 aktif yonetici kalir; 40P01 = 0', rows.every((r) => r.ok === 1 && r.remaining === 1) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
+  }
+
+  // D8: silme x site basvurusu onayi: onay sonrasi tombstone'a bagli yonetici KALMAZ; bekleyen basvuru ASLA onaylanmis olarak kalmaz
+  {
+    resetDeadlocks();
+    const rows = [];
+    for (let trial = 0; trial < 8; trial += 1) {
+      const applicant = await mkUser(`Basvuran ${trial}`, 'individual');
+      const created = await appSvc.createSiteApplication({
+        actor: await actorOf2(applicant),
+        body: { name: `Yaris Basvuru Sitesi ${trial}`, city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+      });
+      const [deleted, approved] = await Promise.all([
+        del(applicant),
+        appSvc.approveSiteApplication({ applicationId: created.id, note: undefined, actor: superActor }).then(() => ({ ok: true }), (error) => ({ ok: false, code: error.code })),
+      ]);
+      const links = await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [applicant]);
+      const pending = await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [applicant]);
+      const sitesMade = await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [`Yaris Basvuru Sitesi ${trial}`]);
+      rows.push({ deleted: deleted.status, approved: approved.ok, approveCode: approved.code, links, pending, sitesMade });
+    }
+    check('D8: 8 deneme: silme (200) ile basvuru onayi ESZAMANLI - tombstone\'a bagli yonetici / uyelik YOK, bekleyen basvuru YOK; onay ya basarili (site olustu) ya da APPLICANT_UNAVAILABLE (site yok); 40P01 = 0',
+      rows.every((r) => r.deleted === 200 && r.links === 0 && r.pending === 0 && ((r.approved && r.sitesMade === 1) || (!r.approved && r.sitesMade === 0))) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
+    check(`D8b: OLCUM (bilgi): onay basarili ${rows.filter((r) => r.approved).length}/8 (site olustu), silme once gelen ${rows.filter((r) => !r.approved).length}/8`, true, rows.map((r) => r.approveCode ?? 'ok'));
+  }
+
+  // D9: silme x "tumunu okundu yap" ve D10: silme x e-posta kuyrugu
+  {
+    resetDeadlocks();
+    const s = await mkSite('Yaris Duyuru', 3);
+    for (let trial = 0; trial < 6; trial += 1) {
+      const L = await seedAda(s, { heavy: false, fresh: true, name: `Duyuru Yarisi ${trial}` });
+      const ann = Number((await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by) VALUES ($1, 'Yaris duyurusu', 'Metin', 'published', NOW(), $2) RETURNING id`, [s.code, SUPER])).rows[0].id);
+      await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status) VALUES ($1, $2, $3, $4, 'pending')`, [ann, L.person, L.email, hashEmail(L.email)]);
+      await Promise.all([del(L.ada), inbox.markAllAnnouncementsRead({ user_code: L.ada }, {}).catch(() => null)]);
+      const unlinked = await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE id = $1 AND user_code IS NULL AND NOT is_active`, [L.person]);
+      if (unlinked !== 1) check(`D9: deneme ${trial} kisi kaydi hesaptan koptu`, false, unlinked);
+    }
+    check('D9: 6 deneme: silme ile "tumunu okundu yap" ESZAMANLI - kilitlenme yok (40P01 = 0), kisi kayitlari hesaptan kopmus', deadlocks() === 0, deadlocks());
+
+    resetDeadlocks();
+    const Q = await seedAda(s, { heavy: false, fresh: true, name: 'Kuyruk Yarisi' });
+    for (let i = 0; i < 15; i += 1) {
+      const ann = Number((await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by) VALUES ($1, $2, 'Metin', 'published', NOW(), $3) RETURNING id`, [s.code, `Kuyruk ${i}`, SUPER])).rows[0].id);
+      await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email, email_hash, email_status) VALUES ($1, $2, $3, $4, 'pending')`, [ann, Q.person, Q.email, hashEmail(Q.email)]);
+    }
+    resetMail();
+    const [qDel, qRun] = await Promise.all([del(Q.ada), queue.runEmailQueue({ batchDelayMs: 0, batchSize: 4 })]);
+    const left = await countOf(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE person_id = $1 AND (email IS NOT NULL OR email_status = 'pending' OR email_hash IS NOT NULL)`, [Q.person]);
+    const toAda = mails.filter((m) => m.to === Q.email && /^\[/.test(m.subject ?? '')).length;
+    check('D10: silme ile e-posta kuyrugu ESZAMANLI: silme 200, kuyruk kosusu tamam; Ada\'nin satirlarinda bekleyen / adres / ozet KALMAZ; silmeden once gonderilenler olabilir (en cok 15); 40P01 = 0',
+      qDel.status === 200 && qRun.smtp === true && left === 0 && toAda <= 15 && deadlocks() === 0, { status: qDel.status, left, toAda, run: qRun, deadlocks: deadlocks() });
+  }
+
+  // D11: disa aktarma x silme: dosya TUTARLI (ya tamamen eski ya tamamen kimliksiz), yari karisik degil
+  {
+    resetDeadlocks();
+    const s = await mkSite('Yaris Disa Aktarma', 3);
+    const rows = [];
+    for (let trial = 0; trial < 8; trial += 1) {
+      const L = await seedAda(s, { heavy: false, fresh: true, name: `Aktarma Yarisi ${trial}` });
+      const [deleted, exported] = await Promise.all([del(L.ada), exportOf(L.ada)]);
+      let consistent = null;
+      if (exported.status === 200) {
+        const body = exported.body;
+        const original = body.user.email === L.email;
+        const anonymous = body.user.email === `deleted-${L.ada}@deleted.invalid`;
+        consistent = (original && body.apartment_memberships.some((m) => m.source === 'membership') && body.memberships.length === 1 && body.people_records.length === 1) || (anonymous && body.apartment_memberships.length === 0 && body.memberships.length === 0 && body.people_records.length === 0 && body.user.phone_number === null);
+      }
+      rows.push({ deleted: deleted.status, exported: exported.status, consistent });
+    }
+    check('D11: 8 deneme: silme ile disa aktarma ESZAMANLI - silme 200; disa aktarma 200 (tutarli anlik goruntu: tamamen eski YA DA tamamen kimliksiz) veya 401; 40P01 = 0',
+      rows.every((r) => r.deleted === 200 && ((r.exported === 200 && r.consistent === true) || r.exported === 401)) && deadlocks() === 0, { rows, deadlocks: deadlocks() });
+  }
+
+  // D12: IDOR yok - uclar HEDEF kimlik almaz: govdede / sorguda baska kullanici kodu gonderilse bile yalniz TOKEN sahibi etkilenir
+  {
+    const s = await mkSite('Yaris IDOR', 3);
+    const victim = await seedAda(s, { heavy: false, fresh: true, name: 'IDOR Magdur' });
+    const attacker = await mkUser('IDOR Saldirgan', 'individual');
+    const forged = await call('POST', `/me/data-export?user_code=${victim.ada}&id=${victim.ada}`, attacker, { current_password: PW, user_code: victim.ada, target_user_code: victim.ada, id: victim.ada });
+    check('D12a: disa aktarma: baska kullanici kodu (govde + sorgu) YOKSAYILIR - dosya saldirganin KENDI verisi, magdurun e-postasi / adi / telefonu yok', forged.status === 200 && forged.body.user.user_code === attacker && !forged.text.includes(victim.email) && !forged.text.includes('IDOR Magdur') && forged.body.apartment_memberships.length === 0);
+    const forgedDelete = await call('POST', '/me/account-deletion', attacker, { current_password: PW, confirm: true, user_code: victim.ada, target_user_code: victim.ada, id: victim.ada });
+    check('D12b: hesap silme: baska kullanici kodu YOKSAYILIR - yalniz token sahibi (saldirgan) silinir; magdurun hesabi, uyeligi ve kisi kaydi DOKUNULMAZ', forgedDelete.status === 200 && (await tombstone(attacker)).deleted_at !== null && (await tombstone(victim.ada)).deleted_at === null && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = $1`, [victim.ada])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_people WHERE user_code = $1 AND is_active`, [victim.ada])) === 1);
+    const staff = await mkUser('Gorevli Kisi', 'individual');
+    await q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, 'STAFF')`, [s.code, staff]);
+    check('D12c: gorevli (STAFF) kendi hesabini silebilir (engel degil); yalniz kendi uyeligi kalkar', (await blk(staff)).can_delete === true && (await del(staff)).status === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [staff])) === 0);
+    res = await exportOf(SUPER);
+    check('D12d: super kullanici KENDI verisini disa aktarabilir (200, yalniz kendi kaydi); silmesi SUPER_USER ile engelli', res.status === 200 && res.body.user.user_code === SUPER && res.body.user.role === 'super_user' && res.body.people_records.length === 0);
+  }
+
+  // D7c / D8c / D8d: BELIRLEYICI yarislar (silme `UPDATE users` oncesinde bekletilir): "silme kazanir" ve "kapsam buyur -> yeniden dene" kollari
+  {
+    resetDeadlocks();
+    // D7c: silme yonetici satirlari kilitliyken "yoneticiyi cikar" BEKLER; silme bitince cikarma "son yonetici" ile reddedilir
+    const g = await mkManaged('Belirleyici Yonetici Cikarma', { managers: 2, members: 1 });
+    let removal = null;
+    const pausedRemoval = await withPausedDeletion(g.ms[0], async () => {
+      removal = siteSvc.removeSiteManager({ siteCode: g.site.code, targetUserCode: g.ms[1], callerUser: superActor });
+      return settledState(removal, 500);
+    });
+    const removalResult = await removal.then(() => ({ ok: true }), (error) => ({ ok: false, status: error.statusCode }));
+    check('D7c: silme yonetici satirlarini tutarken "yoneticiyi cikar" BEKLER (blocked); silme 200; sonra cikarma 400 (son yonetici) - sitede yonetici 2. (cikarilamayan) kalir; 40P01 = 0',
+      pausedRemoval.duringResult === 'blocked' && pausedRemoval.result.status === 200 && removalResult.ok === false && removalResult.status === 400 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE site_code = $1 AND manager_user_code = $2`, [g.site.code, g.ms[1]])) === 1 && deadlocks() === 0, { during: pausedRemoval.duringResult, status: pausedRemoval.result.status, removalResult });
+
+    // D8c: silme bekletilirken basvuru ONAYLANIR (kullanici satiri henuz kilitli degil); silme devam edince kapsam BUYUMUS gorur -> islem geri alinir, bastan denenir, TEK denemede tutarli biter
+    const applicant = await mkUser('Belirleyici Basvuran', 'individual');
+    const created = await appSvc.createSiteApplication({
+      actor: await actorOf2(applicant),
+      body: { name: 'Belirleyici Basvuru Sitesi', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+    });
+    hooks.log = [];
+    const pausedApproval = await withPausedDeletion(applicant, async () => appSvc.approveSiteApplication({ applicationId: created.id, note: undefined, actor: superActor }).then(() => 'approved', (error) => `hata:${error.code}`));
+    const attempts = hooks.log.filter((entry) => /pg_advisory_xact_lock/.test(entry.text ?? '') && Array.isArray(entry.values) && entry.values[0] === 'account_deletion').length;
+    hooks.log = null;
+    check('D8c: silme beklerken onay tamamlandi (approved); silme kapsam buyumesini gordu, ISLEM GERI ALINIP 2. denemede 200 ile bitti; basvurana bagli yonetici / uyelik YOK, site duruyor, basvuru bekleyen degil; 40P01 = 0',
+      pausedApproval.duringResult === 'approved' && pausedApproval.result.status === 200 && attempts === 2 && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [applicant])) === 0
+        && (await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'Belirleyici Basvuru Sitesi'`)) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [applicant])) === 0 && deadlocks() === 0, { attempts, during: pausedApproval.duringResult, status: pausedApproval.result.status });
+
+    // D8d: silme ONCE gelirse onay reddedilir ve site OLUSMAZ
+    const applicant2 = await mkUser('Belirleyici Basvuran 2', 'individual');
+    const created2 = await appSvc.createSiteApplication({
+      actor: await actorOf2(applicant2),
+      body: { name: 'Belirleyici Basvuru Sitesi 2', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+    });
+    const deleted2 = await del(applicant2);
+    const approval2 = await appSvc.approveSiteApplication({ applicationId: created2.id, note: undefined, actor: superActor }).then(() => 'approved', (error) => `hata:${error.code}`);
+    check('D8d: silme ONCE gelirse onay reddedilir (bekleyen degil / basvuran kullanilamaz) ve site OLUSMAZ', deleted2.status === 200 && approval2 !== 'approved' && (await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = 'Belirleyici Basvuru Sitesi 2'`)) === 0, approval2);
+  }
+
+  // D13 / D14: CRM yazmasi ("Tasindi") ve duyuru YAYINI, silme site kisi kilidini (people_sync) tutarken BEKLER; sonra tutarli biter
+  {
+    resetDeadlocks();
+    const mg = await mkManaged('Belirleyici CRM Duyuru', { managers: 1, members: 0 });
+    const managerActor = await actorOf2(mg.ms[0]);
+    const L = await seedAda(mg.site, { heavy: false, fresh: true, name: 'CRM Yarisi' });
+    const residencyId = Number((await q(`SELECT id FROM apartment_residencies WHERE person_id = $1 AND is_current`, [L.person])).rows[0].id);
+    let crm = null;
+    let publication = null;
+    const paused = await withPausedDeletion(L.ada, async () => {
+      crm = peopleSvc.endResidency({ siteCode: mg.site.code, residencyId, body: {}, actor: managerActor });
+      publication = annSvc.createAnnouncement({ siteCode: mg.site.code, body: { title: 'Yaris yayini', body: 'Metin', target: { type: 'site' }, send_email: true, publish: 'now' }, actor: managerActor });
+      return [await settledState(crm, 500), await settledState(publication, 100)];
+    });
+    const crmOutcome = await crm.then(() => 'ok', (error) => `hata:${error.code ?? error.statusCode}`);
+    const announcement = await publication.then((detail) => detail, () => null);
+    const adaRecipientRows = announcement ? await countOf(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE announcement_id = $1 AND person_id = $2`, [announcement.id, L.person]) : -1;
+    check('D13: CRM "Tasindi" (endResidency) silme site kisi kilidini tutarken BEKLER (blocked); silme 200; sonra iliski zaten bitmis (RESIDENCY_NOT_CURRENT) ya da tutarli basarili; 40P01 = 0',
+      paused.duringResult[0] === 'blocked' && paused.result.status === 200 && ['ok', 'hata:RESIDENCY_NOT_CURRENT'].includes(crmOutcome) && deadlocks() === 0, { during: paused.duringResult, crmOutcome, status: paused.result.status, deadlocks: deadlocks() });
+    check('D14: duyuru YAYINI da bekler; silme sonrasi yayin tamamlanir ve silinen sakinin (pasif, hesaptan kopmus) kisisi ALICI OLMAZ; komsu alici olur; 40P01 = 0',
+      paused.duringResult[1] === 'blocked' && announcement !== null && adaRecipientRows === 0 && (await countOf(`SELECT COUNT(*)::int AS n FROM announcement_recipients WHERE announcement_id = $1 AND person_id = $2`, [announcement.id, L.boraPerson])) === 1 && deadlocks() === 0, { during: paused.duringResult, announced: announcement?.id ?? null, adaRecipientRows });
+  }
+
+  // KONTROL DENEYI: ters sira (kullanici -> daire) 40P01 URETIR; gercek silme akisi daire -> kullanici siralidir (yukaridaki yarislar 0 deadlock)
+  {
+    const s = await mkSite('Kontrol Deneyi', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'Kontrol Deneyi' });
+    resetDeadlocks();
+    const wrong = await pool.connect();
+    let wrongOutcome;
+    let deleting;
+    try {
+      await wrong.query('BEGIN');
+      await wrong.query('SELECT user_code FROM users WHERE user_code = $1 FOR UPDATE', [L.ada]);
+      deleting = del(L.ada).then((r) => r.status, () => 'hata');
+      await sleepMs(800); // silme daire kilidini aldi, `UPDATE users` icin bekliyor
+      wrongOutcome = await wrong.query('SELECT id FROM apartments WHERE id = $1 FOR UPDATE', [L.apt1]).then(() => 'ok', (error) => `hata:${error.code}`);
+    } finally {
+      await wrong.query('ROLLBACK').catch(() => {});
+      wrong.release();
+    }
+    const deletedStatus = await deleting;
+    const controlDeadlocks = hooks.deadlocks;
+    hooks.deadlocks = 0; // kontrol deneyi toplama KATILMAZ
+    check('KONTROL DENEYI: ters sira (kullanici -> daire) 40P01 URETIR (sayac calisiyor); silme TEK sefer yeniden denenir ya da kilit biter - sonuc tutarli (silme 200 ya da kurban)', controlDeadlocks >= 1 && (wrongOutcome === 'hata:40P01' || deletedStatus === 200), { wrongOutcome, deletedStatus, controlDeadlocks });
+  }
+
+  // ============================================================================================================
+  // E. Kisisel veri disa aktarma: sozlesme sekli, SIZDIRMA YOK, izolasyon, boyut siniri, hiz siniri
+  // ============================================================================================================
+  console.log('--- E. veri disa aktarma ---');
+  const siteE = await mkSite('Hesap Sitesi E', 4);
+  const E = await seedAda(siteE);
+  resetDeadlocks();
+  res = await exportOf(E.ada);
+  const exportText = res.text;
+  const dump = res.body;
+  const exportedAt = new Date();
+  const stamp = `${exportedAt.getFullYear()}${String(exportedAt.getMonth() + 1).padStart(2, '0')}${String(exportedAt.getDate()).padStart(2, '0')}`;
+  check('E1: 200; Content-Type application/json; charset=utf-8; Cache-Control no-store; Content-Disposition attachment; filename="kisisel-veri-<kod>-<YYYYMMDD>.json"',
+    res.status === 200 && res.headers.get('content-type') === 'application/json; charset=utf-8' && res.headers.get('cache-control') === 'no-store' && res.headers.get('content-disposition') === `attachment; filename="kisisel-veri-${E.ada}-${stamp}.json"`,
+    { status: res.status, ct: res.headers.get('content-type'), cd: res.headers.get('content-disposition') });
+  const TOP_KEYS = ['format_version', 'generated_at', 'notice', 'user', 'memberships', 'apartment_memberships', 'people_records', 'vehicles', 'consents', 'notification_preferences', 'announcements_received', 'finance_statements', 'site_applications', 'guest_passes', 'door_events', 'excluded'];
+  check('E2: sozlesmedeki TUM ust duzey anahtarlar var (format_version 1, generated_at ISO, notice, excluded dolu); ek anahtarlar yalniz EKLEMELI (join_requests, door_permissions, qr_requests, devices, truncated)',
+    TOP_KEYS.every((k) => k in dump) && dump.format_version === 1 && !Number.isNaN(Date.parse(dump.generated_at)) && typeof dump.notice === 'string' && Array.isArray(dump.excluded) && dump.excluded.length >= 6 && dump.truncated === false
+      && ['join_requests', 'door_permissions', 'qr_requests', 'devices'].every((k) => Array.isArray(dump[k])), Object.keys(dump));
+  check('E3: user: yalniz kendi alanlari (kod, ad, e-posta, kullanici adi, telefon, rol, aktif, dogrulanmis, onay durumu, olusturma / guncelleme) - parola ozeti ve belirtec alanlari YOK',
+    same(Object.keys(dump.user).sort(), ['approval_status', 'created_at', 'email', 'email_verified', 'full_name', 'is_active', 'login_name', 'phone_number', 'role', 'updated_at', 'user_code']) && dump.user.user_code === E.ada && dump.user.email === E.email && dump.user.phone_number === '+905551110001' && dump.user.full_name === 'Ada Lovelace', dump.user);
+  check('E4: uyelikler: site uyeligi (RESIDENT) + daire uyeligi (APARTMENT_ADMIN) + eski sakin gostergesi; kisi kaydi (iliski: malik, guncel) ve arac (plaka; yonetici notu YOK)',
+    dump.memberships.some((m) => m.source === 'site_membership' && m.role === 'RESIDENT' && m.site_code === siteE.code) && dump.apartment_memberships.some((m) => m.source === 'membership' && m.role === 'APARTMENT_ADMIN' && m.apartment_id === E.apt1 && m.unit_label === 'Daire 1') && dump.apartment_memberships.some((m) => m.source === 'resident_indicator' && m.apartment_id === E.apt1)
+      && dump.people_records.length === 1 && dump.people_records[0].residencies.length === 1 && dump.people_records[0].residencies[0].relation === 'owner' && dump.people_records[0].residencies[0].is_current === true && !('note' in dump.people_records[0])
+      && dump.vehicles.length === 1 && dump.vehicles[0].plate_display === '34 ADA 001' && !('note' in dump.vehicles[0]), { memberships: dump.memberships, people: dump.people_records });
+  check('E5: onaylar (user_consents: yalniz document_id / version / accepted_at / source), bildirim tercihi, alinan duyurular (baslik + metin + okundu), misafir gecisleri (belirtec YOK), kapi olaylari (IP dahil, kendi), karekod istekleri (konum; belirtec YOK), cihazlar (sirlar YOK)',
+    same(Object.keys(dump.consents[0]).sort(), ['accepted_at', 'document_id', 'source', 'version']) && dump.consents[0].document_id === 'terms'
+      && dump.notification_preferences.email_announcements === false && dump.announcements_received.length === 2 && dump.announcements_received.some((a) => a.title === 'Su kesintisi' && a.body === 'Yarin 10-12 arasi su yok.' && a.read_at !== null)
+      && dump.guest_passes.length === 2 && dump.guest_passes.every((g) => !('token' in g)) && dump.door_events.length === 3 && dump.door_events.every((d) => d.ip_address === '10.1.2.3')
+      && dump.qr_requests.length === 1 && dump.qr_requests[0].request_latitude === 41.0123 && !('token' in dump.qr_requests[0])
+      && dump.devices.length === 1 && dump.devices[0].device_uid === E.deviceUid && same(Object.keys(dump.devices[0]).sort(), ['claimed_at', 'created_at', 'device_uid', 'gate_name', 'hardware_type', 'id', 'site_code']),
+    { consents: dump.consents, ann: dump.announcements_received.length, dev: dump.devices });
+  check('E6: basvurular (kendi notu var; karar notu / karar veren / odeme alanlari YOK), katilim talepleri (kendi notu var; ret gerekcesi / inceleyen YOK), kapi izinleri (yonetici notu YOK)',
+    dump.site_applications.length === 2 && dump.site_applications.some((a) => a.note === 'BASVURU-NOTU-ADA') && dump.site_applications.every((a) => !('decision_note' in a) && !('decided_by' in a) && !('decision_source' in a) && !('payment_status' in a) && !('payment_reference' in a))
+      && dump.join_requests.length === 2 && dump.join_requests.some((j) => j.notes === 'KATILIM-NOTU-ADA') && dump.join_requests.every((j) => !('rejection_reason' in j) && !('reviewed_by_user_code' in j))
+      && dump.door_permissions.length === 1 && !('notes' in dump.door_permissions[0]) && !('granted_by_user_code' in dump.door_permissions[0]), { apps: dump.site_applications.length, jr: dump.join_requests.length });
+  const statement = dump.finance_statements[0];
+  check('E7: finans = "Borcum" gorunumu (mevcut fonksiyon): tek daire, bakiye 99900 (150000 - 150000 + 99900), odeyen taraf both; hareketlerde yonetici aciklamasi / ters kayit nedeni / olusturan adi YOK (null)',
+    dump.finance_statements.length === 1 && statement.site_code === siteE.code && statement.balance_minor === 99900 && statement.payer_party === 'both' && statement.recent.length === 3 && statement.recent.every((r) => r.description === null && r.reversal_reason === null && r.created_by_name === null), statement);
+
+  const forbidden = [
+    ...Object.entries(MARK).filter(([key]) => !['boraName'].includes(key)).map(([, value]) => value),
+    MARK.boraName,
+    MARK.boraPhone,
+    `bora${E.bora}@qa.example`,
+    PW_HASH,
+    'password_hash',
+    'local_control_token',
+    'mqtt_password',
+  ];
+  const leaks = forbidden.filter((needle) => exportText.includes(needle));
+  check(`E8: SIZDIRMA YOK: ${forbidden.length} yasak deger (parola ozeti, sifirlama / dogrulama ozetleri, misafir + karekod belirteci, cihaz sirlari, yonetici notlari / gerekceleri / adi, komsunun ad + telefon + e-postasi) dosyada GECMEZ`, leaks.length === 0 && !/\$2[aby]\$/.test(exportText), leaks);
+  check('E8b: kendi verisi dosyada: e-posta, telefon, ad, duyuru, plaka, cihaz kodu, kapi adi, IP', [E.email, '+905551110001', 'Ada Lovelace', 'Su kesintisi', '34 ADA 001', E.deviceUid, 'Ana Kapi', '10.1.2.3', 'BASVURU-NOTU-ADA'].every((needle) => exportText.includes(needle)));
+  check('E9: dosya DB degistirmedi: hesap, uyelikler ve kisi kaydi ayni; 1 hak kaydi (account_data_exports); 40P01 = 0', (await tombstone(E.ada)).deleted_at === null && (await countOf(`SELECT COUNT(*)::int AS n FROM apartment_memberships WHERE user_code = $1`, [E.ada])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [E.ada])) === 1 && deadlocks() === 0);
+
+  const exportAudits = (await q(`SELECT actor_user_code, actor_name, actor_role, details FROM audit_log WHERE action = 'account.data_exported' AND target_id = $1`, [String(E.ada)])).rows;
+  check('E9b: disa aktarma denetlenir (account.data_exported): actor_user_code dolu AMA ad / rol YOK, details yalniz { bytes, truncated }; dosya icerigi ve kisisel veri denetim kaydinda yok',
+    exportAudits.length === 1 && Number(exportAudits[0].actor_user_code) === E.ada && exportAudits[0].actor_name === null && exportAudits[0].actor_role === null && same(Object.keys(exportAudits[0].details).sort(), ['bytes', 'truncated']) && exportAudits[0].details.truncated === false && exportAudits[0].details.bytes === Buffer.byteLength(exportText, 'utf8'), exportAudits);
+
+  // izolasyon: komsunun dosyasinda Ada'ya ait HICBIR sey yok
+  res = await exportOf(E.bora);
+  const boraText = res.text;
+  check('E10: komsunun (Bora) dosyasi KENDI verisi: Ada\'nin e-postasi / telefonu / adi / cihazi / kapi olaylari / basvurusu / finans satiri YOK',
+    res.status === 200 && res.body.user.user_code === E.bora && ![E.email, '+905551110001', 'Ada Lovelace', E.deviceUid, '10.1.2.3', 'BASVURU-NOTU-ADA', 'KATILIM-NOTU-ADA', '34 ADA 001', `iletisim-${E.ada}@qa.example`].some((needle) => boraText.includes(needle))
+      && res.body.door_events.length === 0 && res.body.site_applications.length === 0 && res.body.apartment_memberships.length === 1 && res.body.people_records.length === 1 && res.body.people_records[0].id === E.boraPerson, { keys: res.body.user });
+
+  // baskasinin hesabi adina disa aktarma yok: yalniz kendi token'i
+  res = await call('POST', '/me/data-export', null, { current_password: PW });
+  check('E11: kimliksiz istek 401', res.status === 401);
+
+  // hiz siniri: 24 saatte 3
+  {
+    const rate = await mkUser('Hiz Siniri Kullanicisi', 'individual');
+    const codes = [];
+    for (let i = 0; i < 4; i += 1) codes.push((await exportOf(rate)).status);
+    const fourth = await exportOf(rate);
+    check('E12: 24 saatte 3 basarili dosya; 4. ve 5. istek 429 EXPORT_RATE_LIMITED + Retry-After (saniye) + retry_after_seconds; sayac 3', same(codes, [200, 200, 200, 429]) && fourth.status === 429 && fourth.body.code === 'EXPORT_RATE_LIMITED' && Number(fourth.headers.get('retry-after')) > 0 && Number(fourth.headers.get('retry-after')) <= 24 * 3600 && fourth.body.retry_after_seconds === Number(fourth.headers.get('retry-after')) && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [rate])) === 3, { codes, fourth: fourth.body });
+    check('E12b: 429 yaniti dosya DEGIL (Content-Disposition yok)', fourth.headers.get('content-disposition') === null);
+    await q(`UPDATE account_data_exports SET requested_at = NOW() - INTERVAL '25 hours' WHERE id = (SELECT MIN(id) FROM account_data_exports WHERE user_code = $1)`, [rate]);
+    res = await exportOf(rate);
+    check('E12c: pencere disina (25 saat) cikan hak yeniden kullanilabilir: 200', res.status === 200);
+    await q(`UPDATE account_data_exports SET requested_at = NOW() - INTERVAL '8 days' WHERE user_code = $1`, [rate]);
+    res = await exportOf(rate);
+    check('E12d: 7 gunden eski hak kayitlari sonraki istekte temizlenir (tabloda yalniz pencere ici satirlar)', res.status === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1 AND requested_at < NOW() - INTERVAL '7 days'`, [rate])) === 0);
+
+    // paralel: 5 esizamanli istek -> tam 3 basarili, 2 sinir (hak sayimi advisory kilit altinda)
+    const parallelUser = await mkUser('Paralel Disa Aktarma', 'individual');
+    const parallel = await Promise.all(Array.from({ length: 5 }, () => exportOf(parallelUser)));
+    const statuses5 = parallel.map((r) => r.status).sort();
+    check('E12e: 5 ESIZAMANLI istek: tam 3 x 200, 2 x 429 EXPORT_RATE_LIMITED (sayim kilit altinda; sinir asilamaz); tabloda 3 kayit', same(statuses5, [200, 200, 200, 429, 429]) && parallel.filter((r) => r.status === 429).every((r) => r.body.code === 'EXPORT_RATE_LIMITED') && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [parallelUser])) === 3, parallel.map((r) => [r.status, r.body?.code]));
+
+    // uretim hatasinda hak iade edilir
+    const refund = await mkUser('Hak Iadesi', 'individual');
+    hooks.failOnce = { match: /SELECT user_code, full_name, email, login_name, phone_number, role/, code: 'XX000' };
+    res = await exportOf(refund);
+    check('E13: uretim hatasi: 500 genel mesaj + errorId (ayrinti yok); hak IADE EDILDI (kayit 0)', res.status === 500 && typeof res.body.errorId === 'string' && !JSON.stringify(res.body).includes('enjekte') && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [refund])) === 0, res.body);
+    check('E13b: sonraki istek basarili (hak yanmamis)', (await exportOf(refund)).status === 200);
+  }
+
+  // boyut siniri: satir siniri ve toplam 5 MB siniri
+  {
+    const rowsUser = await mkUser('Satir Siniri Kullanicisi', 'individual');
+    await q(`INSERT INTO door_access_logs (site_code, door_name, user_code, user_name, trigger_type, apartment_label) SELECT $1, 'Ana Kapi', $2, 'Satir Siniri', 'qr', 'A - 1' FROM generate_series(1, 5100)`, [siteE.code, rowsUser]);
+    res = await exportOf(rowsUser);
+    check('E14: 5100 kapi olayi: door_events 5000 satirla kisaltilir (en yeniler), truncated:true + truncated_sections [{ door_events, 5000, row_limit }] + aciklama', res.status === 200 && res.body.door_events.length === 5000 && res.body.truncated === true && res.body.truncated_sections.some((s) => s.section === 'door_events' && s.included === 5000 && s.reason === 'row_limit') && typeof res.body.truncation_note === 'string', res.body.truncated_sections);
+    const bigUser = await mkUser('Boyut Siniri Kullanicisi', 'individual');
+    await q(
+      `INSERT INTO site_applications (applicant_user_code, status, site_name, blocks, doors, block_count, apartment_count, door_count)
+       SELECT $1, 'rejected', 'Buyuk ' || g, (SELECT jsonb_agg(jsonb_build_object('name', 'Blok-' || i, 'apartmentCount', 10)) FROM generate_series(1, 1500) i), '[]'::jsonb, 1, 1, 1 FROM generate_series(1, 120) g`,
+      [bigUser],
+    );
+    const exportStart = Date.now();
+    res = await exportOf(bigUser);
+    const exportMs = Date.now() - exportStart;
+    const bytes = Buffer.byteLength(res.text, 'utf8');
+    check('E15: 5 MB siniri: gövde <= 5 MB, truncated:true, en buyuk bolum (site_applications) size_limit ile KISALTILDI (included < 100), kimlik bolumleri bozulmadi; JSON gecerli',
+      res.status === 200 && bytes <= 5 * 1024 * 1024 && res.body?.truncated === true && res.body.truncated_sections.some((s) => s.section === 'site_applications' && s.reason === 'size_limit' && s.included < 100 && s.included > 0) && res.body.user.user_code === bigUser && res.body.excluded.length >= 6, { bytes, sections: res.body?.truncated_sections });
+    check(`E15b: OLCUM (bilgi): 100 buyuk basvuru (~13 MB ham) 5 MB sinirina kisaltilarak ${exportMs} ms icinde disa aktarildi (${bytes} bayt)`, true);
+  }
+
+  // silinmis hesap disa aktarma yapamaz
+  res = await callWith('POST', '/me/data-export', oldTokenNoPv, { current_password: PW });
+  check('E16: silinmis hesabin tokeni ile disa aktarma 401', res.status === 401);
+
+  // ============================================================================================================
+  // F. Olcek, degismez defter, FK butunlugu, idempotans, log gizliligi
+  // ============================================================================================================
+  console.log('--- F. olcek ve butunluk ---');
+  // F1: 3000 daireli site + agir ayak izi (60 bin denetim satiri, 30 bin kapi kaydi, 3000 duyuru alicisi): silme suresi ve kalinti
+  {
+    resetDeadlocks();
+    const big = await mkSite('Buyuk Hesap Sitesi', 1);
+    await q(`INSERT INTO apartments (site_code, block_id, unit_label, sort_order) SELECT $1, $2, 'D' || g, 1 + g FROM generate_series(1, 2999) g`, [big.code, big.blockId]);
+    const H = await seedAda(big, { heavy: false, fresh: true, name: 'Agir Ayak Izi' });
+    await q(`INSERT INTO audit_log (actor_user_code, actor_name, actor_role, action, site_code) SELECT $1, 'Agir Ayak Izi', 'apartment_owner', 'qa.heavy', $2 FROM generate_series(1, 60000)`, [H.ada, big.code]);
+    await q(`INSERT INTO door_access_logs (site_code, door_id, door_name, user_code, user_name, trigger_type, ip_address) SELECT $1, $2, 'Ana Kapi', $3, 'Agir Ayak Izi', 'qr', '10.9.9.9' FROM generate_series(1, 30000)`, [big.code, big.doorId, H.ada]);
+    await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by) SELECT $1, 'Agir-' || g, 'b', 'published', NOW(), $2 FROM generate_series(1, 3000) g`, [big.code, SUPER]);
+    await q(`INSERT INTO announcement_recipients (announcement_id, person_id, email_status, read_at) SELECT id, $2, 'none', NOW() FROM announcements WHERE site_code = $1 AND title LIKE 'Agir-%'`, [big.code, H.person]);
+    for (const table of ['audit_log', 'door_access_logs', 'announcement_recipients', 'apartments']) await q(`ANALYZE ${table}`);
+    const startedAt = Date.now();
+    res = await del(H.ada);
+    const elapsed = Date.now() - startedAt;
+    const residual = (
+      await q(
+        `SELECT (SELECT COUNT(*) FROM audit_log WHERE actor_user_code = $1 AND actor_name <> 'Agir Ayak Izi')::int AS audit_left,
+                (SELECT COUNT(*) FROM door_access_logs WHERE user_code = $1 AND (user_name <> 'Silinmiş Kullanıcı' OR ip_address IS NOT NULL))::int AS door_left,
+                (SELECT COUNT(*) FROM announcement_recipients WHERE person_id = $2 AND read_at IS NOT NULL)::int AS read_left,
+                (SELECT COUNT(*) FROM audit_log WHERE actor_user_code = $1)::int AS audit_kept`,
+        [H.ada, H.person],
+      )
+    ).rows[0];
+    check(`F1: 3000 daireli site + 60 bin denetim + 30 bin kapi kaydi + 3000 alici: silme 200 ve ${elapsed} ms (< 15 sn); kalinti yok (kapi adi / IP, okundu); denetim satirlari DEGISMEDI (60000+, actor_name aynen)`,
+      res.status === 200 && elapsed < 15000 && residual.audit_left === 0 && residual.door_left === 0 && residual.read_left === 0 && residual.audit_kept >= 60000 && deadlocks() === 0, { elapsed, residual });
+    check('F1b: OLCUM (bilgi): buyuk ayak izli hesabin silme suresi ' + elapsed + ' ms', true);
+  }
+
+  // F2: degismez defter ve yonetici kayitlari: silinen yonetici tombstone\'a bagli kalir; defter ASLA guncellenmez; tombstone sonradan KALICI silinse bile defter tetikleyicisi izin verir
+  {
+    const g = await mkManaged('Defter Sitesi', { managers: 2, members: 1 });
+    const mgrX = g.ms[0];
+    await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, description, created_by) VALUES ($1, $2, 'charge', 125000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, CURRENT_DATE + 10, 'both', 'defter', $3)`, [g.site.code, g.site.apts[0], mgrX]);
+    await q(`INSERT INTO announcements (site_code, title, body, status, published_at, created_by, published_by) VALUES ($1, 'Yonetici duyurusu', 'x', 'published', NOW(), $2, $2)`, [g.site.code, mgrX]);
+    await q(`INSERT INTO site_join_tokens (site_code, token, created_by_user_code) VALUES ($1, $2, $3)`, [g.site.code, uniq('jt'), mgrX]);
+    await q(`INSERT INTO site_manager_invitations (site_code, email, full_name, invited_by_user_code, token, status) VALUES ($1, 'davetli@qa.example', 'Davetli Kisi', $2, $3, 'PENDING')`, [g.site.code, mgrX, uniq('inv').padEnd(64, 'b').slice(0, 64)]);
+    await q(`UPDATE sites SET deletion_status = 'pending_super_user_approval', deletion_requested_by_user_code = $2, deletion_requested_by_name = 'Defter Yonetici Adi', deletion_requested_by_role = 'site_manager', deletion_requested_at = NOW() WHERE site_code = $1`, [g.site.code, mgrX]);
+    const ledgerBefore = (await q(`SELECT id, amount_minor, created_by, created_at FROM ledger_entries WHERE site_code = $1`, [g.site.code])).rows;
+    res = await del(mgrX);
+    const ledgerAfter = (await q(`SELECT id, amount_minor, created_by, created_at FROM ledger_entries WHERE site_code = $1`, [g.site.code])).rows;
+    const shownName = (await q(`SELECT u.full_name FROM ledger_entries l JOIN users u ON u.user_code = l.created_by WHERE l.site_code = $1`, [g.site.code])).rows[0]?.full_name;
+    check('F2: sitede baska yonetici varken yonetici silinir (200); defter satiri DEGISMEZ (created_by tombstone\'a bagli, tutar / tarih ayni), ekstrede olusturan adi "Silinmis Kullanici"; duyuru created_by / published_by bagli', res.status === 200 && same(ledgerBefore, ledgerAfter) && shownName === 'Silinmiş Kullanıcı'
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1 AND created_by = $2 AND published_by = $2`, [g.site.code, mgrX])) === 1 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites WHERE manager_user_code = $1`, [mgrX])) === 0, { res: res.status, shownName });
+    const joinToken = (await q(`SELECT is_active, revoked_at, created_by_user_code FROM site_join_tokens WHERE site_code = $1`, [g.site.code])).rows[0];
+    const siteRow = (await q(`SELECT deletion_status, deletion_requested_by_user_code, deletion_requested_by_name FROM sites WHERE site_code = $1`, [g.site.code])).rows[0];
+    check('F2a: yoneticinin davet jetonu IPTAL (satir kalir, olusturan tombstone), olusturdugu yonetici davetleri SILINDI (davetli adi / e-postasi tutulmaz), site silme talebindeki ad anlik goruntusu kimliksiz (talep durumu korunur)',
+      joinToken.is_active === false && joinToken.revoked_at !== null && Number(joinToken.created_by_user_code) === mgrX && (await countOf(`SELECT COUNT(*)::int AS n FROM site_manager_invitations WHERE invited_by_user_code = $1`, [mgrX])) === 0
+        && siteRow.deletion_requested_by_name === 'Silinmiş Kullanıcı' && siteRow.deletion_status === 'pending_super_user_approval' && Number(siteRow.deletion_requested_by_user_code) === mgrX, { joinToken, siteRow });
+    res = await call('DELETE', `/admin/users/${mgrX}`, SUPER);
+    const ledgerKept = (await q(`SELECT created_by, amount_minor FROM ledger_entries WHERE site_code = $1`, [g.site.code])).rows[0];
+    check('F2b: admin DELETE tombstone\'a: 409 ACCOUNT_ALREADY_DELETED (kalici silinmez; R2 F-5); tombstone ve defter satiri (created_by tombstone\'a bagli) DEGISMEZ', res.status === 409 && res.body?.code === 'ACCOUNT_ALREADY_DELETED' && (await tombstone(mgrX))?.deleted_at !== null && Number(ledgerKept.created_by) === mgrX && ledgerKept.amount_minor === '125000', { status: res.status, body: res.body, ledgerKept });
+    // bakim yolu (operator dogrudan SQL ile kalici siler): defter degismezlik tetikleyicisi YALNIZ kullanici artik yoksa created_by NULL'a izin verir
+    await q(`DELETE FROM users WHERE user_code = $1`, [mgrX]);
+    const ledgerRow = (await q(`SELECT created_by, amount_minor FROM ledger_entries WHERE site_code = $1`, [g.site.code])).rows[0];
+    check('F2c: tombstone dogrudan SQL ile kalici silinirse defter satiri KALIR, created_by NULL (degismezlik tetikleyicisi yalniz kullanici artik yoksa izin verir); duyuru created_by NULL', ledgerRow.created_by === null && ledgerRow.amount_minor === '125000' && (await tombstone(mgrX)) === undefined && (await countOf(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1 AND created_by IS NULL AND published_by IS NULL`, [g.site.code])) === 1, { ledgerRow });
+  }
+
+  // <g-section-start>
+  // ============================================================================================================
+  // G. Inceleme duzeltmeleri (R1 / R2 / R6): belirleyici yarislar, KONTROL DENEYLERI ve veri duzeltmeleri (gercek PG)
+  // ============================================================================================================
+  console.log('--- G. inceleme duzeltmeleri ---');
+  const staffSvc = await import('../src/modules/staff_role_service.js');
+  const userSvc = await import('../src/services/user_service.js');
+  const exportSvc = await import('../src/modules/account_export_service.js');
+  deletion.accountHooks.sleep = async () => {}; // anahtar dondurme yeniden denemesinde gercek bekleme yok (sureler birim testinde)
+  const outcomeOf = (promise) => promise.then((value) => ({ ok: true, value }), (error) => ({ ok: false, code: error.code ?? null, status: error.statusCode ?? null, message: String(error.message ?? '').slice(0, 60) }));
+
+  /**
+   * Akis (hesaba yazan) `pauseMatch` ifadesinde BEKLETILIR (bu sirada hedef hesap satirini FOR KEY SHARE tutar); ardindan hesap silme baslar.
+   * Silme `UPDATE users` icin akisi BEKLER (blocked); kapi acilinca ikisi de biter. `during`: akis bekletilirken, silme kosarken ek calisma.
+   */
+  async function flowHoldsThenDeletion(userCode, startFlow, pauseMatch) {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const pause = { match: pauseMatch, gate, hit: false };
+    hooks.pause = pause;
+    const flowPromise = outcomeOf(startFlow());
+    const reached = await waitFor(() => pause.hit === true, 15000);
+    hooks.pause = null;
+    const deletePromise = del(userCode);
+    let blocked;
+    try {
+      blocked = await settledState(deletePromise, 900);
+    } finally {
+      release();
+    }
+    const flow = await flowPromise;
+    const deleted = await deletePromise;
+    return { reached, blocked, flow, deleteStatus: deleted.status };
+  }
+  const joinCount = (u) => countOf(`SELECT COUNT(*)::int AS n FROM join_requests WHERE user_code = $1`, [u]);
+  const raceSite = await mkSite('Inceleme Yarisi Sitesi', 8);
+  const joinToken = uniq('QAJT').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  await q(`INSERT INTO site_join_tokens (site_code, token, created_by_user_code) VALUES ($1, $2, $3)`, [raceSite.code, joinToken, SUPER]);
+  const joinFlow = (u, apartmentId) => () => membershipSvc.createJoinRequest({ userCode: u, token: joinToken, blockId: raceSite.blockId, apartmentId, notes: 'yaris' });
+
+  // ---- P2-4 (R2 F-3): hesaba YENI bagli satir yazan akislar silmeyle yarisir -> tombstone'a bagli satir KALMAZ, 40P01 = 0
+  {
+    resetDeadlocks();
+    // G1: katilim talebi
+    const u1 = await mkUser('Yaris Katilim');
+    const r1 = await flowHoldsThenDeletion(u1, joinFlow(u1, raceSite.apts[0]), /INSERT INTO join_requests/);
+    check('G1a: createJoinRequest INSERT\'inde bekletilirken (hesap KEY SHARE elde) silme BEKLER (blocked); akis tamamlanir, silme 200; tombstone\'a bagli talep KALMAZ; 40P01 = 0',
+      r1.reached && r1.blocked === 'blocked' && r1.flow.ok && r1.deleteStatus === 200 && (await tombstone(u1)).deleted_at !== null && (await joinCount(u1)) === 0 && deadlocks() === 0, { r1, deadlocks: deadlocks() });
+    const late1 = await outcomeOf(joinFlow(u1, raceSite.apts[0])());
+    check('G1b: silme ONCE gelirse katilim talebi 404 (hesap bulunamadi); talep YAZILMAZ', !late1.ok && late1.status === 404 && (await joinCount(u1)) === 0, late1);
+
+    // G1c: AYNI daire (pasif uyelik -> kapsamda): daire -> kullanici kilit sirasi sayesinde kilitlenme YOK
+    const u1c = await mkUser('Yaris Ayni Daire');
+    await member(raceSite.apts[1], u1c, 'FAMILY_MEMBER', false);
+    const r1c = await flowHoldsThenDeletion(u1c, joinFlow(u1c, raceSite.apts[1]), /INSERT INTO join_requests/);
+    check('G1c: basvurulan daire silinenin kapsaminda (pasif uyelik): silme daire kilidinde BEKLER, akis tamamlanir, silme 200, talep kalmaz; 40P01 = 0 (daire -> kullanici kilit sirasi)',
+      r1c.reached && r1c.blocked === 'blocked' && r1c.flow.ok && r1c.deleteStatus === 200 && (await joinCount(u1c)) === 0 && deadlocks() === 0, { r1c, deadlocks: deadlocks() });
+    // KONTROL DENEYI: daire on kilidi kaldirilirsa (eski sira: kullanici -> daire) ayni senaryo 40P01 URETIR
+    const u1d = await mkUser('Yaris Ayni Daire Kontrol');
+    await member(raceSite.apts[2], u1d, 'FAMILY_MEMBER', false);
+    hooks.rewrite = (text) => text.replace('SELECT id FROM apartments WHERE id = $1 FOR KEY SHARE', 'SELECT $1::BIGINT');
+    resetDeadlocks();
+    const r1d = await flowHoldsThenDeletion(u1d, joinFlow(u1d, raceSite.apts[2]), /INSERT INTO join_requests/);
+    hooks.rewrite = null;
+    const controlJoinDeadlocks = hooks.deadlocks;
+    hooks.deadlocks = 0; // kontrol deneyi toplama KATILMAZ
+    check('G1d: KONTROL DENEYI: daire on kilidi YOKKEN (eski sira) ayni yaris 40P01 URETIR (sayac / senaryo calisiyor); sonuc yine tutarli (en fazla bir taraf kurban, kalinti yok)',
+      controlJoinDeadlocks >= 1 && (await joinCount(u1d)) === 0, { controlJoinDeadlocks, r1d });
+    resetDeadlocks();
+
+    // G2: katilim talebi ONAYI (jr -> kullanici KEY SHARE tek sorguda): silme jr kilidinde bekler
+    const g2 = await mkManaged('Yaris Onay Sitesi', { managers: 1, members: 0, apartments: 4 });
+    const u2 = await mkUser('Yaris Onay Basvuran');
+    const jr2 = Number((await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status) VALUES ($1, $2, $3, $4, 'PENDING') RETURNING id`, [g2.site.code, g2.site.blockId, g2.site.apts[0], u2])).rows[0].id);
+    const r2 = await flowHoldsThenDeletion(u2, () => membershipSvc.approveJoinRequest({ requestId: jr2, authUser: superActor }), /INSERT INTO apartment_memberships/);
+    check('G2a: approveJoinRequest uyelik INSERT\'inde bekletilirken silme BEKLER; onay tamamlanir, silme (kapsam buyudu -> yeniden dene) 200; tombstone\'a bagli uyelik / talep / site uyeligi KALMAZ; 40P01 = 0',
+      r2.reached && r2.blocked === 'blocked' && r2.flow.ok && r2.deleteStatus === 200 && (await countOf(`SELECT (SELECT COUNT(*) FROM apartment_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) + (SELECT COUNT(*) FROM join_requests WHERE user_code = $1) AS n`, [u2])) === 0 && deadlocks() === 0, { r2, deadlocks: deadlocks() });
+    const late2 = await outcomeOf(membershipSvc.approveJoinRequest({ requestId: jr2, authUser: superActor }));
+    check('G2b: silme sonrasi ayni talep onaylanamaz (404; talep silindi)', !late2.ok && late2.status === 404, late2);
+
+    // G3: kapi izni (tek ifade CTE: hedef hesap FOR KEY SHARE + INSERT). Pool sorgusu oldugundan "devam eden islem" elle tutulan KEY SHARE ile temsil edilir.
+    const u3 = await mkUser('Yaris Kapi Izni');
+    const holder = await pool.connect();
+    let r3Blocked;
+    let r3Status;
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT user_code FROM users WHERE user_code = $1 FOR KEY SHARE', [u3]);
+      const deleting3 = del(u3);
+      r3Blocked = await settledState(deleting3, 900);
+      await holder.query(`INSERT INTO door_access_overrides (site_code, door_id, user_code, is_allowed, granted_by_user_code) VALUES ($1, $2, $3, TRUE, $4)`, [raceSite.code, raceSite.doorId, u3, SUPER]);
+      await holder.query('COMMIT');
+      r3Status = (await deleting3).status;
+    } finally {
+      await holder.query('ROLLBACK').catch(() => {});
+      holder.release();
+    }
+    check('G3a: kapi izni yazan islem hesabi KEY SHARE tutarken silme BEKLER; islem bitince silme 200 ve tombstone\'a bagli kapi izni KALMAZ; 40P01 = 0',
+      r3Blocked === 'blocked' && r3Status === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM door_access_overrides WHERE user_code = $1`, [u3])) === 0 && deadlocks() === 0, { r3Blocked, r3Status });
+    const late3 = await outcomeOf(membershipSvc.setDoorAccessOverride({ doorId: raceSite.doorId, userCode: u3, isAllowed: true, authUser: superActor }));
+    const live3 = await mkUser('Yaris Kapi Izni Canli');
+    const okOverride = await outcomeOf(membershipSvc.setDoorAccessOverride({ doorId: raceSite.doorId, userCode: live3, isAllowed: true, authUser: superActor }));
+    check('G3b: silinmis hesaba kapi izni YAZILMAZ (404, satir yok); canli hesapta ayni cagri basarili (tek ifade CTE dogru calisiyor)',
+      !late3.ok && late3.status === 404 && (await countOf(`SELECT COUNT(*)::int AS n FROM door_access_overrides WHERE user_code = $1`, [u3])) === 0 && okOverride.ok && (await countOf(`SELECT COUNT(*)::int AS n FROM door_access_overrides WHERE user_code = $1 AND is_allowed`, [live3])) === 1, { late3, okOverride });
+
+    // G4: kurul / gorevli rolu atama
+    const u4 = await mkUser('Yaris Gorevli');
+    const email4 = (await tombstone(u4)).email;
+    const r4 = await flowHoldsThenDeletion(u4, () => staffSvc.assignStaffRole({ siteCode: raceSite.code, email: email4, role: 'BOARD_MEMBER', actor: superActor }), /INSERT INTO site_memberships/);
+    check('G4: assignStaffRole upsert\'inde bekletilirken silme BEKLER; rol atandi, silme (kapsam buyudu -> yeniden dene) 200; tombstone\'a bagli site uyeligi KALMAZ; 40P01 = 0',
+      r4.reached && r4.blocked === 'blocked' && r4.flow.ok && r4.deleteStatus === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_memberships WHERE user_code = $1`, [u4])) === 0 && deadlocks() === 0, { r4, deadlocks: deadlocks() });
+
+    // G5: site basvurusu
+    const u5 = await mkUser('Yaris Basvuran');
+    const r5 = await flowHoldsThenDeletion(u5, async () => appSvc.createSiteApplication({
+      actor: await actorOf2(u5),
+      body: { name: 'Yaris Basvuru Sitesi G5', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+    }), /INSERT INTO site_applications/);
+    check('G5: createSiteApplication INSERT\'inde bekletilirken silme BEKLER; basvuru yazildi, silme 200 ve basvuruyu GERI CEKTI (bekleyen basvuru KALMAZ); 40P01 = 0',
+      r5.reached && r5.blocked === 'blocked' && r5.flow.ok && r5.deleteStatus === 200 && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [u5])) === 0
+        && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'cancelled'`, [u5])) === 1 && deadlocks() === 0, { r5, deadlocks: deadlocks() });
+    const late5 = await outcomeOf(appSvc.createSiteApplication({
+      actor: await actorOf2(u5),
+      body: { name: 'Yaris Basvuru Sitesi G5b', city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 4 }], doors: [{ name: 'Ana Kapi' }], note: 'n' },
+    }));
+    check('G5b: silme sonrasi site basvurusu 404 USER_NOT_FOUND; basvuru YAZILMAZ', !late5.ok && late5.code === 'USER_NOT_FOUND' && (await countOf(`SELECT COUNT(*)::int AS n FROM site_applications WHERE applicant_user_code = $1 AND status = 'pending'`, [u5])) === 0, late5);
+
+    // G6: yonetici daveti (kayitli kullanici yolu)
+    const u6 = await mkUser('Yaris Davetli');
+    const email6 = (await tombstone(u6)).email;
+    const r6 = await flowHoldsThenDeletion(u6, () => siteSvc.inviteSiteManager({ siteCode: raceSite.code, email: email6, fullName: 'Yaris Davetli', inviterUser: superActor }), /INSERT INTO site_manager_sites/);
+    check('G6: inviteSiteManager (kayitli kullanici) yonetici baginin INSERT\'inde bekletilirken silme BEKLER; davet tamamlandi, silme (kapsam buyudu -> yeniden dene) 200; tombstone\'a bagli yonetici / site uyeligi KALMAZ, rol individual; 40P01 = 0',
+      r6.reached && r6.blocked === 'blocked' && r6.flow.ok && r6.deleteStatus === 200 && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [u6])) === 0
+        && (await tombstone(u6)).role === 'individual' && deadlocks() === 0, { r6, deadlocks: deadlocks() });
+    resetDeadlocks();
+  }
+
+  // ---- P2-5 (R2 F-4): "son yonetici" karari eslenin devam eden pasiflestirmesini BEKLER
+  {
+    resetDeadlocks();
+    const g = await mkManaged('Es Yonetici Yarisi', { managers: 2, members: 1 });
+    const [mgrA, mgrB] = g.ms;
+    const inFlight = await pool.connect();
+    let blockedState;
+    let result;
+    try {
+      await inFlight.query('BEGIN');
+      await inFlight.query(`UPDATE users SET is_active = FALSE WHERE user_code = $1`, [mgrB]); // yonetici B'nin devam eden (commit edilmemis) pasiflestirmesi
+      const deleting = del(mgrA);
+      blockedState = await settledState(deleting, 900);
+      await inFlight.query('COMMIT');
+      result = await deleting;
+    } finally {
+      await inFlight.query('ROLLBACK').catch(() => {});
+      inFlight.release();
+    }
+    const activeManagers = (code) => countOf(`SELECT COUNT(*)::int AS n FROM site_manager_sites s JOIN users u ON u.user_code = s.manager_user_code WHERE s.site_code = $1 AND u.is_active AND u.deleted_at IS NULL`, [code]);
+    check('G7a: B\'nin pasiflestirmesi commit EDILMEMISKEN A\'nin silmesi eş yonetici satirini FOR SHARE ile BEKLER (blocked); B pasiflesince 409 LAST_SITE_MANAGER; A silinmedi; sitede aktif yonetici SIFIRA dusmedi (A hala aktif)',
+      blockedState === 'blocked' && result.status === 409 && result.body?.blockers?.[0]?.code === 'LAST_SITE_MANAGER' && (await tombstone(mgrA)).deleted_at === null && (await activeManagers(g.site.code)) === 1 && deadlocks() === 0, { blockedState, status: result.status, body: result.body });
+
+    // KONTROL DENEYI: eş yonetici kilidi kaldirilirsa (eski davranis) A'nin silmesi BEKLEMEDEN biter ve site yonetimsiz kalir
+    const gc = await mkManaged('Es Yonetici Kontrol', { managers: 2, members: 1 });
+    const [ctlA, ctlB] = gc.ms;
+    hooks.rewrite = (text) => text.replace(/FOR SHARE OF u\b/, '');
+    const inFlight2 = await pool.connect();
+    let ctlState;
+    let ctlResult;
+    try {
+      await inFlight2.query('BEGIN');
+      await inFlight2.query(`UPDATE users SET is_active = FALSE WHERE user_code = $1`, [ctlB]);
+      const deleting = del(ctlA);
+      ctlState = await settledState(deleting, 900);
+      await inFlight2.query('COMMIT');
+      ctlResult = await deleting;
+    } finally {
+      hooks.rewrite = null;
+      await inFlight2.query('ROLLBACK').catch(() => {});
+      inFlight2.release();
+    }
+    check('G7b: KONTROL DENEYI: eş yonetici kilidi YOKKEN silme beklemeden biter (200) ve site YONETIMSIZ kalir (aktif yonetici 0) - kilit olmadan hata uretiliyor, duzeltme onu kapatiyor',
+      ctlState === 'done' && ctlResult.status === 200 && (await activeManagers(gc.site.code)) === 0, { ctlState, status: ctlResult.status, active: await activeManagers(gc.site.code) });
+    resetDeadlocks();
+  }
+
+  // ---- P2-8 (R2 F-7): removeSiteManager <-> approveJoinRequest kilitlenmesi (FOR NO KEY UPDATE)
+  {
+    const removeVsApprove = async (label, { control }) => {
+      const g = await mkManaged(label, { managers: 1, members: 0, apartments: 3 });
+      const target = await mkUser(`${label} Hedef`, 'site_manager');
+      await linkManager(g.site.code, target);
+      await q(`INSERT INTO site_memberships (site_code, user_code, role, is_active) VALUES ($1, $2, 'SITE_ADMIN', TRUE)`, [g.site.code, target]);
+      const jr = Number((await q(`INSERT INTO join_requests (site_code, block_id, apartment_id, user_code, status) VALUES ($1, $2, $3, $4, 'PENDING') RETURNING id`, [g.site.code, g.site.blockId, g.site.apts[0], target])).rows[0].id);
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const pause = { match: /INSERT INTO site_memberships/, gate, hit: false };
+      if (control) hooks.rewrite = (text) => text.replace('FOR NO KEY UPDATE', 'FOR UPDATE');
+      hooks.pause = pause;
+      hooks.deadlocks = 0;
+      const approval = outcomeOf(membershipSvc.approveJoinRequest({ requestId: jr, authUser: superActor }));
+      const reached = await waitFor(() => pause.hit === true, 15000);
+      hooks.pause = null;
+      const removal = outcomeOf(siteSvc.removeSiteManager({ siteCode: g.site.code, targetUserCode: target, callerUser: superActor }));
+      const removalState = await settledState(removal, 1000);
+      release();
+      const [approved, removed] = [await approval, await removal];
+      hooks.rewrite = null;
+      return { reached, removalState, approved, removed, deadlockCount: hooks.deadlocks };
+    };
+    const fixed = await removeVsApprove('Onay Cikarma Duzeltme', { control: false });
+    check('G8a: onay (uyelik INSERT\'inde bekletilirken) ile "yoneticiyi cikar" ESZAMANLI: cikarma BEKLEMEZ (FOR NO KEY UPDATE, onayin KEY SHARE\'iyle cakismaz), ikisi de basarili, 40P01 = 0',
+      fixed.reached && fixed.removalState === 'done' && fixed.removed.ok && fixed.approved.ok && fixed.deadlockCount === 0, fixed);
+    hooks.deadlocks = 0;
+    const control = await removeVsApprove('Onay Cikarma Kontrol', { control: true });
+    check('G8b: KONTROL DENEYI: eski FOR UPDATE ile ayni senaryo cikarmayi BEKLETIR ve kapi acilinca 40P01 URETIR (sayac >= 1; iki islemden biri kurban) - duzeltme onu kapatiyor',
+      control.reached && control.removalState === 'blocked' && control.deadlockCount >= 1, control);
+    hooks.deadlocks = 0;
+  }
+
+  // ---- P2-3 (R2 F-2): silinmis hesaba YAZILMAZ (updateUserByCode): PATCH, silme commit edildikten sonra calisirsa satir degismez
+  {
+    resetDeadlocks();
+    const u = await mkUser('Yaris Profil');
+    await q(`UPDATE users SET phone_number = '+905550001122' WHERE user_code = $1`, [u]);
+    const patchClient = await pool.connect();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const pause = { match: /UPDATE users\s+SET full_name = \$1/, gate, hit: false };
+    hooks.pause = pause;
+    const patching = outcomeOf(userSvc.updateUserByCode({ userCode: u, fullName: 'Yeni Ad Soyad', phoneNumber: '+905559998811', isActive: true, db: patchClient }));
+    const reached = await waitFor(() => pause.hit === true, 15000);
+    hooks.pause = null;
+    const deleted = await del(u); // PATCH'in UPDATE'i henuz CALISMADI: silme kilitsiz biter
+    release();
+    const patched = await patching;
+    patchClient.release();
+    const t = await tombstone(u);
+    check('G9: PATCH\'in UPDATE\'i silme commit EDILDIKTEN sonra calisirsa satir DONMEZ (null) ve tombstone DEGISMEZ: ad "Silinmis Kullanici", telefon NULL, pasif (is_active=true yazilsa CHECK 23514 olurdu); 40P01 = 0',
+      reached && deleted.status === 200 && patched.ok && patched.value === null && t.full_name === 'Silinmiş Kullanıcı' && t.phone_number === null && t.is_active === false && t.deleted_at !== null && deadlocks() === 0, { reached, patched, t });
+  }
+
+  // ---- P2-6 (R2 F-5): yonetici uclari silinmis hesapta
+  {
+    const dead = await mkUser('Yonetici Ucu Silinmis');
+    await del(dead);
+    const deadRow = await tombstone(dead);
+    let r = await call('DELETE', `/admin/users/${dead}`, SUPER);
+    check('G10a: admin DELETE tombstone: 409 ACCOUNT_ALREADY_DELETED; tombstone ve onay kayitlari yerinde (satir silinmedi)', r.status === 409 && r.body?.code === 'ACCOUNT_ALREADY_DELETED' && (await tombstone(dead))?.deleted_at !== null, r.body);
+    r = await call('PATCH', `/admin/users/${dead}/activation`, SUPER, { is_active: true });
+    const afterActivation = await tombstone(dead);
+    check('G10b: admin etkinlestirme tombstone\'a: 409 ACCOUNT_DELETED; hesap pasif KALIR (CHECK ihlali 500\'u degil temiz 409)', r.status === 409 && r.body?.code === 'ACCOUNT_DELETED' && afterActivation.is_active === false && same(afterActivation.full_name, deadRow.full_name), r.body);
+    r = await call('PATCH', `/admin/users/${dead}`, SUPER, { full_name: 'Geri Getirilen Ad' });
+    check('G10c: admin duzenleme tombstone\'a: 409 ACCOUNT_DELETED; ad degismez', r.status === 409 && r.body?.code === 'ACCOUNT_DELETED' && (await tombstone(dead)).full_name === 'Silinmiş Kullanıcı', r.body);
+    const live = await mkUser('Yonetici Ucu Canli');
+    r = await call('PATCH', `/admin/users/${live}/activation`, SUPER, { is_active: false });
+    check('G10d: canli hesapta admin etkinlestirme / pasiflestirme calismaya devam eder (200, pasif)', r.status === 200 && r.body?.user && (await tombstone(live)).is_active === false, r.body);
+    res = await call('GET', `/admin/users?search=deleted-${dead}&page_size=50`, SUPER);
+    const listed = res.body?.users ?? [];
+    const withDeleted = await call('GET', `/admin/users?search=deleted-${dead}&include_deleted=true&page_size=50`, SUPER);
+    check('G10e: admin kullanici listesi varsayilan olarak silinmis hesaplari GIZLER (arama dahil); ?include_deleted=true ile gorunur', res.status === 200 && listed.length === 0 && withDeleted.status === 200 && (withDeleted.body?.users ?? []).some((user) => Number(user.id) === dead), { listed: listed.length, withDeleted: (withDeleted.body?.users ?? []).length });
+    const unfilteredTotal = (await call('GET', '/admin/users?page_size=100', SUPER)).body?.total;
+    const dbActive = await countOf(`SELECT COUNT(*)::int AS n FROM users WHERE deleted_at IS NULL`);
+    check('G10f: varsayilan liste toplami = silinmemis hesap sayisi', unfilteredTotal === dbActive, { unfilteredTotal, dbActive });
+  }
+
+  // ---- P2-7 (R2 F-8): tombstone e-postasi rezerve degil + ayrilmis alan adi kayitta reddedilir
+  {
+    const w = await mkUser('Tombstone Cakisma');
+    const squatter = await mkUser('Adres Isgalcisi', 'individual', { email: `deleted-${w}@deleted.invalid` });
+    res = await del(w);
+    const wRow = await tombstone(w);
+    const squatterRow = await tombstone(squatter);
+    check('G11a: tombstone adresi (deleted-<kod>@deleted.invalid) ONCEDEN baska satirca alinmis: silme 500 / 23505 ile DUSMEZ (200); yeni adres rastgele sonekli; isgalci satir DEGISMEZ',
+      res.status === 200 && new RegExp(`^deleted-${w}-[0-9a-f]{10}@deleted\\.invalid$`).test(wRow.email) && wRow.deleted_at !== null && squatterRow.email === `deleted-${w}@deleted.invalid` && squatterRow.deleted_at === null, { status: res.status, email: wRow.email });
+    const registerAttempt = await outcomeOf(membershipSvc.registerIndividualUser({ firstName: 'Ayrilmis', lastName: 'Alan', email: 'yeni.kayit@deleted.invalid', password: 'Yeni-Parola-9xQ!' }));
+    const adminAttempt = await call('POST', '/admin/users', SUPER, { full_name: 'Ayrilmis Alan Yonetici', email: 'yonetici.olusturma@deleted.invalid', password: 'Yeni-Parola-9xQ!', role: 'individual' });
+    const subdomainAttempt = await outcomeOf(membershipSvc.registerIndividualUser({ firstName: 'Ayrilmis', lastName: 'Alt', email: 'a@sub.deleted.invalid', password: 'Yeni-Parola-9xQ!' }));
+    check('G11b: ayrilmis alan adi (deleted.invalid ve alt alan adlari) kayitta ve yonetici kullanici olusturmada REDDEDILIR (400); hesap / bekleyen kayit olusmaz',
+      !registerAttempt.ok && registerAttempt.status === 400 && !subdomainAttempt.ok && subdomainAttempt.status === 400 && adminAttempt.status === 400
+        && (await countOf(`SELECT (SELECT COUNT(*) FROM users WHERE email ILIKE '%deleted.invalid' AND deleted_at IS NULL AND user_code <> $1) + (SELECT COUNT(*) FROM pending_registrations WHERE email ILIKE '%deleted.invalid') AS n`, [squatter])) === 0, { registerAttempt, subdomainAttempt, admin: adminAttempt.status });
+  }
+
+  // ---- P2-9 (R2 F-10): kisaltilamayan dev bolum -> 413 EXPORT_TOO_LARGE + hak iadesi; kisaltma en YENI kayitlari tutar
+  {
+    const u = await mkUser('Dev Dosya');
+    const realCollect = exportSvc.exportDeps.collect;
+    exportSvc.exportDeps.collect = async (userCode, options) => {
+      const out = await realCollect(userCode, options);
+      out.data.memberships = [{ id: 1, pad: 'x'.repeat(6 * 1024 * 1024) }];
+      return out;
+    };
+    let big;
+    try {
+      big = await exportOf(u);
+    } finally {
+      exportSvc.exportDeps.collect = realCollect;
+    }
+    const bigAudit = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'account.data_exported' AND actor_user_code = $1`, [u]);
+    check('G12a: kisaltilamayan bolum 5 MB\'i asarsa 413 EXPORT_TOO_LARGE ({ error, code }; dosya degil, errorId yok); hak IADE EDILDI (kayit 0); denetim yazilmadi',
+      big.status === 413 && big.body?.code === 'EXPORT_TOO_LARGE' && typeof big.body?.error === 'string' && !('errorId' in (big.body ?? {})) && big.headers.get('content-disposition') === null
+        && (await countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [u])) === 0 && bigAudit === 0, { status: big.status, body: big.body });
+    res = await exportOf(u);
+    check('G12b: sonraki istek basarili (hak yanmadi)', res.status === 200);
+
+    // en yeni kayitlar once: kisi kayitlari, araclar, cihazlar id DESC
+    const o = await mkUser('Siralama Kullanicisi');
+    const sa = await mkSite('Siralama A', 1);
+    const sb = await mkSite('Siralama B', 1);
+    const pa = Number((await q(`INSERT INTO site_people (site_code, user_code, note) VALUES ($1, $2, 'a') RETURNING id`, [sa.code, o])).rows[0].id);
+    const pb = Number((await q(`INSERT INTO site_people (site_code, user_code, note) VALUES ($1, $2, 'b') RETURNING id`, [sb.code, o])).rows[0].id);
+    await q(`INSERT INTO vehicles (site_code, person_id, plate, plate_display) VALUES ($1, $2, $3, '34 SIRA 001'), ($1, $2, $4, '34 SIRA 002')`, [sa.code, pa, `34SIRA${o}1`, `34SIRA${o}2`]);
+    for (let n = 1; n <= 2; n += 1) {
+      await q(`INSERT INTO devices (device_uid, hardware_type, assigned_user_code, owner_user_id, claimed_at, local_control_token, mqtt_username, mqtt_password, gate_name) VALUES ($1, 'esp32_wroom', $2, (SELECT id FROM users WHERE user_code = $2), NOW(), $3, $4, 'x', 'Kapi')`, [`QASIRA${o}N${n}`, o, `tok-${o}-${n}`, `device_QASIRA${o}N${n}`]);
+    }
+    res = await exportOf(o);
+    const ids = (rows) => (rows ?? []).map((row) => Number(row.id));
+    const desc = (list) => list.length >= 2 && list.every((value, i) => i === 0 || list[i - 1] > value);
+    check('G12c: kisi kayitlari, araclar ve cihazlar EN YENI -> EN ESKI (id DESC): boyut siniri kisaltmasi en yeni kayitlari tutar', res.status === 200 && desc(ids(res.body.people_records)) && desc(ids(res.body.vehicles)) && desc(ids(res.body.devices)) && ids(res.body.people_records)[0] === pb,
+      { people: ids(res.body?.people_records), vehicles: ids(res.body?.vehicles), devices: ids(res.body?.devices) });
+  }
+
+  // ---- P2-10 (R1 B5): gosterge yeni yoneticiye gecerken eski PIN silinir
+  {
+    const s = await mkSite('PIN Devri', 3);
+    const L = await seedAda(s, { heavy: false, fresh: true, name: 'PIN Devri Sakin' });
+    const before = (await q(`SELECT resident_user_code, resident_pin_code FROM apartments WHERE id = $1`, [L.apt1])).rows[0];
+    await membershipSvc.removeApartmentMember({ apartmentId: L.apt1, targetUserCode: L.ada, authUser: superActor });
+    const after = (await q(`SELECT resident_user_code, resident_pin_code FROM apartments WHERE id = $1`, [L.apt1])).rows[0];
+    check('G13: daireden cikarilan yonetici gostergeyi devrederken ESKI PIN SILINIR (cikarilan kisi PIN\'i biliyordu): once PIN 4321 + gosterge Ada; sonra gosterge Bora, PIN NULL',
+      before.resident_pin_code === '4321' && Number(before.resident_user_code) === L.ada && Number(after.resident_user_code) === L.bora && after.resident_pin_code === null, { before, after });
+  }
+
+  // ---- P2-11 (R1 B6): yerel kontrol anahtari donmediyse kimliksiz denetim satiri + errorId'li gunluk
+  {
+    const u = await mkUser('Anahtar Donmeyen');
+    const uDbId = Number((await q(`SELECT id FROM users WHERE user_code = $1`, [u])).rows[0].id);
+    const devUid = `QAROT${u}`;
+    await q(`INSERT INTO devices (device_uid, hardware_type, assigned_user_code, owner_user_id, claimed_at, local_control_token, mqtt_username, mqtt_password, gate_name) VALUES ($1, 'esp32_wroom', $2, $3, NOW(), $4, $5, 'x', 'Kapi')`, [devUid, u, uDbId, `tok-${u}`, `device_${devUid}`]);
+    const savedRotate = deletion.accountHooks.rotateTokensForDevices;
+    let rotateAttempts = 0;
+    deletion.accountHooks.rotateTokensForDevices = async () => {
+      rotateAttempts += 1;
+      throw Object.assign(new Error('mqtt down'), { code: 'ECONNREFUSED' });
+    };
+    const errorsBefore = serverErrors.length;
+    res = await del(u);
+    await settle();
+    deletion.accountHooks.rotateTokensForDevices = savedRotate;
+    const audit = (await q(`SELECT actor_user_code, actor_name, actor_role, target_id, details FROM audit_log WHERE action = 'account.key_rotation_failed' AND target_id = $1`, [String(u)])).rows;
+    const logged = serverErrors.slice(errorsBefore).filter((line) => /\[account\] yerel kontrol anahtari dondurulemedi/.test(line));
+    check('G14: anahtar dondurme 4 kez denendi (ilk + 3 yeniden deneme) ve basarisiz: silme 200; KIMLIKSIZ denetim "account.key_rotation_failed" (actor NULL, yalniz sayilar + errorId); errorId\'li hata gunlugu',
+      res.status === 200 && rotateAttempts === 4 && audit.length === 1 && audit[0].actor_user_code === null && audit[0].details.failed_device_count === 1 && audit[0].details.failed_site_count === 0 && audit[0].details.attempts === 4
+        && typeof audit[0].details.error_id === 'string' && logged.length === 1 && logged[0].includes(`errorId=${audit[0].details.error_id}`) && !JSON.stringify(audit).includes('qa.example'), { rotateAttempts, audit, logged });
+  }
+
+  // ---- P2-12a (R6): misafir gecisiyle kapiyi acan kisinin IP'si disa aktarmada bos
+  {
+    const s = await mkSite('Misafir IP', 2);
+    const u = await mkUser('Misafir IP Sahibi');
+    await q(`INSERT INTO door_access_logs (site_code, door_id, door_name, user_code, user_name, user_role, trigger_type, ip_address) VALUES ($1, $2, 'Ana Kapi', $3, 'Misafir Ahmet (Gecis Linki)', 'guest_pass', 'guest_pass', '203.0.113.77'), ($1, $2, 'Ana Kapi', $3, 'Misafir IP Sahibi', 'individual', 'qr', '10.1.2.3')`, [s.code, s.doorId, u]);
+    res = await exportOf(u);
+    const events = res.body?.door_events ?? [];
+    check('G15: misafir gecisi olayinin IP\'si (kapiyi acan MISAFIRIN adresi, ucuncu kisi) dosyada BOS; kullanicinin kendi karekod olayinin IP\'si KALIR; misafir IP\'si dosyanin hicbir yerinde yok',
+      res.status === 200 && events.length === 2 && events.find((e) => e.trigger_type === 'guest_pass')?.ip_address === null && events.find((e) => e.trigger_type === 'qr')?.ip_address === '10.1.2.3' && !res.text.includes('203.0.113.77'), events);
+  }
+
+  // ---- P1-2 (R1 B1): PATCH /me mevcut parola denemesi paralel acik degil; sayac hesap silme ile ORTAK
+  {
+    guard.passwordChangeFailureTracker.reset();
+    const u = await mkUser('Parola Tahmini');
+    const attempts = await Promise.all(Array.from({ length: 12 }, (_, i) => call('PATCH', '/me', u, { password: 'Yeni-Parola-9xQ!', current_password: `yanlis-${i}` })));
+    const codes = attempts.map((r) => r.status);
+    const wrong = codes.filter((s) => s === 400).length;
+    const locked = codes.filter((s) => s === 429).length;
+    const pwAfter = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [u])).rows[0].password_hash;
+    res = await del(u);
+    check('G16: 12 PARALEL yanlis mevcut parola (PATCH /me): en fazla 4 x 400, kalani 429 CURRENT_PASSWORD_LOCKED; parola degismedi; sayac hesap silme ile ORTAK (dogru parolayla bile silme 429)',
+      wrong <= 4 && wrong + locked === 12 && locked >= 8 && pwAfter === PW_HASH && res.status === 429 && res.body?.code === 'CURRENT_PASSWORD_LOCKED' && (await tombstone(u)).deleted_at === null, { codes, delete: res.status });
+    guard.passwordChangeFailureTracker.reset();
+  }
+
+  // ---- R7 (P2): daire sakini change-password, dogrulamadan SONRA (bcrypt.hash beklerken) silme commit ederse tombstone'a parola ozeti YAZMAZ
+  {
+    resetDeadlocks();
+    // pool.query'yi (hook'lar yalniz pool.connect istemcilerini sarar) belirli bir ifadede bekletir; `rewrite` kontrol deneyi icin metni degistirir
+    const pausePoolQuery = (match, rewrite = null) => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const state = { hit: false, gate, release };
+      const realQuery = pool.query;
+      pool.query = function patchedQuery(text, ...rest) {
+        const sqlText = typeof text === 'string' ? text : text?.text;
+        if (!state.hit && typeof sqlText === 'string' && match.test(sqlText)) {
+          state.hit = true;
+          const effective = rewrite ? rewrite(text) : text;
+          return gate.then(() => realQuery.call(pool, effective, ...rest));
+        }
+        return realQuery.call(pool, text, ...rest);
+      };
+      state.restore = () => {
+        pool.query = realQuery;
+      };
+      return state;
+    };
+    const raceChangePassword = async (label, { control }) => {
+      const s = await mkSite(label, 2);
+      const L = await seedAda(s, { heavy: false, fresh: true, name: label });
+      const pauseState = pausePoolQuery(/UPDATE users SET password_hash/, control ? (text) => String(text).replace(' AND deleted_at IS NULL', '') : null);
+      let changing;
+      let deleted;
+      try {
+        changing = outcomeOf(membershipSvc.changeApartmentMemberPassword({ apartmentId: L.apt1, targetUserCode: L.ada, newPassword: 'YeniParola1xQ', currentPassword: PW, authUser: await actorOf2(L.ada) }));
+        const reached = await waitFor(() => pauseState.hit === true, 15000);
+        if (!reached) throw new Error('UPDATE users bekletilemedi');
+        deleted = await del(L.ada); // dogrulama GECTI, UPDATE henuz calismadi: silme kilitsiz commit eder
+      } finally {
+        pauseState.release();
+        pauseState.restore();
+      }
+      const result = await changing;
+      const row = await tombstone(L.ada);
+      return { L, result, deleted, row };
+    };
+    const fixed = await raceChangePassword('Parola Yarisi Duzeltme', { control: false });
+    check('G17a: change-password dogrulamadan SONRA silme commit ederse tombstone\'a parola ozeti YAZILMAZ: sakin 401 ACCOUNT_DELETED (token yok); ozet hala KULLANILAMAZ ("!" + 96 hex, bcrypt degil); 40P01 = 0',
+      fixed.deleted.status === 200 && !fixed.result.ok && fixed.result.status === 401 && fixed.result.code === 'ACCOUNT_DELETED' && /^![0-9a-f]{96}$/.test(fixed.row.password_hash) && fixed.row.deleted_at !== null && fixed.row.is_active === false
+        && (await bcrypt.compare('YeniParola1xQ', fixed.row.password_hash)) === false && deadlocks() === 0, { status: fixed.result.status, code: fixed.result.code, hash: fixed.row.password_hash.slice(0, 8) });
+    const login = await call('POST', '/auth/login', null, { email: `deleted-${fixed.L.ada}@deleted.invalid`, password: 'YeniParola1xQ' });
+    check('G17b: tombstone adresiyle yeni parola ile giris 401 (parola eslesmiyor)', login.status === 401, login.status);
+    // KONTROL DENEYI: `AND deleted_at IS NULL` olmadan ayni yaris tombstone'a GERCEK bcrypt ozeti yazar
+    const control = await raceChangePassword('Parola Yarisi Kontrol', { control: true });
+    const controlWrote = control.row.password_hash.length === 60 && (await bcrypt.compare('YeniParola1xQ', control.row.password_hash)) === true;
+    check('G17c: KONTROL DENEYI: koruma YOKKEN tombstone\'a gercek bcrypt ozeti yazilir (silinmis hesap yeni parolayla eslesir) - test hatayi yakaliyor, duzeltme onu kapatiyor',
+      control.deleted.status === 200 && control.result.ok === true && controlWrote, { ok: control.result.ok, hashLen: control.row.password_hash.length });
+    await q(`UPDATE users SET password_hash = '!' || md5(random()::text) || md5(random()::text) || md5(random()::text) WHERE user_code = $1`, [control.L.ada]); // kontrol deneyinin kirlettigi tombstone'u eski degismeze dondur
+    resetDeadlocks();
+  }
+
+  // ---- R7 (P2): anlik site kurulumu, kurulum sirasinda silme commit ederse tombstone'a rol YAZMAZ ve site KURMAZ
+  {
+    resetDeadlocks();
+    const raceSetup = async (label, { control }) => {
+      const gm = await mkManaged(label, { managers: 2, members: 1 });
+      const mgr = gm.ms[0];
+      const siteName = `${label} Yeni Site`;
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const pause = { match: /INSERT INTO site_manager_sites/, gate, hit: false };
+      if (control) hooks.rewrite = (text) => text.replace("UPDATE users SET role = 'site_manager' WHERE id = $1 AND deleted_at IS NULL", "UPDATE users SET role = 'site_manager' WHERE id = $1");
+      hooks.pause = pause;
+      let setup;
+      let deleted;
+      try {
+        setup = outcomeOf(membershipSvc.setupSiteWithClaimedDevice({ userCode: mgr, name: siteName, city: 'Ankara', district: 'Cankaya', address: 'Cadde 1', blocks: [{ name: 'A Blok', apartmentCount: 3 }], doors: [{ name: 'Ana Kapi' }] }));
+        const reached = await waitFor(() => pause.hit === true, 15000);
+        if (!reached) throw new Error('kurulum bekletilemedi');
+        hooks.pause = null;
+        deleted = await del(mgr); // kurulum henuz hesap satirini tutmuyor (ilk FK INSERT'i bekliyor): silme kilitsiz commit eder
+      } finally {
+        hooks.pause = null;
+        release();
+      }
+      const result = await setup;
+      hooks.rewrite = null;
+      return { mgr, siteName, result, deleted };
+    };
+    const siteCount = (name) => countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE name = $1`, [name]);
+    const fixed = await raceSetup('Kurulum Yarisi Duzeltme', { control: false });
+    check('G18a: kurulum sirasinda hesap silindi (silme ONCE commit): kurulum 401 ACCOUNT_DELETED ile GERI ALINIR; site YOK, tombstone\'a bagli yonetici / uyelik YOK, tombstone rolu individual; 40P01 = 0',
+      fixed.deleted.status === 200 && !fixed.result.ok && fixed.result.status === 401 && fixed.result.code === 'ACCOUNT_DELETED' && (await siteCount(fixed.siteName)) === 0
+        && (await countOf(`SELECT (SELECT COUNT(*) FROM site_manager_sites WHERE manager_user_code = $1) + (SELECT COUNT(*) FROM site_memberships WHERE user_code = $1) AS n`, [fixed.mgr])) === 0 && (await tombstone(fixed.mgr)).role === 'individual' && deadlocks() === 0,
+      { status: fixed.result.status, code: fixed.result.code });
+    const control = await raceSetup('Kurulum Yarisi Kontrol', { control: true });
+    const ctlSite = await siteCount(control.siteName);
+    const ctlRole = (await tombstone(control.mgr)).role;
+    check('G18b: KONTROL DENEYI: `AND deleted_at IS NULL` YOKKEN ayni yaris tombstone\'a site_manager rolu yazar ve site tombstone sahipli KURULUR - duzeltme bunu kapatiyor',
+      control.deleted.status === 200 && control.result.ok === true && ctlSite === 1 && ctlRole === 'site_manager', { ok: control.result.ok, ctlSite, ctlRole });
+    // kontrol deneyinin kirlettigi veriyi temizle (F4 tutarlilik denetimi tombstone'larin rolu individual ister)
+    await q(`DELETE FROM sites WHERE name = $1`, [control.siteName]);
+    await q(`UPDATE users SET role = 'individual' WHERE user_code = $1`, [control.mgr]);
+    resetDeadlocks();
+  }
+  // <g-section-end>
+
+  // F3: ensureDbSchema (sunucu acilisi) tombstone\'lar varken HATASIZ ve no-op; hesap satirlari ayni
+  {
+    const before = (await q(`SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted FROM users`)).rows[0];
+    await ensureDbSchema();
+    await ensureDbSchema();
+    const after = (await q(`SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted FROM users`)).rows[0];
+    check(`F3: ensureDbSchema x2 silinmis hesaplar (${before.deleted}) varken hatasiz; hesap sayilari ve silinmis sayisi ayni`, same(before, after) && before.deleted > 10, { before, after });
+  }
+
+  // F4: FK butunlugu: users'a referans veren HER yabanci anahtar sutununda yetim satir YOK
+  {
+    const orphanReport = [];
+    for (const fkRow of fkRows) {
+      const orphans = await countOf(`SELECT COUNT(*)::int AS n FROM ${fkRow.tbl} t WHERE t.${fkRow.col} IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users u WHERE u.${fkRow.ref_col} = t.${fkRow.col})`);
+      if (orphans > 0) orphanReport.push(`${fkRow.tbl}.${fkRow.col}=${orphans}`);
+    }
+    const invalid = (await q(`SELECT conname FROM pg_constraint WHERE NOT convalidated AND contype = 'f'`)).rows;
+    check(`F4: ${fkRows.length} yabanci anahtar sutununda YETIM satir yok (hesap silme kimliksizlestirmedir: satirlar tombstone'a bagli); dogrulanmamis FK yok`, orphanReport.length === 0 && invalid.length === 0, { orphanReport, invalid });
+    const tombstones = (await q(`SELECT COUNT(*)::int AS n FROM users WHERE deleted_at IS NOT NULL AND (is_active OR email NOT LIKE 'deleted-%@deleted.invalid' OR full_name <> 'Silinmiş Kullanıcı' OR phone_number IS NOT NULL OR login_name IS NOT NULL OR password_reset_token_hash IS NOT NULL OR email_verification_code_hash IS NOT NULL OR role <> 'individual')`)).rows[0].n;
+    check('F4b: TUM tombstone satirlari tutarli kimliksiz (pasif, tombstone e-posta, sabit ad, telefon / kullanici adi / jeton NULL, rol individual)', tombstones === 0, tombstones);
+  }
+
+  // F5: tum kosu boyunca sunucu gunlugu (console.error) kisisel veri / parola ICERMEZ
+  {
+    const piiPattern = /@qa\.example|Lovelace|\+90555|Parola-123|Yeni-Parola|bora\d+@|Gizli|GIZLI/i;
+    const accountLines = serverErrors.filter((line) => /\[account\]/.test(line));
+    const anyLeak = serverErrors.filter((line) => piiPattern.test(line));
+    check('F5: sunucu gunlugunde ([account] ve tum satirlar) e-posta, ad, telefon, parola, gizli isaret YOK', anyLeak.length === 0, anyLeak.slice(0, 5));
+    check('F5b: OLCUM (bilgi): kosu boyunca [account] gunluk satiri ' + accountLines.length + ' (yalniz hata kodlari)', true, accountLines.slice(0, 3));
+  }
+
+  resetDeadlocks();
+  check('F6: TUM kosuda 40P01 (deadlock) = 0 (her yaris bolumunun sonunda ayrica sayildi; toplam)', deadlockTotal === 0, deadlockTotal);
+
+  await http.close();
+  await finishChild(pool);
+}
+// <account-section-end>
+
+// --------------------------------------------------------------------------------------------------------------
 
 const SECTIONS = {
   chain: sectionChain,
@@ -8598,6 +10891,8 @@ const SECTIONS = {
   site_applications: sectionSiteApplications,
   finance: sectionFinance,
   finance_upgrade: sectionFinanceUpgrade,
+  platform_services: sectionPlatformServices,
+  account: sectionAccount,
 };
 
 if (SECTION === '') {
