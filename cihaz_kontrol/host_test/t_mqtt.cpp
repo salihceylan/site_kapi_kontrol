@@ -114,15 +114,16 @@ int main() {
   g_local_token = "tok";
 
   // ------------------------------------------------------------------------------------------------ E surumler
-  { printf("E sürümler (OTA_VERSION_C3 4.3.0, OTA_VERSION_WROOM 5.2.0)\n");
-    CHECK(std::string(OTA_VERSION_C3) == "4.3.0", "OTA_VERSION_C3 = 4.3.0");
-    CHECK(std::string(OTA_VERSION_WROOM) == "5.2.0", "OTA_VERSION_WROOM = 5.2.0");
+  { printf("E sürümler (OTA_VERSION_C3 4.3.2, OTA_VERSION_WROOM 5.2.1: JetPass adi)\n");
+    CHECK(std::string(OTA_VERSION_C3) == "4.3.2", "OTA_VERSION_C3 = 4.3.2");
+    CHECK(std::string(OTA_VERSION_WROOM) == "5.2.1", "OTA_VERSION_WROOM = 5.2.1");
 #if defined(BOARD_ESP32_WROOM_RELAY)
-    CHECK(std::string(OTA_CURRENT_VERSION) == "5.2.0" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.2.0 / esp32-wroom");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "5.2.1" && std::string(OTA_TARGET) == "esp32-wroom", "WROOM derlemesi: 5.2.1 / esp32-wroom");
 #else
-    CHECK(std::string(OTA_CURRENT_VERSION) == "4.3.0" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.3.0 / esp32-c3");
+    CHECK(std::string(OTA_CURRENT_VERSION) == "4.3.2" && std::string(OTA_TARGET) == "esp32-c3", "C3 derlemesi: 4.3.2 / esp32-c3");
 #endif
-    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.2.1")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.1.1")) > 0, "yeni surumler eskilerden BUYUK (OTA artan-surum kurali)");
+    // Onceki (AHBU adli) surumler 4.3.1 / 5.2.0: JetPass yuklenen kart OTA ile eski ada geri DONMEZ (artan-surum kurali).
+    CHECK(otaSurumKarsilastir(String(OTA_VERSION_C3), String("4.3.1")) > 0 && otaSurumKarsilastir(String(OTA_VERSION_WROOM), String("5.2.0")) > 0, "yeni surumler eskilerden BUYUK (OTA artan-surum kurali)");
   }
 
   // ------------------------------------------------------------------------------------------------ acilis: gercek mqttSetup/otaSetup/baglanma

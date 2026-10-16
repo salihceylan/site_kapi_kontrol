@@ -17,7 +17,7 @@
 #define COLOR_MUTED       0x9CF3  // Açık kurşuni gri
 
 enum ScreenState {
-  STATE_HOME,              // Ana bekleme ekranı ("QR Kodunuzu Okutunuz", AHBU Logo, üst bar, ayarlar ikonu)
+  STATE_HOME,              // Ana bekleme ekranı ("QR Kodunuzu Okutunuz", JetPass logosu, üst bar, ayarlar ikonu)
   STATE_QR_READING,        // "QR Kod Okunuyor...", "Lütfen Bekleyiniz"
   STATE_DOOR_OPENED,       // "Kapı Açıldı", yeşil onay dairesi
   STATE_QR_DENIED,         // "Geçersiz / Yetkisiz QR Kod", kırmızı uyarı

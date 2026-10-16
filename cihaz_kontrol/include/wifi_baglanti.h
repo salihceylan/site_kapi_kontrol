@@ -368,8 +368,10 @@ inline void wifiPerformScan() {
   wifiNotifyBleResult("scan_complete", "WiFi listesi guncellendi.");
 }
 
+// Urun adi JetPass (eski adi AHBU). Eski firmware "AHBU<UID>" yayinlardi; bu firmware yuklenen her kart
+// (yeni ya da yeniden flash'lanan) "JetPass<UID>" yayinlar. Uygulama iki oneki de tanir.
 inline String wifiBleDeviceName() {
-  return "AHBU" + cihazUniqueId();
+  return "JetPass" + cihazUniqueId();
 }
 
 inline void wifiStopProvisioningMode();

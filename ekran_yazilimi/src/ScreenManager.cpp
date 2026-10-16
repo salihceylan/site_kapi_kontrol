@@ -337,11 +337,11 @@ void ScreenManager::drawHomeScreen() {
   tft.fillScreen(COLOR_BG);
   drawTopBar(true);
 
-  // AHBU Marka Başlığı
+  // JetPass Marka Başlığı (eski adı AHBU). Boyut 2 GLCD: karakter 12 px -> 7 harf 84 px, x = (240 - 84) / 2
   tft.setTextColor(COLOR_ACCENT, COLOR_BG);
   tft.setTextSize(2);
-  tft.setCursor(95, 36);
-  tft.print("AHBU");
+  tft.setCursor(78, 36);
+  tft.print("JetPass");
 
   // Alt yazı — Türkçe karakter kullanılmıyor (TFT_eSPI GLCD fontu ASCII-only)
   tft.setTextColor(COLOR_TEXT, COLOR_BG);

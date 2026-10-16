@@ -410,6 +410,14 @@ Yerel (LAN) kapi kontrolu: UDP 8765, protokol v2 (challenge'a bagli HMAC-SHA256;
 
 Firmware ana makine testleri (donanimsiz, Windows + MSVC): `cihaz_kontrol/host_test/` (`python run_all.py`, 719 dogrulama; ayrinti `cihaz_kontrol/host_test/README.md`).
 
+### 11.3 Urun adi: JetPass (eski adi AHBU)
+
+2026-10-16'dan beri kapi (Gecis Kontrol) urununun adi **JetPass**'tir; ad her yerde tam olarak `JetPass` yazilir. Modul adi "Gecis Kontrol (JetPass)". Ev otomasyonu urunu AHBU adini korur.
+
+- Firmware WROOM 5.2.1 / C3 4.3.2 / ekran 1.1.2 ve sonrasi: BLE adi `JetPass<UID>`, mDNS adi `jetpass-<uid>`, MQTT istemci kimligi `JetPass-<UID>`, ekran ana sayfa markasi `JetPass`. Ad calisma aninda uretilir (NVS'te tutulmaz); eski bir kart bu firmware ile (USB ya da OTA) yeniden yuklenince JetPass olur. OTA yalniz artan surumu kabul ettigi icin JetPass'li kart eski adli surume geri donmez.
+- Uygulama BLE taramasinda iki oneki de tanir (`isBleProvisionDeviceName`): sahadaki eski kartlar `AHBU<UID>` gorunmeye devam eder.
+- DEGISMEYEN protokol kimlikleri (sahadaki cihazlarla uyum): karekod `AHBU:DOOR:<uid>:<token>`, `X-AHBU-Device-UID` basligi, `GET /ahbu/status`, mDNS servis turu `_ahbu._tcp`, ekranin seri kimligi `AHBU_DEVICE:DISPLAY`, NVS ad alani `ahbu_sys`, dahili hesap alani `@ahbu.local`, derleme bayraklari `AHBU_*`, company_qr_tool ortam degiskenleri `AHBU_*`. Bunlari degistirmek sahadaki kartlari ve mevcut `.env` dosyalarini bozar.
+
 ## 12. Uretim Sunucu Kurulumu
 
 Detaylar:

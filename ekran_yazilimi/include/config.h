@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define DISPLAY_FIRMWARE_VERSION "1.1.1"
+#define DISPLAY_FIRMWARE_VERSION "1.1.2"  // 1.1.2: ana ekran markasi JetPass (eski AHBU)
 
 // ==========================================
 // UART Configuration to ESP32-WROOM (Main MCU)

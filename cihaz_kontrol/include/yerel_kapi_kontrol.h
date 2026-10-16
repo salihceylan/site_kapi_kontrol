@@ -286,10 +286,10 @@ inline void yerelKapiKontrolBaslat() {
     gYerelDurum.sonKabulVar = false;
   }
 
-  String mdnsHost = "ahbu-" + cihazUniqueId();
+  String mdnsHost = "jetpass-" + cihazUniqueId();  // urun adi (eski: "ahbu-")
   mdnsHost.toLowerCase();
   if (MDNS.begin(mdnsHost.c_str())) {
-    MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);
+    MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);  // servis turu protokol kimligidir, DEGISMEZ
     Serial.print("mDNS aktif: http://");
     Serial.print(mdnsHost);
     Serial.print(".local:");
