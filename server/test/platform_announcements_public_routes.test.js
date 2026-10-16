@@ -4,8 +4,14 @@ import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:t
 import assert from 'node:assert/strict';
 import express from 'express';
 import { pool } from '../src/db.js';
-import { announcementPublicRouter, unsubscribeApplyLimiter, unsubscribeViewLimiter } from '../src/modules/announcement_public_routes.js';
-import { hashEmail, signUnsubscribeToken } from '../src/modules/announcement_email_security.js';
+import {
+  announcementPublicRouter,
+  unsubscribeApplyLimiter,
+  unsubscribeApplyValidLimiter,
+  unsubscribeViewLimiter,
+  unsubscribeViewValidLimiter,
+} from '../src/modules/announcement_public_routes.js';
+import { emailHashSalts, hashEmail, signUnsubscribeToken } from '../src/modules/announcement_email_security.js';
 
 process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef';
 
@@ -45,6 +51,7 @@ beforeEach(() => {
     if (failWrites) throw Object.assign(new Error('db kesildi'), { code: '57P01' });
     if (/^INSERT INTO announcement_email_suppressions/.test(sql)) return { rows: [], rowCount: 1 };
     if (/^UPDATE announcement_recipients/.test(sql)) return { rows: [], rowCount: 2 };
+    if (/^INSERT INTO notification_preferences/.test(sql)) return { rows: [], rowCount: 1 };
     throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);
   };
   mock.method(console, 'error', () => {});
@@ -54,6 +61,8 @@ afterEach(() => {
   mock.restoreAll();
   unsubscribeViewLimiter.reset();
   unsubscribeApplyLimiter.reset();
+  unsubscribeViewValidLimiter.reset();
+  unsubscribeApplyValidLimiter.reset();
 });
 
 const get = async (path) => {
@@ -115,7 +124,7 @@ describe('POST /public/announcement-unsubscribe', () => {
     assert.equal(res.status, 200);
     assert.match(res.text, /Abonelikten çıkıldı/);
     assert.match(res.headers.get('content-security-policy'), /default-src 'none'/);
-    assert.equal(log.length, 2);
+    assert.equal(log.length, 3);
     assert.match(log[0].sql, /^INSERT INTO announcement_email_suppressions \(email_hash\) VALUES \(\$1\) ON CONFLICT \(email_hash\) DO NOTHING$/);
     assert.deepEqual(log[0].params, [hash()]);
     assert.match(log[1].sql, /SET email_status = 'skipped_pref', email = NULL, email_hash = NULL, email_next_at = NULL WHERE email_hash = \$1 AND email_status = 'pending' AND email_claimed_at IS NULL$/);
@@ -127,7 +136,7 @@ describe('POST /public/announcement-unsubscribe', () => {
     const res = await post(`/public/announcement-unsubscribe?t=${encodeURIComponent(token())}`, 'List-Unsubscribe=One-Click');
     assert.equal(res.status, 200);
     assert.deepEqual(log[0].params, [hash()]);
-    assert.equal(log.length, 2);
+    assert.equal(log.length, 3);
   });
 
   it('idempotent: ikinci POST de 200 (ON CONFLICT DO NOTHING); kurcalanmış / eksik belirteç 400 ve hiçbir yazma yapılmaz', async () => {
@@ -154,12 +163,86 @@ describe('POST /public/announcement-unsubscribe', () => {
   });
 });
 
-describe('IP hız sınırları', () => {
-  it('görüntüleme 120/saat, uygulama 30/saat (IP başına); aşılınca 429', async () => {
-    const view = `/public/announcement-unsubscribe?t=${encodeURIComponent(token())}`;
-    for (let i = 0; i < 30; i += 1) assert.equal((await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`)).status, 200, `post ${i}`);
-    assert.equal((await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`)).status, 429);
-    for (let i = 0; i < 120; i += 1) assert.equal((await get(view)).status, 200, `get ${i}`);
+describe('E4a hesap tercihi: abonelikten çıkış o adrese sahip hesapların e-posta bildirimini kapatır', () => {
+  it('POST üçüncü sorgu: notification_preferences UPSERT (email_announcements = FALSE); adres özeti + güncel / eski tuzlar parametre; hesap e-postası ve dahili hesap iletişim adresi KANONİK özetle eşleşir', async () => {
+    const res = await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`);
+    assert.equal(res.status, 200);
+    const prefs = log[2];
+    assert.match(prefs.sql, /^INSERT INTO notification_preferences \(user_code, email_announcements\) SELECT m\.user_code, FALSE FROM \(/);
+    assert.match(prefs.sql, /ON CONFLICT \(user_code\) DO UPDATE SET email_announcements = FALSE, updated_at = NOW\(\)$/);
+    assert.match(prefs.sql, /FROM users u WHERE u\.email IS NOT NULL AND u\.email NOT LIKE '%@ahbu\.local' AND \$1 = ANY \(ARRAY\( SELECT encode\(sha256\(convert_to\(s\.salt \|\| ':' \|\| \(CASE WHEN split_part\(lower\(btrim\(u\.email\)\), '@', 2\) IN \('gmail\.com', 'googlemail\.com'\)/);
+    assert.match(prefs.sql, /UNION SELECT a\.resident_user_code FROM apartments a INNER JOIN users ru ON ru\.user_code = a\.resident_user_code WHERE a\.resident_email IS NOT NULL/);
+    assert.deepEqual(prefs.params, [hash(), emailHashSalts()]);
+    assert.ok(!JSON.stringify(prefs.params).includes(ADDRESS));
+  });
+
+  it('geçersiz / eksik belirteçte hiçbir tercih yazılmaz; veritabanı hatasında 500 (üçüncü sorgu dahil) ve yalnız kod loglanır', async () => {
+    assert.equal((await post('/public/announcement-unsubscribe', 't=abc')).status, 400);
+    assert.equal(log.length, 0);
+    pool.query = async (text, params) => {
+      log.push({ sql: norm(text), params });
+      if (/^INSERT INTO notification_preferences/.test(norm(text))) throw Object.assign(new Error('x'), { code: '40001' });
+      return { rows: [], rowCount: 1 };
+    };
+    const res = await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`);
+    assert.equal(res.status, 500);
+    assert.match(console.error.mock.calls.map((call) => call.arguments.join(' ')).join('\n'), /kayit basarisiz: 40001/);
+  });
+});
+
+describe('E5 hız sınırı: önce imza ucuzca doğrulanır; sıkı IP sınırı yalnız GEÇERSİZ belirteçlere', () => {
+  const tokenFor = (n) => signUnsubscribeToken(hashEmail(`kisi${n}@example.com`));
+  const form = (value) => `t=${encodeURIComponent(value)}`;
+
+  it('posta sağlayıcı havuzu (tek IP, çok sayıda GEÇERLİ tek tık POST): hiçbiri 429 almaz (eski IP başına 30 sınırı çıkışları engellerdi)', async () => {
+    for (let n = 0; n < 100; n += 1) {
+      const res = await post(`/public/announcement-unsubscribe?t=${encodeURIComponent(tokenFor(n))}`, 'List-Unsubscribe=One-Click');
+      assert.equal(res.status, 200, `geçerli POST ${n}`);
+    }
+  });
+
+  it('GEÇERSİZ belirteç: POST IP başına 30/saat, GET 120/saat (sonra 429); geçerli belirteçler bu sayaçtan ETKİLENMEZ', async () => {
+    for (let i = 0; i < 30; i += 1) assert.equal((await post('/public/announcement-unsubscribe', form(`kotu${i}`))).status, 400, `geçersiz post ${i}`);
+    assert.equal((await post('/public/announcement-unsubscribe', form('kotu-son'))).status, 429);
+    assert.equal((await post('/public/announcement-unsubscribe', form(tokenFor(1)))).status, 200, 'geçerli belirteç IP\'nin geçersiz sayacına takılmaz');
+    for (let i = 0; i < 120; i += 1) assert.equal((await get(`/public/announcement-unsubscribe?t=kotu${i}`)).status, 400, `geçersiz get ${i}`);
+    assert.equal((await get('/public/announcement-unsubscribe?t=kotu-son')).status, 429);
+    assert.equal((await get(`/public/announcement-unsubscribe?t=${encodeURIComponent(tokenFor(2))}`)).status, 200);
+  });
+
+  it('GEÇERLİ belirteç: adres özeti başına POST 20/saat, GET 60/saat (idempotent işlem; kötüye kullanım sınırı); başka özet etkilenmez', async () => {
+    const same = form(tokenFor(7));
+    for (let i = 0; i < 20; i += 1) assert.equal((await post('/public/announcement-unsubscribe', same)).status, 200, `post ${i}`);
+    assert.equal((await post('/public/announcement-unsubscribe', same)).status, 429);
+    assert.equal((await post('/public/announcement-unsubscribe', form(tokenFor(8)))).status, 200);
+    const view = `/public/announcement-unsubscribe?t=${encodeURIComponent(tokenFor(9))}`;
+    for (let i = 0; i < 60; i += 1) assert.equal((await get(view)).status, 200, `get ${i}`);
     assert.equal((await get(view)).status, 429);
+  });
+
+  it('429 yanıtı da sayfadır: sıkı CSP + no-store + noindex + Retry-After, Türkçe HTML (JSON değil)', async () => {
+    for (let i = 0; i < 31; i += 1) await post('/public/announcement-unsubscribe', form(`kotu${i}`));
+    const limited = await post('/public/announcement-unsubscribe', form('kotu-x'));
+    assert.equal(limited.status, 429);
+    assert.match(limited.headers.get('content-security-policy'), /default-src 'none'/);
+    assert.equal(limited.headers.get('cache-control'), 'no-store');
+    assert.equal(limited.headers.get('x-robots-tag'), 'noindex');
+    assert.ok(Number(limited.headers.get('retry-after')) > 0);
+    assert.match(limited.headers.get('content-type'), /text\/html/);
+    assert.match(limited.text, /Çok fazla istek/);
+    assert.doesNotMatch(limited.text, /^\{/);
+    // geçerli belirteçte de aynı: digest sınırı
+    const same = form(tokenFor(3));
+    for (let i = 0; i < 20; i += 1) await post('/public/announcement-unsubscribe', same);
+    const validLimited = await post('/public/announcement-unsubscribe', same);
+    assert.equal(validLimited.status, 429);
+    assert.match(validLimited.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+    assert.equal(validLimited.headers.get('cache-control'), 'no-store');
+  });
+
+  it('imza kontrolü sınırdan ÖNCE ve veritabanından bağımsızdır: geçersiz belirteç hiçbir sorgu yapmaz, geçerli olmayan istek sayfa sınırına girmeden elenir', async () => {
+    await post('/public/announcement-unsubscribe', form('kotu'));
+    await get('/public/announcement-unsubscribe?t=kotu');
+    assert.equal(log.length, 0);
   });
 });

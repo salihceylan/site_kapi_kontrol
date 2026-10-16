@@ -14,6 +14,7 @@ import {
   PREVIEW_MAX,
   TITLE_MAX,
   announcementLimits,
+  attachLiveCount,
   dailyLimitReached,
   duplicateAnnouncement,
   hourlyLimitReached,
@@ -331,6 +332,51 @@ describe('duyuru: yanıt eşleyicileri', () => {
     const none = detail(0);
     assert.deepEqual(redactForBoard({ ...none, stats: { ...none.stats, read: 0, unread: 0 } }).stats.read, 0);
     assert.equal(BOARD_SMALL_TARGET_MIN, 5);
+  });
+});
+
+describe('E7 kurul temizliği: canlı alıcı sayısı', () => {
+  const emailStats = { requested: 4, sent: 3, failed: 0, no_address: 1, skipped_pref: 0, capped: 0, duplicate: 0, pending: 0 };
+  const detail = (stored, live) =>
+    attachLiveCount({ id: 1, recipient_count: stored, read_count: 2, stats: { recipients: live, read: 2, unread: live - 2, email: { ...emailStats } } }, live);
+
+  it('küçük hedef kararı min(yayın anı sayısı, canlı satır sayısı) ile verilir: 6 alıcı yayınlandı, kişiler silinip 3 kaldı -> kurul için NULL', () => {
+    const redacted = redactForBoard(detail(6, 3));
+    assert.equal(redacted.read_count, null);
+    assert.equal(redacted.stats.read, null);
+    assert.equal(redacted.stats.unread, null);
+    assert.ok(Object.values(redacted.stats.email).every((value) => value === null));
+    assert.equal(redacted.recipient_count, 6, 'yayın anındaki sayı aynen');
+    assert.equal(redacted.stats.recipients, 3);
+  });
+
+  it('canlı sayı 5 ve üstüyse (yayın anı da) görünür; canlı 0 ise (kişisel veri kalmadı) sayılar olduğu gibi (null DEĞİL); canlı bilinmiyorsa yayın anı sayısı kullanılır', () => {
+    const big = redactForBoard(detail(6, 5));
+    assert.equal(big.read_count, 2);
+    assert.equal(big.stats.read, 2);
+    const none = redactForBoard(attachLiveCount({ id: 1, recipient_count: 3, read_count: 0, stats: { recipients: 0, read: 0, unread: 0, email: { ...emailStats } } }, 0));
+    assert.equal(none.stats.read, 0);
+    assert.equal(none.read_count, 0);
+    const unknown = redactForBoard({ id: 1, recipient_count: 2, read_count: 1, stats: { recipients: 2, read: 1, unread: 1, email: { ...emailStats } } });
+    assert.equal(unknown.read_count, null);
+    assert.equal(unknown.stats.read, null);
+    const smallStoredBigLive = redactForBoard(detail(3, 9));
+    assert.equal(smallStoredBigLive.read_count, null, 'yayın anında küçükse canlı büyük görünse de gizli');
+  });
+
+  it('canlı sayı yanıta GİRMEZ: numaralanamaz özelliktir (JSON, Object.keys, spread, redactForBoard çıktısında yok); liste satırlarında da', () => {
+    const entry = detail(6, 3);
+    assert.equal(entry.live_recipient_count, 3);
+    assert.equal(JSON.stringify(entry).includes('live_recipient_count'), false);
+    assert.equal(Object.keys(entry).includes('live_recipient_count'), false);
+    assert.equal('live_recipient_count' in { ...entry }, false);
+    assert.equal('live_recipient_count' in redactForBoard(entry), false);
+    const row = mapSummaryRow({ id: '5', title: 'T', body_head: 'B', body_length: '1', importance: 'normal', status: 'published', target_type: 'site', send_email: false, recipient_count: 6, read_count: 1, live_count: 3, created_at: new Date() });
+    assert.equal(row.live_recipient_count, 3);
+    assert.equal(JSON.stringify(row).includes('live_'), false);
+    assert.equal(redactForBoard({ items: [row] }).items[0].read_count, null);
+    assert.equal(attachLiveCount({}, undefined).live_recipient_count, undefined);
+    assert.equal(attachLiveCount({}, null).live_recipient_count, undefined);
   });
 });
 

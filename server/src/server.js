@@ -200,4 +200,10 @@ async function startServer() {
   }
 }
 
-startServer();
+export { app };
+
+// Testler (SERVER_SKIP_START=1) uygulamayı ağa açmadan ve veritabanına bağlanmadan içe aktarabilir (gerçek ara katman zinciri, gerçek rotalar).
+// Üretimde değişken tanımsızdır: davranış değişmez.
+if (process.env.SERVER_SKIP_START !== '1') {
+  startServer();
+}

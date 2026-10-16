@@ -11,7 +11,7 @@
 import { HAS_ACCOUNT_SQL } from './people_common.js';
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
-import { emailHashSalt } from './announcement_email_security.js';
+import { emailHashSalt, emailHashSalts } from './announcement_email_security.js';
 import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from './announcement_lock.js';
 import {
   DEFAULT_EMAIL_DAILY_LIMIT,
@@ -90,6 +90,25 @@ export const deliverableEmailSql = (column) => `(
 /** Adresin tuzlu özeti (announcement_email_security.js hashEmail ile birebir aynı): tuz parametresi $saltIndex. */
 export const emailHashSql = (saltParam, column) =>
   `encode(sha256(convert_to(${saltParam}::TEXT || ':' || ${column}, 'UTF8')), 'hex')`;
+
+/**
+ * KANONİK adres (announcement_email_security.js canonicalAddress ile birebir aynı kural): `+etiket` atılır; gmail.com / googlemail.com için
+ * noktalar silinir ve alan adı gmail.com olur. Girdi ZATEN küçük harfli ve kırpılmış tek `@`'li adres olmalıdır (deliverableEmailSql çıktısı).
+ * Etiketten / noktalardan sonra yerel kısım boş kalacaksa dokunulmaz.
+ */
+export const canonicalEmailSql = (column) => {
+  const local = `split_part(${column}, '@', 1)`;
+  const domain = `split_part(${column}, '@', 2)`;
+  const stripped = `(CASE WHEN position('+' IN ${local}) > 1 THEN left(${local}, position('+' IN ${local}) - 1) ELSE ${local} END)`;
+  return `(CASE WHEN ${domain} IN ('gmail.com', 'googlemail.com') THEN COALESCE(NULLIF(replace(${stripped}, '.', ''), ''), ${stripped}) || '@gmail.com' ELSE ${stripped} || '@' || ${domain} END)`;
+};
+
+/**
+ * Adres (küçük harfli, kırpılmış) bastırma listesinde mi: GÜNCEL ve ESKİ sırlarla ($saltsParam TEXT[]) hesaplanan kanonik özetlerden biri
+ * listede varsa true. Sır dönüşümünden önce yapılmış abonelikten çıkışlar eski özetle kayıtlıdır; eski sırlar PREVIOUS listesindeyken geçerlidir.
+ */
+export const suppressedSql = (addressExpr, saltsParam) =>
+  `EXISTS (SELECT 1 FROM unnest(${saltsParam}::TEXT[]) AS salts(salt) INNER JOIN announcement_email_suppressions sup ON sup.email_hash = ${emailHashSql('salts.salt', canonicalEmailSql(addressExpr))})`;
 
 /**
  * Kitle CTE'leri: $1 = site_code; hedef kimlikleri $2'den (hedef türüne göre). `base` (person_id, has_account, email_pref, email).
@@ -193,21 +212,21 @@ export async function previewAudience(db, siteCode, target) {
 export async function assertDeliverableAddressLimit(db, siteCode, target, importance) {
   const audience = audienceCtes(target);
   const saltIndex = audience.params.length + 2;
+  const saltsParam = `$${saltIndex + 2}`;
   const result = await db.query(
     `
       WITH ${audience.sql},
       hashed AS (
-        SELECT b.person_id, b.has_account, b.email_pref, b.email, ${emailHashSql(`$${saltIndex}`, 'b.email')} AS email_hash
+        SELECT b.person_id, b.has_account, b.email_pref, b.email, ${emailHashSql(`$${saltIndex}`, canonicalEmailSql('b.email'))} AS email_hash
         FROM base b
       )
-      SELECT COUNT(DISTINCT h.email)::INTEGER AS n
+      SELECT COUNT(DISTINCT h.email_hash)::INTEGER AS n
       FROM hashed h
-      LEFT JOIN announcement_email_suppressions sup ON sup.email_hash = h.email_hash
       WHERE h.email IS NOT NULL
-        AND sup.email_hash IS NULL
+        AND NOT ${suppressedSql('h.email', saltsParam)}
         AND NOT (h.has_account AND h.email_pref = FALSE AND $${saltIndex + 1}::TEXT = 'normal')
     `,
-    [siteCode, ...audience.params, emailHashSalt(), importance],
+    [siteCode, ...audience.params, emailHashSalt(), importance, emailHashSalts()],
   );
   const deliverable = Number(result.rows?.[0]?.n ?? 0);
   if (deliverable > EMAIL_PER_PUBLISH_LIMIT) {
@@ -281,14 +300,14 @@ export async function snapshotRecipients(
   }
   const audience = audienceCtes(target);
   const next = audience.params.length + 2;
-  const [pAnnouncement, pSend, pImportance, pSalt, pDayStart, pPerAddress, pAllowance] = [0, 1, 2, 3, 4, 5, 6].map((i) => `$${next + i}`);
+  const [pAnnouncement, pSend, pImportance, pSalt, pDayStart, pPerAddress, pAllowance, pSalts] = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => `$${next + i}`);
   const insert = await db.query(
     `
       WITH ${audience.sql},
       hashed AS (
         SELECT
           b.person_id, b.has_account, b.email_pref, b.email,
-          CASE WHEN b.email IS NULL OR NOT ${pSend}::BOOLEAN THEN NULL ELSE ${emailHashSql(pSalt, 'b.email')} END AS email_hash
+          CASE WHEN b.email IS NULL OR NOT ${pSend}::BOOLEAN THEN NULL ELSE ${emailHashSql(pSalt, canonicalEmailSql('b.email'))} END AS email_hash
         FROM base b
       ),
       classified AS (
@@ -297,12 +316,11 @@ export async function snapshotRecipients(
           CASE
             WHEN NOT ${pSend}::BOOLEAN THEN 'none'
             WHEN h.email IS NULL THEN 'no_address'
-            WHEN sup.email_hash IS NOT NULL THEN 'skipped_pref'
+            WHEN ${suppressedSql('h.email', pSalts)} THEN 'skipped_pref'
             WHEN h.has_account AND h.email_pref = FALSE AND ${pImportance}::TEXT = 'normal' THEN 'skipped_pref'
             ELSE 'eligible'
           END AS st
         FROM hashed h
-        LEFT JOIN announcement_email_suppressions sup ON sup.email_hash = h.email_hash
       ),
       ranked AS (
         SELECT
@@ -356,10 +374,12 @@ export async function snapshotRecipients(
       announcementId,
       send,
       importance,
-      emailHashSalt(),
+      // Tuz yalnız e-posta gerektiğinde hesaplanır (e-postasız yayın sır eksik / kısa olsa bile bozulmaz)
+      send ? emailHashSalt() : '',
       istanbulDayRange(now).start.toISOString(),
       perAddressLimit,
       allowance,
+      send ? emailHashSalts() : [],
     ],
   );
   const total = Number(insert.rowCount ?? 0);

@@ -31,6 +31,8 @@ let failures;
 let failureAttempts;
 let purges;
 let purgeImpl;
+let closeCalls;
+let closeImpl;
 
 beforeEach(() => {
   resetSchedulerState();
@@ -45,6 +47,8 @@ beforeEach(() => {
   failureAttempts = 1;
   purges = 0;
   purgeImpl = async () => 0;
+  closeCalls = 0;
+  closeImpl = async () => 0;
   savedHooks = { ...schedulerHooks };
   schedulerHooks.publishDue = async (args) => {
     published.push(args);
@@ -53,6 +57,10 @@ beforeEach(() => {
   schedulerHooks.recordFailure = async (args) => {
     failures.push(args);
     return failureAttempts;
+  };
+  schedulerHooks.closeStaleEmails = async () => {
+    closeCalls += 1;
+    return closeImpl();
   };
   schedulerHooks.purgeHashes = async () => {
     purges += 1;
@@ -212,6 +220,23 @@ describe('zamanlayıcı: tik', () => {
     assert.equal(summary.failed, 0, 'temizlik hatası tik sonucunu bozmaz');
     const logged = console.error.mock.calls.map((call) => call.arguments.join(' ')).join('\n');
     assert.match(logged, /ozet temizligi basarisiz: 57P01/);
+  });
+
+  it('E1 her tikte sahipsiz bekleyen e-postalar kapatılır (kuyruk turu tetiklenmese bile; kilidin sahibi örnek yapar); hata tiki bozmaz', async () => {
+    await runSchedulerTick();
+    assert.equal(closeCalls, 1);
+    lockBusy = true;
+    await runSchedulerTick();
+    assert.equal(closeCalls, 1, 'kilit başka yerdeyse (ikinci sunucu) tik bütünüyle atlanır; temizliği kilidin sahibi yapar');
+    lockBusy = false;
+    closeImpl = async () => {
+      throw Object.assign(new Error('db kesildi a@b.com'), { code: '57P01' });
+    };
+    const summary = await runSchedulerTick();
+    assert.equal(summary.failed, 0);
+    const logged = console.error.mock.calls.map((call) => call.arguments.join(' ')).join('\n');
+    assert.match(logged, /sahipsiz e-posta kapatma basarisiz: 57P01/);
+    assert.ok(!logged.includes('@'));
   });
 
   it('kilit alınamayan tikte özet temizliği de sürer (yalnız yayın / kuyruk kilitle korunur); kilit alınamazsa yayın sorgusu yok', async () => {

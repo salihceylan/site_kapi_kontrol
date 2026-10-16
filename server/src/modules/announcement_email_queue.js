@@ -25,9 +25,9 @@ import {
   EMAIL_RETRY_DELAYS_SECONDS,
   MAX_EMAIL_ATTEMPTS,
 } from './announcement_common.js';
-import { hashEmail, unsubscribeUrl } from './announcement_email_security.js';
+import { emailHashSalts, hashEmail, unsubscribeUrl } from './announcement_email_security.js';
 import { ANNOUNCEMENT_LOCK_JOBS, acquireSessionLock } from './announcement_lock.js';
-import { deliverableEmailSql } from './announcement_recipients.js';
+import { deliverableEmailSql, suppressedSql } from './announcement_recipients.js';
 import { HAS_ACCOUNT_SQL } from './people_common.js';
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 
@@ -49,15 +49,32 @@ export const emailQueueHooks = {
 let activeRun = null;
 let stopRequested = false;
 
-/** Bekleyen e-posta var mı (kısmi indeks; hafif). */
+/**
+ * İŞİ OLAN bekleyen e-posta var mı (kısmi indeks; hafif): YAYINDAKİ duyurunun, geri çekilmesi dolmuş (email_next_at) ve başka işçinin taze
+ * talebinde olmayan satırları. Yayından kalkmış (geri çekilmiş) duyurunun artık gönderilmeyecek satırları SAYILMAZ (bunları failStaleRows
+ * kapatır): aksi halde kuyruk her tikte boşuna dönerdi.
+ */
 export async function hasPendingEmails(db = pool) {
-  const result = await db.query(`SELECT 1 FROM announcement_recipients WHERE email_status = 'pending' LIMIT 1`);
+  const result = await db.query(
+    `
+      SELECT 1
+      FROM announcement_recipients r
+      INNER JOIN announcements a ON a.id = r.announcement_id AND a.status = 'published'
+      WHERE r.email_status = 'pending'
+        AND (r.email_next_at IS NULL OR r.email_next_at <= NOW())
+        AND (r.email_claimed_at IS NULL OR r.email_claimed_at < NOW() - make_interval(mins => $1::INTEGER))
+      LIMIT 1
+    `,
+    [EMAIL_CLAIM_STALE_MINUTES],
+  );
   return Boolean(result.rows?.[0]);
 }
 
 /**
- * Kalıcı hatalı satırları kapatır: adresi olmayan, denemesi tükenmiş (yoldaki gönderim olabilecek taze talepler hariç) ve yayından kalkmış
- * duyurunun bayat talepleri 'failed' olur (adres NULL). @returns {Promise<number>} kapatılan satır sayısı
+ * Kalıcı hatalı satırları kapatır: adresi olmayan, denemesi tükenmiş (yoldaki gönderim olabilecek taze talepler hariç) ve YAYINDA OLMAYAN
+ * (geri çekilmiş) duyurunun pending satırları (talep edilmemiş ya da bayat talepli; taze talep, işçi sonucu yazana dek dokunulmaz) 'failed'
+ * olur (adres ve özet NULL). Zamanlayıcı her tikte de çağırır: kuyruk turu tetiklenmese bile sahipsiz satır düz adresle DB'de kalmaz.
+ * @returns {Promise<number>} kapatılan satır sayısı
  */
 export async function failStaleRows(db) {
   const exhausted = await db.query(
@@ -75,10 +92,11 @@ export async function failStaleRows(db) {
   const orphaned = await db.query(
     `
       UPDATE announcement_recipients r
-      SET email_status = 'failed', email = NULL, email_claimed_at = NULL, email_next_at = NULL
+      SET email_status = 'failed', email = NULL, email_hash = NULL, email_claimed_at = NULL, email_next_at = NULL
       FROM announcements a
       WHERE a.id = r.announcement_id AND a.status <> 'published'
-        AND r.email_status = 'pending' AND r.email_claimed_at < NOW() - make_interval(mins => $1::INTEGER)
+        AND r.email_status = 'pending'
+        AND (r.email_claimed_at IS NULL OR r.email_claimed_at < NOW() - make_interval(mins => $1::INTEGER))
     `,
     [EMAIL_CLAIM_STALE_MINUTES],
   );
@@ -113,6 +131,7 @@ export async function purgeStaleEmailHashes(db = pool) {
  * @returns {Promise<{ picked: number, send: object[] }>}
  */
 async function claimBatch(batchSize, attempted) {
+  const salts = emailHashSalts();
   const client = await pool.connect();
   let began = false;
   try {
@@ -124,7 +143,10 @@ async function claimBatch(batchSize, attempted) {
           r.announcement_id, r.person_id, r.email, r.email_hash, r.email_attempts,
           a.title, a.body, a.importance, s.name AS site_name,
           pc.person_active, pc.has_account, pc.current_email,
-          (sup.email_hash IS NOT NULL) AS suppressed
+          (
+            EXISTS (SELECT 1 FROM announcement_email_suppressions sup WHERE sup.email_hash = r.email_hash)
+            OR ${suppressedSql('r.email', '$6')}
+          ) AS suppressed
         FROM announcement_recipients r
         INNER JOIN announcements a ON a.id = r.announcement_id
         INNER JOIN sites s ON s.site_code = a.site_code
@@ -136,7 +158,6 @@ async function claimBatch(batchSize, attempted) {
             WHERE sp.id = r.person_id AND sp.site_code = a.site_code
           ) q
         ) pc ON TRUE
-        LEFT JOIN announcement_email_suppressions sup ON sup.email_hash = r.email_hash
         WHERE r.email_status = 'pending'
           AND r.email IS NOT NULL
           AND r.email_attempts < $1
@@ -151,7 +172,7 @@ async function claimBatch(batchSize, attempted) {
         LIMIT $4
         FOR UPDATE OF r SKIP LOCKED
       `,
-      [MAX_EMAIL_ATTEMPTS, attempted.announcementIds, attempted.personIds, batchSize, EMAIL_CLAIM_STALE_MINUTES],
+      [MAX_EMAIL_ATTEMPTS, attempted.announcementIds, attempted.personIds, batchSize, EMAIL_CLAIM_STALE_MINUTES, salts],
     );
     const rows = picked.rows ?? [];
     const send = [];
@@ -259,6 +280,8 @@ const retryDelaySeconds = (attempts) => EMAIL_RETRY_DELAYS_SECONDS[Math.min(Math
 /**
  * Sonuçları yazar: başarı 'sent'; kalıcı hata ya da denemesi tükenen 'failed'; geçici hata 'pending' (talep işareti kalkar, geri çekilme
  * başlar). Her son durumda email NULL (email_hash günlük sayım için kalır). Yalnız hâlâ 'pending' satırlar güncellenir.
+ * E1: gönderim sürerken duyuru geri çekildiyse (artık 'published' değil) GEÇİCİ hatalı satır pending bırakılmaz (bir daha talep edilmez ve düz
+ * adres DB'de sonsuza dek kalırdı): 'failed' yapılır, adres ve özet silinir. Başarılı gönderim (sent) etkilenmez.
  */
 async function finalizeBatch(results) {
   const aids = [];
@@ -285,11 +308,18 @@ async function finalizeBatch(results) {
   await pool.query(
     `
       UPDATE announcement_recipients r
-      SET email_status = v.st,
-          email = CASE WHEN v.st = 'pending' THEN r.email END,
+      SET email_status = x.final_st,
+          email = CASE WHEN x.final_st = 'pending' THEN r.email END,
+          email_hash = CASE WHEN x.orphaned THEN NULL ELSE r.email_hash END,
           email_claimed_at = NULL,
-          email_next_at = CASE WHEN v.st = 'pending' THEN NOW() + make_interval(secs => v.delay::DOUBLE PRECISION) END
+          email_next_at = CASE WHEN x.final_st = 'pending' THEN NOW() + make_interval(secs => v.delay::DOUBLE PRECISION) END
       FROM unnest($1::BIGINT[], $2::BIGINT[], $3::TEXT[], $4::INTEGER[]) AS v(aid, pid, st, delay)
+      INNER JOIN announcements a ON a.id = v.aid
+      CROSS JOIN LATERAL (
+        SELECT
+          CASE WHEN v.st = 'pending' AND a.status <> 'published' THEN 'failed' ELSE v.st END AS final_st,
+          (v.st = 'pending' AND a.status <> 'published') AS orphaned
+      ) x
       WHERE r.announcement_id = v.aid AND r.person_id = v.pid AND r.email_status = 'pending'
     `,
     [aids, pids, states, delays],

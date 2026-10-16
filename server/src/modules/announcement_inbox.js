@@ -14,6 +14,9 @@ import {
   BODY_HEAD_CHARS,
 } from './announcement_common.js';
 import { parsePositiveId, toIso } from './people_common.js';
+import { hashEmailAll } from './announcement_email_security.js';
+import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
+import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 
 const INT32_MAX = 2147483647;
 
@@ -248,6 +251,9 @@ export async function getNotificationPreferences(authUser, db = pool) {
 /**
  * PUT /app/notification-preferences gövde { email_announcements: bool }. Diğer anahtarlar (push_* dahil) YOKSAYILIR: push_* şimdilik
  * değişmez (Faz 3b). Acil duyurular tercihi yok sayar (e-posta kuyruğu).
+ * GERİ ALMA YOLU: `email_announcements: true` ayrıca çağıranın KENDİ adreslerinin (hesap e-postası ve kişi kayıtlarındaki iletişim e-postası)
+ * kanonik özetlerini (güncel ve eski sırlarla) abonelikten çık bastırma listesinden siler: e-postadaki bağlantıyla yapılmış çıkış uygulamadan
+ * geri alınabilir. Başkasının adresine dokunulmaz (yalnız çağıranın hesabına bağlı adresler).
  */
 export async function setNotificationPreferences(authUser, body = {}, db = pool) {
   const userCode = userCodeOf(authUser);
@@ -267,5 +273,40 @@ export async function setNotificationPreferences(authUser, body = {}, db = pool)
     `,
     [userCode, value],
   );
+  if (value === true) {
+    await removeOwnSuppressions(userCode, db);
+  }
   return preferencesBody(result.rows?.[0] ?? { email_announcements: value, push_announcements: true });
+}
+
+/** Çağıranın kendi adreslerinin (hesap + kişi iletişim e-postası) bastırma kayıtlarını siler; silinen kayıt sayısını döner. */
+async function removeOwnSuppressions(userCode, db) {
+  const own = await db.query(
+    `
+      SELECT DISTINCT lower(btrim(x.address)) AS address
+      FROM (
+        SELECT u.email AS address FROM users u WHERE u.user_code = $1
+        UNION ALL
+        SELECT ${CONTACT_EMAIL_SQL} AS address
+        ${PERSON_FROM}
+        WHERE sp.user_code = $1
+      ) x
+      WHERE x.address IS NOT NULL
+    `,
+    [userCode],
+  );
+  const hashes = new Set();
+  for (const row of own.rows ?? []) {
+    const address = String(row.address ?? '');
+    if (address.includes('@') && !address.endsWith(INTERNAL_EMAIL_SUFFIX)) {
+      for (const hash of hashEmailAll(address)) {
+        hashes.add(hash);
+      }
+    }
+  }
+  if (hashes.size === 0) {
+    return 0;
+  }
+  const removed = await db.query(`DELETE FROM announcement_email_suppressions WHERE email_hash = ANY($1::TEXT[])`, [[...hashes]]);
+  return Number(removed.rowCount ?? 0);
 }

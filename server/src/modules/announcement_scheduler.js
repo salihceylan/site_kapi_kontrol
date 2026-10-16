@@ -12,7 +12,7 @@
 //  - ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile (testler) hiç başlamaz.
 
 import { pool } from '../db.js';
-import { hasPendingEmails, kickEmailQueue, resumeEmailQueue, stopEmailQueue } from './announcement_email_queue.js';
+import { failStaleRows, hasPendingEmails, kickEmailQueue, resumeEmailQueue, stopEmailQueue } from './announcement_email_queue.js';
 import { MAX_PUBLISH_ATTEMPTS } from './announcement_common.js';
 import { purgeStaleEmailHashes } from './announcement_email_queue.js';
 import { ANNOUNCEMENT_LOCK_JOBS, acquireSessionLock } from './announcement_lock.js';
@@ -29,6 +29,7 @@ export const schedulerHooks = {
   publishDue: (args) => publishDueAnnouncement(args),
   recordFailure: (args) => recordPublishFailure(args),
   purgeHashes: () => purgeStaleEmailHashes(),
+  closeStaleEmails: () => failStaleRows(pool),
   hasPendingEmails: () => hasPendingEmails(),
   kickEmailQueue: () => kickEmailQueue(),
 };
@@ -110,6 +111,16 @@ async function doTick() {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('[announcement-scheduler] ozet temizligi basarisiz:', error?.code || error?.message || 'hata');
+    }
+  }
+  // Sahipsiz bekleyen e-postalar (geri çekilmiş duyurunun satırları, tükenmiş denemeler) kuyruk turu tetiklenmese de her tikte kapatılır:
+  // düz adres DB'de sonsuza dek kalmaz. Kendi kilidi gerekmez (taze talepli satırlara dokunmaz); hata tiki bozmaz.
+  if (!stopped) {
+    try {
+      await schedulerHooks.closeStaleEmails();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[announcement-scheduler] sahipsiz e-posta kapatma basarisiz:', error?.code || error?.message || 'hata');
     }
   }
   // E-posta kuyruğu: yayınlar bittikten ve zamanlayıcı kilidi açıldıktan sonra arka planda (kendi tek-çalışan kilidi vardır).

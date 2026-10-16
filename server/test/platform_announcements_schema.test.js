@@ -65,6 +65,8 @@ describe('migration 032: duyuru ve bildirim', () => {
       'recipient_count INTEGER NOT NULL DEFAULT 0',
       'created_by INTEGER REFERENCES users\\(user_code\\) ON DELETE SET NULL',
       'published_by INTEGER REFERENCES users\\(user_code\\) ON DELETE SET NULL',
+      'email_requested_by INTEGER REFERENCES users\\(user_code\\) ON DELETE SET NULL',
+      'email_requested_at TIMESTAMPTZ',
       'publish_attempts INTEGER NOT NULL DEFAULT 0',
       'next_attempt_at TIMESTAMPTZ',
       'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW\\(\\)',
@@ -93,6 +95,8 @@ describe('migration 032: duyuru ve bildirim', () => {
     // D16: yabancı anahtar taraması (kullanıcı silme) ve yöneticinin saatlik yayın sayımı için kısmi indeksler
     assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_announcements_created_by ON announcements \(created_by\) WHERE created_by IS NOT NULL/);
     assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_announcements_published_by ON announcements \(published_by, published_at\) WHERE published_by IS NOT NULL/);
+    // E6: yöneticinin saatlik e-postalı istek sayacı (elle yayın + zamanlama)
+    assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_announcements_email_requested ON announcements \(email_requested_by, email_requested_at\) WHERE email_requested_by IS NOT NULL/);
   });
 
   it('announcement_recipients: PK (duyuru, kişi), CASCADE FK\'ler, e-posta durumları, deneme sayacı, okundu; indeksler', () => {
@@ -211,7 +215,7 @@ describe('sunucu bağlantısı ve kaynak korumaları', () => {
       const ownRowUpdate = /UPDATE announcements SET recipient_count = \$2, published_at = clock_timestamp\(\) WHERE id = \$1/.test(flat);
       const viaListWhere = flat.includes('${where.sql}');
       // yöneticinin kendi saatlik e-postalı yayın sayımı: yöneticiye (published_by) bağlıdır, yalnız sayı döndürür
-      const ownHourlyCount = /SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1 /.test(flat);
+      const ownHourlyCount = /SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE email_requested_by = \$1 /.test(flat);
       assert.ok(/site_code/.test(flat) || ownRowUpdate || viaListWhere || ownHourlyCount, flat.slice(0, 140));
     }
   });

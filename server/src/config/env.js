@@ -130,6 +130,24 @@ export function validateEnv(env = process.env) {
     warnings.push(`SMTP ayarlari eksik: ${missingSmtp.join(', ')}; e-posta gonderilemez.`);
   }
 
+  // Duyuru e-postası: adres özetleri (bastırma listesi, adres başına sınır) ve abonelikten çık imzası bu sırdan türetilir.
+  const isProduction = String(env.NODE_ENV || '').trim() === 'production';
+  if (isSet(env, 'ANNOUNCEMENT_EMAIL_SECRET')) {
+    const own = String(env.ANNOUNCEMENT_EMAIL_SECRET).trim();
+    if (isPlaceholderSecret(own) || own.length < 16) {
+      warnings.push(
+        `ANNOUNCEMENT_EMAIL_SECRET yer tutucu ya da zayif bir deger (${own.length} karakter; en az 16 onerilir). ` +
+          '8 karakterden kisaysa kullanilmaz ve JWT_SECRET\'tan turetilir (duyuru yayini bozulmaz).',
+      );
+    }
+  } else if (isProduction) {
+    warnings.push(
+      'ANNOUNCEMENT_EMAIL_SECRET tanimli degil: duyuru e-postasi adres ozetleri ve abonelikten cik imzasi JWT_SECRET\'tan turetiliyor. ' +
+        'JWT_SECRET dondurulursa abonelikten cikma listesi ve eski baglantilar gecersiz olur; ozel bir ANNOUNCEMENT_EMAIL_SECRET tanimlayin ' +
+        '(dondururken eskisini ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS\'a yazin).',
+    );
+  }
+
   if (!isSet(env, 'COMPANY_API_KEY')) {
     warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile calisir.');
   } else if (String(env.COMPANY_API_KEY).trim().length < 24) {

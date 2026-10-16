@@ -23,10 +23,17 @@ describe('buildAnnouncementEmail', () => {
 
   it('D4c alt bilgi alıcı türüne göre: hesaplıya "uygulamadan" (bağlantı YOK), hesapsıza abonelikten çık bağlantısı ("uygulamadan" YOK), bağlantısız hesapsıza yalnız gönderen cümlesi', () => {
     const link = 'https://api.example.com/public/announcement-unsubscribe?t=abc.def&x=1';
+    // E4c: hesaplı alıcı hem uygulamadaki Bildirim Tercihleri'ni hem bağlantıyı görür; acil duyuru tercihten bağımsızdır, bağlantı acil dahil her şeyi durdurur
     const withAccount = buildAnnouncementEmail(input({ hasAccount: true, unsubscribeUrl: link }));
-    assert.ok(withAccount.text.includes('Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.'));
-    assert.ok(!withAccount.text.includes(link));
-    assert.ok(!withAccount.html.includes('Abonelikten çık'));
+    assert.ok(withAccount.text.endsWith(`Bu e-posta Gül Sitesi yönetimi tarafından gönderildi. Acil duyurular uygulamadaki tercihten bağımsız gönderilir; bağlantıdan çıkış acil duyurular dahil tüm duyuru e-postalarını durdurur. Bu e-postaları durdurmak için uygulamadaki Bildirim Tercihleri'ni kullanabilir veya şu bağlantıdan çıkabilirsiniz: ${link}`));
+    assert.ok(withAccount.html.includes('Abonelikten çık</a>'));
+    assert.ok(withAccount.html.includes('Bildirim Tercihleri'));
+    assert.ok(withAccount.html.includes('href="https://api.example.com/public/announcement-unsubscribe?t=abc.def&amp;x=1"'));
+    assert.ok(!withAccount.text.includes('Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.'));
+    // bağlantı yoksa (kanala bağlantı eklenemedi) eski cümle
+    const accountNoLink = buildAnnouncementEmail(input({ hasAccount: true, unsubscribeUrl: null }));
+    assert.ok(accountNoLink.text.endsWith('Bu e-posta Gül Sitesi yönetimi tarafından gönderildi. Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.'));
+    assert.ok(!accountNoLink.html.includes('Abonelikten çık'));
     const guest = buildAnnouncementEmail(input({ hasAccount: false, unsubscribeUrl: link }));
     assert.ok(guest.text.endsWith(`Bu e-posta Gül Sitesi yönetimi tarafından gönderildi. Bu e-postaları almak istemiyorsanız şu bağlantıdan çıkabilirsiniz: ${link}`));
     assert.ok(!guest.text.includes('uygulamadan') && !guest.html.includes('uygulamadan'));

@@ -3,6 +3,7 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
+import { hashEmailAll } from '../src/modules/announcement_email_security.js';
 import {
   getMyAnnouncement,
   getNotificationPreferences,
@@ -13,6 +14,7 @@ import {
   setNotificationPreferences,
 } from '../src/modules/announcement_inbox.js';
 
+process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef';
 const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = [], rowCount = rows.length) => ({ rows, rowCount });
 const user = { id: 20004, user_code: 20004, userCode: 20004, role: 'apartment_owner', full_name: 'Deniz Sakin' };
@@ -203,6 +205,36 @@ describe('bildirim tercihleri', () => {
     const result = await setNotificationPreferences(user, { email_announcements: false, push_announcements: false, baska: 1 });
     assert.deepEqual(log[0].params, [20004, false]);
     assert.deepEqual(result, { email_announcements: false, push_announcements: true, push_available: false });
+  });
+
+  it('E4b geri alma yolu: PUT true çağıranın KENDİ adreslerinin (hesap + iletişim e-postası) kanonik özetlerini (güncel + eski sırlarla) bastırma listesinden siler; dahili adres atlanır; false hiçbir silme yapmaz', async () => {
+    handlers.push(
+      [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: true, push_announcements: true }])],
+      [/^SELECT DISTINCT lower\(btrim\(x\.address\)\) AS address FROM \( SELECT u\.email AS address FROM users u WHERE u\.user_code = \$1 UNION ALL SELECT /, () => ok([{ address: 'a.li+haber@gmail.com' }, { address: 'iletisim@example.com' }, { address: 'daire_a1@ahbu.local' }, { address: 'bozuk' }])],
+      [/^DELETE FROM announcement_email_suppressions WHERE email_hash = ANY\(\$1::TEXT\[\]\)$/, () => ok([], 2)],
+    );
+    const result = await setNotificationPreferences(user, { email_announcements: true });
+    assert.deepEqual(result, { email_announcements: true, push_announcements: true, push_available: false });
+    const own = log.find((q) => /^SELECT DISTINCT lower/.test(q.sql));
+    assert.deepEqual(own.params, [20004], 'yalnız çağıranın kendi kullanıcı kodu');
+    assert.match(own.sql, /WHERE sp\.user_code = \$1/);
+    const removal = log.find((q) => /^DELETE FROM announcement_email_suppressions/.test(q.sql));
+    const expected = new Set([...hashEmailAll('ali@gmail.com'), ...hashEmailAll('iletisim@example.com')]);
+    assert.deepEqual(new Set(removal.params[0]), expected, 'kanonik özetler (a.li+haber@gmail.com = ali@gmail.com), dahili ve bozuk adres yok');
+    assert.equal(removal.params[0].length, expected.size);
+    log.length = 0;
+    handlers.unshift([/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: false, push_announcements: true }])]);
+    await setNotificationPreferences(user, { email_announcements: false });
+    assert.equal(log.length, 1, 'false yalnız tercihi yazar; bastırma listesine dokunmaz');
+  });
+
+  it('E4b adresi olmayan çağıranda DELETE çalışmaz (hesap e-postası dahili / yok)', async () => {
+    handlers.push(
+      [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: true, push_announcements: true }])],
+      [/^SELECT DISTINCT lower/, () => ok([{ address: 'daire_b3@ahbu.local' }])],
+    );
+    await setNotificationPreferences(user, { email_announcements: true });
+    assert.equal(log.some((q) => /^DELETE/.test(q.sql)), false);
   });
 
   it('PUT: boolean olmayan / eksik değer -> 400 INVALID_BODY (alan adı yok); kullanıcı yoksa 401', async () => {

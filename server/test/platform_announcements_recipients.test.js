@@ -1,10 +1,11 @@
 // Duyuru kitlesi (DB'siz): günlük sınır ortam değişkeni, e-posta sayaçları, hedef SQL'i, anlık görüntü (TEK INSERT ... SELECT) ve sınırları.
 // SQL'in ANLAMI (hangi kişi kitleye girer, adres seçimi, tekilleştirme, adres başına sınır) gerçek-PG betiğinde sınanır.
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assertDeliverableAddressLimit,
   assertTargetBelongsToSite,
+  canonicalEmailSql,
   emailCountsFromRows,
   emailDailyLimit,
   emailHashSql,
@@ -12,9 +13,10 @@ import {
   emptyEmailCounts,
   previewAudience,
   snapshotRecipients,
+  suppressedSql,
   targetClause,
 } from '../src/modules/announcement_recipients.js';
-import { hashEmail, emailHashSalt } from '../src/modules/announcement_email_security.js';
+import { hashEmail, emailHashSalt, emailHashSalts } from '../src/modules/announcement_email_security.js';
 import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from '../src/modules/announcement_lock.js';
 import { istanbulDayRange } from '../src/modules/announcement_common.js';
 
@@ -110,6 +112,23 @@ describe('emailHashSql / adres özeti', () => {
   });
 });
 
+describe('E3 canonicalEmailSql / E2 suppressedSql', () => {
+  it('canonicalEmailSql: +etiket atılır, gmail / googlemail noktaları silinir ve alan adı gmail.com olur; boş kalacak yerel kısma dokunulmaz (JS canonicalAddress ile aynı kural; PG\'de değer eşliği sınanır)', () => {
+    const sql = canonicalEmailSql('b.email');
+    assert.match(sql, /position\('\+' IN split_part\(b\.email, '@', 1\)\) > 1 THEN left\(split_part\(b\.email, '@', 1\), position\('\+' IN split_part\(b\.email, '@', 1\)\) - 1\)/);
+    assert.match(sql, /split_part\(b\.email, '@', 2\) IN \('gmail\.com', 'googlemail\.com'\)/);
+    assert.match(sql, /COALESCE\(NULLIF\(replace\(.*, '\.', ''\), ''\), .*\) \|\| '@gmail\.com'/);
+    assert.match(sql, /\|\| '@' \|\| split_part\(b\.email, '@', 2\) END\)$/);
+  });
+
+  it('suppressedSql: güncel + eski tuzların (dizi parametresi) HEPSİYLE kanonik özet hesaplanıp bastırma listesinde aranır', () => {
+    const sql = suppressedSql('r.email', '$6');
+    assert.match(sql, /^EXISTS \(SELECT 1 FROM unnest\(\$6::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = encode\(sha256\(convert_to\(salts\.salt::TEXT \|\| ':' \|\| /);
+    assert.ok(sql.includes(canonicalEmailSql('r.email')));
+    assert.match(sql, /'UTF8'\)\), 'hex'\)\)$/);
+  });
+});
+
 describe('emailUsageToday', () => {
   it('pending + sent sayılır, failed ve none SAYILMAZ; site kapsamlı; gün başlangıcı İstanbul takvim günüdür', async () => {
     const db = fakeDb([[/^SELECT COUNT\(\*\)::INTEGER AS used FROM announcement_recipients r/, () => ok([{ used: 7 }])]]);
@@ -126,7 +145,7 @@ describe('assertDeliverableAddressLimit (kilitsiz erken kapı)', () => {
   const target = { type: 'site', blockIds: [], apartmentIds: [] };
 
   it('teslim edilecek TEKİL adres > 1000 ise 400 ANNOUNCEMENT_EMAIL_LIMIT; <= 1000 ise sayıyı döner; yalnız SELECT (kilit ve yazma yok)', async () => {
-    const make = (n) => fakeDb([[/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)::INTEGER AS n FROM hashed h/, () => ok([{ n }])]]);
+    const make = (n) => fakeDb([[/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email_hash\)::INTEGER AS n FROM hashed h/, () => ok([{ n }])]]);
     const db = make(1000);
     assert.equal(await assertDeliverableAddressLimit(db, 5, target, 'normal'), 1000);
     assert.equal(db.log.length, 1);
@@ -137,10 +156,12 @@ describe('assertDeliverableAddressLimit (kilitsiz erken kapı)', () => {
   it('bastırılmış adresler ve (normal duyuruda) tercihi kapalı hesaplılar sayılmaz; parametreler: site, tuz, önem', async () => {
     const db = fakeDb([[/^WITH audience AS/, () => ok([{ n: 3 }])]]);
     await assertDeliverableAddressLimit(db, 5, { type: 'blocks', blockIds: [2], apartmentIds: [] }, 'urgent');
-    assert.match(db.log[0].sql, /LEFT JOIN announcement_email_suppressions sup ON sup\.email_hash = h\.email_hash/);
-    assert.match(db.log[0].sql, /sup\.email_hash IS NULL/);
+    // E2/E3: bastırma KANONİK adresin özetiyle, güncel + eski tuzlarla ($5) aranır; özet de kanonik adresten hesaplanır
+    assert.match(db.log[0].sql, /AND NOT EXISTS \(SELECT 1 FROM unnest\(\$5::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = encode\(sha256\(convert_to\(salts\.salt::TEXT \|\| ':' \|\|/);
+    assert.doesNotMatch(db.log[0].sql, /LEFT JOIN announcement_email_suppressions/);
     assert.match(db.log[0].sql, /NOT \(h\.has_account AND h\.email_pref = FALSE AND \$4::TEXT = 'normal'\)/);
-    assert.deepEqual(db.log[0].params, [5, [2], emailHashSalt(), 'urgent']);
+    assert.match(db.log[0].sql, /encode\(sha256\(convert_to\(\$3::TEXT \|\| ':' \|\| \(CASE WHEN split_part\(b\.email, '@', 2\) IN \('gmail\.com', 'googlemail\.com'\)/);
+    assert.deepEqual(db.log[0].params, [5, [2], emailHashSalt(), 'urgent', emailHashSalts()]);
   });
 });
 
@@ -159,13 +180,37 @@ describe('snapshotRecipients', () => {
     assert.equal(result.total, 12);
     assert.deepEqual(result.email, emptyEmailCounts());
     assert.equal(db.log.length, 1);
-    assert.deepEqual(db.log[0].params, [5, 3, false, 'normal', emailHashSalt(), DAY_START, 3, 0]);
+    assert.deepEqual(db.log[0].params, [5, 3, false, 'normal', '', DAY_START, 3, 0, []]);
+  });
+
+  it('E2 tuz YALNIZ e-posta gerektiğinde hesaplanır: sır eksik / kısa olsa bile e-postasız yayın bozulmaz (500 yok); e-postalı yayın net hata verir', async () => {
+    const savedJwt = process.env.JWT_SECRET;
+    const savedOwn = process.env.ANNOUNCEMENT_EMAIL_SECRET;
+    delete process.env.JWT_SECRET;
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = 'kisa';
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      const db = fakeDb([[insertRegex, () => ok([], 4)]]);
+      const result = await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: false, enforceEmailLimit: true, now: NOW });
+      assert.equal(result.total, 4);
+      assert.deepEqual(db.log[0].params.slice(-5, -4), [''], 'tuz parametresi boş (hiç türetilmedi)');
+      assert.deepEqual(db.log[0].params.at(-1), []);
+      assert.equal(warn.mock.calls.length, 0, 'e-postasız yayında sır hiç okunmadı');
+      await assert.rejects(
+        () => snapshotRecipients(fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])]]), { announcementId: 3, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: true, now: NOW }),
+        /tanimli degil/,
+      );
+    } finally {
+      process.env.JWT_SECRET = savedJwt;
+      if (savedOwn === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET = savedOwn;
+    }
   });
 
   it('hedef parametreleri site kodundan hemen sonra gelir (blocks: $2); duyuru kimliği ve diğer parametreler onları izler', async () => {
     const db = fakeDb([[insertRegex, () => ok([], 2)]]);
     await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: { type: 'blocks', blockIds: [7, 9], apartmentIds: [] }, importance: 'urgent', sendEmail: false, enforceEmailLimit: false, now: NOW });
-    assert.deepEqual(db.log[0].params, [5, [7, 9], 3, false, 'urgent', emailHashSalt(), DAY_START, 3, 0]);
+    assert.deepEqual(db.log[0].params, [5, [7, 9], 3, false, 'urgent', '', DAY_START, 3, 0, []]);
     assert.match(db.log[0].sql, /a\.block_id = ANY\(\$2::BIGINT\[\]\)/);
     assert.match(db.log[0].sql, /\$3::BIGINT, f\.person_id/);
   });
@@ -177,7 +222,7 @@ describe('snapshotRecipients', () => {
     assert.deepEqual(db.log.map((q) => kind(q.sql)), ['lock', 'usage', 'insert', 'counts']);
     assert.deepEqual(db.log[0].params, [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
     assert.deepEqual(db.log[1].params, [5, DAY_START]);
-    assert.deepEqual(db.log[2].params, [5, 8, true, 'normal', emailHashSalt(), DAY_START, 3, 380]);
+    assert.deepEqual(db.log[2].params, [5, 8, true, 'normal', emailHashSalt(), DAY_START, 3, 380, emailHashSalts()]);
     assert.equal(result.total, 4);
     assert.equal(result.email.pending, 3);
     assert.equal(result.email.no_address, 1);
@@ -191,8 +236,11 @@ describe('snapshotRecipients', () => {
     assert.equal(db.log.filter((q) => /^UPDATE/.test(q.sql)).length, 0, 'karesel UPDATE ... FROM (ROW_NUMBER) kalıbı yok');
     assert.match(insert, /ROW_NUMBER\(\) OVER \(PARTITION BY CASE WHEN c\.st = 'eligible' THEN c\.email_hash END ORDER BY c\.person_id\) AS addr_rn/);
     assert.match(insert, /ROW_NUMBER\(\) OVER \(PARTITION BY f\.in_quota ORDER BY f\.person_id\) AS cap_rn/);
-    assert.match(insert, /LEFT JOIN announcement_email_suppressions sup ON sup\.email_hash = h\.email_hash/);
-    assert.match(insert, /WHEN sup\.email_hash IS NOT NULL THEN 'skipped_pref'/);
+    // bastırma: KANONİK adres özeti, güncel + eski tuzlar ($n TEXT[]); acil dahil skipped_pref
+    assert.doesNotMatch(insert, /LEFT JOIN announcement_email_suppressions/);
+    assert.match(insert, /WHEN EXISTS \(SELECT 1 FROM unnest\(\$\d+::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = encode\(sha256\(convert_to\(salts\.salt::TEXT \|\| ':' \|\| \(CASE WHEN split_part\(h\.email, '@', 2\)[^]*?\)\) THEN 'skipped_pref'/);
+    // özet kanonik adresten (+etiket atılır, gmail noktaları silinir); düz adres saklanmaz
+    assert.match(insert, /ELSE encode\(sha256\(convert_to\(\$\d+::TEXT \|\| ':' \|\| \(CASE WHEN split_part\(b\.email, '@', 2\) IN \('gmail\.com', 'googlemail\.com'\) THEN COALESCE\(NULLIF\(replace\(/);
     assert.match(insert, /WHEN h\.has_account AND h\.email_pref = FALSE AND \$\d+::TEXT = 'normal' THEN 'skipped_pref'/);
     // adres başına günlük sayım: indeks yoklayan ilişkili alt sorgu (karesel plan riski yok); yalnız pending + sent; İstanbul günü
     assert.match(insert, /SELECT COUNT\(\*\) FROM announcement_recipients r WHERE r\.email_hash = k\.email_hash AND r\.email_status IN \('pending', 'sent'\) AND \(SELECT an\.published_at FROM announcements an WHERE an\.id = r\.announcement_id\) >= \$\d+::TIMESTAMPTZ/);
@@ -214,7 +262,7 @@ describe('snapshotRecipients', () => {
     const run = async ({ dailyLimit, used }) => {
       const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
       await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: false, dailyLimit, now: NOW });
-      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-1);
+      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-2);
     };
     assert.equal(await run({ dailyLimit: 500, used: 0 }), 500);
     assert.equal(await run({ dailyLimit: 500, used: 450 }), 50);
@@ -227,7 +275,7 @@ describe('snapshotRecipients', () => {
     const run = async (perAddressLimit) => {
       const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
       await snapshotRecipients(db, { announcementId: 8, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail: true, enforceEmailLimit: false, now: NOW, ...(perAddressLimit === undefined ? {} : { perAddressLimit }) });
-      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-2);
+      return db.log.find((q) => insertRegex.test(q.sql)).params.at(-3);
     };
     assert.equal(await run(undefined), 3);
     assert.equal(await run(1), 1);

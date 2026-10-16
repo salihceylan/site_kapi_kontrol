@@ -61,9 +61,9 @@ const DETAIL_STATS = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n, COUNT\(\*
 const LOCK_ROW = /^SELECT id, title, body, importance, status, target_type, target_block_ids, target_apartment_ids, send_email, publish_at FROM announcements WHERE id = \$1 AND site_code = \$2 FOR UPDATE$/;
 // kötüye kullanım sınırları ve koruma sorguları
 const DAY_COUNTS = /^SELECT COUNT\(\*\)::INTEGER AS total, COUNT\(\*\) FILTER \(WHERE importance = 'urgent' AND send_email\)::INTEGER AS urgent_email FROM announcements WHERE site_code = \$1 AND id <> \$2 AND/;
-const HOURLY = /^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1 AND send_email = TRUE AND id <> \$2 AND status IN \('published', 'withdrawn'\) AND published_at > NOW\(\) - INTERVAL '1 hour'$/;
+const HOURLY = /^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE email_requested_by = \$1 AND email_requested_at > NOW\(\) - INTERVAL '1 hour' AND id <> \$2$/;
 const DUPLICATE = /^SELECT 1 FROM announcements WHERE site_code = \$1 AND created_by = \$2 AND status = 'published' AND published_at > NOW\(\) - make_interval\(secs => \$3::DOUBLE PRECISION\) AND title = \$4 AND body = \$5 AND target_type = \$6 AND target_block_ids = \$7::BIGINT\[\] AND target_apartment_ids = \$8::BIGINT\[\] LIMIT 1$/;
-const ADDRESS_PRECHECK = /^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)::INTEGER AS n FROM hashed h/;
+const ADDRESS_PRECHECK = /^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email_hash\)::INTEGER AS n FROM hashed h/;
 const PUBLISH_PRESELECT = /^SELECT importance, target_type, target_block_ids, target_apartment_ids, send_email FROM announcements WHERE id = \$1 AND site_code = \$2 AND status IN \('draft', 'scheduled'\)$/;
 const DUE_ROW = /^SELECT created_by FROM announcements WHERE id = \$1 AND site_code = \$2 AND status = 'scheduled' AND publish_at <= NOW\(\) FOR UPDATE$/;
 const CREATOR_AUTH = /^SELECT \(u\.role = 'super_user'\) AS is_super, .* FROM users u WHERE u\.user_code = \$1 AND u\.is_active = TRUE$/;
@@ -359,7 +359,7 @@ describe('createAnnouncement: şimdi yayınla (atomik, kilit sırası)', () => {
       );
       await createAnnouncement({ siteCode: SITE, body: { ...base, importance: 'urgent', send_email: true, publish: 'now' }, actor, now: NOW });
       const snapshot = find(SNAPSHOT);
-      assert.equal(snapshot.params.at(-1), 6, '10 - 4 = 6 kalan kota');
+      assert.equal(snapshot.params.at(-2), 6, '10 - 4 = 6 kalan kota');
       assert.deepEqual(snapshot.params.slice(0, 4), [SITE, 47, true, 'urgent']);
       assert.equal(auditDetails('announcement.published').send_email, true);
       assert.equal(auditDetails('announcement.published').email.capped, 24);
@@ -444,39 +444,113 @@ describe('D4 / D10: kötüye kullanım sınırları ve çift POST koruması', ()
     }
   });
 
-  it('D4b yönetici başına SAATLİK e-postalı yayın sınırı (varsayılan 10): elle e-postalı yayında sayılır; e-postasız yayında ve zamanlamada sorgulanmaz; aşılırsa 409 ANNOUNCEMENT_HOURLY_LIMIT', async () => {
+  it('E6 yönetici başına SAATLİK e-postalı İSTEK sınırı (varsayılan 10): elle e-postalı yayında KÜRESEL e-posta kilidi altında sayılır; e-postasız yayında sorgulanmaz; aşılırsa 409 ANNOUNCEMENT_HOURLY_LIMIT', async () => {
     handlers.push(...baseHandlers([[HOURLY, () => ok([{ n: 10 }])], [CLAIM, () => ok([{ ...CLAIM_ROW, send_email: true }])]]));
     await assert.rejects(() => publishNow({ send_email: true }), (e) => e.code === 'ANNOUNCEMENT_HOURLY_LIMIT' && e.statusCode === 409 && /saat/.test(e.message));
     assert.deepEqual(find(HOURLY).params, [20001, 43]);
-    assert.match(find(HOURLY).sql, /status IN \('published', 'withdrawn'\)/, 'geri çekilen yayın da sayılır (yayınla-geri çek döngüsü kota serbest bırakmaz)');
+    assert.match(find(HOURLY).sql, /email_requested_by = \$1 AND email_requested_at > NOW\(\) - INTERVAL '1 hour' AND id <> \$2/, 'sayaç yönetici + istek zamanı; geri çekilen / zamanlanan istek de sayılır');
+    assert.doesNotMatch(find(HOURLY).sql, /status/, 'durumdan bağımsız: yayınla-geri çek döngüsü kotayı serbest bırakmaz');
+    assert.deepEqual(find(GLOBAL_LOCK).params, [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
+    assert.ok(indexOfQuery(GLOBAL_LOCK) < indexOfQuery(HOURLY), 'sayım küresel e-posta kilidi ALTINDA (çok siteli paralel yayın aşamaz)');
     log.length = 0;
     handlers.length = 0;
     handlers.push(...baseHandlers([[HOURLY, () => ok([{ n: 99 }])]]));
     await publishNow();
     assert.equal(has(HOURLY), false, 'e-postasız yayın saatlik sınıra takılmaz');
+    assert.equal(has(GLOBAL_LOCK), false, 'e-postasız yayın küresel kilit almaz');
   });
 
-  it('assertPublishAllowed (doğrudan): sınırlar, gün aralığı, saatlik koşullar', async () => {
+  it('E6 elle e-postalı yayın isteği SAYACA yazılır: talep UPDATE\'i email_requested_by / email_requested_at\'i yayını yapana işler; zamanlayıcı yayını işlemez', async () => {
+    handlers.push(...baseHandlers([[CLAIM, () => ok([{ ...CLAIM_ROW, send_email: true }])]]));
+    await publishNow({ send_email: true });
+    const claim = find(CLAIM);
+    assert.match(claim.sql, /email_requested_by = CASE WHEN NOT \$3::BOOLEAN AND send_email AND \$4::INTEGER IS NOT NULL THEN \$4::INTEGER ELSE email_requested_by END/);
+    assert.match(claim.sql, /email_requested_at = CASE WHEN NOT \$3::BOOLEAN AND send_email AND \$4::INTEGER IS NOT NULL THEN NOW\(\) ELSE email_requested_at END/);
+    assert.deepEqual(claim.params, [43, SITE, false, 20001]);
+    log.length = 0;
+    handlers.length = 0;
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [DUE_ROW, () => ok([{ created_by: 20001 }])], ...publishHandlers({ claim: { ...CLAIM_ROW, send_email: true }, total: 1, pending: 1 }));
+    await publishDueAnnouncement({ id: 41, siteCode: SITE });
+    assert.deepEqual(find(CLAIM).params, [41, SITE, true, 20001], 'zamanlayıcı yayını: $3 = true -> sayaç CASE\'leri değiştirmez (yeniden sayılmaz)');
+    assert.equal(has(HOURLY), false, 'zamanlayıcının kendi yayını yeniden denetlenmez');
+  });
+
+  it('E6 e-postalı ZAMANLAMA da saatlik sınırda sayılır: kişi kilidi -> küresel kilit -> sayım -> INSERT (sayaç sütunları yöneticiyle); aşılırsa 409 ve INSERT yok; e-postasız zamanlama sorgulamaz', async () => {
+    const when = new Date(NOW.getTime() + 3600_000);
+    const schedule = (extra = {}) => createAnnouncement({ siteCode: SITE, body: { ...base, publish: 'schedule', publish_at: when.toISOString(), ...extra }, actor, now: NOW });
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [INSERT_ANN, () => ok([{ id: '42' }])], ...detailHandlers(annRow({ id: '42', status: 'scheduled', send_email: true })));
+    await schedule({ send_email: true });
+    assert.ok(indexOfQuery(PEOPLE_LOCK) < indexOfQuery(GLOBAL_LOCK) && indexOfQuery(GLOBAL_LOCK) < indexOfQuery(HOURLY) && indexOfQuery(HOURLY) < indexOfQuery(INSERT_ANN), 'kilit sırası: kişi -> küresel -> sayım -> INSERT');
+    assert.deepEqual(find(HOURLY).params, [20001, 0]);
+    const insert = find(INSERT_ANN);
+    assert.match(insert.sql, /email_requested_by, email_requested_at \) VALUES \(.*\$12::INTEGER, CASE WHEN \$12::INTEGER IS NOT NULL THEN NOW\(\) END\)/);
+    assert.equal(insert.params[11], 20001, 'zamanlama isteği yöneticiye yazılır');
+    log.length = 0;
+    handlers.unshift([HOURLY, () => ok([{ n: 10 }])]);
+    await assert.rejects(() => schedule({ send_email: true }), (e) => e.code === 'ANNOUNCEMENT_HOURLY_LIMIT');
+    assert.equal(has(INSERT_ANN), false);
+    assert.ok(has(/^ROLLBACK$/));
+    log.length = 0;
+    await schedule({ send_email: false });
+    assert.equal(has(HOURLY), false, 'e-postasız zamanlama saatlik sınıra takılmaz');
+    assert.equal(has(GLOBAL_LOCK), false);
+    assert.equal(find(INSERT_ANN).params[11], null, 'e-postasız zamanlama sayaca yazılmaz');
+  });
+
+  it('E6 PATCH: taslağı e-postalı zamanlama / yeniden zamanlama / e-postayı açma bir istektir (sınır + sayaç yazımı); yalnız başlık düzenlemesi ve e-postasız zamanlama değildir', async () => {
+    const lockRow = (overrides = {}) => [LOCK_ROW, () => ok([{ id: '41', title: 'Eski', body: 'Eski metin', importance: 'normal', status: 'draft', target_type: 'site', target_block_ids: [], target_apartment_ids: [], send_email: true, publish_at: null, ...overrides }])];
+    const when = new Date(NOW.getTime() + 7200_000);
+    const updateSql = /^UPDATE announcements SET status = \$3, publish_at = \$4, publish_attempts = 0, next_attempt_at = NULL, email_requested_by = \$5, email_requested_at = NOW\(\), updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2$/;
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], lockRow(), [updateSql, () => ok([], 1)], ...detailHandlers(annRow({ status: 'scheduled', send_email: true })));
+    await updateAnnouncement({ siteCode: SITE, id: '41', body: { publish_at: when.toISOString() }, actor, now: NOW });
+    assert.deepEqual(find(updateSql).params, [41, SITE, 'scheduled', when.toISOString(), 20001]);
+    assert.ok(indexOfQuery(HOURLY) >= 0 && indexOfQuery(HOURLY) < indexOfQuery(updateSql));
+    // sınır dolu: 409, UPDATE yok
+    log.length = 0;
+    handlers.unshift([HOURLY, () => ok([{ n: 10 }])]);
+    await assert.rejects(() => updateAnnouncement({ siteCode: SITE, id: '41', body: { publish_at: when.toISOString() }, actor, now: NOW }), (e) => e.code === 'ANNOUNCEMENT_HOURLY_LIMIT');
+    assert.equal(has(/^UPDATE announcements/), false);
+    // zaten zamanlanmış e-postalı duyuruda yalnız başlık: yeni istek DEĞİL
+    log.length = 0;
+    handlers.length = 0;
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], lockRow({ status: 'scheduled', publish_at: when }), [/^UPDATE announcements SET title = \$3, updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2$/, () => ok([], 1)], ...detailHandlers(annRow({ status: 'scheduled' })));
+    await updateAnnouncement({ siteCode: SITE, id: '41', body: { title: 'Yeni' }, actor, now: NOW });
+    assert.equal(has(HOURLY), false);
+    assert.equal(has(GLOBAL_LOCK), false);
+    // e-postasız taslağın e-postayı açması + zaten zamanlı olması: istek
+    log.length = 0;
+    handlers.length = 0;
+    handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], lockRow({ status: 'scheduled', publish_at: when, send_email: false }), [/^UPDATE announcements SET send_email = \$3, email_requested_by = \$4, email_requested_at = NOW\(\), updated_at = NOW\(\) WHERE id = \$1 AND site_code = \$2$/, () => ok([], 1)], ...detailHandlers(annRow({ status: 'scheduled', send_email: true })));
+    await updateAnnouncement({ siteCode: SITE, id: '41', body: { send_email: true }, actor, now: NOW });
+    assert.ok(has(HOURLY), 'e-postayı açmak da bir istektir');
+    assert.deepEqual(find(/^UPDATE announcements SET send_email/).params, [41, SITE, true, 20001]);
+  });
+
+  it('assertPublishAllowed (doğrudan): sınırlar, gün aralığı, e-posta isteği koşulları (küresel kilit + sayım)', async () => {
     const calls = [];
     const client = {
       query: async (text, params) => {
         calls.push({ sql: norm(text), params });
+        if (/pg_advisory_xact_lock/.test(text)) return ok();
         return /AS total/.test(text) ? ok([{ total: calls.countTotal ?? 0, urgent_email: calls.countUrgent ?? 0 }]) : ok([{ n: calls.recent ?? 0 }]);
       },
     };
-    const input = { id: 7, siteCode: SITE, importance: 'normal', sendEmail: false, when: new Date('2026-10-16T21:30:00.000Z'), actorUserCode: 20001, hourly: true };
+    const input = { id: 7, siteCode: SITE, importance: 'normal', sendEmail: false, when: new Date('2026-10-16T21:30:00.000Z'), actorUserCode: 20001, emailRequest: true };
     await assertPublishAllowed(client, input);
     assert.deepEqual(calls[0].params, [SITE, 7, '2026-10-16T21:00:00.000Z', '2026-10-17T21:00:00.000Z'], '23:30Z İstanbul 17 Ekim 00:30: gün 17 Ekim');
-    assert.equal(calls.length, 1, 'e-postasız: saatlik sorgu yok');
+    assert.equal(calls.length, 1, 'e-postasız: kilit ve saatlik sorgu yok');
     calls.length = 0;
-    await assertPublishAllowed(client, { ...input, sendEmail: true, hourly: false });
-    assert.equal(calls.length, 1, 'hourly=false (zamanlama): saatlik sorgu yok');
+    await assertPublishAllowed(client, { ...input, sendEmail: true, emailRequest: false });
+    assert.equal(calls.length, 1, 'emailRequest=false (örn. önemi değiştirme): saatlik sorgu yok');
     calls.length = 0;
     await assertPublishAllowed(client, { ...input, sendEmail: true, actorUserCode: null });
-    assert.equal(calls.length, 1, 'yazar kullanıcı kodu yoksa saatlik sorgu yok (sistem)');
+    assert.equal(calls.length, 1, 'yazar kullanıcı kodu yoksa (sistem) saatlik sorgu yok');
     calls.length = 0;
     await assertPublishAllowed(client, { ...input, sendEmail: true });
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3, 'günlük sayım + küresel kilit + saatlik sayım');
+    assert.match(calls[1].sql, /^SELECT pg_advisory_xact_lock\(\$1::int, \$2::int\)$/);
+    assert.deepEqual(calls[1].params, [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
+    assert.deepEqual(calls[2].params, [20001, 7]);
     calls.countTotal = 29;
     await assertPublishAllowed(client, input);
     calls.countTotal = 30;
@@ -492,6 +566,7 @@ describe('D4 / D10: kötüye kullanım sınırları ve çift POST koruması', ()
     calls.recent = 10;
     await assert.rejects(() => assertPublishAllowed(client, { ...input, sendEmail: true }), (e) => e.code === 'ANNOUNCEMENT_HOURLY_LIMIT');
   });
+
 
   it('D4b zamanlama sınırı: zamanlanan güne düşen duyuru sayısı sınıra ulaştıysa 409 (INSERT yazılmaz); zamanlanan günün İstanbul gece yarısı aralığı kullanılır', async () => {
     const when = new Date(NOW.getTime() + 36 * 3600_000);
@@ -621,7 +696,7 @@ describe('publishAnnouncement / publishDueAnnouncement: yarış ve idempotans', 
     handlers.push([SITE_LOCK, () => ok([{ site_code: SITE }])], [DUE_ROW, () => ok([{ created_by: 20001 }])], ...publishHandlers({ claim: { ...CLAIM_ROW, send_email: true }, total: 4000, pending: 500, capped: 2500, used: 0 }));
     const result = await publishDueAnnouncement({ id: 41, siteCode: SITE });
     assert.equal(result.published, true);
-    assert.equal(find(SNAPSHOT).params.at(-1), 500, 'varsayılan günlük sınır 500');
+    assert.equal(find(SNAPSHOT).params.at(-2), 500, 'varsayılan günlük sınır 500');
   });
 
   it('D12 oluşturanın yetkisi alınmış: YAYINLANMAZ, taslağa döner (publish_at NULL, sayaç sıfır), announcement.publish_skipped audit (Sistem, neden), talep / kitle / e-posta yok, işlem COMMIT', async () => {

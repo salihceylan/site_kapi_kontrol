@@ -1222,7 +1222,8 @@ export async function ensureDbSchema() {
       -- 032: DUYURU VE BILDIRIM (Faz 3a). db.js ile migrations/032_announcements.sql AYNI DDL; ekleyici ve idempotent.
       -- 1. Duyuru. Metin düz yazıdır (HTML kabul edilmez). scheduled durumunda publish_at DOLU, published/withdrawn durumunda published_at DOLU olmalıdır.
       -- published_by: yayını yapan yönetici (zamanlayıcı yayınında oluşturan); publish_attempts / next_attempt_at: zamanlanmış yayının
-      -- başarısızlık sayacı ve üstel geri çekilmesi (zehirli kayıt tüm kuyruğu tıkamasın).
+      -- başarısızlık sayacı ve üstel geri çekilmesi (zehirli kayıt tüm kuyruğu tıkamasın). email_requested_by / email_requested_at: yöneticinin
+      -- kabul edilen e-postalı İSTEĞİ (elle yayın ya da zamanlama / yeniden zamanlama) ve zamanı; saatlik yönetici sınırı bu sayaçla çalışır.
       CREATE TABLE IF NOT EXISTS announcements (
         id BIGSERIAL PRIMARY KEY,
         site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
@@ -1242,6 +1243,8 @@ export async function ensureDbSchema() {
         recipient_count INTEGER NOT NULL DEFAULT 0,
         created_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
         published_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        email_requested_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+        email_requested_at TIMESTAMPTZ,
         publish_attempts INTEGER NOT NULL DEFAULT 0,
         next_attempt_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1263,6 +1266,8 @@ export async function ensureDbSchema() {
         ON announcements (created_by) WHERE created_by IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_announcements_published_by
         ON announcements (published_by, published_at) WHERE published_by IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_announcements_email_requested
+        ON announcements (email_requested_by, email_requested_at) WHERE email_requested_by IS NOT NULL;
 
       -- 2. Alıcı anlık görüntüsü (yayın anında alınır) + okundu bilgisi + e-posta kuyruğu durumu.
       -- email yalnız gönderilene kadar (pending) tutulur; son durumda NULL'lanır. email_hash: adresin tuzlu SHA-256 özeti (düz adres değil);

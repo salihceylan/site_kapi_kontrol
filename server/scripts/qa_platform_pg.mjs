@@ -3062,8 +3062,8 @@ async function sectionAnnouncements() {
   check('gonderilen e-postalar: konu "[Duyuru Sitesi] E-posta 1", alici adresi tek tek (iletisim8 BIR kez), bilgi alt metni',
     mails.every((m) => m.subject === '[Duyuru Sitesi] E-posta 1') && same(mails.map((m) => m.to).sort(), pendingEmails), mails.map((m) => [m.to, m.subject]));
   const mailOf = (address) => mails.find((m) => m.to === address);
-  check('altbilgi alici turune gore: hesapli (u1, u3, dahili hesap) "uygulamadan degistirebilirsiniz"; hesapsiz (p2, p7) abonelikten cik baglantisi (metin + HTML); hesapsizda "uygulamadan" YOK',
-    ['u1@example.com', 'u3@example.com', 'iletisim8@example.com'].every((a) => mailOf(a).text.includes('Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.') && !mailOf(a).text.includes('/public/announcement-unsubscribe'))
+  check('altbilgi alici turune gore (E4c): hesapli (u1, u3, dahili hesap) uygulamadaki Bildirim Tercihleri VE baglanti + "acil dahil" notu; hesapsiz (p2, p7) yalniz abonelikten cik baglantisi (metin + HTML), "uygulamadan" YOK',
+    ['u1@example.com', 'u3@example.com', 'iletisim8@example.com'].every((a) => mailOf(a).text.includes("Bildirim Tercihleri'ni kullanabilir veya şu bağlantıdan çıkabilirsiniz: ") && mailOf(a).text.includes('bağlantıdan çıkış acil duyurular dahil tüm duyuru e-postalarını durdurur') && /\/public\/announcement-unsubscribe\?t=[0-9a-f]{64}\.\S+$/.test(mailOf(a).text) && mailOf(a).html.includes('Abonelikten çık') && !mailOf(a).text.includes('Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.'))
       && ['p2@example.com', 'p7@example.com'].every((a) => /şu bağlantıdan çıkabilirsiniz: https?:\/\/\S+\/public\/announcement-unsubscribe\?t=[0-9a-f]{64}\./.test(mailOf(a).text) && !mailOf(a).text.includes('uygulamadan') && mailOf(a).html.includes('Abonelikten çık')),
     mails.map((m) => m.text.slice(-160)));
   check('List-Unsubscribe + List-Unsubscribe-Post: List-Unsubscribe=One-Click basliklari HER iletide; baglantida duz adres YOK',
@@ -3802,8 +3802,8 @@ async function sectionAnnouncements() {
     const memberHash = emailSec.hashEmail('abone.hesapli@example.com');
     const suppressionCount = async () => (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions`)).rows[0].n;
     const suppressedBefore = await suppressionCount();
-    check('D4c: hesapsiz alicinin iletisi abonelikten cik baglantisi tasir, hesapli alici "uygulamadan" der; ikisinde de List-Unsubscribe + One-Click basligi; baglanti belirteci adresin ozetini icerir (adresi degil)',
-      Boolean(guestMail && memberMail) && guestMail.text.includes('/public/announcement-unsubscribe?t=') && !guestMail.text.includes('uygulamadan') && memberMail.text.includes('uygulamadan') && !memberMail.text.includes('/public/announcement-unsubscribe')
+    check('D4c/E4c: hesapsiz alicinin iletisi abonelikten cik baglantisi tasir ("uygulamadan" yok), hesapli alici hem uygulamadaki tercihi hem baglantiyi gorur; ikisinde de List-Unsubscribe + One-Click basligi; baglanti belirteci adresin KANONIK ozetini icerir (adresi degil)',
+      Boolean(guestMail && memberMail) && guestMail.text.includes('/public/announcement-unsubscribe?t=') && !guestMail.text.includes('uygulamadan') && memberMail.text.includes("Bildirim Tercihleri'ni kullanabilir") && memberMail.text.includes('/public/announcement-unsubscribe?t=')
         && guestUrl.pathname === '/public/announcement-unsubscribe' && guestUrl.searchParams.get('t').startsWith(guestHash) && memberUrl.searchParams.get('t').startsWith(memberHash) && guestMail.headers['List-Unsubscribe-Post'] === 'List-Unsubscribe=One-Click', [guestUrl.href]);
     let page = await rawCall('GET', guestPath);
     check('D4c: GET onay sayfasi (200) hicbir seyi DEGISTIRMEZ (on yukleme guvenli): bastirma kaydi yok; sayfada adres yok; sıkı CSP + no-store', page.status === 200 && page.text.includes('abonelikten çık') && !page.text.includes('abone.hesapsiz') && (await suppressionCount()) === suppressedBefore && /default-src 'none'/.test(page.headers.get('content-security-policy') ?? '') && page.headers.get('cache-control') === 'no-store', [page.status, page.headers.get('content-security-policy')]);
@@ -3818,8 +3818,8 @@ async function sectionAnnouncements() {
     const guestPerson = Number((await q(`SELECT id FROM site_people WHERE site_code = $1 AND full_name = 'Hesapsiz Abone'`, [S16])).rows[0].id);
     check('D4c: bastirilan adres sonraki duyurularda ACIL dahil skipped_pref olur (hesapsiz icin baska kanal yok); hesapli alici etkilenmez (pending)', urgentRows.find((r) => Number(r.person_id) === guestPerson).email_status === 'skipped_pref' && urgentRows.find((r) => Number(r.person_id) !== guestPerson && r.email_status === 'pending') !== undefined, urgentRows.map((r) => r.email_status));
     const oneClick = await rawCall('POST', `${memberUrl.pathname}${memberUrl.search}`, { form: 'List-Unsubscribe=One-Click' });
-    check('D4c: tek tikla abonelikten cikma (RFC 8058: belirtec sorgu dizesinde, govde List-Unsubscribe=One-Click) 200; hesapli kullanicinin UYGULAMADAKI duyurusu ve tercihi ETKILENMEZ',
-      oneClick.status === 200 && (await suppressionCount()) === suppressedBefore + 2 && (await call('GET', '/app/announcements', memberUser)).body.items.length >= 2 && (await call('GET', '/app/notification-preferences', memberUser)).body.email_announcements === true, [oneClick.status]);
+    check('D4c/E4a: tek tikla abonelikten cikma (RFC 8058: belirtec sorgu dizesinde, govde List-Unsubscribe=One-Click) 200; hesapli kullanicinin UYGULAMADAKI duyurusu etkilenmez, uygulamadaki e-posta tercihi GERCEGI yansitir (false)',
+      oneClick.status === 200 && (await suppressionCount()) === suppressedBefore + 2 && (await call('GET', '/app/announcements', memberUser)).body.items.length >= 2 && (await call('GET', '/app/notification-preferences', memberUser)).body.email_announcements === false, [oneClick.status]);
     const goodToken = guestUrl.searchParams.get('t');
     const [tokHash, tokSig] = goodToken.split('.');
     const flip = (value) => `${value.slice(0, -1)}${value.endsWith('A') ? 'B' : 'A'}`;
@@ -4328,7 +4328,7 @@ async function sectionAnnouncements() {
       resetMail();
       await call('POST', `${P(fx.code)}/${fx.first}/publish`, MGR);
       serverErrors.length = 0;
-      hooks.failOnce = { match: /email = CASE WHEN v\.st = 'pending'/, code: '57P01' };
+      hooks.failOnce = { match: /email = CASE WHEN x\.final_st = 'pending'/, code: '57P01' };
       const kicked = await queue.kickEmailQueue({ batchSize: 20, batchDelayMs: 0 });
       const stuck = await recipientsOf(fx.first);
       check('D17 finalize hatasi: sonuc yazimi basarisiz olunca tur { error } ile biter (firlatmaz, sunucu dusmez; yalniz kod loglanir); 3 e-posta gitti, satirlar pending + talep edilmis (deneme 1) kalir',
@@ -4448,6 +4448,415 @@ async function sectionAnnouncements() {
     await call('DELETE', `${P(S4)}/${byApartments.id}`, MGR);
     await call('DELETE', `${P(S4)}/${byBlocks.id}`, MGR);
     await call('DELETE', `${P(S4)}/${site.id}`, MGR);
+  }
+
+
+  // =============================================================================================================
+  // E-SERISI: son inceleme duzeltmeleri (E1-E7)
+  // =============================================================================================================
+  const publicMod = await import('../src/modules/announcement_public_routes.js');
+  const resetPublicLimiters = () => {
+    for (const limiter of [publicMod.unsubscribeViewLimiter, publicMod.unsubscribeApplyLimiter, publicMod.unsubscribeViewValidLimiter, publicMod.unsubscribeApplyValidLimiter]) limiter.reset();
+  };
+  const tokenOfMail = (message) => new URL(message.headers['List-Unsubscribe'].slice(1, -1)).searchParams.get('t');
+  const closeAllPending = () =>
+    q(`UPDATE announcement_recipients SET email_status = 'none', email = NULL, email_hash = NULL, email_claimed_at = NULL, email_next_at = NULL WHERE email_status = 'pending'`);
+
+  // --- E1: geri cekme x yoldaki gecici SMTP hatasi ---------------------------------------------------------------------------------------------
+  console.log('--- E1: claim -> geri cek -> gecici hata ---');
+  {
+    await closeAllPending();
+    const S25 = 1000000025;
+    const s25 = await makeSite(S25, 'E1 Sitesi', { 'E Blok': [1, 2, 3] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S25, MGR]);
+    for (const n of [1, 2, 3]) {
+      const person = await addPerson(S25, { name: `E1 Kisi ${n}`, email: `e1_${n}@example.com` });
+      await addResidency(S25, s25.aptIds[`E${n}`], person);
+    }
+    resetMail();
+    const ann = (await create(S25, MGR, { title: 'E1', body: 'x', send_email: true, publish: 'now' })).body;
+    const realSend = queue.emailQueueHooks.send;
+    let openGate;
+    const gate = new Promise((resolve) => { openGate = resolve; });
+    let entered;
+    const enteredPromise = new Promise((resolve) => { entered = resolve; });
+    queue.emailQueueHooks.send = async () => {
+      entered();
+      await gate;
+      throw Object.assign(new Error('421 try again later'), { code: 'EMESSAGE', responseCode: 421 });
+    };
+    const run = queue.runEmailQueue({ batchSize: 3, concurrency: 3, batchDelayMs: 0 });
+    await enteredPromise;
+    await sleep(150);
+    const claimedBefore = (await recipientsOf(ann.id)).filter((r) => r.email_status === 'pending' && r.email_claimed_at !== null).length;
+    const withdrawn = await call('POST', `${P(S25)}/${ann.id}/withdraw`, MGR);
+    openGate();
+    const summary = await run;
+    queue.emailQueueHooks.send = realSend;
+    const rows = await recipientsOf(ann.id);
+    check('E1: claim -> geri cek -> gecici SMTP hatasi (421): satirlar pending KALMAZ -> failed, adres + ozet NULL, talep ve geri cekilme isareti yok; tur hatasiz biter',
+      claimedBefore === 3 && withdrawn.status === 200 && summary.error === undefined && rows.every((r) => r.email_status === 'failed' && r.email === null && r.email_hash === null && r.email_claimed_at === null && r.email_next_at === null), { claimedBefore, rows: rows.map((r) => [r.email_status, r.email, r.email_hash]) });
+    const again = await queue.runEmailQueue();
+    check('E1: ikinci tur bu satirlari bir daha talep etmez; hasPendingEmails bu duyuru icin is gormez (kuyruk her 30 sn bosuna donmez)', again.batches === 0 && again.sent === 0 && !(await queue.hasPendingEmails()), again);
+    check('E1: istatistik gercegi yansitir (failed 3), kota failed saymaz', (await annSvcDetail(ann.id, S25)).stats.email.failed === 3 && (await recipientsMod.emailUsageToday(pool, S25)) === 0);
+
+    // sahipsiz (talep edilmemis) pending satir: zamanlayici tiki kapatir (kuyruk turu tetiklenmese bile)
+    const orphanAnn = (await create(S25, MGR, { title: 'E1 sahipsiz', body: 'x', send_email: true, publish: 'now' })).body;
+    await call('POST', `${P(S25)}/${orphanAnn.id}/withdraw`, MGR);
+    await q(`UPDATE announcement_recipients SET email_status = 'pending', email = 'e1_1@example.com', email_hash = $2, email_attempts = 1 WHERE announcement_id = $1 AND person_id = (SELECT MIN(person_id) FROM announcement_recipients WHERE announcement_id = $1)`, [orphanAnn.id, emailSec.hashEmail('e1_1@example.com')]);
+    const orphanBefore = (await q(`SELECT email_status, email, email_hash FROM announcement_recipients WHERE announcement_id = $1 AND email_status = 'pending'`, [orphanAnn.id])).rows;
+    const hasWork = await queue.hasPendingEmails();
+    await scheduler.runSchedulerTick();
+    const orphanAfter = (await recipientsOf(orphanAnn.id)).filter((r) => r.email_status === 'failed');
+    check('E1: geri cekilmis duyurunun talep edilmemis pending satiri (yaris artigi) hasPendingEmails\'te SAYILMAZ ve zamanlayici tikinde failed olur (adres + ozet NULL)',
+      orphanBefore.length === 1 && orphanBefore[0].email === 'e1_1@example.com' && hasWork === false && orphanAfter.every((r) => r.email === null && r.email_hash === null) && (await recipientsOf(orphanAnn.id)).filter((r) => r.email_status === 'failed').length === 1, [orphanBefore, hasWork, orphanAfter]);
+
+    // hasPendingEmails: yalniz isi olan satirlar
+    await closeAllPending();
+    const live = (await create(S25, MGR, { title: 'E1 canli', body: 'x', send_email: true, publish: 'now' })).body;
+    const probe = [];
+    probe.push(await queue.hasPendingEmails());
+    await q(`UPDATE announcement_recipients SET email_next_at = NOW() + INTERVAL '5 minutes' WHERE announcement_id = $1 AND email_status = 'pending'`, [live.id]);
+    probe.push(await queue.hasPendingEmails());
+    await q(`UPDATE announcement_recipients SET email_next_at = NULL, email_claimed_at = NOW() WHERE announcement_id = $1 AND email_status = 'pending'`, [live.id]);
+    probe.push(await queue.hasPendingEmails());
+    await q(`UPDATE announcement_recipients SET email_claimed_at = NOW() - INTERVAL '11 minutes' WHERE announcement_id = $1 AND email_status = 'pending'`, [live.id]);
+    probe.push(await queue.hasPendingEmails());
+    await q(`UPDATE announcement_recipients SET email_claimed_at = NULL WHERE announcement_id = $1 AND email_status = 'pending'`, [live.id]);
+    await q(`UPDATE announcements SET status = 'withdrawn', withdrawn_at = NOW() WHERE id = $1`, [live.id]);
+    probe.push(await queue.hasPendingEmails());
+    check('E1: hasPendingEmails yalniz isi olan satirlari sayar: taze/hazir yayin satiri true; geri cekilmesi dolmamis false; baska iscinin taze talebi false; bayat talep true; yayindan kalkmis duyuru false', same(probe, [true, false, false, true, false]), probe);
+    await closeAllPending();
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S25]);
+    resetMail();
+  }
+
+  // --- E2: sir yonetimi (kisa sir yayini bozmaz; onceki sir) -----------------------------------------------------------------------------------------
+  console.log('--- E2: sir yonetimi ---');
+  {
+    const S26 = 1000000026;
+    const s26 = await makeSite(S26, 'E2 Sitesi', { 'F Blok': [1, 2] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S26, MGR]);
+    const pTarget = await addPerson(S26, { name: 'E2 Hedef', email: 'e2.hedef@example.com' });
+    await addResidency(S26, s26.aptIds.F1, pTarget);
+    const pOther = await addPerson(S26, { name: 'E2 Diger', email: 'e2.diger@example.com' });
+    await addResidency(S26, s26.aptIds.F2, pOther);
+    const toF1 = { type: 'apartments', apartment_ids: [s26.aptIds.F1] };
+    const savedOwn = process.env.ANNOUNCEMENT_EMAIL_SECRET;
+    const savedPrev = process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+    const warns = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => warns.push(args.join(' '));
+    try {
+      // (1) kisa / gecersiz sir: yayin BOZULMAZ (JWT_SECRET'tan turetme + bir kez uyari)
+      process.env.ANNOUNCEMENT_EMAIL_SECRET = 'kisa12';
+      emailSec.resetSecretWarnings();
+      const plain = await create(S26, MGR, { title: 'E2 e-postasiz', body: 'x', publish: 'now', target: toF1 });
+      const mailed = await create(S26, MGR, { title: 'E2 e-postali', body: 'x', send_email: true, publish: 'now', target: toF1 });
+      check('E2: kisa (< 8) ANNOUNCEMENT_EMAIL_SECRET yayini BOZMAZ: e-postasiz ve e-postali yayin 201 (JWT_SECRET\'tan turetme); uyari bir kez, deger loglanmaz',
+        plain.status === 201 && mailed.status === 201 && mailed.body.stats.email.pending === 1 && warns.length === 1 && !warns.join('').includes('kisa12'), [plain.status, mailed.status, warns]);
+      await queue.runEmailQueue();
+      resetMail();
+      delete process.env.ANNOUNCEMENT_EMAIL_SECRET;
+
+      // (2) sir donusumu: onceki sir ile atilmis abonelik / baglanti
+      process.env.ANNOUNCEMENT_EMAIL_SECRET = 'qa-eski-duyuru-sirri-0123456789';
+      delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      const first = (await create(S26, MGR, { title: 'E2 eski sir', body: 'x', send_email: true, publish: 'now', target: toF1 })).body;
+      await queue.runEmailQueue();
+      const oldMail = mails.find((m) => m.to === 'e2.hedef@example.com');
+      const oldToken = tokenOfMail(oldMail);
+      resetPublicLimiters();
+      const unsub = await rawCall('POST', `/public/announcement-unsubscribe?t=${encodeURIComponent(oldToken)}`, { form: 'List-Unsubscribe=One-Click' });
+      const oldHash = emailSec.hashEmail('e2.hedef@example.com');
+      check('E2 hazirlik: eski sirla gonderilen e-postadaki baglanti calisir ve bastirma kaydi ESKI ozetle yazilir', Boolean(oldMail) && unsub.status === 200 && (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = $1`, [oldHash])).rows[0].n === 1 && first.stats.email.pending === 1, [unsub.status]);
+      resetMail();
+      process.env.ANNOUNCEMENT_EMAIL_SECRET = 'qa-yeni-duyuru-sirri-0123456789';
+      const withoutPrevious = (await create(S26, MGR, { title: 'E2 sir donusu PREVIOUS yok', body: 'x', send_email: true, publish: 'now', target: toF1 })).body;
+      const viewWithout = await rawCall('GET', `/public/announcement-unsubscribe?t=${encodeURIComponent(oldToken)}`);
+      check('E2 KONTROL: sir degisip ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS verilmezse bastirma listesi sessizce gecersizlesir (adres yeniden e-posta alir) ve eski baglanti 400 olur - PREVIOUS\'un gerekce deneyi',
+        withoutPrevious.stats.email.pending === 1 && withoutPrevious.stats.email.skipped_pref === 0 && viewWithout.status === 400, [withoutPrevious.stats.email, viewWithout.status]);
+      await q(`UPDATE announcement_recipients SET email_status = 'none', email = NULL, email_hash = NULL WHERE announcement_id = $1`, [withoutPrevious.id]);
+      process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = 'qa-eski-duyuru-sirri-0123456789';
+      const withPrevious = (await create(S26, MGR, { title: 'E2 sir donusu PREVIOUS var', body: 'x', send_email: true, publish: 'now', target: toF1 })).body;
+      const viewWith = await rawCall('GET', `/public/announcement-unsubscribe?t=${encodeURIComponent(oldToken)}`);
+      const rowsWithPrevious = await recipientsOf(withPrevious.id);
+      check('E2: ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS ile eski sirla yapilmis bastirma BULUNUR (skipped_pref), eski baglanti gecerli (200); yeni satirlar yeni ozetle',
+        withPrevious.stats.email.skipped_pref === 1 && withPrevious.stats.email.pending === 0 && rowsWithPrevious.every((r) => r.email === null) && viewWith.status === 200, [withPrevious.stats.email, viewWith.status]);
+      // yeni sirla yeni baglanti: PREVIOUS kaldirilsa da gecerli (yalniz guncel sirla imzalanir)
+      const newMail = (await create(S26, MGR, { title: 'E2 yeni baglanti', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s26.aptIds.F2] } })).body;
+      resetMail();
+      await queue.runEmailQueue();
+      const otherMail = mails.find((m) => m.to === 'e2.diger@example.com');
+      delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      check('E2: yeni sirla atilan baglanti PREVIOUS olmadan da gecerli; yeni ozet guncel sirla uretilir', newMail.stats.email.pending === 1 && Boolean(otherMail) && (await rawCall('GET', `/public/announcement-unsubscribe?t=${encodeURIComponent(tokenOfMail(otherMail))}`)).status === 200);
+    } finally {
+      console.warn = originalWarn;
+      if (savedOwn === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET = savedOwn;
+      if (savedPrev === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = savedPrev;
+    }
+    resetMail();
+    await q(`DELETE FROM announcement_email_suppressions`);
+    await closeAllPending();
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S26]);
+  }
+
+  // --- E3: kanonik adres (takma adla bastirma / sinir dolanilamaz) ----------------------------------------------------------------------------
+  console.log('--- E3: kanonik adres ---');
+  {
+    const addresses = ['Ali@Gmail.com', 'a.li+1@gmail.com', 'ALI@googlemail.com', 'a.l.i+x+y@googlemail.com', 'ali+tag@example.com', 'a.li@example.com', '+x@example.com', '...@gmail.com', 'x@y.co', 'a@b.com'];
+    const mismatches = [];
+    for (const address of addresses) {
+      const sqlHash = (await q(`SELECT ${recipientsMod.emailHashSql('$1', recipientsMod.canonicalEmailSql('lower(btrim($2::text))'))} AS h`, [emailSec.emailHashSalt(), address])).rows[0].h;
+      if (sqlHash !== emailSec.hashEmail(address)) mismatches.push(address);
+    }
+    check('E3: kanonik adres ozeti SQL ve JS\'te BIREBIR ayni (gmail noktalari, +etiket, googlemail, bos kalacak yerel kisim)', mismatches.length === 0, mismatches);
+    check('E3: varyant adresler ayni ozeti verir; gmail disi nokta farkli kisidir', emailSec.hashEmail('a.li+1@gmail.com') === emailSec.hashEmail('ali@gmail.com') && emailSec.hashEmail('ALI@googlemail.com') === emailSec.hashEmail('ali@gmail.com') && emailSec.hashEmail('a.li@example.com') !== emailSec.hashEmail('ali@example.com'));
+
+    const S27 = 1000000027;
+    const s27 = await makeSite(S27, 'E3 Sitesi', { 'G Blok': [1, 2, 3] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S27, MGR]);
+    const p1 = await addPerson(S27, { name: 'E3 Bir', email: 'ali.kaya+haber@gmail.com' });
+    await addResidency(S27, s27.aptIds.G1, p1);
+    const p2 = await addPerson(S27, { name: 'E3 Iki', email: 'Ali.Kaya@GoogleMail.com' });
+    await addResidency(S27, s27.aptIds.G2, p2);
+    const p3 = await addPerson(S27, { name: 'E3 Uc', email: 'baska@example.com' });
+    await addResidency(S27, s27.aptIds.G3, p3);
+    // ayni yayinda iki varyant: ayni kutu -> biri duplicate; gonderim GERCEK adrese gider
+    resetMail();
+    const both = (await create(S27, MGR, { title: 'E3 varyantlar', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s27.aptIds.G1, s27.aptIds.G2] } })).body;
+    await queue.runEmailQueue();
+    check('E3: ayni kutuya giden iki varyant adres tek e-posta alir (biri duplicate); e-posta GERCEK (varyant) adrese gider, kanonik adrese degil',
+      both.stats.email.pending === 1 && both.stats.email.duplicate === 1 && mails.length === 1 && mails[0].to === 'ali.kaya+haber@gmail.com', [both.stats.email, mails.map((m) => m.to)]);
+    // bastirma: kanonik adresin baglantisi tum varyantlari kapsar
+    resetMail();
+    resetPublicLimiters();
+    const canonicalToken = emailSec.signUnsubscribeToken(emailSec.hashEmail('alikaya@gmail.com'));
+    check('E3: kanonik adresin abonelik baglantisi 200', (await rawCall('POST', '/public/announcement-unsubscribe', { form: `t=${encodeURIComponent(canonicalToken)}` })).status === 200);
+    const afterUnsub = (await create(S27, MGR, { title: 'E3 bastirma sonrasi', body: 'x', send_email: true, importance: 'urgent', publish: 'now', target: { type: 'apartments', apartment_ids: [s27.aptIds.G1, s27.aptIds.G2, s27.aptIds.G3] } })).body;
+    const afterRows = await recipientsOf(afterUnsub.id);
+    check('E3: varyant adresle (a.li+etiket@gmail / googlemail) bastirma DOLANILAMAZ: iki varyant da skipped_pref (acil dahil), baska adres pending',
+      afterRows.filter((r) => r.email_status === 'skipped_pref').length === 2 && afterRows.filter((r) => r.email_status === 'pending').length === 1 && afterUnsub.stats.email.skipped_pref === 2, afterUnsub.stats.email);
+    // adres basina gunluk sinir varyantlar arasinda ortak
+    await q(`DELETE FROM announcement_email_suppressions`);
+    await closeAllPending();
+    await q(`DELETE FROM announcement_recipients WHERE announcement_id IN (SELECT id FROM announcements WHERE site_code = $1)`, [S27]);
+    process.env.ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_ADDRESS = '1';
+    const first = (await create(S27, MGR, { title: 'E3 sinir 1', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s27.aptIds.G1] } })).body;
+    const second = (await create(S27, MGR, { title: 'E3 sinir 2', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s27.aptIds.G2] } })).body;
+    check('E3: adres basina gunluk sinir varyantlar arasinda ORTAK (sinir 1): a.li+etiket@gmail ilk duyuru pending, googlemail varyanti ayni gun capped', first.stats.email.pending === 1 && second.stats.email.capped === 1 && second.stats.email.pending === 0, [first.stats.email, second.stats.email]);
+    resetLimits();
+    await closeAllPending();
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S27]);
+    resetMail();
+  }
+
+  // --- E4: hesap tercihi ve geri alma yolu ---------------------------------------------------------------------------------------------------
+  console.log('--- E4: abonelikten cikis -> tercih, PUT true -> geri alma ---');
+  {
+    const S28 = 1000000028;
+    const s28 = await makeSite(S28, 'E4 Sitesi', { 'H Blok': [1, 2, 3] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S28, MGR]);
+    const gmailUser = await mkUser('E4 Gmail Hesabi', 'e4.hesap@gmail.com');
+    await addMembership(s28.aptIds.H1, gmailUser);
+    const controlUser = await mkUser('E4 Kontrol Hesabi', 'e4.kontrol@example.com');
+    await addMembership(s28.aptIds.H2, controlUser);
+    const internalUser = await mkUser('E4 Daire Hesabi', 'daire_e4@ahbu.local', { internal: true });
+    await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'e4.iletisim@example.com', resident_pin_code = '4444' WHERE id = $1`, [s28.aptIds.H3, internalUser]);
+    await syncSitePeople(S28);
+    const prefOf = async (userCode) => (await q(`SELECT email_announcements FROM notification_preferences WHERE user_code = $1`, [userCode])).rows[0]?.email_announcements ?? null;
+    resetPublicLimiters();
+    const hesapHash = emailSec.hashEmail('e4hesap@gmail.com');
+    const post = (hash) => rawCall('POST', '/public/announcement-unsubscribe', { form: `t=${encodeURIComponent(emailSec.signUnsubscribeToken(hash))}` });
+    check('E4a hazirlik: kimsenin tercihi yok', (await prefOf(gmailUser)) === null && (await prefOf(controlUser)) === null && (await prefOf(internalUser)) === null);
+    check('E4a: hesap e-postasinin KANONIK adresiyle abonelikten cikis (e4.hesap@gmail.com = e4hesap@gmail.com) o hesabin e-posta tercihini FALSE yapar; baska hesaplar etkilenmez',
+      (await post(hesapHash)).status === 200 && (await prefOf(gmailUser)) === false && (await prefOf(controlUser)) === null && (await prefOf(internalUser)) === null);
+    check('E4a: uygulama bunu yansitir (GET /app/notification-preferences false)', (await call('GET', '/app/notification-preferences', gmailUser)).body.email_announcements === false);
+    check('E4a: dahili daire hesabinin iletisim adresiyle (apartments.resident_email) cikis o hesabin tercihini kapatir', (await post(emailSec.hashEmail('e4.iletisim@example.com'))).status === 200 && (await prefOf(internalUser)) === false && (await prefOf(controlUser)) === null);
+    // bastirma gercekten etkin: bu adrese yayin skipped_pref
+    resetMail();
+    const blocked = (await create(S28, MGR, { title: 'E4 bastirilmis', body: 'x', send_email: true, importance: 'urgent', publish: 'now', target: { type: 'apartments', apartment_ids: [s28.aptIds.H1] } })).body;
+    check('E4 hazirlik: bastirilmis hesapli alici acil duyuruda bile skipped_pref', blocked.stats.email.skipped_pref === 1 && blocked.stats.email.pending === 0, blocked.stats.email);
+    // geri alma: PUT true yalniz KENDI adresini siler
+    await post(emailSec.hashEmail('baska.kisi@example.com')); // baskasinin kaydi
+    const suppressed = async (hash) => (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = $1`, [hash])).rows[0].n;
+    const controlPut = await call('PUT', '/app/notification-preferences', controlUser, { email_announcements: true });
+    check('E4b: baska hesabin PUT true\'su bu adresin bastirmasini SILMEZ (yalniz kendi adresleri)', controlPut.status === 200 && (await suppressed(hesapHash)) === 1 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1);
+    const ownPut = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: true });
+    check('E4b: hesap sahibinin PUT true\'su KENDI adresinin (kanonik) bastirmasini siler, tercih true olur; baskasinin bastirmasi ve dahili hesabin adresi KALIR',
+      ownPut.status === 200 && ownPut.body.email_announcements === true && (await suppressed(hesapHash)) === 0 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1 && (await suppressed(emailSec.hashEmail('e4.iletisim@example.com'))) === 1 && (await prefOf(gmailUser)) === true);
+    const afterUndo = (await create(S28, MGR, { title: 'E4 geri alindi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s28.aptIds.H1] } })).body;
+    check('E4b: geri alma sonrasi ayni adrese duyuru e-postasi yeniden pending (artik bastirilmiyor)', afterUndo.stats.email.pending === 1 && afterUndo.stats.email.skipped_pref === 0, afterUndo.stats.email);
+    const putFalse = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: false });
+    check('E4b: PUT false bastirma listesine DOKUNMAZ (yalniz tercihi kapatir)', putFalse.body.email_announcements === false && (await suppressed(hesapHash)) === 0);
+    // dahili hesap: kendi iletisim adresinin bastirmasini PUT true siler
+    const internalPut = await call('PUT', '/app/notification-preferences', internalUser, { email_announcements: true });
+    check('E4b: dahili daire hesabinin PUT true\'su iletisim e-postasinin (resident_email) bastirmasini siler', internalPut.status === 200 && (await suppressed(emailSec.hashEmail('e4.iletisim@example.com'))) === 0 && (await prefOf(internalUser)) === true);
+    await q(`DELETE FROM announcement_email_suppressions`);
+    await closeAllPending();
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S28]);
+    await q(`DELETE FROM users WHERE user_code = ANY($1::int[])`, [[gmailUser, controlUser, internalUser]]);
+    resetMail();
+  }
+
+  // --- E5: tek tik POST'a IP sinirinin cikisi engellememesi ----------------------------------------------------------------------------------------
+  console.log('--- E5: genel uc hiz siniri ---');
+  {
+    resetPublicLimiters();
+    const statuses = [];
+    for (let n = 0; n < 100; n += 1) {
+      const token = emailSec.signUnsubscribeToken(emailSec.hashEmail(`e5_${n}@example.com`));
+      statuses.push((await rawCall('POST', `/public/announcement-unsubscribe?t=${encodeURIComponent(token)}`, { form: 'List-Unsubscribe=One-Click' })).status);
+    }
+    check('E5: posta saglayici havuzu benzeri (TEK IP, 100 farkli GECERLI belirtec, tek tik POST): hicbiri 429 almaz (eski IP basina 30 sinirinda cikis uygulanmazdi)', statuses.every((s) => s === 200), statuses.filter((s) => s !== 200).slice(0, 5));
+    const invalid = [];
+    for (let i = 0; i < 31; i += 1) invalid.push(await rawCall('POST', '/public/announcement-unsubscribe', { form: `t=kotu${i}` }));
+    const limited = invalid.at(-1);
+    check('E5: GECERSIZ belirtec POST IP basina 30/saat -> 31. istek 429; 429 de sayfadir (CSP + no-store + Retry-After + HTML)',
+      invalid.slice(0, 30).every((r) => r.status === 400) && limited.status === 429 && /default-src 'none'/.test(limited.headers.get('content-security-policy') ?? '') && limited.headers.get('cache-control') === 'no-store' && Number(limited.headers.get('retry-after')) > 0 && /Çok fazla istek/.test(limited.text), [limited.status, limited.headers.get('retry-after')]);
+    const stillValid = await rawCall('POST', `/public/announcement-unsubscribe?t=${encodeURIComponent(emailSec.signUnsubscribeToken(emailSec.hashEmail('e5_ek@example.com')))}`, { form: 'List-Unsubscribe=One-Click' });
+    check('E5: IP\'nin gecersiz-belirtec sayaci dolsa bile GECERLI belirtec calisir (cikis engellenmez)', stillValid.status === 200);
+    const sameToken = `/public/announcement-unsubscribe?t=${encodeURIComponent(emailSec.signUnsubscribeToken(emailSec.hashEmail('e5_ayni@example.com')))}`;
+    const sameStatuses = [];
+    for (let i = 0; i < 21; i += 1) sameStatuses.push((await rawCall('POST', sameToken, { form: 'List-Unsubscribe=One-Click' })).status);
+    check('E5: ayni adres ozeti icin POST 20/saat (idempotent islem, kotuye kullanim siniri): 21. istek 429', sameStatuses.slice(0, 20).every((s) => s === 200) && sameStatuses[20] === 429, sameStatuses.slice(-3));
+    resetPublicLimiters();
+    await q(`DELETE FROM announcement_email_suppressions`);
+  }
+
+  // --- E6: zamanlama yoluyla saatlik yonetici siniri dolanilamaz -------------------------------------------------------------------------------
+  console.log('--- E6: saatlik yonetici siniri (zamanlama dahil) ---');
+  {
+    const S29 = 1000000029;
+    const s29 = await makeSite(S29, 'E6 Sitesi', { 'I Blok': [1, 2, 3, 4, 5, 6] });
+    const M3 = await mkUser('E6 Yonetici', 'e6.yonetici@example.com');
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S29, M3]);
+    for (let n = 1; n <= 6; n += 1) {
+      const person = await addPerson(S29, { name: `E6 Kisi ${n}`, email: `e6_${n}@example.com` });
+      await addResidency(S29, s29.aptIds[`I${n}`], person);
+    }
+    const toI = (n) => ({ type: 'apartments', apartment_ids: [s29.aptIds[`I${n}`]] });
+    process.env.ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER = '2';
+    const at = (minutes) => inMs(minutes * 60_000);
+    const s1 = await create(S29, M3, { title: 'E6 zaman 1', body: 'x', send_email: true, publish: 'schedule', publish_at: at(10), target: toI(1) });
+    const s2 = await create(S29, M3, { title: 'E6 zaman 2', body: 'x', send_email: true, publish: 'schedule', publish_at: at(11), target: toI(2) });
+    const s3 = await create(S29, M3, { title: 'E6 zaman 3', body: 'x', send_email: true, publish: 'schedule', publish_at: at(12), target: toI(3) });
+    check('E6: e-postali ZAMANLAMA da saatlik sinira sayilir (sinir 2): 1. ve 2. zamanlama 201, 3. 409 ANNOUNCEMENT_HOURLY_LIMIT; kayit olusmaz',
+      s1.status === 201 && s2.status === 201 && s3.status === 409 && s3.body.code === 'ANNOUNCEMENT_HOURLY_LIMIT' && (await q(`SELECT COUNT(*)::int AS n FROM announcements WHERE site_code = $1`, [S29])).rows[0].n === 2, [s1.status, s2.status, s3.status]);
+    const stamps = (await q(`SELECT id, email_requested_by, email_requested_at FROM announcements WHERE site_code = $1 ORDER BY id`, [S29])).rows;
+    check('E6: istek sayaci yoneticiye yazilir (email_requested_by / email_requested_at)', stamps.length === 2 && stamps.every((r) => r.email_requested_by === M3 && r.email_requested_at !== null), stamps);
+    const plainSchedule = await create(S29, M3, { title: 'E6 e-postasiz zaman', body: 'x', publish: 'schedule', publish_at: at(13), target: toI(4) });
+    const draft = (await create(S29, M3, { title: 'E6 taslak', body: 'x', send_email: true, target: toI(5) })).body;
+    const manual = await call('POST', `${P(S29)}/${draft.id}/publish`, M3);
+    const patched = await call('PATCH', `${P(S29)}/${draft.id}`, M3, { publish_at: at(14) });
+    check('E6: e-postasiz zamanlama sinira takilmaz; elle e-postali yayin (sayac 2) 409; taslagi e-postali zamanlama (PATCH) da 409', plainSchedule.status === 201 && manual.status === 409 && manual.body.code === 'ANNOUNCEMENT_HOURLY_LIMIT' && patched.status === 409, [plainSchedule.status, manual.status, patched.status]);
+    // zamanlayici kendi yayinini yeniden denetlemez ve sayaci degistirmez
+    await q(`UPDATE announcements SET publish_at = NOW() - INTERVAL '1 minute' WHERE id = ANY($1::bigint[])`, [stamps.map((r) => Number(r.id))]);
+    const tick = await scheduler.runSchedulerTick();
+    const afterTick = (await q(`SELECT id, status, email_requested_at FROM announcements WHERE id = ANY($1::bigint[]) ORDER BY id`, [stamps.map((r) => Number(r.id))])).rows;
+    check('E6: zamanlayici iki e-postali duyuruyu sinir dolu olsa da yayinlar (yeniden denetlenmez) ve istek sayacini degistirmez', afterTick.every((r) => r.status === 'published') && afterTick.every((r, i) => new Date(r.email_requested_at).getTime() === new Date(stamps[i].email_requested_at).getTime()) && tick.failed === 0, [afterTick, tick]);
+    const stillBlocked = await call('POST', `${P(S29)}/${draft.id}/publish`, M3);
+    check('E6: zamanlanan istekler yayinlandiktan sonra da son 1 saatlik toplama dahildir (elle yayin hala 409); baska yonetici (super) etkilenmez', stillBlocked.status === 409 && (await call('POST', `${P(S29)}/${draft.id}/publish`, SUPER)).status === 200);
+
+    // cok siteli yonetici: paralel yayin / zamanlama sinirini ASAMAZ
+    process.env.ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER = '3';
+    const S30 = 1000000030;
+    const S31 = 1000000031;
+    const M4 = await mkUser('E6 Cok Siteli Yonetici', 'e6.cok@example.com');
+    const multi = {};
+    for (const [code, name] of [[S30, 'E6 Cok A'], [S31, 'E6 Cok B']]) {
+      const made = await makeSite(code, name, { 'J Blok': [1, 2, 3, 4] });
+      await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [code, M4]);
+      for (let n = 1; n <= 4; n += 1) {
+        const person = await addPerson(code, { name: `E6 Cok ${code} ${n}`, email: `e6cok_${code}_${n}@example.com` });
+        await addResidency(code, made.aptIds[`J${n}`], person);
+      }
+      multi[code] = made;
+    }
+    const drafts = [];
+    for (const code of [S30, S31]) {
+      for (let n = 1; n <= 4; n += 1) {
+        drafts.push({ code, id: (await create(code, M4, { title: `E6 paralel ${code} ${n}`, body: 'x', send_email: true, target: { type: 'apartments', apartment_ids: [multi[code].aptIds[`J${n}`]] } })).body.id });
+      }
+    }
+    const deadlocksBefore = hooks.deadlocks;
+    const outcomes = await Promise.all(drafts.map((d) => call('POST', `${P(d.code)}/${d.id}/publish`, M4)));
+    const okCount = outcomes.filter((r) => r.status === 200).length;
+    const limitedCount = outcomes.filter((r) => r.status === 409 && r.body.code === 'ANNOUNCEMENT_HOURLY_LIMIT').length;
+    check('E6: cok siteli yonetici 8 PARALEL e-postali yayinda (iki sitede 4\'er, sinir 3) sinirin uzerine CIKAMAZ: tam 3 basari, 5 ANNOUNCEMENT_HOURLY_LIMIT; deadlock ve 500 yok',
+      okCount === 3 && limitedCount === 5 && hooks.deadlocks === deadlocksBefore, { okCount, limitedCount, statuses: outcomes.map((r) => r.status), deadlocks: hooks.deadlocks - deadlocksBefore });
+    // PARALEL zamanlama + yayin karisimi da asamaz (kalan sinir 0): hepsi 409
+    const lateSchedule = await create(S31, M4, { title: 'E6 gec zaman', body: 'x', send_email: true, publish: 'schedule', publish_at: at(30), target: { type: 'apartments', apartment_ids: [multi[S31].aptIds.J1] } });
+    check('E6: sinir dolunca iki siteden de zamanlama 409', lateSchedule.status === 409 && lateSchedule.body.code === 'ANNOUNCEMENT_HOURLY_LIMIT');
+
+    // KONTROL DENEYI (belirleyici): kuresel kilit olmadan iki siteden esanli yayin siniri ASAR; kilitle ikincisi BEKLER ve 409 alir
+    process.env.ANNOUNCEMENT_EMAIL_PUBLISH_MAX_PER_HOUR_PER_USER = '1';
+    const raceRound = async (label, manager, removeLock) => {
+      const draftOn = async (code, n) =>
+        (await create(code, manager, { title: `E6 ${label} ${code} ${n}`, body: 'x', send_email: true, target: { type: 'apartments', apartment_ids: [multi[code].aptIds[`J${n}`]] } })).body.id;
+      const [first, second] = [await draftOn(S30, 1), await draftOn(S31, 1)];
+      hooks.rewrite = removeLock ? (text) => text.replace('SELECT pg_advisory_xact_lock($1::int, $2::int)', 'SELECT $1::int + $2::int') : null;
+      let openGate;
+      hooks.pause = { match: /INSERT INTO announcement_recipients/, gate: new Promise((resolve) => { openGate = resolve; }), hit: false };
+      const firstResult = call('POST', `${P(S30)}/${first}/publish`, manager);
+      const reached = await waitFor(() => hooks.pause.hit, 8000);
+      hooks.pause = null; // ilk yayin tx'i commit oncesi bekliyor (sayim ve istek damgasi yapildi, commit edilmedi)
+      let secondSettled = false;
+      const secondResult = call('POST', `${P(S31)}/${second}/publish`, manager).then((r) => {
+        secondSettled = true;
+        return r;
+      });
+      await sleep(900);
+      const settledWhileFirstOpen = secondSettled;
+      openGate();
+      const [r1, r2] = [await firstResult, await secondResult];
+      hooks.rewrite = null;
+      return { reached, settledWhileFirstOpen, statuses: [r1.status, r2.status], code2: r2.body?.code };
+    };
+    const M5 = await mkUser('E6 Kontrol Yoneticisi', 'e6.kontrol@example.com');
+    const M6 = await mkUser('E6 Kilitli Yonetici', 'e6.kilitli@example.com');
+    for (const code of [S30, S31]) await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2), ($1, $3)`, [code, M5, M6]);
+    const withoutLock = await raceRound('kilitsiz', M5, true);
+    check('E6 KONTROL DENEYI: kuresel e-posta kilidi OLMADAN iki siteden eszamanli yayin sinirin (1) uzerine cikar (ikisi de 200): kilidin gerekliligi', withoutLock.reached && withoutLock.statuses[0] === 200 && withoutLock.statuses[1] === 200, withoutLock);
+    const withLock = await raceRound('kilitli', M6, false);
+    check('E6: kuresel e-posta kilidiyle ikinci site yayini birincinin commit\'ini BEKLER (bu sirada bitmez) ve sinirin dolu oldugunu gorur: 200 + 409 ANNOUNCEMENT_HOURLY_LIMIT',
+      withLock.reached && withLock.settledWhileFirstOpen === false && withLock.statuses[0] === 200 && withLock.statuses[1] === 409 && withLock.code2 === 'ANNOUNCEMENT_HOURLY_LIMIT', withLock);
+    resetLimits();
+    await closeAllPending();
+    await q(`DELETE FROM sites WHERE site_code = ANY($1::bigint[])`, [[S29, S30, S31]]);
+    await q(`DELETE FROM users WHERE user_code = ANY($1::int[])`, [[M3, M4, M5, M6]]);
+    resetMail();
+  }
+
+  // --- E7: kurul kucuk-hedef karari CANLI alici sayisiyla --------------------------------------------------------------------------------------------
+  console.log('--- E7: kurul canli alici sayisi ---');
+  {
+    const S32 = 1000000032;
+    const s32 = await makeSite(S32, 'E7 Sitesi', { 'K Blok': [1, 2, 3, 4, 5, 6] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S32, MGR]);
+    const boardUser = await mkUser('E7 Kurul', 'e7.kurul@example.com');
+    await q(`INSERT INTO site_memberships (site_code, user_code, role) VALUES ($1, $2, 'BOARD_MEMBER')`, [S32, boardUser]);
+    const personIds = [];
+    for (let n = 1; n <= 6; n += 1) {
+      const person = await addPerson(S32, { name: `E7 Kisi ${n}`, email: `e7_${n}@example.com` });
+      await addResidency(S32, s32.aptIds[`K${n}`], person);
+      personIds.push(person);
+    }
+    const published = (await create(S32, MGR, { title: 'E7 yayin', body: 'x', publish: 'now' })).body;
+    await q(`UPDATE announcement_recipients SET read_at = NOW() WHERE announcement_id = $1 AND person_id = ANY($2::bigint[])`, [published.id, personIds.slice(0, 2)]);
+    const boardBefore = (await call('GET', `${P(S32)}/${published.id}`, boardUser)).body;
+    check('E7 hazirlik: 6 alicili duyuruda kurul sayilari gorur (>= 5)', boardBefore.stats.recipients === 6 && boardBefore.stats.read === 2 && boardBefore.read_count === 2, boardBefore.stats);
+    await q(`DELETE FROM site_people WHERE id = ANY($1::bigint[])`, [personIds.slice(0, 3)]);
+    const boardAfter = (await call('GET', `${P(S32)}/${published.id}`, boardUser)).body;
+    const managerAfter = (await call('GET', `${P(S32)}/${published.id}`, MGR)).body;
+    const boardList = (await call('GET', P(S32), boardUser)).body.items.find((i) => i.id === published.id);
+    check('E7: kisiler silinip canli alici satiri 3\'e dusunce (yayin anindaki sayi 6) kurul icin sayilar NULL: ayrintida ve listede; recipient_count aynen; yonetici gercek sayilari gorur; yanitta canli sayi alani yok',
+      boardAfter.recipient_count === 6 && boardAfter.stats.recipients === 3 && boardAfter.stats.read === null && boardAfter.stats.unread === null && boardAfter.read_count === null && Object.values(boardAfter.stats.email).every((v) => v === null)
+        && boardList.read_count === null && boardList.recipient_count === 6 && typeof managerAfter.stats.read === 'number' && !JSON.stringify([boardAfter, boardList]).includes('live_'), { stats: boardAfter.stats, list: boardList.read_count });
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S32]);
+    await q(`DELETE FROM users WHERE user_code = $1`, [boardUser]);
   }
 
   // =============================================================================================================

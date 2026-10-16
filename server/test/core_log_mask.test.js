@@ -20,8 +20,9 @@ describe('maskSensitiveUrl', () => {
   it('duyuru abonelikten cik belirteci (?t=<ozet>.<imza>) maskelenir; t ile baslayan baska parametreler etkilenmez', () => {
     const token = `${HEX_TOKEN}.AbCdEf_-123456789012345678901234567890123`;
     const masked = maskSensitiveUrl(`/public/announcement-unsubscribe?t=${token}`);
-    assert.ok(masked.endsWith('?t=***'), masked);
+    assert.equal(masked, '/public/announcement-unsubscribe?t=***', 'yol ayırt edilebilir, yalnız belirteç maskeli');
     assert.equal(masked.includes(HEX_TOKEN), false);
+    assert.equal(maskSensitiveUrl('/x/abcdefghijklmnopqrstuvwxyz0123/y'), '/x/***/y', 'diğer uzun segmentler yine maskelenir');
     assert.equal(maskSensitiveUrl(`/x?x=1&t=${token}&lang=tr`), '/x?x=1&t=***&lang=tr');
     assert.equal(maskSensitiveUrl('/x?tab=2&title=1'), '/x?tab=2&title=1');
   });

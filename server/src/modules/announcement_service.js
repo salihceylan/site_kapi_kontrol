@@ -26,6 +26,7 @@ import {
   HAS_ACCOUNT_SQL,
 } from './people_common.js';
 import { runSyncSteps } from './people_sync_sql.js';
+import { ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS } from './announcement_lock.js';
 import { peopleLockKey, syncSitePeopleSafe } from './people_sync.js';
 import {
   BODY_HEAD_CHARS,
@@ -33,6 +34,7 @@ import {
   MAX_PUBLISH_ATTEMPTS,
   announcementLimits,
   announcementNotFound,
+  attachLiveCount,
   dailyLimitReached,
   duplicateAnnouncement,
   hourlyLimitReached,
@@ -152,13 +154,13 @@ export async function listAnnouncements(siteCode, query = {}, db = pool) {
       SELECT
         a.id, a.title, left(a.body, ${BODY_HEAD_CHARS}) AS body_head, char_length(a.body) AS body_length,
         a.importance, a.status, a.target_type, a.send_email, a.publish_at, a.published_at, a.edited_at,
-        a.recipient_count, a.created_at, u.full_name AS created_by_name, rc.read_count
+        a.recipient_count, a.created_at, u.full_name AS created_by_name, rc.read_count, rc.live_count
       FROM announcements a
       LEFT JOIN users u ON u.user_code = a.created_by
       LEFT JOIN LATERAL (
-        SELECT COUNT(*)::INTEGER AS read_count
+        SELECT COUNT(*)::INTEGER AS live_count, COUNT(*) FILTER (WHERE r.read_at IS NOT NULL)::INTEGER AS read_count
         FROM announcement_recipients r
-        WHERE r.announcement_id = a.id AND r.read_at IS NOT NULL
+        WHERE r.announcement_id = a.id
       ) rc ON TRUE
       WHERE ${where.sql}
       ORDER BY (a.status IN ('draft', 'scheduled')) DESC, COALESCE(a.published_at, a.created_at) DESC, a.id DESC
@@ -240,7 +242,7 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
   const recipients = statRows.reduce((sum, entry) => sum + Number(entry.n ?? 0), 0);
   const read = statRows.reduce((sum, entry) => sum + Number(entry.read_n ?? 0), 0);
   const targetView = await loadTargetLabels(db, siteCode, row);
-  return {
+  const detail = {
     ...mapSummaryRow({ ...row, read_count: read }),
     body: row.body,
     // EKLEMELİ: yayından sonra kaç kez düzenlendi (sakine "düzenlendi" notu edited_at ile verilir)
@@ -261,6 +263,8 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
       email: emailCountsFromRows(statRows),
     },
   };
+  // canlı alıcı satırı sayısı (yanıta girmez): kurul için küçük hedef kararında kullanılır
+  return attachLiveCount(detail, recipients);
 }
 
 /** GET announcements/:id. Yok / başka sitenin kaydı -> 404 ANNOUNCEMENT_NOT_FOUND. */
@@ -393,11 +397,12 @@ const PUBLISH_STATE_MESSAGES = Object.freeze({
  *  - siteye günlük toplam: `when` anının İstanbul gününde yayınlanmış (geri çekilenler dahil: yayınla-geri çek döngüsü kota yer) + o güne
  *    zamanlanmış duyurular >= sınır ise 409 ANNOUNCEMENT_DAILY_LIMIT
  *  - siteye günlük acil + e-postalı: aynı sayım, yalnız acil + send_email (varsayılan 3)
- *  - yöneticiye saatlik e-postalı yayın (`hourly`, yalnız elle yayında): son 1 saatte bu yöneticinin yayınladığı e-postalı duyuru >= sınır
- *    ise 409 ANNOUNCEMENT_HOURLY_LIMIT
- * Zamanlayıcı yayınları ENGELLENMEZ (sınır, zamanlama anında denetlendi).
+ *  - yöneticiye saatlik e-postalı İSTEK (`emailRequest`: elle e-postalı yayın VEYA e-postalı zamanlama / yeniden zamanlama): son 1 saatte
+ *    bu yöneticinin kabul edilen e-postalı istek sayısı (email_requested_by / email_requested_at; geri çekilenler dahil) >= sınır ise
+ *    409 ANNOUNCEMENT_HOURLY_LIMIT. Sayım KÜRESEL e-posta kilidi altında yapılır (çok siteli yönetici paralel yayın / zamanlamayla aşamaz).
+ * Zamanlayıcının kendi yayını ENGELLENMEZ ve yeniden sayılmaz (istek zamanlama anında denetlendi ve sayıldı).
  */
-export async function assertPublishAllowed(client, { id, siteCode, importance, sendEmail, when, actorUserCode, hourly }) {
+export async function assertPublishAllowed(client, { id, siteCode, importance, sendEmail, when, actorUserCode, emailRequest }) {
   const limits = announcementLimits();
   const day = istanbulDayRange(when);
   const counts = await client.query(
@@ -423,13 +428,13 @@ export async function assertPublishAllowed(client, { id, siteCode, importance, s
       `Bu site için günlük ${limits.siteDailyUrgentEmail} acil e-postalı duyuru sınırına ulaşıldı. Acil duyuruyu e-postasız yayınlayın ya da yarın deneyin.`,
     );
   }
-  if (hourly === true && sendEmail === true && actorUserCode !== null && actorUserCode !== undefined) {
+  if (emailRequest === true && sendEmail === true && actorUserCode !== null && actorUserCode !== undefined) {
+    await client.query('SELECT pg_advisory_xact_lock($1::int, $2::int)', [ANNOUNCEMENT_LOCK_CLASS, ANNOUNCEMENT_LOCK_JOBS.emailGlobal]);
     const recent = await client.query(
       `
         SELECT COUNT(*)::INTEGER AS n
         FROM announcements
-        WHERE published_by = $1 AND send_email = TRUE AND id <> $2
-          AND status IN ('published', 'withdrawn') AND published_at > NOW() - INTERVAL '1 hour'
+        WHERE email_requested_by = $1 AND email_requested_at > NOW() - INTERVAL '1 hour' AND id <> $2
       `,
       [actorUserCode, id],
     );
@@ -507,6 +512,8 @@ export async function publishWithinTransaction(
           published_at = NOW(),
           publish_at = CASE WHEN $3::BOOLEAN THEN publish_at ELSE NULL END,
           published_by = $4::INTEGER,
+          email_requested_by = CASE WHEN NOT $3::BOOLEAN AND send_email AND $4::INTEGER IS NOT NULL THEN $4::INTEGER ELSE email_requested_by END,
+          email_requested_at = CASE WHEN NOT $3::BOOLEAN AND send_email AND $4::INTEGER IS NOT NULL THEN NOW() ELSE email_requested_at END,
           updated_at = NOW()
       WHERE id = $1 AND site_code = $2 AND status IN ('draft', 'scheduled')
         AND ($3::BOOLEAN = FALSE OR (status = 'scheduled' AND publish_at <= NOW()))
@@ -536,7 +543,7 @@ export async function publishWithinTransaction(
       sendEmail: row.send_email === true,
       when: now,
       actorUserCode,
-      hourly: true,
+      emailRequest: true,
     });
   }
   await runSyncSteps(client, { siteCode, userCode: null });
@@ -697,16 +704,16 @@ export async function createAnnouncement({ siteCode, body, actor, now = new Date
           sendEmail: input.sendEmail,
           when: input.publishAt,
           actorUserCode: actorInfo.userCode,
-          hourly: false,
+          emailRequest: true,
         });
       }
       const inserted = await client.query(
         `
           INSERT INTO announcements (
             site_code, title, body, importance, status, target_type, target_block_ids, target_apartment_ids,
-            send_email, publish_at, created_by
+            send_email, publish_at, created_by, email_requested_by, email_requested_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7::BIGINT[], $8::BIGINT[], $9, $10, $11)
+          VALUES ($1, $2, $3, $4, $5, $6, $7::BIGINT[], $8::BIGINT[], $9, $10, $11, $12::INTEGER, CASE WHEN $12::INTEGER IS NOT NULL THEN NOW() END)
           RETURNING id
         `,
         [
@@ -721,6 +728,8 @@ export async function createAnnouncement({ siteCode, body, actor, now = new Date
           input.sendEmail,
           input.publishAt === null ? null : input.publishAt.toISOString(),
           actorInfo.userCode,
+          // e-postalı ZAMANLAMA bir e-posta isteğidir: yöneticinin saatlik sayacına yazılır (zamanlayıcı yayını yeniden saymaz)
+          status === 'scheduled' && input.sendEmail && actorInfo.userCode !== null && actorInfo.userCode !== undefined ? actorInfo.userCode : null,
         ],
       );
       const createdId = Number(inserted.rows[0].id);
@@ -888,15 +897,23 @@ export async function updateAnnouncement({ siteCode, id: rawId, body, actor, now
           nextStatus === 'scheduled' &&
           (rescheduled || fields.includes('importance') || fields.includes('send_email'));
         if (limitRelevant) {
+          // E-postalı zamanlama / yeniden zamanlama / e-postayı açma bir e-posta İSTEĞİDİR: saatlik yönetici sınırında sayılır ve sayaca yazılır.
+          const sendEmailFinal = patch.sendEmail ?? row.send_email === true;
+          const actorUserCode = actorFromAuthUser(actor).userCode;
+          const emailRequest = sendEmailFinal && (rescheduled || fields.includes('send_email'));
           await assertPublishAllowed(client, {
             id,
             siteCode,
             importance: patch.importance ?? row.importance,
-            sendEmail: patch.sendEmail ?? row.send_email === true,
+            sendEmail: sendEmailFinal,
             when: nextPublishAt,
-            actorUserCode: actorFromAuthUser(actor).userCode,
-            hourly: false,
+            actorUserCode,
+            emailRequest,
           });
+          if (emailRequest && actorUserCode !== null && actorUserCode !== undefined) {
+            setField('email_requested_by', actorUserCode);
+            sets.push('email_requested_at = NOW()');
+          }
         }
       }
       if (sets.length > 0) {

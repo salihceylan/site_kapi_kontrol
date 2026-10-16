@@ -103,7 +103,7 @@ export const hourlyLimitReached = () =>
   new PlatformError(
     409,
     'ANNOUNCEMENT_HOURLY_LIMIT',
-    'Son bir saatte çok sayıda e-postalı duyuru yayınladınız. Biraz sonra tekrar deneyin.',
+    'Son bir saatte çok sayıda e-postalı duyuru yayınladınız veya zamanladınız. Biraz sonra tekrar deneyin.',
   );
 export const duplicateAnnouncement = () =>
   new PlatformError(
@@ -485,7 +485,7 @@ export function idArray(value) {
 
 /** AnnouncementSummary (yönetici/kurul). `created_by_name` kurula route katmanında temizlenir (redactForBoard). */
 export function mapSummaryRow(row) {
-  return {
+  const summary = {
     id: Number(row.id),
     title: row.title,
     body_preview: bodyPreview(row),
@@ -501,17 +501,38 @@ export function mapSummaryRow(row) {
     created_at: toIso(row.created_at),
     created_by_name: row.created_by_name ?? null,
   };
+  attachLiveCount(summary, row.live_count);
+  return summary;
 }
 
 /**
- * Kurul üyesine verilmeyen alanlar: kullanıcı kodları (redactForReadOnlyRole) + oluşturan yöneticinin adı. KÜÇÜK HEDEF (1-4 alıcı):
- * okunma / okunmamış / e-posta sayıları tek bir daireyi ele verir -> null (anahtarlar kalır, istemci "—" gösterir).
+ * Canlı alıcı satırı sayısı: yanıta GİRMEYEN (numaralanamaz) özellik. Yayın anındaki recipient_count kişi silinince eskir; kurul için
+ * "küçük hedef" kararı min(recipient_count, canlı sayı) ile verilir (bkz. redactForBoard).
+ */
+export function attachLiveCount(target, liveCount) {
+  if (liveCount !== undefined && liveCount !== null && Number.isFinite(Number(liveCount))) {
+    Object.defineProperty(target, 'live_recipient_count', { value: Number(liveCount), enumerable: false, configurable: true });
+  }
+  return target;
+}
+
+/**
+ * Kurul üyesine verilmeyen alanlar: kullanıcı kodları (redactForReadOnlyRole) + oluşturan yöneticinin adı. KÜÇÜK HEDEF: okunma /
+ * okunmamış / e-posta sayıları tek bir daireyi ele verir -> null (anahtarlar kalır, istemci "—" gösterir). Karar, yayın anındaki
+ * recipient_count ile CANLI alıcı satırı sayısının (kişi silinince satır sayısı düşer) KÜÇÜĞÜNE göre verilir: 1-4 ise küçük hedeftir.
+ * Canlı sayı yanıta girmeyen özelliktir (attachLiveCount); ASIL (temizlenmemiş) nesne ile kopya paralel gezilir.
  */
 export function redactForBoard(value) {
   const base = redactForReadOnlyRole(value);
-  const isSmallTarget = (entry) => {
-    const count = Number(entry.recipient_count);
-    return Number.isFinite(count) && count >= 1 && count < BOARD_SMALL_TARGET_MIN;
+  const isSmallTarget = (copy, original) => {
+    const stored = Number(copy.recipient_count);
+    if (!Number.isFinite(stored)) {
+      return false;
+    }
+    const liveRaw = original ? original.live_recipient_count : undefined;
+    const live = liveRaw === undefined || liveRaw === null || !Number.isFinite(Number(liveRaw)) ? stored : Number(liveRaw);
+    const count = Math.min(stored, live);
+    return count >= 1 && count < BOARD_SMALL_TARGET_MIN;
   };
   const nullAll = (entry) => {
     const out = {};
@@ -520,14 +541,14 @@ export function redactForBoard(value) {
     }
     return out;
   };
-  const clear = (entry) => {
-    if (Array.isArray(entry)) {
-      return entry.map(clear);
+  const clear = (copy, original) => {
+    if (Array.isArray(copy)) {
+      return copy.map((entry, index) => clear(entry, Array.isArray(original) ? original[index] : undefined));
     }
-    if (entry && typeof entry === 'object' && !(entry instanceof Date)) {
-      const small = isSmallTarget(entry);
+    if (copy && typeof copy === 'object' && !(copy instanceof Date)) {
+      const small = isSmallTarget(copy, original);
       const out = {};
-      for (const [key, inner] of Object.entries(entry)) {
+      for (const [key, inner] of Object.entries(copy)) {
         if (key === 'created_by_name') {
           out[key] = null;
         } else if (small && key === 'read_count') {
@@ -535,14 +556,14 @@ export function redactForBoard(value) {
         } else if (small && key === 'stats' && inner && typeof inner === 'object') {
           out[key] = { ...inner, read: null, unread: null, email: inner.email && typeof inner.email === 'object' ? nullAll(inner.email) : inner.email };
         } else {
-          out[key] = clear(inner);
+          out[key] = clear(inner, original && typeof original === 'object' ? original[key] : undefined);
         }
       }
       return out;
     }
-    return entry;
+    return copy;
   };
-  return clear(base);
+  return clear(base, value);
 }
 
 /** Sakin gelen kutusu satırı. */

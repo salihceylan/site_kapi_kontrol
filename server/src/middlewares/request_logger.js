@@ -34,7 +34,8 @@ const PATH_TOKEN_PREFIX_PATTERN =
   /(\/(?:guest|guest-pass|join-info|reset-password|reset|verify|invite|invitation|qr-token)\/)([^/?#\s]+)/gi;
 
 // Token benzeri uzun segmentler (>=24 karakter base64url/hex) - kalan her yer icin emniyet agi.
-const LONG_TOKEN_SEGMENT_PATTERN = /(\/)([A-Za-z0-9_-]{24,})(?=[/?#]|$)/g;
+// "announcement-unsubscribe" (24 karakter) bilinen bir genel uç adıdır, belirteç değil: yol logda ayırt edilebilsin (belirteç ?t= ile maskelenir).
+const LONG_TOKEN_SEGMENT_PATTERN = /(\/)(?!announcement-unsubscribe(?=[/?#]|$))([A-Za-z0-9_-]{24,})(?=[/?#]|$)/g;
 
 export function maskSensitiveUrl(url) {
   let text = String(url ?? '');

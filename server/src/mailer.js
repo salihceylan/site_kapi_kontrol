@@ -511,8 +511,8 @@ const ANNOUNCEMENT_RECIPIENT_PATTERN = /^[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[^\s@,;<
  * site adı ve alıcı satır başı enjeksiyonuna (CRLF) karşı temizlenir; gövde düz yazıdır, HTML'de kaçırılır ve satır sonları korunur.
  * Geçersiz alıcı adresi { code: 'INVALID_RECIPIENT' } hatası verir.
  *
- * Altbilgi alıcı türüne göre doğrudur: hesabı olan alıcıya "tercihlerinizi uygulamadan değiştirebilirsiniz" (hesapsız alıcının uygulaması
- * yok); hesapsız alıcıya abonelikten çık bağlantısı. `unsubscribeUrl` (http/https) verilirse RFC 8058 uyumlu `List-Unsubscribe` ve
+ * Altbilgi alıcı türüne göre doğrudur: hesabı olan alıcıya uygulamadaki Bildirim Tercihleri VE abonelikten çık bağlantısı (acil duyuru
+ * tercihten bağımsızdır, bağlantı acil dahil her şeyi durdurur - metin bunu söyler); hesapsız alıcıya (uygulaması yok) abonelikten çık bağlantısı. `unsubscribeUrl` (http/https) verilirse RFC 8058 uyumlu `List-Unsubscribe` ve
  * `List-Unsubscribe-Post: List-Unsubscribe=One-Click` başlıkları HER alıcıya eklenir.
  */
 export function buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount = true, unsubscribeUrl = null }) {
@@ -535,7 +535,13 @@ export function buildAnnouncementEmail({ to, siteName, title, body, importance, 
   const sentBy = `Bu e-posta ${site} yönetimi tarafından gönderildi.`;
   let footerText = sentBy;
   let footerHtml = escapeHtml(sentBy);
-  if (hasAccount !== false) {
+  if (hasAccount !== false && link) {
+    // Hesaplı alıcı: uygulamadaki tercih (acil duyuru hariç) VEYA bağlantı (acil dahil HER ŞEYİ durdurur) - ikisi de dürüstçe anlatılır
+    const note = 'Acil duyurular uygulamadaki tercihten bağımsız gönderilir; bağlantıdan çıkış acil duyurular dahil tüm duyuru e-postalarını durdurur.';
+    const prompt = "Bu e-postaları durdurmak için uygulamadaki Bildirim Tercihleri'ni kullanabilir veya şu bağlantıdan çıkabilirsiniz:";
+    footerText = `${sentBy} ${note} ${prompt} ${link}`;
+    footerHtml = `${escapeHtml(sentBy)} ${escapeHtml(note)} ${escapeHtml(prompt)} <a href="${escapeHtml(link)}" style="color: #6b7280;">Abonelikten çık</a>`;
+  } else if (hasAccount !== false) {
     footerText = `${sentBy} Bildirim tercihlerinizi uygulamadan değiştirebilirsiniz.`;
     footerHtml = escapeHtml(footerText);
   } else if (link) {

@@ -6,25 +6,43 @@
 //                                                         `List-Unsubscribe=One-Click`) ya da gövdede (`t`, onay sayfasındaki form) olabilir
 //
 // Belirteç = "<adres özeti>.<HMAC>" (announcement_email_security.js): adrese bağlı, süresiz, düz adres İÇERMEZ; sayfada adres gösterilmez.
-// Çıkış `announcement_email_suppressions`'a yazılır: adres sonraki duyurularda 'skipped_pref' olur (acil dahil; hesapsız alıcı için başka
-// kanal yok). Hesabı olan kullanıcının UYGULAMADAKİ duyurusu etkilenmez. IP başına sıkı hız sınırı; sayfa sıkı CSP ile servis edilir.
+// Çıkış `announcement_email_suppressions`'a yazılır: adres (KANONİK biçimiyle: +etiket / gmail noktaları önemsiz) sonraki duyurularda
+// 'skipped_pref' olur (acil dahil; hesapsız alıcı için başka kanal yok). O adrese sahip HESAPLARIN bildirim tercihi de kapatılır
+// (uygulamadaki ayar gerçeği yansıtsın); uygulamadaki duyuruları etkilenmez. Geri alma: uygulamada tercih "açık" yapılır
+// (announcement_inbox.js setNotificationPreferences).
+//
+// HIZ SINIRI (E5): posta sağlayıcıları (Google / Yahoo vb.) tek tık POST'larını ortak IP havuzlarından gönderir; sıkı IP sınırı geçerli
+// belirteçleri 429'a düşürüp çıkışı uygulatmazdı. Bu yüzden ÖNCE imza ucuzca doğrulanır:
+//   - GEÇERSİZ belirteç: sıkı IP sınırı (GET 120/saat, POST 30/saat) - tarama / kaba kuvvet buradan kısıtlanır;
+//   - GEÇERLİ belirteç: adres özeti başına makul sınır (işlem idempotent) + geniş bir IP üst sınırı (kullanıcı taramasının maliyetini sınırlar).
+// Tüm yanıtlar (429 dahil) sıkı CSP + no-store ile gider.
 
 import express from 'express';
 import { pool } from '../db.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
-import { verifyUnsubscribeToken } from './announcement_email_security.js';
+import { emailHashSalts, verifyUnsubscribeToken } from './announcement_email_security.js';
+import { canonicalEmailSql } from './announcement_recipients.js';
+import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 import { HOUR_MS, ipKey } from './route_helpers.js';
 
 export const announcementPublicRouter = express.Router();
 
-export const unsubscribeViewLimiter = createRuleLimiter({
-  rules: [{ windowMs: HOUR_MS, max: 120, key: ipKey }],
-  message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
-});
+const MESSAGE = 'Çok fazla istek. Biraz sonra tekrar deneyin.';
+const digestKey = (req) => (req.unsubscribeDigest ? `d:${req.unsubscribeDigest}` : null);
 
-export const unsubscribeApplyLimiter = createRuleLimiter({
-  rules: [{ windowMs: HOUR_MS, max: 30, key: ipKey }],
-  message: 'Çok fazla istek. Biraz sonra tekrar deneyin.',
+/** GEÇERSİZ belirteçli GET: IP başına 120/saat. */
+export const unsubscribeViewLimiter = createRuleLimiter({ rules: [{ windowMs: HOUR_MS, max: 120, key: ipKey }], message: MESSAGE });
+/** GEÇERSİZ belirteçli POST: IP başına 30/saat. */
+export const unsubscribeApplyLimiter = createRuleLimiter({ rules: [{ windowMs: HOUR_MS, max: 30, key: ipKey }], message: MESSAGE });
+/** GEÇERLİ belirteçli GET: adres özeti başına 60/saat, IP başına 1800/saat. */
+export const unsubscribeViewValidLimiter = createRuleLimiter({
+  rules: [{ windowMs: HOUR_MS, max: 60, key: digestKey }, { windowMs: HOUR_MS, max: 1800, key: ipKey }],
+  message: MESSAGE,
+});
+/** GEÇERLİ belirteçli POST: adres özeti başına 20/saat, IP başına 600/saat (posta sağlayıcı havuzları). */
+export const unsubscribeApplyValidLimiter = createRuleLimiter({
+  rules: [{ windowMs: HOUR_MS, max: 20, key: digestKey }, { windowMs: HOUR_MS, max: 600, key: ipKey }],
+  message: MESSAGE,
 });
 
 const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
@@ -62,7 +80,7 @@ const INVALID_PAGE = page(
 const DONE_PAGE = page(
   'Abonelikten çıkıldı',
   `    <h1>Abonelikten çıkıldı</h1>
-    <p>Bu e-posta adresine bundan sonra site duyuru e-postaları gönderilmeyecek. Uygulamayı kullanıyorsanız duyurularınızı uygulamada görmeye devam edersiniz.</p>`,
+    <p>Bu e-posta adresine bundan sonra site duyuru e-postaları gönderilmeyecek. Uygulamayı kullanıyorsanız duyurularınızı uygulamada görmeye devam edersiniz. Fikrinizi değiştirirseniz uygulamadaki Bildirim Tercihleri'nden e-posta bildirimlerini yeniden açabilirsiniz.</p>`,
 );
 
 const ERROR_PAGE = page(
@@ -71,12 +89,18 @@ const ERROR_PAGE = page(
     <p>Şu anda isteğiniz işlenemedi. Lütfen biraz sonra bağlantıyı yeniden açın.</p>`,
 );
 
+const RATE_PAGE = page(
+  'Çok fazla istek',
+  `    <h1>Çok fazla istek</h1>
+    <p>Kısa sürede çok fazla istek gönderildi. Lütfen biraz sonra bağlantıyı yeniden açın.</p>`,
+);
+
 function confirmPage(token) {
   // Belirteç yalnız [0-9a-f], '.', base64url karakterlerinden oluşur (verifyUnsubscribeToken doğruladı): HTML'e güvenle girer.
   return page(
     'Abonelikten çık',
     `    <h1>Duyuru e-postalarından çıkmak istiyor musunuz?</h1>
-    <p>Onaylarsanız bu e-posta adresine site yönetiminin duyuru e-postaları artık gönderilmeyecek.</p>
+    <p>Onaylarsanız bu e-posta adresine site yönetiminin duyuru e-postaları artık gönderilmeyecek (acil duyurular dahil).</p>
     <form method="post" action="/public/announcement-unsubscribe">
       <input type="hidden" name="t" value="${token}" />
       <button type="submit">Evet, abonelikten çık</button>
@@ -84,12 +108,22 @@ function confirmPage(token) {
   );
 }
 
-function sendPage(res, status, html) {
+function setPageHeaders(res) {
   res.setHeader('Content-Security-Policy', PAGE_CSP);
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Robots-Tag', 'noindex');
+}
+
+function sendPage(res, status, html) {
+  setPageHeaders(res);
   return res.status(status).type('html').send(html);
 }
+
+// Bu yoldaki HER yanıt (hız sınırı 429'u ve beklenmeyen hata dahil) sayfa güvenlik başlıklarıyla gider.
+announcementPublicRouter.use('/public/announcement-unsubscribe', (_req, res, next) => {
+  setPageHeaders(res);
+  next();
+});
 
 const tokenOf = (req) => {
   const fromQuery = typeof req.query?.t === 'string' ? req.query.t : null;
@@ -97,19 +131,90 @@ const tokenOf = (req) => {
   return fromQuery ?? fromBody;
 };
 
-announcementPublicRouter.get('/public/announcement-unsubscribe', unsubscribeViewLimiter, (req, res) => {
-  const token = tokenOf(req);
-  if (verifyUnsubscribeToken(token) === null) {
-    return sendPage(res, 400, INVALID_PAGE);
+/** Hız sınırlayıcıyı yanıt yazmadan çalıştırır: { passed, retryAfter }. (createRuleLimiter eşzamanlı çalışır.) */
+function gate(limiter, req) {
+  let passed = false;
+  const headers = {};
+  const probe = {
+    setHeader(name, value) {
+      headers[name] = value;
+    },
+    status() {
+      return probe;
+    },
+    json() {
+      return probe;
+    },
+  };
+  limiter(req, probe, () => {
+    passed = true;
+  });
+  return { passed, retryAfter: headers['Retry-After'] };
+}
+
+function tooMany(res, retryAfter) {
+  if (retryAfter) {
+    res.setHeader('Retry-After', retryAfter);
   }
-  return sendPage(res, 200, confirmPage(token));
+  return sendPage(res, 429, RATE_PAGE);
+}
+
+/** İmzayı ucuzca doğrular; geçersizse SIKI IP sınırı, geçerliyse adres özeti başına sınır uygular. { digest } | { response } */
+function admit(req, res, { invalidLimiter, validLimiter }) {
+  const token = tokenOf(req);
+  const digest = verifyUnsubscribeToken(token);
+  if (digest === null) {
+    const result = gate(invalidLimiter, req);
+    return { response: result.passed ? sendPage(res, 400, INVALID_PAGE) : tooMany(res, result.retryAfter) };
+  }
+  req.unsubscribeDigest = digest;
+  const result = gate(validLimiter, req);
+  if (!result.passed) {
+    return { response: tooMany(res, result.retryAfter) };
+  }
+  return { digest, token };
+}
+
+announcementPublicRouter.get('/public/announcement-unsubscribe', (req, res) => {
+  const admitted = admit(req, res, { invalidLimiter: unsubscribeViewLimiter, validLimiter: unsubscribeViewValidLimiter });
+  if (admitted.response) {
+    return admitted.response;
+  }
+  return sendPage(res, 200, confirmPage(admitted.token));
 });
 
-announcementPublicRouter.post('/public/announcement-unsubscribe', unsubscribeApplyLimiter, async (req, res) => {
-  const emailHash = verifyUnsubscribeToken(tokenOf(req));
-  if (emailHash === null) {
-    return sendPage(res, 400, INVALID_PAGE);
+// Adresin KANONİK özeti ($1) bu özetle (güncel ya da eski tuz: $2) eşleşen hesapların e-posta bildirim tercihi KAPATILIR: hesap e-postası
+// (dahili @ahbu.local hariç) ve dahili daire hesaplarının iletişim e-postası (apartments.resident_email).
+const DISABLE_ACCOUNT_PREFERENCES_SQL = `
+  INSERT INTO notification_preferences (user_code, email_announcements)
+  SELECT m.user_code, FALSE
+  FROM (
+    SELECT u.user_code
+    FROM users u
+    WHERE u.email IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+      AND $1 = ANY (ARRAY(
+        SELECT encode(sha256(convert_to(s.salt || ':' || ${canonicalEmailSql('lower(btrim(u.email))')}, 'UTF8')), 'hex')
+        FROM unnest($2::TEXT[]) AS s(salt)
+      ))
+    UNION
+    SELECT a.resident_user_code
+    FROM apartments a
+    INNER JOIN users ru ON ru.user_code = a.resident_user_code
+    WHERE a.resident_email IS NOT NULL
+      AND $1 = ANY (ARRAY(
+        SELECT encode(sha256(convert_to(s.salt || ':' || ${canonicalEmailSql('lower(btrim(a.resident_email))')}, 'UTF8')), 'hex')
+        FROM unnest($2::TEXT[]) AS s(salt)
+      ))
+  ) m
+  ON CONFLICT (user_code) DO UPDATE SET email_announcements = FALSE, updated_at = NOW()
+`;
+
+announcementPublicRouter.post('/public/announcement-unsubscribe', async (req, res) => {
+  const admitted = admit(req, res, { invalidLimiter: unsubscribeApplyLimiter, validLimiter: unsubscribeApplyValidLimiter });
+  if (admitted.response) {
+    return admitted.response;
   }
+  const emailHash = admitted.digest;
   try {
     await pool.query(
       `INSERT INTO announcement_email_suppressions (email_hash) VALUES ($1) ON CONFLICT (email_hash) DO NOTHING`,
@@ -124,6 +229,8 @@ announcementPublicRouter.post('/public/announcement-unsubscribe', unsubscribeApp
       `,
       [emailHash],
     );
+    // Uygulamadaki tercih de gerçeği yansıtsın (E4a): bu adrese sahip hesapların e-posta bildirimi kapanır.
+    await pool.query(DISABLE_ACCOUNT_PREFERENCES_SQL, [emailHash, emailHashSalts()]);
     return sendPage(res, 200, DONE_PAGE);
   } catch (error) {
     // eslint-disable-next-line no-console

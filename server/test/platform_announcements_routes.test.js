@@ -114,9 +114,9 @@ function installFakeDb() {
     if (STEP_SQLS.has(sql)) return ok();
     // kötüye kullanım sınırları ve çift POST koruması: varsayılan "izin verilir" (sınırları sınayan testler kendi işleyicisini ekler)
     if (/^SELECT COUNT\(\*\)::INTEGER AS total, COUNT\(\*\) FILTER \(WHERE importance = 'urgent' AND send_email\)/.test(sql)) return ok([{ total: 0, urgent_email: 0 }]);
-    if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1/.test(sql)) return ok([{ n: 0 }]);
+    if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE email_requested_by = \$1/.test(sql)) return ok([{ n: 0 }]);
     if (/^SELECT 1 FROM announcements WHERE site_code = \$1 AND created_by = \$2 AND status = 'published'/.test(sql)) return ok();
-    if (/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)/.test(sql)) return ok([{ n: 10 }]);
+    if (/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email_hash\)/.test(sql)) return ok([{ n: 10 }]);
     if (/^SELECT importance, target_type, target_block_ids, target_apartment_ids, send_email FROM announcements WHERE id = \$1 AND site_code = \$2 AND status IN/.test(sql)) return ok();
     if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return ok([{ locked: true }]);
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 220)}`);
@@ -469,8 +469,39 @@ describe('kurul üyesi yanıtları', () => {
     assert.equal(listBoard.body.items[0].recipient_count, 2);
     assert.equal((await call('GET', base(), { user: users.mgrA })).body.items[0].read_count, 1);
     handlers.length = 0;
-    handlers.push([DETAIL, () => ok([annRow({ recipient_count: 5 })])], [DETAIL_STATS, () => ok(stats)]);
+    const fiveStats = [{ email_status: 'sent', n: 3, read_n: 1 }, { email_status: 'no_address', n: 2, read_n: 0 }];
+    handlers.push([DETAIL, () => ok([annRow({ recipient_count: 5 })])], [DETAIL_STATS, () => ok(fiveStats)]);
     assert.equal((await call('GET', `${base()}/41`, { user: users.board })).body.stats.read, 1);
+  });
+
+  it('E7 küçük hedef kararı CANLI alıcı satırı sayısıyla da verilir: yayın anında 6 alıcı, kişi silinince 3 satır kaldıysa kurul sayıları NULL görür (ayrıntı ve liste); canlı sayı 0 ise sayılar sıfırdır, null değil; yanıta canlı sayı alanı GİRMEZ', async () => {
+    const threeStats = [{ email_status: 'sent', n: 2, read_n: 1 }, { email_status: 'no_address', n: 1, read_n: 0 }];
+    handlers.push(
+      [DETAIL, () => ok([annRow({ recipient_count: 6 })])],
+      [DETAIL_STATS, () => ok(threeStats)],
+      [LIST_COUNT, () => ok([{ total: 2 }])],
+      [LIST_PAGE, () => ok([annRow({ id: '41', recipient_count: 6, read_count: 1, live_count: 3 }), annRow({ id: '42', recipient_count: 6, read_count: 4, live_count: 6 })])],
+    );
+    const detailBoard = (await call('GET', `${base()}/41`, { user: users.board })).body;
+    assert.equal(detailBoard.recipient_count, 6, 'yayın anındaki sayı aynen');
+    assert.equal(detailBoard.stats.recipients, 3);
+    assert.equal(detailBoard.stats.read, null);
+    assert.equal(detailBoard.stats.unread, null);
+    assert.equal(detailBoard.read_count, null);
+    assert.ok(Object.values(detailBoard.stats.email).every((value) => value === null));
+    const detailManager = (await call('GET', `${base()}/41`, { user: users.mgrA })).body;
+    assert.equal(detailManager.stats.read, 1);
+    assert.equal(Object.hasOwn(detailManager, 'live_recipient_count'), false, 'canlı sayı yanıta girmez');
+    assert.equal(JSON.stringify(detailManager).includes('live_'), false);
+    const list = (await call('GET', base(), { user: users.board })).body.items;
+    assert.equal(list[0].read_count, null, 'canlı 3: küçük hedef');
+    assert.equal(list[1].read_count, 4, 'canlı 6: kurul görür');
+    assert.equal(JSON.stringify(list).includes('live_'), false);
+    // tüm alıcı satırları silinmiş: kişisel veri kalmadı, sayılar sıfır
+    handlers.unshift([DETAIL_STATS, () => ok([])]);
+    const empty = (await call('GET', `${base()}/41`, { user: users.board })).body;
+    assert.equal(empty.stats.recipients, 0);
+    assert.equal(empty.stats.read, 0);
   });
 });
 
@@ -521,11 +552,11 @@ describe('hata biçimleri', () => {
     assert.deepEqual([daily.status, daily.body.code], [409, 'ANNOUNCEMENT_DAILY_LIMIT']);
     assert.match(daily.body.error, /günlük/);
     handlers.length = 0;
-    handlers.push(...publishFlow({ sendEmail: true, pending: 2 }), [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE published_by = \$1/, () => ok([{ n: 10 }])]);
+    handlers.push(...publishFlow({ sendEmail: true, pending: 2 }), [/^SELECT COUNT\(\*\)::INTEGER AS n FROM announcements WHERE email_requested_by = \$1/, () => ok([{ n: 10 }])]);
     const hourly = await create({ send_email: true });
     assert.deepEqual([hourly.status, hourly.body.code], [409, 'ANNOUNCEMENT_HOURLY_LIMIT']);
     handlers.length = 0;
-    handlers.push(...publishFlow({ sendEmail: true }), [/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email\)/, () => ok([{ n: 1001 }])]);
+    handlers.push(...publishFlow({ sendEmail: true }), [/^WITH audience AS .* SELECT COUNT\(DISTINCT h\.email_hash\)/, () => ok([{ n: 1001 }])]);
     const tooMany = await create({ send_email: true });
     assert.deepEqual([tooMany.status, tooMany.body.code], [400, 'ANNOUNCEMENT_EMAIL_LIMIT']);
     for (const res of [duplicate, daily, hourly, tooMany]) {
