@@ -95,7 +95,8 @@ String _groupThousands(String digits) {
 /// Kullanıcı girişini kuruşa çevirir.
 ///
 /// Kurallar (hiçbirinde yuvarlama yoktur):
-/// - Başındaki/sonundaki boşluk, "₺" ve "TL" işareti yok sayılır; sayının İÇİNDE boşluk GEÇERSİZdir.
+/// - Başındaki/sonundaki boşluk ile BAŞTAKİ/SONDAKİ "₺" ve sondaki "TL" işareti yok sayılır; sayının İÇİNDE
+///   boşluk ya da "₺" ("12₺50") GEÇERSİZdir (sessizce silinmez).
 /// - Eksi işareti ya da parantez -> [MoneyProblem.negative]; boş -> [MoneyProblem.empty]; rakam, nokta ve
 ///   virgül dışında karakter -> [MoneyProblem.invalid].
 /// - Hem nokta hem virgül varsa SON ayırıcı ondalıktır, diğeri binliktir ve doğru gruplanmalıdır
@@ -114,8 +115,13 @@ MoneyParse parseMoney(
   bool allowZero = false,
 }) {
   var s = (input ?? '').trim();
-  // Para birimi işareti (yapıştırma): "1.250,50 ₺", "₺1.250,50", "1.250,50 TL".
-  s = s.replaceAll(kMoneySymbol, '');
+  // Para birimi işareti (yapıştırma): "1.250,50 ₺", "₺1.250,50", "1.250,50 TL". İşaret yalnız BAŞTA ya da
+  // SONDA kabul edilir; sayının ortasındaki "₺" ("12₺50") sessizce silinmez, aşağıda geçersiz sayılır.
+  if (s.startsWith(kMoneySymbol)) {
+    s = s.substring(kMoneySymbol.length).trim();
+  } else if (s.endsWith(kMoneySymbol)) {
+    s = s.substring(0, s.length - kMoneySymbol.length).trim();
+  }
   s = s.replaceFirst(RegExp(r'\s*(TL|tl|Tl)\s*$'), '').trim();
   if (s.isEmpty) return const MoneyParse.fail(MoneyProblem.empty);
 
@@ -289,4 +295,21 @@ String moneySemanticLabel(int minor) {
   if (lira == 0) return '$prefix${turkishNumberWords(kurus)} kuruş';
   if (kurus == 0) return '$prefix${turkishNumberWords(lira)} lira';
   return '$prefix${turkishNumberWords(lira)} lira ${turkishNumberWords(kurus)} kuruş';
+}
+
+// --- Metin içindeki tutarların okunuşu ---------------------------------------------------------
+
+final RegExp _moneyInText = RegExp(r'(-)?(\d{1,3}(?:\.\d{3})*),(\d{2})\s?₺');
+
+/// Metindeki "1.250,00 ₺" kalıplarını ekran okuyucu okunuşuna çevirir ("bin iki yüz elli lira"); tutar
+/// içermeyen metin aynen döner. İleti / SnackBar / onay metinlerinin `semanticsLabel`ı için: görsel metin
+/// değişmez, ekran okuyucu rakam yığını yerine Türkçe okunuş duyar.
+String spokenMoneyText(String text) {
+  return text.replaceAllMapped(_moneyInText, (match) {
+    final digits = '${match.group(2)!.replaceAll('.', '')}${match.group(3)!}';
+    if (digits.length > 13) return match.group(0)!;
+    final minor = int.tryParse(digits);
+    if (minor == null) return match.group(0)!;
+    return moneySemanticLabel(match.group(1) == null ? minor : -minor);
+  });
 }

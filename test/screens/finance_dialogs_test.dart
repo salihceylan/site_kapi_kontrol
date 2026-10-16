@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 import 'dialog_layout_harness.dart';
 import 'finance_fixtures.dart';
+import 'site_application_fixtures.dart' show captureAnnouncements;
 import 'list_fixtures.dart' show tapFinder, tapText;
 
 final DateTime _now = DateTime.utc(2026, 10, 16, 9);
@@ -199,13 +200,18 @@ void main() {
       expect(out.result!.definition.name, 'Aylık aidat 2027');
     });
 
-    testWidgets('tek seferlik tür: vade günü seçici yok', (t) async {
+    // W6 (inceleme düzeltmesi): önceki test tek seferlikte "Dönem" seçicisinin görünmesini bekliyordu; ama o seçim
+    // hiçbir şeyi etkilemiyordu (tek seferlik tanımın dönemi yok). Artık seçici gizlenir ve kısa bir açıklama yazılır.
+    testWidgets('tek seferlik tür: vade günü ve dönem seçici yok (etkisiz alan gizlenir)', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _openForm(t, auth);
       expect(find.byType(DropdownButtonFormField<int>), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_start_label')), findsOneWidget);
       await _tapKey(t, 'finance_kind_one_time');
       expect(find.byType(DropdownButtonFormField<int>), findsNothing);
-      expect(find.text('Dönem'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_start_label')), findsNothing, reason: 'dönem etkisiz');
+      expect(find.text('Dönem'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('finance_one_time_note')), findsOneWidget);
       await _enter(t, 'finance_definition_name', 'Boya');
       await _tapKey(t, 'def_spec_dist_equal');
       await _enter(t, 'def_spec_amount', '9.000');
@@ -214,6 +220,7 @@ void main() {
       expect(body['kind'], 'one_time');
       expect(body.containsKey('due_day'), isFalse);
       expect(body['amount_minor'], 900000);
+      expect(body['start_period'], '2026-10', reason: 'kayıt ayı başlangıç sayılır');
     });
 
     testWidgets('bitiş dönemi: yalnız anahtar açıkken gider; başlangıçtan önceye inilmez', (t) async {
@@ -501,7 +508,11 @@ void main() {
       expect(find.text('İptal edildi'), findsOneWidget);
       expect(find.text('Ters kayıt'), findsOneWidget);
       expect(find.text('Neden: Yanlış dönem'), findsOneWidget);
-      expect(find.text('#2 numaralı kaydın ters kaydı'), findsOneWidget);
+      // Kayıt numarası gösterilmez; ilgili kaydın tarihi ve tutarı yazılır.
+      expect(find.text('Şu kaydın ters kaydı: 01.10.2026 • 500,00 ₺'), findsOneWidget);
+      expect(find.text('Ters kayıtla iptal edildi: 16.10.2026 • 500,00 ₺'), findsOneWidget);
+      expect(find.textContaining('numaralı'), findsNothing);
+      expect(find.textContaining('#'), findsNothing);
       final amounts = t.widgetList<Text>(find.byType(Text)).where((w) => w.style?.decoration == TextDecoration.lineThrough);
       expect(amounts.length, 1, reason: 'yalnız iptal edilen kaydın tutarı çizili');
       // Bakiye: ekim borcu ters kaydıyla silindi; geriye eylül borcu kalır.
@@ -591,6 +602,13 @@ void main() {
       await _enter(t, 'finance_reverse_reason', 'Yanlış tanım');
       await _tapKey(t, 'finance_reverse_submit');
       await settleFor(t);
+      // W12: yazmadan önce tutar, daire ve nedeni özetleyen ONAY adımı gelir.
+      expect(auth.reverseCalls, isEmpty);
+      expect(find.text('Kaydı iptal et'), findsOneWidget);
+      expect(find.textContaining('Neden: Yanlış tanım'), findsOneWidget);
+      expect(find.textContaining('500,00 ₺'), findsWidgets);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Ters Kaydı Ekle')));
+      await settleFor(t);
       expect(auth.reverseCalls.single['entry_id'], 2);
       expect(out.changed, 1);
       expect(find.text('500,00 ₺'), findsWidgets);
@@ -651,5 +669,85 @@ void main() {
       expect(<IconData>{debt.icon, credit.icon, zero.icon}.length, 3, reason: 'üç durumun simgeleri farklı');
       expect(<String>{debt.badgeText, credit.badgeText, zero.badgeText}.length, 3);
     });
+  });
+  // ---------------------------------------------------------------------------------------------------
+  // İnceleme düzeltmeleri (W13, W14): ekstre notları yalnız yönetici; kayıt numarası yok; hata duyurusu.
+  // ---------------------------------------------------------------------------------------------------
+
+  group('W14: ekstre notları ve kayıt numaraları', () {
+    FinanceFakeAuth withNotes() {
+      final auth = FinanceFakeAuth.seeded();
+      auth.ledger.firstWhere((e) => e['id'] == 4)['description'] = 'Yönetici notu: elden alındı';
+      return auth;
+    }
+
+    testWidgets('yönetici: tahsilat açıklaması ve iptal nedeni görünür', (t) async {
+      final auth = withNotes();
+      await auth.reverseFinanceEntry(11, 2, reason: 'Yanlış dönem', idempotencyKey: 'k1');
+      await _openAccount(t, auth, apartmentId: 302);
+      expect(find.textContaining('Yönetici notu: elden alındı'), findsOneWidget);
+      await _openAccount(t, auth);
+      expect(find.text('Neden: Yanlış dönem'), findsOneWidget);
+    });
+
+    testWidgets('kurul üyesi (salt okur): açıklama / iptal nedeni / kaydeden yönetici notu ÇİZİLMEZ', (t) async {
+      final auth = withNotes();
+      await auth.reverseFinanceEntry(11, 2, reason: 'Yanlış dönem', idempotencyKey: 'k1');
+      await _openAccount(t, auth, apartmentId: 302, canWrite: false);
+      expect(find.textContaining('Yönetici notu'), findsNothing);
+      expect(find.textContaining('Kaydeden:'), findsNothing);
+      await _openAccount(t, auth, canWrite: false);
+      expect(find.textContaining('Neden:'), findsNothing);
+      expect(find.text('İptal edildi'), findsOneWidget, reason: 'iptal durumu bilgisi kalır');
+      expect(find.byKey(const ValueKey<String>('ledger_reverse_1')), findsNothing, reason: 'yazma düğmesi yok');
+    });
+  });
+
+  group('W13: tanım formu hata kutusu duyurulur', () {
+    testWidgets('sunucu reddi ekran okuyucuya duyurulur; doğrulama özeti de', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded();
+      await _openForm(t, auth);
+      await _save(t);
+      await settleFor(t);
+      expect(announced, contains('Lütfen işaretli alanları düzeltin.'));
+
+      auth.finError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
+      await _enter(t, 'finance_definition_name', 'Aidat');
+      await _enter(t, 'def_spec_amount', '500');
+      await _save(t);
+      await settleFor(t);
+      expect(announced, contains('Bu işlem için yetkiniz yok.'));
+    });
+
+    testWidgets('kategori listesi hatası (yinelenen ad) kaydırılan formda görünür kılınır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _openForm(t, auth, width: 320, height: 640, scale: 2.0);
+      await _enter(t, 'finance_definition_name', 'Kategorili');
+      await _tapKey(t, 'def_spec_dist_category');
+      await _enter(t, 'def_spec_category_name_0', '3+1');
+      await _enter(t, 'def_spec_category_amount_0', '750');
+      await _tapKey(t, 'def_spec_add_category');
+      await _enter(t, 'def_spec_category_name_1', '3+1');
+      await _enter(t, 'def_spec_category_amount_1', '500');
+      await _save(t);
+      await settleFor(t);
+      await settleFor(t);
+      expect(auth.definitionCreateCalls, isEmpty);
+      final message = find.text('Aynı kategori adı iki kez girilmiş.');
+      expect(message, findsOneWidget);
+      final viewport = t.getRect(find.ancestor(of: message, matching: find.byType(Scrollable)).first);
+      final rect = t.getRect(message);
+      expect(rect.top, greaterThanOrEqualTo(viewport.top));
+      expect(rect.bottom, lessThanOrEqualTo(viewport.bottom));
+    });
+  });
+  testWidgets('W11: ekstre 502 (metinsiz): Türkçe yedek metin, "borç yok" yazılmaz', (t) async {
+    final auth = FinanceFakeAuth.seeded()
+      ..accountError = ApiException('İşlem başarısız (502)', statusCode: 502, genericFallback: true);
+    await _openAccount(t, auth, apartmentId: 303);
+    expect(find.text('Ekstre yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+    expect(find.textContaining('502'), findsNothing);
+    expect(find.text('Borç yok'), findsNothing);
   });
 }

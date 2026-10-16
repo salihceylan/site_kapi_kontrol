@@ -6,7 +6,17 @@
 // yazmalar sunucu kurallarını aynı hata kodlarıyla uygular (PERIOD_CLOSED, PREVIEW_STALE, ENTRY_ALREADY_REVERSED,
 // idempotency_key tekrarı = aynı kayıt, ...). Yarış testleri için çağrılar kuyruktaki bir kapıyı bekleyebilir
 // (yanıt çağrı ANINDA hesaplanır, kapı açılınca teslim edilir).
+//
+// Faz 4a inceleme düzeltmeleri sonrası sunucu davranışı (docs/PLATFORM_FINANS.md eki):
+// - Aylar SIRAYLA kapanır ve bir ay kapanınca ondan önceki TÜM aylar kapalı sayılır ([isClosed]); `periods`
+//   yanıtı `closable` listesini verir ([omitClosable] eski sunucuyu taklit eder).
+// - Önizleme `preview_hash` / `redistributed` / `skipped_count` (ek borçta `duplicate_of_run_id`) döner; onay
+//   `expected_hash`i doğrular (uyuşmazsa 409 PREVIEW_STALE + güncel toplam / sayı / özet).
+// - Aynı anahtar + farklı gövde = 409 IDEMPOTENCY_CONFLICT; aynı ek borç 24 saat içinde 409 DUPLICATE_CHARGE
+//   (`allowDuplicate` ile aşılır).
+// - [errorsAfterWrite]: yazma BAŞARILI olduktan SONRA fırlatılan hatalar ("yazıldı ama yanıt kayboldu").
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
@@ -221,6 +231,17 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   bool staleOnFirstPost = false;
   bool _staleConsumed = false;
 
+  /// true: eski sunucu; `periods` yanıtında `closable` alanı YOKTUR.
+  bool omitClosable = false;
+
+  /// Yazma BAŞARILI olduktan SONRA sırayla fırlatılacak hatalar (tek seferlik): istek sunucuda işlenir ama yanıt
+  /// kaybolur (ağ kopması / 5xx). Tekrar edilen (yeniden oynatılan) istekler bunu tüketmez.
+  final List<Object> errorsAfterWrite = <Object>[];
+
+  /// Önizleme sonrası araya girip verileri değiştiren bir kanca (sıradaki ONAYDAN önce bir kez çalışır):
+  /// `preview_hash`in değiştiği ama toplam ve sayının AYNI kaldığı yarışları kurmak içindir.
+  void Function()? beforeNextPost;
+
   // --- Çağrı kayıtları -------------------------------------------------------------------------
   final List<({int site, String status, String? query, int limit, int offset})> balanceCalls =
       <({int site, String status, String? query, int limit, int offset})>[];
@@ -242,18 +263,25 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   int periodsGetCalls = 0;
   int myFinanceCalls = 0;
 
-  // İşlem anahtarı -> kayıt kimliği (tekrar = aynı kayıt, 200).
+  // İşlem anahtarı -> kayıt kimliği (tekrar = aynı kayıt, 200) ve istek parmak izi (farklı gövde = 409).
   final Map<String, int> _keys = <String, int>{};
+  final Map<String, String> _keyFingerprints = <String, String>{};
   final Map<String, FeePostResult> _runKeys = <String, FeePostResult>{};
+  final Map<String, String> _runFingerprints = <String, String>{};
+
+  // Son yazılan ek borçlar (24 saat içinde aynısı 409 DUPLICATE_CHARGE).
+  final List<({String naturalKey, int runId, DateTime at})> _chargeLog =
+      <({String naturalKey, int runId, DateTime at})>[];
 
   int _nextEntryId = 100;
   int _nextDefinitionId = 50;
   int _nextRunId = 900;
 
-  ApiException _coded(String code, int status, [String? text]) => ApiException(
+  ApiException _coded(String code, int status, [String? text, Map<String, dynamic>? payload]) => ApiException(
     AuthApi.messageForErrorCode(code) ?? text ?? code,
     statusCode: status,
     code: code,
+    payload: payload == null ? null : <String, dynamic>{'code': code, ...payload},
   );
 
   ApiException _invalid(String text) => ApiException(text, statusCode: 400, code: 'INVALID_BODY');
@@ -277,12 +305,39 @@ class FinanceFakeAuth extends PeopleFakeAuth {
 
   String get currentPeriod => todayIso.substring(0, 7);
 
+  /// En son kapatılan ay (kapalı ay yoksa null). Bu ay ve ÖNCESİ kapalıdır.
+  String? get closedThrough =>
+      closedPeriods.isEmpty ? null : (List<String>.of(closedPeriods)..sort()).last;
+
+  /// [period] ('YYYY-AA') kapalı mı? Bir ay kapatılınca ondan önceki tüm aylar da kapalı sayılır.
+  bool isClosed(String period) {
+    final through = closedThrough;
+    return through != null && period.compareTo(through) <= 0;
+  }
+
   String get openPeriod {
     var period = currentPeriod;
-    while (closedPeriods.contains(period)) {
+    while (isClosed(period)) {
       period = FinancePeriod.tryParse(period)!.next.toApi();
     }
     return period;
+  }
+
+  /// Şu an kapatılabilecek aylar (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay; varsa yalnız
+  /// kapalı ayın sonraki ayı (bu ay ya da öncesiyse).
+  List<String> get closableMonths {
+    final through = closedThrough;
+    final current = FinancePeriod.tryParse(currentPeriod)!;
+    if (through == null) {
+      return [for (var i = 0; i < 12; i++) current.addMonths(-i).toApi()];
+    }
+    final next = FinancePeriod.tryParse(through)!.next.toApi();
+    return next.compareTo(currentPeriod) <= 0 ? <String>[next] : <String>[];
+  }
+
+  /// Yazma sonrası fırlatılacak hata varsa fırlatır (istek işlendi ama yanıt kayboldu).
+  void _throwAfterWrite() {
+    if (errorsAfterWrite.isNotEmpty) throw errorsAfterWrite.removeAt(0);
   }
 
   // --- Defter ------------------------------------------------------------------------------------
@@ -495,6 +550,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     void miss(int id, String code, String text) => missing.add(<String, dynamic>{
       'apartment_id': id,
       'label': _labelOf(id),
+      'block_name': _blockOf(id),
       'reason': text,
       'reason_code': code,
     });
@@ -541,21 +597,47 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     return <String, dynamic>{'lines': lines, 'missing': missing};
   }
 
+  /// Önizlemenin içerik özeti (sunucudaki `preview_hash`): satırlar + eksik veri kümesi.
+  String _planHash(Map<String, dynamic> plan) {
+    final lines = plan['lines'] as Map<int, int>;
+    final ids = lines.keys.toList()..sort();
+    final parts = <String>[
+      for (final id in ids) '$id:${lines[id]}',
+      for (final m in plan['missing'] as List) 'm:${(m as Map)['apartment_id']}:${m['reason_code']}',
+    ];
+    return 'hash-${parts.join('|').hashCode.toRadixString(16)}';
+  }
+
+  /// Eksik veri atlanınca payın kalanlara yeniden dağıtıldığı yöntemler (sabit / kategori: dağıtılmaz).
+  static const Set<String> _redistributing = <String>{'equal', 'land_share', 'area'};
+
+  /// true: eski sunucu; önizleme yanıtında `preview_hash` / `redistributed` / `skipped_count` YOKTUR ve onay
+  /// `expected_hash` doğrulamaz.
+  bool omitPreviewHash = false;
+
+  /// true: ek borç önizlemesi `duplicate_of_run_id` BİLDİRMEZ (yakın zamanda yazılmış aynı ek borcu yalnız onay
+  /// anında 409 `DUPLICATE_CHARGE` ile yakalar).
+  bool omitDuplicateHint = false;
+
   Map<String, dynamic> _previewJson({
     required Map<String, dynamic> plan,
     required String? period,
     required int? definitionId,
     required bool alreadyPosted,
     required bool closed,
+    required String distribution,
+    int? duplicateOfRunId,
   }) {
     final lines = plan['lines'] as Map<int, int>;
     final ordered = lines.keys.toList()..sort();
+    final missing = plan['missing'] as List;
     return <String, dynamic>{
       'period': period,
       'definition_id': definitionId,
       'currency': 'TRY',
       'total_minor': lines.values.fold<int>(0, (a, b) => a + b),
       'apartment_count': lines.length,
+      if (!omitPreviewHash) 'preview_hash': _planHash(plan),
       'lines': [
         for (final id in ordered)
           <String, dynamic>{
@@ -568,7 +650,11 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       ],
       'missing_data': plan['missing'],
       'zero_amount_count': 0,
+      if (!omitPreviewHash) 'skipped_count': missing.length,
+      if (!omitPreviewHash)
+        'redistributed': missing.isNotEmpty && _redistributing.contains(distribution),
       'already_posted': alreadyPosted,
+      'duplicate_of_run_id': duplicateOfRunId,
       'closed': closed,
     };
   }
@@ -611,7 +697,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       alreadyPosted: _posted(definitionId, p) ||
           (row['last_posted_period'] != null && row['last_posted_period'] == p) ||
           (row['kind'] == 'one_time' && row['has_runs'] == true),
-      closed: p != null && closedPeriods.contains(p),
+      closed: p != null && isClosed(p),
+      distribution: row['distribution'] as String,
     );
     await _gateOf(previewGates);
     if (gate != null) await gate.future;
@@ -658,13 +745,31 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     );
   }
 
-  /// Ortak onay denetimleri: eksik veri, önizleme güncelliği.
-  void _verifyPlan(
-    Map<String, dynamic> plan, {
+  ApiException _staleError(Map<String, dynamic> plan) {
+    final lines = plan['lines'] as Map<int, int>;
+    return _coded('PREVIEW_STALE', 409, null, <String, dynamic>{
+      'total_minor': lines.values.fold<int>(0, (a, b) => a + b),
+      'apartment_count': lines.length,
+      'preview_hash': _planHash(plan),
+    });
+  }
+
+  /// Ortak onay denetimleri: eksik veri, önizleme güncelliği (toplam, daire sayısı, içerik özeti). Plan ONAY
+  /// ANINDA yeniden hesaplanır ([computePlan]); verileri araya sokan kancalar ([beforeNextPost],
+  /// [staleOnFirstPost]) önce çalışır. Geçerli (güncel) planı döndürür.
+  Map<String, dynamic> _verifyPlan({
+    required Map<String, dynamic> Function() computePlan,
     required bool skipMissing,
     required int expectedTotal,
     required int expectedCount,
+    String? expectedHash,
   }) {
+    final hook = beforeNextPost;
+    if (hook != null) {
+      beforeNextPost = null;
+      hook();
+    }
+    final plan = computePlan();
     final missing = plan['missing'] as List;
     if (missing.isNotEmpty && !skipMissing) throw _coded('PREVIEW_INCOMPLETE', 409);
     final lines = plan['lines'] as Map<int, int>;
@@ -673,10 +778,15 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       _staleConsumed = true;
       // Araya yeni bir daire girdi: toplam ve sayı değişir.
       apartmentsJson[399] = pplApartmentJson(399, 'C Blok - 1', blockId: 3);
-      throw _coded('PREVIEW_STALE', 409);
+      throw _staleError(computePlan());
     }
     final total = lines.values.fold<int>(0, (a, b) => a + b);
-    if (total != expectedTotal || lines.length != expectedCount) throw _coded('PREVIEW_STALE', 409);
+    if (total != expectedTotal ||
+        lines.length != expectedCount ||
+        (expectedHash != null && expectedHash != _planHash(plan))) {
+      throw _staleError(plan);
+    }
+    return plan;
   }
 
   @override
@@ -687,6 +797,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     DateTime? dueDate,
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
   }) async {
@@ -696,6 +807,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'due_date': dueDate,
       'expected_total_minor': expectedTotalMinor,
       'expected_apartment_count': expectedApartmentCount,
+      'expected_hash': expectedHash,
       'skip_missing': skipMissing,
       'idempotency_key': idempotencyKey,
     });
@@ -704,7 +816,11 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (gate != null) await gate.future;
     final error = postError;
     if (error != null) throw error;
+    final fingerprint =
+        'def:$definitionId|${period?.toApi()}|${dueDate == null ? '' : _dateString(dueDate)}|$skipMissing';
     if (idempotencyKey != null && _runKeys.containsKey(idempotencyKey)) {
+      // Aynı anahtar: aynı istekse kayıt döner (200), farklı istekse 409.
+      if (_runFingerprints[idempotencyKey] != fingerprint) throw _coded('IDEMPOTENCY_CONFLICT', 409);
       return _runKeys[idempotencyKey]!;
     }
     final row = definitions[definitionId];
@@ -715,13 +831,13 @@ class FinanceFakeAuth extends PeopleFakeAuth {
         (row['last_posted_period'] != null && row['last_posted_period'] == p)) {
       throw _coded('PERIOD_ALREADY_POSTED', 409);
     }
-    if (p != null && closedPeriods.contains(p)) throw _coded('PERIOD_CLOSED', 409);
-    final plan = _definitionPlan(row);
-    _verifyPlan(
-      plan,
+    if (p != null && isClosed(p)) throw _coded('PERIOD_CLOSED', 409);
+    final plan = _verifyPlan(
+      computePlan: () => _definitionPlan(row),
       skipMissing: skipMissing,
       expectedTotal: expectedTotalMinor,
       expectedCount: expectedApartmentCount,
+      expectedHash: expectedHash,
     );
     final result = _writeRun(
       period: row['kind'] == 'recurring' ? p : null,
@@ -734,7 +850,11 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     );
     row['has_runs'] = true;
     if (p != null) row['last_posted_period'] = p;
-    if (idempotencyKey != null) _runKeys[idempotencyKey] = result;
+    if (idempotencyKey != null) {
+      _runKeys[idempotencyKey] = result;
+      _runFingerprints[idempotencyKey] = fingerprint;
+    }
+    _throwAfterWrite();
     return result;
   }
 
@@ -755,6 +875,24 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     );
   }
 
+  /// Ek borcun doğal özeti: ad (küçük harf) + tutar + dağıtım + hedef + ETKİN vade (sunucudaki `chargeNaturalKey`).
+  String _naturalKey(ExtraChargeInput input) {
+    final json = Map<String, dynamic>.of(input.toJson())..remove('due_date');
+    json['name'] = (json['name'] as String).toLowerCase();
+    json['effective_due'] = input.dueDate == null ? todayIso : _dateString(input.dueDate!);
+    return jsonEncode(json);
+  }
+
+  /// Son 24 saatteki aynı ek borç; yoksa null.
+  ({String naturalKey, int runId, DateTime at})? _recentDuplicate(String naturalKey) {
+    for (final entry in _chargeLog.reversed) {
+      if (entry.naturalKey == naturalKey && clock().difference(entry.at) < const Duration(hours: 24)) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
   @override
   Future<FeePreview> previewExtraCharge(int siteCode, ExtraChargeInput input) async {
     chargePreviewCalls.add(Map<String, Object?>.of(input.toJson()));
@@ -765,7 +903,9 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       period: currentPeriod,
       definitionId: null,
       alreadyPosted: false,
-      closed: closedPeriods.contains(currentPeriod),
+      closed: isClosed(currentPeriod),
+      distribution: input.distribution.apiValue,
+      duplicateOfRunId: omitDuplicateHint ? null : _recentDuplicate(_naturalKey(input))?.runId,
     );
     await _gateOf(previewGates);
     if (gate != null) await gate.future;
@@ -780,14 +920,18 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     ExtraChargeInput input, {
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
-    String? idempotencyKey,
+    bool allowDuplicate = false,
+    required String idempotencyKey,
   }) async {
     chargePostCalls.add(<String, Object?>{
       ...input.toJson(),
       'expected_total_minor': expectedTotalMinor,
       'expected_apartment_count': expectedApartmentCount,
+      'expected_hash': expectedHash,
       'skip_missing': skipMissing,
+      'allow_duplicate': allowDuplicate,
       'idempotency_key': idempotencyKey,
     });
     _guard();
@@ -795,16 +939,29 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (gate != null) await gate.future;
     final error = postError;
     if (error != null) throw error;
-    if (idempotencyKey != null && _runKeys.containsKey(idempotencyKey)) {
+    final fingerprint = 'charge:${jsonEncode(input.toJson())}|$skipMissing';
+    if (_runKeys.containsKey(idempotencyKey)) {
+      // Aynı anahtar: aynı istekse kayıt döner (200), farklı istekse 409.
+      if (_runFingerprints[idempotencyKey] != fingerprint) throw _coded('IDEMPOTENCY_CONFLICT', 409);
       return _runKeys[idempotencyKey]!;
     }
-    if (closedPeriods.contains(currentPeriod)) throw _coded('PERIOD_CLOSED', 409);
-    final plan = _chargePlan(input);
-    _verifyPlan(
-      plan,
+    if (isClosed(currentPeriod)) throw _coded('PERIOD_CLOSED', 409);
+    final naturalKey = _naturalKey(input);
+    if (!allowDuplicate) {
+      final duplicate = _recentDuplicate(naturalKey);
+      if (duplicate != null) {
+        throw _coded('DUPLICATE_CHARGE', 409, null, <String, dynamic>{
+          'existing_run_id': duplicate.runId,
+          'posted_at': duplicate.at.toUtc().toIso8601String(),
+        });
+      }
+    }
+    final plan = _verifyPlan(
+      computePlan: () => _chargePlan(input),
       skipMissing: skipMissing,
       expectedTotal: expectedTotalMinor,
       expectedCount: expectedApartmentCount,
+      expectedHash: expectedHash,
     );
     final result = _writeRun(
       period: null,
@@ -814,7 +971,10 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       payerSource: 'apartment',
       dueDate: input.dueDate == null ? null : _dateString(input.dueDate!),
     );
-    if (idempotencyKey != null) _runKeys[idempotencyKey] = result;
+    _runKeys[idempotencyKey] = result;
+    _runFingerprints[idempotencyKey] = fingerprint;
+    _chargeLog.add((naturalKey: naturalKey, runId: result.runId!, at: clock()));
+    _throwAfterWrite();
     return result;
   }
 
@@ -971,8 +1131,14 @@ class FinanceFakeAuth extends PeopleFakeAuth {
   }) {
     final date = _dateString(entryDate);
     if (date.compareTo(todayIso) > 0) throw _invalid('Gelecek tarihli tahsilat girilemez.');
+    // Sunucu: tarih bugünden en fazla 5 yıl öncesi olabilir.
+    final today = DateTime.parse(todayIso);
+    final limit = '${(today.year - 5).toString().padLeft(4, '0')}${todayIso.substring(4)}';
+    if (date.compareTo(limit) < 0) {
+      throw _invalid('Tahsilat tarihi bugünden en fazla 5 yıl öncesi olabilir.');
+    }
     final period = date.substring(0, 7);
-    if (closedPeriods.contains(period)) throw _coded('PERIOD_CLOSED', 409);
+    if (isClosed(period)) throw _coded('PERIOD_CLOSED', 409);
     final row = finEntry(
       _nextEntryId++,
       apartmentId,
@@ -1018,8 +1184,13 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (gate != null) await gate.future;
     final error = paymentError;
     if (error != null) throw error;
+    // Sunucu: aynı anahtar + AYNI daire / tutar / tarih / yöntem = kayıt döner; açıklama karşılaştırılmaz.
+    final fingerprint = 'pay|$apartmentId|$amountMinor|${_dateString(entryDate)}|${method.apiValue}';
     final existing = _byKey(idempotencyKey);
-    if (existing != null) return _result(existing, apartmentId);
+    if (existing != null) {
+      if (_keyFingerprints[idempotencyKey] != fingerprint) throw _coded('IDEMPOTENCY_CONFLICT', 409);
+      return _result(existing, apartmentId);
+    }
     if (!apartmentsJson.containsKey(apartmentId)) throw _coded('APARTMENT_NOT_FOUND', 404);
     final row = _addPayment(
       apartmentId: apartmentId,
@@ -1029,6 +1200,8 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       description: description,
       key: idempotencyKey,
     );
+    _keyFingerprints[idempotencyKey] = fingerprint;
+    _throwAfterWrite();
     return _result(row, apartmentId);
   }
 
@@ -1075,10 +1248,17 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (error != null) throw error;
     final key = idempotencyKey ?? 'rev-$entryId';
     final existing = _byKey(key);
-    if (existing != null) return _result(existing, existing['apartment_id'] as int);
+    if (existing != null) {
+      // Sunucu: aynı anahtar AYNI kaydın ters kaydı için kullanıldıysa kayıt döner, değilse 409.
+      if (existing['kind'] != 'reversal' || existing['reverses_entry_id'] != entryId) {
+        throw _coded('IDEMPOTENCY_CONFLICT', 409);
+      }
+      return _result(existing, existing['apartment_id'] as int);
+    }
     final original = ledger.where((e) => e['id'] == entryId).toList();
     if (original.isEmpty) throw _coded('ENTRY_NOT_FOUND', 404);
     final reversal = _reverseRow(original.first, reason, key);
+    _throwAfterWrite();
     return _result(reversal, reversal['apartment_id'] as int);
   }
 
@@ -1105,14 +1285,19 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     if (gate != null) await gate.future;
     final error = paymentError;
     if (error != null) throw error;
+    final fingerprint = 'cor|$entryId|$amountMinor|${_dateString(entryDate)}|${method.apiValue}';
     final existing = _byKey(idempotencyKey);
-    if (existing != null) return _result(existing, existing['apartment_id'] as int);
+    if (existing != null) {
+      if (_keyFingerprints[idempotencyKey] != fingerprint) throw _coded('IDEMPOTENCY_CONFLICT', 409);
+      return _result(existing, existing['apartment_id'] as int);
+    }
     final original = ledger.where((e) => e['id'] == entryId).toList();
     if (original.isEmpty) throw _coded('ENTRY_NOT_FOUND', 404);
     if (original.first['kind'] != 'payment') throw _coded('ENTRY_NOT_CORRECTABLE', 409);
     final apartmentId = original.first['apartment_id'] as int;
     // Tek işlem: ters kayıt + yeni tahsilat; ikisinden biri başarısız olursa hiçbiri yazılmaz.
     final snapshot = List<Map<String, dynamic>>.of(ledger);
+    final LedgerWriteResult result;
     try {
       final reversal = _reverseRow(original.first, 'Düzeltme', '$idempotencyKey-r');
       final row = _addPayment(
@@ -1123,13 +1308,17 @@ class FinanceFakeAuth extends PeopleFakeAuth {
         description: description,
         key: idempotencyKey,
       );
-      return _result(row, apartmentId, reversal: reversal);
+      _keyFingerprints[idempotencyKey] = fingerprint;
+      result = _result(row, apartmentId, reversal: reversal);
     } catch (_) {
       ledger
         ..clear()
         ..addAll(snapshot);
       rethrow;
     }
+    // İşlem tamamlandı (kalıcı); yanıtın kaybolduğu senaryoda hata ŞİMDİ fırlar.
+    _throwAfterWrite();
+    return result;
   }
 
   // --- Dönemler ----------------------------------------------------------------------------------
@@ -1147,6 +1336,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
           },
       ],
       'open_period': openPeriod,
+      if (!omitClosable) 'closable': closableMonths,
     };
   }
 
@@ -1167,11 +1357,12 @@ class FinanceFakeAuth extends PeopleFakeAuth {
     final error = paymentError;
     if (error != null) throw error;
     final p = period.toApi();
-    if (p.compareTo(currentPeriod) > 0) {
-      throw _coded('PERIOD_NOT_CLOSABLE', 409, 'Gelecek dönem kapatılamaz.');
+    // Sunucu: yalnız `closable` listesindeki aylar kapatılabilir (sıralı kapatma; gelecek ay ve kapalı ay yok).
+    if (!closableMonths.contains(p)) {
+      throw _coded('PERIOD_NOT_CLOSABLE', 409, 'Bu ay şu an kapatılamaz.');
     }
-    if (closedPeriods.contains(p)) throw _coded('PERIOD_NOT_CLOSABLE', 409, 'Bu dönem zaten kapalı.');
     closedPeriods.add(p);
+    _throwAfterWrite();
   }
 
   @override
@@ -1185,6 +1376,7 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       throw _coded('PERIOD_NOT_REOPENABLE', 409);
     }
     closedPeriods.remove(period.toApi());
+    _throwAfterWrite();
   }
 
   // --- Sakin -------------------------------------------------------------------------------------

@@ -118,6 +118,26 @@ void main() {
   });
 
   group('parseMoney: reddedilen girişler', () {
+    // W5 (inceleme düzeltmesi): "₺" işareti eskiden sayının ORTASINDAN da sessizce siliniyordu ("12₺50" ->
+    // 1.250,00 ₺). Artık yalnız baş / son kenarda kabul edilir; ortadaki işaret girişi geçersiz kılar.
+    test('"₺" sayının ortasında REDDEDİLİR (sessizce silinmez)', () {
+      for (final input in const <String>['12₺50', '1₺250', '1.2₺50', '₺12₺50', '12₺50₺', '1 ₺ 250', '₺₺5']) {
+        expect(_problem(input), MoneyProblem.invalid, reason: '"$input" geçersiz olmalı');
+      }
+      // Kenardaki tek işaret hâlâ kabul edilir; boşluklu da.
+      expect(_ok('₺ 1.250,50'), 125050);
+      expect(_ok('1.250,50 ₺'), 125050);
+      expect(_ok('₺1250'), 125000);
+    });
+
+    test('harf / E gösterimi / karışık metin: sessiz süzme yok, geçersiz', () {
+      for (final input in const <String>['1,5E3', '12a5', 'abc12,5x', '1e3', '12 5', '1.2.3,4,5', '٣٤']) {
+        expect(parseMoney(input).isOk, isFalse, reason: input);
+      }
+      expect(_problem('1,5E3'), MoneyProblem.invalid);
+      expect(_problem('12a5'), MoneyProblem.invalid);
+    });
+
     test('boş', () {
       expect(_problem(''), MoneyProblem.empty);
       expect(_problem('   '), MoneyProblem.empty);
@@ -319,6 +339,23 @@ void main() {
       expect(turkishNumberWords(1000000000), 'bir milyar');
       expect(turkishNumberWords(1000000000000), 'bir trilyon');
       expect(() => turkishNumberWords(-1), throwsArgumentError);
+    });
+
+    test('spokenMoneyText: metindeki tutarlar okunuşa çevrilir, geri kalan metin aynen kalır', () {
+      expect(spokenMoneyText('Tahsilat kaydedildi: 1.250,00 ₺.'), 'Tahsilat kaydedildi: bin iki yüz elli lira.');
+      expect(
+        spokenMoneyText('Ek borç yazıldı: 3 daire, toplam 100.000,00 ₺. Güncel bakiye: Borç 500,50 ₺.'),
+        'Ek borç yazıldı: 3 daire, toplam yüz bin lira. Güncel bakiye: Borç beş yüz lira elli kuruş.',
+      );
+      expect(spokenMoneyText('-50,00 ₺ alacak'), 'eksi elli lira alacak');
+      expect(spokenMoneyText('0,05 ₺'), 'beş kuruş');
+      expect(spokenMoneyText('Tutar yok, 3 daire.'), 'Tutar yok, 3 daire.');
+      // Binlik ayırıcısız ya da kuruşsuz yazımlar dokunulmaz (formatMinor üretmez).
+      expect(spokenMoneyText('1250 ₺'), '1250 ₺');
+      // formatMinor çıktısıyla bire bir tutarlı.
+      for (final minor in const <int>[1, 99, 100, 123456, 99999999999]) {
+        expect(spokenMoneyText(formatMinor(minor)), moneySemanticLabel(minor), reason: '$minor');
+      }
     });
 
     test('her kuruş değeri için etiket boş değildir ve rakam içermez', () {

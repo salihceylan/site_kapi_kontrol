@@ -7,6 +7,7 @@ class ApiException implements Exception {
     bool? invalidatesSession,
     this.fromIntermediary = false,
     this.payload,
+    this.genericFallback = false,
   }) : _invalidatesSession = invalidatesSession;
 
   final String message;
@@ -29,6 +30,11 @@ class ApiException implements Exception {
   /// Sunucunun hata gövdesi (JSON haritası); yoksa null. Koda özgü ek alanlar için (örn. `PERSON_EXISTS`
   /// yanıtındaki `person_id`). Kullanıcıya gösterilecek metin her zaman [message]'dır.
   final Map<String, dynamic>? payload;
+
+  /// Sunucu kullanılabilir bir hata metni GÖNDERMEDİ ve [message] yalnız "İşlem başarısız (502)" gibi teknik
+  /// yedek metindir (durum kodu / hata numarası içerir). Mali akışlar bu durumda kendi bağlama uygun Türkçe
+  /// yedek metnini gösterir; diğer ekranlar [message]'ı olduğu gibi kullanmaya devam eder.
+  final bool genericFallback;
 
   /// Bu hata oturumun geçersiz olduğu anlamına mı geliyor? Varsayılan: 401.
   /// Giriş / mevcut şifre doğrulama gibi kimlik bilgisi uçlarında 401 "hatalı bilgi"

@@ -36,6 +36,8 @@ abstract final class AppSnack {
   /// - [persist]: null (varsayılan) iken Flutter'ın kuralı geçerlidir: [action] varsa SnackBar süre dolsa da
   ///   KALIR (kullanıcı dokunana dek) ve sıradaki mesajları engeller. Süresi dolunca kapanması gereken
   ///   eylemli SnackBar için `false` verin.
+  /// - [semanticsLabel]: ekran okuyucunun metin yerine okuyacağı etiket (örn. tutarın "bin iki yüz elli lira"
+  ///   okunuşu); verilmezse görsel metin okunur.
   /// - [maxLines]: çok uzun metni sınırlar (varsayılan 4); ekran okuyucu her zaman TAM metni okur.
   ///   Uzun bir cümleyi (örn. 140 karakter) büyük yazıda kısaltmak istemeyen çağıran artırabilir.
   ///
@@ -53,6 +55,7 @@ abstract final class AppSnack {
     bool replace = false,
     bool? persist,
     int maxLines = 4,
+    String? semanticsLabel,
   }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
@@ -64,6 +67,7 @@ abstract final class AppSnack {
       action: action,
       persist: persist,
       maxLines: maxLines,
+      semanticsLabel: semanticsLabel,
     );
     if (replace) {
       messenger.clearSnackBars();
@@ -80,6 +84,7 @@ abstract final class AppSnack {
     required SnackBarAction? action,
     required bool? persist,
     required int maxLines,
+    required String? semanticsLabel,
   }) {
     final (Color? background, IconData icon) = switch (kind) {
       AppSnackKind.success => (AppTone.success.b, Icons.check_circle_rounded),
@@ -124,6 +129,7 @@ abstract final class AppSnack {
           Expanded(
             child: Text(
               message,
+              semanticsLabel: semanticsLabel,
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

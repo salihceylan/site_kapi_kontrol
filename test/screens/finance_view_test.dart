@@ -7,6 +7,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsRole;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -14,6 +15,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart' show InlineNotice;
+import 'package:site_kapi_kontrol/ui/design/buttons.dart' show PrimaryActionButton;
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
@@ -22,6 +24,7 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'dialog_layout_harness.dart' show settleFor;
 import 'finance_fixtures.dart';
 import 'list_fixtures.dart';
+import 'site_application_fixtures.dart' show captureAnnouncements;
 import 'people_fixtures.dart';
 
 final DateTime _now = DateTime.utc(2026, 10, 16, 9);
@@ -106,7 +109,8 @@ void main() {
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark, canReopen: true);
       await _tab(t, 2);
       expect(find.byKey(const ValueKey<String>('finance_open_period')), findsOneWidget);
-      expect(find.text('Ekim 2026'), findsOneWidget);
+      // Açık ay hem kart başlığında hem "Kapatılacak ay" seçicisinde yazılıdır.
+      expect(find.text('Ekim 2026'), findsWidgets);
       expect(find.byKey(const ValueKey<String>('finance_closed_2026-09')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('finance_closed_2026-08')), findsOneWidget);
     });
@@ -484,14 +488,24 @@ void main() {
   });
 
   group('Dönemler sekmesi', () {
-    testWidgets('Ayı Kapat: onay -> sunucunun bildirdiği AÇIK ay kapatılır -> liste ve özet yenilenir', (t) async {
+    // W1 (inceleme düzeltmesi): önceki test HER ZAMAN sunucunun açık ayını (bu ayı) kapatıyordu; bir ay kapanınca
+    // ondan önceki tüm aylar da kapandığı için bu, geçen ayın kayıtlarını sessizce donduruyordu. Artık kapatılacak ay
+    // `closable` listesinden SEÇİLİR (varsayılan: bir önceki ay) ve onay "X ve öncesi" der.
+    testWidgets('Ayı Kapat: ay `closable` listesinden seçilir (varsayılan bir önceki ay); onay "X ve öncesi" der', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _pump(t, auth);
       await _tab(t, 2);
       final summary = auth.summaryCalls;
+      expect(find.byKey(const ValueKey<String>('finance_close_choice_2026-09_12')), findsOneWidget,
+          reason: 'varsayılan seçim: bir önceki ay (Eylül)');
+      expect(
+        find.text('Eylül 2026 kapatılınca Eylül 2026 ve öncesindeki tüm aylar değiştirilemez olur.'),
+        findsOneWidget,
+      );
       await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
       await settleFor(t);
-      expect(find.text('Ekim 2026 ayını kapat'), findsOneWidget);
+      expect(find.text('Eylül 2026 ayını kapat'), findsOneWidget);
+      expect(find.textContaining('Eylül 2026 kapatılınca Eylül 2026 ve öncesindeki tüm aylar'), findsWidgets);
       await tapText(t, 'Vazgeç');
       await settleFor(t);
       expect(auth.periodCalls, isEmpty);
@@ -500,11 +514,78 @@ void main() {
       await settleFor(t);
       await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Ayı Kapat')));
       await settleFor(t);
-      expect(auth.periodCalls, <String>['close 2026-10']);
-      expect(find.text('Ekim 2026 kapatıldı.'), findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('finance_closed_2026-10')), findsOneWidget);
-      expect(find.text('Kasım 2026'), findsOneWidget, reason: 'yeni açık ay');
+      expect(auth.periodCalls, <String>['close 2026-09']);
+      expect(find.text('Eylül 2026 kapatıldı.'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_closed_2026-09')), findsOneWidget);
       expect(auth.summaryCalls, greaterThan(summary));
+      // Sıralı kapatma: şimdi yalnız bir sonraki ay (Ekim) kapatılabilir.
+      expect(find.byKey(const ValueKey<String>('finance_close_choice_2026-10_1')), findsOneWidget);
+    });
+
+    testWidgets('Ayı Kapat: başka bir ay seçilebilir; onay seçilen ayı ve öncesini söyler', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _pump(t, auth);
+      await _tab(t, 2);
+      await tapFinder(t, find.byType(DropdownButtonFormField<FinancePeriod>));
+      await tapFinder(t, find.text('Ağustos 2026').last);
+      await settleFor(t);
+      expect(find.text('Ağustos 2026 kapatılınca Ağustos 2026 ve öncesindeki tüm aylar değiştirilemez olur.'),
+          findsOneWidget);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
+      await settleFor(t);
+      expect(find.text('Ağustos 2026 ayını kapat'), findsOneWidget);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Ayı Kapat')));
+      await settleFor(t);
+      expect(auth.periodCalls, <String>['close 2026-08']);
+      expect(auth.closedThrough, '2026-08');
+      expect(auth.isClosed('2026-07'), isTrue, reason: 'ondan önceki tüm aylar da kapalı sayılır');
+    });
+
+    testWidgets('`closable` boşsa: "şu an kapatılabilecek dönem yok" açıklaması, kapatma düğmesi yok', (t) async {
+      final auth = FinanceFakeAuth.seeded()..closedPeriods.add('2026-10');
+      await _pump(t, auth);
+      await _tab(t, 2);
+      expect(find.byKey(const ValueKey<String>('finance_nothing_closable')), findsOneWidget);
+      expect(find.textContaining('Şu an kapatılabilecek dönem yok'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_close_period')), findsNothing);
+      expect(find.byType(DropdownButtonFormField<FinancePeriod>), findsNothing);
+    });
+
+    testWidgets('`closable` alanı yoksa (eski sunucu): eski davranış, açık ay kapatılır', (t) async {
+      final auth = FinanceFakeAuth.seeded()..omitClosable = true;
+      await _pump(t, auth);
+      await _tab(t, 2);
+      expect(find.byType(DropdownButtonFormField<FinancePeriod>), findsNothing);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
+      await settleFor(t);
+      expect(find.text('Ekim 2026 ayını kapat'), findsOneWidget);
+    });
+
+    testWidgets('kapalı ay kuralı: kapalı aya (ve öncesine) yazma 409 PERIOD_CLOSED', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await auth.closeFinancePeriod(11, const FinancePeriod(2026, 9));
+      expect(auth.isClosed('2026-08'), isTrue);
+      await expectLater(
+        auth.recordFeePayment(
+          11,
+          apartmentId: 301,
+          amountMinor: 100,
+          entryDate: DateTime(2026, 8, 20),
+          method: PaymentMethod.cash,
+          idempotencyKey: 'k-old',
+        ),
+        throwsA(isA<ApiException>().having((e) => e.code, 'code', 'PERIOD_CLOSED')),
+      );
+      // Sıralı kapatma: Eylül kapalıyken Ağustos'u ya da Kasım'ı kapatamazsın.
+      await expectLater(
+        auth.closeFinancePeriod(11, const FinancePeriod(2026, 8)),
+        throwsA(isA<ApiException>().having((e) => e.code, 'code', 'PERIOD_NOT_CLOSABLE')),
+      );
+      await expectLater(
+        auth.closeFinancePeriod(11, const FinancePeriod(2026, 11)),
+        throwsA(isA<ApiException>().having((e) => e.code, 'code', 'PERIOD_NOT_CLOSABLE')),
+      );
+      expect(auth.closableMonths, <String>['2026-10']);
     });
 
     testWidgets('kapatma reddi (PERIOD_NOT_CLOSABLE): Türkçe mesaj, durum yeniden okunur', (t) async {
@@ -556,6 +637,271 @@ void main() {
       await tapText(t, 'Tekrar Dene');
       await settleFor(t);
       expect(find.text('Henüz kapatılmış ay yok.'), findsOneWidget);
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // İnceleme düzeltmeleri (W6, W7, W9, W10, W15, W17): sekmeler, eylem hataları, odak ve anlamsal ağaç.
+  // ---------------------------------------------------------------------------------------------------
+
+  group('W6: yenileme başarısızsa eski veri ve eylemler', () {
+    testWidgets('Daireler: yenileme hatasında ESKİ bakiyeler gizlenir; hata + Tekrar Dene; düzelince geri gelir',
+        (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final key = await _pump(t, auth);
+      expect(find.byType(BalanceRowCard), findsNWidgets(3));
+      auth.balancesError = ApiException('Sunucuya ulaşılamadı.');
+      await key.currentState!.reload();
+      await settleFor(t);
+      expect(find.byType(BalanceRowCard), findsNothing, reason: 'eski tutarlar hata uyarısıyla gösterilmez');
+      expect(find.text('Sunucuya ulaşılamadı.'), findsOneWidget);
+      expect(find.text('Bu sitede daire bulunamadı.'), findsNothing);
+      auth.balancesError = null;
+      await tapText(t, 'Tekrar Dene');
+      await settleFor(t);
+      expect(find.byType(BalanceRowCard), findsNWidgets(3));
+    });
+
+    testWidgets('Tanımlar: liste yenilenemedi -> eski liste kalır ama Borçlandır / Düzenle / Pasifleştir PASİF', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _pump(t, auth);
+      await _tab(t, 1);
+      TextButton post() => t.widget<TextButton>(find.byKey(const ValueKey<String>('fee_definition_post_1')));
+      expect(post().onPressed, isNotNull);
+      auth.definitionsError = ApiException('Tanım hatası', statusCode: 500);
+      await tapFinder(t, find.byTooltip('Yenile').last);
+      await settleFor(t);
+      expect(find.text('Tanım hatası'), findsOneWidget);
+      expect(find.byType(FeeDefinitionCard), findsNWidgets(2), reason: 'tanımlar yapılandırmadır; liste görünür kalır');
+      expect(post().onPressed, isNull);
+      expect(t.widget<TextButton>(find.byKey(const ValueKey<String>('fee_definition_edit_1'))).onPressed, isNull);
+      expect(t.widget<TextButton>(find.byKey(const ValueKey<String>('fee_definition_toggle_1'))).onPressed, isNull);
+      auth.definitionsError = null;
+      await tapText(t, 'Tekrar Dene');
+      await settleFor(t);
+      expect(post().onPressed, isNotNull);
+    });
+
+    testWidgets('Dönemler: liste yenilenemedi -> Ayı Kapat ve Yeniden Aç PASİF', (t) async {
+      final auth = FinanceFakeAuth.seeded(role: _superRole)..closedPeriods.add('2026-08');
+      await _pump(t, auth, canReopen: true);
+      await _tab(t, 2);
+      PrimaryActionButton closeButton() =>
+          t.widget<PrimaryActionButton>(find.byKey(const ValueKey<String>('finance_close_period')));
+      expect(closeButton().onPressed, isNotNull);
+      auth.periodsError = ApiException('Dönem hatası', statusCode: 500);
+      await tapFinder(t, find.byTooltip('Yenile').last);
+      await settleFor(t);
+      expect(find.text('Dönem hatası'), findsOneWidget);
+      expect(closeButton().onPressed, isNull);
+      expect(t.widget<TextButton>(find.byKey(const ValueKey<String>('finance_reopen_2026-08'))).onPressed, isNull);
+      expect(t.widget<DropdownButtonFormField<FinancePeriod>>(find.byType(DropdownButtonFormField<FinancePeriod>)).onChanged,
+          isNull);
+    });
+
+    testWidgets('tek seferlik tanım kartı "Dönem" yerine "Vade" der', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..definitions[8] = finDefinition(8, name: 'Boya', kind: 'one_time', distribution: 'equal', amount: 90000);
+      await _pump(t, auth);
+      await _tab(t, 1);
+      final card = find.byKey(const ValueKey<String>('fee_definition_8'));
+      expect(find.descendant(of: card, matching: find.textContaining('Dönem:')), findsNothing);
+      // Kart birleşik anlamsal etiketle okunur; görsel metin orada yazılıdır.
+      expect(find.descendant(of: card, matching: find.text('Vade: borçlandırılırken belirlenir')), findsOneWidget);
+    });
+  });
+
+  group('W9: eylem hatası eylemin yapıldığı kartta; meşgul durumu', () {
+    testWidgets('Pasifleştirme hatası o tanımın KARTINDA görünür ve duyurulur', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded();
+      await _pump(t, auth);
+      await _tab(t, 1);
+      auth.finError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
+      await tapFinder(t, find.byKey(const ValueKey<String>('fee_definition_toggle_2')));
+      await settleFor(t);
+      final card = find.byKey(const ValueKey<String>('fee_definition_2'));
+      expect(find.descendant(of: card, matching: find.text('Bu işlem için yetkiniz yok.')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey<String>('fee_definition_1')),
+          matching: find.text('Bu işlem için yetkiniz yok.')), findsNothing);
+      expect(announced, contains('Bu işlem için yetkiniz yok.'));
+    });
+
+    testWidgets('Etkinleştirme sürerken düğmede dönen gösterge + "Güncelleniyor..." (görsel ve anlamsal), pasif', (t) async {
+      final auth = FinanceFakeAuth.seeded()..paymentGate = Completer<void>();
+      await _pump(t, auth);
+      await _tab(t, 1);
+      await tapFinder(t, find.byKey(const ValueKey<String>('fee_definition_toggle_2')));
+      await t.pump();
+      final toggle = find.byKey(const ValueKey<String>('fee_definition_toggle_2'));
+      expect(find.descendant(of: toggle, matching: find.text('Güncelleniyor...')), findsOneWidget);
+      expect(find.descendant(of: toggle, matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+      expect(t.widget<TextButton>(toggle).onPressed, isNull);
+      auth.paymentGate!.complete();
+      await settleFor(t);
+      expect(find.text('Güncelleniyor...'), findsNothing);
+    });
+
+    testWidgets('Ay kapatma hatası açık ay kartında görünür ve duyurulur', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded()
+        ..paymentError = ApiException(
+          AuthApi.messageForErrorCode('PERIOD_NOT_CLOSABLE')!,
+          statusCode: 409,
+          code: 'PERIOD_NOT_CLOSABLE',
+        );
+      await _pump(t, auth);
+      await _tab(t, 2);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_close_period')));
+      await settleFor(t);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Ayı Kapat')));
+      await settleFor(t);
+      final open = find.byKey(const ValueKey<String>('finance_open_period'));
+      expect(find.descendant(of: open, matching: find.byKey(const ValueKey<String>('finance_close_error'))),
+          findsOneWidget);
+      expect(announced, contains(AuthApi.messageForErrorCode('PERIOD_NOT_CLOSABLE')!));
+    });
+
+    testWidgets('Yeniden Aç hatası kapalı ay kartında görünür; sürerken "Yeniden açılıyor..."', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded(role: _superRole)
+        ..closedPeriods.add('2026-09')
+        ..paymentGate = Completer<void>();
+      await _pump(t, auth, canReopen: true);
+      await _tab(t, 2);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_reopen_2026-09')));
+      await settleFor(t);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Yeniden Aç')));
+      await t.pump();
+      final reopen = find.byKey(const ValueKey<String>('finance_reopen_2026-09'));
+      expect(find.descendant(of: reopen, matching: find.text('Yeniden açılıyor...')), findsOneWidget);
+      expect(find.descendant(of: reopen, matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+      expect(t.widget<TextButton>(reopen).onPressed, isNull);
+      auth.paymentGate!.complete();
+      await settleFor(t);
+
+      // İkinci deneme: sunucu reddeder -> hata o kartın içinde.
+      auth.paymentGate = null;
+      auth.closedPeriods
+        ..clear()
+        ..addAll(<String>['2026-08', '2026-09']);
+      await tapFinder(t, find.byTooltip('Yenile').last);
+      await settleFor(t);
+      auth.finError = ApiException(
+        AuthApi.messageForErrorCode('PERIOD_NOT_REOPENABLE')!,
+        statusCode: 409,
+        code: 'PERIOD_NOT_REOPENABLE',
+      );
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_reopen_2026-09')));
+      await settleFor(t);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('Yeniden Aç')));
+      await settleFor(t);
+      final closed = find.byKey(const ValueKey<String>('finance_closed_2026-09'));
+      expect(find.descendant(of: closed, matching: find.byKey(const ValueKey<String>('finance_reopen_error_2026-09'))),
+          findsOneWidget);
+      expect(announced, contains(AuthApi.messageForErrorCode('PERIOD_NOT_REOPENABLE')!));
+    });
+  });
+
+  group('W7 / W17: sekmeler', () {
+    testWidgets('görünmeyen sekmenin alanları klavye / ekran okuyucu odağına GİRMEZ; sekme değişince açılır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _pump(t, auth);
+      await _tab(t, 1);
+      EditableText search() => t.widget<EditableText>(find.descendant(
+        of: find.byKey(const ValueKey<String>('finance_balances_search'), skipOffstage: false),
+        matching: find.byType(EditableText, skipOffstage: false),
+        skipOffstage: false,
+      ));
+      final hidden = search().focusNode;
+      hidden.requestFocus();
+      await t.pump();
+      expect(hidden.hasFocus, isFalse, reason: 'Offstage sekmedeki arama alanı odak alamaz');
+      await _tab(t, 0);
+      final shown = search().focusNode;
+      shown.requestFocus();
+      await t.pump();
+      expect(shown.hasFocus, isTrue);
+    });
+
+    testWidgets('sekme çipleri "sekme" rolü ve seçili durumuyla okunur', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      final first = t.getSemantics(find.byKey(const ValueKey<String>('finance_tab_0')));
+      final second = t.getSemantics(find.byKey(const ValueKey<String>('finance_tab_1')));
+      expect(first.getSemanticsData().role, SemanticsRole.tab);
+      expect(second.getSemanticsData().role, SemanticsRole.tab);
+      expect(first.getSemanticsData().label, 'Daireler');
+      expect(first, isSemantics(label: 'Daireler', isSelected: true, hasTapAction: true, isButton: true,
+          isEnabled: true, hasEnabledState: true, isFocusable: true, hasSelectedState: true));
+      expect(second, isSemantics(label: 'Tanımlar', isSelected: false, hasTapAction: true, isButton: true,
+          isEnabled: true, hasEnabledState: true, isFocusable: true, hasSelectedState: true));
+      handle.dispose();
+    });
+
+    testWidgets('Tür / Durum / Yöntem grup başlıkları başlık (header) olarak okunur', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      expect(t.getSemantics(find.text('Durum').first), isSemantics(label: 'Durum', isHeader: true));
+      await _tab(t, 1);
+      expect(t.getSemantics(find.text('Tür')), isSemantics(label: 'Tür', isHeader: true));
+      handle.dispose();
+    });
+
+    testWidgets('uzun site adı seçicide kısalır ama tam ad ipucunda (tooltip) bulunur; boş ad teknik kod göstermez',
+        (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final sites = <PeopleSite>[
+        const PeopleSite(code: 11, name: 'Mavi Park Evleri Çok Uzun Adlı Konut Yapı Kooperatifi Sitesi', canWrite: true),
+        const PeopleSite(code: 12, name: '', canWrite: true),
+      ];
+      await _pump(t, auth, sites: sites, width: 320, scale: 2.0);
+      expect(find.byTooltip('Mavi Park Evleri Çok Uzun Adlı Konut Yapı Kooperatifi Sitesi'), findsWidgets);
+      await tapFinder(t, find.byType(DropdownButtonFormField<int>));
+      expect(find.text('İsimsiz site'), findsWidgets);
+      expect(find.textContaining('Site 12'), findsNothing, reason: 'teknik site kodu gösterilmez');
+    });
+
+    testWidgets('site yoksa metin "Finans" sözcüğünü tekrarlamaz', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _pump(t, auth, sites: const <PeopleSite>[]);
+      expect(find.text('Aidat ve Finans modülü açık bir siteye bağlı olduğunuzda burada görünür.'), findsOneWidget);
+      expect(find.textContaining('Finans, Aidat ve Finans'), findsNothing);
+    });
+  });
+
+  group('W10: tutarlar ekran okuyucuda okunuşla', () {
+    testWidgets('mali özet kartı: etiket + tutar TEK birleşik etiketle okunur', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      expect(find.bySemanticsLabel('Toplam borç: bin lira'), findsOneWidget);
+      expect(find.bySemanticsLabel('Toplam alacak: üç yüz lira'), findsOneWidget);
+      // Eskiden etiket ayrıca bir de yalnız etiket olarak okunuyordu (çift okuma).
+      expect(find.bySemanticsLabel('Toplam borç'), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('tahsilat başarı bildirimi (SnackBar) tutarı okunuşla bildirir; görsel metin değişmez', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_add_payment')));
+      await settleFor(t);
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_payment_apartment')));
+      await settleFor(t);
+      await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text('B Blok - 2')));
+      await settleFor(t);
+      await t.enterText(find.byKey(const ValueKey<String>('finance_payment_amount')), '750');
+      await t.pump();
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_method_cash')));
+      await tapFinder(t, find.byKey(const ValueKey<String>('finance_payment_submit')));
+      await settleFor(t);
+      expect(find.textContaining('Tahsilat kaydedildi: 750,00 ₺.'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('Tahsilat kaydedildi: yedi yüz elli lira')), findsOneWidget);
+      handle.dispose();
     });
   });
 
@@ -641,6 +987,33 @@ void main() {
       await _pump(t, auth, sites: const <PeopleSite>[], manageAll: true);
       expect(find.text('Siteler yüklenemedi'), findsOneWidget);
       expect(find.text('Kayıtlı site bulunamadı.'), findsNothing);
+    });
+  });
+  group('W11: sunucu metin vermezse (502) Türkçe yedek metin; teknik metin GÖRÜNMEZ', () {
+    ApiException bare() => ApiException('İşlem başarısız (502) (Hata kodu: x1)', statusCode: 502, genericFallback: true);
+
+    testWidgets('özet, bakiyeler, tanımlar ve dönemler', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..summaryError = bare()
+        ..balancesError = bare()
+        ..definitionsError = bare()
+        ..periodsError = bare();
+      await _pump(t, auth);
+      expect(find.text('Mali özet yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(find.text('Bakiyeler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      await _tab(t, 1);
+      expect(find.text('Tanımlar yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      await _tab(t, 2);
+      expect(find.text('Dönemler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(find.textContaining('502'), findsNothing);
+      expect(find.textContaining('Hata kodu'), findsNothing);
+      expect(find.textContaining('İşlem başarısız'), findsNothing);
+    });
+
+    testWidgets('sunucunun kendi Türkçe metni korunur (yedek yalnız metin yoksa)', (t) async {
+      final auth = FinanceFakeAuth.seeded()..summaryError = ApiException('Mali özet hazırlanamıyor.', statusCode: 500);
+      await _pump(t, auth);
+      expect(find.text('Mali özet hazırlanamıyor.'), findsOneWidget);
     });
   });
 }

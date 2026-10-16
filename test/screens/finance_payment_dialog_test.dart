@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart' show CrmPickerField;
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_reverse_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
@@ -19,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'dialog_layout_harness.dart';
 import 'finance_fixtures.dart';
 import 'list_fixtures.dart' show tapFinder, tapText;
+import 'site_application_fixtures.dart' show captureAnnouncements;
 
 final DateTime _now = DateTime.utc(2026, 10, 16, 9);
 
@@ -117,6 +119,13 @@ Future<void> _submit(WidgetTester t, String key) async {
   await t.tap(finder);
   await t.pump();
   await t.pump(const Duration(milliseconds: 450));
+}
+
+/// İptal penceresindeki ONAY adımında [label] düğmesine basar ("Ters Kaydı Ekle" ya da "Geri Dön").
+Future<void> _confirmReverse(WidgetTester t, {String label = 'Ters Kaydı Ekle'}) async {
+  expect(find.text('Kaydı iptal et'), findsOneWidget, reason: 'onay adımı açık olmalı');
+  await tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text(label)));
+  await settleFor(t);
 }
 
 /// Daire seçicisini açıp [label] dairesini seçer.
@@ -500,6 +509,13 @@ void main() {
 
       await _enter(t, 'finance_reverse_reason', '  Yanlış daireye girildi  ');
       await _submit(t, 'finance_reverse_submit');
+      // W12: yazmadan önce ONAY adımı; "Geri Dön" hiçbir şey yazmaz ve pencere açık kalır.
+      expect(auth.reverseCalls, isEmpty);
+      await _confirmReverse(t, label: 'Geri Dön');
+      expect(auth.reverseCalls, isEmpty);
+      expect(out.closed, isFalse);
+      await _submit(t, 'finance_reverse_submit');
+      await _confirmReverse(t);
       expect(auth.reverseCalls.length, 1);
       expect(auth.reverseCalls.single['reason'], 'Yanlış daireye girildi');
       expect((auth.reverseCalls.single['idempotency_key'] as String).isNotEmpty, isTrue);
@@ -525,9 +541,12 @@ void main() {
       final out = await _openReverse(t, auth, _paymentEntry(auth));
       await _enter(t, 'finance_reverse_reason', 'Tekrar');
       await _submit(t, 'finance_reverse_submit');
+      await _confirmReverse(t);
       expect(find.text(AuthApi.messageForErrorCode('ENTRY_ALREADY_REVERSED')!), findsOneWidget);
       expect(out.closed, isFalse);
-      await tapText(t, 'Vazgeç');
+      // W12: pencereyi kapatan düğme "Kapat" (eskiden "Vazgeç"; "kaydı iptal et" ile karışıyordu).
+      expect(find.text('Vazgeç'), findsNothing);
+      await _tapKey(t, 'finance_reverse_close');
       await settleFor(t);
       expect(out.refreshes, 1, reason: 'kayıt durumu eskidi: liste tazelenir');
     });
@@ -537,8 +556,9 @@ void main() {
       final out = await _openReverse(t, auth, _paymentEntry(auth));
       await _enter(t, 'finance_reverse_reason', 'Neden');
       await _submit(t, 'finance_reverse_submit');
-      expect(find.text('İptal ediliyor...'), findsOneWidget);
-      await t.tap(find.text('İptal ediliyor...'), warnIfMissed: false);
+      await _confirmReverse(t);
+      expect(find.text('Ters kayıt ekleniyor...'), findsOneWidget);
+      await t.tap(find.text('Ters kayıt ekleniyor...'), warnIfMissed: false);
       await t.pump();
       expect(auth.reverseCalls.length, 1);
       await t.binding.handlePopRoute();
@@ -548,6 +568,307 @@ void main() {
       await settleFor(t);
       expect(out.closed, isTrue);
       expect(auth.reverseCalls.length, 1);
+    });
+  });
+  // ---------------------------------------------------------------------------------------------------
+  // İnceleme düzeltmeleri (W3, W10, W11, W13, W16): tahsilat anahtarı, hata görünürlüğü, alan kuralları.
+  // ---------------------------------------------------------------------------------------------------
+
+  Future<void> fillPayment(WidgetTester t, {String amount = '100', bool method = true}) async {
+    await _enter(t, 'finance_payment_amount', amount);
+    if (method) await _tapKey(t, 'finance_method_cash');
+  }
+
+  int paymentRows(FinanceFakeAuth auth) => auth.ledger.where((e) => e['kind'] == 'payment').length;
+
+  group('W3: tahsilat işlem anahtarı', () {
+    testWidgets('A gönder (yanıt kayıp) -> B -> A: AYNI anahtar, çift tahsilat yok', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final start = paymentRows(auth);
+      final out = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t, amount: '100');
+      await _submit(t, 'finance_payment_submit'); // A: sunucuda işlendi, yanıt kayboldu
+      expect(paymentRows(auth), start + 1);
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
+
+      await _enter(t, 'finance_payment_amount', '200'); // B
+      auth.paymentError = ApiException('Geçici hata', statusCode: 400);
+      await _submit(t, 'finance_payment_submit');
+      auth.paymentError = null;
+      expect(paymentRows(auth), start + 1);
+
+      await _enter(t, 'finance_payment_amount', '100'); // A yeniden
+      await _submit(t, 'finance_payment_submit');
+      final keys = auth.paymentCalls.map((c) => c['idempotency_key']).toList();
+      expect(keys.length, 3);
+      expect(keys[1], isNot(keys[0]), reason: 'B farklı veri: farklı anahtar');
+      expect(keys[2], keys[0], reason: 'A\'ya dönünce AYNI anahtar (tek-imza tutucu bunu unutuyordu)');
+      expect(paymentRows(auth), start + 1, reason: 'sunucu A\'yı yeniden oynattı; çift kayıt yok');
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('açıklama imzada YOK: yalnız açıklamayı düzeltmek aynı anahtarı korur', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final start = paymentRows(auth);
+      final out = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _enter(t, 'finance_payment_note', 'ilk not');
+      await _submit(t, 'finance_payment_submit');
+      await _enter(t, 'finance_payment_note', 'düzeltilmiş not');
+      await _submit(t, 'finance_payment_submit');
+      expect(auth.paymentCalls[1]['idempotency_key'], auth.paymentCalls[0]['idempotency_key']);
+      expect(paymentRows(auth), start + 1);
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('pencere kapanıp yeniden açılsa bile (aynı oturum) aynı veri aynı anahtarı kullanır', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final start = paymentRows(auth);
+      final first = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      await tapText(t, 'Vazgeç');
+      await settleFor(t);
+      expect(first.closed, isTrue);
+      expect(first.refreshes, 1, reason: 'sonuç belirsiz: liste tazelenir');
+
+      final second = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(auth.paymentCalls[1]['idempotency_key'], auth.paymentCalls[0]['idempotency_key']);
+      expect(paymentRows(auth), start + 1, reason: 'çift tahsilat yok');
+      expect(second.closed, isTrue);
+    });
+
+    testWidgets('başarıdan sonra anahtar atılır: aynı tutardaki İKİNCİ gerçek tahsilat yeni anahtar alır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final start = paymentRows(auth);
+      final first = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(first.closed, isTrue);
+      final second = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(second.closed, isTrue);
+      expect(auth.paymentCalls[1]['idempotency_key'], isNot(auth.paymentCalls[0]['idempotency_key']));
+      expect(paymentRows(auth), start + 2, reason: 'iki ayrı tahsilat');
+    });
+
+    testWidgets('IDEMPOTENCY_CONFLICT: hesabı kontrol et uyarısı; sonraki deneme yeni anahtar alır', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..paymentError = ApiException(
+          AuthApi.messageForErrorCode('IDEMPOTENCY_CONFLICT')!,
+          statusCode: 409,
+          code: 'IDEMPOTENCY_CONFLICT',
+        );
+      final out = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(find.text(AuthApi.messageForErrorCode('IDEMPOTENCY_CONFLICT')!), findsOneWidget);
+      auth.paymentError = null;
+      await _submit(t, 'finance_payment_submit');
+      expect(auth.paymentCalls[1]['idempotency_key'], isNot(auth.paymentCalls[0]['idempotency_key']));
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('düzeltme (correct) de aynı mantık: yanıtı kayıp düzeltme çift ters kayıt yazmaz', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final entry = _paymentEntry(auth);
+      final out = await _openPayment(t, auth, apartmentId: 302, apartmentLabel: 'A Blok - 6', correcting: entry);
+      await _enter(t, 'finance_payment_amount', '300');
+      await _submit(t, 'finance_payment_submit');
+      final reversals = auth.ledger.where((e) => e['reverses_entry_id'] == 4).length;
+      expect(reversals, 1);
+      await _submit(t, 'finance_payment_submit');
+      expect(auth.correctCalls[1]['idempotency_key'], auth.correctCalls[0]['idempotency_key']);
+      expect(auth.ledger.where((e) => e['reverses_entry_id'] == 4).length, 1);
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('iptal (reverse): yanıtı kayıp istek sonrası aynı neden AYNI anahtarı kullanır', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final out = await _openReverse(t, auth, _paymentEntry(auth));
+      await _enter(t, 'finance_reverse_reason', 'Yanlış daire');
+      await _submit(t, 'finance_reverse_submit');
+      await _confirmReverse(t);
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
+      await _submit(t, 'finance_reverse_submit');
+      await _confirmReverse(t);
+      expect(auth.reverseCalls[1]['idempotency_key'], auth.reverseCalls[0]['idempotency_key']);
+      expect(auth.ledger.where((e) => e['reverses_entry_id'] == 4).length, 1);
+      expect(out.closed, isTrue);
+    });
+  });
+
+  group('W11: sunucu metin vermezse bağlama uygun Türkçe yedek', () {
+    testWidgets('tahsilat 502 (metinsiz): "İşlem başarısız (502)" ve hata numarası GÖRÜNMEZ', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..paymentError = ApiException(
+          'İşlem başarısız (502) (Hata kodu: abc123)',
+          statusCode: 502,
+          genericFallback: true,
+        );
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(find.textContaining('502'), findsNothing);
+      expect(find.textContaining('abc123'), findsNothing);
+      expect(find.textContaining('Tahsilat kaydedilemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget, reason: '5xx: sonuç belirsiz ipucu');
+    });
+
+    testWidgets('sunucu Türkçe metin verdiyse o gösterilir (yedek yalnız metin yoksa)', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..paymentError = ApiException('Daire bulunamadı.', statusCode: 404, code: 'APARTMENT_NOT_FOUND');
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      expect(find.text('Daire bulunamadı.'), findsOneWidget);
+    });
+  });
+
+  group('W13: hata kutuları duyurulur', () {
+    testWidgets('tahsilat hatası ortaya çıkınca ekran okuyucuya duyurulur', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded()
+        ..paymentError = ApiException('Bu işlem için yetkiniz yok.', statusCode: 403, code: 'FORBIDDEN_ROLE');
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _submit(t, 'finance_payment_submit');
+      await settleFor(t);
+      expect(announced, contains('Bu işlem için yetkiniz yok.'));
+    });
+
+    testWidgets('doğrulama özeti de duyurulur', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded();
+      await _openPayment(t, auth);
+      await _submit(t, 'finance_payment_submit');
+      await settleFor(t);
+      expect(announced, contains('Lütfen işaretli alanları düzeltin.'));
+    });
+  });
+
+  group('W16: tahsilat alanları', () {
+    testWidgets('daire / yöntem eksikken hata alanın altında; ekran ilk soruna kayar ve odaklanır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _openPayment(t, auth, width: 320, height: 640, scale: 2.0);
+      await _enter(t, 'finance_payment_amount', '100');
+      await _submit(t, 'finance_payment_submit');
+      await settleFor(t);
+      expect(find.text('Daire seçin.'), findsOneWidget);
+      expect(find.text('Tahsilat yöntemini seçin.'), findsOneWidget);
+      // İlk sorun (daire) görünür bölgededir ve odak seçicinin içindedir.
+      final viewport = t.getRect(find.ancestor(of: find.text('Daire seçin.'), matching: find.byType(Scrollable)).first);
+      final rect = t.getRect(find.text('Daire seçin.'));
+      expect(rect.top, greaterThanOrEqualTo(viewport.top));
+      expect(rect.bottom, lessThanOrEqualTo(viewport.bottom));
+      final focus = FocusManager.instance.primaryFocus;
+      expect(focus, isNotNull);
+      var insidePicker = false;
+      focus!.context!.visitAncestorElements((e) {
+        if (e.widget is CrmPickerField) {
+          insidePicker = true;
+          return false;
+        }
+        return true;
+      });
+      expect(insidePicker, isTrue, reason: 'odak daire seçicisine taşınır');
+    });
+
+    testWidgets('yalnız yöntem eksikse ilk sorun yöntemdir: görünür kılınır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5', width: 320, height: 640, scale: 2.0);
+      await _enter(t, 'finance_payment_amount', '100');
+      await _submit(t, 'finance_payment_submit');
+      await settleFor(t);
+      expect(find.text('Daire seçin.'), findsNothing);
+      final viewport = t.getRect(
+        find.ancestor(of: find.text('Tahsilat yöntemini seçin.'), matching: find.byType(Scrollable)).first,
+      );
+      final rect = t.getRect(find.text('Tahsilat yöntemini seçin.'));
+      expect(rect.top, greaterThanOrEqualTo(viewport.top));
+      expect(rect.bottom, lessThanOrEqualTo(viewport.bottom));
+    });
+
+    testWidgets('tarih alanında kalıcı biçim yardımı; 9. rakam sessizce silinmez, uyarı gösterilir ve duyurulur',
+        (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded();
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      expect(find.text('Gün.Ay.Yıl biçiminde yazın (GG.AA.YYYY).'), findsOneWidget);
+      await _enter(t, 'finance_payment_date', '161020261');
+      await settleFor(t);
+      expect(find.text('Tarih en çok 8 rakamdır (GG.AA.YYYY); fazla rakam eklenmedi.'), findsOneWidget);
+      expect(announced, contains('Tarih en çok 8 rakamdır. Fazla rakam eklenmedi.'));
+      final controller = t.widget<TextField>(find.descendant(
+        of: find.byKey(const ValueKey<String>('finance_payment_date')),
+        matching: find.byType(TextField),
+      )).controller!;
+      expect(controller.text, '16.10.2026', reason: 'eski değer korunur');
+      // Geçerli bir düzenleme uyarıyı kaldırır.
+      await _enter(t, 'finance_payment_date', '15102026');
+      await settleFor(t);
+      expect(find.text('Gün.Ay.Yıl biçiminde yazın (GG.AA.YYYY).'), findsOneWidget);
+    });
+
+    testWidgets('kapalı ay seçilince bilgi amaçlı uyarı (dönem bilgisi yüklüyse); açık ayda yok', (t) async {
+      final auth = FinanceFakeAuth.seeded()..closedPeriods.add('2026-09');
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      expect(find.byKey(const ValueKey<String>('finance_payment_closed_month')), findsNothing);
+      await _enter(t, 'finance_payment_date', '15.09.2026');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_payment_closed_month')), findsOneWidget);
+      expect(find.textContaining('Bu ay kapatılmış olabilir'), findsOneWidget);
+      await _enter(t, 'finance_payment_date', '05.10.2026');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_payment_closed_month')), findsNothing);
+    });
+
+    testWidgets('dönem bilgisi yüklenemezse uyarı yok ve kayıt yine denenebilir', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..closedPeriods.add('2026-09')
+        ..periodsError = ApiException('Dönem hatası', statusCode: 500);
+      final out = await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _enter(t, 'finance_payment_date', '15.09.2026');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_payment_closed_month')), findsNothing);
+      await _submit(t, 'finance_payment_submit');
+      // Kesin karar sunucudadır: kapalı ay reddedilir.
+      expect(find.text(AuthApi.messageForErrorCode('PERIOD_CLOSED')!), findsOneWidget);
+      expect(out.closed, isFalse);
+    });
+
+    testWidgets('5 yıldan eski tarih istemcide Türkçe reddedilir; sunucuya gidilmez', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _openPayment(t, auth, apartmentId: 301, apartmentLabel: 'A Blok - 5');
+      await fillPayment(t);
+      await _enter(t, 'finance_payment_date', '15.10.2021');
+      await _submit(t, 'finance_payment_submit');
+      expect(find.text('Tarih bugünden en fazla 5 yıl öncesi olabilir.'), findsOneWidget);
+      expect(auth.paymentCalls, isEmpty);
+      await _enter(t, 'finance_payment_date', '16.10.2021');
+      await settleFor(t);
+      expect(find.text('Tarih bugünden en fazla 5 yıl öncesi olabilir.'), findsNothing, reason: 'sınır gün DAHİL');
+    });
+  });
+
+  group('W10: tutarlar ekran okuyucuda okunuşla', () {
+    testWidgets('tahsilat düzeltme penceresinde düzeltilen kaydın tutarı "sekiz yüz lira" okunur', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      final handle = t.ensureSemantics();
+      await _openPayment(
+        t,
+        auth,
+        apartmentId: 302,
+        apartmentLabel: 'A Blok - 6',
+        correcting: _paymentEntry(auth),
+      );
+      expect(find.bySemanticsLabel(RegExp(r'sekiz yüz lira')), findsWidgets);
+      expect(find.bySemanticsLabel('20.09.2026 • 800,00 ₺ • Nakit'), findsNothing, reason: 'rakam yığını okunmaz');
+      handle.dispose();
     });
   });
 }

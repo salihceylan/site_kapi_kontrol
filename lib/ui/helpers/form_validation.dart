@@ -9,15 +9,33 @@ const String kFixFieldsMessage = 'Lütfen işaretli alanları düzeltin.';
 ///
 /// Kaydırma iki çerçeve sonra yapılır: özet bildirimi (`CrmFormError`) kendini en üste kaydırır, alan
 /// ondan SONRA görünür kılınır ve odaklanır.
-bool validateForm(GlobalKey<FormState> formKey) {
+///
+/// [validateExtra]: form alanı OLMAYAN ek kuralların (örn. hedef seçimi, kategori listesi) doğrulayıcısı; geçerliyse
+/// true döner. [revealExtra]: alan hatası yoksa ek kuralın hatasını görünür kılar (true: gösterdi). Ek hataların
+/// kendi bildirimleri kendilerini kaydırmaz; görünür kılma işini yalnız bu TEK yol yapar, böylece iki
+/// `ensureVisible` birbirinin kaydırmasını ezmez. [reveal] verilirse varsayılan zincirin YERİNE çalışır (alan
+/// hatalarıyla ek hataların ekrandaki sırası karışıksa çağıran sırayı kendisi belirler).
+bool validateForm(
+  GlobalKey<FormState> formKey, {
+  bool Function()? validateExtra,
+  bool Function()? revealExtra,
+  void Function(BuildContext formContext)? reveal,
+}) {
   final form = formKey.currentState;
   if (form == null) return false;
-  if (form.validate()) return true;
+  final fieldsOk = form.validate();
+  final extraOk = validateExtra?.call() ?? true;
+  if (fieldsOk && extraOk) return true;
   final context = formKey.currentContext;
   if (context != null) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) revealFirstInvalidField(context);
+        if (!context.mounted) return;
+        if (reveal != null) {
+          reveal(context);
+        } else if (!revealFirstInvalidField(context)) {
+          revealExtra?.call();
+        }
       });
     });
   }
@@ -25,8 +43,8 @@ bool validateForm(GlobalKey<FormState> formKey) {
 }
 
 /// [formContext] altındaki ilk geçersiz (`hasError`) form alanını görünür kılar ve metin alanıysa odaklar.
-/// Alan yoksa hiçbir şey yapmaz.
-void revealFirstInvalidField(BuildContext formContext) {
+/// Alan yoksa hiçbir şey yapmaz ve false döner.
+bool revealFirstInvalidField(BuildContext formContext) {
   Element? invalid;
   void visit(Element element) {
     if (invalid != null) return;
@@ -42,7 +60,7 @@ void revealFirstInvalidField(BuildContext formContext) {
 
   formContext.visitChildElements(visit);
   final field = invalid;
-  if (field == null) return;
+  if (field == null) return false;
   Scrollable.ensureVisible(
     field,
     alignment: 0.15,
@@ -61,4 +79,5 @@ void revealFirstInvalidField(BuildContext formContext) {
 
   field.visitChildren(findEditable);
   focusNode?.requestFocus();
+  return true;
 }

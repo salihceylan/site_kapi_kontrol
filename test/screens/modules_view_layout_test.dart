@@ -108,7 +108,7 @@ void main() {
       );
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
 
-      expect(find.byType(Switch), findsNothing, reason: 'site yöneticisinde anahtar yok');
+      expect(doorModuleSwitch, findsNothing, reason: 'site yöneticisinde anahtar yok');
       expect(find.widgetWithText(StatusChip, 'Talep gönderildi'), findsOneWidget);
       expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(5));
       expect(find.widgetWithText(StatusChip, 'Her sitede açık'), findsNWidgets(2));
@@ -124,7 +124,7 @@ void main() {
 
     listMatrix('talepsiz görünüm: "Tanımlı değil" + Modül Talep Et; boş talep listesi', (t, w, h, s, dark) async {
       await _pump(t, _managerAuth(door: false), width: w, height: h, scale: s, dark: dark);
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
       expect(find.widgetWithText(StatusChip, 'Tanımlı değil'), findsOneWidget);
       expect(find.text('Modül Talep Et'), findsOneWidget);
       expect(find.text('Talebi Geri Çek'), findsNothing);
@@ -134,7 +134,7 @@ void main() {
     testWidgets('Geçiş Kontrol tanımlıysa çip "Tanımlı"; kapatma/talep düğmesi yok', (t) async {
       await _pump(t, _managerAuth(door: true));
       expect(find.widgetWithText(StatusChip, 'Tanımlı'), findsOneWidget);
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
       expect(find.text('Modül Talep Et'), findsNothing);
       expect(find.text('Talebi Geri Çek'), findsNothing);
       expect(find.widgetWithText(StatusChip, 'Açık'), findsNothing,
@@ -145,11 +145,11 @@ void main() {
       // mdState superView:true -> can_toggle: true (yönetici oturumunda bile anahtar çıkmamalı).
       final auth = ModulesFakeAuth(fixtureRole: UserRole.siteManager);
       await _pump(t, auth);
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
 
       final superAuth = ModulesFakeAuth();
       await _pump(t, superAuth);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
       expect(superAuth.listRequestCalls, isEmpty, reason: 'süper kullanıcı için talep listesi çekilmez');
       expect(find.text('Modül Taleplerim'), findsNothing);
       expect(find.text('Modül Talep Et'), findsNothing);
@@ -164,7 +164,7 @@ void main() {
       await _pump(t, auth);
       expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
       expect(find.widgetWithText(StatusChip, 'Bekleyen talep var'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
     });
 
     testWidgets('enabled, request_status\'tan ÖNCELİKLİDİR: açık modülde "Talep gönderildi" / düğme gösterilmez', (t) async {
@@ -202,7 +202,7 @@ void main() {
       expect(find.text('Modül Talep Et'), findsNothing);
       expect(find.text('Talebi Geri Çek'), findsNothing);
       expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
     });
 
     testWidgets('Modül Talep Et: not alanlı pencere -> talep gider (not kırpılır) -> çip ve liste güncellenir', (t) async {
@@ -358,7 +358,7 @@ void main() {
       expect(find.text('Modüller'), findsOneWidget);
       expect(find.text('Site Modülleri'), findsOneWidget);
       expect(find.text('Geçiş Kontrol (SmartKeyPass)'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget,
+      expect(doorModuleSwitch, findsOneWidget,
           reason: 'yalnız açılıp kapatılabilen modülde anahtar var');
       expect(find.widgetWithText(StatusChip, 'Açık'), findsOneWidget);
       expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(5));
@@ -377,7 +377,7 @@ void main() {
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
       expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
       expect(find.widgetWithText(StatusChip, 'Açık'), findsNothing);
-      expect(t.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(t.widget<Switch>(doorModuleSwitch).value, isFalse);
     });
 
     listMatrix('boş durumlar: onaylı site yok', (t, w, h, s, dark) async {
@@ -400,7 +400,7 @@ void main() {
       final auth = ModulesFakeAuth()..sitesGate = Completer<void>();
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
       expect(find.byType(ListSkeleton), findsOneWidget);
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
     });
 
     listMatrix('yükleniyor: modüller ve ek roller (site seçici görünür)', (
@@ -416,7 +416,7 @@ void main() {
       await _pump(t, auth, width: w, height: h, scale: s, dark: dark);
       expect(find.text('Site Seçin'), findsOneWidget);
       expect(find.byType(ListSkeleton), findsNWidgets(2));
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
     });
 
     listMatrix('hata: siteler yüklenemedi (InlineNotice + Tekrar Dene)', (
@@ -442,7 +442,7 @@ void main() {
       expect(find.byType(InlineNotice), findsNWidgets(2));
       expect(find.text('Bu site üzerinde yönetim yetkiniz bulunmuyor.'), findsOneWidget);
       expect(find.text('Ek roller yüklenemedi (500).'), findsOneWidget);
-      expect(find.byType(Switch), findsNothing);
+      expect(doorModuleSwitch, findsNothing);
     });
   });
 
@@ -452,7 +452,7 @@ void main() {
       final changed = <int>[];
       await _pump(t, auth, onChanged: () => changed.add(1));
 
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       expect(find.byType(AppDialog), findsOneWidget);
       expect(find.text('Geçiş Kontrol Kapatılsın mı?'), findsOneWidget);
       expect(find.text(_doorWarning), findsOneWidget);
@@ -461,7 +461,7 @@ void main() {
       expect(find.byType(AppDialog), findsNothing);
       expect(auth.setCalls, isEmpty);
       expect(changed, isEmpty);
-      expect(t.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(t.widget<Switch>(doorModuleSwitch).value, isTrue);
     });
 
     testWidgets('Kapat -> confirm:true ile istek, çip "Kapalı", otomatik yeniden çekme, onModulesChanged', (t) async {
@@ -470,7 +470,7 @@ void main() {
       await _pump(t, auth, onChanged: () => changed.add(1));
       final readsBefore = auth.getModulesCalls.length;
 
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       await tapText(t, 'Kapat');
       await settleFor(t);
 
@@ -480,7 +480,7 @@ void main() {
       expect(auth.setCalls.single.enabled, isFalse);
       expect(auth.setCalls.single.confirm, isTrue);
       expect(find.widgetWithText(StatusChip, 'Kapalı'), findsOneWidget);
-      expect(t.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(t.widget<Switch>(doorModuleSwitch).value, isFalse);
       expect(find.text('Geçiş Kontrol (SmartKeyPass) kapatıldı.'), findsOneWidget);
       expect(changed, hasLength(1));
       expect(auth.getModulesCalls.length, readsBefore + 1,
@@ -493,7 +493,7 @@ void main() {
       );
       await _pump(t, auth);
 
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       await settleFor(t);
 
       expect(find.byType(AppDialog), findsNothing);
@@ -509,12 +509,12 @@ void main() {
       final changed = <int>[];
       await _pump(t, auth, onChanged: () => changed.add(1));
 
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       await tapText(t, 'Kapat');
       await settleFor(t);
 
       expect(find.text('Bu modül kapatılamaz.'), findsOneWidget);
-      expect(t.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(t.widget<Switch>(doorModuleSwitch).value, isTrue);
       expect(changed, hasLength(1),
           reason: 'hata/zaman aşımı olsa da menü süzgeci sunucudan yeniden okunur');
     });
@@ -525,7 +525,7 @@ void main() {
       )..demandConfirm = true;
       await _pump(t, auth);
 
-      await tapFinder(t, find.byType(Switch)); // açmaya çalış: ilk istek confirm:false
+      await tapFinder(t, doorModuleSwitch); // açmaya çalış: ilk istek confirm:false
       expect(auth.setCalls.single.confirm, isFalse);
       expect(find.text('Onay Gerekli'), findsOneWidget);
       expect(find.text(_doorWarning), findsOneWidget);
@@ -712,7 +712,7 @@ void main() {
       await tapText(t, 'Tekrar Dene');
       await settleFor(t);
       expect(find.text('Tekrar Dene'), findsNothing);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
     });
 
     testWidgets('site listesi hatasından sonra Tekrar Dene sürerken iskelet gösterilir (yanıltıcı boş durum yanıp sönmez)', (t) async {
@@ -730,7 +730,7 @@ void main() {
 
       auth.sitesGate!.complete();
       await settleFor(t);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
     });
 
     testWidgets('ek rol listesi boşken yenileme hatası "Ek rol atanmamış." diye gizlenmez; Tekrar Dene çalışır', (t) async {
@@ -757,7 +757,7 @@ void main() {
 
       // 1) A sitesinde Geçiş Kontrol'ü kapat; istek sürerken beklet.
       auth.setGate = Completer<void>();
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       await tapText(t, 'Kapat');
       expect(auth.setCalls, hasLength(1));
 
@@ -777,7 +777,7 @@ void main() {
       // 4) B'nin yanıtı gelir: içerik görünür, iskelette kalmaz.
       auth.modulesGate!.complete();
       await settleFor(t);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
       expect(find.byType(ListSkeleton), findsNothing);
     });
 
@@ -786,7 +786,7 @@ void main() {
       final changed = <int>[];
       await _pump(t, auth, onChanged: () => changed.add(1));
       auth.setGate = Completer<void>();
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       await tapText(t, 'Kapat');
 
       await t.pumpWidget(const SizedBox()); // ekran kapandı
@@ -801,7 +801,7 @@ void main() {
       await _pump(t, auth);
       auth.modulesGate = Completer<void>();
       await tapFinder(t, find.byTooltip('Yenile'));
-      expect(find.byType(Switch), findsOneWidget);
+      expect(doorModuleSwitch, findsOneWidget);
       expect(find.byType(ListSkeleton), findsNothing);
     });
   });

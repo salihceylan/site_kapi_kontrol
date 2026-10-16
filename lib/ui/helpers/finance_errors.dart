@@ -1,7 +1,17 @@
+import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
-import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 
 /// Mali yazma hatalarının ortak yardımcıları (Platform Faz 4a).
+
+/// Mali akışlarda kullanıcıya gösterilecek hata metni: sunucu Türkçe bir metin verdiyse o; sunucu metin
+/// vermediyse (mesaj yalnız "İşlem başarısız (502)" gibi teknik yedekse), ağ / ayrıştırma hatasıysa ya da mesaj
+/// boşsa bağlama uygun Türkçe [fallback]. Durum kodu ve hata numarası kullanıcıya gösterilmez.
+String financeMessageOf(Object error, String fallback) {
+  if (error is ApiException && !error.genericFallback && error.message.trim().isNotEmpty) {
+    return error.message;
+  }
+  return fallback;
+}
 
 /// İstek sunucuya ulaşmış olabilir mi (sonuç BELİRSİZ)? Ağ / zaman aşımı (durum kodu yok), 5xx ya da araya
 /// giren katman. 4xx hatalar kesin reddir: kayıt oluşmamıştır.
@@ -27,7 +37,7 @@ const String kFinanceUncertainStateHint = 'İşlem tamamlanmış olabilir; günc
 /// Yazma hatasının kullanıcı metni: sunucu metni (Türkçe eşlenmiş) ya da [fallback]; sonuç belirsizse
 /// [hint] eklenir (varsayılan: idempotent yazma ipucu).
 String financeWriteMessage(Object error, String fallback, {String hint = kFinanceUncertainHint}) {
-  final base = crmMessageOf(error, fallback);
+  final base = financeMessageOf(error, fallback);
   if (!financeOutcomeUncertain(error)) return base;
   final trimmed = base.endsWith('.') ? base : '$base.';
   return '$trimmed $hint';
@@ -39,3 +49,15 @@ bool isFinanceModuleDisabled(Object error) =>
 
 /// Hata kodu [code] mu?
 bool hasErrorCode(Object error, String code) => error is ApiException && error.code == code;
+
+/// 409 `PREVIEW_STALE` yanıtındaki güncel toplam / sayı / içerik özeti; hata başka bir hataysa null.
+PreviewStaleInfo? previewStaleInfoOf(Object error) {
+  if (!hasErrorCode(error, 'PREVIEW_STALE')) return null;
+  return PreviewStaleInfo.fromPayload((error as ApiException).payload);
+}
+
+/// 409 `DUPLICATE_CHARGE` yanıtındaki önceki kayıt bilgisi; hata başka bir hataysa null.
+DuplicateChargeInfo? duplicateChargeInfoOf(Object error) {
+  if (!hasErrorCode(error, 'DUPLICATE_CHARGE')) return null;
+  return DuplicateChargeInfo.fromPayload((error as ApiException).payload);
+}

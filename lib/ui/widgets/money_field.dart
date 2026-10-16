@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 
@@ -8,8 +7,9 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 /// REDDEDİLİR (sessiz yuvarlama / kırpma yok). Yazarken alanın altında ayrıştırılan tutar gösterilir
 /// ("Girilen tutar: 1.250,50 ₺"), böylece yanlış anlaşılan ayırıcı gönderimden ÖNCE fark edilir.
 ///
-/// Klavye sayısaldır; yapıştırılan metinden yalnız rakam, nokta, virgül, boşluk, artı/eksi ve "₺" korunur
-/// (eksi işareti bilerek korunur: doğrulayıcı "negatif olamaz" der, sessizce işaret düşürülmez).
+/// Klavye sayısaldır ama girilen / yapıştırılan HİÇBİR karakter sessizce silinmez ya da kısaltılmaz ("1,5E3"
+/// "1,53" olmaz, "12a5" "125" olmaz): geçersiz karakter içeren giriş doğrulayıcıdan GÖRÜNÜR hata alır ve
+/// gönderilemez (eksi işareti de korunur: "negatif olamaz" denir).
 ///
 /// DİKKAT: [key] ZORUNLUDUR. İçindeki `TextFormField` durumlu olduğundan, anahtarsız kullanılırsa üst `Column`
 /// çocuk listesi değiştiğinde (örn. doğrulama özeti eklenince) eleman yeniden kurulur ve alanın doğrulama hatası
@@ -46,9 +46,6 @@ class MoneyFormField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
   final bool showPreview;
 
-  /// Girişten izin verilen karakterler.
-  static final RegExp allowed = RegExp('[0-9.,+\\-−₺ ]');
-
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -64,10 +61,7 @@ class MoneyFormField extends StatelessWidget {
           textInputAction: textInputAction,
           onChanged: onChanged,
           onFieldSubmitted: onSubmitted,
-          inputFormatters: <TextInputFormatter>[
-            FilteringTextInputFormatter.allow(allowed),
-            LengthLimitingTextInputFormatter(24),
-          ],
+          // Girişi süzen / kısaltan biçimlendirici YOKTUR: geçersiz karakter sessizce düşmez, doğrulayıcı söyler.
           autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             labelText: label,

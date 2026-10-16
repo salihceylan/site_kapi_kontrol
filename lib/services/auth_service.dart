@@ -1718,6 +1718,7 @@ class AuthService extends ChangeNotifier {
     DateTime? dueDate,
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
   }) {
@@ -1730,6 +1731,7 @@ class AuthService extends ChangeNotifier {
         dueDate: dueDate,
         expectedTotalMinor: expectedTotalMinor,
         expectedApartmentCount: expectedApartmentCount,
+        expectedHash: expectedHash,
         skipMissing: skipMissing,
         idempotencyKey: idempotencyKey,
       ),
@@ -1742,13 +1744,17 @@ class AuthService extends ChangeNotifier {
     );
   }
 
+  /// Ek borç: [idempotencyKey] ZORUNLU; aynı ek borç son 24 saatte yazıldıysa 409 `DUPLICATE_CHARGE`
+  /// ([allowDuplicate] bilinçli tekrar için).
   Future<FeePostResult> postExtraCharge(
     int siteCode,
     ExtraChargeInput input, {
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
-    String? idempotencyKey,
+    bool allowDuplicate = false,
+    required String idempotencyKey,
   }) {
     return _runAuthorized(
       (token) => api.postExtraCharge(
@@ -1757,7 +1763,9 @@ class AuthService extends ChangeNotifier {
         input: input,
         expectedTotalMinor: expectedTotalMinor,
         expectedApartmentCount: expectedApartmentCount,
+        expectedHash: expectedHash,
         skipMissing: skipMissing,
+        allowDuplicate: allowDuplicate,
         idempotencyKey: idempotencyKey,
       ),
     );

@@ -4,9 +4,13 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
+import 'package:site_kapi_kontrol/ui/helpers/focus_helpers.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_target_picker.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -35,11 +39,13 @@ class _CategoryRow {
 
   final TextEditingController name;
   final TextEditingController amount;
+  final FocusNode nameFocus = FocusNode();
   final Key key = UniqueKey();
 
   void dispose() {
     name.dispose();
     amount.dispose();
+    nameFocus.dispose();
   }
 }
 
@@ -109,6 +115,10 @@ class FeeSpecFormState extends State<FeeSpecForm> {
       _CategoryRow(name: entry.key, amount: formatMinor(entry.value, symbol: false)),
   ];
   String? _categoryError;
+  final GlobalKey _categoryErrorKey = GlobalKey();
+
+  // "Kategori Ekle" düğmesini saran odak düğümü: son satır silinince odak bu düğmeye taşınır.
+  final FocusNode _addFocus = FocusNode(skipTraversal: true, canRequestFocus: false);
 
   @override
   void initState() {
@@ -119,6 +129,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
   @override
   void dispose() {
     _amount.dispose();
+    _addFocus.dispose();
     for (final row in _rows) {
       row.dispose();
     }
@@ -138,6 +149,17 @@ class FeeSpecFormState extends State<FeeSpecForm> {
     }
     final targetOk = _targetKey.currentState?.validate() ?? true;
     return ok && targetOk;
+  }
+
+  /// Alan düzeyi hata yokken İLK ek hatayı (kategori listesi, sonra hedef) görünür kılar; gösterdiyse true.
+  /// Hata bildirimleri kendilerini kaydırmaz: görünür kılma yalnız bu yolla (üst `validateForm` zinciri) olur.
+  bool revealFirstError() {
+    final categoryContext = _categoryError == null ? null : _categoryErrorKey.currentContext;
+    if (categoryContext != null) {
+      Scrollable.ensureVisible(categoryContext, alignment: 0.15, duration: Duration.zero);
+      return true;
+    }
+    return _targetKey.currentState?.revealError() ?? false;
   }
 
   String? _categoryProblem() {
@@ -195,14 +217,21 @@ class FeeSpecFormState extends State<FeeSpecForm> {
       setState(() => _categoryError = 'En çok ${FeeSpecForm.maxCategories} kategori eklenebilir.');
       return;
     }
+    final row = _CategoryRow();
     setState(() {
       _categoryError = null;
-      _rows.add(_CategoryRow());
+      _rows.add(row);
     });
     _changed();
+    // Odak yeni satırın ad alanına taşınır (klavye / ekran okuyucu kullanıcısı yeni satıra iner).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _rows.contains(row)) row.nameFocus.requestFocus();
+    });
+    announcePolite(context, 'Kategori satırı eklendi. Toplam ${_rows.length} satır.');
   }
 
   void _removeRow(_CategoryRow row) {
+    final index = _rows.indexOf(row);
     setState(() {
       _rows.remove(row);
       _categoryError = null;
@@ -210,6 +239,18 @@ class FeeSpecFormState extends State<FeeSpecForm> {
     // Denetleyiciler bu çerçeve bittikten sonra atılır (alan hâlâ ağaçtadır).
     WidgetsBinding.instance.addPostFrameCallback((_) => row.dispose());
     _changed();
+    // Silinen düğmenin odağı kaybolmasın: bir sonraki (yoksa önceki) satırın adına, hiç satır kalmadıysa
+    // "Kategori Ekle" düğmesine taşınır.
+    final next = _rows.isEmpty ? null : _rows[index.clamp(0, _rows.length - 1)];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (next != null && _rows.contains(next)) {
+        next.nameFocus.requestFocus();
+      } else {
+        focusFirstWithin(_addFocus);
+      }
+    });
+    announcePolite(context, 'Kategori satırı kaldırıldı. Kalan ${_rows.length} satır.');
   }
 
   @override
@@ -221,7 +262,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Dağıtım yöntemi', style: th.titleSmall),
+        const FinanceGroupTitle('Dağıtım yöntemi'),
         const SizedBox(height: AppSpace.sm),
         Wrap(
           spacing: AppSpace.sm,
@@ -244,7 +285,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
         ),
         if (_distribution == FeeDistribution.area) ...[
           const SizedBox(height: AppSpace.md),
-          Text('Metrekare türü', style: th.titleSmall),
+          const FinanceGroupTitle('Metrekare türü'),
           const SizedBox(height: AppSpace.sm),
           Wrap(
             spacing: AppSpace.sm,
@@ -278,7 +319,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
         ],
         if (_distribution == FeeDistribution.category) ...[
           const SizedBox(height: AppSpace.md),
-          Text('Kategori tutarları', style: th.titleSmall),
+          const FinanceGroupTitle('Kategori tutarları'),
           const SizedBox(height: AppSpace.xs),
           Text(
             'Kategori adı, dairelerin Kişiler > Daireler ekranındaki kategorisiyle aynı yazılmalıdır. '
@@ -290,20 +331,25 @@ class FeeSpecFormState extends State<FeeSpecForm> {
             _buildRow(context, i, _rows[i]),
             const SizedBox(height: AppSpace.sm),
           ],
-          if (_categoryError != null) ...[
-            Text(
-              _categoryError!,
-              key: ValueKey<String>('${prefix}_category_error'),
-              style: th.bodySmall?.copyWith(color: AppTone.danger.ink(p), fontWeight: FontWeight.w700),
+          if (_categoryError != null)
+            KeyedSubtree(
+              key: _categoryErrorKey,
+              child: CrmFormError(
+                key: ValueKey<String>('${prefix}_category_error'),
+                message: _categoryError!,
+                // Görünür kılma işini üst form doğrulaması yapar ([revealFirstError]); iki kaydırma yarışmasın.
+                reveal: false,
+              ),
             ),
-            const SizedBox(height: AppSpace.sm),
-          ],
-          PrimaryActionButton(
-            key: ValueKey<String>('${prefix}_add_category'),
-            label: 'Kategori Ekle',
-            icon: Icons.add_rounded,
-            variant: AppButtonVariant.outline,
-            onPressed: enabled ? _addRow : null,
+          Focus(
+            focusNode: _addFocus,
+            child: PrimaryActionButton(
+              key: ValueKey<String>('${prefix}_add_category'),
+              label: 'Kategori Ekle',
+              icon: Icons.add_rounded,
+              variant: AppButtonVariant.outline,
+              onPressed: enabled ? _addRow : null,
+            ),
           ),
         ],
         const SizedBox(height: AppSpace.lg),
@@ -329,6 +375,7 @@ class FeeSpecFormState extends State<FeeSpecForm> {
           TextFormField(
             key: ValueKey<String>('${prefix}_category_name_$index'),
             controller: row.name,
+            focusNode: row.nameFocus,
             enabled: enabled,
             textInputAction: TextInputAction.next,
             maxLength: FeeSpecForm.maxCategoryNameLength,

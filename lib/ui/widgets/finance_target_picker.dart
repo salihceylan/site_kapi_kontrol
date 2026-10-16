@@ -6,8 +6,11 @@ import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_pickers.dart';
+import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
+import 'package:site_kapi_kontrol/ui/helpers/focus_helpers.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Hedefte seçilmiş bir blok ya da daire (etiketiyle).
 typedef _Picked = ({int id, String label});
@@ -52,6 +55,16 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
   List<SiteBlockRecord>? _blockCache;
   bool _picking = false;
   String? _error;
+  final GlobalKey _errorKey = GlobalKey();
+
+  // "Blok / Daire Ekle" düğmesini saran odak düğümü: çip çıkarılınca odak buraya taşınır.
+  final FocusNode _addFocus = FocusNode(skipTraversal: true, canRequestFocus: false);
+
+  @override
+  void dispose() {
+    _addFocus.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -96,6 +109,22 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
     };
     if (problem != _error) setState(() => _error = problem);
     return problem == null;
+  }
+
+  /// Hedef hatası görünürse kaydırıp görünür kılar (true). Hata bildirimi kendini kaydırmaz: görünür kılma
+  /// yalnız üst form doğrulama zincirinden ya da bu çağrıdan olur (iki kaydırma yarışmasın).
+  bool revealError() {
+    final errorContext = _error == null ? null : _errorKey.currentContext;
+    if (errorContext == null) return false;
+    Scrollable.ensureVisible(errorContext, alignment: 0.15, duration: Duration.zero);
+    return true;
+  }
+
+  void _showError(String message) {
+    setState(() => _error = message);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) revealError();
+    });
   }
 
   Future<List<SiteBlockRecord>> _loadBlocks() async {
@@ -179,7 +208,7 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
     final block = picked;
     if (block == null || !mounted || _blockIds.contains(block.id)) return;
     if (_blockIds.length >= FinanceTargetPicker.maxItems) {
-      setState(() => _error = _tooMany);
+      _showError(_tooMany);
       return;
     }
     setState(() {
@@ -204,7 +233,7 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
     final apartment = picked;
     if (apartment == null || !mounted || _apartmentIds.contains(apartment.id)) return;
     if (_apartmentIds.length >= FinanceTargetPicker.maxItems) {
-      setState(() => _error = _tooMany);
+      _showError(_tooMany);
       return;
     }
     setState(() {
@@ -223,7 +252,7 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Hedef', style: th.titleSmall),
+        const FinanceGroupTitle('Hedef'),
         const SizedBox(height: AppSpace.sm),
         Wrap(
           spacing: AppSpace.sm,
@@ -249,7 +278,7 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
             onAdd: _pickBlock,
             onRemove: (id) {
               setState(() => _blocks = _blocks.where((b) => b.id != id).toList());
-              _changed();
+              _afterRemove('blok');
             },
             onClearKept: () {
               setState(() => _keptBlockIds = const <int>[]);
@@ -267,7 +296,7 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
             onAdd: _pickApartment,
             onRemove: (id) {
               setState(() => _apartments = _apartments.where((a) => a.id != id).toList());
-              _changed();
+              _afterRemove('daire');
             },
             onClearKept: () {
               setState(() => _keptApartmentIds = const <int>[]);
@@ -283,10 +312,22 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
         ],
         if (_error != null) ...[
           const SizedBox(height: AppSpace.sm),
-          CrmFormError(message: _error!),
+          KeyedSubtree(
+            key: _errorKey,
+            child: CrmFormError(message: _error!, reveal: false),
+          ),
         ],
       ],
     );
+  }
+
+  /// Çip çıkarıldı: silinen düğmenin odağı kaybolmasın, "Ekle" düğmesine taşınır.
+  void _afterRemove(String noun) {
+    _changed();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) focusFirstWithin(_addFocus);
+    });
+    announcePolite(context, 'Seçili $noun hedeften çıkarıldı.');
   }
 
   List<Widget> _section(
@@ -338,12 +379,15 @@ class FinanceTargetPickerState extends State<FinanceTargetPicker> {
         ),
         const SizedBox(height: AppSpace.sm),
       ],
-      PrimaryActionButton(
-        key: ValueKey<String>(addKey),
-        label: addLabel,
-        icon: Icons.add_rounded,
-        variant: AppButtonVariant.outline,
-        onPressed: widget.enabled ? onAdd : null,
+      Focus(
+        focusNode: _addFocus,
+        child: PrimaryActionButton(
+          key: ValueKey<String>(addKey),
+          label: addLabel,
+          icon: Icons.add_rounded,
+          variant: AppButtonVariant.outline,
+          onPressed: widget.enabled ? onAdd : null,
+        ),
       ),
     ];
   }

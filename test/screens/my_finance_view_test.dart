@@ -341,4 +341,101 @@ void main() {
       }
     });
   });
+  // ---------------------------------------------------------------------------------------------------
+  // İnceleme düzeltmeleri (W10, W14): tutar okunuşu, kim öder bilgisi, yönetici notu ve kayıt numarası yok.
+  // ---------------------------------------------------------------------------------------------------
+
+  group('W10 / W14: sakin ekranı', () {
+    testWidgets('toplam kartı tutarları okunuşla tek etiketle bildirir (rakam yığını değil)', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..myFinanceItems = <Map<String, dynamic>>[
+          finMyItem(),
+          finMyItem(
+            siteCode: 12,
+            siteName: 'Mavi Park',
+            apartmentId: 502,
+            label: 'C Blok - 1',
+            balance: -250000,
+            overdue: 0,
+            nextDueDate: null,
+            nextDueMinor: null,
+            recent: const <Map<String, dynamic>>[],
+          ),
+        ];
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      expect(
+        find.bySemanticsLabel('Toplam borç: bin lira. Toplam alacak: iki bin beş yüz lira.'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('daire kartının birleşik etiketi "kim öder" bilgisini de söyler', (t) async {
+      final auth = FinanceFakeAuth.seeded()..myFinanceItems = <Map<String, dynamic>>[finMyItem()];
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      expect(find.bySemanticsLabel(RegExp(r'Sıradaki vade: 25\.10\.2026, beş yüz lira\. Malik öder\.')), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('sunucu yönetici notu / iptal nedeni / kaydeden gönderse bile sakin görmez', (t) async {
+      final entry = <String, dynamic>{
+        ...finEntry(2, 301, amount: 50000, dueDate: '2026-10-25', definitionName: 'Aylık aidat'),
+        'description': 'Yönetici notu: gizli',
+        'reversal_reason': 'Gizli iptal nedeni',
+        'created_by_name': 'Site Yöneticisi',
+        'reversed_by_entry_id': null,
+      };
+      final tahsilat = <String, dynamic>{
+        ...finEntry(7, 301, kind: 'payment', amount: -20000, method: 'cash'),
+        'description': 'Yönetici notu: elden',
+        'created_by_name': 'Site Yöneticisi',
+        'reversed_by_entry_id': null,
+      };
+      final auth = FinanceFakeAuth.seeded()
+        ..myFinanceItems = <Map<String, dynamic>>[
+          finMyItem(recent: <Map<String, dynamic>>[entry, tahsilat]),
+        ];
+      await _pump(t, auth);
+      expect(find.byType(LedgerEntryTile), findsNWidgets(2));
+      expect(find.textContaining('Yönetici notu'), findsNothing);
+      expect(find.textContaining('Gizli iptal nedeni'), findsNothing);
+      expect(find.textContaining('Site Yöneticisi'), findsNothing);
+      expect(find.textContaining('Neden:'), findsNothing);
+    });
+
+    testWidgets('ters kayıt satırı kayıt NUMARASI yazmaz; ilgili kaydın tarih ve tutarını yazar', (t) async {
+      final original = <String, dynamic>{
+        ...finEntry(2, 301, amount: 50000, entryDate: '2026-10-01', definitionName: 'Aylık aidat'),
+        'reversed_by_entry_id': 9,
+      };
+      final reversal = <String, dynamic>{
+        ...finEntry(9, 301, kind: 'reversal', amount: -50000, entryDate: '2026-10-05', reverses: 2),
+        'reversed_by_entry_id': null,
+      };
+      final orphan = <String, dynamic>{
+        ...finEntry(11, 301, kind: 'reversal', amount: -1000, entryDate: '2026-10-06', reverses: 4),
+        'reversed_by_entry_id': null,
+      };
+      final auth = FinanceFakeAuth.seeded()
+        ..myFinanceItems = <Map<String, dynamic>>[
+          finMyItem(recent: <Map<String, dynamic>>[orphan, reversal, original]),
+        ];
+      await _pump(t, auth);
+      expect(find.text('Şu kaydın ters kaydı: 01.10.2026 • 500,00 ₺'), findsOneWidget);
+      expect(find.text('Ters kayıtla iptal edildi: 05.10.2026 • 500,00 ₺'), findsOneWidget);
+      expect(find.text('Daha önceki bir kaydın ters kaydı'), findsOneWidget, reason: 'ilgili kayıt listede yoksa genel metin');
+      expect(find.textContaining('#'), findsNothing);
+      expect(find.textContaining('numaralı'), findsNothing);
+    });
+  });
+  testWidgets('W11: Borcum 502 (metinsiz): teknik metin yok, Türkçe yedek var; "Borcunuz yok" demez', (t) async {
+    final auth = FinanceFakeAuth.seeded()
+      ..myFinanceError = ApiException('İşlem başarısız (502)', statusCode: 502, genericFallback: true);
+    await _pump(t, auth);
+    expect(find.text('Borç bilgisi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+    expect(find.textContaining('502'), findsNothing);
+    expect(find.textContaining('Borcunuz yok'), findsNothing);
+  });
 }

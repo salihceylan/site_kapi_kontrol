@@ -242,6 +242,7 @@ void main() {
         period: const FinancePeriod(2026, 10),
         expectedTotalMinor: 100000,
         expectedApartmentCount: 2,
+        expectedHash: 'abc123',
         idempotencyKey: 'run-abc',
       );
       expect(rec.last.url.path, '/manager/sites/7/finance/definitions/7/post');
@@ -249,6 +250,7 @@ void main() {
         'period': '2026-10',
         'expected_total_minor': 100000,
         'expected_apartment_count': 2,
+        'expected_hash': 'abc123',
         'idempotency_key': 'run-abc',
       });
       expect(result.totalMinor, 100000);
@@ -265,6 +267,8 @@ void main() {
       );
       expect(rec.lastBody['skip_missing'], true);
       expect(rec.lastBody.containsKey('idempotency_key'), isFalse);
+      // Önizleme özeti yoksa (eski sunucu) `expected_hash` hiç gönderilmez.
+      expect(rec.lastBody.containsKey('expected_hash'), isFalse);
     });
 
     test('aynı anahtarla tekrar (200) başarıdır', () async {
@@ -311,15 +315,139 @@ void main() {
         input: input,
         expectedTotalMinor: 12000000,
         expectedApartmentCount: 30,
+        expectedHash: 'h-1',
         idempotencyKey: 'chg-1',
       );
       expect(rec.last.method, 'POST');
       expect(rec.last.url.path, '/manager/sites/7/finance/charges');
       expect(rec.lastBody['expected_total_minor'], 12000000);
       expect(rec.lastBody['expected_apartment_count'], 30);
+      expect(rec.lastBody['expected_hash'], 'h-1');
       expect(rec.lastBody['idempotency_key'], 'chg-1');
       expect(rec.lastBody['due_date'], '2026-11-05');
+      // Bilinçli tekrar bayrağı yalnız istenince gider.
+      expect(rec.lastBody.containsKey('allow_duplicate'), isFalse);
       expect(result.entriesCount, 2);
+
+      await api.postExtraCharge(
+        token: 'tok',
+        siteCode: 7,
+        input: input,
+        expectedTotalMinor: 12000000,
+        expectedApartmentCount: 30,
+        expectedHash: 'h-1',
+        allowDuplicate: true,
+        idempotencyKey: 'chg-2',
+      );
+      expect(rec.lastBody['allow_duplicate'], true);
+      expect(rec.lastBody['idempotency_key'], 'chg-2');
+    });
+
+    test('önizleme yanıtı: preview_hash, redistributed, skipped_count, duplicate_of_run_id okunur', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json(<String, dynamic>{
+        ..._preview(),
+        'preview_hash': 'f00d',
+        'redistributed': true,
+        'skipped_count': 3,
+        'duplicate_of_run_id': 41,
+      }));
+      final preview = await api.previewExtraCharge(
+        token: 'tok',
+        siteCode: 7,
+        input: const ExtraChargeInput(name: 'E', distribution: FeeDistribution.equal, amountMinor: 100),
+      );
+      expect(preview.previewHash, 'f00d');
+      expect(preview.redistributed, isTrue);
+      expect(preview.skippedCount, 3);
+      expect(preview.duplicateOfRunId, 41);
+
+      // Alanlar yoksa (eski sunucu) güvenli varsayılanlar.
+      final plain = _api(rec, (r) => _json(_preview()));
+      final old = await plain.previewFeeRun(token: 'tok', siteCode: 7, definitionId: 7);
+      expect(old.previewHash, isNull);
+      expect(old.redistributed, isFalse);
+      expect(old.skippedCount, 0);
+      expect(old.duplicateOfRunId, isNull);
+    });
+
+    test('409 PREVIEW_STALE ve DUPLICATE_CHARGE: ek alanlar ApiException.payload içinde', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) {
+        if (r.url.path.endsWith('/post')) {
+          return _json(<String, dynamic>{
+            ..._error('PREVIEW_STALE', 'Önizleme güncelliğini yitirdi.'),
+            'total_minor': 123400,
+            'apartment_count': 3,
+            'preview_hash': 'beef',
+          }, 409);
+        }
+        return _json(<String, dynamic>{
+          ..._error('DUPLICATE_CHARGE', 'Aynı ek borç.'),
+          'existing_run_id': 12,
+          'posted_at': '2026-10-16T08:30:00.000Z',
+        }, 409);
+      });
+      final stale = await api
+          .postFeeRun(
+            token: 'tok',
+            siteCode: 7,
+            definitionId: 7,
+            expectedTotalMinor: 100,
+            expectedApartmentCount: 1,
+          )
+          .then<ApiException?>((_) => null, onError: (Object e) => e as ApiException);
+      final staleInfo = PreviewStaleInfo.fromPayload(stale!.payload);
+      expect(stale.code, 'PREVIEW_STALE');
+      expect(staleInfo.totalMinor, 123400);
+      expect(staleInfo.apartmentCount, 3);
+      expect(staleInfo.previewHash, 'beef');
+
+      final dup = await api
+          .postExtraCharge(
+            token: 'tok',
+            siteCode: 7,
+            input: const ExtraChargeInput(name: 'E', distribution: FeeDistribution.equal, amountMinor: 100),
+            expectedTotalMinor: 100,
+            expectedApartmentCount: 1,
+            idempotencyKey: 'k',
+          )
+          .then<ApiException?>((_) => null, onError: (Object e) => e as ApiException);
+      final dupInfo = DuplicateChargeInfo.fromPayload(dup!.payload);
+      expect(dup.code, 'DUPLICATE_CHARGE');
+      expect(dupInfo.existingRunId, 12);
+      expect(dupInfo.postedAt, DateTime.utc(2026, 10, 16, 8, 30));
+      // Payload yoksa güvenli boş değerler.
+      expect(PreviewStaleInfo.fromPayload(null).totalMinor, isNull);
+      expect(DuplicateChargeInfo.fromPayload(null).postedAt, isNull);
+    });
+
+    test('listFeeDefinitions: total daha büyükse sonraki sayfalar offset ile istenir ve birleştirilir', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) {
+        final offset = int.tryParse(r.url.queryParameters['offset'] ?? '0') ?? 0;
+        final ids = offset == 0 ? <int>[1, 2] : (offset == 2 ? <int>[2, 3] : <int>[]);
+        return _json(<String, dynamic>{
+          'items': <Map<String, dynamic>>[for (final id in ids) _definition(id: id)],
+          'total': 3,
+        });
+      });
+      final items = await api.listFeeDefinitions(token: 'tok', siteCode: 7);
+      expect(rec.requests.length, 2);
+      expect(rec.requests.first.url.queryParameters, isEmpty, reason: 'ilk istek varsayılan sayfa');
+      expect(rec.requests.last.url.queryParameters['offset'], '2');
+      expect(rec.requests.last.url.queryParameters['limit'], '100');
+      // Sayfa kayması: aynı kimlik iki kez eklenmez.
+      expect(items.map((d) => d.id), <int>[1, 2, 3]);
+    });
+
+    test('listFeeDefinitions: total yoksa (eski sunucu) tek istek yeter', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json(<String, dynamic>{
+        'items': <Map<String, dynamic>>[_definition(id: 1)],
+      }));
+      expect((await api.listFeeDefinitions(token: 'tok', siteCode: 7)).length, 1);
+      expect(rec.requests.length, 1);
     });
   });
 
@@ -548,6 +676,7 @@ void main() {
       'APARTMENT_HAS_FINANCE',
       'NOTHING_TO_POST',
       'IDEMPOTENCY_CONFLICT',
+      'DUPLICATE_CHARGE',
       'DEFINITION_NOT_FOUND',
       'ENTRY_NOT_FOUND',
       'FORBIDDEN_ROLE',
@@ -568,7 +697,15 @@ void main() {
     test('belirli mesajlar', () {
       expect(
         AuthApi.messageForErrorCode('PREVIEW_STALE'),
-        'Veriler önizlemeden sonra değişti. Önizleme yenilendi; kontrol edip yeniden onaylayın.',
+        'Veriler önizlemeden sonra değişti. Önizlemeyi yenileyip toplamı kontrol edin.',
+      );
+      expect(
+        AuthApi.messageForErrorCode('DUPLICATE_CHARGE'),
+        'Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Önce daire hesaplarını kontrol edin.',
+      );
+      expect(
+        AuthApi.messageForErrorCode('IDEMPOTENCY_CONFLICT'),
+        'Bu işlem daha önce farklı bilgilerle gönderilmiş görünüyor. Önce daire hesaplarını kontrol edin.',
       );
       expect(
         AuthApi.messageForErrorCode('PERIOD_ALREADY_POSTED'),
@@ -601,6 +738,39 @@ void main() {
               .having((e) => e.message, 'message', AuthApi.messageForErrorCode('PERIOD_CLOSED')),
         ),
       );
+    });
+
+    test('sunucu metin göndermezse teknik yedek metin genericFallback ile işaretlenir', () async {
+      final rec = _Recorder();
+      var body = <String, dynamic>{};
+      final api = _api(rec, (r) => _json(body, 502));
+      Future<ApiException> run() async {
+        try {
+          await api.getFinanceSummary(token: 'tok', siteCode: 7);
+        } on ApiException catch (e) {
+          return e;
+        }
+        throw StateError('hata bekleniyordu');
+      }
+
+      final bare = await run();
+      expect(bare.message, 'İşlem başarısız (502)');
+      expect(bare.genericFallback, isTrue);
+
+      body = <String, dynamic>{'errorId': 'abc123'};
+      final withId = await run();
+      expect(withId.genericFallback, isTrue);
+
+      // Sunucu Türkçe metin verdiyse o kullanılır; teknik yedek DEĞİLDİR.
+      body = <String, dynamic>{'error': 'Mali özet şu an hazırlanamıyor.'};
+      final withText = await run();
+      expect(withText.genericFallback, isFalse);
+      expect(withText.message, 'Mali özet şu an hazırlanamıyor.');
+
+      // Kodlu hata: eşlenmiş Türkçe metin.
+      body = _error('MODULE_DISABLED', 'x');
+      final coded = await run();
+      expect(coded.genericFallback, isFalse);
     });
 
     test('INVALID_BODY: Türkçe sunucu metni kullanılır; alan adı jargonu sızmaz', () async {
@@ -865,7 +1035,14 @@ void main() {
       const charge = ExtraChargeInput(name: 'E', distribution: FeeDistribution.equal, amountMinor: 100);
       await s.previewExtraCharge(7, charge);
       expectCall('POST', '/manager/sites/7/finance/charges/preview');
-      await s.postExtraCharge(7, charge, expectedTotalMinor: 100, expectedApartmentCount: 1);
+      await s.postExtraCharge(
+        7,
+        charge,
+        expectedTotalMinor: 100,
+        expectedApartmentCount: 1,
+        expectedHash: 'abc',
+        idempotencyKey: 'chg',
+      );
       expectCall('POST', '/manager/sites/7/finance/charges');
       await s.listFinanceBalances(7, status: 'credit', query: 'a');
       expectCall('GET', '/manager/sites/7/finance/balances');

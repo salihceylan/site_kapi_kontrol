@@ -1770,30 +1770,52 @@ class AuthApi {
   }
 
   /// Tanım listesi. [kind] ve [active] verilmezse süzgeç yok.
+  ///
+  /// Sunucu listeyi sayfalar (`limit/offset` + `total`): bütün sayfalar sırayla okunur ve birleştirilir, böylece
+  /// ekran sessizce ilk sayfada kalmaz. `total` yoksa (eski sunucu) tek yanıt tüm listedir. Sayfa sayısı
+  /// sınırlıdır; aynı kimlik iki kez eklenmez. İlk istekte `limit/offset` gönderilmez.
   Future<List<FeeDefinition>> listFeeDefinitions({
     required String token,
     required int siteCode,
     FeeKind? kind,
     bool? active,
   }) async {
-    final response = await _authorizedRequest(
-      method: 'GET',
-      path: _financePath(siteCode, 'definitions', {
-        if (kind != null && kind != FeeKind.unknown) 'kind': kind.apiValue,
-        'active': ?active?.toString(),
-      }),
-      token: token,
-    );
-    _ensureStatus(response, 200);
-    final payload = _decodePayload(response);
-    return _parsePayload('Tanımlar', () {
-      final raw = payload['items'];
-      if (raw is! List) return const <FeeDefinition>[];
-      return List<FeeDefinition>.unmodifiable(
-        raw.whereType<Map>().map((e) => FeeDefinition.fromJson(Map<String, dynamic>.from(e))),
+    final byId = <int, FeeDefinition>{};
+    var offset = 0;
+    for (var page = 0; page < _maxDefinitionPages; page++) {
+      final response = await _authorizedRequest(
+        method: 'GET',
+        path: _financePath(siteCode, 'definitions', {
+          if (kind != null && kind != FeeKind.unknown) 'kind': kind.apiValue,
+          'active': ?active?.toString(),
+          // İlk istek sunucunun varsayılan sayfasını ister (eski sunucuyla uyumlu); `total` daha fazlasını
+          // bildirirse sonraki sayfalar `offset` ile istenir.
+          if (offset > 0) ...{'limit': '$_definitionPageSize', 'offset': '$offset'},
+        }),
+        token: token,
       );
-    });
+      _ensureStatus(response, 200);
+      final payload = _decodePayload(response);
+      final pageItems = _parsePayload('Tanımlar', () {
+        final raw = payload['items'];
+        if (raw is! List) return const <FeeDefinition>[];
+        return raw
+            .whereType<Map>()
+            .map((e) => FeeDefinition.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      });
+      for (final item in pageItems) {
+        byId.putIfAbsent(item.id, () => item);
+      }
+      final total = payload['total'] is num ? (payload['total'] as num).toInt() : null;
+      if (total == null || pageItems.isEmpty || offset + pageItems.length >= total) break;
+      offset += pageItems.length;
+    }
+    return List<FeeDefinition>.unmodifiable(byId.values);
   }
+
+  static const int _definitionPageSize = 100;
+  static const int _maxDefinitionPages = 20;
 
   Future<FeeDefinition> createFeeDefinition({
     required String token,
@@ -1852,8 +1874,9 @@ class AuthApi {
     return _parsePayload('Önizleme', () => FeePreview.fromJson(payload));
   }
 
-  /// Borçlandırır: sunucu önizlemeyle aynı hesabı yeniden yapar; toplam / daire sayısı uyuşmazsa 409
-  /// `PREVIEW_STALE` (hiçbir şey yazılmaz). [idempotencyKey] yeniden denemede AYNI verilir.
+  /// Borçlandırır: sunucu önizlemeyle aynı hesabı yeniden yapar; toplam / daire sayısı / içerik özeti
+  /// ([expectedHash] = önizlemenin `preview_hash`i) uyuşmazsa 409 `PREVIEW_STALE` (hiçbir şey yazılmaz).
+  /// [idempotencyKey] yeniden denemede AYNI verilir. [expectedHash] önizleme yanıtında yoksa (eski sunucu) null.
   Future<FeePostResult> postFeeRun({
     required String token,
     required int siteCode,
@@ -1862,6 +1885,7 @@ class AuthApi {
     DateTime? dueDate,
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
     String? idempotencyKey,
   }) async {
@@ -1874,6 +1898,7 @@ class AuthApi {
         if (dueDate != null) 'due_date': crmDateParam(dueDate),
         'expected_total_minor': expectedTotalMinor,
         'expected_apartment_count': expectedApartmentCount,
+        'expected_hash': ?expectedHash,
         if (skipMissing) 'skip_missing': true,
         'idempotency_key': ?idempotencyKey,
       },
@@ -1901,14 +1926,20 @@ class AuthApi {
   }
 
   /// Ek borcu yazar (tek işlemde tek seferlik tanım + önizleme doğrulaması + borçlandırma).
+  ///
+  /// [idempotencyKey] ZORUNLUDUR (aynı anahtar + farklı gövde = 409 `IDEMPOTENCY_CONFLICT`). Aynı ek borç
+  /// son 24 saatte yazıldıysa 409 `DUPLICATE_CHARGE`; kullanıcı bilerek tekrar ekleyecekse [allowDuplicate]
+  /// true gönderilir.
   Future<FeePostResult> postExtraCharge({
     required String token,
     required int siteCode,
     required ExtraChargeInput input,
     required int expectedTotalMinor,
     required int expectedApartmentCount,
+    String? expectedHash,
     bool skipMissing = false,
-    String? idempotencyKey,
+    bool allowDuplicate = false,
+    required String idempotencyKey,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -1918,8 +1949,10 @@ class AuthApi {
         ...input.toJson(),
         'expected_total_minor': expectedTotalMinor,
         'expected_apartment_count': expectedApartmentCount,
+        'expected_hash': ?expectedHash,
         if (skipMissing) 'skip_missing': true,
-        'idempotency_key': ?idempotencyKey,
+        if (allowDuplicate) 'allow_duplicate': true,
+        'idempotency_key': idempotencyKey,
       },
     );
     _ensureCreatedOrOk(response);
@@ -3089,10 +3122,10 @@ class AuthApi {
 
     final mappedMessage =
         messageForErrorCode(code, retryAfterSeconds: retryAfter, payload: payload);
-    var message = mappedMessage ??
-        errorMsg ??
-        genericMessageForStatus(status, code: code) ??
-        'İşlem başarısız ($status)';
+    final statusMessage = genericMessageForStatus(status, code: code);
+    // Sunucu hiçbir kullanılabilir metin vermediyse mesaj yalnız teknik yedektir ("İşlem başarısız (502)").
+    final genericFallback = mappedMessage == null && errorMsg == null && statusMessage == null;
+    var message = mappedMessage ?? errorMsg ?? statusMessage ?? 'İşlem başarısız ($status)';
 
     if (status == 429 && mappedMessage == null) {
       // Genel hız sınırı: bekleme süresini kullanıcıya göster (kapı açma dahil).
@@ -3112,6 +3145,7 @@ class AuthApi {
       code: code,
       retryAfterSeconds: retryAfter,
       payload: payload,
+      genericFallback: genericFallback,
     );
   }
 
@@ -3427,13 +3461,13 @@ class AuthApi {
       // Aidat ve Finans (Faz 4a). MODULE_DISABLED ve FORBIDDEN_ROLE yukarıda eşlidir; INVALID_BODY için
       // sunucunun Türkçe metni (alan adı jargonu temizlenmiş) ya da genel yedek metin kullanılır.
       case 'PREVIEW_STALE':
-        return 'Veriler önizlemeden sonra değişti. Önizleme yenilendi; kontrol edip yeniden onaylayın.';
+        return 'Veriler önizlemeden sonra değişti. Önizlemeyi yenileyip toplamı kontrol edin.';
       case 'PREVIEW_INCOMPLETE':
         return 'Bazı dairelerin bilgisi eksik. Eksikleri tamamlayın ya da bu daireleri atlayarak devam edin.';
       case 'PERIOD_ALREADY_POSTED':
         return 'Bu tanım bu dönem için zaten borçlandırılmış. Aynı ay ikinci kez borçlandırılamaz.';
       case 'PERIOD_CLOSED':
-        return 'Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Ayı açtırmak için sistem yöneticisine başvurun.';
+        return 'Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Kapalı ayı yalnızca süper kullanıcı yeniden açabilir.';
       case 'PERIOD_NOT_CLOSABLE':
         return 'Bu ay kapatılamaz. Aylar sırayla kapatılır: önceki ay kapalı olmalı ve gelecek ay kapatılamaz.';
       case 'PERIOD_NOT_REOPENABLE':
@@ -3445,7 +3479,9 @@ class AuthApi {
       case 'NOTHING_TO_POST':
         return 'Borçlandırılacak daire bulunamadı. Hedefi ve daire bilgilerini kontrol edin.';
       case 'IDEMPOTENCY_CONFLICT':
-        return 'Bu işlem anahtarı başka bir işlem için kullanılmış. Pencereyi kapatıp işlemi yeniden başlatın.';
+        return 'Bu işlem daha önce farklı bilgilerle gönderilmiş görünüyor. Önce daire hesaplarını kontrol edin.';
+      case 'DUPLICATE_CHARGE':
+        return 'Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Önce daire hesaplarını kontrol edin.';
       case 'DEFINITION_INACTIVE':
         return 'Bu tanım pasif ya da bu dönemde geçerli değil. Tanımı etkinleştirin veya dönemi kontrol edin.';
       case 'ENTRY_ALREADY_REVERSED':

@@ -9,6 +9,7 @@ import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
+import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
@@ -108,11 +109,15 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
 
   Future<void> _submit() async {
     if (_submitting || _retry.locked) return;
-    final fieldsOk = validateForm(_formKey);
-    final specOk = !_specEditable || (_specKey.currentState?.validateExtras() ?? true);
+    // Alan hataları ve ek kurallar (kategori listesi, hedef) tek doğrulama + tek görünür kılma zinciriyle çalışır.
+    final allOk = validateForm(
+      _formKey,
+      validateExtra: _specEditable ? () => _specKey.currentState?.validateExtras() ?? true : null,
+      revealExtra: _specEditable ? () => _specKey.currentState?.revealFirstError() ?? false : null,
+    );
     FeeSpec? spec;
     if (_specEditable) spec = _specKey.currentState?.read();
-    if (!fieldsOk || !specOk || (_specEditable && spec == null)) {
+    if (!allOk || (_specEditable && spec == null)) {
       setState(() => _error = kFixFieldsMessage);
       return;
     }
@@ -137,7 +142,8 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
         amountMinor: s.amountMinor,
         categoryAmounts: s.categoryAmounts,
         dueDay: _kind == FeeKind.recurring ? _dueDay : null,
-        startPeriod: _start,
+        // Tek seferlik tanımın dönemi yoktur (ay seçimi etkisizdi): kayıt ayı başlangıç sayılır.
+        startPeriod: _kind == FeeKind.recurring ? _start : _current,
         endPeriod: _kind == FeeKind.recurring && _hasEnd ? _end : null,
         target: s.target,
       );
@@ -265,7 +271,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_error != null) CrmFormError(message: _error!),
+              if (_error != null) CrmFormError(message: _error!, announce: true),
               TextFormField(
                 key: const ValueKey<String>('finance_definition_name'),
                 controller: _name,
@@ -295,7 +301,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                 },
               ),
               const SizedBox(height: AppSpace.lg),
-              Text('Tür', style: th.titleSmall),
+              const FinanceGroupTitle('Tür'),
               const SizedBox(height: AppSpace.sm),
               if (_editing)
                 Wrap(
@@ -351,11 +357,19 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                   validator: (value) => value == null ? 'Vade gününü seçin.' : null,
                 ),
               ],
-              if (!_editing) ...[
+              if (!_editing && !recurring) ...[
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  'Tek seferlik tanımın dönemi ve vade günü yoktur; vade tarihi borçlandırırken seçilir.',
+                  key: const ValueKey<String>('finance_one_time_note'),
+                  style: th.bodySmall?.copyWith(color: p.textSecondary),
+                ),
+              ],
+              if (!_editing && recurring) ...[
                 const SizedBox(height: AppSpace.md),
                 _stepper(
                   context,
-                  title: recurring ? 'Başlangıç dönemi' : 'Dönem',
+                  title: 'Başlangıç dönemi',
                   value: _start,
                   keyPrefix: 'finance_start',
                   onChanged: (value) => setState(() {
@@ -430,7 +444,20 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
           const SizedBox(height: AppSpace.md),
           CrmInfoLine(label: 'Dağıtım', value: d.distribution.label),
           const SizedBox(height: AppSpace.sm),
-          CrmInfoLine(label: 'Tutar', value: definitionAmountText(d)),
+          Builder(
+            builder: (context) {
+              final amount = definitionAmountText(d);
+              final p = context.palette;
+              // Tutar ekran okuyucuya "bin iki yüz elli lira" diye okunur.
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tutar', style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                  Text(amount, semanticsLabel: spokenMoneyText(amount), style: th.bodyMedium),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: AppSpace.sm),
           CrmInfoLine(label: 'Hedef', value: d.target.summary),
         ],

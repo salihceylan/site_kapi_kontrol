@@ -10,7 +10,6 @@ import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
-import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
@@ -76,7 +75,7 @@ class MyFinanceViewState extends State<MyFinanceView> {
         if (isFinanceModuleDisabled(e)) {
           _moduleOff = true;
         } else {
-          _error = crmMessageOf(
+          _error = financeMessageOf(
             e,
             'Borç bilgisi yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
           );
@@ -180,23 +179,32 @@ class _TotalsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text('Tüm dairelerim', style: th.titleMedium)),
+          Semantics(header: true, container: true, child: Text('Tüm dairelerim', style: th.titleMedium)),
           const SizedBox(height: AppSpace.sm),
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.xs,
-            children: [
-              DialogMetaPill(
-                'Toplam borç ${formatMinor(debtMinor)}',
-                tone: AppTone.danger,
-                icon: Icons.arrow_circle_up_rounded,
+          // Tutarlar ekran okuyucuya "bin iki yüz elli lira" diye okunur; görsel çipler okunuştan dışlanır.
+          Semantics(
+            container: true,
+            label:
+                'Toplam borç: ${moneySemanticLabel(debtMinor)}. '
+                'Toplam alacak: ${moneySemanticLabel(creditMinor)}.',
+            child: ExcludeSemantics(
+              child: Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: AppSpace.xs,
+                children: [
+                  DialogMetaPill(
+                    'Toplam borç ${formatMinor(debtMinor)}',
+                    tone: AppTone.danger,
+                    icon: Icons.arrow_circle_up_rounded,
+                  ),
+                  DialogMetaPill(
+                    'Toplam alacak ${formatMinor(creditMinor)}',
+                    tone: AppTone.success,
+                    icon: Icons.arrow_circle_down_rounded,
+                  ),
+                ],
               ),
-              DialogMetaPill(
-                'Toplam alacak ${formatMinor(creditMinor)}',
-                tone: AppTone.success,
-                icon: Icons.arrow_circle_down_rounded,
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -245,6 +253,8 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
       if (item.nextDueMinor != null) semantic.write(', ${moneySemanticLabel(item.nextDueMinor!)}');
       semantic.write('.');
     }
+    // Kim öder bilgisi görsel çipte var; birleşik etikette de okunmalı (çip okunuştan dışlanıyor).
+    if (item.payerParty != null) semantic.write(' ${payerPartyLabel(item.payerParty!)}.');
 
     return AppCard(
       padding: listCardPadding(context),
@@ -310,7 +320,7 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
             ),
           ),
           const SizedBox(height: AppSpace.md),
-          Semantics(header: true, child: Text('Son hareketler', style: th.titleSmall)),
+          Semantics(header: true, container: true, child: Text('Son hareketler', style: th.titleSmall)),
           const SizedBox(height: AppSpace.sm),
           if (recent.isEmpty)
             Text(
@@ -322,7 +332,12 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
             for (final entry in shown)
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpace.sm),
-                child: LedgerEntryTile(entry: entry),
+                child: LedgerEntryTile(
+                  entry: entry,
+                  // Sakin yönetici notu görmez (açıklama, iptal nedeni); ters kayıt satırı için aynı listedeki
+                  // kayıtlar verilir.
+                  related: {for (final e in recent) e.id: e},
+                ),
               ),
             if (hidden > 0 || _expanded && recent.length > MyFinanceCard.collapsedCount)
               Align(

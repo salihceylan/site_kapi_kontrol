@@ -3,11 +3,13 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart' show crmApartmentTitle;
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
+import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
+import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart' show CrmFormError;
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Aidat ve Finans ekranlarının ortak görünüm parçaları (Platform Faz 4a).
@@ -81,25 +83,6 @@ BalanceDescription describeBalance(int minor) {
   );
 }
 
-/// Bakiye rozeti: simge + "Borç 1.250,00 ₺" / "Alacak 50,00 ₺" / "Borç yok". Sarar, kırpılmaz.
-class BalanceBadge extends StatelessWidget {
-  const BalanceBadge(this.minor, {super.key});
-
-  final int minor;
-
-  @override
-  Widget build(BuildContext context) {
-    final d = describeBalance(minor);
-    return Semantics(
-      label: d.semanticLabel,
-      container: true,
-      child: ExcludeSemantics(
-        child: DialogMetaPill(d.badgeText, tone: d.tone, icon: d.icon),
-      ),
-    );
-  }
-}
-
 /// Para metni: görsel "1.250,00 ₺", ekran okuyucuya "bin iki yüz elli lira". [semanticPrefix] ("Toplam borç")
 /// okunuşun başına eklenir.
 class MoneyText extends StatelessWidget {
@@ -109,7 +92,6 @@ class MoneyText extends StatelessWidget {
     this.style,
     this.signed = false,
     this.semanticPrefix,
-    this.strikeThrough = false,
     this.textAlign,
   });
 
@@ -117,7 +99,6 @@ class MoneyText extends StatelessWidget {
   final TextStyle? style;
   final bool signed;
   final String? semanticPrefix;
-  final bool strikeThrough;
   final TextAlign? textAlign;
 
   @override
@@ -130,13 +111,27 @@ class MoneyText extends StatelessWidget {
         child: Text(
           signed ? formatSignedMinor(minor) : formatMinor(minor),
           textAlign: textAlign,
-          style: strikeThrough
-              ? base?.copyWith(decoration: TextDecoration.lineThrough)
-              : base,
+          style: base,
         ),
       ),
     );
   }
+}
+
+/// Mali bir iletiyi SnackBar olarak gösterir; ekran okuyucu tutarları "bin iki yüz elli lira" diye okur
+/// ([spokenMoneyText]), görsel metin değişmez.
+void showFinanceSnack(
+  BuildContext context,
+  String message, {
+  AppSnackKind kind = AppSnackKind.success,
+}) {
+  final spoken = spokenMoneyText(message);
+  AppSnack.show(
+    context,
+    message,
+    kind: kind,
+    semanticsLabel: spoken == message ? null : spoken,
+  );
 }
 
 /// "A Blok / Daire 5" gibi tek metin (boş etikette "-").
@@ -279,26 +274,32 @@ class _MetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
     final p = context.palette;
-    return DialogPanel(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(child: Icon(metric.icon, size: 22, color: metric.tone.ink(p))),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(metric.label, style: th.bodySmall?.copyWith(color: p.textSecondary)),
-                MoneyText(
-                  metric.minor,
-                  semanticPrefix: metric.label,
-                  style: th.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+    // Etiket + tutar TEK birleşik etiketle okunur (etiket iki kez okunmasın).
+    return Semantics(
+      container: true,
+      label: '${metric.label}: ${moneySemanticLabel(metric.minor)}',
+      child: ExcludeSemantics(
+        child: DialogPanel(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(metric.icon, size: 22, color: metric.tone.ink(p)),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(metric.label, style: th.bodySmall?.copyWith(color: p.textSecondary)),
+                    Text(
+                      formatMinor(metric.minor),
+                      style: th.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -416,12 +417,18 @@ class BalanceRowCard extends StatelessWidget {
 /// - Borç (+): "Borca eklendi"; tahsilat (-): "Borçtan düşüldü"; ters kayıt: kendi işaretine göre.
 /// - İptal edilmiş kayıt: tutar üstü çizili + "İptal edildi" rozeti. Ters kayıt: "Ters kayıt" rozeti ve neden.
 /// - [showActor] true iken kaydı yapan kişi gösterilir (yalnız yönetici; sakin ucunda zaten gelmez).
+/// - [showNotes] true iken yönetici notları (tahsilat açıklaması, iptal nedeni) çizilir. VARSAYILAN false:
+///   sakin ve kurul ekranları, sunucu göndermiş olsa bile bu notları göstermez.
+/// - [related]: aynı ekstredeki kayıtlar (kimliğe göre). Ters kayıt / iptal edilen kayıt satırı, kayıt NUMARASI
+///   yerine ilgili kaydın tarihi ve tutarını yazar; kayıt listede yoksa numarasız genel metin kullanılır.
 /// - [onCorrect] / [onReverse] yalnız yönetici içindir (kurul / sakinde null).
 class LedgerEntryTile extends StatelessWidget {
   const LedgerEntryTile({
     super.key,
     required this.entry,
     this.showActor = false,
+    this.showNotes = false,
+    this.related = const <int, LedgerEntry>{},
     this.onCorrect,
     this.onReverse,
     this.actionsEnabled = true,
@@ -429,9 +436,29 @@ class LedgerEntryTile extends StatelessWidget {
 
   final LedgerEntry entry;
   final bool showActor;
+  final bool showNotes;
+  final Map<int, LedgerEntry> related;
   final VoidCallback? onCorrect;
   final VoidCallback? onReverse;
   final bool actionsEnabled;
+
+  /// "05.10.2026 • 500,00 ₺" (tarih ve tutar); kayıt bilinmiyorsa null.
+  static String? _brief(LedgerEntry? e) =>
+      e == null ? null : '${formatCrmDate(e.entryDate)} • ${formatMinor(e.amountMinor.abs())}';
+
+  /// Ters kayıt satırı: hangi kaydı tersine çevirdiği (numara gösterilmez).
+  String? _reversesText() {
+    if (entry.reversesEntryId == null) return null;
+    final brief = _brief(related[entry.reversesEntryId]);
+    return brief == null ? 'Daha önceki bir kaydın ters kaydı' : 'Şu kaydın ters kaydı: $brief';
+  }
+
+  /// İptal edilen kayıt satırı: hangi ters kayıtla iptal edildiği (numara gösterilmez).
+  String? _reversedByText() {
+    if (entry.reversedByEntryId == null) return null;
+    final brief = _brief(related[entry.reversedByEntryId]);
+    return brief == null ? 'Ters kayıtla iptal edildi' : 'Ters kayıtla iptal edildi: $brief';
+  }
 
   static (AppTone, IconData) _style(LedgerEntry e) {
     if (e.isReversal) return (AppTone.warning, Icons.undo_rounded);
@@ -456,10 +483,16 @@ class LedgerEntryTile extends StatelessWidget {
     final (tone, icon) = _style(e);
     final kindLabel = e.isReversal ? LedgerKind.reversal.label : e.kind.label;
     final effect = e.amountMinor > 0 ? 'Borca eklendi' : (e.amountMinor < 0 ? 'Borçtan düşüldü' : '');
+    // Yönetici notları yalnız yazma yetkisi olan ekranda ([showNotes]); sakin / kurul sunucu göndermiş olsa bile
+    // not görmez. Not yoksa başlık yalnız tanım adıdır.
+    final note = showNotes ? e.description : null;
+    final reason = showNotes ? e.reversalReason : null;
     final title = <String>[
       if (e.definitionName != null) e.definitionName!,
-      if (e.definitionName == null && e.description != null) e.description!,
+      if (e.definitionName == null && note != null) note,
     ].join(' ');
+    final reversesText = _reversesText();
+    final reversedByText = _reversedByText();
     final canAct = actionsEnabled && (onCorrect != null || onReverse != null);
 
     final semantic = StringBuffer('$kindLabel. ${formatCrmDate(e.entryDate)}.');
@@ -467,7 +500,9 @@ class LedgerEntryTile extends StatelessWidget {
     semantic.write(' ${e.amountMinor > 0 ? 'Borç artar' : 'Borç azalır'}: ${moneySemanticLabel(e.amountMinor.abs())}.');
     if (title.isNotEmpty) semantic.write(' $title.');
     if (e.method != null) semantic.write(' ${e.method!.label}.');
-    if (e.reversalReason != null) semantic.write(' Neden: ${e.reversalReason}.');
+    if (reversesText != null) semantic.write(' ${spokenMoneyText(reversesText)}.');
+    if (reversedByText != null) semantic.write(' ${spokenMoneyText(reversedByText)}.');
+    if (reason != null) semantic.write(' Neden: $reason.');
 
     return DialogPanel(
       key: ValueKey<String>('ledger_entry_${e.id}'),
@@ -520,15 +555,12 @@ class LedgerEntryTile extends StatelessWidget {
                     const SizedBox(height: AppSpace.xs),
                     Text(title, style: th.bodyMedium),
                   ],
-                  if (e.definitionName != null && e.description != null)
-                    Text(e.description!, style: secondary),
+                  if (e.definitionName != null && note != null) Text(note, style: secondary),
                   if (e.period != null) Text('Dönem: ${e.period!.label}', style: secondary),
                   if (e.dueDate != null) Text('Vade: ${formatCrmDate(e.dueDate)}', style: secondary),
-                  if (e.reversesEntryId != null)
-                    Text('#${e.reversesEntryId} numaralı kaydın ters kaydı', style: secondary),
-                  if (e.reversedByEntryId != null)
-                    Text('#${e.reversedByEntryId} numaralı ters kayıtla iptal edildi', style: secondary),
-                  if (e.reversalReason != null) Text('Neden: ${e.reversalReason}', style: secondary),
+                  if (reversesText != null) Text(reversesText, style: secondary),
+                  if (reversedByText != null) Text(reversedByText, style: secondary),
+                  if (reason != null) Text('Neden: $reason', style: secondary),
                   if (e.payerParty != null) Text(payerPartyLabel(e.payerParty!), style: secondary),
                   if (showActor && e.createdByName != null)
                     Text(
@@ -585,6 +617,9 @@ class FeeDefinitionCard extends StatelessWidget {
     this.onEdit,
     this.onToggleActive,
     this.busy = false,
+    this.busyLabel,
+    this.actionsEnabled = true,
+    this.errorText,
   });
 
   final FeeDefinition definition;
@@ -592,6 +627,16 @@ class FeeDefinitionCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onToggleActive;
   final bool busy;
+
+  /// Verilirse (örn. "Güncelleniyor...") ve [busy] iken "Pasifleştir / Etkinleştir" düğmesi bu etiketle ve
+  /// dönen göstergeyle çizilir: meşgul durumu yalnız pasiflikle değil görsel + anlamsal olarak da bildirilir.
+  final String? busyLabel;
+
+  /// false: liste güncel değil (yenileme başarısız); eylem düğmeleri görünür ama pasiftir.
+  final bool actionsEnabled;
+
+  /// Bu tanım üzerindeki son eylemin hatası (kartın içinde, eylem düğmelerinin üstünde gösterilir).
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -601,15 +646,17 @@ class FeeDefinitionCard extends StatelessWidget {
     final d = definition;
     final name = d.name.trim().isEmpty ? 'Adsız tanım' : d.name.trim();
     final last = d.lastPostedPeriod;
+    // Tek seferlik tanımın dönemi yoktur (ay seçimi etkisizdi); vadesi borçlandırılırken belirlenir.
     final schedule = d.isRecurring
         ? '${dueDayText(d.dueDay)} • ${periodRangeText(d.startPeriod, d.endPeriod)}'
-        : (d.startPeriod == null ? null : 'Dönem: ${d.startPeriod!.label}');
+        : (d.kind == FeeKind.oneTime ? 'Vade: borçlandırılırken belirlenir' : null);
     final hasActions = onPost != null || onEdit != null || onToggleActive != null;
 
     final semantic = StringBuffer('Tanım: $name. ${d.kind.label}. ${d.isActive ? 'Aktif' : 'Pasif'}.');
-    semantic.write(' ${d.distribution.label}. ${definitionAmountText(d)}.');
+    semantic.write(' ${d.distribution.label}. ${spokenMoneyText(definitionAmountText(d))}.');
     semantic.write(' Hedef: ${d.target.summary}.');
     semantic.write(last == null ? ' Henüz borçlandırılmadı.' : ' Son borçlandırma: ${last.label}.');
+    final disabled = busy || !actionsEnabled;
 
     return AppCard(
       key: ValueKey<String>('fee_definition_${d.id}'),
@@ -658,6 +705,14 @@ class FeeDefinitionCard extends StatelessWidget {
               ),
             ),
           ),
+          if (errorText != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            CrmFormError(
+              key: ValueKey<String>('fee_definition_error_${d.id}'),
+              message: errorText!,
+              announce: true,
+            ),
+          ],
           if (hasActions) ...[
             const SizedBox(height: AppSpace.sm),
             Wrap(
@@ -667,7 +722,7 @@ class FeeDefinitionCard extends StatelessWidget {
                 if (onPost != null)
                   TextButton.icon(
                     key: ValueKey<String>('fee_definition_post_${d.id}'),
-                    onPressed: busy ? null : onPost,
+                    onPressed: disabled ? null : onPost,
                     icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
                     label: const Text('Borçlandır'),
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -675,7 +730,7 @@ class FeeDefinitionCard extends StatelessWidget {
                 if (onEdit != null)
                   TextButton.icon(
                     key: ValueKey<String>('fee_definition_edit_${d.id}'),
-                    onPressed: busy ? null : onEdit,
+                    onPressed: disabled ? null : onEdit,
                     icon: const Icon(Icons.edit_rounded, size: 18),
                     label: const Text('Düzenle'),
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -683,12 +738,23 @@ class FeeDefinitionCard extends StatelessWidget {
                 if (onToggleActive != null)
                   TextButton.icon(
                     key: ValueKey<String>('fee_definition_toggle_${d.id}'),
-                    onPressed: busy ? null : onToggleActive,
-                    icon: Icon(
-                      d.isActive ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                      size: 18,
+                    onPressed: disabled ? null : onToggleActive,
+                    icon: busy && busyLabel != null
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            d.isActive
+                                ? Icons.pause_circle_outline_rounded
+                                : Icons.play_circle_outline_rounded,
+                            size: 18,
+                          ),
+                    label: Text(
+                      busy && busyLabel != null
+                          ? busyLabel!
+                          : (d.isActive ? 'Pasifleştir' : 'Etkinleştir'),
                     ),
-                    label: Text(d.isActive ? 'Pasifleştir' : 'Etkinleştir'),
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                   ),
               ],
@@ -700,7 +766,9 @@ class FeeDefinitionCard extends StatelessWidget {
   }
 }
 
-/// Önizleme satırı: daire etiketi, kim öder ve tutar. Dar ekranda alt alta sarar.
+/// Önizleme satırı: daire etiketi, kim öder ve tutar. Yer yetiyorsa tutar satırın sağ ucundadır; dar ekranda ya da
+/// büyük yazıda (örn. 320 dp x 2,0) tutar daire adının ALTINA iner (gerçek `Wrap`: sığmayan öğe alt satıra geçer) ve
+/// kırpılmaz. Pencere içerik ölçüsü (IntrinsicHeight) kullandığı için `LayoutBuilder` kullanılmaz.
 class FeePreviewLineTile extends StatelessWidget {
   const FeePreviewLineTile({super.key, required this.line});
 
@@ -717,28 +785,26 @@ class FeePreviewLineTile extends StatelessWidget {
       child: ExcludeSemantics(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.start,
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    Text(
-                      payerPartyLabel(line.payerParty),
-                      style: th.bodySmall?.copyWith(color: p.textSecondary),
-                    ),
-                  ],
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    payerPartyLabel(line.payerParty),
+                    style: th.bodySmall?.copyWith(color: p.textSecondary),
+                  ),
+                ],
               ),
-              const SizedBox(width: AppSpace.sm),
-              Flexible(
-                child: Text(
-                  formatMinor(line.amountMinor),
-                  textAlign: TextAlign.end,
-                  style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
+              Text(
+                formatMinor(line.amountMinor),
+                style: th.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -757,4 +823,20 @@ class PayerPartyChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       InfoChip(payerPartyLabel(party), tone: AppTone.info);
+}
+
+/// Seçenek grubu başlığı ("Tür", "Durum", "Yöntem"): ekran okuyucuda başlık olarak gezilebilir.
+class FinanceGroupTitle extends StatelessWidget {
+  const FinanceGroupTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      container: true,
+      child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+    );
+  }
 }

@@ -5,6 +5,7 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_account_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
@@ -64,6 +65,7 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
     },
     isAlive: () => mounted,
     errorFallback: 'Bakiyeler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+    messageOf: financeMessageOf,
   );
 
   @override
@@ -136,7 +138,6 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final th = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -168,7 +169,7 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
                 ),
               ),
               const SizedBox(height: AppSpace.md),
-              Text('Durum', style: th.titleSmall),
+              const FinanceGroupTitle('Durum'),
               const SizedBox(height: AppSpace.sm),
               Wrap(
                 spacing: AppSpace.sm,
@@ -203,6 +204,8 @@ class FinanceBalancesTabState extends State<FinanceBalancesTab> {
           emptyTitle: 'Bu sitede daire bulunamadı.',
           filteredTitle: 'Bu arama ve süzgeç için daire bulunamadı.',
           filtered: _filtered,
+          // Yenileme başarısızsa eski tutarlar hata kutusunun altında güncelmiş gibi durmasın: gizlenir.
+          hideItemsOnError: true,
           itemBuilder: (context, row) => BalanceRowCard(row: row, onTap: () => _open(row)),
         ),
       ],

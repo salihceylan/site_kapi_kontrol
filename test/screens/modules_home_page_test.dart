@@ -576,7 +576,7 @@ void main() {
       await _closeDrawer(t);
 
       await _tapMenu(t, 'Modüller');
-      expect(find.byType(Switch), findsNothing, reason: 'site yöneticisi modülü kendi kapatamaz');
+      expect(doorModuleSwitch, findsNothing, reason: 'site yöneticisi modülü kendi kapatamaz');
       expect(auth.setCalls, isEmpty);
 
       // Süper kullanıcı başka yerden kapattı: yönetici yenileyince menü güncellenir.
@@ -646,8 +646,8 @@ void main() {
         mdRequest(1),
         mdRequest(2, status: 'approved', decidedBy: 'Süper Yönetici'),
       ];
-      await t.ensureVisible(find.byType(Switch));
-      await t.tap(find.byType(Switch));
+      await t.ensureVisible(doorModuleSwitch);
+      await t.tap(doorModuleSwitch);
       await t.pump();
       await t.pump(const Duration(milliseconds: 450));
       await t.tap(find.text('Kapat'));
@@ -1053,8 +1053,8 @@ void main() {
       expect(find.byType(DashboardView), findsOneWidget);
 
       await _tapMenu(t, 'Modüller');
-      await t.ensureVisible(find.byType(Switch));
-      await t.tap(find.byType(Switch));
+      await t.ensureVisible(doorModuleSwitch);
+      await t.tap(doorModuleSwitch);
       await t.pump();
       await t.pump(const Duration(milliseconds: 450));
       await t.tap(find.text('Kapat'));

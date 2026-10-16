@@ -2,16 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsRole;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
-import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_run_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
-import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_balances_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_definitions_tab.dart';
@@ -165,7 +164,7 @@ class FinanceViewState extends State<FinanceView> {
         if (!mounted || token != _sitesToken) return;
         setState(() {
           _loadingSites = false;
-          _sitesError = crmMessageOf(
+          _sitesError = financeMessageOf(
             e,
             'Siteler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
           );
@@ -227,17 +226,17 @@ class FinanceViewState extends State<FinanceView> {
       if (!mounted || token != _summaryToken || code != _siteCode) return;
       setState(() {
         _summary = summary;
-            _moduleOff = false;
+        _moduleOff = false;
       });
     } catch (e) {
       if (!mounted || token != _summaryToken || code != _siteCode) return;
       setState(() {
-            // Eski özet gösterilmez: yazmadan önceki tutarlar yanıltmasın.
+        // Eski özet gösterilmez: yazmadan önceki tutarlar yanıltmasın.
         _summary = null;
         if (isFinanceModuleDisabled(e)) {
           _moduleOff = true;
         } else {
-          _summaryError = crmMessageOf(
+          _summaryError = financeMessageOf(
             e,
             'Mali özet yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
           );
@@ -319,7 +318,7 @@ class FinanceViewState extends State<FinanceView> {
       _opening = false;
     }
     if (outcome == null || !mounted) return;
-    AppSnack.show(context, outcome.message, kind: AppSnackKind.success);
+    showFinanceSnack(context, outcome.message);
     _refreshAll();
   }
 
@@ -338,7 +337,7 @@ class FinanceViewState extends State<FinanceView> {
       _opening = false;
     }
     if (outcome == null || !mounted) return;
-    AppSnack.show(context, outcome.message, kind: AppSnackKind.success);
+    showFinanceSnack(context, outcome.message);
     _refreshAll();
   }
 
@@ -366,7 +365,7 @@ class FinanceViewState extends State<FinanceView> {
         content = const EmptyCard(
           icon: Icons.apartment_rounded,
           title: 'Kayıtlı site bulunamadı.',
-          message: 'Finans, Aidat ve Finans modülü açık bir siteye bağlı olduğunuzda burada görünür.',
+          message: 'Aidat ve Finans modülü açık bir siteye bağlı olduğunuzda burada görünür.',
         );
       }
     } else {
@@ -414,7 +413,12 @@ class FinanceViewState extends State<FinanceView> {
                 for (final s in _sites)
                   DropdownMenuItem<int>(
                     value: s.code,
-                    child: Text(_siteLabel(s), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    // Uzun ad satırda kısalır; tam ad uzun basınca / imleçle üzerine gelince tooltip'te görünür
+                    // (ekran okuyucu zaten tam metni okur).
+                    child: Tooltip(
+                      message: _siteLabel(s),
+                      child: Text(_siteLabel(s), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
                   ),
               ],
               onChanged: (value) {
@@ -461,27 +465,41 @@ class FinanceViewState extends State<FinanceView> {
             ),
             const SizedBox(height: AppSpace.md),
           ],
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              for (var i = 0; i < _tabs.length; i++)
-                ChoiceChip(
-                  key: ValueKey<String>('finance_tab_$i'),
-                  avatar: Icon(_tabs[i].$2, size: 18),
-                  label: Text(_tabs[i].$1),
-                  selected: _tab == i,
-                  onSelected: (_) => _selectTab(i),
-                ),
-            ],
+          // Sekme çubuğu: ekran okuyucu "sekme" rolünü ve seçili durumu okur.
+          Semantics(
+            container: true,
+            role: SemanticsRole.tabBar,
+            child: Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                for (var i = 0; i < _tabs.length; i++)
+                  MergeSemantics(
+                    child: Semantics(
+                      role: SemanticsRole.tab,
+                      child: ChoiceChip(
+                        key: ValueKey<String>('finance_tab_$i'),
+                        avatar: Icon(_tabs[i].$2, size: 18),
+                        label: Text(_tabs[i].$1),
+                        selected: _tab == i,
+                        onSelected: (_) => _selectTab(i),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpace.md),
-          // Kurulu sekmeler durumunu korur; görünmeyenin animasyonları (iskelet) durur.
+          // Kurulu sekmeler durumunu korur; görünmeyenin animasyonları (iskelet) durur ve alanları klavye /
+          // ekran okuyucu odağına GİRMEZ (Offstage odağı kapatmaz, ExcludeFocus kapatır).
           for (var i = 0; i < _tabs.length; i++)
             if (_visited.contains(i))
               Offstage(
                 offstage: _tab != i,
-                child: TickerMode(enabled: _tab == i, child: _buildTab(i, scope)),
+                child: ExcludeFocus(
+                  excluding: _tab != i,
+                  child: TickerMode(enabled: _tab == i, child: _buildTab(i, scope)),
+                ),
               ),
         ],
       ],
@@ -549,6 +567,7 @@ class FinanceViewState extends State<FinanceView> {
           key: _periodsKey,
           scope: scope,
           canReopen: widget.canReopen,
+          now: widget.now,
           onDataChanged: () => _afterWrite(2),
         );
     }

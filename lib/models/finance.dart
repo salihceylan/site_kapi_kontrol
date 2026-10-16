@@ -590,12 +590,16 @@ class FeeMissingData {
   const FeeMissingData({
     required this.apartmentId,
     this.label = '',
+    this.blockName,
     this.reason = '',
     this.reasonCode = '',
   });
 
   final int apartmentId;
   final String label;
+
+  /// Blok adı (sunucu `block_name` gönderirse); yoksa null ve etiket tek başına gösterilir.
+  final String? blockName;
 
   /// Sunucudaki neden metni (Türkçe) ya da kod; ekranda [financeMissingReason] ile gösterilir.
   final String reason;
@@ -606,6 +610,7 @@ class FeeMissingData {
   factory FeeMissingData.fromJson(Map<String, dynamic> json) => FeeMissingData(
     apartmentId: crmInt(json['apartment_id']),
     label: json['label']?.toString() ?? '',
+    blockName: crmText(json['block_name']),
     reason: json['reason']?.toString() ?? '',
     reasonCode: json['reason_code']?.toString() ?? '',
   );
@@ -654,6 +659,10 @@ class FeePreview {
     this.alreadyPosted = false,
     this.closed = false,
     this.zeroAmountCount = 0,
+    this.previewHash,
+    this.redistributed = false,
+    this.skippedCount = 0,
+    this.duplicateOfRunId,
   });
 
   final FinancePeriod? period;
@@ -668,10 +677,25 @@ class FeePreview {
   /// Payı sıfır kuruşa düştüğü için listeye girmeyen daire sayısı (borç yazılmaz).
   final int zeroAmountCount;
 
+  /// Önizlemenin içerik özeti (`preview_hash`, onay isteğinde `expected_hash` olarak geri gönderilir). Sunucu
+  /// göndermediyse (eski sunucu) null: onay yine toplam ve daire sayısıyla yapılır.
+  final String? previewHash;
+
+  /// Eksik bilgili daireler hariç tutulup tutar kalan dairelere yeniden paylaştırılıyor mu?
+  final bool redistributed;
+
+  /// Eksik bilgi nedeniyle hariç tutulan daire sayısı.
+  final int skippedCount;
+
+  /// Ek borçta: aynı ek borcun yakın zamanda yazıldığı çalışma (`duplicate_of_run_id`); yoksa null.
+  final int? duplicateOfRunId;
+
   bool get hasMissingData => missingData.isNotEmpty;
 
   factory FeePreview.fromJson(Map<String, dynamic> json) {
     final lines = _listOf(json['lines'], FeePreviewLine.fromJson);
+    final rawHash = json['preview_hash'];
+    final hash = rawHash is String && rawHash.trim().isNotEmpty ? rawHash.trim() : null;
     return FeePreview(
       period: FinancePeriod.tryParse(json['period']),
       definitionId: crmIntOrNull(json['definition_id']),
@@ -684,6 +708,48 @@ class FeePreview {
       alreadyPosted: json['already_posted'] == true,
       closed: json['closed'] == true,
       zeroAmountCount: crmInt(json['zero_amount_count']),
+      previewHash: hash,
+      redistributed: json['redistributed'] == true,
+      skippedCount: crmInt(json['skipped_count']),
+      duplicateOfRunId: crmIntOrNull(json['duplicate_of_run_id']),
+    );
+  }
+}
+
+/// 409 `PREVIEW_STALE` yanıtındaki güncel durum: onaydan sonra veri değişti, sunucu şu anki toplamı, daire
+/// sayısını ve içerik özetini bildirir. Alan yoksa null (kullanıcıya yalnız "önizleme eskidi" söylenir).
+@immutable
+class PreviewStaleInfo {
+  const PreviewStaleInfo({this.totalMinor, this.apartmentCount, this.previewHash});
+
+  final int? totalMinor;
+  final int? apartmentCount;
+  final String? previewHash;
+
+  factory PreviewStaleInfo.fromPayload(Map<String, dynamic>? payload) {
+    final map = payload ?? const <String, dynamic>{};
+    final rawHash = map['preview_hash'];
+    return PreviewStaleInfo(
+      totalMinor: _optionalMinor(map, 'total_minor'),
+      apartmentCount: crmIntOrNull(map['apartment_count']),
+      previewHash: rawHash is String && rawHash.trim().isNotEmpty ? rawHash.trim() : null,
+    );
+  }
+}
+
+/// 409 `DUPLICATE_CHARGE` yanıtı: aynı ek borç son 24 saatte yazılmış. [postedAt] önceki kaydın zamanı.
+@immutable
+class DuplicateChargeInfo {
+  const DuplicateChargeInfo({this.existingRunId, this.postedAt});
+
+  final int? existingRunId;
+  final DateTime? postedAt;
+
+  factory DuplicateChargeInfo.fromPayload(Map<String, dynamic>? payload) {
+    final map = payload ?? const <String, dynamic>{};
+    return DuplicateChargeInfo(
+      existingRunId: crmIntOrNull(map['existing_run_id']),
+      postedAt: announcementInstant(map['posted_at']),
     );
   }
 }
@@ -946,6 +1012,7 @@ class FinancePeriods {
     this.closedThrough,
     this.items = const <ClosedPeriod>[],
     this.openPeriod,
+    this.closable,
   });
 
   /// Bu ay (dahil) ve öncesi kapalı; hiç kapatılmadıysa null.
@@ -956,6 +1023,11 @@ class FinancePeriods {
 
   /// Kayıt eklenebilen ilk açık ay.
   final FinancePeriod? openPeriod;
+
+  /// Şu an kapatılabilecek aylar, YENİDEN ESKİYE sıralı (sunucu `closable`; boş olabilir). Bir ay kapatılınca
+  /// ondan önceki TÜM aylar da kapalı sayılır. Sunucu alanı göndermediyse (eski sürüm) null: ekran eski
+  /// davranışla [openPeriod]u kapatır.
+  final List<FinancePeriod>? closable;
 
   factory FinancePeriods.fromJson(Map<String, dynamic> json) {
     final items = <ClosedPeriod>[];
@@ -975,10 +1047,19 @@ class FinancePeriods {
       }
     }
     items.sort((a, b) => b.period.compareTo(a.period));
+    List<FinancePeriod>? closable;
+    final rawClosable = json['closable'];
+    if (rawClosable is List) {
+      final parsed = <FinancePeriod>{
+        for (final value in rawClosable) ?FinancePeriod.tryParse(value),
+      }.toList()..sort((a, b) => b.compareTo(a));
+      closable = List<FinancePeriod>.unmodifiable(parsed);
+    }
     return FinancePeriods(
       closedThrough: FinancePeriod.tryParse(json['closed_through']),
       items: List<ClosedPeriod>.unmodifiable(items),
       openPeriod: FinancePeriod.tryParse(json['open_period']),
+      closable: closable,
     );
   }
 }

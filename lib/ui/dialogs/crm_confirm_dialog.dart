@@ -14,6 +14,8 @@ Future<bool> confirmCrmAction(
   required String confirmLabel,
   IconData icon = Icons.help_outline_rounded,
   AppTone tone = AppTone.warning,
+  String? semanticMessage,
+  String cancelLabel = 'Vazgeç',
 }) async {
   final result = await showDialog<bool>(
     context: context,
@@ -24,7 +26,7 @@ Future<bool> confirmCrmAction(
       actions: [
         TextButton(
           onPressed: () => popIfCurrent(dialogContext, false),
-          child: const Text('Vazgeç'),
+          child: Text(cancelLabel),
         ),
         ElevatedButton(
           style: filledToneStyle(dialogContext, tone: tone),
@@ -32,7 +34,12 @@ Future<bool> confirmCrmAction(
           child: Text(confirmLabel),
         ),
       ],
-      child: Text(message, style: Theme.of(dialogContext).textTheme.bodyMedium),
+      child: Text(
+        message,
+        // Tutar içeren iletiler ekran okuyucuya sayı yığını değil "bin iki yüz elli lira" diye okunur.
+        semanticsLabel: semanticMessage,
+        style: Theme.of(dialogContext).textTheme.bodyMedium,
+      ),
     ),
   );
   return result ?? false;

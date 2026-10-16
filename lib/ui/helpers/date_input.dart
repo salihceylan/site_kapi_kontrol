@@ -62,7 +62,11 @@ String? validateDateField(String? text) {
 ///   (yapıştırma ya da dolu alanın ortasına rakam yazma) REDDEDİLİR, eski değer kalır.
 /// - İmleç: kendisinden SONRAKİ rakam sayısı korunur (ortadan düzeltmede imleç sona atlamaz).
 class DateInputFormatter extends TextInputFormatter {
-  const DateInputFormatter();
+  const DateInputFormatter({this.onRejected});
+
+  /// 8 rakamdan fazlası reddedilince çağrılır (sessiz reddetme olmasın: çağıran kısa bir uyarı gösterir). Çağıran
+  /// `const` ifadesini kullanıyorsa verilmez.
+  final VoidCallback? onRejected;
 
   static String _mask(String digits) {
     final buffer = StringBuffer();
@@ -114,7 +118,10 @@ class DateInputFormatter extends TextInputFormatter {
     if (month != null) return _atEnd('${month.group(1)}.0${month.group(2)}.');
 
     final digits = text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length > 8) return oldValue;
+    if (digits.length > 8) {
+      onRejected?.call();
+      return oldValue;
+    }
     final masked = _mask(digits);
 
     final caret = newValue.selection.isValid

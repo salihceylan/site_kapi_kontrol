@@ -4,6 +4,7 @@ import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmFormatNumb
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
@@ -37,11 +38,23 @@ class RelationChip extends StatelessWidget {
 /// öğe içinde GÖRÜNÜR konuma getirilir. Hata, kaydırılmış uzun bir formun üstünde kalıp kullanıcıdan
 /// gizli kalmasın (320 dp x 2,0 yazıda Kaydet'e basınca hata ekran dışında kalıyordu). [action] hatanın
 /// hemen altına konan isteğe bağlı eylemdir (örn. "Kişiyi Aç").
+///
+/// [reveal] false ise bildirim kendini kaydırmaz (form doğrulamasında görünür kılma işini TEK bir yol,
+/// [validateForm], yapar; iki `ensureVisible` birbirini ezmesin). [announce] true ise hata ortaya çıkınca
+/// ekran okuyucuya ayrıca duyurulur (canlı bölge yeni eklenen düğümde güvenilir değildir).
 class CrmFormError extends StatefulWidget {
-  const CrmFormError({super.key, required this.message, this.action});
+  const CrmFormError({
+    super.key,
+    required this.message,
+    this.action,
+    this.reveal = true,
+    this.announce = false,
+  });
 
   final String message;
   final Widget? action;
+  final bool reveal;
+  final bool announce;
 
   @override
   State<CrmFormError> createState() => _CrmFormErrorState();
@@ -63,7 +76,10 @@ class _CrmFormErrorState extends State<CrmFormError> {
   void _reveal() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Scrollable.ensureVisible(context, duration: Duration.zero, alignment: 0.0);
+      if (widget.reveal) {
+        Scrollable.ensureVisible(context, duration: Duration.zero, alignment: 0.0);
+      }
+      if (widget.announce) announcePolite(context, widget.message);
     });
   }
 
@@ -117,6 +133,7 @@ class CrmListBody<T> extends StatelessWidget {
     this.filteredTitle,
     this.filtered = false,
     this.skeletonRows = 3,
+    this.hideItemsOnError = false,
   });
 
   final PagedLoader<T> loader;
@@ -129,6 +146,11 @@ class CrmListBody<T> extends StatelessWidget {
   final String? filteredTitle;
   final bool filtered;
   final int skeletonRows;
+
+  /// true: yenileme başarısız olduysa ELDEKİ ESKİ kayıtlar gösterilmez, yalnız hata + "Tekrar Dene" çizilir.
+  /// Para tutarı gösteren listelerde (bakiyeler) eski tutar, hata uyarısının altında güncelmiş gibi durmasın
+  /// diye kullanılır. Varsayılan false: eski liste hata kutusuyla birlikte kalır.
+  final bool hideItemsOnError;
 
   @override
   Widget build(BuildContext context) {
@@ -146,6 +168,9 @@ class CrmListBody<T> extends StatelessWidget {
         title: filtered ? (filteredTitle ?? emptyTitle) : emptyTitle,
         message: emptyMessage,
       );
+    }
+    if (hideItemsOnError && error != null) {
+      return InlineNotice(message: error, onRetry: loader.reload);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

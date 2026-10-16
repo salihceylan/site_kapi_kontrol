@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
@@ -29,18 +30,27 @@ class FinanceReverseOutcome {
 /// (defter yalnız eklenir). Neden zorunludur (en çok 200 karakter, kod noktası sayımı) ve denetim için
 /// saklanır. Ters kayıt bugünün AÇIK ayına yazılır; kapalı dönem hatası Türkçe gösterilir.
 ///
-/// Çift gönderim koruması ve `idempotency_key`: [FinancePaymentDialog] ile aynı kural (aynı neden = aynı
-/// anahtar). Gönderim sürerken geri tuşu kapatmaz; hata pencerede görünür ve pencere AÇIK kalır.
+/// "Ters Kaydı Ekle" düğmesi doğrudan yazmaz: önce tutar, daire ve nedeni özetleyen bir ONAY adımı gelir
+/// (geri alınması zahmetli işlem). Pencereyi kapatan düğmenin adı "Kapat"tır ("Vazgeç" kaydı iptal etmekle
+/// karışırdı).
+///
+/// Çift gönderim koruması ve `idempotency_key`: [FinancePaymentDialog] ile aynı kural (aynı kayıt + aynı neden =
+/// oturum boyunca aynı anahtar; başarıdan sonra atılır). Gönderim sürerken geri tuşu kapatmaz; hata pencerede
+/// görünür ve pencere AÇIK kalır.
 class FinanceReverseDialog extends StatefulWidget {
   const FinanceReverseDialog({
     super.key,
     required this.scope,
     required this.entry,
+    this.apartmentLabel,
     this.onRefreshNeeded,
   });
 
   final PeopleScope scope;
   final LedgerEntry entry;
+
+  /// Onay özetinde gösterilen daire adı (ekstreden verilir); yoksa daire satırı yazılmaz.
+  final String? apartmentLabel;
 
   /// Sonuç BELİRSİZ kaldığında (ağ / 5xx) ya da kayıt zaten iptal edilmişse (409) kapanırken çağrılır.
   final VoidCallback? onRefreshNeeded;
@@ -51,6 +61,7 @@ class FinanceReverseDialog extends StatefulWidget {
     BuildContext context, {
     required PeopleScope scope,
     required LedgerEntry entry,
+    String? apartmentLabel,
     VoidCallback? onRefreshNeeded,
   }) {
     return showDialog<FinanceReverseOutcome>(
@@ -59,6 +70,7 @@ class FinanceReverseDialog extends StatefulWidget {
       builder: (_) => FinanceReverseDialog(
         scope: scope,
         entry: entry,
+        apartmentLabel: apartmentLabel,
         onRefreshNeeded: onRefreshNeeded,
       ),
     );
@@ -71,9 +83,10 @@ class FinanceReverseDialog extends StatefulWidget {
 class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _reason = TextEditingController();
-  final IdempotencyKeys _keys = IdempotencyKeys('rev');
+  late final IdempotencyKeys _keys = sessionIdempotencyKeys(widget.scope.authService, 'rev');
   final RetryLock _retry = RetryLock();
   bool _submitting = false;
+  bool _confirming = false;
   bool _needsRefreshOnClose = false;
   String? _error;
 
@@ -84,14 +97,46 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
     super.dispose();
   }
 
+  /// Onay penceresinin metni: kayıt (tür, tarih, tutar), daire ve neden.
+  String _confirmMessage(String reason) {
+    final entry = widget.entry;
+    final apartment = widget.apartmentLabel?.trim();
+    final name = entry.definitionName == null ? '' : ' • ${entry.definitionName}';
+    final apartmentLine = apartment == null || apartment.isEmpty ? '' : '$apartment\n';
+    return 'Şu kayıt iptal edilecek:\n'
+        '$apartmentLine'
+        '${entry.kind.label} • ${formatCrmDate(entry.entryDate)} • ${formatMinor(entry.amountMinor.abs())}$name\n'
+        'Neden: $reason\n\n'
+        'Kayıt silinmez; karşı işaretli bir ters kayıt eklenir ve bakiye düzelir.';
+  }
+
   Future<void> _submit() async {
-    if (_submitting || _retry.locked) return;
+    if (_submitting || _confirming || _retry.locked) return;
     if (!validateForm(_formKey)) {
       setState(() => _error = kFixFieldsMessage);
       return;
     }
     final reason = _reason.text.trim();
-    final key = _keys.keyFor('${widget.entry.id}|$reason');
+    final message = _confirmMessage(reason);
+    setState(() => _confirming = true);
+    final bool confirmed;
+    try {
+      confirmed = await confirmCrmAction(
+        context,
+        title: 'Kaydı iptal et',
+        message: message,
+        semanticMessage: spokenMoneyText(message),
+        confirmLabel: 'Ters Kaydı Ekle',
+        cancelLabel: 'Geri Dön',
+        icon: Icons.undo_rounded,
+        tone: AppTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+    if (!confirmed || !mounted) return;
+    final signature = '${widget.scope.siteCode}|${widget.entry.id}|$reason';
+    final key = _keys.keyFor(signature);
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
@@ -104,6 +149,7 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
         reason: reason,
         idempotencyKey: key,
       );
+      _keys.clear(signature);
       if (!mounted) return;
       _needsRefreshOnClose = false;
       final balance = result.balanceMinor;
@@ -119,9 +165,12 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
       // Kayıt zaten iptal edilmiş / iptal edilemez: kayıt listesi eskimiştir, kapanırken tazelenir.
       if (financeOutcomeUncertain(e) ||
           hasErrorCode(e, 'ENTRY_ALREADY_REVERSED') ||
-          hasErrorCode(e, 'ENTRY_NOT_REVERSIBLE')) {
+          hasErrorCode(e, 'ENTRY_NOT_REVERSIBLE') ||
+          hasErrorCode(e, 'IDEMPOTENCY_CONFLICT')) {
         _needsRefreshOnClose = true;
       }
+      // Sunucu bu anahtarı farklı bilgiyle zaten kullanmış: anahtar atılır, hesap kontrol edilir.
+      if (hasErrorCode(e, 'IDEMPOTENCY_CONFLICT')) _keys.clear(signature);
       if (!mounted) return;
       final limited = _retry.lockIfRateLimited(e, () {
         if (mounted) setState(() {});
@@ -161,14 +210,15 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
         tone: AppTone.danger,
         actions: [
           TextButton(
-            onPressed: _submitting ? null : () => popIfCurrent(context),
-            child: const Text('Vazgeç'),
+            key: const ValueKey<String>('finance_reverse_close'),
+            onPressed: (_submitting || _confirming) ? null : () => popIfCurrent(context),
+            child: const Text('Kapat'),
           ),
           ElevatedButton(
             key: const ValueKey<String>('finance_reverse_submit'),
             style: filledToneStyle(context, tone: AppTone.danger),
-            onPressed: (_submitting || _retry.locked) ? null : _submit,
-            child: Text(_submitting ? 'İptal ediliyor...' : 'İptal Et'),
+            onPressed: (_submitting || _confirming || _retry.locked) ? null : _submit,
+            child: Text(_submitting ? 'Ters kayıt ekleniyor...' : 'Ters Kaydı Ekle'),
           ),
         ],
         child: Form(
@@ -177,7 +227,7 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_error != null) CrmFormError(message: _error!),
+              if (_error != null) CrmFormError(message: _error!, announce: true),
               DialogPanel(
                 key: const ValueKey<String>('finance_reverse_entry'),
                 child: Column(
@@ -188,10 +238,14 @@ class _FinanceReverseDialogState extends State<FinanceReverseDialog> {
                       title: entry.kind.label,
                     ),
                     const SizedBox(height: AppSpace.sm),
-                    Text(
-                      '${formatCrmDate(entry.entryDate)} • ${formatMinor(entry.amountMinor.abs())}'
-                      '${entry.definitionName == null ? '' : ' • ${entry.definitionName}'}',
-                      style: th.bodyMedium,
+                    Builder(
+                      builder: (context) {
+                        final summary =
+                            '${formatCrmDate(entry.entryDate)} • ${formatMinor(entry.amountMinor.abs())}'
+                            '${entry.definitionName == null ? '' : ' • ${entry.definitionName}'}';
+                        // Tutar ekran okuyucuya "bin iki yüz elli lira" diye okunur.
+                        return Text(summary, semanticsLabel: spokenMoneyText(summary), style: th.bodyMedium);
+                      },
                     ),
                   ],
                 ),

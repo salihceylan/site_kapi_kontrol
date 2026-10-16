@@ -32,8 +32,15 @@ SiteModulesState mdState(
   String siteName, {
   bool door = true,
 
-  /// true: Faz 4a kataloğu (`finance` = `available`, `toggleable`); false (varsayılan): Faz 1 kataloğu
-  /// (`finance` = `coming_soon`) — Faz 1/1.1 testleri tek açılıp kapanabilir modül (Geçiş Kontrol) varsayar.
+  /// true: sunucunun GERÇEK kataloğu (Faz 4a'dan beri `finance` = `available`, `toggleable`); false (varsayılan): eski
+  /// Faz 1 kataloğu (`finance` = `coming_soon`).
+  ///
+  /// Varsayılan bilerek false: Faz 1 / 1.1 modül testlerinden 25'i TÜM katalog üzerinde sayım yapar ("tam 1 Tanımlı
+  /// değil çipi", "tam 5 Yakında çipi", "tek Modül Talep Et düğmesi", "tek Kapalı çipi"). Katalog finance'ı
+  /// `available` yapınca bu sayımlar değişir; hepsini kart kapsamına almak anlamlı bir test değişikliği olurdu ve
+  /// Faz 1 güvencelerini zayıflatma riski taşır. Anahtar bulucuları ise artık katalogdan bağımsızdır: tüm
+  /// `find.byType(Switch)` kullanımları [doorModuleSwitch] ile yalnız Geçiş Kontrol kartına bağlandı. Faz 4a'ya özgü
+  /// testler `financeAvailable: true` ile gerçek kataloğu kullanır.
   bool financeAvailable = false,
 
   /// [financeAvailable] iken `finance` modülü açık mı (varsayılan kapalı).
@@ -98,7 +105,7 @@ SiteModulesState mdState(
         'Aidat ve Finans',
         'Aidat, borç ve alacak takibi; gelir ve gider kayıtları.',
         // Faz 4a: sunucu kataloğunda `available` (varsayılan KAPALI, süper açar, yönetici talep eder).
-        // Eski testler Faz 1 kataloğunu ("Yakında…") bekler: yeni katalog [financeAvailable] ile seçilir.
+        // [financeAvailable] false: eski Faz 1 kataloğunu ("Yakında…") taklit eder.
         status: financeAvailable ? 'available' : 'coming_soon',
         enabled: financeAvailable && finance,
         toggleable: financeAvailable,

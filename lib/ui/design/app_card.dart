@@ -485,10 +485,14 @@ class InlineNotice extends StatelessWidget {
     this.tone = AppTone.danger,
     this.onRetry,
     this.icon,
+    this.semanticsLabel,
   });
 
   /// Gösterilen metin (mevcut hata/başarı cümleleri birebir geçer).
   final String message;
+
+  /// Ekran okuyucunun [message] yerine okuyacağı metin (örn. tutarın "bin lira" okunuşu); yoksa [message].
+  final String? semanticsLabel;
 
   /// danger (hata), success (başarı), warning (uyarı), info (bilgi).
   final AppTone tone;
@@ -537,6 +541,7 @@ class InlineNotice extends StatelessWidget {
                     children: [
                       Text(
                         message,
+                        semanticsLabel: semanticsLabel,
                         style: th.bodyMedium?.copyWith(
                           color: ink,
                           fontWeight: FontWeight.w600,

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
-import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
@@ -11,6 +10,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/finance_reverse_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
@@ -97,6 +97,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     isAlive: () => mounted,
     errorFallback: 'Ekstre yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
     moreErrorFallback: 'Daha fazla hareket yüklenemedi. Tekrar deneyin.',
+    messageOf: financeMessageOf,
   );
 
   bool get _canWrite => widget.scope.canWrite;
@@ -117,7 +118,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   void _afterChange(String? message) {
     widget.onChanged?.call();
     if (!mounted) return;
-    if (message != null) AppSnack.show(context, message, kind: AppSnackKind.success);
+    if (message != null) showFinanceSnack(context, message);
     unawaited(_loader.reload());
   }
 
@@ -175,6 +176,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
         context,
         scope: widget.scope,
         entry: entry,
+        apartmentLabel: _title,
         onRefreshNeeded: _refreshOnly,
       );
     } finally {
@@ -196,6 +198,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final header = _header;
+    final related = <int, LedgerEntry>{for (final item in _loader.items) item.id: item};
     return AppDialog(
       title: 'Hesap Ekstresi',
       subtitle: _title,
@@ -226,6 +229,7 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
               Expanded(
                 child: Semantics(
                   header: true,
+                  container: true,
                   child: Text('Hareketler', style: Theme.of(context).textTheme.titleMedium),
                 ),
               ),
@@ -249,6 +253,9 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
               child: LedgerEntryTile(
                 entry: entry,
                 showActor: _canWrite,
+                // Yönetici notları (açıklama, iptal nedeni) yalnız yazma yetkisi olan ekranda; kurul görmez.
+                showNotes: _canWrite,
+                related: related,
                 actionsEnabled: !_opening,
                 onCorrect: _canWrite && entry.canCorrect ? () => _correct(entry) : null,
                 onReverse: _canWrite && entry.canReverse ? () => _reverse(entry) : null,

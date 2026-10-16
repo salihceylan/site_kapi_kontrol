@@ -36,7 +36,8 @@ class PeopleSite {
   /// Yönetici / süper kullanıcı: true; yalnız kurul üyesi olunan sitede false.
   final bool canWrite;
 
-  String get label => name.trim().isEmpty ? 'Site $code' : name.trim();
+  /// Kullanıcıya görünen site adı. Ad boşsa teknik site KODU gösterilmez ("Site 11" değil).
+  String get label => name.trim().isEmpty ? 'İsimsiz site' : name.trim();
 
   @override
   bool operator ==(Object other) =>

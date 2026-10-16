@@ -218,7 +218,7 @@ void main() {
       );
 
       // Geçiş Kontrol kapatma onayı.
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       expect(find.byType(AppDialog), findsOneWidget);
       expect(find.text('Geçiş Kontrol Kapatılsın mı?'), findsOneWidget);
       expect(t.takeException(), isNull);
@@ -255,7 +255,7 @@ void main() {
         scale: s,
         dark: dark,
       );
-      await tapFinder(t, find.byType(Switch));
+      await tapFinder(t, doorModuleSwitch);
       expect(find.text('Onay Gerekli'), findsOneWidget);
       expect(t.takeException(), isNull);
       await scrollTo(t, find.text('Onayla'));

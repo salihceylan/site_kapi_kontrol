@@ -679,4 +679,50 @@ void main() {
       }
     });
   });
+  group('inceleme düzeltmeleri: closable ve önizleme alanları', () {
+    test('FinancePeriods.closable: yeni -> eski sıralanır, yinelenen / bozuk atılır; alan yoksa null', () {
+      final periods = FinancePeriods.fromJson(<String, dynamic>{
+        'closed_through': '2026-08',
+        'items': <dynamic>[],
+        'open_period': '2026-10',
+        'closable': <dynamic>['2026-08', '2026-10', 'bozuk', '2026-09', '2026-09', null, 7],
+      });
+      expect(periods.closable, <FinancePeriod>[
+        const FinancePeriod(2026, 10),
+        const FinancePeriod(2026, 9),
+        const FinancePeriod(2026, 8),
+      ]);
+      expect(FinancePeriods.fromJson(<String, dynamic>{'items': <dynamic>[]}).closable, isNull);
+      expect(FinancePeriods.fromJson(<String, dynamic>{'closable': 'x'}).closable, isNull);
+      // Boş liste "kapatılabilir ay yok" demektir (null'dan FARKLI).
+      final empty = FinancePeriods.fromJson(<String, dynamic>{'closable': <dynamic>[]});
+      expect(empty.closable, isNotNull);
+      expect(empty.closable, isEmpty);
+    });
+
+    test('FeePreview: preview_hash, redistributed, skipped_count, duplicate_of_run_id', () {
+      final preview = FeePreview.fromJson(<String, dynamic>{
+        'total_minor': 100,
+        'apartment_count': 1,
+        'preview_hash': '  abc123  ',
+        'redistributed': true,
+        'skipped_count': 2,
+        'duplicate_of_run_id': 31,
+        'missing_data': <dynamic>[
+          <String, dynamic>{'apartment_id': 5, 'label': 'Daire 5', 'block_name': 'A Blok', 'reason_code': 'area_missing'},
+        ],
+      });
+      expect(preview.previewHash, 'abc123');
+      expect(preview.redistributed, isTrue);
+      expect(preview.skippedCount, 2);
+      expect(preview.duplicateOfRunId, 31);
+      expect(preview.missingData.single.blockName, 'A Blok');
+      final bare = FeePreview.fromJson(<String, dynamic>{'total_minor': 100, 'apartment_count': 1});
+      expect(bare.previewHash, isNull);
+      expect(bare.redistributed, isFalse);
+      expect(bare.skippedCount, 0);
+      expect(bare.duplicateOfRunId, isNull);
+      expect(FeePreview.fromJson(<String, dynamic>{'total_minor': 1, 'preview_hash': ''}).previewHash, isNull);
+    });
+  });
 }

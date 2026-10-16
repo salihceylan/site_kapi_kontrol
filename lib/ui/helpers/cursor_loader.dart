@@ -20,6 +20,7 @@ class CursorLoader<T> {
     required this.isAlive,
     this.errorFallback = 'Liste yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
     this.moreErrorFallback = 'Daha fazla kayıt yüklenemedi. Tekrar deneyin.',
+    this.messageOf = crmMessageOf,
   });
 
   /// `beforeId` imlecinden (null: ilk sayfa) sayfa getirir; süzgeç değerlerini ÇAĞRI ANINDA okur.
@@ -36,6 +37,9 @@ class CursorLoader<T> {
 
   final String errorFallback;
   final String moreErrorFallback;
+
+  /// Hatadan kullanıcı metni üretir (varsayılan [crmMessageOf]); mali ekranlar teknik metni göstermez.
+  final String Function(Object error, String fallback) messageOf;
 
   List<T> items = <T>[];
   bool loading = false;
@@ -85,7 +89,7 @@ class CursorLoader<T> {
     } catch (e) {
       if (_disposed || !isAlive() || token != _token) return;
       loading = false;
-      error = crmMessageOf(e, errorFallback);
+      error = messageOf(e, errorFallback);
       notify();
     }
   }
@@ -111,7 +115,7 @@ class CursorLoader<T> {
     } catch (e) {
       if (_disposed || !isAlive() || more != _moreToken) return;
       loadingMore = false;
-      moreError = crmMessageOf(e, moreErrorFallback);
+      moreError = messageOf(e, moreErrorFallback);
       notify();
     }
   }

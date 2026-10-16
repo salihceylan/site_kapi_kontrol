@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
-import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/crm_confirm_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_definition_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_run_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
-import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
@@ -45,7 +43,10 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
   bool _loading = false;
   bool _loadedOnce = false;
   String? _error;
+
+  // Son eylemin hatası, eylemin yapıldığı tanımın KARTINDA gösterilir (listenin başında görünmez kalmasın).
   String? _actionError;
+  int? _actionErrorId;
   int _token = 0;
   FeeKind? _kind;
   bool? _active;
@@ -92,7 +93,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
       if (!mounted || token != _token) return;
       setState(() {
         _loading = false;
-        _error = crmMessageOf(
+        _error = financeMessageOf(
           e,
           'Tanımlar yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
         );
@@ -112,7 +113,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
   void _afterChange(String? message) {
     widget.onDataChanged();
     if (!mounted) return;
-    if (message != null) AppSnack.show(context, message, kind: AppSnackKind.success);
+    if (message != null) showFinanceSnack(context, message);
     unawaited(reload());
   }
 
@@ -191,6 +192,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
     setState(() {
       _busyId = definition.id;
       _actionError = null;
+      _actionErrorId = null;
     });
     try {
       await widget.scope.authService.updateFeeDefinition(
@@ -208,6 +210,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
       });
       setState(() {
         _busyId = null;
+        _actionErrorId = definition.id;
         _actionError = limited
             ? RetryLock.messageFor(e)
             : financeWriteMessage(
@@ -225,7 +228,6 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final th = Theme.of(context).textTheme;
     final Widget body;
     if (_items.isEmpty && (_loading || (!_loadedOnce && _error == null))) {
       body = const ListSkeleton(rows: 3);
@@ -253,6 +255,10 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
               child: FeeDefinitionCard(
                 definition: definition,
                 busy: _busyId == definition.id || _opening,
+                busyLabel: _busyId == definition.id ? 'Güncelleniyor...' : null,
+                // Liste yenilenemediyse (eski veri) borçlandır / düzenle / pasifleştir kapalıdır.
+                actionsEnabled: _error == null,
+                errorText: _actionErrorId == definition.id ? _actionError : null,
                 onPost: _canWrite &&
                         definition.isActive &&
                         definition.isKnown &&
@@ -282,7 +288,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Tür', style: th.titleSmall),
+              const FinanceGroupTitle('Tür'),
               const SizedBox(height: AppSpace.sm),
               Wrap(
                 spacing: AppSpace.sm,
@@ -309,7 +315,7 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
                 ],
               ),
               const SizedBox(height: AppSpace.md),
-              Text('Durum', style: th.titleSmall),
+              const FinanceGroupTitle('Durum'),
               const SizedBox(height: AppSpace.sm),
               Wrap(
                 spacing: AppSpace.sm,
@@ -349,10 +355,6 @@ class FinanceDefinitionsTabState extends State<FinanceDefinitionsTab> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
-        if (_actionError != null) ...[
-          InlineNotice(message: _actionError!),
-          const SizedBox(height: AppSpace.md),
-        ],
         body,
       ],
     );

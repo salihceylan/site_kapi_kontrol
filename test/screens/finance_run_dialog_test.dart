@@ -16,8 +16,9 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 
 import 'dialog_layout_harness.dart';
 import 'finance_fixtures.dart';
-import 'list_fixtures.dart' show tapText;
+import 'list_fixtures.dart' show tapFinder, tapText;
 import 'people_fixtures.dart';
+import 'site_application_fixtures.dart' show captureAnnouncements;
 
 final DateTime _now = DateTime.utc(2026, 10, 16, 9);
 
@@ -254,7 +255,10 @@ void main() {
       expect(find.byKey(const ValueKey<String>('finance_run_more')), findsNothing);
     });
 
-    testWidgets('Geri: forma döner; seçilen dönem korunur; yeni önizleme yeni anahtar üretir', (t) async {
+    // W2 (inceleme düzeltmesi): önceki test adı "yeni önizleme yeni anahtar üretir" idi ve her önizleme anahtarı
+    // SIFIRLIYORDU; yanıtı kaybolan bir onaydan sonra "Geri -> Önizle -> Onayla" bu yüzden ÇİFT borçlandırırdı. Artık
+    // anahtar form içeriğine bağlıdır ve önizlemeler arasında değişmez.
+    testWidgets('Geri: forma döner; seçilen dönem korunur; yeni önizleme işlem anahtarını DEĞİŞTİRMEZ', (t) async {
       final auth = FinanceFakeAuth.seeded();
       await _open(t, auth, definition: _def(auth, 1));
       await _tapKey(t, 'finance_period_next');
@@ -266,6 +270,27 @@ void main() {
       await _preview(t);
       expect(auth.previewCalls.length, 2);
       expect(auth.previewCalls.last['period'], '2026-11');
+    });
+
+    testWidgets('yazıldı ama yanıt kayboldu: Geri -> Önizle -> Onayla ÇİFT borç yazmaz (aynı anahtar)', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final before = auth.ledger.length;
+      final out = await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      await _confirm(t);
+      // İstek sunucuda İŞLENDİ (3 satır yazıldı) ama yanıt kayboldu.
+      expect(auth.ledger.length, before + 3);
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
+      expect(out.closed, isFalse);
+
+      await _tapKey(t, 'finance_run_back');
+      await _preview(t);
+      // Yenilenen önizleme artık "zaten borçlandırılmış" der ve onay kapalıdır: ikinci yazma denenemez.
+      expect(find.byKey(const ValueKey<String>('finance_run_already_posted')), findsOneWidget);
+      expect(_confirmEnabled(t), isFalse);
+      expect(auth.postCalls.length, 1);
+      expect(auth.ledger.length, before + 3, reason: 'çift kayıt yok');
     });
 
     testWidgets('zaten borçlandırılmış dönem: uyarı, onay AÇILMAZ', (t) async {
@@ -351,7 +376,10 @@ void main() {
       expect(auth.previewCalls.length, 2, reason: 'önizleme otomatik yenilendi');
       expect(out.closed, isFalse);
       expect(find.byKey(const ValueKey<String>('finance_run_notice')), findsOneWidget);
-      expect(find.text(AuthApi.messageForErrorCode('PREVIEW_STALE')!), findsOneWidget);
+      // W4: eski ve yeni toplam birlikte yazılır; yeni önizleme gösterilir.
+      expect(find.textContaining('Veriler değişti, önizleme yenilendi.'), findsOneWidget);
+      expect(find.textContaining('Yeni toplam 2.000,00 ₺ (4 daire)'), findsOneWidget);
+      expect(find.textContaining('önceki toplam 1.500,00 ₺ (3 daire) idi'), findsOneWidget);
       expect(find.text('4 daire'), findsOneWidget, reason: 'araya giren yeni daire görünür');
       expect(find.text('2.000,00 ₺'), findsWidgets);
       expect(auth.ledger.length, before, reason: 'bayat onayda hiçbir şey yazılmaz');
@@ -360,7 +388,11 @@ void main() {
       expect(auth.postCalls.length, 2);
       expect(auth.postCalls[1]['expected_total_minor'], 200000);
       expect(auth.postCalls[1]['expected_apartment_count'], 4);
-      expect(auth.postCalls[1]['idempotency_key'], isNot(auth.postCalls[0]['idempotency_key']));
+      expect(auth.postCalls[1]['expected_hash'], isNot(auth.postCalls[0]['expected_hash']),
+          reason: 'onay YENİ önizlemenin özetini taşır');
+      // W2: işlem anahtarı form içeriğine bağlıdır; önizleme yenilemesi onu değiştirmez (sunucu stale ile hiçbir şey
+      // kaydetmediği için aynı anahtarla yeni onay güvenlidir).
+      expect(auth.postCalls[1]['idempotency_key'], auth.postCalls[0]['idempotency_key']);
       expect(out.closed, isTrue);
       expect(auth.ledger.length, before + 4);
     });
@@ -679,6 +711,346 @@ void main() {
     });
   });
 
+  // ---------------------------------------------------------------------------------------------------
+  // İnceleme düzeltmeleri (W2, W4, W7, W14, W17): para bütünlüğü ve erişilebilirlik.
+  // ---------------------------------------------------------------------------------------------------
+
+  /// Ek borç formunu doldurur: ad, eşit bölüş, toplam tutar (tüm site: 3 daire).
+  Future<void> fillCharge(WidgetTester t, {String name = 'Asansör', String amount = '90'}) async {
+    await _enter(t, 'finance_charge_name', name);
+    await _tapKey(t, 'charge_spec_dist_equal');
+    await _enter(t, 'charge_spec_amount', amount);
+  }
+
+  int chargeRows(FinanceFakeAuth auth, [String name = 'Asansör']) =>
+      auth.ledger.where((e) => e['definition_name'] == name).length;
+
+  Future<void> tapInDialog(WidgetTester t, String label) =>
+      tapFinder(t, find.descendant(of: find.byType(AlertDialog).last, matching: find.text(label)));
+
+  group('W2: ek borç işlem anahtarı ve tekrar koruması', () {
+    testWidgets('yazıldı ama yanıt kayboldu: Geri -> Önizle -> Onayla; önizleme "yakın zamanda yazıldı" der, '
+        'uyarı penceresinde Vazgeç ÇİFT borç yazmaz', (t) async {
+      final auth = FinanceFakeAuth.seeded()..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final out = await _open(t, auth);
+      await fillCharge(t);
+      await _preview(t);
+      await _confirm(t);
+      expect(chargeRows(auth), 3, reason: 'istek sunucuda işlendi');
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
+
+      await _tapKey(t, 'finance_run_back');
+      await _preview(t);
+      expect(find.byKey(const ValueKey<String>('finance_run_duplicate')), findsOneWidget);
+      await _confirm(t);
+      expect(find.text('Aynı ek borç daha önce kaydedilmiş'), findsOneWidget);
+      expect(
+        find.textContaining('Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Önce daire hesaplarını kontrol edin.'),
+        findsWidgets,
+      );
+      expect(auth.chargePostCalls.length, 1, reason: 'uyarı penceresi açıkken istek gönderilmez');
+      await tapInDialog(t, 'Vazgeç');
+      await settleFor(t);
+      expect(auth.chargePostCalls.length, 1);
+      expect(chargeRows(auth), 3, reason: 'çift borç yok');
+      expect(out.closed, isFalse);
+    });
+
+    testWidgets('önizleme "yakın zamanda yazıldı" demese de Geri -> Önizle -> Onayla AYNI anahtarı gönderir: '
+        'sunucu kaydı yeniden oynatır, çift borç yazılmaz', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..omitDuplicateHint = true
+        ..errorsAfterWrite.add(ApiException('Sunucuya ulaşılamadı.'));
+      final out = await _open(t, auth);
+      await fillCharge(t);
+      await _preview(t);
+      await _confirm(t);
+      expect(chargeRows(auth), 3);
+      await _tapKey(t, 'finance_run_back');
+      await _preview(t);
+      await _confirm(t);
+      expect(auth.chargePostCalls.length, 2);
+      expect(auth.chargePostCalls[1]['idempotency_key'], auth.chargePostCalls[0]['idempotency_key']);
+      expect(chargeRows(auth), 3, reason: 'aynı anahtar: kayıt yeniden oynatıldı, çift yazılmadı');
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('form içeriği değişince YENİ anahtar; eski anahtar geri gelince aynı kalır (A -> B -> A)', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..omitDuplicateHint = true
+        ..postError = ApiException('Sunucuya ulaşılamadı.');
+      await _open(t, auth);
+      await fillCharge(t, amount: '90');
+      await _preview(t);
+      await _confirm(t); // A: yanıt yok
+      await _tapKey(t, 'finance_run_back');
+      await _enter(t, 'charge_spec_amount', '120');
+      await _preview(t);
+      await _confirm(t); // B
+      await _tapKey(t, 'finance_run_back');
+      await _enter(t, 'charge_spec_amount', '90');
+      await _preview(t);
+      await _confirm(t); // A yeniden
+      final keys = auth.chargePostCalls.map((c) => c['idempotency_key']).toList();
+      expect(keys.length, 3);
+      expect(keys[1], isNot(keys[0]), reason: 'içerik değişti: yeni anahtar');
+      expect(keys[2], keys[0], reason: 'A içeriği geri geldi: AYNI anahtar');
+    });
+
+    testWidgets('DUPLICATE_CHARGE (önizleme haber vermedi): uyarı penceresi + "Yine de ekle" '
+        'allow_duplicate ve YENİ anahtarla yazar', (t) async {
+      final auth = FinanceFakeAuth.seeded()..omitDuplicateHint = true;
+      // Bir saat önce aynı ek borç yazılmış.
+      await auth.postExtraCharge(
+        11,
+        const ExtraChargeInput(name: 'Asansör', distribution: FeeDistribution.equal, amountMinor: 9000),
+        expectedTotalMinor: 9000,
+        expectedApartmentCount: 3,
+        idempotencyKey: 'onceki-kayit',
+      );
+      expect(chargeRows(auth), 3);
+      final seeded = auth.chargePostCalls.length; // hazırlık çağrısı sayaca girer
+      final out = await _open(t, auth);
+      await fillCharge(t, amount: '90');
+      await _preview(t);
+      await _confirm(t);
+      expect(auth.chargePostCalls.length, seeded + 1);
+      expect(auth.chargePostCalls.last['allow_duplicate'], false);
+      expect(find.text('Aynı ek borç daha önce kaydedilmiş'), findsOneWidget);
+      expect(find.textContaining('Önceki kayıt:'), findsOneWidget, reason: 'önceki kaydın zamanı yazılır');
+      expect(chargeRows(auth), 3);
+
+      await tapInDialog(t, 'Yine de ekle');
+      await settleFor(t);
+      expect(auth.chargePostCalls.length, seeded + 2);
+      expect(auth.chargePostCalls.last['allow_duplicate'], true);
+      expect(
+        auth.chargePostCalls.last['idempotency_key'],
+        isNot(auth.chargePostCalls[seeded]['idempotency_key']),
+        reason: '"Yine de ekle" YENİ işlem anahtarı kullanır',
+      );
+      expect(chargeRows(auth), 6, reason: 'bilinçli tekrar yazıldı');
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('IDEMPOTENCY_CONFLICT: hesapları kontrol et uyarısı; sonraki deneme yeni anahtar alır', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..omitDuplicateHint = true
+        ..postError = ApiException(
+          AuthApi.messageForErrorCode('IDEMPOTENCY_CONFLICT')!,
+          statusCode: 409,
+          code: 'IDEMPOTENCY_CONFLICT',
+        );
+      final out = await _open(t, auth);
+      await fillCharge(t);
+      await _preview(t);
+      await _confirm(t);
+      expect(find.text(AuthApi.messageForErrorCode('IDEMPOTENCY_CONFLICT')!), findsOneWidget);
+      expect(out.closed, isFalse);
+      auth.postError = null;
+      await _confirm(t);
+      expect(auth.chargePostCalls.length, 2);
+      expect(auth.chargePostCalls[1]['idempotency_key'], isNot(auth.chargePostCalls[0]['idempotency_key']));
+    });
+
+    testWidgets('aylık borçlandırma: yanıtı kayıp onaydan sonra Geri -> Önizle AYNI anahtarı korur', (t) async {
+      final auth = FinanceFakeAuth.seeded()..postError = ApiException('Sunucuya ulaşılamadı.');
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      await _confirm(t);
+      await _tapKey(t, 'finance_run_back');
+      await _preview(t);
+      await _confirm(t);
+      expect(auth.postCalls.length, 2);
+      expect(auth.postCalls[1]['idempotency_key'], auth.postCalls[0]['idempotency_key']);
+    });
+  });
+
+  group('W4: PREVIEW_STALE, özet (hash) ve yeniden paylaştırma', () {
+    FinanceFakeAuth withMissing() => FinanceFakeAuth.seeded()
+      ..definitions[3] = finDefinition(3, name: 'Arsa payı aidatı', distribution: 'land_share', amount: 6000000);
+
+    testWidgets('onay önizlemenin özetini (expected_hash) gönderir', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      await _confirm(t);
+      expect((auth.postCalls.single['expected_hash'] as String?)?.isNotEmpty, isTrue);
+    });
+
+    testWidgets('eski sunucu (preview_hash yok): onay hash göndermez, yeniden paylaştırma notu çıkmaz', (t) async {
+      final auth = withMissing()..omitPreviewHash = true;
+      await _open(t, auth, definition: _def(auth, 3));
+      await _preview(t);
+      expect(find.byKey(const ValueKey<String>('finance_run_redistributed')), findsNothing);
+      await _tapKey(t, 'finance_skip_missing');
+      await _confirm(t);
+      expect(auth.postCalls.single['expected_hash'], isNull);
+    });
+
+    testWidgets('toplam ve sayı AYNI kalsa da özet değişirse (paylar takas) sunucu PREVIEW_STALE der; '
+        'önizleme güncel paylarla yenilenir', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..apartmentsJson[303] = pplApartmentJson(303, 'B Blok - 2', blockId: 2, shareN: 20, shareD: 1000)
+        ..definitions[3] = finDefinition(3, name: 'Arsa payı aidatı', distribution: 'land_share', amount: 6000000);
+      auth.apartmentsJson[301] = pplApartmentJson(301, 'A Blok - 5', shareN: 30, shareD: 1000, party: 'owner');
+      auth.apartmentsJson[302] = pplApartmentJson(302, 'A Blok - 6', shareN: 50, shareD: 1000, party: 'tenant');
+      await _open(t, auth, definition: _def(auth, 3));
+      await _preview(t);
+      final before = auth.ledger.length;
+      // Onaydan önce 301 ile 302'nin payları takas edilir: toplam (60.000 ₺) ve daire sayısı (3) değişmez.
+      auth.beforeNextPost = () {
+        final a = auth.apartmentsJson[301]!['land_share'];
+        auth.apartmentsJson[301]!['land_share'] = auth.apartmentsJson[302]!['land_share'];
+        auth.apartmentsJson[302]!['land_share'] = a;
+      };
+      await _confirm(t);
+      expect(auth.postCalls.length, 1);
+      expect(auth.ledger.length, before, reason: 'hiçbir şey yazılmadı');
+      expect(find.textContaining('Veriler değişti, önizleme yenilendi.'), findsOneWidget);
+      expect(auth.previewCalls.length, 2, reason: 'önizleme yenilendi');
+    });
+
+    testWidgets('yenileme BAŞARISIZ olursa "önizleme yenilendi" yazılmaz; hata + eski onay kapalı; '
+        '"Önizlemeyi Yenile" ile düzelir', (t) async {
+      final auth = FinanceFakeAuth.seeded()..staleOnFirstPost = true;
+      final out = await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      auth.previewError = ApiException('Sunucuya ulaşılamadı.');
+      await _confirm(t);
+      expect(auth.postCalls.length, 1);
+      expect(find.textContaining('önizleme yenilendi'), findsNothing);
+      expect(find.text('Sunucuya ulaşılamadı.'), findsOneWidget);
+      expect(_confirmEnabled(t), isFalse, reason: 'eski önizlemeyle onay kapalı');
+      expect(find.byKey(const ValueKey<String>('finance_run_refresh')), findsOneWidget);
+      expect(find.textContaining('Önizleme eskidi'), findsWidgets, reason: 'nedeni yazılır');
+
+      // Eski önizlemeyle zorla onay denense bile istek gitmez.
+      await t.tap(find.byKey(const ValueKey<String>('finance_run_confirm')), warnIfMissed: false);
+      await t.pump();
+      expect(auth.postCalls.length, 1);
+
+      auth.previewError = null;
+      await _tapKey(t, 'finance_run_refresh');
+      await settleFor(t);
+      expect(find.byKey(const ValueKey<String>('finance_run_refresh')), findsNothing);
+      expect(find.textContaining('Yeni toplam 2.000,00 ₺ (4 daire)'), findsOneWidget);
+      expect(_confirmEnabled(t), isTrue);
+      await _confirm(t);
+      expect(out.closed, isTrue);
+    });
+
+    testWidgets('redistributed: eksik bilgili daire sayısı ve yeniden paylaştırma notu ONAYDAN ÖNCE görünür', (t) async {
+      final auth = withMissing();
+      await _open(t, auth, definition: _def(auth, 3));
+      await _preview(t);
+      expect(
+        find.text('Eksik bilgili 1 daire hariç tutuldu; tutar kalan dairelere yeniden paylaştırılır.'),
+        findsOneWidget,
+      );
+      expect(auth.postCalls, isEmpty, reason: 'henüz onay yok');
+    });
+
+    testWidgets('sabit tutarda (yeniden paylaştırılmaz) not çıkmaz', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..definitions[4] = finDefinition(
+          4,
+          name: 'Kategorili',
+          distribution: 'category',
+          categories: <String, int>{'3+1': 75000},
+        );
+      await _open(t, auth, definition: _def(auth, 4));
+      await _preview(t);
+      expect(find.byKey(const ValueKey<String>('finance_run_missing')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('finance_run_redistributed')), findsNothing);
+    });
+  });
+
+  group('W7: gizli form alanı odaklanamaz', () {
+    testWidgets('önizleme gösterilirken Offstage form odağa KAPALI; Geri ile geri açılır', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _open(t, auth);
+      await fillCharge(t);
+      await _preview(t);
+      EditableText nameField() => t.widget<EditableText>(find.descendant(
+        of: find.byKey(const ValueKey<String>('finance_charge_name'), skipOffstage: false),
+        matching: find.byType(EditableText, skipOffstage: false),
+        skipOffstage: false,
+      ));
+      final hidden = nameField().focusNode;
+      hidden.requestFocus();
+      await t.pump();
+      expect(hidden.hasFocus, isFalse, reason: 'gizli alan odak alamaz');
+
+      await _tapKey(t, 'finance_run_back');
+      final visible = nameField().focusNode;
+      visible.requestFocus();
+      await t.pump();
+      expect(visible.hasFocus, isTrue, reason: 'form görünürken alan odak alır');
+    });
+  });
+
+  group('W14 / W17: onay nedeni, daire etiketi, tutar okunuşu', () {
+    testWidgets('onay pasifken NEDEN düğmeyle ilişkilendirilir (ipucu) ve ekranda yazılır', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..definitions[3] = finDefinition(3, name: 'Arsa payı aidatı', distribution: 'land_share', amount: 6000000);
+      await _open(t, auth, definition: _def(auth, 3));
+      await _preview(t);
+      expect(_confirmEnabled(t), isFalse);
+      final reason = t.widget<Text>(find.byKey(const ValueKey<String>('finance_run_blocked_reason'))).data!;
+      expect(reason, startsWith('Onaylamak için:'));
+      expect(reason, contains('Eksik bilgili daireleri atla'));
+      final handle = t.ensureSemantics();
+      final data = t.getSemantics(find.byKey(const ValueKey<String>('finance_run_confirm')));
+      expect(data.label, 'Onayla ve Borçlandır');
+      expect(data.hint, contains('Eksik bilgili daireleri atla'));
+      handle.dispose();
+      // İşaretlenince neden satırı kalkar ve düğme açılır.
+      await _tapKey(t, 'finance_skip_missing');
+      expect(find.byKey(const ValueKey<String>('finance_run_blocked_reason')), findsNothing);
+      expect(_confirmEnabled(t), isTrue);
+    });
+
+    testWidgets('eksik veri satırı blok adını da yazar', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..definitions[3] = finDefinition(3, name: 'Arsa payı aidatı', distribution: 'land_share', amount: 6000000);
+      // Etiket yalnız "Daire 2", blok adı ayrı alanda (gerçek sunucu biçimi).
+      auth.apartmentsJson[303] = <String, dynamic>{
+        ...auth.apartmentsJson[303]!,
+        'label': 'Daire 2',
+        'block_name': 'B Blok',
+      };
+      await _open(t, auth, definition: _def(auth, 3));
+      await _preview(t);
+      expect(find.text('B Blok / Daire 2: Arsa payı tanımlı değil.'), findsOneWidget);
+    });
+
+    testWidgets('önizleme özeti TEK birleşik etiketle okunur (başlık / sayı / toplam iki kez okunmaz)', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      final handle = t.ensureSemantics();
+      expect(
+        find.bySemanticsLabel('Önizleme. Dönem: Ekim 2026. 3 daire. Toplam borç: bin beş yüz lira'),
+        findsOneWidget,
+      );
+      // Parça parça okunan eski etiketler artık ayrı düğüm değildir.
+      expect(find.bySemanticsLabel('Toplam: bin beş yüz lira'), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('320x640 x2,0: önizleme satırında tutar daire adının altına iner, taşma yok', (t) async {
+      final auth = _bigSite();
+      await _open(t, auth, definition: _def(auth, 1), width: 320, height: 640, scale: 2.0);
+      await _preview(t);
+      expect(find.text('A Blok - 1'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      final title = t.getTopLeft(find.text('A Blok - 1'));
+      final amount = t.getTopLeft(find.text('500,00 ₺').first);
+      expect(amount.dy, greaterThan(title.dy), reason: 'tutar alt satırda');
+    });
+  });
+
   group('klavye', () {
     testWidgets('klavye açıkken (320x640 x2,0) Ek Borç formu taşmaz', (t) async {
       final auth = FinanceFakeAuth.seeded();
@@ -690,6 +1062,42 @@ void main() {
       await _preview(t);
       expect(find.text('Tutarı girin.'), findsOneWidget);
       expect(t.takeException(), isNull);
+    });
+  });
+  group('W4 / W11: duyuru ve teknik metin', () {
+    testWidgets('PREVIEW_STALE sonrası yenilenen önizleme tutarlarla birlikte DUYURULUR (okunuşla)', (t) async {
+      final announced = captureAnnouncements(t);
+      final auth = FinanceFakeAuth.seeded()..staleOnFirstPost = true;
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      await _confirm(t);
+      await settleFor(t);
+      expect(
+        announced.any((m) => m.startsWith('Veriler değişti, önizleme yenilendi.') && m.contains('iki bin lira (4 daire)')),
+        isTrue,
+        reason: announced.toString(),
+      );
+      expect(announced.any((m) => m.contains('₺')), isFalse, reason: 'duyuruda rakam yığını yok');
+    });
+
+    testWidgets('önizleme 502 (metinsiz): teknik metin yok, Türkçe yedek metin var', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..previewError = ApiException('İşlem başarısız (502)', statusCode: 502, genericFallback: true);
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      expect(find.text('Önizleme alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(find.textContaining('502'), findsNothing);
+    });
+
+    testWidgets('onay 502 (metinsiz): Borçlandırma yedek metni + sonuç belirsiz ipucu', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..postError = ApiException('İşlem başarısız (502)', statusCode: 502, genericFallback: true);
+      await _open(t, auth, definition: _def(auth, 1));
+      await _preview(t);
+      await _confirm(t);
+      expect(find.textContaining('Borçlandırma yapılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.'), findsOneWidget);
+      expect(find.textContaining('Kayıt oluşmuş olabilir'), findsOneWidget);
+      expect(find.textContaining('502'), findsNothing);
     });
   });
 }
