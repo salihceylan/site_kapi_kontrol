@@ -239,10 +239,16 @@ describe('zamanlayıcı: tik', () => {
     assert.ok(!logged.includes('@'));
   });
 
-  it('kilit alınamayan tikte özet temizliği de sürer (yalnız yayın / kuyruk kilitle korunur); kilit alınamazsa yayın sorgusu yok', async () => {
+  it('F6a kilit başka yerdeyken (ikinci sunucu) tik BÜTÜNÜYLE atlanır: yayın sorgusu, özet temizliği, sahipsiz e-posta kapatma ve kuyruk tetiği çalışmaz (hepsini kilidin sahibi örnek yapar)', async () => {
     lockBusy = true;
-    await runSchedulerTick();
-    assert.equal(log.some((q) => /FROM announcements/.test(q.sql)), false);
+    pendingEmails = true;
+    const summary = await runSchedulerTick();
+    assert.equal(summary.locked, true);
+    assert.equal(log.some((q) => /FROM announcements/.test(q.sql)), false, 'yayın sorgusu yok');
+    assert.equal(purges, 0, 'özet temizliği yok');
+    assert.equal(closeCalls, 0, 'sahipsiz e-posta kapatma yok');
+    assert.equal(kicks, 0, 'kuyruk tetiği yok');
+    assert.deepEqual(lockOps, ['try']);
   });
 
   it('DB hatası (duyuru sorgusu) tiki düşürmez; kilit yine açılır', async () => {

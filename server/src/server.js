@@ -27,7 +27,7 @@ import { announcementPublicRouter } from './modules/announcement_public_routes.j
 import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
-import { validateEnv } from './config/env.js';
+import { resolveServerStart, validateEnv } from './config/env.js';
 import { installProcessHandlers } from './config/process_handlers.js';
 import { requireCompanyAccess } from './middlewares/company_auth.js';
 import { errorHandler, notFoundHandler } from './middlewares/error_handler.js';
@@ -203,7 +203,13 @@ async function startServer() {
 export { app };
 
 // Testler (SERVER_SKIP_START=1) uygulamayı ağa açmadan ve veritabanına bağlanmadan içe aktarabilir (gerçek ara katman zinciri, gerçek rotalar).
-// Üretimde değişken tanımsızdır: davranış değişmez.
-if (process.env.SERVER_SKIP_START !== '1') {
+// Üretimde değişken tanımsızdır: davranış değişmez. dotenv .env'i de yüklediğinden değişken oraya yanlışlıkla yazılmış olabilir: NODE_ENV=production
+// iken YOK SAYILIR ve yüksek sesle (hata) loglanır; sunucu normal başlar.
+const startDecision = resolveServerStart(process.env);
+if (startDecision.error) {
+  // eslint-disable-next-line no-console
+  console.error(`[ENV] HATA: ${startDecision.error}`);
+}
+if (!startDecision.skip) {
   startServer();
 }

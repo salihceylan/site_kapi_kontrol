@@ -76,6 +76,13 @@ export function evaluateJwtSecret(secret) {
   return { ok: true };
 }
 
+// Sır dönüşümü notu (uyarılarda): PREVIOUS'tan bir sırrı silmek, o sırla atılmış eski bağlantıları ve (henüz güncel tuza taşınmamış) bastırma
+// kayıtlarını geçersiz kılar. Sunucu eski tuzla eşleşen bastırmayı yayın / kuyruk sırasında güncel tuza da yazar (sessiz geçiş), ama bunun için
+// sırrın en az bir gönderim turu boyunca PREVIOUS'ta kalması gerekir.
+const ANNOUNCEMENT_ROTATION_NOTE =
+  "PREVIOUS'tan bir sir silinirse o sirla kayitli abonelikten cikma kayitlari (guncel tuza tasinmadiysa) ve eski baglantilar gecersiz olur; " +
+  'PREVIOUS degerleri virgul iceremez (virgul ayirici), her sir bas/son bosluksuz en az 8 karakter olmalidir.';
+
 function isSet(env, name) {
   return String(env[name] ?? '').trim().length > 0;
 }
@@ -137,15 +144,24 @@ export function validateEnv(env = process.env) {
     if (isPlaceholderSecret(own) || own.length < 16) {
       warnings.push(
         `ANNOUNCEMENT_EMAIL_SECRET yer tutucu ya da zayif bir deger (${own.length} karakter; en az 16 onerilir). ` +
-          '8 karakterden kisaysa kullanilmaz ve JWT_SECRET\'tan turetilir (duyuru yayini bozulmaz).',
+          `8 karakterden kisaysa kullanilmaz ve JWT_SECRET'tan turetilir (duyuru yayini bozulmaz). ${ANNOUNCEMENT_ROTATION_NOTE}`,
       );
     }
   } else if (isProduction) {
     warnings.push(
       'ANNOUNCEMENT_EMAIL_SECRET tanimli degil: duyuru e-postasi adres ozetleri ve abonelikten cik imzasi JWT_SECRET\'tan turetiliyor. ' +
         'JWT_SECRET dondurulursa abonelikten cikma listesi ve eski baglantilar gecersiz olur; ozel bir ANNOUNCEMENT_EMAIL_SECRET tanimlayin ' +
-        '(dondururken eskisini ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS\'a yazin).',
+        `(dondururken eskisini ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS'a yazin). ${ANNOUNCEMENT_ROTATION_NOTE}`,
     );
+  }
+  if (isSet(env, 'ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS')) {
+    const previous = String(env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS).split(',').map((entry) => entry.trim());
+    const unusable = previous.filter((entry) => entry.length < 8).length;
+    if (unusable > 0) {
+      warnings.push(
+        `ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS icinde kullanilamayan ${unusable} girdi var (bos ya da 8 karakterden kisa); yok sayilir. ${ANNOUNCEMENT_ROTATION_NOTE}`,
+      );
+    }
   }
 
   if (!isSet(env, 'COMPANY_API_KEY')) {
@@ -163,4 +179,24 @@ export function validateEnv(env = process.env) {
   }
 
   return { errors, warnings };
+}
+
+/**
+ * Sunucunun açılışta başlatılıp başlatılmayacağı. SERVER_SKIP_START=1 YALNIZ testler içindir (uygulama ağa / veritabanına açılmadan içe
+ * aktarılır). dotenv .env dosyasını da yüklediği için değişken yanlışlıkla .env'e yazılmış olabilir: NODE_ENV=production iken YOK SAYILIR
+ * (sunucu normal başlar) ve çağıran `error` mesajını yüksek sesle (console.error) loglar.
+ * @returns {{ skip: boolean, error: string | null }}
+ */
+export function resolveServerStart(env = process.env) {
+  const requested = String(env.SERVER_SKIP_START ?? '').trim() === '1';
+  if (!requested) {
+    return { skip: false, error: null };
+  }
+  if (String(env.NODE_ENV ?? '').trim() === 'production') {
+    return {
+      skip: false,
+      error: 'SERVER_SKIP_START=1 production ortaminda YOK SAYILDI (yalniz testler icindir; .env dosyasindan kaldirin). Sunucu normal baslatiliyor.',
+    };
+  }
+  return { skip: true, error: null };
 }

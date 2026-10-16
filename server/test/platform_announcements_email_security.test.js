@@ -140,6 +140,63 @@ describe('E3 kanonik adres (takma adlarla bastırma / sınır dolanılamaz)', ()
   });
 });
 
+describe('F6b ASCII dışı harfler: JS ve SQL aynı davranır (yalnız A-Z küçültülür)', () => {
+  it('normalizeAddress YALNIZ ASCII büyük harfi küçültür: Türkçe İ / ı / Ç / Ö / Ş / Ğ / Ü olduğu gibi kalır (toLowerCase()\'in yerel ayara bağlı farkı yok)', () => {
+    assert.equal(normalizeAddress('İLHAN.Çağrı@Example.COM'), 'İlhan.Çağrı@example.com');
+    assert.equal(normalizeAddress('İ@x.com'), 'İ@x.com');
+    assert.equal(normalizeAddress('ISPARTA@X.COM'), 'isparta@x.com', 'ASCII I -> i');
+    assert.equal(normalizeAddress('ılhan@x.com'), 'ılhan@x.com');
+    assert.equal(normalizeAddress('ÖZGÜR@GMAIL.COM'), 'ÖzgÜr@gmail.com');
+    assert.notEqual(normalizeAddress('İ@x.com'), 'İ@x.com'.toLowerCase(), 'toLowerCase() İ\'yi i̇ yapardı (yerel ayara bağlı ayrışma kaynağı)');
+  });
+
+  it('kanonik özet ASCII dışı yerel kısımda deterministiktir: ASCII büyük harf varyantlar eşit, ASCII dışı büyük / küçük harfler FARKLI (SQL translate() ile aynı)', () => {
+    assert.equal(hashEmail('Çağrı@Example.com'), hashEmail('Çağrı@example.com'));
+    assert.notEqual(hashEmail('ÇAĞRI@example.com'), hashEmail('çağrı@example.com'), 'ASCII dışı büyük harf küçültülmez (iki taraf da aynı)');
+    assert.equal(hashEmail('İlhan+x@Gmail.com'), hashEmail('İlhan@gmail.com'));
+    assert.equal(canonicalAddress('Ö.Z+etiket@GoogleMail.com'), 'Öz@gmail.com');
+  });
+});
+describe('F4 sır kırpma: her yerde aynı kural (trim)', () => {
+  it('baş / sondaki boşluk fark yaratmaz: ANNOUNCEMENT_EMAIL_SECRET, JWT_SECRET yedeği ve PREVIOUS girdileri kırpılmış değerle türetilir', () => {
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = 'guclu-duyuru-sirri-0123456789';
+    const clean = emailHashSalt();
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = '  guclu-duyuru-sirri-0123456789\t';
+    assert.equal(emailHashSalt(), clean, 'özel sır');
+    delete process.env.ANNOUNCEMENT_EMAIL_SECRET;
+    const jwtSalt = emailHashSalt();
+    process.env.JWT_SECRET = `  ${process.env.JWT_SECRET}  `;
+    assert.equal(emailHashSalt(), jwtSalt, 'JWT_SECRET yedeği');
+    // JWT_SECRET (boşluklu) PREVIOUS\'a taşınınca (orada kırpılır) AYNI tuz üretilir: eski özetler / bağlantılar kaybolmaz
+    const withSpaces = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'rotasyon-sonrasi-jwt-0123456789abcdef';
+    process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = withSpaces;
+    assert.ok(emailHashSalts().includes(jwtSalt), 'PREVIOUS\'taki kırpılmış sır eski tuzla aynı');
+    process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = `, ${withSpaces} ,`;
+    assert.equal(emailHashSalts().filter((salt) => salt === jwtSalt).length, 1);
+  });
+
+  it('uzunluk KIRPILMIŞ değerle ölçülür (validateEnv ile aynı): "  abcdefg  " (7) kullanılamaz, "  abcdefgh  " (8) kullanılır', () => {
+    const warn = mock.method(console, 'warn', () => {});
+    const fallback = emailHashSalt();
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = '  abcdefg  ';
+    assert.equal(emailHashSalt(), fallback);
+    assert.equal(warn.mock.calls.length, 1);
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = '  abcdefgh  ';
+    assert.notEqual(emailHashSalt(), fallback);
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = '  abcdefgh  ';
+    process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = 'abcdefgh';
+    assert.equal(emailHashSalts().length, 1, 'kırpılınca güncel sırla aynı olan PREVIOUS girdisi atılır');
+  });
+
+  it('imza da kırpılmış sırla atılır: boşluklu ve boşluksuz yazım aynı bağlantıyı doğrular', () => {
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = 'imza-sirri-0123456789';
+    const token = signUnsubscribeToken(hashEmail('sakin@example.com'));
+    process.env.ANNOUNCEMENT_EMAIL_SECRET = '   imza-sirri-0123456789   ';
+    assert.equal(verifyUnsubscribeToken(token), hashEmail('sakin@example.com'));
+  });
+});
+
 describe('E2 sır yönetimi', () => {
   it('kısa (< 8) ANNOUNCEMENT_EMAIL_SECRET HATA FIRLATMAZ: JWT_SECRET\'a düşer ve BİR kez uyarı loglar (sır değeri yazılmaz)', () => {
     const warn = mock.method(console, 'warn', () => {});

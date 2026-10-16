@@ -3025,7 +3025,7 @@ async function sectionAnnouncements() {
   // tercihler
   console.log('--- tercihler ---');
   res = await call('GET', '/app/notification-preferences', R1);
-  check('tercih varsayilani: { email_announcements:true, push_announcements:true, push_available:false }', res.status === 200 && same(res.body, { email_announcements: true, push_announcements: true, push_available: false }), res.body);
+  check('tercih varsayilani: { email_announcements:true, push_announcements:true, push_available:false }', res.status === 200 && same(res.body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }), res.body);
   res = await call('PUT', '/app/notification-preferences', R1, { email_announcements: false, push_announcements: false, baska: 1 });
   check('PUT email_announcements:false; push_* ve bilinmeyen anahtarlar YOKSAYILIR (push degismez)', res.status === 200 && res.body.email_announcements === false && res.body.push_announcements === true && res.body.push_available === false, res.body);
   res = await call('GET', '/app/notification-preferences', R1);
@@ -4583,6 +4583,14 @@ async function sectionAnnouncements() {
       const rowsWithPrevious = await recipientsOf(withPrevious.id);
       check('E2: ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS ile eski sirla yapilmis bastirma BULUNUR (skipped_pref), eski baglanti gecerli (200); yeni satirlar yeni ozetle',
         withPrevious.stats.email.skipped_pref === 1 && withPrevious.stats.email.pending === 0 && rowsWithPrevious.every((r) => r.email === null) && viewWith.status === 200, [withPrevious.stats.email, viewWith.status]);
+      // F3 sessiz tuz gecisi: eski tuzla eslesen bastirma, kitle anlik goruntusu sirasinda GUNCEL tuzla da eklendi
+      const currentHash = emailSec.hashEmail('e2.hedef@example.com');
+      check('F3: PREVIOUS ile eski tuzdan bulunan bastirma GUNCEL tuzla da yazilir (sessiz gecis): hem eski hem yeni ozet listede', currentHash !== oldHash && (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = ANY($1::text[])`, [[oldHash, currentHash]])).rows[0].n === 2);
+      const previousSaved = process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      const afterRemoval = (await create(S26, MGR, { title: 'E2 PREVIOUS kaldirildi', body: 'x', send_email: true, publish: 'now', target: toF1 })).body;
+      check('F3: PREVIOUS\'tan eski sir SILINSE BILE bastirma kaybolmaz (guncel tuzla zaten kayitli): skipped_pref', afterRemoval.stats.email.skipped_pref === 1 && afterRemoval.stats.email.pending === 0, afterRemoval.stats.email);
+      process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = previousSaved;
       // yeni sirla yeni baglanti: PREVIOUS kaldirilsa da gecerli (yalniz guncel sirla imzalanir)
       const newMail = (await create(S26, MGR, { title: 'E2 yeni baglanti', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s26.aptIds.F2] } })).body;
       resetMail();
@@ -4606,13 +4614,22 @@ async function sectionAnnouncements() {
   // --- E3: kanonik adres (takma adla bastirma / sinir dolanilamaz) ----------------------------------------------------------------------------
   console.log('--- E3: kanonik adres ---');
   {
-    const addresses = ['Ali@Gmail.com', 'a.li+1@gmail.com', 'ALI@googlemail.com', 'a.l.i+x+y@googlemail.com', 'ali+tag@example.com', 'a.li@example.com', '+x@example.com', '...@gmail.com', 'x@y.co', 'a@b.com'];
+    const addresses = ['Ali@Gmail.com', 'a.li+1@gmail.com', 'ALI@googlemail.com', 'a.l.i+x+y@googlemail.com', 'ali+tag@example.com', 'a.li@example.com', '+x@example.com', '...@gmail.com', 'x@y.co', 'a@b.com',
+      // F6b: ASCII disi harfler (Turkce I / i / C / O / S / G / U): JS ve SQL ayni davranmali (yalniz A-Z kucultulur)
+      'İLHAN@Example.com', 'ılhan@example.com', 'ISPARTA@Example.com', 'Çağrı+x@GMAIL.com', 'ÖZGÜR.Kaya@GoogleMail.com', 'ŞÜKRÜ@example.com', 'ığdır+x@Gmail.COM', 'İ.Z@gmail.com', 'ǅ@example.com', 'ß.Σ@Example.COM'];
     const mismatches = [];
     for (const address of addresses) {
-      const sqlHash = (await q(`SELECT ${recipientsMod.emailHashSql('$1', recipientsMod.canonicalEmailSql('lower(btrim($2::text))'))} AS h`, [emailSec.emailHashSalt(), address])).rows[0].h;
+      // SQL tarafi uretimdeki ifadelerle: deliverableEmailSql (ASCII kucuk harf + SAFE bicim) -> canonicalEmailSql -> emailHashSql
+      const sqlHash = (await q(`SELECT ${recipientsMod.emailHashSql('$1', recipientsMod.canonicalEmailSql(recipientsMod.deliverableEmailSql('$2::text')))} AS h`, [emailSec.emailHashSalt(), address])).rows[0].h;
       if (sqlHash !== emailSec.hashEmail(address)) mismatches.push(address);
     }
-    check('E3: kanonik adres ozeti SQL ve JS\'te BIREBIR ayni (gmail noktalari, +etiket, googlemail, bos kalacak yerel kisim)', mismatches.length === 0, mismatches);
+    check('E3/F6b: kanonik adres ozeti SQL (uretimdeki deliverableEmailSql + canonicalEmailSql) ve JS\'te BIREBIR ayni (gmail noktalari, +etiket, googlemail, bos kalacak yerel kisim, Turkce I/i ve ASCII disi harfler)', mismatches.length === 0, mismatches);
+    const lowered = [];
+    for (const address of ['İLHAN@Example.com', 'ılhan@EXAMPLE.com', 'ÖZGÜR@Example.com', 'ISPARTA@EXAMPLE.COM']) {
+      const sqlAddress = (await q(`SELECT ${recipientsMod.deliverableEmailSql('$1::text')} AS a`, [address])).rows[0].a;
+      if (sqlAddress !== emailSec.normalizeAddress(address)) lowered.push([address, sqlAddress, emailSec.normalizeAddress(address)]);
+    }
+    check('F6b: SQL deliverableEmailSql ciktisi JS normalizeAddress ile ayni (ASCII disi harfler olduklari gibi, yalniz A-Z kucuk)', lowered.length === 0, lowered);
     check('E3: varyant adresler ayni ozeti verir; gmail disi nokta farkli kisidir', emailSec.hashEmail('a.li+1@gmail.com') === emailSec.hashEmail('ali@gmail.com') && emailSec.hashEmail('ALI@googlemail.com') === emailSec.hashEmail('ali@gmail.com') && emailSec.hashEmail('a.li@example.com') !== emailSec.hashEmail('ali@example.com'));
 
     const S27 = 1000000027;
@@ -4653,51 +4670,83 @@ async function sectionAnnouncements() {
     resetMail();
   }
 
-  // --- E4: hesap tercihi ve geri alma yolu ---------------------------------------------------------------------------------------------------
-  console.log('--- E4: abonelikten cikis -> tercih, PUT true -> geri alma ---');
+  // --- E4 / F1 / F2: abonelikten cikis (ucuz), etkin tercih (GET), geri alma yolu (yalniz dogrulanmis gercek hesap e-postasi) ---------------------------
+  console.log('--- E4/F1/F2: abonelikten cikis, etkin tercih, geri alma ---');
   {
     const S28 = 1000000028;
-    const s28 = await makeSite(S28, 'E4 Sitesi', { 'H Blok': [1, 2, 3] });
+    const s28 = await makeSite(S28, 'E4 Sitesi', { 'H Blok': [1, 2, 3, 4] });
     await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S28, MGR]);
     const gmailUser = await mkUser('E4 Gmail Hesabi', 'e4.hesap@gmail.com');
     await addMembership(s28.aptIds.H1, gmailUser);
     const controlUser = await mkUser('E4 Kontrol Hesabi', 'e4.kontrol@example.com');
     await addMembership(s28.aptIds.H2, controlUser);
+    // F2 "yanlis hesap kapanmaz": ayni dairede (H1) ikinci hesap (farkli adres)
+    const roommate = await mkUser('E4 Dairedaki Diger Hesap', 'e4.diger@example.com');
+    await addMembership(s28.aptIds.H1, roommate);
     const internalUser = await mkUser('E4 Daire Hesabi', 'daire_e4@ahbu.local', { internal: true });
     await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'e4.iletisim@example.com', resident_pin_code = '4444' WHERE id = $1`, [s28.aptIds.H3, internalUser]);
     await syncSitePeople(S28);
     const prefOf = async (userCode) => (await q(`SELECT email_announcements FROM notification_preferences WHERE user_code = $1`, [userCode])).rows[0]?.email_announcements ?? null;
+    const getPref = async (userCode) => (await call('GET', '/app/notification-preferences', userCode)).body;
     resetPublicLimiters();
     const hesapHash = emailSec.hashEmail('e4hesap@gmail.com');
     const post = (hash) => rawCall('POST', '/public/announcement-unsubscribe', { form: `t=${encodeURIComponent(emailSec.signUnsubscribeToken(hash))}` });
-    check('E4a hazirlik: kimsenin tercihi yok', (await prefOf(gmailUser)) === null && (await prefOf(controlUser)) === null && (await prefOf(internalUser)) === null);
-    check('E4a: hesap e-postasinin KANONIK adresiyle abonelikten cikis (e4.hesap@gmail.com = e4hesap@gmail.com) o hesabin e-posta tercihini FALSE yapar; baska hesaplar etkilenmez',
-      (await post(hesapHash)).status === 200 && (await prefOf(gmailUser)) === false && (await prefOf(controlUser)) === null && (await prefOf(internalUser)) === null);
-    check('E4a: uygulama bunu yansitir (GET /app/notification-preferences false)', (await call('GET', '/app/notification-preferences', gmailUser)).body.email_announcements === false);
-    check('E4a: dahili daire hesabinin iletisim adresiyle (apartments.resident_email) cikis o hesabin tercihini kapatir', (await post(emailSec.hashEmail('e4.iletisim@example.com'))).status === 200 && (await prefOf(internalUser)) === false && (await prefOf(controlUser)) === null);
+    const suppressed = async (hash) => (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = $1`, [hash])).rows[0].n;
+    check('E4 hazirlik: kimsenin saklanan tercihi yok; GET varsayilan { true, email_suppressed false }', (await prefOf(gmailUser)) === null && same(await getPref(gmailUser), { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }));
+
+    // F2: POST ucuz: yalniz bastirma kaydi (+ indeksli bekleyen kapatma); users / apartments / notification_preferences'a dokunmaz
+    hooks.log = [];
+    const posted = await post(hesapHash);
+    const postQueries = hooks.log.map((entry) => String(entry.text).replace(/\s+/g, ' ').trim());
+    hooks.log = null;
+    check('F2: POST abonelikten cikis YALNIZ bastirma INSERT + indeksli bekleyen kapatma calistirir (2 sorgu); users / apartments / site_people / notification_preferences\'a ve sha256 taramasina HIC dokunmaz',
+      posted.status === 200 && postQueries.length === 2 && /^INSERT INTO announcement_email_suppressions/.test(postQueries[0]) && /^UPDATE announcement_recipients/.test(postQueries[1]) && !postQueries.some((sql) => /\busers\b|apartments|site_people|notification_preferences|sha256/i.test(sql)), postQueries.map((sql) => sql.slice(0, 80)));
+    check('F2: POST saklanan tercihi DEGISTIRMEZ (kimsenin satiri olusmadi)', (await prefOf(gmailUser)) === null && (await prefOf(controlUser)) === null && (await prefOf(roommate)) === null && (await prefOf(internalUser)) === null);
+    const gmailPref = await getPref(gmailUser);
+    check('F2: GET ETKIN deger hesaplar: hesap e-postasi (e4.hesap@gmail.com, kanonik e4hesap@gmail.com) bastirildi -> email_announcements false + email_suppressed true; saklanan tercih true kalir', same(gmailPref, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: true }) && (await prefOf(gmailUser)) === null, gmailPref);
+    check('F2 YANLIS HESAP KAPANMAZ: ayni dairedeki baska hesap (farkli adres) ve baska daire hesabi etkin degerde true kalir', (await getPref(roommate)).email_announcements === true && (await getPref(roommate)).email_suppressed === false && (await getPref(controlUser)).email_suppressed === false);
+    // dahili hesabin iletisim adresi (resident_email) bastirilirsa o hesap GET'te bastirilmis gorunur
+    check('F2: dahili daire hesabinin iletisim adresi (apartments.resident_email) bastirilinca GET email_suppressed true (yalniz GOSTERIM)', (await post(emailSec.hashEmail('e4.iletisim@example.com'))).status === 200 && (await getPref(internalUser)).email_suppressed === true && (await getPref(internalUser)).email_announcements === false);
     // bastirma gercekten etkin: bu adrese yayin skipped_pref
     resetMail();
     const blocked = (await create(S28, MGR, { title: 'E4 bastirilmis', body: 'x', send_email: true, importance: 'urgent', publish: 'now', target: { type: 'apartments', apartment_ids: [s28.aptIds.H1] } })).body;
-    check('E4 hazirlik: bastirilmis hesapli alici acil duyuruda bile skipped_pref', blocked.stats.email.skipped_pref === 1 && blocked.stats.email.pending === 0, blocked.stats.email);
-    // geri alma: PUT true yalniz KENDI adresini siler
+    check('E4 hazirlik: bastirilmis hesapli alici acil duyuruda bile skipped_pref (diger dairedaki hesap pending)', blocked.stats.email.skipped_pref === 1 && blocked.stats.email.pending === 1, blocked.stats.email);
+
+    // F1/E4b geri alma: PUT true YALNIZ cagiranin dogrulanmis GERCEK hesap e-postasinin bastirmasini siler
     await post(emailSec.hashEmail('baska.kisi@example.com')); // baskasinin kaydi
-    const suppressed = async (hash) => (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = $1`, [hash])).rows[0].n;
     const controlPut = await call('PUT', '/app/notification-preferences', controlUser, { email_announcements: true });
-    check('E4b: baska hesabin PUT true\'su bu adresin bastirmasini SILMEZ (yalniz kendi adresleri)', controlPut.status === 200 && (await suppressed(hesapHash)) === 1 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1);
+    check('E4b: baska hesabin PUT true\'su bu adresin bastirmasini SILMEZ', controlPut.status === 200 && (await suppressed(hesapHash)) === 1 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1);
+    // F1 SALDIRI: yonetici dahili hesabin resident_email'ini KURBAN adresi yapar; dahili hesapla PUT true kurbanin bastirmasini SILEMEZ
+    const victimHash = emailSec.hashEmail('e4.kurban@example.com');
+    await post(victimHash);
+    await q(`UPDATE apartments SET resident_email = 'e4.kurban@example.com' WHERE id = $1`, [s28.aptIds.H3]);
+    const attack = await call('PUT', '/app/notification-preferences', internalUser, { email_announcements: true });
+    check('F1: yonetici dahili hesabin iletisim adresini kurban adresi yaparsa dahili hesabin PUT true\'su kurbanin bastirmasini SILEMEZ; yanit email_suppressed true + etkin false', attack.status === 200 && (await suppressed(victimHash)) === 1 && attack.body.email_suppressed === true && attack.body.email_announcements === false && (await prefOf(internalUser)) === true, attack.body);
+    check('F1: site_people.email gibi diger iletisim kaynaklari da silme kaynagi degil: hesapsiz kisinin e-postasi bastirmayi acamaz (PUT true yalniz users.email)', (await suppressed(emailSec.hashEmail('e4.iletisim@example.com'))) === 1);
+    // F1: e-postasi DOGRULANMAMIS hesap silemez
+    const unverifiedUser = await mkUser('E4 Dogrulanmamis', 'e4.dogrulanmamis@example.com');
+    await q(`UPDATE users SET email_verified = FALSE WHERE user_code = $1`, [unverifiedUser]);
+    await post(emailSec.hashEmail('e4.dogrulanmamis@example.com'));
+    // kimlik katmani dogrulanmamis hesabi zaten reddeder (savunma katmani 1); servis katmaninin kendi sarti (email_verified = TRUE) DOGRUDAN sinanir (katman 2)
+    const httpAttempt = await call('PUT', '/app/notification-preferences', unverifiedUser, { email_announcements: true });
+    const inboxMod = await import('../src/modules/announcement_inbox.js');
+    const unverifiedPut = await inboxMod.setNotificationPreferences({ user_code: unverifiedUser }, { email_announcements: true });
+    check('F1: e-postasi dogrulanmamis hesap: HTTP katmani reddeder (403/401 ailesi); servis katmani da bastirmayi SILMEZ (email_verified = TRUE sarti): email_suppressed true', httpAttempt.status >= 400 && (await suppressed(emailSec.hashEmail('e4.dogrulanmamis@example.com'))) === 1 && unverifiedPut.email_suppressed === true && unverifiedPut.email_announcements === false, [httpAttempt.status, unverifiedPut]);
+    await q(`UPDATE users SET email_verified = TRUE WHERE user_code = $1`, [unverifiedUser]);
+    check('F1: dogrulama yapilinca ayni hesabin PUT true\'su siler', (await call('PUT', '/app/notification-preferences', unverifiedUser, { email_announcements: true })).body.email_suppressed === false && (await suppressed(emailSec.hashEmail('e4.dogrulanmamis@example.com'))) === 0);
+    // gercek hesap kendi adresininkini siler
     const ownPut = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: true });
-    check('E4b: hesap sahibinin PUT true\'su KENDI adresinin (kanonik) bastirmasini siler, tercih true olur; baskasinin bastirmasi ve dahili hesabin adresi KALIR',
-      ownPut.status === 200 && ownPut.body.email_announcements === true && (await suppressed(hesapHash)) === 0 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1 && (await suppressed(emailSec.hashEmail('e4.iletisim@example.com'))) === 1 && (await prefOf(gmailUser)) === true);
+    check('E4b/F1: hesap sahibinin PUT true\'su KENDI e-postasinin (kanonik e4hesap@gmail.com) bastirmasini siler; yanit etkin true + email_suppressed false; baskasinin bastirmalari KALIR',
+      ownPut.status === 200 && same(ownPut.body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }) && (await suppressed(hesapHash)) === 0 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1 && (await suppressed(victimHash)) === 1, ownPut.body);
     const afterUndo = (await create(S28, MGR, { title: 'E4 geri alindi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s28.aptIds.H1] } })).body;
-    check('E4b: geri alma sonrasi ayni adrese duyuru e-postasi yeniden pending (artik bastirilmiyor)', afterUndo.stats.email.pending === 1 && afterUndo.stats.email.skipped_pref === 0, afterUndo.stats.email);
+    check('E4b: geri alma sonrasi hesap sahibinin adresine duyuru e-postasi yeniden pending (artik bastirilmiyor)', afterUndo.stats.email.pending === 2 && afterUndo.stats.email.skipped_pref === 0, afterUndo.stats.email);
     const putFalse = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: false });
-    check('E4b: PUT false bastirma listesine DOKUNMAZ (yalniz tercihi kapatir)', putFalse.body.email_announcements === false && (await suppressed(hesapHash)) === 0);
-    // dahili hesap: kendi iletisim adresinin bastirmasini PUT true siler
-    const internalPut = await call('PUT', '/app/notification-preferences', internalUser, { email_announcements: true });
-    check('E4b: dahili daire hesabinin PUT true\'su iletisim e-postasinin (resident_email) bastirmasini siler', internalPut.status === 200 && (await suppressed(emailSec.hashEmail('e4.iletisim@example.com'))) === 0 && (await prefOf(internalUser)) === true);
+    check('E4b: PUT false yalniz tercihi false yapar, bastirma listesine DOKUNMAZ', putFalse.body.email_announcements === false && putFalse.body.email_suppressed === false && (await prefOf(gmailUser)) === false);
+    await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: true });
     await q(`DELETE FROM announcement_email_suppressions`);
     await closeAllPending();
     await q(`DELETE FROM sites WHERE site_code = $1`, [S28]);
-    await q(`DELETE FROM users WHERE user_code = ANY($1::int[])`, [[gmailUser, controlUser, internalUser]]);
+    await q(`DELETE FROM users WHERE user_code = ANY($1::int[])`, [[gmailUser, controlUser, roommate, internalUser, unverifiedUser]]);
     resetMail();
   }
 
@@ -4857,6 +4906,65 @@ async function sectionAnnouncements() {
         && boardList.read_count === null && boardList.recipient_count === 6 && typeof managerAfter.stats.read === 'number' && !JSON.stringify([boardAfter, boardList]).includes('live_'), { stats: boardAfter.stats, list: boardList.read_count });
     await q(`DELETE FROM sites WHERE site_code = $1`, [S32]);
     await q(`DELETE FROM users WHERE user_code = $1`, [boardUser]);
+  }
+
+
+  // --- F6c: eski (ilk 032 surumuyle kurulmus) veritabani -> idempotent ALTER ile yukseltme (42703 olmasin) ------------------------------------------------
+  console.log('--- F6c: eski 032 semasindan yukseltme ---');
+  {
+    const migrationSql = fs.readFileSync(new URL('../migrations/032_announcements.sql', import.meta.url), 'utf8');
+    const newColumns = {
+      announcements: ['published_by', 'email_requested_by', 'email_requested_at', 'publish_attempts', 'next_attempt_at'],
+      announcement_recipients: ['email_hash', 'email_claimed_at', 'email_next_at'],
+    };
+    const columnSet = async (client, table) => new Set((await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = $1`, [table])).rows.map((r) => r.column_name));
+    const client = await pool.connect();
+    const report = {};
+    try {
+      await client.query('BEGIN');
+      // ESKI SEMAYI taklit et: sonradan eklenen sutunlar ve kisit yok (yine de gercek satirlar var)
+      await client.query(`ALTER TABLE announcements DROP COLUMN published_by, DROP COLUMN email_requested_by, DROP COLUMN email_requested_at, DROP COLUMN publish_attempts, DROP COLUMN next_attempt_at, DROP CONSTRAINT chk_announcements_published_at`);
+      await client.query(`ALTER TABLE announcement_recipients DROP COLUMN email_hash, DROP COLUMN email_claimed_at, DROP COLUMN email_next_at`);
+      report.oldAnnouncements = await columnSet(client, 'announcements');
+      report.oldRecipients = await columnSet(client, 'announcement_recipients');
+      report.rowsBefore = Number((await client.query(`SELECT COUNT(*)::int AS n FROM announcements`)).rows[0].n);
+      await client.query(migrationSql); // 1. calistirma: sutunlar + kisit + indeksler eklenir
+      report.afterFirstAnnouncements = await columnSet(client, 'announcements');
+      report.afterFirstRecipients = await columnSet(client, 'announcement_recipients');
+      report.constraint = (await client.query(`SELECT convalidated FROM pg_constraint WHERE conname = 'chk_announcements_published_at' AND conrelid = 'announcements'::regclass`)).rows[0];
+      report.indexes = new Set((await client.query(`SELECT indexname FROM pg_indexes WHERE tablename IN ('announcements', 'announcement_recipients')`)).rows.map((r) => r.indexname));
+      await client.query(migrationSql); // 2. calistirma: idempotent (hata yok)
+      report.secondOk = true;
+      // yukseltilmis semada kod calisir: yeni sutunlu satir ve kisit
+      await client.query('SAVEPOINT chk');
+      let violation = null;
+      try {
+        await client.query(`INSERT INTO announcements (site_code, title, body, status) VALUES ($1, 'x', 'x', 'published')`, [S4]);
+      } catch (error) {
+        violation = error.code;
+      }
+      await client.query('ROLLBACK TO SAVEPOINT chk');
+      report.violation = violation;
+      const ok = await client.query(
+        `INSERT INTO announcements (site_code, title, body, status, published_at, publish_attempts, email_requested_by) VALUES ($1, 'yukseltme', 'x', 'published', NOW(), 2, $2) RETURNING id, publish_attempts, email_requested_by`,
+        [S4, MGR],
+      );
+      report.inserted = ok.rows[0];
+      report.rowsAfter = Number((await client.query(`SELECT COUNT(*)::int AS n FROM announcements`)).rows[0].n);
+    } finally {
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+    }
+    check('F6c: eski semada yeni sutunlar YOK (taklit dogru), mevcut satirlar duruyor',
+      newColumns.announcements.every((c) => !report.oldAnnouncements.has(c)) && newColumns.announcement_recipients.every((c) => !report.oldRecipients.has(c)) && report.rowsBefore > 0, [report.rowsBefore]);
+    check('F6c: migration 032 eski semaya uygulaninca (42703 OLMADAN) TUM sonradan eklenen sutunlar eklenir; yeni indeksler olusur; kisit NOT VALID olarak eklenir (eski satirlari taramaz)',
+      newColumns.announcements.every((c) => report.afterFirstAnnouncements.has(c)) && newColumns.announcement_recipients.every((c) => report.afterFirstRecipients.has(c))
+        && ['idx_announcements_published_by', 'idx_announcements_email_requested', 'idx_announcements_created_by', 'idx_announcement_recipients_email_hash'].every((name) => report.indexes.has(name)) && report.constraint?.convalidated === false, { constraint: report.constraint });
+    check('F6c: ikinci calistirma idempotent (hata yok); yukseltilmis semada kisit yeni yazimlari denetler (23514) ve yeni sutunlu satir eklenebilir; satir sayisi korunur',
+      report.secondOk === true && report.violation === '23514' && report.inserted?.publish_attempts === 2 && report.inserted?.email_requested_by === MGR && report.rowsAfter === report.rowsBefore + 1, report);
+    // ROLLBACK sonrasi gercek sema ayni
+    const restored = await columnSet(pool, 'announcements');
+    check('F6c: deney ROLLBACK ile geri alindi (calisan sema degismedi)', newColumns.announcements.every((c) => restored.has(c)) && (await columnSet(pool, 'announcement_recipients')).has('email_hash'));
   }
 
   // =============================================================================================================

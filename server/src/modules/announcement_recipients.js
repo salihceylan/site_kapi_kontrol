@@ -76,14 +76,20 @@ export function targetClause(target, startIndex) {
 
 const SAFE_EMAIL_PATTERN = `'^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'`;
 
-/** Ham iletişim e-postası -> teslim edilebilir adres (küçük harf) ya da NULL (dahili @ahbu.local / biçim hatalı / çok uzun). */
+/**
+ * YALNIZ ASCII küçük harf (announcement_email_security.js normalizeAddress ile birebir aynı): PostgreSQL `lower()` ASCII dışı harflerde (Türkçe
+ * İ / ı...) veritabanı yerel ayarına göre JS `toLowerCase()`'ten AYRIŞIR; kanonik özetin iki tarafta aynı çıkması için dönüşüm sabittir.
+ */
+export const asciiLowerSql = (column) => `translate(${column}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')`;
+
+/** Ham iletişim e-postası -> teslim edilebilir adres (ASCII küçük harf) ya da NULL (dahili @ahbu.local / biçim hatalı / çok uzun). */
 export const deliverableEmailSql = (column) => `(
   CASE
     WHEN ${column} IS NULL THEN NULL
-    WHEN lower(btrim(${column})) LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN NULL
+    WHEN ${asciiLowerSql(`btrim(${column})`)} LIKE '%${INTERNAL_EMAIL_SUFFIX}' THEN NULL
     WHEN char_length(btrim(${column})) > 254 THEN NULL
     WHEN btrim(${column}) !~ ${SAFE_EMAIL_PATTERN} THEN NULL
-    ELSE lower(btrim(${column}))
+    ELSE ${asciiLowerSql(`btrim(${column})`)}
   END
 )`;
 
@@ -301,6 +307,23 @@ export async function snapshotRecipients(
   const audience = audienceCtes(target);
   const next = audience.params.length + 2;
   const [pAnnouncement, pSend, pImportance, pSalt, pDayStart, pPerAddress, pAllowance, pSalts] = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => `$${next + i}`);
+  const salts = send ? emailHashSalts() : [];
+  // SESSİZ TUZ GEÇİŞİ (F3): bastırma yalnız ESKİ bir tuzla kayıtlıysa aynı kayıt GÜNCEL tuzla da eklenir (ON CONFLICT DO NOTHING); böylece
+  // PREVIOUS listesinden sır silinse de bastırma kaybolmaz. Yalnız eski sır tanımlıysa çalışır (veri değiştiren CTE; INSERT'ten bağımsız yürür).
+  const migrateCte =
+    salts.length > 1
+      ? `,
+      migrated AS (
+        INSERT INTO announcement_email_suppressions (email_hash)
+        SELECT DISTINCT h.email_hash
+        FROM hashed h
+        WHERE ${pSend}::BOOLEAN AND h.email IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM announcement_email_suppressions cur WHERE cur.email_hash = h.email_hash)
+          AND ${suppressedSql('h.email', pSalts)}
+        ON CONFLICT (email_hash) DO NOTHING
+        RETURNING 1
+      )`
+      : '';
   const insert = await db.query(
     `
       WITH ${audience.sql},
@@ -309,7 +332,7 @@ export async function snapshotRecipients(
           b.person_id, b.has_account, b.email_pref, b.email,
           CASE WHEN b.email IS NULL OR NOT ${pSend}::BOOLEAN THEN NULL ELSE ${emailHashSql(pSalt, canonicalEmailSql('b.email'))} END AS email_hash
         FROM base b
-      ),
+      )${migrateCte},
       classified AS (
         SELECT
           h.person_id, h.email, h.email_hash,
@@ -379,7 +402,7 @@ export async function snapshotRecipients(
       istanbulDayRange(now).start.toISOString(),
       perAddressLimit,
       allowance,
-      send ? emailHashSalts() : [],
+      salts,
     ],
   );
   const total = Number(insert.rowCount ?? 0);

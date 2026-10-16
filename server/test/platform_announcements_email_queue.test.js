@@ -39,6 +39,7 @@ let sleeps;
 let sendImpl;
 let savedHooks;
 let claimSalts;
+let suppressionInserts;
 const savedEnv = {};
 
 const ENV_NAMES = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
@@ -174,6 +175,11 @@ function emulate(sql, params) {
     });
     return ok([], params[0].length);
   }
+  // sessiz tuz geçişi (F3): bastırılmış adresin güncel tuzla özeti de listeye yazılır
+  if (/^INSERT INTO announcement_email_suppressions \(email_hash\) SELECT unnest\(\$1::TEXT\[\]\) ON CONFLICT \(email_hash\) DO NOTHING$/.test(sql)) {
+    suppressionInserts.push(...params[0]);
+    return ok([], params[0].length);
+  }
   // özet temizliği (gizlilik)
   if (/^UPDATE announcement_recipients r SET email_hash = NULL FROM announcements a WHERE a\.id = r\.announcement_id AND r\.email_hash IS NOT NULL AND r\.email_status <> 'pending' AND a\.published_at < NOW\(\) - make_interval\(days => \$1::INTEGER\)$/.test(sql)) {
     const hit = rows.filter((r) => r.hash !== null && r.status !== 'pending' && r.old === true);
@@ -192,6 +198,7 @@ beforeEach(() => {
   sent = [];
   sleeps = [];
   claimSalts = [];
+  suppressionInserts = [];
   sendImpl = async () => {};
   for (const name of ENV_NAMES) savedEnv[name] = process.env[name];
   Object.assign(process.env, { SMTP_HOST: 'smtp.invalid', SMTP_USER: 'u@example.invalid', SMTP_PASSWORD: 'x', SMTP_FROM: 'AHBU <n@example.invalid>' });
@@ -389,6 +396,34 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
     assert.deepEqual(sent.map((m) => m.to), ['kisi5@example.com']);
     assert.equal(summary.sent, 1);
     assert.equal(summary.dropped, 4);
+  });
+
+  it('F3 sessiz tuz geçişi: PREVIOUS tanımlıyken bastırılmış satırın adresi GÜNCEL tuzla (kanonik) listeye de yazılır (talep işlemi içinde, ON CONFLICT DO NOTHING); PREVIOUS yokken yazılmaz', async () => {
+    const saved = process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+    try {
+      delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      rows = makeRows(2);
+      rows[0].suppressed = true;
+      await runEmailQueue();
+      assert.deepEqual(suppressionInserts, [], 'olağan durumda ek yazım yok');
+      process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = 'eski-duyuru-sirri-0123456789';
+      rows = makeRows(3, { startPid: 10 });
+      rows[0].suppressed = true;
+      rows[0].email = 'Eski.Adres+x@gmail.com'.toLowerCase();
+      rows[0].currentEmail = rows[0].email;
+      rows[1].suppressed = true;
+      await runEmailQueue();
+      assert.deepEqual(new Set(suppressionInserts), new Set([hashEmail('eski.adres+x@gmail.com'), hashEmail('kisi11@example.com')]));
+      assert.ok(suppressionInserts.includes(hashEmail('eskiadres@gmail.com')), 'kanonik özet (gmail noktaları / +etiket)');
+      assert.deepEqual(rows.map((r) => r.status), ['skipped_pref', 'skipped_pref', 'sent']);
+      const insert = log.find((q) => /^INSERT INTO announcement_email_suppressions/.test(q.sql));
+      const insertIndex = log.indexOf(insert);
+      const closeIndex = log.findIndex((q, index) => index > insertIndex && /^UPDATE announcement_recipients r SET email_status = v\.st, email = NULL, email_hash = NULL/.test(q.sql));
+      assert.ok(insertIndex >= 0 && closeIndex > insertIndex, 'bastırma yazımı satırlar kapatılmadan ÖNCE (aynı talep işleminde)');
+    } finally {
+      if (saved === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = saved;
+    }
   });
 
   it('sahte talep sorgusu gerçek koşulu uygular: yayında olmayan (geri çekilmiş) duyurunun satırları talep edilmez ve gönderilmez', async () => {

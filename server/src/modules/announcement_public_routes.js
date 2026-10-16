@@ -7,22 +7,21 @@
 //
 // Belirteç = "<adres özeti>.<HMAC>" (announcement_email_security.js): adrese bağlı, süresiz, düz adres İÇERMEZ; sayfada adres gösterilmez.
 // Çıkış `announcement_email_suppressions`'a yazılır: adres (KANONİK biçimiyle: +etiket / gmail noktaları önemsiz) sonraki duyurularda
-// 'skipped_pref' olur (acil dahil; hesapsız alıcı için başka kanal yok). O adrese sahip HESAPLARIN bildirim tercihi de kapatılır
-// (uygulamadaki ayar gerçeği yansıtsın); uygulamadaki duyuruları etkilenmez. Geri alma: uygulamada tercih "açık" yapılır
-// (announcement_inbox.js setNotificationPreferences).
+// 'skipped_pref' olur (acil dahil; hesapsız alıcı için başka kanal yok). POST YALNIZ bastırma kaydını yazar (ve gönderimi başlamamış bekleyen
+// e-postaları indeksle kapatır): kullanıcı / daire tablosu TARANMAZ ve bildirim tercihi UPDATE'i YOKTUR (geçerli belirteçle bile ucuz;
+// yanlış hesabın tercihi kapanmaz). Uygulamadaki ayar bastırmayı GET /app/notification-preferences'ta HESAPLANAN etkin değerle yansıtır;
+// geri alma: uygulamada tercih "açık" yapılır (announcement_inbox.js setNotificationPreferences, yalnız doğrulanmış hesap e-postası).
 //
 // HIZ SINIRI (E5): posta sağlayıcıları (Google / Yahoo vb.) tek tık POST'larını ortak IP havuzlarından gönderir; sıkı IP sınırı geçerli
 // belirteçleri 429'a düşürüp çıkışı uygulatmazdı. Bu yüzden ÖNCE imza ucuzca doğrulanır:
 //   - GEÇERSİZ belirteç: sıkı IP sınırı (GET 120/saat, POST 30/saat) - tarama / kaba kuvvet buradan kısıtlanır;
-//   - GEÇERLİ belirteç: adres özeti başına makul sınır (işlem idempotent) + geniş bir IP üst sınırı (kullanıcı taramasının maliyetini sınırlar).
+//   - GEÇERLİ belirteç: adres özeti başına makul sınır (işlem idempotent) + geniş bir IP üst sınırı (yazma yükünü sınırlar).
 // Tüm yanıtlar (429 dahil) sıkı CSP + no-store ile gider.
 
 import express from 'express';
 import { pool } from '../db.js';
 import { createRuleLimiter } from '../middlewares/rate_limiters.js';
-import { emailHashSalts, verifyUnsubscribeToken } from './announcement_email_security.js';
-import { canonicalEmailSql } from './announcement_recipients.js';
-import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { verifyUnsubscribeToken } from './announcement_email_security.js';
 import { HOUR_MS, ipKey } from './route_helpers.js';
 
 export const announcementPublicRouter = express.Router();
@@ -183,32 +182,6 @@ announcementPublicRouter.get('/public/announcement-unsubscribe', (req, res) => {
   return sendPage(res, 200, confirmPage(admitted.token));
 });
 
-// Adresin KANONİK özeti ($1) bu özetle (güncel ya da eski tuz: $2) eşleşen hesapların e-posta bildirim tercihi KAPATILIR: hesap e-postası
-// (dahili @ahbu.local hariç) ve dahili daire hesaplarının iletişim e-postası (apartments.resident_email).
-const DISABLE_ACCOUNT_PREFERENCES_SQL = `
-  INSERT INTO notification_preferences (user_code, email_announcements)
-  SELECT m.user_code, FALSE
-  FROM (
-    SELECT u.user_code
-    FROM users u
-    WHERE u.email IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
-      AND $1 = ANY (ARRAY(
-        SELECT encode(sha256(convert_to(s.salt || ':' || ${canonicalEmailSql('lower(btrim(u.email))')}, 'UTF8')), 'hex')
-        FROM unnest($2::TEXT[]) AS s(salt)
-      ))
-    UNION
-    SELECT a.resident_user_code
-    FROM apartments a
-    INNER JOIN users ru ON ru.user_code = a.resident_user_code
-    WHERE a.resident_email IS NOT NULL
-      AND $1 = ANY (ARRAY(
-        SELECT encode(sha256(convert_to(s.salt || ':' || ${canonicalEmailSql('lower(btrim(a.resident_email))')}, 'UTF8')), 'hex')
-        FROM unnest($2::TEXT[]) AS s(salt)
-      ))
-  ) m
-  ON CONFLICT (user_code) DO UPDATE SET email_announcements = FALSE, updated_at = NOW()
-`;
-
 announcementPublicRouter.post('/public/announcement-unsubscribe', async (req, res) => {
   const admitted = admit(req, res, { invalidLimiter: unsubscribeApplyLimiter, validLimiter: unsubscribeApplyValidLimiter });
   if (admitted.response) {
@@ -229,8 +202,6 @@ announcementPublicRouter.post('/public/announcement-unsubscribe', async (req, re
       `,
       [emailHash],
     );
-    // Uygulamadaki tercih de gerçeği yansıtsın (E4a): bu adrese sahip hesapların e-posta bildirimi kapanır.
-    await pool.query(DISABLE_ACCOUNT_PREFERENCES_SQL, [emailHash, emailHashSalts()]);
     return sendPage(res, 200, DONE_PAGE);
   } catch (error) {
     // eslint-disable-next-line no-console

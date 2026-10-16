@@ -1,5 +1,6 @@
 // Genel (kimliksiz) "abonelikten çık" uçları (DB'siz, gerçek HTTP): GET onay sayfası hiçbir şeyi DEĞİŞTİRMEZ, POST uygular (form gövdesi ya da
 // RFC 8058 tek tıklama), imzasız / kurcalanmış belirteç 400, sıkı CSP, adres sayfada görünmez, IP hız sınırı.
+import fs from 'node:fs';
 import { describe, it, before, after, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -11,7 +12,7 @@ import {
   unsubscribeViewLimiter,
   unsubscribeViewValidLimiter,
 } from '../src/modules/announcement_public_routes.js';
-import { emailHashSalts, hashEmail, signUnsubscribeToken } from '../src/modules/announcement_email_security.js';
+import { hashEmail, signUnsubscribeToken } from '../src/modules/announcement_email_security.js';
 
 process.env.JWT_SECRET ||= 'unit-test-secret-0123456789abcdef';
 
@@ -51,7 +52,6 @@ beforeEach(() => {
     if (failWrites) throw Object.assign(new Error('db kesildi'), { code: '57P01' });
     if (/^INSERT INTO announcement_email_suppressions/.test(sql)) return { rows: [], rowCount: 1 };
     if (/^UPDATE announcement_recipients/.test(sql)) return { rows: [], rowCount: 2 };
-    if (/^INSERT INTO notification_preferences/.test(sql)) return { rows: [], rowCount: 1 };
     throw new Error(`BEKLENMEYEN SQL: ${sql.slice(0, 160)}`);
   };
   mock.method(console, 'error', () => {});
@@ -124,7 +124,7 @@ describe('POST /public/announcement-unsubscribe', () => {
     assert.equal(res.status, 200);
     assert.match(res.text, /Abonelikten çıkıldı/);
     assert.match(res.headers.get('content-security-policy'), /default-src 'none'/);
-    assert.equal(log.length, 3);
+    assert.equal(log.length, 2);
     assert.match(log[0].sql, /^INSERT INTO announcement_email_suppressions \(email_hash\) VALUES \(\$1\) ON CONFLICT \(email_hash\) DO NOTHING$/);
     assert.deepEqual(log[0].params, [hash()]);
     assert.match(log[1].sql, /SET email_status = 'skipped_pref', email = NULL, email_hash = NULL, email_next_at = NULL WHERE email_hash = \$1 AND email_status = 'pending' AND email_claimed_at IS NULL$/);
@@ -136,7 +136,7 @@ describe('POST /public/announcement-unsubscribe', () => {
     const res = await post(`/public/announcement-unsubscribe?t=${encodeURIComponent(token())}`, 'List-Unsubscribe=One-Click');
     assert.equal(res.status, 200);
     assert.deepEqual(log[0].params, [hash()]);
-    assert.equal(log.length, 3);
+    assert.equal(log.length, 2);
   });
 
   it('idempotent: ikinci POST de 200 (ON CONFLICT DO NOTHING); kurcalanmış / eksik belirteç 400 ve hiçbir yazma yapılmaz', async () => {
@@ -163,25 +163,30 @@ describe('POST /public/announcement-unsubscribe', () => {
   });
 });
 
-describe('E4a hesap tercihi: abonelikten çıkış o adrese sahip hesapların e-posta bildirimini kapatır', () => {
-  it('POST üçüncü sorgu: notification_preferences UPSERT (email_announcements = FALSE); adres özeti + güncel / eski tuzlar parametre; hesap e-postası ve dahili hesap iletişim adresi KANONİK özetle eşleşir', async () => {
+describe('F2 POST ucuzdur: YALNIZ bastırma kaydı yazılır (tablo taraması ve tercih UPDATE\'i YOK)', () => {
+  it('geçerli belirteçle POST iki sorgu çalıştırır: bastırma INSERT + gönderimi başlamamış bekleyenleri (indeksli) kapatma; users / apartments / notification_preferences\'a HİÇ dokunmaz', async () => {
     const res = await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`);
     assert.equal(res.status, 200);
-    const prefs = log[2];
-    assert.match(prefs.sql, /^INSERT INTO notification_preferences \(user_code, email_announcements\) SELECT m\.user_code, FALSE FROM \(/);
-    assert.match(prefs.sql, /ON CONFLICT \(user_code\) DO UPDATE SET email_announcements = FALSE, updated_at = NOW\(\)$/);
-    assert.match(prefs.sql, /FROM users u WHERE u\.email IS NOT NULL AND u\.email NOT LIKE '%@ahbu\.local' AND \$1 = ANY \(ARRAY\( SELECT encode\(sha256\(convert_to\(s\.salt \|\| ':' \|\| \(CASE WHEN split_part\(lower\(btrim\(u\.email\)\), '@', 2\) IN \('gmail\.com', 'googlemail\.com'\)/);
-    assert.match(prefs.sql, /UNION SELECT a\.resident_user_code FROM apartments a INNER JOIN users ru ON ru\.user_code = a\.resident_user_code WHERE a\.resident_email IS NOT NULL/);
-    assert.deepEqual(prefs.params, [hash(), emailHashSalts()]);
-    assert.ok(!JSON.stringify(prefs.params).includes(ADDRESS));
+    assert.equal(log.length, 2);
+    assert.match(log[0].sql, /^INSERT INTO announcement_email_suppressions/);
+    assert.match(log[1].sql, /^UPDATE announcement_recipients SET email_status = 'skipped_pref'/);
+    assert.match(log[1].sql, /WHERE email_hash = \$1 AND email_status = 'pending' AND email_claimed_at IS NULL$/);
+    const everything = log.map((q) => q.sql).join('\n');
+    assert.doesNotMatch(everything, /\busers\b|apartments|notification_preferences|site_people|sha256|unnest/i, 'tablo taraması / tercih yazımı / özet hesabı yok');
+    assert.deepEqual(log.map((q) => q.params), [[hash()], [hash()]], 'parametre yalnız belirteçteki özet');
   });
 
-  it('geçersiz / eksik belirteçte hiçbir tercih yazılmaz; veritabanı hatasında 500 (üçüncü sorgu dahil) ve yalnız kod loglanır', async () => {
+  it('POST kaynak kodunda hesap tercihi yazımı yoktur (yanlış hesabın tercihi kapanamaz)', async () => {
+    const source = fs.readFileSync(new URL('../src/modules/announcement_public_routes.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /notification_preferences|FROM users|FROM apartments|resident_user_code|DISABLE_ACCOUNT/);
+  });
+
+  it('geçersiz / eksik belirteçte hiçbir yazma yapılmaz; veritabanı hatasında 500 ve yalnız hata kodu loglanır', async () => {
     assert.equal((await post('/public/announcement-unsubscribe', 't=abc')).status, 400);
     assert.equal(log.length, 0);
     pool.query = async (text, params) => {
       log.push({ sql: norm(text), params });
-      if (/^INSERT INTO notification_preferences/.test(norm(text))) throw Object.assign(new Error('x'), { code: '40001' });
+      if (/^UPDATE announcement_recipients/.test(norm(text))) throw Object.assign(new Error('x'), { code: '40001' });
       return { rows: [], rowCount: 1 };
     };
     const res = await post('/public/announcement-unsubscribe', `t=${encodeURIComponent(token())}`);

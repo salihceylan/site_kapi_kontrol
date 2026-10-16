@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import {
   assertDeliverableAddressLimit,
   assertTargetBelongsToSite,
+  asciiLowerSql,
   canonicalEmailSql,
+  deliverableEmailSql,
   emailCountsFromRows,
   emailDailyLimit,
   emailHashSql,
@@ -126,6 +128,58 @@ describe('E3 canonicalEmailSql / E2 suppressedSql', () => {
     assert.match(sql, /^EXISTS \(SELECT 1 FROM unnest\(\$6::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = encode\(sha256\(convert_to\(salts\.salt::TEXT \|\| ':' \|\| /);
     assert.ok(sql.includes(canonicalEmailSql('r.email')));
     assert.match(sql, /'UTF8'\)\), 'hex'\)\)$/);
+  });
+});
+
+describe('F6b ASCII küçük harf (JS ile aynı) / deliverableEmailSql', () => {
+  it('asciiLowerSql yalnız A-Z\'yi küçültür (translate); lower() KULLANILMAZ - Türkçe İ / ı veritabanı yerel ayarına göre ayrışmaz', () => {
+    assert.equal(asciiLowerSql('x'), "translate(x, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')");
+    const sql = deliverableEmailSql('raw_email');
+    assert.doesNotMatch(sql, /\blower\(/);
+    assert.match(sql, /translate\(btrim\(raw_email\), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'\) LIKE '%@ahbu\.local' THEN NULL/);
+    assert.match(sql, /ELSE translate\(btrim\(raw_email\), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'\)\s+END/);
+    assert.match(sql, /char_length\(btrim\(raw_email\)\) > 254 THEN NULL/);
+  });
+});
+
+describe('F3 sessiz tuz geçişi (snapshotRecipients)', () => {
+  const insertRegex = /^WITH audience AS .* INSERT INTO announcement_recipients/;
+  const lockRegex = /^SELECT pg_advisory_xact_lock\(\$1::int, \$2::int\)$/;
+  const usageRegex = /^SELECT COUNT\(\*\)::INTEGER AS used FROM announcement_recipients r/;
+  const countsRegex = /^SELECT email_status, COUNT\(\*\)::INTEGER AS n FROM announcement_recipients WHERE announcement_id = \$1 GROUP BY email_status$/;
+  const siteTarget = { type: 'site', blockIds: [], apartmentIds: [] };
+  const run = async (sendEmail) => {
+    const db = fakeDb([[lockRegex, () => ok()], [usageRegex, () => ok([{ used: 0 }])], [insertRegex, () => ok([], 1)], [countsRegex, () => ok([{ email_status: 'pending', n: 1 }])]]);
+    await snapshotRecipients(db, { announcementId: 3, siteCode: 5, target: siteTarget, importance: 'normal', sendEmail, enforceEmailLimit: false, now: new Date('2026-10-16T10:00:00.000Z') });
+    return db.log.find((q) => insertRegex.test(q.sql));
+  };
+
+  it('PREVIOUS tanımlıyken e-postalı yayın: veri değiştiren CTE eski tuzla eşleşen bastırmayı GÜNCEL tuzla da ekler (ON CONFLICT DO NOTHING); yalnız güncel tuzda zaten olmayanlar', async () => {
+    const saved = process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+    process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = 'eski-duyuru-sirri-0123456789';
+    try {
+      const insert = await run(true);
+      assert.match(insert.sql, /, migrated AS \( INSERT INTO announcement_email_suppressions \(email_hash\) SELECT DISTINCT h\.email_hash FROM hashed h WHERE \$\d+::BOOLEAN AND h\.email IS NOT NULL AND NOT EXISTS \(SELECT 1 FROM announcement_email_suppressions cur WHERE cur\.email_hash = h\.email_hash\) AND EXISTS \(SELECT 1 FROM unnest\(\$\d+::TEXT\[\]\) AS salts\(salt\)/);
+      assert.match(insert.sql, /ON CONFLICT \(email_hash\) DO NOTHING RETURNING 1 \), classified AS/);
+      assert.equal(insert.params.at(-1).length, 2, 'güncel + 1 eski tuz');
+      assert.deepEqual(insert.params.at(-1), emailHashSalts());
+    } finally {
+      if (saved === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = saved;
+    }
+  });
+
+  it('eski sır yokken (olağan durum) ve e-postasız yayında geçiş CTE\'si EKLENMEZ (ek maliyet yok)', async () => {
+    const saved = process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+    delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+    try {
+      assert.doesNotMatch((await run(true)).sql, /migrated AS|INSERT INTO announcement_email_suppressions/);
+      process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = 'eski-duyuru-sirri-0123456789';
+      assert.doesNotMatch((await run(false)).sql, /migrated AS|INSERT INTO announcement_email_suppressions/);
+    } finally {
+      if (saved === undefined) delete process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS;
+      else process.env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS = saved;
+    }
   });
 });
 

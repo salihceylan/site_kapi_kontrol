@@ -14,7 +14,8 @@ import {
   BODY_HEAD_CHARS,
 } from './announcement_common.js';
 import { parsePositiveId, toIso } from './people_common.js';
-import { hashEmailAll } from './announcement_email_security.js';
+import { emailHashSalts } from './announcement_email_security.js';
+import { asciiLowerSql, canonicalEmailSql, emailHashSql, suppressedSql } from './announcement_recipients.js';
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
 
@@ -229,31 +230,68 @@ function emptySummary() {
   };
 }
 
-const preferencesBody = (row) => ({
-  email_announcements: row ? row.email_announcements === true : true,
-  push_announcements: row ? row.push_announcements === true : true,
-  push_available: false,
-});
+/**
+ * Bildirim tercihi yanıtı. `email_announcements` ETKİN değerdir: saklanan tercih VE çağıranın kendi adreslerinden hiçbiri e-postadaki bağlantıyla
+ * bastırılmamış. `email_suppressed`: adreslerinden biri bastırma listesinde (EKLEMELİ alan; istemci "e-posta bağlantıyla durdurulmuş" gösterebilir).
+ */
+const preferencesBody = (row, suppressed) => {
+  const stored = row ? row.email_announcements === true : true;
+  return {
+    email_announcements: stored && suppressed !== true,
+    push_announcements: row ? row.push_announcements === true : true,
+    push_available: false,
+    email_suppressed: suppressed === true,
+  };
+};
 
-/** GET /app/notification-preferences -> { email_announcements, push_announcements, push_available: false } (kayıt yoksa varsayılan açık). */
+/**
+ * Çağıranın KENDİ adreslerinden biri bastırma listesinde mi (okuma): gerçek hesap e-postası (dahili @ahbu.local hariç) ve kişi kayıtlarındaki
+ * iletişim e-postası; kanonik özet, güncel + eski tuzlarla. Yalnız GÖSTERİM içindir; silme kaynağı DEĞİLDİR (removeOwnSuppressions).
+ */
+async function ownAddressSuppressed(userCode, db) {
+  const result = await db.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM (
+          SELECT ${asciiLowerSql('btrim(u.email)')} AS address
+          FROM users u
+          WHERE u.user_code = $1 AND u.email IS NOT NULL AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+          UNION ALL
+          SELECT ${asciiLowerSql(`btrim(${CONTACT_EMAIL_SQL})`)} AS address
+          ${PERSON_FROM}
+          WHERE sp.user_code = $1
+        ) x
+        WHERE x.address IS NOT NULL AND x.address LIKE '%@%' AND x.address NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+          AND ${suppressedSql('x.address', '$2')}
+      ) AS suppressed
+    `,
+    [userCode, emailHashSalts()],
+  );
+  return result.rows?.[0]?.suppressed === true;
+}
+
+/** GET /app/notification-preferences -> { email_announcements (ETKİN), push_announcements, push_available: false, email_suppressed } (kayıt yoksa varsayılan açık). */
 export async function getNotificationPreferences(authUser, db = pool) {
   const userCode = userCodeOf(authUser);
   if (userCode === null) {
-    return preferencesBody(null);
+    return preferencesBody(null, false);
   }
   const result = await db.query(
     `SELECT email_announcements, push_announcements FROM notification_preferences WHERE user_code = $1`,
     [userCode],
   );
-  return preferencesBody(result.rows?.[0] ?? null);
+  return preferencesBody(result.rows?.[0] ?? null, await ownAddressSuppressed(userCode, db));
 }
 
 /**
  * PUT /app/notification-preferences gövde { email_announcements: bool }. Diğer anahtarlar (push_* dahil) YOKSAYILIR: push_* şimdilik
  * değişmez (Faz 3b). Acil duyurular tercihi yok sayar (e-posta kuyruğu).
- * GERİ ALMA YOLU: `email_announcements: true` ayrıca çağıranın KENDİ adreslerinin (hesap e-postası ve kişi kayıtlarındaki iletişim e-postası)
- * kanonik özetlerini (güncel ve eski sırlarla) abonelikten çık bastırma listesinden siler: e-postadaki bağlantıyla yapılmış çıkış uygulamadan
- * geri alınabilir. Başkasının adresine dokunulmaz (yalnız çağıranın hesabına bağlı adresler).
+ * `false` yalnız tercihi false yapar. `true` tercihi true yapar VE çağıranın DOĞRULANMIŞ GERÇEK hesap e-postasının (users.email; dahili
+ * @ahbu.local değil, email_verified) bastırma kaydını (güncel + eski tuzlarla) siler: e-postadaki bağlantıyla yapılmış çıkış uygulamadan geri
+ * alınabilir. İletişim e-postaları (apartments.resident_email, site_people.email) silme kaynağı DEĞİLDİR: bunları yönetici doğrulamasız yazar,
+ * yönetici bir adresi dahili hesabın iletişim e-postası yapıp o hesapla PUT true göndererek BAŞKASININ bastırmasını kaldıramaz. Bastırılmış bir
+ * iletişim adresi uygulamadan açılamaz: yanıtta `email_suppressed: true` döner (yönetici / destek ile açılır).
  */
 export async function setNotificationPreferences(authUser, body = {}, db = pool) {
   const userCode = userCodeOf(authUser);
@@ -274,39 +312,27 @@ export async function setNotificationPreferences(authUser, body = {}, db = pool)
     [userCode, value],
   );
   if (value === true) {
-    await removeOwnSuppressions(userCode, db);
+    await removeOwnAccountSuppression(userCode, db);
   }
-  return preferencesBody(result.rows?.[0] ?? { email_announcements: value, push_announcements: true });
+  return preferencesBody(result.rows?.[0] ?? { email_announcements: value, push_announcements: true }, await ownAddressSuppressed(userCode, db));
 }
 
-/** Çağıranın kendi adreslerinin (hesap + kişi iletişim e-postası) bastırma kayıtlarını siler; silinen kayıt sayısını döner. */
-async function removeOwnSuppressions(userCode, db) {
-  const own = await db.query(
+/**
+ * Çağıranın DOĞRULANMIŞ GERÇEK hesap e-postasının kanonik özetlerini (güncel + eski tuzlarla) bastırma listesinden siler (tek ifade). Başka
+ * hiçbir adres kaynağına bakılmaz. Silinen kayıt sayısını döner.
+ */
+async function removeOwnAccountSuppression(userCode, db) {
+  const removed = await db.query(
     `
-      SELECT DISTINCT lower(btrim(x.address)) AS address
-      FROM (
-        SELECT u.email AS address FROM users u WHERE u.user_code = $1
-        UNION ALL
-        SELECT ${CONTACT_EMAIL_SQL} AS address
-        ${PERSON_FROM}
-        WHERE sp.user_code = $1
-      ) x
-      WHERE x.address IS NOT NULL
+      DELETE FROM announcement_email_suppressions s
+      USING users u
+      WHERE u.user_code = $1 AND u.email IS NOT NULL AND u.email_verified = TRUE AND u.email NOT LIKE '%${INTERNAL_EMAIL_SUFFIX}'
+        AND s.email_hash IN (
+          SELECT ${emailHashSql('t.salt', canonicalEmailSql(asciiLowerSql('btrim(u.email)')))}
+          FROM unnest($2::TEXT[]) AS t(salt)
+        )
     `,
-    [userCode],
+    [userCode, emailHashSalts()],
   );
-  const hashes = new Set();
-  for (const row of own.rows ?? []) {
-    const address = String(row.address ?? '');
-    if (address.includes('@') && !address.endsWith(INTERNAL_EMAIL_SUFFIX)) {
-      for (const hash of hashEmailAll(address)) {
-        hashes.add(hash);
-      }
-    }
-  }
-  if (hashes.size === 0) {
-    return 0;
-  }
-  const removed = await db.query(`DELETE FROM announcement_email_suppressions WHERE email_hash = ANY($1::TEXT[])`, [[...hashes]]);
   return Number(removed.rowCount ?? 0);
 }

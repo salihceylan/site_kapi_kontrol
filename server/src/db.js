@@ -1257,6 +1257,23 @@ export async function ensureDbSchema() {
         CONSTRAINT chk_announcements_scheduled_at CHECK (status <> 'scheduled' OR publish_at IS NOT NULL),
         CONSTRAINT chk_announcements_published_at CHECK (status NOT IN ('published', 'withdrawn') OR published_at IS NOT NULL)
       );
+      -- Önceki 032 sürümüyle kurulmuş yerel / QA veritabanları için: sonradan eklenen sütunlar ve kısıt idempotent eklenir (yeni kurulumda hepsi
+      -- zaten CREATE TABLE içindedir ve bu ifadeler hiçbir şey yapmaz). Kısıt NOT VALID eklenir: eski satırları taramaz, yeni yazımları denetler.
+      ALTER TABLE announcements ADD COLUMN IF NOT EXISTS published_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL;
+      ALTER TABLE announcements ADD COLUMN IF NOT EXISTS email_requested_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL;
+      ALTER TABLE announcements ADD COLUMN IF NOT EXISTS email_requested_at TIMESTAMPTZ;
+      ALTER TABLE announcements ADD COLUMN IF NOT EXISTS publish_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE announcements ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'chk_announcements_published_at' AND conrelid = 'announcements'::regclass
+        ) THEN
+          ALTER TABLE announcements ADD CONSTRAINT chk_announcements_published_at
+            CHECK (status NOT IN ('published', 'withdrawn') OR published_at IS NOT NULL) NOT VALID;
+        END IF;
+      END $$;
       CREATE INDEX IF NOT EXISTS idx_announcements_site_status
         ON announcements (site_code, status, published_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_announcements_due
@@ -1288,6 +1305,10 @@ export async function ensureDbSchema() {
           email_status IN ('none', 'pending', 'sent', 'failed', 'no_address', 'skipped_pref', 'capped', 'duplicate')
         )
       );
+      -- Önceki 032 sürümüyle kurulmuş veritabanları için sonradan eklenen sütunlar (yeni kurulumda hiçbir şey yapmaz).
+      ALTER TABLE announcement_recipients ADD COLUMN IF NOT EXISTS email_hash TEXT;
+      ALTER TABLE announcement_recipients ADD COLUMN IF NOT EXISTS email_claimed_at TIMESTAMPTZ;
+      ALTER TABLE announcement_recipients ADD COLUMN IF NOT EXISTS email_next_at TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS idx_announcement_recipients_person
         ON announcement_recipients (person_id, announcement_id DESC);
       CREATE INDEX IF NOT EXISTS idx_announcement_recipients_unread

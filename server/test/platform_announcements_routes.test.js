@@ -649,6 +649,7 @@ describe('sakin uçları (kimliği doğrulanmış her kullanıcı)', () => {
       [/^WITH mine AS/, () => ok([{ unread: 2, unread_urgent: 0, latest_id: '2', latest_published_at: new Date('2026-10-16T08:00:00.000Z'), server_time: new Date('2026-10-16T09:00:00.000Z') }])],
       [/^SELECT email_announcements, push_announcements FROM notification_preferences/, () => ok()],
       [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: false, push_announcements: true }])],
+      [/^SELECT EXISTS \( SELECT 1 FROM \( SELECT translate\(btrim\(u\.email\)/, () => ok([{ suppressed: false }])],
     );
     const as = { user: users.resident };
     const list = await call('GET', '/app/announcements?limit=5', as);
@@ -661,8 +662,8 @@ describe('sakin uçları (kimliği doğrulanmış her kullanıcı)', () => {
     const summary = await call('GET', '/app/notifications/summary', as);
     assert.equal(summary.body.unread_announcements, 2);
     assert.equal(summary.body.latest_announcement_id, 2);
-    assert.deepEqual((await call('GET', '/app/notification-preferences', as)).body, { email_announcements: true, push_announcements: true, push_available: false });
-    assert.deepEqual((await call('PUT', '/app/notification-preferences', { ...as, body: { email_announcements: false } })).body, { email_announcements: false, push_announcements: true, push_available: false });
+    assert.deepEqual((await call('GET', '/app/notification-preferences', as)).body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false });
+    assert.deepEqual((await call('PUT', '/app/notification-preferences', { ...as, body: { email_announcements: false } })).body, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: false });
     // tüm sakin sorguları çağıranın kullanıcı kodunu (20004) parametre olarak taşır; istekten gelen kimlik kullanılmaz
     const userParams = state.log.filter((q) => /site_people|notification_preferences/.test(q.sql)).map((q) => q.params);
     assert.ok(userParams.length >= 6);

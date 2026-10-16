@@ -139,12 +139,48 @@ describe('migration 032: duyuru ve bildirim', () => {
     assert.match(table, /updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\)/);
   });
 
-  it('ekleyici: silme/düşürme/veri yazma yok, mevcut tabloya ALTER yok; her CREATE IF NOT EXISTS ile', () => {
+  it('ekleyici: silme/düşürme/veri yazma yok; ALTER TABLE yalnız ADD COLUMN IF NOT EXISTS (+ korumalı NOT VALID kısıt); her CREATE IF NOT EXISTS ile', () => {
     const sql = normalizeSql(blankSqlNoise(MIGRATION));
-    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO|\bALTER\s+TABLE/i.test(sql), false);
+    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO/i.test(sql), false);
+    // her ALTER TABLE: ya "ADD COLUMN IF NOT EXISTS" ya da DO bloğundaki pg_constraint korumalı "ADD CONSTRAINT"
+    const alters = sql.match(/ALTER TABLE \w+ [^;]*;/gi) || [];
+    assert.ok(alters.length >= 8, `ALTER sayısı ${alters.length}`);
+    for (const alter of alters) {
+      assert.ok(/^ALTER TABLE \w+ ADD COLUMN IF NOT EXISTS /i.test(alter) || /^ALTER TABLE announcements ADD CONSTRAINT chk_announcements_published_at /i.test(alter), alter);
+    }
     const full = normalizeSql(MIGRATION);
+    const constraintGuard = /DO \$\$ BEGIN IF NOT EXISTS \( SELECT 1 FROM pg_constraint WHERE conname = 'chk_announcements_published_at' AND conrelid = 'announcements'::regclass \) THEN ALTER TABLE announcements ADD CONSTRAINT chk_announcements_published_at CHECK \(status NOT IN \('published', 'withdrawn'\) OR published_at IS NOT NULL\) NOT VALID; END IF; END \$\$;/;
+    assert.match(full, constraintGuard, 'kısıt idempotent ve NOT VALID (eski satırları taramaz)');
     assert.deepEqual(full.match(/CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)\s+(?!IF NOT EXISTS)/gi) || [], []);
     assert.equal((full.match(/CREATE TABLE IF NOT EXISTS/g) || []).length, 4);
+  });
+
+  it('F6c eski (ilk 032 sürümüyle kurulmuş) veritabanları için: sonradan eklenen TÜM sütunlar CREATE TABLE\'da VE idempotent ALTER ... ADD COLUMN IF NOT EXISTS ile bulunur; ALTER\'lar bu sütunları kullanan indekslerden ÖNCE gelir', () => {
+    const sql = normalizeSql(MIGRATION);
+    const added = {
+      announcements: [
+        'published_by INTEGER REFERENCES users\\(user_code\\) ON DELETE SET NULL',
+        'email_requested_by INTEGER REFERENCES users\\(user_code\\) ON DELETE SET NULL',
+        'email_requested_at TIMESTAMPTZ',
+        'publish_attempts INTEGER NOT NULL DEFAULT 0',
+        'next_attempt_at TIMESTAMPTZ',
+      ],
+      announcement_recipients: ['email_hash TEXT', 'email_claimed_at TIMESTAMPTZ', 'email_next_at TIMESTAMPTZ'],
+    };
+    for (const [table, columns] of Object.entries(added)) {
+      const create = new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(([\\s\\S]*?)\\);`).exec(sql)?.[1];
+      assert.ok(create, table);
+      for (const column of columns) {
+        assert.match(create, new RegExp(column), `${table}: CREATE TABLE ${column}`);
+        assert.match(sql, new RegExp(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column};`), `${table}: ALTER ${column}`);
+      }
+    }
+    const lastAlterOf = (table) => Math.max(...[...sql.matchAll(new RegExp(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS [^;]*;`, 'g'))].map((m) => m.index));
+    for (const [table, index] of [['announcements', 'idx_announcements_published_by'], ['announcements', 'idx_announcements_email_requested'], ['announcement_recipients', 'idx_announcement_recipients_email_hash']]) {
+      assert.ok(sql.indexOf(`CREATE INDEX IF NOT EXISTS ${index}`) > lastAlterOf(table), `${index}, ${table} ALTER'larindan sonra`);
+    }
+    // db.js aynı metni içerir (eşitlik testi); burada ayrıca ALTER'ların db.js'te de bulunduğu gösterilir
+    assert.ok(normalizeSql(DB_SOURCE).includes('ALTER TABLE announcement_recipients ADD COLUMN IF NOT EXISTS email_hash TEXT;'));
   });
 
   it('migration numaraları tekrarlanmaz', () => {

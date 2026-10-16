@@ -179,11 +179,15 @@ async function claimBatch(batchSize, attempted) {
     const skippedA = [];
     const skippedP = [];
     const skippedS = [];
+    const migrateHashes = new Set();
     for (const row of rows) {
       if (row.suppressed === true) {
         skippedA.push(row.announcement_id);
         skippedP.push(row.person_id);
         skippedS.push('skipped_pref');
+        if (salts.length > 1) {
+          migrateHashes.add(hashEmail(row.email));
+        }
       } else if (row.person_active !== true || row.current_email === null || row.current_email !== row.email) {
         skippedA.push(row.announcement_id);
         skippedP.push(row.person_id);
@@ -191,6 +195,13 @@ async function claimBatch(batchSize, attempted) {
       } else {
         send.push(row);
       }
+    }
+    if (migrateHashes.size > 0) {
+      // Sessiz tuz geçişi (F3): bastırılmış adresin GÜNCEL tuzla özeti de listeye yazılır (eski sır PREVIOUS'tan silinse de bastırma kalır).
+      await client.query(
+        `INSERT INTO announcement_email_suppressions (email_hash) SELECT unnest($1::TEXT[]) ON CONFLICT (email_hash) DO NOTHING`,
+        [[...migrateHashes]],
+      );
     }
     if (skippedA.length > 0) {
       await client.query(

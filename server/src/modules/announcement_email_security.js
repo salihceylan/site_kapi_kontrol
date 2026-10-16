@@ -17,17 +17,22 @@ import crypto from 'node:crypto';
 
 export const MIN_EMAIL_SECRET_LENGTH = 8;
 
-const usable = (value) => typeof value === 'string' && value.length >= MIN_EMAIL_SECRET_LENGTH;
+/**
+ * TEK kırpma kuralı: sırlar HER yerde (güncel, JWT yedeği, PREVIOUS girdileri, validateEnv) `trim`lenmiş değerle kullanılır. Aksi halde
+ * .env'de baş/sonunda boşluk olan bir değer PREVIOUS'a taşınınca (orada kırpılır) farklı bir sır olur ve eski özetler / bağlantılar kaybolurdu.
+ */
+const clean = (value) => (typeof value === 'string' ? value.trim() : '');
+const usable = (value) => clean(value).length >= MIN_EMAIL_SECRET_LENGTH;
 
 let warnedShortSecret = false;
 
 /** Güncel sır: ANNOUNCEMENT_EMAIL_SECRET (geçerliyse), yoksa JWT_SECRET. İkisi de kullanılamazsa hata (yalnız e-posta yollarında çağrılır). */
 function currentSecret(env = process.env) {
-  const own = env.ANNOUNCEMENT_EMAIL_SECRET;
+  const own = clean(env.ANNOUNCEMENT_EMAIL_SECRET);
   if (usable(own)) {
     return own;
   }
-  if (own !== undefined && String(own).trim() !== '' && !warnedShortSecret) {
+  if (own !== '' && !warnedShortSecret) {
     warnedShortSecret = true;
     // eslint-disable-next-line no-console
     console.warn(
@@ -35,7 +40,7 @@ function currentSecret(env = process.env) {
     );
   }
   if (usable(env.JWT_SECRET)) {
-    return String(env.JWT_SECRET);
+    return clean(env.JWT_SECRET);
   }
   throw new Error('ANNOUNCEMENT_EMAIL_SECRET veya JWT_SECRET tanimli degil.');
 }
@@ -46,7 +51,7 @@ function previousSecrets(env = process.env) {
   const seen = new Set([current]);
   const out = [];
   for (const part of String(env.ANNOUNCEMENT_EMAIL_SECRET_PREVIOUS ?? '').split(',')) {
-    const secret = part.trim();
+    const secret = clean(part);
     if (usable(secret) && !seen.has(secret)) {
       seen.add(secret);
       out.push(secret);
@@ -69,7 +74,12 @@ export function emailHashSalts() {
   return [saltOf(currentSecret()), ...previousSecrets().map(saltOf)];
 }
 
-export const normalizeAddress = (address) => String(address ?? '').trim().toLowerCase();
+/**
+ * Adres normalleştirme: kırpma + YALNIZ ASCII küçük harf. `toLowerCase()` ve PostgreSQL `lower()` ASCII dışı harflerde (Türkçe İ / ı, Ç, Ö...)
+ * veritabanı yerel ayarına göre AYRIŞIR; kanonik özetin JS ve SQL'de aynı çıkması için ikisi de yalnız A-Z'yi küçültür (SQL: asciiLowerSql).
+ * E-posta yerel kısmı zaten büyük/küçük harfe duyarlı olabilir; alan adları ASCII (punycode) olduğundan pratikte kayıp yoktur.
+ */
+export const normalizeAddress = (address) => String(address ?? '').trim().replace(/[A-Z]/g, (letter) => String.fromCharCode(letter.charCodeAt(0) + 32));
 
 const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
 
