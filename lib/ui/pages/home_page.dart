@@ -134,6 +134,10 @@ import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
+import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
+import 'package:site_kapi_kontrol/ui/views/site_applications_view.dart';
 
 
 
@@ -197,10 +201,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         fetchPendingCount: () async => (await widget.authService
                 .listAdminModuleRequests(status: 'pending', limit: 1))
             .pendingCount,
+        // Süper kullanıcı: çekmecedeki "Site Başvuruları" rozeti (hafif `summary` ucu), aynı yoklamayla.
+        fetchPendingApplicationCount: () =>
+            widget.authService.getAdminSiteApplicationsPendingCount(),
       );
   final GlobalKey<ModulesViewState> _modulesViewKey = GlobalKey<ModulesViewState>();
   final GlobalKey<ModuleRequestsViewState> _moduleRequestsViewKey =
       GlobalKey<ModuleRequestsViewState>();
+  final GlobalKey<SiteApplicationsViewState> _siteApplicationsViewKey =
+      GlobalKey<SiteApplicationsViewState>();
+
+  // Site başvurusu (site yöneticisi olma): bireysel / daire kullanıcısının KENDİ başvurusunun durumu. Ekranlar
+  // açılınca yüklenir; bekleyen başvuru varken ön planda ~30 sn'de bir yoklanır (bekleyen yokken zamanlayıcı
+  // yoktur). Onaylanınca oturum / rol sunucudan yenilenir ve kullanıcı yönetici görünümüne geçer.
+  late final SiteApplicationTracker _siteApplications = SiteApplicationTracker(
+    fetch: () => widget.authService.getMySiteApplications(),
+    cancel: (id) => widget.authService.cancelSiteApplication(id),
+    isActive: _isModulePollingActive,
+    isEligible: () => canApplyForSite(widget.authService.session?.role),
+  );
+  StreamSubscription<SiteApplication>? _siteApplicationApprovals;
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
   final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
   final GlobalKey<AnnouncementsViewState> _announcementsKey =
@@ -410,6 +430,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _initAnnouncements();
 
+    _siteApplicationApprovals = _siteApplications.approvals.listen(_onSiteApplicationApproved);
+
 
 
     _loadInitialData();
@@ -429,6 +451,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _statusPoller.dispose();
 
     _disposeAnnouncements();
+
+    unawaited(_siteApplicationApprovals?.cancel());
+
+    _siteApplications.dispose();
 
     _disposeModuleAccess();
 
@@ -461,6 +487,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // Arka plandayken yeni duyuru gelmiş olabilir: ön plana dönüşte hemen çek.
       _announcements.resetBackoff();
       unawaited(_announcements.refresh());
+      // Arka plandayken başvuru karara bağlanmış olabilir: bekleyen başvuru biliniyorsa hemen oku.
+      if (_siteApplications.pending != null) {
+        _siteApplications.resetBackoff();
+        unawaited(_siteApplications.refresh());
+      }
       unawaited(_loadSuperDoorModule());
       _startStatusAutoRefreshTimer();
       if (_doorControlDoor != null) {
@@ -598,11 +629,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _lastSeenRole = null;
       _moduleAccess.clear();
       _announcements.clear();
+      _siteApplications.clear();
       return;
     }
     if (_lastSeenRole != session.role) {
       _lastSeenRole = session.role;
       unawaited(_moduleAccess.refresh());
+      // Rol değişti (örn. site başvurusu onaylandı ya da cihaz sahiplenildi): eski rolün başvuru durumu atılır
+      // ve yeni rolün Panel verisi (siteler / kapılar) yeniden okunur.
+      _siteApplications.clear();
+      _loadInitialData();
       // Rol değişince alıcı olma durumu değişebilir: eski duyuru durumu atılır, yeniden okunur.
       _announcements.clear();
       unawaited(_announcements.refresh());
@@ -1043,6 +1079,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.duyurular:
         return 'Duyurular';
+
+      case SirketMenuItem.siteBasvurulari:
+        return 'Site Başvuruları';
 
     }
 
@@ -2065,11 +2104,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _openSiteDialog({SiteRecord? site}) async {
     if (site == null && widget.authService.session?.role == UserRole.siteManager) {
+      // "Site Ekle" (site yöneticisi) ANLIK kalır: başvuru akışına girmez.
       final created = await SetupSiteDialog.show(
         context,
         authService: widget.authService,
+        mode: SetupSiteMode.instant,
       );
-      if (created == true) {
+      if (created == SetupSiteOutcome.created) {
         await _loadSites(force: true);
         // Yeni sitenin modül durumu (varsayılanlar) hemen alınır.
         unawaited(_moduleAccess.refresh());
@@ -3186,18 +3227,58 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await _loadCompanyDevices(force: true);
       await _loadDoorControlSites();
       if (!mounted) return;
+      // Cihaz sahiplenmek bireysel / daire kullanıcısını site yöneticisi YAPMAZ (rol değişmez): bilgi
+      // metni + "Site Kur" (başvuru) eylemi sunulur; yönetici görünümüne geçiş beklenmez.
+      if (canApplyForSite(widget.authService.session?.role)) {
+        await offerSiteApplicationAfterClaim(
+          context,
+          authService: widget.authService,
+          deviceUid: claimedUid,
+          tracker: _siteApplications,
+        );
+        return;
+      }
       final hasSites = _doorControlSitesPage?.sites.isNotEmpty ?? false;
       if (!hasSites) {
+        // Yönetici / süper kullanıcı: anlık site kurulum sihirbazı.
         final result = await SetupSiteDialog.show(
           context,
           authService: widget.authService,
           deviceUid: claimedUid,
         );
-        if (result == true) {
+        if (result == SetupSiteOutcome.created) {
           _loadInitialData();
+        } else if (result == SetupSiteOutcome.applied) {
+          unawaited(_siteApplications.noteChanged());
         }
       }
     }
+  }
+
+  /// Başvuru ONAYLANDI (yoklama ya da ön plana dönüş): oturum / rol sunucudan yenilenir (yerelde TAHMİN
+  /// EDİLMEZ), Panel verisi okunur ve kullanıcı sayfa yenilenmeden yönetici görünümüne geçer.
+  Future<void> _onSiteApplicationApproved(SiteApplication application) async {
+    if (!mounted) return;
+    await _refreshAccountAfterApproval();
+    if (!mounted) return;
+    final role = widget.authService.session?.role;
+    if (role == UserRole.siteManager) {
+      setState(() => _selectedMenu = SirketMenuItem.dashboard);
+      AppSnack.show(
+        context,
+        'Site başvurunuz onaylandı. Artık site yöneticisisiniz.',
+        kind: AppSnackKind.success,
+      );
+    }
+  }
+
+  /// Oturum bilgisini (rol dahil) sunucudan zorla yeniler ve Panel verisini tazeler. Rol değişirse
+  /// [_onAuthChanged] menüyü / modülleri günceller.
+  Future<void> _refreshAccountAfterApproval() async {
+    await widget.authService.refreshSession(force: true);
+    if (!mounted) return;
+    _loadInitialData();
+    unawaited(_moduleAccess.refresh());
   }
 
   Future<void> _openJoinRequestFlow() async {
@@ -4155,6 +4236,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.siteBasvurulari:
+        await _siteApplicationsViewKey.currentState?.reload();
+        break;
       case SirketMenuItem.kisiler:
         await _peopleViewKey.currentState?.reload();
         break;
@@ -4428,6 +4512,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         badgeCounts: <SirketMenuItem, int>{
           if (session.role == UserRole.superUser)
             SirketMenuItem.modulTalepleri: _moduleAccess.pendingRequestCount ?? 0,
+          if (session.role == UserRole.superUser)
+            SirketMenuItem.siteBasvurulari: _moduleAccess.pendingApplicationCount ?? 0,
           if (_hasAnnouncementInbox(session.role))
             SirketMenuItem.duyurular: _announcements.unreadCount,
         },
@@ -4535,6 +4621,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             session: session,
             authService: widget.authService,
             onRefreshAll: _loadInitialData,
+            // Site başvurusu kartı / formu yalnız bireysel ve daire kullanıcısına açılır.
+            applications: canApplyForSite(session.role) ? _siteApplications : null,
+            onRefreshAccount: _refreshAccountAfterApproval,
           );
           // Geçiş Kontrol kapalıyken bireysel ana ekranın kapı dışı bölümleri (dairelerim, katılım
           // talepleri, cihazlar, hızlı işlemler) ERİŞİLEBİLİR kalır; en üste kısa bir bilgi eklenir.
@@ -4947,6 +5036,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onChanged: () => unawaited(_moduleAccess.refresh()),
         );
 
+      case SirketMenuItem.siteBasvurulari:
+        return SiteApplicationsView(
+          key: _siteApplicationsViewKey,
+          authService: widget.authService,
+          // Karardan sonra çekmece rozeti (bekleyen sayı) sunucudan hemen yeniden okunur.
+          onChanged: () => unawaited(_moduleAccess.refresh()),
+        );
+
       case SirketMenuItem.kisiler:
         return PeopleView(
           key: _peopleViewKey,
@@ -4974,6 +5071,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOpenClaimDevice: _openClaimDeviceFlow,
           onOpenJoinSite: _openJoinRequestFlow,
           onRefreshAll: _loadInitialData,
+          applications: canApplyForSite(session.role) ? _siteApplications : null,
+          onRefreshAccount: _refreshAccountAfterApproval,
         );
 
       case SirketMenuItem.cihazEkle:

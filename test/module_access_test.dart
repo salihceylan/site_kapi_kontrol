@@ -259,6 +259,105 @@ void main() {
     });
   });
 
+  group('Süper kullanıcı: bekleyen site başvurusu sayısı (çekmece rozeti)', () {
+    test('sayı modül talebinden bağımsız çekilir; ikisi de aynı yoklamada tazelenir', () async {
+      var requests = 2;
+      var applications = 4;
+      final access = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        fetchPendingCount: () async => requests,
+        fetchPendingApplicationCount: () async => applications,
+      );
+      var notified = 0;
+      access.addListener(() => notified++);
+      expect(access.pendingApplicationCount, isNull, reason: 'henüz alınmadı');
+
+      expect(await access.refresh(), isTrue);
+      expect(access.pendingRequestCount, 2);
+      expect(access.pendingApplicationCount, 4);
+      expect(notified, 2);
+
+      await access.refresh();
+      expect(notified, 2, reason: 'sayılar aynı: dinleyiciler uyarılmaz');
+
+      applications = 1;
+      await access.refresh();
+      expect(access.pendingApplicationCount, 1);
+      expect(access.pendingRequestCount, 2);
+      requests = 0;
+      applications = 0;
+      await access.refresh();
+      expect(access.pendingApplicationCount, 0);
+      expect(access.pendingRequestCount, 0);
+      access.dispose();
+    });
+
+    test('başvuru ucu hata verirse modül talebi rozeti etkilenmez (ve tersi); son değerler korunur', () async {
+      var failApplications = true;
+      var failRequests = false;
+      var requests = 3;
+      final access = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        fetchPendingCount: () async {
+          if (failRequests) throw StateError('ağ');
+          return requests;
+        },
+        fetchPendingApplicationCount: () async {
+          if (failApplications) throw StateError('ağ');
+          return 7;
+        },
+      );
+      expect(await access.refresh(), isTrue, reason: 'biri başarılıysa yoklama başarılı sayılır');
+      expect(access.pendingRequestCount, 3);
+      expect(access.pendingApplicationCount, isNull, reason: 'hata "0 başvuru" DEMEZ');
+
+      failApplications = false;
+      failRequests = true;
+      requests = 9;
+      expect(await access.refresh(), isTrue);
+      expect(access.pendingApplicationCount, 7);
+      expect(access.pendingRequestCount, 3, reason: 'hata son rozeti sıfırlamaz');
+
+      failApplications = true;
+      expect(await access.refresh(), isFalse, reason: 'ikisi de hatalı: geri çekilme');
+      expect(access.pendingApplicationCount, 7);
+      access.dispose();
+    });
+
+    test('yalnız başvuru sayısı verilmişse de çalışır; süper olmayan kullanıcıda hiç çağrılmaz; clear sıfırlar', () async {
+      var calls = 0;
+      final superAccess = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => true,
+        fetchPendingApplicationCount: () async {
+          calls++;
+          return 5;
+        },
+      );
+      expect(await superAccess.refresh(), isTrue);
+      expect(superAccess.pendingApplicationCount, 5);
+      expect(superAccess.pendingRequestCount, isNull);
+      superAccess.clear();
+      expect(superAccess.pendingApplicationCount, isNull);
+      superAccess.dispose();
+
+      final normal = ModuleAccess(
+        fetch: _Fetcher().call,
+        isSuperUser: () => false,
+        fetchPendingApplicationCount: () async {
+          calls++;
+          return 8;
+        },
+      );
+      await normal.refresh();
+      expect(normal.pendingApplicationCount, isNull);
+      expect(calls, 1, reason: 'yalnız süper kullanıcı için çağrıldı');
+      normal.dispose();
+    });
+  });
+
   group('Süper kullanıcı: bekleyen modül talebi sayısı (çekmece rozeti, Faz 1.1)', () {
     test('süper kullanıcıda sayı çekilir; my-modules çekilmez; değişmeyen sayı dinleyicileri uyarmaz', () async {
       final fetcher = _Fetcher();

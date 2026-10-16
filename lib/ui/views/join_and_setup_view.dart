@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/join_request_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/setup_option_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
 
 class JoinAndSetupView extends StatefulWidget {
   const JoinAndSetupView({
@@ -17,6 +24,8 @@ class JoinAndSetupView extends StatefulWidget {
     required this.onOpenClaimDevice,
     required this.onOpenJoinSite,
     this.onRefreshAll,
+    this.applications,
+    this.onRefreshAccount,
   });
 
   final AuthService authService;
@@ -25,18 +34,107 @@ class JoinAndSetupView extends StatefulWidget {
   final VoidCallback onOpenJoinSite;
   final VoidCallback? onRefreshAll;
 
+  /// Site başvurusu durumu (Platform: site başvurusu). YALNIZ bireysel / daire kullanıcısına verilir: null
+  /// iken başvuru kartı ve "Site Kurmak İçin Başvur" eylemi görünmez (eski ekran birebir aynıdır).
+  final SiteApplicationTracker? applications;
+
+  /// Onaylanmış başvuruda rolü elle yenileme ("Hesabı yenile").
+  final Future<void> Function()? onRefreshAccount;
+
   @override
   State<JoinAndSetupView> createState() => _JoinAndSetupViewState();
 }
 
 class _JoinAndSetupViewState extends State<JoinAndSetupView> {
+  /// Cihaz ekleyerek yönetici olma düğmesi (eski eylem; etiketi ve davranışı aynıdır).
+  Widget _claimButton({bool tonal = false}) {
+    return ElevatedButton.icon(
+      style: tonal ? tonalActionStyle(context) : null,
+      onPressed: () async {
+        widget.onOpenClaimDevice();
+        await _loadRequests();
+      },
+      icon: const Icon(
+        Icons.add_circle_outline_rounded,
+        size: 20,
+      ),
+      label: Text(
+        // Başvuru akışında cihaz sahiplenmek yönetici yapmaz: etiket yanıltmasın.
+        tonal ? 'Cihaz Ekle' : 'Cihaz Ekleyerek Site Yöneticisi Ol',
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  /// "Yönetici & Cihaz Kurulumu" kartının eylemi: başvuru akışı kapalıysa (rol uygun değil) eski tek düğme;
+  /// açıksa birincil "Site Kurmak İçin Başvur", ikincil cihaz düğmesi ve "Yakında…" pasif satırı.
+  Widget _buildAdminAction() {
+    final tracker = widget.applications;
+    if (tracker == null) return _claimButton();
+    return ListenableBuilder(
+      listenable: tracker,
+      builder: (context, _) {
+        final pending = tracker.pending != null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton.icon(
+              key: const ValueKey<String>('site_application_apply'),
+              onPressed: pending ? null : () => unawaited(_openApplicationForm()),
+              icon: Icon(
+                pending ? Icons.hourglass_top_rounded : Icons.domain_add_rounded,
+                size: 20,
+              ),
+              label: Text(
+                pending ? 'Başvurunuz İnceleniyor' : 'Site Kurmak İçin Başvur',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            _claimButton(tonal: true),
+            const SizedBox(height: AppSpace.sm),
+            const SiteSubscriptionComingSoonRow(),
+          ],
+        );
+      },
+    );
+  }
+
   List<JoinRequestRecord> _myRequests = [];
   bool _isLoadingRequests = false;
+
+  // Başvuru formu çift dokunuşta iki kez açılmasın.
+  bool _openingApplication = false;
 
   @override
   void initState() {
     super.initState();
     _loadRequests();
+    unawaited(widget.applications?.ensureLoaded());
+  }
+
+  @override
+  void didUpdateWidget(JoinAndSetupView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.applications != widget.applications) {
+      unawaited(widget.applications?.ensureLoaded());
+    }
+  }
+
+  /// "Site Kurmak İçin Başvur" / "Yeniden başvur": başvuru formunu açar ([previous] ile önceki değerlerle).
+  Future<void> _openApplicationForm([SiteApplication? previous]) async {
+    if (_openingApplication) return;
+    _openingApplication = true;
+    try {
+      await openSiteApplicationForm(
+        context,
+        authService: widget.authService,
+        tracker: widget.applications,
+        previous: previous,
+      );
+    } finally {
+      _openingApplication = false;
+    }
   }
 
   Future<void> _loadRequests() async {
@@ -62,6 +160,7 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
     return RefreshIndicator(
       onRefresh: () async {
         await _loadRequests();
+        await widget.applications?.refresh();
         widget.onRefreshAll?.call();
       },
       child: SingleChildScrollView(
@@ -106,6 +205,14 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                 ),
                 const SizedBox(height: AppSpace.lg),
 
+                // Site başvurusu durumu (bekleyen / reddedildi / iptal / onaylandı); durum alınamazsa hata.
+                if (widget.applications != null)
+                  SiteApplicationStatusCard(
+                    tracker: widget.applications!,
+                    onReapply: _openApplicationForm,
+                    onRefreshAccount: widget.onRefreshAccount,
+                  ),
+
                 // ==========================================
                 // 1. KART: SİTE SAKİNİ GİRİŞİ (DAİREYE KATIL)
                 // ==========================================
@@ -148,22 +255,10 @@ class _JoinAndSetupViewState extends State<JoinAndSetupView> {
                     icon: Icons.admin_panel_settings_rounded,
                     title: 'Yönetici & Cihaz Kurulumu',
                     badge: 'Yönetici Ol',
-                    description:
-                        'Satın aldığınız kutudaki QR kodu veya Seri Numarasını okutup cihazınızı bağlayarak yeni site kurun ve site yöneticisi olun.',
-                    action: ElevatedButton.icon(
-                      onPressed: () async {
-                        widget.onOpenClaimDevice();
-                        await _loadRequests();
-                      },
-                      icon: const Icon(
-                        Icons.add_circle_outline_rounded,
-                        size: 20,
-                      ),
-                      label: const Text(
-                        'Cihaz Ekleyerek Site Yöneticisi Ol',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                    description: widget.applications == null
+                        ? 'Satın aldığınız kutudaki QR kodu veya Seri Numarasını okutup cihazınızı bağlayarak yeni site kurun ve site yöneticisi olun.'
+                        : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve site yöneticisi olursunuz. Cihaz şart değildir, kutudaki QR kodu veya Seri Numarasıyla sonra da eklenebilir.',
+                    action: _buildAdminAction(),
                   ),
                 ),
 

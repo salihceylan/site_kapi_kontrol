@@ -60,13 +60,14 @@ List<String> _titles(WidgetTester t) {
 
 void main() {
   group('yeni öğeler ve sayılar', () {
-    testWidgets('süper kullanıcı: 15 öğe + çıkış; Kişiler Site Yönetimi\'nin, Modüller Kişiler\'in, Modül Talepleri Modüller\'in hemen altında; Denetim Kaydı en sonda', (t) async {
+    testWidgets('süper kullanıcı: 16 öğe + çıkış; Kişiler Site Yönetimi\'nin, Modüller Kişiler\'in, Modül Talepleri Modüller\'in, Site Başvuruları Modül Talepleri\'nin hemen altında; Denetim Kaydı en sonda', (t) async {
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final titles = _titles(t);
-      expect(titles, hasLength(16));
+      expect(titles, hasLength(17));
       expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
       expect(titles.indexOf('Modüller'), titles.indexOf('Kişiler') + 1);
       expect(titles.indexOf('Modül Talepleri'), titles.indexOf('Modüller') + 1);
+      expect(titles.indexOf('Site Başvuruları'), titles.indexOf('Modül Talepleri') + 1);
       expect(titles[titles.length - 2], 'Denetim Kaydı');
       expect(titles.last, 'Çıkış Yap');
     });

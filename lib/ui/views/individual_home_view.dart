@@ -21,6 +21,12 @@ import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/submit_join_request_dialog.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
+import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
+import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart';
 import 'package:site_kapi_kontrol/services/geofence_service.dart';
 import 'package:site_kapi_kontrol/ui/pages/qr_scan_page.dart';
@@ -37,11 +43,20 @@ class IndividualHomeView extends StatefulWidget {
     required this.session,
     required this.authService,
     required this.onRefreshAll,
+    this.applications,
+    this.onRefreshAccount,
   });
 
   final UserSession session;
   final AuthService authService;
   final VoidCallback onRefreshAll;
+
+  /// Site başvurusu durumu (Platform: site başvurusu). YALNIZ bireysel / daire kullanıcısına verilir: null
+  /// iken başvuru kartı ve "Site Kurmak İçin Başvur" eylemi hiç görünmez (eski ekran birebir aynıdır).
+  final SiteApplicationTracker? applications;
+
+  /// Onaylanmış başvuruda rolü elle yenileme ("Hesabı yenile").
+  final Future<void> Function()? onRefreshAccount;
 
   @override
   State<IndividualHomeView> createState() => IndividualHomeViewState();
@@ -68,6 +83,9 @@ class IndividualHomeViewState extends State<IndividualHomeView>
   String? _errorMessage;
   int? _selectedSiteCode;
 
+  // Site kurma / başvuru formu çift dokunuşta iki kez açılmasın.
+  bool _openingSetup = false;
+
   Map<int, String> get _availableSites {
     final map = <int, String>{};
     for (final door in _myDoors) {
@@ -90,6 +108,16 @@ class IndividualHomeViewState extends State<IndividualHomeView>
     loadAll();
     // Kapı çevrimiçi bilgisi (Kural 7: uygulamayı kapatıp açmadan güncel kalmalı) periyodik tazelenir.
     _doorsPoller.start();
+    // Başvuru durumu: hiç yüklenmediyse / eskiyse okunur (bekleyen varken tracker kendisi yoklar).
+    unawaited(widget.applications?.ensureLoaded());
+  }
+
+  @override
+  void didUpdateWidget(IndividualHomeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.applications != widget.applications) {
+      unawaited(widget.applications?.ensureLoaded());
+    }
   }
 
   @override
@@ -150,6 +178,7 @@ class IndividualHomeViewState extends State<IndividualHomeView>
       _loadDevices(),
       _loadRequests(),
       _loadApartments(),
+      ?widget.applications?.refresh(),
     ]);
   }
 
@@ -439,7 +468,24 @@ class IndividualHomeViewState extends State<IndividualHomeView>
       await loadAll();
       widget.onRefreshAll();
       if (!mounted) return;
-      // Cihaz hesaba bağlandı, kullanıcıyı doğrudan Site Kurulum Sihirbazı'na yönlendir
+      final role = widget.authService.session?.role ?? widget.session.role;
+      if (canApplyForSite(role)) {
+        // Cihaz sahiplenmek kullanıcıyı site yöneticisi YAPMAZ (rol değişmez): bilgi + "Site Kur" eylemi.
+        if (_openingSetup) return;
+        _openingSetup = true;
+        try {
+          await offerSiteApplicationAfterClaim(
+            context,
+            authService: widget.authService,
+            deviceUid: claimedUid,
+            tracker: widget.applications,
+          );
+        } finally {
+          _openingSetup = false;
+        }
+        return;
+      }
+      // Yönetici / süper kullanıcı: eski akış, kullanıcıyı doğrudan Site Kurulum Sihirbazı'na yönlendir
       await _openSetupSite(claimedUid);
     }
   }
@@ -456,22 +502,48 @@ class IndividualHomeViewState extends State<IndividualHomeView>
     }
   }
 
+  /// Site kurma formu (cihazlı akış): rol bireysel / daire kullanıcısıysa BAŞVURU, yönetici / süper
+  /// kullanıcıysa anlık kurulum ([SetupSiteDialog.modeFor]).
   Future<void> _openSetupSite([String? uid]) async {
-    final result = await SetupSiteDialog.show(
-      context,
-      authService: widget.authService,
-      deviceUid: uid,
-    );
-    if (result == true) {
-      if (mounted) {
+    if (_openingSetup) return;
+    _openingSetup = true;
+    try {
+      final result = await SetupSiteDialog.show(
+        context,
+        authService: widget.authService,
+        deviceUid: uid,
+      );
+      if (!mounted) return;
+      if (result == SetupSiteOutcome.created) {
         AppSnack.show(
           context,
           'Site ve bloklar başarıyla kuruldu!',
           kind: AppSnackKind.success,
           duration: const Duration(seconds: 3),
         );
+        widget.onRefreshAll();
+      } else {
+        // Başvuru gönderildi (ya da 409 gibi durum uyuşmazlığı): durum sunucudan okunur.
+        unawaited(widget.applications?.noteChanged());
       }
-      widget.onRefreshAll();
+    } finally {
+      _openingSetup = false;
+    }
+  }
+
+  /// "Site Kurmak İçin Başvur" / "Yeniden başvur": başvuru formunu açar ([previous] ile önceki değerlerle).
+  Future<void> _openApplicationForm([SiteApplication? previous]) async {
+    if (_openingSetup) return;
+    _openingSetup = true;
+    try {
+      await openSiteApplicationForm(
+        context,
+        authService: widget.authService,
+        tracker: widget.applications,
+        previous: previous,
+      );
+    } finally {
+      _openingSetup = false;
     }
   }
 
@@ -538,10 +610,12 @@ class IndividualHomeViewState extends State<IndividualHomeView>
     // Bir kişi bireysel kullanıcıdan daire kullanıcılığına veya yöneticiliğe geçtiği zaman
     // panelindeki "Daireye Katıl" ve "Cihaz Ekleyerek Site Yöneticisi Ol" kartları
     // panelde görünmez; sandwich menüdeki "Daireye Katıl & Cihaz Ekle" menüsünden erişilir.
+    // Başvuru akışında (applications != null: bireysel / daire kullanıcısı) cihaz sahiplenmek kullanıcıyı
+    // yönetici yapmaz; cihazı olan kişi de "Site Kur" ile başvurabilmelidir: cihaz kartları gizlemez.
     final hasTransitioned = widget.session.role == UserRole.siteManager ||
         widget.session.role == UserRole.superUser ||
         widget.session.role == UserRole.apartmentOwner ||
-        _claimedDevices.isNotEmpty ||
+        (_claimedDevices.isNotEmpty && widget.applications == null) ||
         _myApartments.isNotEmpty;
     if (hasTransitioned) {
       return const SizedBox.shrink();
@@ -590,14 +664,22 @@ class IndividualHomeViewState extends State<IndividualHomeView>
             icon: Icons.admin_panel_settings_rounded,
             title: 'Yönetici & Cihaz Kurulumu',
             badge: 'YÖNETİCİ',
-            description:
-                'Yeni kapı kontrol cihazınızı kutu QR koduyla ekleyip sitenizi kurun.',
-            action: PrimaryActionButton(
-              label: 'Yönetici Olarak Cihaz Ekle',
-              icon: Icons.add_to_photos_rounded,
-              tone: AppTone.primary,
-              onPressed: _openClaimDialog,
-            ),
+            description: widget.applications == null
+                ? 'Yeni kapı kontrol cihazınızı kutu QR koduyla ekleyip sitenizi kurun.'
+                : 'Sitenizi tanımlayıp başvurun; süper kullanıcı onayladığında siteniz kurulur ve '
+                      'site yöneticisi olursunuz. Cihaz şart değildir, sonra da eklenebilir.',
+            action: widget.applications == null
+                ? PrimaryActionButton(
+                    label: 'Yönetici Olarak Cihaz Ekle',
+                    icon: Icons.add_to_photos_rounded,
+                    tone: AppTone.primary,
+                    onPressed: _openClaimDialog,
+                  )
+                : _SiteApplyActions(
+                    tracker: widget.applications!,
+                    onApply: _openApplicationForm,
+                    onClaimDevice: _openClaimDialog,
+                  ),
           ),
         ),
       ],
@@ -656,6 +738,15 @@ class IndividualHomeViewState extends State<IndividualHomeView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Site başvurusu durumu (bekleyen / reddedildi / iptal / onaylandı): yalnız bireysel ve daire
+          // kullanıcısında; durum alınamazsa hata + "Tekrar Dene" (asla "başvuru yok" denmez).
+          if (widget.applications != null)
+            SiteApplicationStatusCard(
+              tracker: widget.applications!,
+              onReapply: _openApplicationForm,
+              onRefreshAccount: widget.onRefreshAccount,
+            ),
+
           // Site Switcher / Filtre Çipleri
           _buildSiteFilterBar(),
 
@@ -850,6 +941,59 @@ class IndividualHomeViewState extends State<IndividualHomeView>
           ],
         ],
       ),
+    );
+  }
+}
+
+/// "Yönetici & Cihaz Kurulumu" kartının eylemleri (başvuru akışı): birincil "Site Kurmak İçin Başvur"
+/// (bekleyen başvuru varken "Başvurunuz İnceleniyor" ve pasif), ikincil "Cihaz Ekle" (cihaz sahiplenmek
+/// yönetici yapmaz) ve
+/// "Abonelikle hemen site aç — Yakında…" pasif satırı. Düğme etiketleri sarar; kırpılmaz.
+class _SiteApplyActions extends StatelessWidget {
+  const _SiteApplyActions({
+    required this.tracker,
+    required this.onApply,
+    required this.onClaimDevice,
+  });
+
+  final SiteApplicationTracker tracker;
+  final Future<void> Function() onApply;
+  final VoidCallback onClaimDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: tracker,
+      builder: (context, _) {
+        final pending = tracker.pending != null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton.icon(
+              key: const ValueKey<String>('site_application_apply'),
+              onPressed: pending ? null : () => unawaited(onApply()),
+              icon: Icon(
+                pending ? Icons.hourglass_top_rounded : Icons.domain_add_rounded,
+                size: 20,
+              ),
+              label: Text(
+                pending ? 'Başvurunuz İnceleniyor' : 'Site Kurmak İçin Başvur',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            OutlinedButton.icon(
+              key: const ValueKey<String>('site_application_claim_device'),
+              onPressed: onClaimDevice,
+              style: tonalActionStyle(context),
+              icon: const Icon(Icons.add_to_photos_rounded, size: 20),
+              label: const Text('Cihaz Ekle', textAlign: TextAlign.center),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            const SiteSubscriptionComingSoonRow(),
+          ],
+        );
+      },
     );
   }
 }

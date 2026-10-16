@@ -889,7 +889,9 @@ void main() {
 
       expect(find.byType(IndividualHomeView), findsOneWidget);
       expect(find.text('Site Sakini Olarak Devam Et'), findsOneWidget);
-      expect(find.text('Yönetici Olarak Cihaz Ekle'), findsOneWidget);
+      // Site başvurusu akışı: cihaz sahiplenmek yönetici yapmaz; "Site Kurmak İçin Başvur" birincil eylemdir.
+      expect(find.text('Site Kurmak İçin Başvur'), findsOneWidget);
+      expect(find.text('Cihaz Ekle'), findsOneWidget);
       expect(find.byType(DoorControlDisabledCard), findsOneWidget);
       expect(find.text('Modüller Ekranını Aç'), findsNothing);
       await _disposeHome(t);

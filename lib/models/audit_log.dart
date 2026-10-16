@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
 
 /// Denetim kaydı satırı (`GET /admin/audit-log` -> `items[]`). Kayıtlar yalnız eklenir.
 @immutable
@@ -71,7 +72,10 @@ class AuditLogEntry {
       case 'module_request.cancelled':
         return 'Talep geri çekildi';
       default:
-        return peopleActionLabel(action) ?? announcementActionLabel(action) ?? 'Diğer işlem';
+        return peopleActionLabel(action) ??
+            announcementActionLabel(action) ??
+            siteApplicationActionLabel(action) ??
+            'Diğer işlem';
     }
   }
 
@@ -108,6 +112,12 @@ class AuditLogEntry {
       case 'announcement':
         // Başlık / gövde denetim kaydına yazılmaz; yalnız numara gösterilir.
         return _numbered('Duyuru');
+      case 'site_application':
+        // Site adı / gerekçe / not denetim kaydına yazılmaz; yalnız başvuru numarası gösterilir.
+        return _numbered('Başvuru');
+      case 'platform_settings':
+        // Hedef ayar anahtarıdır (örn. `site_onboarding`); ham anahtar gösterilmez.
+        return targetId == 'site_onboarding' ? 'Site açılış modu' : 'Platform ayarı';
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;

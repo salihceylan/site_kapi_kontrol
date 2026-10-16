@@ -8,7 +8,10 @@ import 'package:site_kapi_kontrol/services/adaptive_poller.dart';
 /// süzgeçleri bunu okur). Platform modül sistemi Faz 1.
 ///
 /// - SÜPER KULLANICIDA ayrıca bekleyen modül talebi sayısı ([pendingRequestCount]; çekmece rozeti)
-///   aynı yoklamayla tazelenir ([fetchPendingCount] verilmişse); modül süzgeci yine yoktur.
+///   aynı yoklamayla tazelenir ([fetchPendingCount] verilmişse); modül süzgeci yine yoktur. Aynı yoklama
+///   bekleyen SİTE BAŞVURUSU sayısını da ([pendingApplicationCount]; [fetchPendingApplicationCount]
+///   verilmişse) tazeler: iki sayı birbirinden bağımsızdır (biri hata verirse öbürünün son değeri ve
+///   güncellemesi etkilenmez).
 /// - Veri `GET /app/my-modules` ile ([fetch]) çekilir: girişten sonra, her genel yenilemede
 ///   ([refresh]) ve [AdaptivePoller] ile kısa aralıklı ([start]/[stop]; uygulama arka plandayken ya
 ///   da sayfa görünür değilken [isActive] false döner ve ağ isteği yapılmaz).
@@ -24,11 +27,13 @@ class ModuleAccess extends ChangeNotifier {
     bool Function()? isSuperUser,
     bool Function()? isActive,
     Future<int> Function()? fetchPendingCount,
+    Future<int> Function()? fetchPendingApplicationCount,
     Duration interval = const Duration(seconds: 30),
     Duration maxDelay = const Duration(minutes: 5),
   }) : _fetch = fetch,
        _isSuperUser = isSuperUser,
-       _fetchPendingCount = fetchPendingCount {
+       _fetchPendingCount = fetchPendingCount,
+       _fetchPendingApplicationCount = fetchPendingApplicationCount {
     _poller = AdaptivePoller(
       interval: interval,
       maxDelay: maxDelay,
@@ -40,10 +45,12 @@ class ModuleAccess extends ChangeNotifier {
   final Future<MyModulesResult> Function() _fetch;
   final bool Function()? _isSuperUser;
   final Future<int> Function()? _fetchPendingCount;
+  final Future<int> Function()? _fetchPendingApplicationCount;
   late final AdaptivePoller _poller;
 
   MyModulesResult? _result;
   int? _pendingRequestCount;
+  int? _pendingApplicationCount;
   Future<bool?>? _inFlight;
   bool _rerun = false;
   bool _disposed = false;
@@ -55,6 +62,10 @@ class ModuleAccess extends ChangeNotifier {
   /// Süper kullanıcı için bekleyen modül talebi sayısı; henüz alınmadıysa (ya da süper kullanıcı
   /// değilse) null. Çağrı hatasında son değer korunur.
   int? get pendingRequestCount => _pendingRequestCount;
+
+  /// Süper kullanıcı için bekleyen site başvurusu sayısı; henüz alınmadıysa (ya da süper kullanıcı değilse)
+  /// null. Çağrı hatasında son değer korunur.
+  int? get pendingApplicationCount => _pendingApplicationCount;
 
   /// En az bir yanıt başarıyla alındı mı? (false iken fail-open: her şey açık.)
   bool get isLoaded => _result != null;
@@ -145,9 +156,19 @@ class ModuleAccess extends ChangeNotifier {
 
   Future<bool?> _fetchOnce() async {
     if (_isSuperUser?.call() ?? false) {
-      // Süper kullanıcıda modül süzgeci yok; yalnız bekleyen talep sayısı (rozet) tazelenir.
+      // Süper kullanıcıda modül süzgeci yok; yalnız bekleyen talep / başvuru sayıları (rozet) tazelenir.
       final pending = _fetchPendingCount;
-      return pending == null ? null : _fetchPendingOnce(pending);
+      final applications = _fetchPendingApplicationCount;
+      if (pending == null && applications == null) return null;
+      // İkisi eşzamanlı çekilir; sonuç: en az biri başarılıysa true, hepsi hatalıysa false (geri çekilme),
+      // ikisi de atlandıysa null.
+      final results = await Future.wait(<Future<bool?>>[
+        if (pending != null) _fetchPendingOnce(pending),
+        if (applications != null) _fetchPendingApplicationsOnce(applications),
+      ]);
+      if (results.any((r) => r == true)) return true;
+      if (results.any((r) => r == false)) return false;
+      return null;
     }
     final generation = _generation;
     try {
@@ -181,6 +202,22 @@ class ModuleAccess extends ChangeNotifier {
     }
   }
 
+  Future<bool?> _fetchPendingApplicationsOnce(Future<int> Function() fetchPending) async {
+    final generation = _generation;
+    try {
+      final count = await fetchPending();
+      if (_disposed || generation != _generation) return null;
+      if (_pendingApplicationCount != count) {
+        _pendingApplicationCount = count;
+        notifyListeners();
+      }
+      return true;
+    } catch (_) {
+      if (_disposed || generation != _generation) return null;
+      return false;
+    }
+  }
+
   /// Kısa aralıklı tazelemeyi başlatır (ilk tur [interval] sonra; hemen çekmek için [refresh]).
   void start({bool immediately = false}) {
     if (_disposed) return;
@@ -197,9 +234,10 @@ class ModuleAccess extends ChangeNotifier {
   /// modülleri sızmaz). Uçuştaki eski yanıt yok sayılır.
   void clear() {
     _generation++;
-    if (_result != null || _pendingRequestCount != null) {
+    if (_result != null || _pendingRequestCount != null || _pendingApplicationCount != null) {
       _result = null;
       _pendingRequestCount = null;
+      _pendingApplicationCount = null;
       if (!_disposed) notifyListeners();
     }
   }

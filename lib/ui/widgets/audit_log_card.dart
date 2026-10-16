@@ -18,6 +18,7 @@ AppTone auditToneOf(String action) {
     case 'vehicle.added':
     case 'announcement.created':
     case 'announcement.published':
+    case 'site_application.approved':
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
@@ -29,12 +30,16 @@ AppTone auditToneOf(String action) {
     case 'residency.ended':
     case 'vehicle.removed':
     case 'announcement.deleted':
+    case 'site_application.cancelled':
       return AppTone.neutral;
     case 'module_request.created':
     case 'announcement.updated':
     case 'announcement.scheduled':
+    case 'site_application.created':
+    case 'platform_settings.updated':
       return AppTone.info;
     case 'module_request.rejected':
+    case 'site_application.rejected':
       return AppTone.danger;
     default:
       return AppTone.info;

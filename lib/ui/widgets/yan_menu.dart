@@ -57,6 +57,11 @@ enum SirketMenuItem {
   /// altına). Yönetici: duyuru yönetimi; sakin: gelen kutusu (okunmamış sayısı rozetle). Görevli
   /// (STAFF) ve bireysel kullanıcı için yoktur.
   duyurular,
+
+  /// Site başvuruları (site yöneticisi olma): bireysel kullanıcıların site kurma başvurularını inceleyen
+  /// süper kullanıcı ekranı (yalnız süper kullanıcı; bekleyen sayısı rozetle gösterilir). "Abonelik
+  /// Talepleri"nden (site yöneticisi KAYDI onayı) farklıdır.
+  siteBasvurulari,
 }
 
 class YanMenu extends StatelessWidget {
@@ -413,6 +418,7 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.kisiler,
         SirketMenuItem.moduller,
         SirketMenuItem.modulTalepleri,
+        SirketMenuItem.siteBasvurulari,
         SirketMenuItem.katilimVeKurulum,
         SirketMenuItem.cihazEkle,
         SirketMenuItem.kayitliCihazlar,
@@ -497,6 +503,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Kişiler';
     case SirketMenuItem.duyurular:
       return 'Duyurular';
+    case SirketMenuItem.siteBasvurulari:
+      return 'Site Başvuruları';
   }
 }
 
@@ -540,6 +548,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.contacts_rounded;
     case SirketMenuItem.duyurular:
       return Icons.campaign_rounded;
+    case SirketMenuItem.siteBasvurulari:
+      return Icons.domain_add_rounded;
   }
 }
 

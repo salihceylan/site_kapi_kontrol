@@ -26,6 +26,7 @@ import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_info.dart';
@@ -337,7 +338,8 @@ class AuthService extends ChangeNotifier {
     final res = await _runAuthorized(
       (token) => api.claimDevice(token: token, deviceInput: deviceInput),
     );
-    // Rol yükseltmesi sunucuda yapılır; yerelde tahmin etmek yerine /me ile eşitle (C11).
+    // Cihaz sahiplenmek kullanıcıyı site yöneticisi YAPMAZ (site yöneticisi olmak için site başvurusu
+    // gerekir; rol değişmez). Rol yine de yerelde tahmin edilmez: /me ile eşitle (C11).
     await refreshSession(force: true);
     return res;
   }
@@ -1098,6 +1100,105 @@ class AuthService extends ChangeNotifier {
         requestId: requestId,
         approve: approve,
         note: note,
+      ),
+    );
+  }
+
+  // --- Site başvurusu (site yöneticisi olma) -----------------------------------------------
+  // Hata durumunda ApiException FIRLATIR (Türkçe mesajlı); oturum hatası [_runAuthorized] içinde işlenir.
+  // Başvuru yalnız bireysel / daire kullanıcısı rolünde yapılır; rol onayla sunucuda değişir ve yerelde
+  // TAHMİN EDİLMEZ: onaydan sonra [refreshSession] (`force: true`) çağrılır.
+
+  /// Başvuran: site başvurusu gönderir (`POST /membership/site-applications`). Cihaz isteğe bağlıdır.
+  Future<SiteApplication> createSiteApplication({
+    required String name,
+    String? city,
+    String? district,
+    String? address,
+    required List<Map<String, dynamic>> blocks,
+    List<Map<String, dynamic>>? doors,
+    int doorCount = 1,
+    String? deviceUid,
+    String? managementType,
+    String? note,
+  }) {
+    return _runAuthorized(
+      (token) => api.createSiteApplication(
+        token: token,
+        name: name,
+        city: city,
+        district: district,
+        address: address,
+        blocks: blocks,
+        doors: doors,
+        doorCount: doorCount,
+        deviceUid: deviceUid,
+        managementType: managementType,
+        note: note,
+      ),
+    );
+  }
+
+  /// Başvuran: bekleyen başvuru ve son başvurular.
+  Future<MySiteApplications> getMySiteApplications() {
+    return _runAuthorized((token) => api.getMySiteApplications(token: token));
+  }
+
+  /// Başvuran: kendi bekleyen başvurusunu iptal eder.
+  Future<SiteApplication> cancelSiteApplication(int applicationId) {
+    return _runAuthorized(
+      (token) => api.cancelSiteApplication(token: token, applicationId: applicationId),
+    );
+  }
+
+  /// Süper kullanıcı: başvurular (`status`: `pending|approved|rejected|cancelled|all`).
+  Future<SiteApplicationPage> listAdminSiteApplications({
+    String? status,
+    String? query,
+    int limit = 30,
+    int offset = 0,
+  }) {
+    return _runAuthorized(
+      (token) => api.listAdminSiteApplications(
+        token: token,
+        status: status,
+        query: query,
+        limit: limit,
+        offset: offset,
+      ),
+    );
+  }
+
+  /// Süper kullanıcı: bekleyen başvuru sayısı (çekmece rozeti).
+  Future<int> getAdminSiteApplicationsPendingCount() {
+    return _runAuthorized((token) => api.getAdminSiteApplicationsPendingCount(token: token));
+  }
+
+  /// Süper kullanıcı: tek başvuru (başvuran iletişimi ve cihaz durumuyla).
+  Future<SiteApplication> getAdminSiteApplication(int applicationId) {
+    return _runAuthorized(
+      (token) => api.getAdminSiteApplication(token: token, applicationId: applicationId),
+    );
+  }
+
+  /// Süper kullanıcı: başvuruyu onaylar; sunucu tek işlemde siteyi kurar ve başvuranı site yöneticisi yapar.
+  Future<SiteApplicationDecision> approveSiteApplication(int applicationId, {String? note}) {
+    return _runAuthorized(
+      (token) => api.approveSiteApplication(
+        token: token,
+        applicationId: applicationId,
+        note: note,
+      ),
+    );
+  }
+
+  /// Süper kullanıcı: başvuruyu reddeder; [reason] isteğe bağlı gerekçe.
+  Future<SiteApplication> rejectSiteApplication(int applicationId, {String? reason}) {
+    return _runAuthorized(
+      (token) => api.rejectSiteApplication(
+        token: token,
+        applicationId: applicationId,
+        reason: reason,
       ),
     );
   }

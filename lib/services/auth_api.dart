@@ -27,6 +27,7 @@ import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
 import 'package:site_kapi_kontrol/models/site_join_token_record.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
+import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/site_join_info.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
@@ -846,6 +847,220 @@ class AuthApi {
     return _parsePayload(
       'Modül talebi',
       () => ModuleRequest.fromJson(payload['request'] as Map<String, dynamic>),
+    );
+  }
+
+  // --- Site başvurusu (site yöneticisi olma) -----------------------------------------------
+  // Sözleşme: docs/PLATFORM_SITE_BASVURUSU.md. Başvuran uçları `/membership/site-applications...`,
+  // süper kullanıcı uçları `/admin/site-applications...` altındadır. Başarı durum kodu (200/201)
+  // savunmacı okunur: ikisi de kabul edilir.
+
+  /// 200 ya da 201 kabul edilir; başka durum [ApiException] fırlatır.
+  void _ensureCreatedOrOk(http.Response response) {
+    final status = response.statusCode;
+    _ensureStatus(response, status == 201 ? 201 : 200);
+  }
+
+  /// Site başvurusu gönderir (201). Gövde `setup-site` ile aynıdır; [deviceUid] ve [note] isteğe bağlıdır.
+  ///
+  /// Başvuranın bakış açısıyla iki hata metni bağlama göre yeniden yazılır: `ALREADY_SITE_MANAGER` ("Bu kişi
+  /// zaten site yöneticisi" başvuranı anlatmaz) ve `DEVICE_NOT_FOUND`.
+  Future<SiteApplication> createSiteApplication({
+    required String token,
+    required String name,
+    String? city,
+    String? district,
+    String? address,
+    required List<Map<String, dynamic>> blocks,
+    List<Map<String, dynamic>>? doors,
+    int doorCount = 1,
+    String? deviceUid,
+    String? managementType,
+    String? note,
+  }) async {
+    final trimmedNote = note?.trim();
+    try {
+      final response = await _authorizedRequest(
+        method: 'POST',
+        path: '/membership/site-applications',
+        token: token,
+        body: {
+          'name': name,
+          if (city != null && city.isNotEmpty) 'city': city,
+          if (district != null && district.isNotEmpty) 'district': district,
+          if (address != null && address.isNotEmpty) 'address': address,
+          'blocks': blocks,
+          if (doors != null && doors.isNotEmpty) 'doors': doors,
+          'doorCount': doors != null && doors.isNotEmpty ? doors.length : doorCount,
+          if (deviceUid != null && deviceUid.isNotEmpty) 'deviceUid': deviceUid,
+          if (managementType != null && managementType.isNotEmpty)
+            'management_type': managementType,
+          if (trimmedNote != null && trimmedNote.isNotEmpty) 'note': trimmedNote,
+        },
+      );
+      _ensureCreatedOrOk(response);
+      final payload = _decodePayload(response);
+      final application = _parsePayload(
+        'Site başvurusu',
+        () => SiteApplication.fromJson(payload['application'] as Map<String, dynamic>),
+      );
+      return application;
+    } on ApiException catch (e) {
+      if (e.code == 'ALREADY_SITE_MANAGER') {
+        throw ApiException(
+          siteApplicationAlreadyManagerMessage,
+          statusCode: e.statusCode,
+          code: e.code,
+          retryAfterSeconds: e.retryAfterSeconds,
+          payload: e.payload,
+        );
+      }
+      if (e.code == 'DEVICE_NOT_FOUND') {
+        throw ApiException(
+          siteApplicationDeviceNotFoundMessage,
+          statusCode: e.statusCode,
+          code: e.code,
+          retryAfterSeconds: e.retryAfterSeconds,
+          payload: e.payload,
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// "Zaten site yöneticisisiniz" (başvuran bakış açısı; genel `ALREADY_SITE_MANAGER` metni başkasını anlatır).
+  static const String siteApplicationAlreadyManagerMessage =
+      'Zaten site yöneticisisiniz. Yeni site için Site Yönetimi bölümündeki "Site Ekle"yi kullanın.';
+
+  static const String siteApplicationDeviceNotFoundMessage =
+      'Seçtiğiniz cihaz hesabınızda bulunamadı. Cihaz seçimini kaldırıp tekrar deneyin.';
+
+  /// Kendi başvurularım: bekleyen (yoksa null) ve son 10 başvuru (yeniden eskiye).
+  Future<MySiteApplications> getMySiteApplications({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/membership/site-applications/mine',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Site başvurularım', () => MySiteApplications.fromJson(payload));
+  }
+
+  /// Kendi BEKLEYEN başvurusunu iptal eder.
+  Future<SiteApplication> cancelSiteApplication({
+    required String token,
+    required int applicationId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/membership/site-applications/$applicationId/cancel',
+      token: token,
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Site başvurusu',
+      () => SiteApplication.fromJson(payload['application'] as Map<String, dynamic>),
+    );
+  }
+
+  /// Süper kullanıcı: başvurular. [status] `pending|approved|rejected|cancelled|all` (sunucu varsayılanı
+  /// `pending`); [query] site adı, şehir, başvuran adı / e-postası.
+  Future<SiteApplicationPage> listAdminSiteApplications({
+    required String token,
+    String? status,
+    String? query,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+      'limit': '$limit',
+      'offset': '$offset',
+    };
+    final path = Uri(path: '/admin/site-applications', queryParameters: params).toString();
+    final response = await _authorizedRequest(method: 'GET', path: path, token: token);
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Site başvuruları', () => SiteApplicationPage.fromJson(payload));
+  }
+
+  /// Süper kullanıcı: bekleyen başvuru sayısı (çekmece rozeti; hafif uç).
+  Future<int> getAdminSiteApplicationsPendingCount({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/admin/site-applications/summary',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Site başvuru özeti', () {
+      final raw = payload['pending'];
+      final count = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+      if (count == null) throw const FormatException('pending yok');
+      return count < 0 ? 0 : count;
+    });
+  }
+
+  /// Süper kullanıcı: tek başvuru (başvuran iletişimi, cihaz durumu dahil).
+  Future<SiteApplication> getAdminSiteApplication({
+    required String token,
+    required int applicationId,
+  }) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/admin/site-applications/$applicationId',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Site başvurusu', () {
+      // Sözleşme: gövde doğrudan `Application`; bazı sürümler `{ application }` sarar — ikisi de okunur.
+      final wrapped = payload['application'];
+      return SiteApplication.fromJson(
+        wrapped is Map<String, dynamic> ? wrapped : payload,
+      );
+    });
+  }
+
+  /// Süper kullanıcı: başvuruyu onaylar (tek işlemde site kurulur, başvuran site yöneticisi olur).
+  Future<SiteApplicationDecision> approveSiteApplication({
+    required String token,
+    required int applicationId,
+    String? note,
+  }) async {
+    final trimmed = note?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/site-applications/$applicationId/approve',
+      token: token,
+      body: {if (trimmed != null && trimmed.isNotEmpty) 'note': trimmed},
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload('Site başvurusu', () => SiteApplicationDecision.fromJson(payload));
+  }
+
+  /// Süper kullanıcı: başvuruyu reddeder; [reason] isteğe bağlı gerekçe (en çok 300 karakter).
+  Future<SiteApplication> rejectSiteApplication({
+    required String token,
+    required int applicationId,
+    String? reason,
+  }) async {
+    final trimmed = reason?.trim();
+    final response = await _authorizedRequest(
+      method: 'POST',
+      path: '/admin/site-applications/$applicationId/reject',
+      token: token,
+      body: {if (trimmed != null && trimmed.isNotEmpty) 'reason': trimmed},
+    );
+    _ensureCreatedOrOk(response);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Site başvurusu',
+      () => SiteApplication.fromJson(payload['application'] as Map<String, dynamic>),
     );
   }
 
@@ -2771,6 +2986,24 @@ class AuthApi {
         return 'Yayın zamanı geçersiz. En az 1 dakika, en çok 1 yıl sonrası seçin.';
       case 'ANNOUNCEMENT_EMAIL_LIMIT':
         return 'Tek seferde en çok 1000 kişiye e-posta gönderilebilir. Hedefi bölüp ayrı duyurular oluşturun.';
+      // Site başvurusu (site yöneticisi olma). ALREADY_SITE_MANAGER ve DEVICE_NOT_FOUND yukarıda eşlidir;
+      // başvuran bakış açısı için [createSiteApplication] bunları bağlama göre yeniden yazar.
+      case 'APPLICATION_REQUIRED':
+        return 'Site kurmak için başvuru yapmalısınız.';
+      case 'APPLICATION_PENDING':
+        return 'Zaten bekleyen bir site başvurunuz var.';
+      case 'APPLICATION_NOT_FOUND':
+        return 'Başvuru bulunamadı.';
+      case 'APPLICATION_NOT_PENDING':
+        return 'Bu başvuru artık bekleyen durumda değil.';
+      case 'APPLICATION_DATA_INVALID':
+        return 'Başvuru bilgileri geçersiz. Alanları kontrol edip tekrar deneyin.';
+      case 'APPLICANT_UNAVAILABLE':
+        return 'Başvuran hesap silinmiş ya da pasif; başvuru onaylanamaz.';
+      case 'APPLICATION_DAILY_LIMIT':
+        return 'Günlük başvuru sınırına ulaştınız. Yarın tekrar deneyin.';
+      case 'PAYMENT_NOT_AVAILABLE':
+        return 'Ödeme ile site açma yakında.';
       default:
         return null;
     }
