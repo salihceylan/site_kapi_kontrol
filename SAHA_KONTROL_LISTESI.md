@@ -1253,14 +1253,14 @@ Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yu
 
 ## 59. 🧩 Platform Modül Sistemi — Faz 1: Modül Aç/Kapa, Yönetim Türü, Denetim Kaydı, Ek Roller (2026-10-15)
 
-Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (AHBU) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
+Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüllerin açık olacağını seçer (şimdilik yalnız Geçiş Kontrol (JetPass) seçilebilir; diğerleri "Yakında…"). Sözleşme: `docs/PLATFORM_MODUL_SISTEMI.md`. Deneme listesi (claude.ai): `tools/deneme_listesi`. Yeni modüller varsayılan KAPALI, Geçiş Kontrol varsayılan AÇIKTIR.
 
 - [ ] **59.1. Eski ve Yeni Uygulama Sürümü: Kapı Açma Değişmez:**
   - **Nasıl Test Edilir:** Güncellemeden önceki uygulama sürümüyle, sonra yeni sürümle giriş yapın; telefondan kapıyı açın, giriş QR kodu üretin, bir misafir bağlantısı oluşturup açın.
   - **Beklenen Sonuç:** Üçü de her iki sürümde eskisi gibi çalışır, hata çıkmaz (Geçiş Kontrol modülü varsayılan olarak AÇIKTIR; mevcut siteler etkilenmez).
 - [ ] **59.2. Modüller Ekranı:**
   - **Nasıl Test Edilir:** Site yöneticisi olarak ve ayrıca süper kullanıcı olarak çekmeceden "Modüller"i açın.
-  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (AHBU)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
+  - **Beklenen Sonuç:** 8 kart görünür. Süper kullanıcıda "Geçiş Kontrol (JetPass)" anahtarlıdır; site yöneticisinde ANAHTAR YOKTUR (Açık modül "Tanımlı", kapalı modül "Tanımlı değil" + "Modül Talep Et"). "Kişi ve Daire Kayıtları" ile "Duyuru ve Bildirim" "Her sitede açık"; diğer 5 modül (Aidat ve Finans dahil) "Yakında…" ve anahtarsız/talepsizdir. Çekip yenileme ve yenile düğmesi çalışır.
 - [ ] **59.3. Geçiş Kontrol Modülünü Kapatma ve Açma (süper kullanıcı):**
   - **Nasıl Test Edilir:** Süper kullanıcı olarak Modüller ekranında bir sitenin Geçiş Kontrol anahtarını kapatın, uyarıyı okuyup onaylayın; sonra yeniden açın. Site yöneticisi hesabıyla aynı siteye bakın.
   - **Beklenen Sonuç:** Kapatmadan önce "Telefondan kapı açma, QR ve misafir geçişi durur" uyarısı çıkar; vazgeçilirse hiçbir şey değişmez. Onaylanınca çip "Kapalı" olur. Tek siteli yöneticide "Kayıtlı Cihazlar" ve "Bluetooth ile Wi-Fi Kur" menüleri kaybolur, Panel'de "Geçiş Kontrol modülü kapalı" kartı çıkar. Yeniden açınca her şey anında geri gelir. Site yöneticisi kendisi açıp kapatamaz (anahtarı yoktur; API ile denerse 403 "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.").
@@ -1311,7 +1311,7 @@ Site ve toplu yaşam yönetim platformunun çekirdeği: her site hangi modüller
   - **Beklenen Sonuç:** Çekmece öğesinde bekleyen sayısı rozeti görünür ve onay/ret sonrası düşer. Onayda modül siteye tanımlanır; site yöneticisi yenileyince "Tanımlı" görür ve modülün menüleri gelir. Retta yönetici gerekçeyi "Modül Taleplerim"de görür, modül kapalı kalır. İkinci onay "Bu talep artık bekleyen durumda değil." der. Süper kullanıcı modülü Modüller anahtarıyla doğrudan açarsa o modülün bekleyen talebi otomatik "onaylandı" olur. Denetim Kaydı'nda `module_request.*` ve `module.enabled` satırları görünür.
 - [ ] **59.19. Ürün Adı: "Site ve Toplu Yaşam Yönetim Sistemi":**
   - **Nasıl Test Edilir:** Giriş ekranına, Panel başlığına, web sekme başlığına, Android/Windows uygulama adına, doğrulama kodu ve şifre sıfırlama e-postalarına ve şifre sıfırlama sayfasına bakın; kapı kartında etiketi okuyun.
-  - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). "AHBU" yalnızca kapı modülünde kalır: kapı kartı etiketleri ("AHBU AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (AHBU)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.
+  - **Beklenen Sonuç:** Platform adı her yerde "Site ve Toplu Yaşam Yönetim Sistemi"dir (giriş alt başlığı "Yönetici ve sakin girişi", Panel başlığı "Panel"; uzun başlık dar ekranda taşmadan sarar). Kapı modülünün adı JetPass'tir (kapı kartı etiketleri "JetPass AKILLI GEÇİŞ"), katalogdaki "Geçiş Kontrol (JetPass)", cihaz/BLE adları ve kapı günlüğü/cihaz raporları.
 
 ---
 
@@ -1428,3 +1428,49 @@ Yönetimin sakinlere duyuru yaptığı çekirdek modül (her sitede hep açık).
 - [ ] **61.16. Eski Ekranlar ve Kapı Açma Etkilenmedi:**
   - **Nasıl Test Edilir:** Duyuru özelliği gelmişken kapı açma, QR, misafir bağlantısı, Kişiler ve Modüller ekranlarını kısaca kullanın.
   - **Beklenen Sonuç:** Hiçbiri değişmeden çalışır. Modüller ekranında "Duyuru ve Bildirim" "Her sitede açık" görünür.
+
+---
+
+## 62. 📝 Site Yöneticisi Olma — Site Başvurusu ve Süper Kullanıcı Onayı (2026-10-16)
+
+Bireysel kullanıcı site için başvurur; süper kullanıcı onaylayınca site kurulur ve kişi site yöneticisi olur. JetPass cihazı şart değildir (isteğe bağlı); cihaz sahiplenmek yönetici yapmaz. İleride ödeme/abonelik bu onayın yerini alacak (altyapı hazır, ödeme yok). Sözleşme: `docs/PLATFORM_SITE_BASVURUSU.md` (sondaki kararlar öncelikli). Mevcut sahibi olduğu sitesi olan yöneticinin "Site Ekle"si ve süper kullanıcının site kurması anlık kalır.
+
+- [ ] **62.1. Bireysel Başvuru (Cihaz Şartı Yok):**
+  - **Nasıl Test Edilir:** Cihazı OLMAYAN bir bireysel hesapla giriş yapın; ana ekranda "Site Kurmak İçin Başvur"a dokunun; site adı, şehir/ilçe, blok ve daire sayılarını girip "Başvuruyu Gönder".
+  - **Beklenen Sonuç:** "Başvurunuz alındı. Süper kullanıcı onayladığında site yöneticisi olacaksınız." çıkar; cihaz istenmez. Hesap hâlâ bireyseldir, yönetici ekranları açılmaz. Üstte "Site başvurunuz inceleniyor" kartı görünür.
+- [ ] **62.2. Başvuru Kartı, İptal ve Yinelenen Başvuru:**
+  - **Nasıl Test Edilir:** Bekleyen başvuruyla ana ekrana bakın; ikinci cihazdan aynı hesapla başvurmayı deneyin; "Başvuruyu iptal et"e basıp onaylayın; kartı ve "Yeniden başvur"u görün. İnterneti kapatıp ekranı açın.
+  - **Beklenen Sonuç:** Bekleyen başvuruda yeni başvuru düğmesi pasiftir ve nedeni yazılır; ikinci cihazdan başvuru formu kapanır ve bekleyen kart görünür. İptalden sonra "iptal ettiniz" kartı + "Yeniden başvur". Ağ yokken "durum alınamadı • Tekrar Dene" çıkar, "başvuru yok" yazmaz.
+- [ ] **62.3. Süper Kullanıcı: Site Başvuruları:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla giriş yapın; çekmecede "Site Başvuruları" ve rozeti görün; liste, durum süzgeci, arama; bir başvurunun ayrıntısını açın; 12'den fazla bloklu başvuruda "Tümünü göster"e basın.
+  - **Beklenen Sonuç:** Başvuran, site, blok/daire/kapı sayısı, tarih ve durum görünür; ayrıntıda başvuranın iletişimi, bloklar/kapılar, not ve cihaz durumu vardır. Rozet bekleyen sayısını gösterir (hesabı silinmiş başvuranlar sayılmaz). Sıradan kullanıcıda bu ekran yoktur.
+- [ ] **62.4. Onay: Site Kurulur ve Başvuran Yönetici Olur:**
+  - **Nasıl Test Edilir:** Süper kullanıcıyla başvuruyu "Onayla" (onay özetini okuyun). Başvuranın uygulaması açıkken bekleyin (en geç ~30 sn); başvuran hesapta çekmece ve Site Yönetimi'ne bakın.
+  - **Beklenen Sonuç:** Site bloklar, daireler ve kapılarla kurulur; başvuran sayfa yenilemeden "Artık site yöneticisisiniz" iletisini alır ve yönetici görünümüne geçer. İkinci onay "zaten sonuçlandı" der. Başvuruda seçilen cihaz hâlâ başvuranındaysa 1. kapıya bağlanır; değilse cihazsız kurulur ve iletişim bunu söyler.
+- [ ] **62.5. Red, Gerekçe ve Yeniden Başvuru:**
+  - **Nasıl Test Edilir:** Süper kullanıcı başka bir başvuruyu gerekçeyle reddetsin (gerekçe 300 karakterle sınırlı; 301'de düğme kapanır); başvuran kartı okuyup "Yeniden başvur"a bassın.
+  - **Beklenen Sonuç:** Başvuranda "reddedildi" kartı ve gerekçe görünür (gerekçe/not başvurana açıktır, arayüz bunu yazar); form önceki değerlerle açılır. Hesabı silinmiş başvuranda "Onayla" pasiftir, yalnız "Reddet" çalışır.
+- [ ] **62.6. Cihaz Sahiplenmek Yönetici Yapmaz:**
+  - **Nasıl Test Edilir:** Cihazı olan bireysel hesapla "Cihaz Ekle"; çıkan "Cihaz Eklendi" penceresinde "Site Kur"a dokunun. Menülerde/kartlarda "Yönetici Olarak Cihaz Ekle", "Cihaz Ekleyerek Site Yöneticisi Ol", "SITE_OWNER", "AHBU" metinlerini arayın.
+  - **Beklenen Sonuç:** Rol bireysel kalır; "Site Kur" başvuru formunu cihaz seçili açar; "Daha Sonra" form açmaz. Aranan metinlerin hiçbiri görünmez.
+- [ ] **62.7. Kendi Sitesi Olmayan Yönetici Başvurur:**
+  - **Nasıl Test Edilir:** Bir yöneticinin davet ettiği (kendi sitesi olmayan) hesapla Site Yönetimi'ndeki yeni site düğmesine bakın; sahibi olduğu sitesi olan bir yöneticiyle aynı düğmeye bakın; süper kullanıcıyla bakın.
+  - **Beklenen Sonuç:** Davetle yönetici olanda düğme "Site Başvurusu" olur ve başvuru akışı çalışır (onaydan sonra "Yeni Site" anlık açılır). Kendi sitesi olan yöneticide "Yeni Site" anlıktır ve eskisi gibi çalışır. Süper kullanıcı etkilenmez. Sunucuda sahip bağı kalkmış bayat ekranda anlık gönderim "başvuru yapmanız gerekiyor" der ve form başvuru kipine geçer.
+- [ ] **62.8. Ödeme Altyapısı: Yakında:**
+  - **Nasıl Test Edilir:** Başvuru formunda ve ana ekran kartında "Abonelikle hemen site aç" satırına bakın; sunucuda `SELECT code,is_active FROM subscription_plans; SELECT * FROM platform_settings;` çalıştırın.
+  - **Beklenen Sonuç:** "Yakında…" pasif satırı vardır, ödeme alınmaz. Tohumlar: `manual_approval` açık, `standard` kapalı, ayar `{"mode":"approval"}`. Onaylanan her yeni site `site_subscriptions` satırı alır (`manual_approval`); eski siteler satırsızdır.
+- [ ] **62.9. Sınırlar ve Girdi Güvenliği:**
+  - **Nasıl Test Edilir:** Kısa sürede çok başvuru gönderip iptal edin; site adına sıfır genişlikli/yön değiştiren karakter ve 150 emoji yapıştırın; 60 karakterden uzun blok adı yazın; nota 501 karakter yazın.
+  - **Beklenen Sonuç:** Son 24 saatte en fazla 5 başvuru (aşılırsa Türkçe mesaj). Tehlikeli/görünmez karakterler temizlenir, uzun adlar sınırda kesilir, 500 üstü not reddedilir; uygulama ve sunucu hata vermez.
+- [ ] **62.10. E-posta ve Denetim:**
+  - **Nasıl Test Edilir:** Yeni başvuru gönderin ve süper kullanıcının e-postasına bakın; onay/redden sonra başvuranın e-postasına bakın; süper kullanıcıyla Denetim Kaydı'nda eylem süzgecini kullanın.
+  - **Beklenen Sonuç:** Süper kullanıcıya "yeni site başvurusu" e-postası gelir (başvuranın e-posta/telefonu yoktur); başvurana sonuç e-postası gider. Denetimde başvuru olayları Türkçe etiketlidir; not/gerekçe metni ve e-posta adresi denetim kaydında yoktur.
+- [ ] **62.11. Küçük Ekran, Klavye ve Ekran Okuyucu:**
+  - **Nasıl Test Edilir:** Yazı boyutunu en büyüğe alıp telefonu yatay çevirerek klavye açıkken başvuru formunu doldurun; TalkBack/VoiceOver ile başarı ekranını ve silme düğmelerini dolaşın.
+  - **Beklenen Sonuç:** Taşma yoktur, "Başvuruyu Gönder"e ulaşılır; başarıda odak başlığa gelir ve "Başvurunuz alındı" okunur; silme düğmeleri "Bloğu sil: A Blok" gibi okunur; iptal/yenile/429 sonrası durum duyurulur.
+- [ ] **62.12. (Geliştirici) Gerçek Veritabanı Doğrulaması:**
+  - **Nasıl Test Edilir:** server klasöründe `node scripts/qa_platform_pg.mjs` komutunu `QA_CONFIRM_DISPOSABLE_DB=yes` ile çalıştırın.
+  - **Beklenen Sonuç:** Sekiz bölüm yeşil (≈1000 kontrol): site_applications bölümünde şema eşitliği, başvuru→onay→site/rol/abonelik, ROLLBACK (11 hata noktası), çift başvuru/çift onay yarışları, sahip bağı kuralı, IDOR/rol matrisi, güvenli metin, 40P01 = 0.
+- [ ] **62.13. (Operasyon) Dağıtım Doğrulaması:**
+  - **Nasıl Test Edilir:** Sunucuda: `SELECT count(*) FROM site_applications;` (0), `SELECT count(*) FROM site_subscriptions;` (0, mevcut sitelere satır yazılmaz), `\d site_manager_sites` (link_source sütunu), pm2 logunda DDL hatası ve `?q=***` maskesi.
+  - **Beklenen Sonuç:** Tablolar boş, `link_source` sütunu vardır, mevcut yönetici bağları NULL (sahip sayılır) olduğundan canlıdaki yönetici "Site Ekle"yi anlık kullanmaya devam eder. Eski uygulama sürümü bireysel "Site Kur"da 409 alır, bu yüzden yeni uygulama sürümü sunucuyla birlikte yayınlanmalıdır.

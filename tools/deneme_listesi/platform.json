@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
-  "aciklama": "AHBU Site Kapı Kontrol, site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a ve Faz 3a (Duyuru ve Bildirim) canlıda ve denemeye hazır. Sırada: Faz 2b (Excel'den toplu yükleme ve dışa aktarma), Faz 3b (Belgeler ve uygulama kapalıyken telefon bildirimi; telefon bildirimi için sizden Firebase kurulumu gerekecek). Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
+  "aciklama": "JetPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a ve “Site yöneticisi olma (site başvurusu)” canlıda ve denemeye hazır. Sırada: Faz 2b (Excel'den toplu yükleme ve dışa aktarma), Faz 3b (Belgeler ve uygulama kapalıyken telefon bildirimi; telefon bildirimi için sizden Firebase kurulumu gerekecek). Faz 4 (Aidat ve Finans) sizin incelemenizi bekliyor. Yönetim türleri ile banka ve ödeme işleri “Yakında”.",
   "bolumler": [
     {
       "id": "F0",
@@ -133,7 +133,7 @@
       "id": "F1",
       "baslik": "Modül sistemi ve yönetim türü",
       "durum": "hazir",
-      "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (AHBU) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
+      "ozet": "Her yönetim, hangi özelliklerin açık olacağını seçer. Kapalı modülün menüsü görünmez. Geçiş Kontrol (JetPass) bu sistemin ilk modülüdür. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır, kapatılamaz.",
       "maddeler": [
         {
           "id": "F1.01",
@@ -141,7 +141,7 @@
           "adimlar": [
             "Menüden “Modüller” ekranını açın."
           ],
-          "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (AHBU) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
+          "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (JetPass) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
           "yeni": true,
@@ -194,7 +194,7 @@
           "adimlar": [
             "Kapıları zaten kullanan bir sitenin Modüller ekranına bakın."
           ],
-          "beklenen": "Geçiş Kontrol (AHBU) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
+          "beklenen": "Geçiş Kontrol (JetPass) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
           "yeni": true,
@@ -381,7 +381,7 @@
             "Doğrulama kodu ya da şifre sıfırlama e-postasını ve şifre sıfırlama sayfasını açın.",
             "Kapı kartındaki etiketi okuyun."
           ],
-          "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. “AHBU” yalnızca kapı modülünde kalır: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (AHBU)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
+          "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. Kapı modülünün adı JetPass’tir: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (JetPass)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
           "rol_notu": "Hepsi",
           "on_kosul": "Yeni APK / web / e-posta",
           "yeni": true,
@@ -396,6 +396,137 @@
           "beklenen": "403 “Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.” (kod MODULE_ADMIN_ONLY). Süper kullanıcıda aynı istek çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "API aracı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.21",
+          "baslik": "Bireysel kullanıcı site için başvurur (cihaz şartı yok)",
+          "adimlar": [
+            "Bireysel hesapla giriş yapın; cihaz EKLEMEDEN ana ekranda “Site Kurmak İçin Başvur”a dokunun.",
+            "Site adı, şehir/ilçe, blok ve daire sayılarını girip “Başvuruyu Gönder”e basın."
+          ],
+          "beklenen": "“Başvurunuz alındı. Süper kullanıcı onayladığında site yöneticisi olacaksınız.” iletisi çıkar. Cihaz istenmez (cihaz isteğe bağlıdır). Başvurudan sonra hesabınız hâlâ bireyseldir, yönetici ekranları açılmaz.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "Cihazı olmayan bir bireysel hesap",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.22",
+          "baslik": "Başvuru durumu kartı ve iptal",
+          "adimlar": [
+            "Başvuru gönderdikten sonra ana ekranın üstüne bakın.",
+            "“Başvuruyu iptal et”e basıp onaylayın.",
+            "Aynı hesapla ikinci kez başvurmayı deneyin (önce iptal etmeden)."
+          ],
+          "beklenen": "“Site başvurunuz inceleniyor” kartı (site adı, tarih) görünür; bekleyen başvuru varken yeni başvuru düğmesi pasiftir ve nedeni yazılır. İptal edince kart “iptal ettiniz” olur ve “Yeniden başvur” çıkar. Kayıt durumu okunamazsa “durum alınamadı • Tekrar Dene” denir, “başvuru yok” denmez.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.23",
+          "baslik": "Süper kullanıcı: Site Başvuruları ekranı",
+          "adimlar": [
+            "Süper kullanıcıyla giriş yapın; çekmecede “Site Başvuruları” ve bekleyen sayısı rozetini görün.",
+            "Bir başvuruyu açın; durum süzgecini ve aramayı deneyin."
+          ],
+          "beklenen": "Liste başvuran adı, site adı, blok/daire/kapı sayısı ve tarihle gelir; rozet bekleyen sayısını gösterir (hesabı silinmiş başvuranlar rozete sayılmaz). Ayrıntıda başvuranın iletişimi, bloklar, kapılar, not ve cihaz durumu görünür. Sıradan kullanıcıya bu ekran görünmez.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "En az bir bekleyen başvuru",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.24",
+          "baslik": "Onay: site kurulur, başvuran site yöneticisi olur",
+          "adimlar": [
+            "Süper kullanıcıyla başvuruyu “Onayla” (onay penceresindeki özeti okuyun).",
+            "Başvuranın uygulaması açıkken bekleyin (en geç ~30 sn).",
+            "Başvuran hesapta çekmeceye ve Site Yönetimi'ne bakın."
+          ],
+          "beklenen": "Site, bloklar, daireler ve kapılarla kurulur; başvuran sayfa yenilemeden “Site başvurunuz onaylandı. Artık site yöneticisisiniz.” iletisini alır ve yönetici görünümüne geçer. İkinci onay denemesi “zaten sonuçlandı” der. Başvuranda cihaz seçilmişse ve hâlâ ona aitse 1. kapıya bağlanır, değilse cihazsız kurulur (iletişimde belirtilir).",
+          "rol_notu": "Süper kullanıcı / başvuran",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.25",
+          "baslik": "Red ve yeniden başvuru",
+          "adimlar": [
+            "Süper kullanıcı başka bir başvuruyu gerekçeyle “Reddet” (gerekçe 300 karakter sınırlı).",
+            "Başvuran hesapta kartı okuyup “Yeniden başvur”a basın."
+          ],
+          "beklenen": "Başvuranda “Site başvurunuz reddedildi” kartı ve gerekçe görünür (gerekçe başvurana açıktır); form önceki değerlerle açılır ve yeniden başvurulabilir.",
+          "rol_notu": "Süper kullanıcı / başvuran",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.26",
+          "baslik": "Cihaz sahiplenmek artık yönetici yapmaz",
+          "adimlar": [
+            "Cihazı olan bireysel hesapla “Cihaz Ekle” ile cihazı sahiplenin.",
+            "Çıkan “Cihaz Eklendi” penceresinde “Site Kur”a dokunun."
+          ],
+          "beklenen": "Rol bireysel kalır, yönetici görünümüne geçilmez. Pencere “Site yöneticisi olmak için Site Kur ile başvuru yapabilirsiniz” der; “Site Kur” başvuru formunu sahiplenilen cihaz seçili açar. Hiçbir yerde “cihaz ekleyince yönetici olursunuz” denmez.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "Sahiplenilebilir bir JetPass cihazı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.27",
+          "baslik": "Kendi sitesi olmayan yönetici de başvurur",
+          "adimlar": [
+            "Bir yönetici başka bir yöneticiyi davet etsin; davet edilen hesapla girip Site Yönetimi'ndeki yeni site düğmesine bakın.",
+            "Sahibi olduğu sitesi olan bir yöneticiyle aynı düğmeye bakın."
+          ],
+          "beklenen": "Davetle yönetici olan (kendi sitesi olmayan) kişide düğme “Site Başvurusu” olur, başvuru akışı çalışır; onay sonrası “Yeni Site” (anlık) açılır. Kendi sitesi olan yöneticide düğme “Yeni Site”, kurulum anlıktır ve eskisi gibi çalışır. Süper kullanıcı etkilenmez.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "Davetle eklenmiş bir yönetici",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.28",
+          "baslik": "Abonelikle site açma: Yakında…",
+          "adimlar": [
+            "Site kurma/başvuru formunda ve ana ekrandaki karta bakın."
+          ],
+          "beklenen": "“Abonelikle hemen site aç — Yakında…” pasif satırı görünür. Ödeme alınmaz, fiyat gösterilmez; ileride ödeme başarılı olunca onay otomatikleşecek (altyapı hazır).",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.29",
+          "baslik": "Başvuru sınırları ve girdi güvenliği",
+          "adimlar": [
+            "Kısa sürede çok sayıda başvuru gönderip iptal etmeyi deneyin.",
+            "Site adına uzun emoji dizisi, sıfır genişlikli/yön değiştiren karakter yapıştırın; 60 karakterden uzun blok adı girin."
+          ],
+          "beklenen": "Son 24 saatte en fazla 5 başvuru yapılabilir (aşılırsa açık Türkçe mesaj). Tehlikeli/görünmez karakterler temizlenir, uzun adlar sınırda kesilir; uygulama hata vermez ve süper kullanıcıya temiz ad ulaşır.",
+          "rol_notu": "Bireysel kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.30",
+          "baslik": "Süper kullanıcıya e-posta ve denetim kaydı",
+          "adimlar": [
+            "Yeni bir başvuru gönderin; süper kullanıcının e-postasına bakın.",
+            "Süper kullanıcıyla Denetim Kaydı'nda eylem süzgecini kullanın."
+          ],
+          "beklenen": "Süper kullanıcıya “yeni site başvurusu” e-postası gelir (başvuranın e-posta/telefonu e-postada yoktur); karar verilince başvurana sonuç e-postası gider. Denetimde “Site başvurusu yapıldı / onaylandı / reddedildi / iptal edildi” kayıtları Türkçe etiketlidir.",
+          "rol_notu": "Süper kullanıcı",
+          "on_kosul": "",
           "yeni": true,
           "gelistirme": "hazir"
         }
@@ -1299,7 +1430,7 @@
       "id": "F10",
       "baslik": "Geçiş kontrol genişlemesi",
       "durum": "yakinda",
-      "ozet": "Yakında… Geçiş Kontrol (AHBU) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
+      "ozet": "Yakında… Geçiş Kontrol (JetPass) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
       "maddeler": [
         {
           "id": "F10.01",
