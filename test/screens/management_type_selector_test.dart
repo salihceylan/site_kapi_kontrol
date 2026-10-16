@@ -16,9 +16,11 @@ import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/management_type_selector.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_card.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 
 import 'dialog_layout_harness.dart';
 import 'list_fixtures.dart';
+import '../legal_fixtures.dart';
 
 class _SetupAuth extends AuthService {
   _SetupAuth() : super(api: AuthApi(baseUrl: 'http://localhost'));
@@ -55,6 +57,12 @@ Finder get _radioOn => find.byIcon(Icons.radio_button_checked_rounded);
 Finder get _radioOff => find.byIcon(Icons.radio_button_unchecked_rounded);
 
 void main() {
+  // Yasal belge uçları sahte: başvuruda onay gerektiren belge yok (DPA kutusu çıkmaz, gönderme açık kalır).
+  setUp(() {
+    LegalApi.debugDefaultFactory = () => FakeLegalServer(documents: <Map<String, dynamic>>[]).api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   group('ManagementTypeSelector', () {
     listMatrix('5 tür: Apartman ve Site seçili, diğer dördü "Yakında…" ve devre dışı', (
       t,

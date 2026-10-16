@@ -4,6 +4,8 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
+import 'package:site_kapi_kontrol/ui/widgets/account_privacy_section.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/managed_user_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/my_records_section.dart';
@@ -127,13 +129,14 @@ class ProfileView extends StatelessWidget {
                     enableSuggestions: false,
                     decoration: const InputDecoration(
                       labelText: 'Yeni Şifre (opsiyonel)',
+                      helperText: PasswordPolicy.hint,
                     ),
-                    validator: (value) {
-                      final text = (value ?? '').trim();
-                      return text.isNotEmpty && text.length < 6
-                          ? 'Şifre en az 6 karakter olmalı.'
-                          : null;
-                    },
+                    validator: (value) => PasswordPolicy.validate(
+                      (value ?? '').trim(),
+                      allowEmpty: true,
+                      email: emailController.text.trim(),
+                      names: <String>[fullNameController.text],
+                    ),
                   ),
                   const SizedBox(height: AppSpace.lg),
                   SizedBox(
@@ -167,6 +170,10 @@ class ProfileView extends StatelessWidget {
           if (authService != null && showNotificationPrefs) ...[
             const SizedBox(height: AppSpace.lg),
             NotificationPrefsSection(authService: authService!),
+          ],
+          if (authService != null) ...[
+            const SizedBox(height: AppSpace.lg),
+            AccountPrivacySection(authService: authService!),
           ],
         ],
       ),
@@ -329,6 +336,8 @@ class ResidentProfileView extends StatelessWidget {
           const SizedBox(height: AppSpace.lg),
           NotificationPrefsSection(authService: service),
         ],
+        const SizedBox(height: AppSpace.lg),
+        AccountPrivacySection(authService: service),
       ],
     );
   }

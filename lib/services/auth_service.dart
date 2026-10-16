@@ -16,6 +16,7 @@ import 'package:site_kapi_kontrol/models/door_runtime_status.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
@@ -39,18 +40,22 @@ import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/subscription_request_page.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
+import 'package:site_kapi_kontrol/services/account_local_wipe.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/door_widget_service.dart';
 import 'package:site_kapi_kontrol/services/geofence_service.dart';
 import 'package:site_kapi_kontrol/services/local_door_service.dart';
+import 'package:site_kapi_kontrol/services/login_device_token_store.dart';
 
 class AuthService extends ChangeNotifier {
   AuthService({
     required this.api,
     Future<LocationFixResult> Function()? locationProvider,
+    LoginDeviceTokenStore? deviceTokenStore,
   }) : _locationProvider =
-            locationProvider ?? GeofenceService.instance.acquireVerifiedPosition;
+            locationProvider ?? GeofenceService.instance.acquireVerifiedPosition,
+       _deviceTokenStore = deviceTokenStore ?? LoginDeviceTokenStore();
 
   static const String _storageKey = 'auth_session';
   static const String _localDoorCacheKey = 'local_door_cache';
@@ -64,6 +69,9 @@ class AuthService extends ChangeNotifier {
 
   final AuthApi api;
   final Future<LocationFixResult> Function() _locationProvider;
+
+  /// Güvenilir cihaz belirteci deposu (giriş kilidi koruması; bkz. [LoginDeviceTokenStore]).
+  final LoginDeviceTokenStore _deviceTokenStore;
   final LocalDoorService _localDoorService = LocalDoorService();
   UserSession? _session;
   final Map<String, LocalDoorAccess> _localDoorCache =
@@ -229,8 +237,11 @@ class AuthService extends ChangeNotifier {
         if (_credentialSwapDepth > 0 && e.code == 'TOKEN_REVOKED') {
           return; // Parola değişimi sürüyor: yeni token değişim yanıtıyla gelecek.
         }
-        _sessionNotice = e.message;
+        final deleted = e.code == _accountDeletedCode;
+        _sessionNotice = deleted ? _accountDeletedNotice : e.message;
+        if (deleted) await LocalDataWiper().clearSavedLoginIdentifier();
         await logout();
+        if (deleted) await _wipeAfterRemoteDeletion();
       }
       // Diğer hatalar (ağ, 5xx, ara katman 401/403): çevrimdışı oturum korunur.
     } catch (_) {
@@ -253,7 +264,22 @@ class AuthService extends ChangeNotifier {
     UserRole? role,
   }) async {
     try {
-      _session = await api.login(email: email, password: password, role: role);
+      // Önceki girişte sunucunun verdiği güvenilir cihaz belirteci (varsa) gönderilir; yeni belirteç gelirse
+      // saklanır. Depolama hataları girişi etkilemez. ÇIKIŞTA silinmez (bkz. [LoginDeviceTokenStore]).
+      final deviceToken = await _deviceTokenStore.read(email);
+      String? issuedDeviceToken;
+      _session = await api.login(
+        email: email,
+        password: password,
+        role: role,
+        deviceToken: deviceToken,
+        onDeviceToken: (token) => issuedDeviceToken = token,
+      );
+      final issued = issuedDeviceToken;
+      if (issued != null) {
+        final active = _session;
+        await _deviceTokenStore.save(<String?>[email, active?.email, active?.loginName], issued);
+      }
       _lastSessionCheckAt = DateTime.now();
       await _persist();
       _notifySafely();
@@ -270,6 +296,7 @@ class AuthService extends ChangeNotifier {
     required String lastName,
     required String email,
     required String password,
+    List<AcceptedDocument>? acceptedDocuments,
   }) async {
     try {
       await api.registerIndividual(
@@ -277,6 +304,7 @@ class AuthService extends ChangeNotifier {
         lastName: lastName,
         email: email,
         password: password,
+        acceptedDocuments: acceptedDocuments,
       );
       return null;
     } on ApiException catch (e) {
@@ -1130,6 +1158,7 @@ class AuthService extends ChangeNotifier {
     String? deviceUid,
     String? managementType,
     String? note,
+    List<AcceptedDocument>? acceptedDocuments,
   }) {
     return _runAuthorized(
       (token) => api.createSiteApplication(
@@ -1144,6 +1173,7 @@ class AuthService extends ChangeNotifier {
         deviceUid: deviceUid,
         managementType: managementType,
         note: note,
+        acceptedDocuments: acceptedDocuments,
       ),
     );
   }
@@ -2893,6 +2923,11 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Bu hesap için saklı cihaz belirteci (önce e-posta, sonra kullanıcı adı); yoksa null. Depo hatası yutulur.
+  Future<String?> _readDeviceTokenFor(UserSession account) async {
+    return await _deviceTokenStore.read(account.email) ?? await _deviceTokenStore.read(account.loginName);
+  }
+
   Future<String?> updateMyProfile({
     required String fullName,
     required String email,
@@ -2916,6 +2951,9 @@ class AuthService extends ChangeNotifier {
       _credentialSwapDepth++;
     }
     try {
+      // Parola değişirken kayıtlı cihaz belirteci (varsa) gönderilir; sunucu yenisini döndürürse saklanır.
+      final deviceToken = isPasswordChange ? await _readDeviceTokenFor(active) : null;
+      String? issuedDeviceToken;
       final updated = await api.updateMyProfile(
         token: active.token,
         id: active.id,
@@ -2926,7 +2964,17 @@ class AuthService extends ChangeNotifier {
         phoneNumber: phoneNumber,
         password: password,
         currentPassword: currentPassword,
+        deviceToken: deviceToken,
+        onDeviceToken: (token) => issuedDeviceToken = token,
       );
+      final issued = issuedDeviceToken;
+      if (issued != null) {
+        // Belirteç HESABA bağlıdır: oturum bu arada değişse de bu hesabın tanımlayıcıları için yazılır.
+        await _deviceTokenStore.save(
+          <String?>[active.email, active.loginName, updated.email, updated.loginName],
+          issued,
+        );
+      }
       if (_session?.token != active.token) {
         // Yanıt beklenirken oturum kapandı/değişti: eski oturumu yeniden yazma.
         return null;
@@ -3079,11 +3127,35 @@ class AuthService extends ChangeNotifier {
     }
     if (error is SessionExpiredException ||
         (error is ApiException && error.invalidatesSession)) {
-      _sessionNotice = (error as ApiException).message;
-      unawaited(logout());
+      final deleted = (error as ApiException).code == _accountDeletedCode;
+      _sessionNotice = deleted ? _accountDeletedNotice : error.message;
+      if (deleted) {
+        unawaited(() async {
+          await LocalDataWiper().clearSavedLoginIdentifier();
+          await logout();
+          await _wipeAfterRemoteDeletion();
+        }());
+      } else {
+        unawaited(logout());
+      }
     } else if (error is ApiException && error.isForbidden) {
       // 403 hesap pasifleştirme/onay bekleme olabilir: /me ile doğrula (kısıtlı sıklıkta).
       unawaited(refreshSession());
+    }
+  }
+
+  /// Sunucu hesabın silindiğini bildirir (`401 ACCOUNT_DELETED`): başka cihazda ya da yanıtı kaybolan bir silme
+  /// sonucu. Oturum kapanınca uygulama içi silmedekiyle AYNI yerel temizlik yapılır (kayıtlı e-posta, güvenilir
+  /// cihaz belirteci, tercihler, kuyruklar); temizlik hataları çıkışı bozmaz.
+  static const String _accountDeletedCode = 'ACCOUNT_DELETED';
+  static const String _accountDeletedNotice =
+      'Bu hesap silinmiş. İsterseniz aynı e-posta adresiyle yeniden kayıt olabilirsiniz.';
+
+  Future<void> _wipeAfterRemoteDeletion() async {
+    try {
+      await LocalDataWiper().wipe();
+    } catch (_) {
+      // Temizlik en iyi çabadır.
     }
   }
 
@@ -3617,13 +3689,22 @@ class AuthService extends ChangeNotifier {
     // oturumu kapatmasın (yeni token bu yanıtla gelir).
     _credentialSwapDepth++;
     try {
+      // Sunucu yalnız kullanıcının KENDİ parolasına izin verir: kayıtlı cihaz belirteci gönderilir, yenisi saklanır.
+      final deviceToken = await _readDeviceTokenFor(active);
+      String? issuedDeviceToken;
       final res = await api.changeApartmentMemberPassword(
         token: active.token,
         apartmentId: apartmentId,
         targetUserCode: targetUserCode,
         newPassword: newPassword,
         currentPassword: currentPassword,
+        deviceToken: deviceToken,
+        onDeviceToken: (token) => issuedDeviceToken = token,
       );
+      final issued = issuedDeviceToken;
+      if (issued != null) {
+        await _deviceTokenStore.save(<String?>[active.email, active.loginName], issued);
+      }
       // Parola değişince eski token'lar iptal olur; sunucunun döndürdüğü yeni token'ı yaz.
       final newToken = res['token'];
       if (newToken is String &&

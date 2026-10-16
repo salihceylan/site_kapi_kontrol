@@ -18,6 +18,7 @@ import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
@@ -39,6 +40,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/background_work.dart';
+import 'package:site_kapi_kontrol/services/login_device_token_store.dart';
 
 class AuthApi {
   AuthApi({
@@ -81,10 +83,16 @@ class AuthApi {
   /// Yalnızca GET isteklerinde yeniden deneme öncesi bekleme.
   final Duration _retryDelay;
 
+  /// Giriş. [deviceToken]: önceki başarılı girişte sunucunun verdiği güvenilir cihaz belirteci; varsa gövdede
+  /// `device_token` olarak gönderilir (dağıtık parola püskürtmesinde hesap sahibinin kilitlenmesini önler).
+  /// [onDeviceToken]: yanıtta (yeni) bir `device_token` gelirse çağrılır; eksik / boş / metin olmayan değerde
+  /// ÇAĞRILMAZ (eski sunucu uyumu).
   Future<UserSession> login({
     required String email,
     required String password,
     UserRole? role,
+    String? deviceToken,
+    void Function(String deviceToken)? onDeviceToken,
   }) async {
     return _authRequest(
       path: '/auth/login',
@@ -92,8 +100,10 @@ class AuthApi {
         'email': email,
         'password': password,
         if (role != null) 'role': role.apiValue,
+        if (deviceToken != null && deviceToken.isNotEmpty) 'device_token': deviceToken,
       },
       expectedCode: 200,
+      onDeviceToken: onDeviceToken,
     );
   }
 
@@ -106,6 +116,7 @@ class AuthApi {
     required String lastName,
     required String email,
     required String password,
+    List<AcceptedDocument>? acceptedDocuments,
   }) async {
     final uri = Uri.parse('$baseUrl/auth/register-individual');
     final response = await _sendRequest(
@@ -117,6 +128,7 @@ class AuthApi {
         'last_name': lastName,
         'email': email,
         'password': password,
+        ..._acceptedDocumentsBody(acceptedDocuments),
       },
     );
     _ensureStatus(response, 201, unauthorizedIsSession: false);
@@ -187,6 +199,17 @@ class AuthApi {
       },
       expectedCode: 201,
     );
+  }
+
+  /// Bireysel kayıt (`/auth/register-individual`) ve site başvurusu (`/membership/site-applications`) gövdesine
+  /// eklenen isteğe bağlı `accepted_documents:[{id,version}]` (docs/PLATFORM_SATISA_HAZIRLIK.md §1.4). Onay yoksa
+  /// alan hiç gönderilmez (eski sunucu/istemci uyumu). `/auth/register` ve `/auth/site-manager/register` sunucuda
+  /// kalıcı 410 (kapalı): oralara gönderilmez.
+  static Map<String, dynamic> _acceptedDocumentsBody(List<AcceptedDocument>? documents) {
+    if (documents == null || documents.isEmpty) return const <String, dynamic>{};
+    return <String, dynamic>{
+      'accepted_documents': <Map<String, dynamic>>[for (final d in documents) d.toJson()],
+    };
   }
 
   Future<ManagedUserPage> listManagedUsers({
@@ -920,6 +943,7 @@ class AuthApi {
     String? deviceUid,
     String? managementType,
     String? note,
+    List<AcceptedDocument>? acceptedDocuments,
   }) {
     final trimmedNote = note?.trim();
     return _siteApplicationCall(applicantCreate: true, () async {
@@ -939,6 +963,7 @@ class AuthApi {
           if (managementType != null && managementType.isNotEmpty)
             'management_type': managementType,
           if (trimmedNote != null && trimmedNote.isNotEmpty) 'note': trimmedNote,
+          ..._acceptedDocumentsBody(acceptedDocuments),
         },
       );
       _ensureCreatedOrOk(response);
@@ -2797,6 +2822,8 @@ class AuthApi {
     String? password,
     String? currentPassword,
     String? phoneNumber,
+    String? deviceToken,
+    void Function(String deviceToken)? onDeviceToken,
   }) async {
     final body = <String, dynamic>{
       'full_name': fullName,
@@ -2812,6 +2839,9 @@ class AuthApi {
       path: '/me',
       token: token,
       body: body,
+      // Parola değişince cihaz belirteci parola sürümüne bağlı olduğundan eskisi düşer: sunucu cihaz kimliğini
+      // korumak için kayıtlı belirteci okur ve yenisini döndürür. Yalnız parola değişirken gönderilir.
+      extraHeaders: password != null ? _deviceTokenHeader(deviceToken) : null,
     );
 
     // Yanlış mevcut şifre sunucuda 400 CURRENT_PASSWORD_INVALID döner (oturumu kapatmaz). Bu uçta
@@ -2819,6 +2849,9 @@ class AuthApi {
     // SessionExpiredException olarak oturumu sonlandırır.
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
+    // Yeni cihaz belirteci (yalnız parola değişiminde) isteğe bağlıdır; yok / bozuksa sessizce yok sayılır ve
+    // parola değişiminin başarısını etkilemez.
+    _emitDeviceToken(payload, onDeviceToken);
     return _parsePayload('Profil bilgisi', () {
       final user = payload['user'] as Map<String, dynamic>;
       // Şifre değişiminde sunucu yeni bir token döndürürse (parola sürümü claim'i) onu kullan.
@@ -2862,6 +2895,7 @@ class AuthApi {
     required String path,
     required Map<String, dynamic> body,
     required int expectedCode,
+    void Function(String deviceToken)? onDeviceToken,
   }) async {
     final uri = Uri.parse('$baseUrl$path');
     final response = await _sendRequest(
@@ -2873,7 +2907,7 @@ class AuthApi {
 
     _ensureStatus(response, expectedCode, unauthorizedIsSession: false);
     final payload = _decodePayload(response);
-    return _parsePayload('Oturum bilgisi', () {
+    final session = _parsePayload('Oturum bilgisi', () {
       final user = payload['user'] as Map<String, dynamic>;
       return _toUserSession(
         user: user,
@@ -2883,6 +2917,31 @@ class AuthApi {
         fallbackIsActive: user['is_active'] as bool? ?? true,
       );
     });
+    // Güvenilir cihaz belirteci isteğe bağlıdır: yoksa / bozuksa sessizce yok sayılır (giriş etkilenmez).
+    _emitDeviceToken(payload, onDeviceToken);
+    return session;
+  }
+
+  /// Yanıttaki `device_token` boş olmayan bir metinse (kırpılmış, <= 512) [onDeviceToken]'a verir; yok / null /
+  /// metin değil / boş / çok uzun ise HİÇBİR ŞEY yapmaz. Geri çağrının hatası çağıranı etkilemez.
+  static void _emitDeviceToken(Map<String, dynamic> payload, void Function(String deviceToken)? onDeviceToken) {
+    if (onDeviceToken == null) return;
+    final raw = payload['device_token'];
+    if (raw is! String) return;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed.length > LoginDeviceTokenStore.maxTokenLength) return;
+    try {
+      onDeviceToken(trimmed);
+    } catch (_) {
+      // Saklama hatası parola değişiminin / girişin başarısını bozmaz.
+    }
+  }
+
+  /// `X-Device-Token` başlığı: belirteç yoksa ya da başlığa yazılamayacak biçimdeyse (boşluk, ASCII dışı, çok
+  /// uzun) başlık HİÇ gönderilmez.
+  static Map<String, String>? _deviceTokenHeader(String? deviceToken) {
+    if (!LoginDeviceTokenStore.isPlausibleToken(deviceToken)) return null;
+    return <String, String>{'X-Device-Token': deviceToken!};
   }
 
   Future<http.Response> _authorizedRequest({
@@ -2892,11 +2951,13 @@ class AuthApi {
     Map<String, dynamic>? body,
     Duration? timeout,
     String? timeoutMessage,
+    Map<String, String>? extraHeaders,
   }) async {
     final uri = Uri.parse('$baseUrl$path');
-    final headers = {
+    final headers = <String, String>{
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
+      ...?extraHeaders,
     };
 
     switch (method) {
@@ -3274,6 +3335,45 @@ class AuthApi {
     return null;
   }
 
+  /// `400 WEAK_PASSWORD` için Türkçe iletiler (parola ilkesi: docs/PLATFORM_SATISA_HAZIRLIK.md §1.7).
+  /// Sunucu yanıtındaki `reason` (required | too_short | too_long | same_as_email | same_as_name | common)
+  /// özel iletiye eşlenir; bilinmeyen / eksik `reason` genel iletiye düşer. İstemci doğrulayıcı
+  /// (lib/ui/helpers/password_policy.dart) AYNI metinleri kullanır.
+  static const String weakPasswordMessage =
+      'Bu şifre güvenlik ilkesine uymuyor. En az 8 karakterli, yaygın olmayan ve adınızdan ya da '
+      'e-postanızdan farklı bir şifre seçin.';
+  static const String passwordRequiredMessage = 'Şifre zorunludur';
+  static const String passwordTooShortMessage =
+      'Şifre çok kısa: en az 8 karakter olmalı. Birkaç sözcüğü art arda yazabilirsiniz.';
+  static const String passwordTooLongMessage =
+      'Şifre çok uzun: en fazla 128 karakter ve 72 bayt olabilir (Türkçe harfler 2 bayt sayılır; yaklaşık 36 '
+      'Türkçe harf ya da 72 İngilizce harf). Daha kısa bir şifre seçin.';
+  static const String passwordSameAsEmailMessage =
+      'Şifre e-posta adresinizle aynı olamaz. Farklı bir şifre seçin.';
+  static const String passwordSameAsNameMessage =
+      'Şifre adınızla ya da kullanıcı adınızla aynı olamaz. Farklı bir şifre seçin.';
+  static const String passwordCommonMessage =
+      'Bu şifre çok yaygın ve kolay tahmin edilir. Daha özgün bir şifre seçin.';
+
+  /// `WEAK_PASSWORD` yanıtının `reason` alanına karşılık gelen ileti (bilinmiyorsa genel ileti).
+  static String weakPasswordMessageFor(Object? reason) {
+    switch (reason) {
+      case 'required':
+        return passwordRequiredMessage;
+      case 'too_short':
+        return passwordTooShortMessage;
+      case 'too_long':
+        return passwordTooLongMessage;
+      case 'same_as_email':
+        return passwordSameAsEmailMessage;
+      case 'same_as_name':
+        return passwordSameAsNameMessage;
+      case 'common':
+        return passwordCommonMessage;
+    }
+    return weakPasswordMessage;
+  }
+
   /// Bilinen sunucu hata kodları için anlaşılır (kısa, taşmayan) Türkçe metin;
   /// bilinmiyorsa null döner ve sunucunun `error` metni kullanılır.
   /// [payload]: GEOFENCE_OUT_OF_RANGE için `distance_meters` / `allowed_radius_meters`.
@@ -3298,6 +3398,20 @@ class AuthApi {
 
     switch (code) {
       // --- Hesap / kimlik doğrulama
+      case 'WEAK_PASSWORD':
+        // Sunucu parola ilkesi (en az 8, yaygın olmayan, ad/e-postadan farklı). İstemci doğrulayıcı
+        // (lib/ui/helpers/password_policy.dart) genellikle bunu önceden yakalar; `reason` varsa özel ileti.
+        return weakPasswordMessageFor(payload?['reason']);
+      case 'CONSENT_REQUIRED':
+        return LegalMessages.consentRequired;
+      case 'CONSENT_VERSION_STALE':
+        return LegalMessages.consentVersionStale;
+      case 'DOCUMENT_NOT_ACCEPTABLE':
+        return LegalMessages.documentNotAcceptable;
+      case 'DOCUMENT_INCOMPLETE':
+        return LegalMessages.documentIncomplete;
+      case 'INVALID_ACCEPTED_DOCUMENTS':
+        return LegalMessages.invalidAcceptedDocuments;
       case 'CURRENT_PASSWORD_REQUIRED':
         return 'Şifrenizi değiştirmek için mevcut şifrenizi girmelisiniz.';
       case 'CURRENT_PASSWORD_INVALID':
@@ -4104,6 +4218,8 @@ class AuthApi {
     required int targetUserCode,
     required String newPassword,
     required String currentPassword,
+    String? deviceToken,
+    void Function(String deviceToken)? onDeviceToken,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -4113,9 +4229,12 @@ class AuthApi {
         'new_password': newPassword,
         'current_password': currentPassword,
       },
+      extraHeaders: _deviceTokenHeader(deviceToken),
     );
     _ensureStatus(response, 200);
-    return _decodePayload(response);
+    final payload = _decodePayload(response);
+    _emitDeviceToken(payload, onDeviceToken);
+    return payload;
   }
 
   Future<Map<String, dynamic>> setApartmentPrimaryAdmin({

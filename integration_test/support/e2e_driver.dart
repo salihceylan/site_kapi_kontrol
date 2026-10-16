@@ -26,6 +26,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:site_kapi_kontrol/main.dart' as app;
+import 'package:site_kapi_kontrol/services/crash_reporter.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 
@@ -989,6 +990,9 @@ Future<void> bootApp(WidgetTester tester) async {
   } catch (e) {
     print('E2E~ guvenli depo temizlenemedi: $e');
   }
+  // Yürüyüş/ölçüm koşuları (profil/yayın kipinde de) çökme raporlamayı AÇMAMALI: main() kancaları kurmadan
+  // önce süreç düzeyinde kapatılır.
+  CrashReporter.suppress();
   unawaited(app.main());
   final reached = await pumpUntilFound(
     tester,

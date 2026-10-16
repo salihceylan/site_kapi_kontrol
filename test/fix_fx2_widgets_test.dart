@@ -23,6 +23,9 @@ import 'package:site_kapi_kontrol/ui/dialogs/site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/admin_door_status_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/company_device_card.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
+
+import 'legal_fixtures.dart';
 
 DoorRecord _door({
   int id = 7,
@@ -165,6 +168,12 @@ ElevatedButton _elevatedWithText(WidgetTester tester, String text) {
 }
 
 void main() {
+  // Yasal belge uçları sahte: başvuruda onay gerektiren belge yok (DPA kutusu çıkmaz, gönderme açık kalır).
+  setUp(() {
+    LegalApi.debugDefaultFactory = () => FakeLegalServer(documents: <Map<String, dynamic>>[]).api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   group('Kapı yetkileri penceresi gerçek sunucu yanıtıyla (membership#2, models-json#1)', () {
     Map<String, dynamic> serverJson() => {
           'ok': true,

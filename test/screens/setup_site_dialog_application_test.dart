@@ -16,10 +16,12 @@ import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_parts.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 
 import 'dialog_layout_harness.dart';
 import 'g4_test_support.dart';
 import 'site_application_fixtures.dart';
+import '../legal_fixtures.dart';
 
 SiteApplicationFakeAuth _auth([UserRole role = UserRole.individual]) => SiteApplicationFakeAuth(role: role);
 
@@ -99,6 +101,12 @@ SiteApplication _previous() => SiteApplication.fromJson(
 );
 
 void main() {
+  // Yasal belge uçları sahte: başvuruda onay gerektiren belge yok (DPA kutusu çıkmaz, gönderme açık kalır).
+  setUp(() {
+    LegalApi.debugDefaultFactory = () => FakeLegalServer(documents: <Map<String, dynamic>>[]).api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   group('rol kapısı', () {
     testWidgets('bireysel ve daire kullanıcısı: BAŞVURU formu; başlık, düğme ve bilgi metni', (t) async {
       for (final role in const [UserRole.individual, UserRole.apartmentOwner]) {

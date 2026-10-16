@@ -11,6 +11,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/views/profile_view.dart';
 
 import '../design/harness.dart';
@@ -128,7 +129,7 @@ void main() {
           find.text('Şifre değiştirmek için mevcut şifrenizi girin.'),
           findsOneWidget,
         );
-        expect(find.text('Şifre en az 6 karakter olmalı.'), findsOneWidget);
+        expect(find.text(PasswordPolicy.tooShortMessage), findsOneWidget);
         expect(form.saves, 0);
       },
     );
@@ -404,7 +405,7 @@ void main() {
 
         await t.enterText(
           find.widgetWithText(TextFormField, 'Yeni Şifre (opsiyonel)'),
-          'yeniSifre1',
+          'Mavi-Kedi-2026', // parola ilkesine uyar ('yenisifre1' sunucu ve istemci yaygın listesindedir)
         );
         await t.tap(find.text('Profili Kaydet'));
         await t.pump();

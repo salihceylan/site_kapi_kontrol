@@ -282,7 +282,7 @@ void main() {
       expect(saved, 1);
 
       // Yeni şifre yazılınca mevcut şifre zorunlu olur.
-      await tester.enterText(find.widgetWithText(TextFormField, 'Yeni Şifre (opsiyonel)'), 'yeniSifre1');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Yeni Şifre (opsiyonel)'), 'Mavi-Kedi-2026');
       await tapSave();
       expect(saved, 1);
       expect(find.text('Şifre değiştirmek için mevcut şifrenizi girin.'), findsOneWidget);

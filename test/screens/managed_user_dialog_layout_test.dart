@@ -8,6 +8,7 @@ import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 
 import '../design/harness.dart';
 import 'dialog_layout_harness.dart';
@@ -58,7 +59,7 @@ void main() {
     await t.tap(find.text('Kaydet'));
     await settleFor(t);
     expect(find.text('Ad Soyad en az 3 karakter olmalı.'), findsOneWidget);
-    expect(find.text('Şifre en az 6 karakter olmalı.'), findsOneWidget);
+    expect(find.text(PasswordPolicy.requiredMessage), findsOneWidget);
   });
 
   layoutMatrix('ManagedUserDialog (düzenleme, kendi hesabı)', (
@@ -240,7 +241,7 @@ void main() {
 
       await t.enterText(find.widgetWithText(TextFormField, 'Ad Soyad'), 'Ali Veli');
       await t.enterText(find.widgetWithText(TextFormField, 'E-posta'), 'Ali@Ornek.com');
-      await t.enterText(find.widgetWithText(TextFormField, 'Şifre'), 'sifre123');
+      await t.enterText(find.widgetWithText(TextFormField, 'Şifre'), 'Mavi-Kedi-2026');
       await scrollTo(t, find.text('Kaydet'));
       await t.tap(find.text('Kaydet'));
       await settleFor(t, 700);
@@ -249,7 +250,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.fullName, 'Ali Veli');
       expect(result!.email, 'ali@ornek.com');
-      expect(result!.password, 'sifre123');
+      expect(result!.password, 'Mavi-Kedi-2026');
       expect(haptics, ['HapticFeedbackType.lightImpact']);
       expect(t.takeException(), isNull);
     },

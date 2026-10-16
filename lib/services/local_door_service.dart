@@ -10,7 +10,7 @@ import 'package:site_kapi_kontrol/models/local_door_access.dart';
 
 class NativeWifiHelper {
   static const MethodChannel _channel =
-      MethodChannel('com.example.site_kapi_kontrol/wifi_helper');
+      MethodChannel('tr.com.gudeteknoloji.siteyonetim/wifi_helper');
 
   static Future<bool> isWifiConnected() async {
     if (kIsWeb || !Platform.isAndroid) return false;

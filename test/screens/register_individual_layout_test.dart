@@ -13,17 +13,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 import 'package:site_kapi_kontrol/styles/app_decorations.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
 
 import '../design/harness.dart';
+import '../legal_fixtures.dart';
 
 /// Sahte kimlik servisi: ağa çıkmaz; kayıt sonucu ve bekleme durumu test tarafından belirlenir.
 class _FakeAuth extends AuthService {
@@ -33,14 +37,21 @@ class _FakeAuth extends AuthService {
   final Future<String?> Function()? onRegister;
   final List<List<String>> registers = <List<String>>[];
 
+  /// Her çağrıda gönderilen `accepted_documents` (kimlik@sürüm).
+  final List<List<String>> acceptedPerCall = <List<String>>[];
+
   @override
   Future<String?> registerIndividual({
     required String firstName,
     required String lastName,
     required String email,
     required String password,
+    List<AcceptedDocument>? acceptedDocuments,
   }) async {
     registers.add(<String>[firstName, lastName, email, password]);
+    acceptedPerCall.add(<String>[
+      for (final d in acceptedDocuments ?? const <AcceptedDocument>[]) '${d.id}@${d.version}',
+    ]);
     final handler = onRegister;
     return handler == null ? null : handler();
   }
@@ -64,6 +75,12 @@ List<String?> _labels(WidgetTester t) => t
     .map((f) => f.decoration?.labelText)
     .toList();
 
+/// Yasal belge sunucusu (sahte): her testte yeniden kurulur.
+FakeLegalServer _legal = FakeLegalServer();
+
+/// Geçerli, yaygın olmayan test parolası (parola ilkesine uyar).
+const String _goodPassword = 'Mavi-Kedi-2026';
+
 /// Sayfayı verilen ölçüde kurar (pumpAt gövdeyi kaydırılabilir sarar: sayfaya sabit boyut verilir).
 Future<void> _pumpRegister(
   WidgetTester t,
@@ -79,7 +96,7 @@ Future<void> _pumpRegister(
     SizedBox(
       width: width,
       height: height,
-      child: RegisterIndividualPage(authService: auth),
+      child: RegisterIndividualPage(authService: auth, legalApi: _legal.api),
     ),
     width: width,
     height: height,
@@ -102,12 +119,24 @@ Future<void> _tapLast(WidgetTester t, String text) async {
   await t.tap(target);
 }
 
-Future<void> _fillForm(WidgetTester t) async {
+Future<void> _fillForm(WidgetTester t, {bool accept = true}) async {
   await t.enterText(_fields.at(0), 'Ali');
   await t.enterText(_fields.at(1), 'Veli');
   await t.enterText(_fields.at(2), 'ALI@Example.com');
-  await t.enterText(_fields.at(3), 'parola123');
-  await t.enterText(_fields.at(4), 'parola123');
+  await t.enterText(_fields.at(3), _goodPassword);
+  await t.enterText(_fields.at(4), _goodPassword);
+  if (accept) await _acceptTerms(t);
+}
+
+/// Yasal onay kutusunu işaretler (kutu işaretlenmeden "Kayıt Ol" kapalıdır).
+Future<void> _acceptTerms(WidgetTester t) async {
+  final box = find.byType(Checkbox);
+  await t.pump(const Duration(milliseconds: 300));
+  await t.ensureVisible(box);
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 300));
+  await t.tap(box);
+  await t.pump();
 }
 
 Future<void> _submit(WidgetTester t) async {
@@ -126,6 +155,12 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
+  setUp(() {
+    _legal = FakeLegalServer();
+    LegalApi.debugDefaultFactory = () => _legal.api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   for (final (w, h, s) in _cells) {
     for (final dark in const <bool>[false, true]) {
       final cell = '${w.toInt()}x${h.toInt()} x$s ${dark ? 'koyu' : 'açık'}';
@@ -175,6 +210,7 @@ void main() {
             scale: s,
             dark: dark,
           );
+          await _acceptTerms(t);
           await _tapLast(t, 'Kayıt Ol');
           await t.pump();
           await t.pump(const Duration(milliseconds: 300));
@@ -202,14 +238,12 @@ void main() {
             await t.enterText(_fields.at(2), 'ali@example.com');
             await t.enterText(_fields.at(3), '123');
             await t.enterText(_fields.at(4), '456');
+            await _acceptTerms(t);
             await _tapLast(t, 'Kayıt Ol');
             await t.pump();
             await t.pump(const Duration(milliseconds: 300));
 
-            expect(
-              find.text('Şifre en az 6 karakter olmalıdır'),
-              findsOneWidget,
-            );
+            expect(find.text(PasswordPolicy.tooShortMessage), findsOneWidget);
             expect(find.text('Şifreler birbiriyle eşleşmiyor'), findsOneWidget);
             expect(t.takeException(), isNull);
           },
@@ -297,7 +331,13 @@ void main() {
               'Ali',
               'Veli',
               'ali@example.com',
-              'parola123',
+              _goodPassword,
+            ]);
+            // Onaylanan belgeler (kimlik@sürüm) kayıtla birlikte gönderilir.
+            expect(auth.acceptedPerCall.single, <String>[
+              'terms@2026-10-16',
+              'privacy@2026-10-16',
+              'kvkk_notice@2026-10-16',
             ]);
             expect(find.byType(VerifyEmailCodePage), findsOneWidget);
             expect(find.text('Doğrulama Kodunu Giriniz'), findsOneWidget);
@@ -436,6 +476,7 @@ void main() {
       t,
     ) async {
       await _pumpRegister(t, _FakeAuth(), width: 820, height: 900, scale: 1.0);
+      await _acceptTerms(t);
       await _tapLast(t, 'Kayıt Ol');
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
@@ -465,6 +506,7 @@ void main() {
         scale: 1.0,
       );
       await t.enterText(_fields.at(0), 'Ali');
+      await _acceptTerms(t);
       await _tapLast(t, 'Kayıt Ol');
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));

@@ -30,9 +30,11 @@ import 'package:site_kapi_kontrol/ui/views/individual_home_view.dart';
 import 'package:site_kapi_kontrol/ui/views/join_and_setup_view.dart';
 import 'package:site_kapi_kontrol/ui/views/site_applications_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 
 import 'dialog_layout_harness.dart';
 import 'site_application_fixtures.dart';
+import '../legal_fixtures.dart';
 
 SiteRecord _site(int id, String name) => SiteRecord.fromJson(<String, dynamic>{
   'id': id,
@@ -176,6 +178,12 @@ Future<void> _elapse(WidgetTester t, Duration d) async {
 }
 
 void main() {
+  // Yasal belge uçları sahte: başvuruda onay gerektiren belge yok (DPA kutusu çıkmaz, gönderme açık kalır).
+  setUp(() {
+    LegalApi.debugDefaultFactory = () => FakeLegalServer(documents: <Map<String, dynamic>>[]).api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   group('süper kullanıcı: menü ve rozet', () {
     _HomeApp superAuth() {
       final auth = _HomeApp(role: UserRole.superUser, myUserCode: 999);

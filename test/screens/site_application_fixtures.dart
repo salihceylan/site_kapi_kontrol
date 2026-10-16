@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -165,6 +166,9 @@ class SiteApplicationFakeAuth extends AuthService {
 
   // --- Çağrı kayıtları -------------------------------------------------------------------------
   final List<Map<String, Object?>> createCalls = <Map<String, Object?>>[];
+
+  /// Her başvuru çağrısında gönderilen `accepted_documents` (kimlik@sürüm).
+  final List<List<String>> createAccepted = <List<String>>[];
   int mineCalls = 0;
   final List<int> cancelCalls = <int>[];
   final List<({String? status, String? query, int limit, int offset})> adminListCalls =
@@ -253,7 +257,11 @@ class SiteApplicationFakeAuth extends AuthService {
     String? deviceUid,
     String? managementType,
     String? note,
+    List<AcceptedDocument>? acceptedDocuments,
   }) async {
+    createAccepted.add(<String>[
+      for (final d in acceptedDocuments ?? const <AcceptedDocument>[]) '${d.id}@${d.version}',
+    ]);
     createCalls.add(<String, Object?>{
       'name': name,
       'city': city,

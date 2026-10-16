@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import '../../data/turkey_cities_districts.dart';
+import '../../models/legal_document.dart';
 import '../../models/management_type.dart';
 import '../../models/site_application.dart';
 import '../../models/user_role.dart';
 import '../../services/api_exception.dart';
 import '../../services/auth_service.dart';
+import '../../services/legal_api.dart';
 import '../design/app_card.dart';
 import '../design/app_dialog.dart';
 import '../design/app_snack.dart';
@@ -21,6 +23,8 @@ import '../helpers/form_validation.dart';
 import '../helpers/paged_loader.dart';
 import '../helpers/retry_lock.dart';
 import '../helpers/text_length.dart';
+import '../views/legal_consent_controller.dart';
+import '../views/legal_consent_field.dart';
 import '../widgets/crm_parts.dart';
 import '../widgets/management_type_selector.dart';
 import '../widgets/site_application_parts.dart';
@@ -107,9 +111,13 @@ class SetupSiteDialog extends StatefulWidget {
     this.deviceUid,
     this.mode,
     this.prefill,
+    this.legalApi,
   });
 
   final AuthService authService;
+
+  /// Yasal belge istemcisi (başvuruda Veri İşleme Sözleşmesi onayı); verilmezse varsayılan sunucu.
+  final LegalApi? legalApi;
 
   /// Önceden seçilmiş cihaz (cihaz sahiplenme akışından gelir).
   final String? deviceUid;
@@ -155,6 +163,7 @@ class SetupSiteDialog extends StatefulWidget {
     String? deviceUid,
     SetupSiteMode? mode,
     SiteApplication? prefill,
+    LegalApi? legalApi,
   }) async {
     final outcome = await showDialog<SetupSiteOutcome>(
       context: context,
@@ -164,6 +173,7 @@ class SetupSiteDialog extends StatefulWidget {
         deviceUid: deviceUid,
         mode: mode,
         prefill: prefill,
+        legalApi: legalApi,
       ),
     );
     if (outcome == SetupSiteOutcome.alreadyPending && context.mounted) {
@@ -185,6 +195,10 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
   late final TextEditingController _addressController;
   late final TextEditingController _noteController;
   final RetryLock _retry = RetryLock();
+
+  /// Başvuruda Veri İşleme Sözleşmesi (dpa) onayı. Yalnız başvuru kipinde kurulur; belgeler yüklenmeden /
+  /// kutu işaretlenmeden "Başvuruyu Gönder" kapalıdır.
+  LegalConsentController? _dpa;
 
   /// Çalışma biçimi. Anlık kurulum 409 `APPLICATION_REQUIRED` dönerse (eskimiş rol / alan) başvuru kipine
   /// geçilir: kullanıcı çıkmaza sokulmaz, girdiği bilgiler korunur.
@@ -266,11 +280,33 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
       _selectedDevice = widget.deviceUid ?? _noDevice;
       if (widget.deviceUid != null) _deviceUids = <String>[widget.deviceUid!];
       unawaited(_loadDevices());
+      _ensureDpa();
     }
   }
 
+  /// Başvuru kipi için DPA onay denetleyicisini (bir kez) kurar ve belgeleri yükler.
+  void _ensureDpa() {
+    if (_dpa != null) return;
+    final controller = LegalConsentController(
+      api: widget.legalApi ?? LegalApi.defaultInstance(),
+      context: LegalContexts.siteApplication,
+    );
+    controller.addListener(_onDpaChanged);
+    _dpa = controller;
+    unawaited(controller.load());
+  }
+
+  void _onDpaChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Başvuruda DPA belgeleri yüklenmediyse ya da onaylanmadıysa gönderme kapalıdır.
+  bool get _dpaBlocksSubmit => _isApplication && (_dpa?.blocksSubmit ?? true);
+
   @override
   void dispose() {
+    _dpa?.removeListener(_onDpaChanged);
+    _dpa?.dispose();
     _retry.dispose();
     _successFocus.dispose();
     _nameController.dispose();
@@ -454,6 +490,7 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
           deviceUid: _selectedDevice == _noDevice ? null : _selectedDevice,
           managementType: _managementType.apiValue,
           note: _noteController.text,
+          acceptedDocuments: _dpa?.acceptedDocuments,
         );
         if (!mounted) return;
         // Başarı iletisi aynı pencerede gösterilir; "Tamam" ile (ya da geri tuşuyla) kapanır. Form başarı
@@ -494,6 +531,10 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         return;
       }
       final limited = _retry.lockIfRateLimited(e, _onRetryReady);
+      // Belgeler değişmiş olabilir: işaret kaldırılır, güncel metinler yeniden okunur.
+      if (e.code == 'CONSENT_REQUIRED' || e.code == 'CONSENT_VERSION_STALE') {
+        unawaited(_dpa?.reloadAfterRejection());
+      }
       // Rol eskimiş olabilir (zaten yönetici): oturum sunucudan yenilenir.
       if (e.code == 'ALREADY_SITE_MANAGER') {
         unawaited(widget.authService.refreshSession(force: true));
@@ -520,7 +561,10 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
         if (_isApplication && (e.statusCode == null || e.isServerError)) _uncertain = true;
         _submitting = false;
       });
-      if (switchToApplication) unawaited(_loadDevices());
+      if (switchToApplication) {
+        _ensureDpa();
+        unawaited(_loadDevices());
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -560,15 +604,35 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
     final subtitle = _isApplication
         ? 'Onaydan sonra site yöneticisi olursunuz'
         : 'Site Yönetimi Ayarları';
-    final submitButton = PrimaryActionButton(
-      key: const ValueKey<String>('setup_site_submit'),
-      label: _submitting
-          ? (_isApplication ? 'Gönderiliyor...' : 'Site Kuruluyor...')
-          : (_isApplication ? 'Başvuruyu Gönder' : 'Site Kurulumunu Tamamla'),
-      icon: _isApplication ? Icons.send_rounded : Icons.check_circle_rounded,
-      loading: _submitting,
-      // Gönderim sürerken ve hız sınırı (429) sonrası kısa süre kilitli: art arda deneme yapılmasın.
-      onPressed: (_submitting || _retry.locked) ? null : _submit,
+    final dpaReason = (_dpaBlocksSubmit && !_submitting) ? _dpa?.blockReason : null;
+    final submitButton = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Başvuru kapalıysa NEDEN yazılıdır (belgeler yüklenmedi / onay kutusu işaretlenmedi).
+        if (dpaReason != null) ...[
+          Text(
+            dpaReason,
+            key: const ValueKey<String>('setup_site_block_reason'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpace.sm),
+        ],
+        // Pasif nedeni (DPA onayı yok) düğmeye de bağlıdır: ekran okuyucu düğmeye odaklanınca ipucunu okur.
+        Semantics(
+          hint: dpaReason,
+          child: PrimaryActionButton(
+            key: const ValueKey<String>('setup_site_submit'),
+            label: _submitting
+                ? (_isApplication ? 'Gönderiliyor...' : 'Site Kuruluyor...')
+                : (_isApplication ? 'Başvuruyu Gönder' : 'Site Kurulumunu Tamamla'),
+            icon: _isApplication ? Icons.send_rounded : Icons.check_circle_rounded,
+            loading: _submitting,
+            // Gönderim sürerken, hız sınırı (429) sonrası kısa süre ve DPA onayı yokken kilitli.
+            onPressed: (_submitting || _retry.locked || _dpaBlocksSubmit) ? null : _submit,
+          ),
+        ),
+      ],
     );
     final header = _buildHeader(context, compactHeader: compactHeader, subtitle: subtitle);
     const formPadding = EdgeInsets.fromLTRB(AppSpace.xl, AppSpace.lg, AppSpace.xl, AppSpace.lg);
@@ -926,6 +990,11 @@ class _SetupSiteDialogState extends State<SetupSiteDialog> {
               : null,
         ),
         const SizedBox(height: AppSpace.lg),
+        // Veri İşleme Sözleşmesi (dpa) onayı: belgeler yüklenemezse onay verilemez, "Yeniden dene" gösterilir.
+        if (_dpa != null) ...[
+          LegalConsentField(controller: _dpa!, enabled: !_submitting),
+          const SizedBox(height: AppSpace.lg),
+        ],
         // Ödeme altyapısı hazır değil: pasif satır.
         const SiteSubscriptionComingSoonRow(),
       ],

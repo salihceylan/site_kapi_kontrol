@@ -1701,7 +1701,7 @@ export default {
           note: 'Arka plan çağrısı uygulama açılışında kaydedilir; kayıt hatası "[DoorWidgetService] initialize error" ile yutulur',
         },
         {
-          file: 'android/app/src/main/kotlin/com/example/site_kapi_kontrol/DoorWidgetProvider.kt',
+          file: 'android/app/src/main/kotlin/tr/com/gudeteknoloji/siteyonetim/DoorWidgetProvider.kt',
           find: 'class DoorWidgetProvider',
           note: 'Android tarafı: widget düzeni ve düğmelerin PendingIntent\'leri',
         },
@@ -2787,8 +2787,8 @@ export default {
         },
         {
           file: 'lib/main.dart',
-          find: 'runApp(MyApp(themeService: themeService));',
-          note: 'Başlatma sırası: binding -> yön kilidi -> tema yükleme -> uygulama',
+          find: 'child: MyApp(themeService: themeService),',
+          note: 'Başlatma sırası: binding + çökme raporlama kancaları -> yön kilidi -> tema yükleme -> açılış kapısı (AppGate: bakım/zorunlu güncelleme) -> uygulama',
         },
         {
           file: 'lib/app.dart',

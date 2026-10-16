@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/apartment_member_record.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/join_request_record.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
@@ -16,11 +17,15 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/managed_user_dialog.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
+
+import 'legal_fixtures.dart';
 
 /// lib/app.dart'taki kök yapıyı taklit eden sahte servis: oturum durumu değişince
 /// dinleyicilere haber verir (MaterialApp.home bu servise tepki verir).
@@ -55,6 +60,7 @@ class _FlowAuth extends AuthService {
     required String lastName,
     required String email,
     required String password,
+    List<AcceptedDocument>? acceptedDocuments,
   }) async =>
       null;
 
@@ -172,6 +178,11 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
+      // Yasal belgeler sahte sunucudan gelir; kayıt için onay kutusu işaretlenir.
+      final legal = FakeLegalServer();
+      LegalApi.debugDefaultFactory = () => legal.api;
+      addTearDown(() => LegalApi.debugDefaultFactory = null);
+
       final auth = _FlowAuth();
       await tester.pumpWidget(_app(auth));
       await tester.pumpAndSettle();
@@ -186,8 +197,12 @@ void main() {
       await tester.enterText(fields.at(0), 'Ali');
       await tester.enterText(fields.at(1), 'Veli');
       await tester.enterText(fields.at(2), 'ali@example.com');
-      await tester.enterText(fields.at(3), 'parola123');
-      await tester.enterText(fields.at(4), 'parola123');
+      await tester.enterText(fields.at(3), 'Mavi-Kedi-2026');
+      await tester.enterText(fields.at(4), 'Mavi-Kedi-2026');
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Kayıt Ol').last);
       await tester.pumpAndSettle();
       expect(find.byType(VerifyEmailCodePage), findsOneWidget);
@@ -306,10 +321,10 @@ void main() {
 
       expect(find.widgetWithText(TextFormField, 'Şifre'), findsOneWidget);
 
-      // Parola kısa/boşken kaydedilemez.
+      // Parola boşken kaydedilemez (boş = "zorunlu"; kısa/yaygın parola ayrı iletiler verir).
       await tester.tap(find.text('Kaydet'));
       await tester.pump();
-      expect(find.text('Şifre en az 6 karakter olmalı.'), findsOneWidget);
+      expect(find.text(PasswordPolicy.requiredMessage), findsOneWidget);
       expect(result, isNull);
       expect(tester.takeException(), isNull);
     });

@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart' show Checkbox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 
@@ -107,6 +108,17 @@ void main() {
             await c.type(email, label: 'E-Posta');
             await c.type(password, label: 'Şifre'); // ilk eslesen: 'Şifre' ('Şifre Tekrar'dan once)
             await c.type(password, label: 'Şifre Tekrar');
+            // Yasal onay kutusu: belgeler sunucudan yüklenince çıkar ve işaretlenmeden "Kayıt Ol" kapalıdır. Sunucuda
+            // kayıt için onay gerektiren belge yoksa kutu hiç çıkmaz (o zaman bu adım atlanır).
+            final hasConsent = await pumpUntilFound(
+              tester,
+              find.byType(Checkbox),
+              timeout: const Duration(seconds: 10),
+            );
+            if (hasConsent) {
+              await c.tap("Kullanım Koşulları, Gizlilik Politikası ve KVKK Aydınlatma Metni'ni okudum.", exact: true);
+              await c.settleUi();
+            }
             await c.shot('dolu_form');
             // VERI DEGISTIREN: kullanici olusturur ve dogrulama e-postasi gonderir.
             // 'Kayıt Ol' sayfada iki kez geçer (başlık + düğme etiketi): gönderen düğme 2. eşleşmedir.

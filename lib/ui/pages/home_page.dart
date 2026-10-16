@@ -120,6 +120,9 @@ import 'package:site_kapi_kontrol/services/module_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/module_menu.dart';
 
 import 'package:site_kapi_kontrol/ui/views/audit_log_view.dart';
+import 'package:site_kapi_kontrol/ui/views/client_errors_view.dart';
+import 'package:site_kapi_kontrol/ui/views/help_view.dart';
+import 'package:site_kapi_kontrol/ui/views/platform_settings_view.dart';
 
 import 'package:site_kapi_kontrol/ui/views/module_requests_view.dart';
 
@@ -231,6 +234,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // yeniden kurulur (başka durumlarda takipçi yalnız kendi görünümlerini tazeler).
   String _applicationsSignature = '';
   final GlobalKey<AuditLogViewState> _auditLogViewKey = GlobalKey<AuditLogViewState>();
+  final GlobalKey<PlatformSettingsViewState> _platformSettingsKey =
+      GlobalKey<PlatformSettingsViewState>();
+  final GlobalKey<ClientErrorsViewState> _clientErrorsKey = GlobalKey<ClientErrorsViewState>();
   final GlobalKey<PeopleViewState> _peopleViewKey = GlobalKey<PeopleViewState>();
   final GlobalKey<AnnouncementsViewState> _announcementsKey =
       GlobalKey<AnnouncementsViewState>();
@@ -928,31 +934,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _openAnnouncement(int? id, {ResidentAnnouncement? known}) {
     final session = widget.authService.session;
     if (!mounted || session == null) return;
-    if (_receivesAnnouncements(session.role)) {
-      setState(() {
-        _forceAnnouncementInbox = true;
-        _selectedMenu = SirketMenuItem.duyurular;
-      });
-    }
-    if (id == null || _openingAnnouncement) return;
-    _openingAnnouncement = true;
-    void refreshAfterChange() {
-      unawaited(_announcements.refresh());
-      unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
+    void showReadDialog() {
+      if (id == null || _openingAnnouncement) return;
+      _openingAnnouncement = true;
+      void refreshAfterChange() {
+        unawaited(_announcements.refresh());
+        unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
+      }
+
+      unawaited(
+        AnnouncementReadDialog.show(
+          context,
+          authService: widget.authService,
+          announcement: known ?? ResidentAnnouncement(id: id),
+          onRead: (updated) {
+            _announcements.noteRead(updated.id, urgent: updated.isUrgent);
+            refreshAfterChange();
+          },
+          onGone: refreshAfterChange,
+        ).whenComplete(() => _openingAnnouncement = false),
+      );
     }
 
-    unawaited(
-      AnnouncementReadDialog.show(
-        context,
-        authService: widget.authService,
-        announcement: known ?? ResidentAnnouncement(id: id),
-        onRead: (updated) {
-          _announcements.noteRead(updated.id, urgent: updated.isUrgent);
-          refreshAfterChange();
-        },
-        onGone: refreshAfterChange,
-      ).whenComplete(() => _openingAnnouncement = false),
-    );
+    if (_receivesAnnouncements(session.role)) {
+      // Menü değişimi korumalı kapıdan geçer: Platform Ayarları'nda kaydedilmemiş değişiklik varken önce sorulur;
+      // vazgeçilirse ekranda kalınır ve duyuru penceresi açılmaz (şerit duruyor, kaydedince yeniden dokunulur).
+      _requestMenuChange(SirketMenuItem.duyurular, () {
+        if (!mounted) return;
+        setState(() {
+          _forceAnnouncementInbox = true;
+          _selectedMenu = SirketMenuItem.duyurular;
+        });
+        showReadDialog();
+      });
+      return;
+    }
+    showReadDialog();
   }
 
   /// Kalıcı kırmızı şerit: okunmamış ACİL duyuru kaldığı sürece kaydırılan içeriğin DIŞINDA, gövdenin
@@ -1184,6 +1201,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.siteBasvurulari:
         return 'Site Başvuruları';
 
+      case SirketMenuItem.platformAyarlari:
+        return 'Platform Ayarları';
+
+      case SirketMenuItem.istemciHatalari:
+        return 'İstemci Hataları';
+
     }
 
   }
@@ -1266,6 +1289,75 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ];
   }
 
+  /// Çekmeceden "Yardım ve Destek": çekmece kapanır, ekran yeni sayfa olarak açılır. Ekrandaki "Profilim
+  /// ekranına git" sayfayı kapatıp menüyü Profilim'e alır.
+  void _openHelp() {
+    Navigator.of(context).pop();
+    final session = widget.authService.session;
+    if (session == null) return;
+    unawaited(
+      HelpView.open(
+        context,
+        role: session.role,
+        residentMode: _isResidentMode,
+        userId: session.id,
+        onOpenProfile: () => _goToMenu(SirketMenuItem.profilim),
+      ),
+    );
+  }
+
+  /// Menü değişiminin TEK korumalı kapısı: çekmece, Yardım'dan "Profilim'e git", acil duyuru şeridi, mod geçişi,
+  /// başvuru onayı ve "Modüller'e git" hep buradan geçer. Platform Ayarları'nda kaydedilmemiş değişiklik varken
+  /// başka menüye çıkılacaksa önce onay istenir: onaylanırsa [apply] çalışır, vazgeçilirse ekranda kalınır.
+  /// [apply] menüyü [setState] içinde değiştirir ve gerekirse [mounted] denetimini kendisi yapar.
+  void _requestMenuChange(SirketMenuItem target, VoidCallback apply) {
+    final leaving = _platformSettingsKey.currentState;
+    if (_selectedMenu == SirketMenuItem.platformAyarlari &&
+        target != SirketMenuItem.platformAyarlari &&
+        leaving != null &&
+        leaving.hasUnsavedChanges) {
+      // Yeniden-giriş koruması: onay penceresi açıkken gelen ikinci istek (aynı karede erişilebilirlik eylemi,
+      // klavye ya da programatik çağrı; ikinci İŞARETÇİYİ Navigator zaten soğurur) yok sayılır; aksi hâlde iki pencere
+      // açılır ve `apply` (örn. mod geçişi, bir TOGGLE) iki kez çalışıp geri çevrilirdi. Vazgeç / onaydan sonra
+      // sıfırlanır.
+      if (_menuGuardOpen) return;
+      _menuGuardOpen = true;
+      unawaited(
+        leaving
+            .confirmDiscard()
+            .then((discard) {
+              if (discard && mounted) apply();
+            })
+            .whenComplete(() => _menuGuardOpen = false),
+      );
+      return;
+    }
+    apply();
+  }
+
+  /// Menü kapısının onay penceresi açık mı ([_requestMenuChange]).
+  bool _menuGuardOpen = false;
+
+  /// [target] menüsüne korumalı geçiş (yalnız menü seçimi değişir).
+  void _goToMenu(SirketMenuItem target) {
+    _requestMenuChange(target, () {
+      if (mounted) setState(() => _selectedMenu = target);
+    });
+  }
+
+  /// "Sakin Modu / Yönetici Paneli" geçişi (AppBar hapı ve çekmece): yönetici paneline dönüşte menü Panel'e alınır.
+  void _toggleResidentMode() {
+    _requestMenuChange(SirketMenuItem.dashboard, () {
+      if (!mounted) return;
+      setState(() {
+        _isResidentMode = !_isResidentMode;
+        if (!_isResidentMode) {
+          _selectedMenu = SirketMenuItem.dashboard;
+        }
+      });
+    });
+  }
+
   void _selectMenu(SirketMenuItem item) {
 
     Navigator.of(context).pop();
@@ -1293,6 +1385,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
+    // Platform Ayarları'nda kaydedilmemiş değişiklik varken başka ekrana geçmeden önce onay istenir.
+    _requestMenuChange(item, () => _applyMenuSelection(item));
+  }
+
+  void _applyMenuSelection(SirketMenuItem item) {
     setState(() => _selectedMenu = item);
 
 
@@ -3380,7 +3477,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     final role = widget.authService.session?.role;
     if (role == UserRole.siteManager) {
-      setState(() => _selectedMenu = SirketMenuItem.dashboard);
+      _goToMenu(SirketMenuItem.dashboard);
       AppSnack.show(
         context,
         before == UserRole.siteManager
@@ -4390,6 +4487,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.denetimKaydi:
         await _auditLogViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.platformAyarlari:
+        await _platformSettingsKey.currentState?.reload();
+        break;
+      case SirketMenuItem.istemciHatalari:
+        await _clientErrorsKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -4457,14 +4560,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       shape: StadiumBorder(side: BorderSide(color: tone.hue, width: 1.2)),
       child: InkWell(
         customBorder: const StadiumBorder(),
-        onTap: () {
-          setState(() {
-            _isResidentMode = !_isResidentMode;
-            if (!_isResidentMode) {
-              _selectedMenu = SirketMenuItem.dashboard;
-            }
-          });
-        },
+        onTap: _toggleResidentMode,
         child: ConstrainedBox(
           constraints: BoxConstraints(minWidth: 44, minHeight: 44, maxWidth: maxWidth),
           child: Padding(
@@ -4689,14 +4785,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         canToggleMode: _canToggleDualMode,
         onToggleMode: () {
           Navigator.pop(context);
-          setState(() {
-            _isResidentMode = !_isResidentMode;
-            if (!_isResidentMode) {
-              _selectedMenu = SirketMenuItem.dashboard;
-            }
-          });
+          _toggleResidentMode();
         },
         onSelect: _selectMenu,
+        onOpenHelp: _openHelp,
         onLogout: () {
           Navigator.pop(context);
           widget.authService.logout();
@@ -4836,7 +4928,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               (session.role == UserRole.siteManager && !_isResidentMode);
           return DoorControlDisabledCard(
             onOpenModules: canManage
-                ? () => setState(() => _selectedMenu = SirketMenuItem.moduller)
+                ? () => _goToMenu(SirketMenuItem.moduller)
                 : null,
           );
         }
@@ -5221,6 +5313,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           authService: widget.authService,
         );
 
+      case SirketMenuItem.platformAyarlari:
+        return PlatformSettingsView(
+          key: _platformSettingsKey,
+          authService: widget.authService,
+        );
+
+      case SirketMenuItem.istemciHatalari:
+        return ClientErrorsView(
+          key: _clientErrorsKey,
+          authService: widget.authService,
+        );
+
       case SirketMenuItem.modulTalepleri:
         return ModuleRequestsView(
           key: _moduleRequestsViewKey,
@@ -5266,7 +5370,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           canReopen: session.role == UserRole.superUser,
           // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
           onOpenModules: _canManagePeople(session.role)
-              ? () => setState(() => _selectedMenu = SirketMenuItem.moduller)
+              ? () => _goToMenu(SirketMenuItem.moduller)
               : null,
         );
 

@@ -60,15 +60,17 @@ List<String> _titles(WidgetTester t) {
 
 void main() {
   group('yeni öğeler ve sayılar', () {
-    testWidgets('süper kullanıcı: 16 öğe + çıkış; Kişiler Site Yönetimi\'nin, Modüller Kişiler\'in, Modül Talepleri Modüller\'in, Site Başvuruları Modül Talepleri\'nin hemen altında; Denetim Kaydı en sonda', (t) async {
+    testWidgets('süper kullanıcı: 18 öğe + çıkış; Kişiler Site Yönetimi\'nin, Modüller Kişiler\'in, Modül Talepleri Modüller\'in, Site Başvuruları Modül Talepleri\'nin hemen altında; sonda Denetim Kaydı, Platform Ayarları, İstemci Hataları', (t) async {
       await _pumpMenu(t, UserRole.superUser, height: 1200);
       final titles = _titles(t);
-      expect(titles, hasLength(17));
+      expect(titles, hasLength(19));
       expect(titles.indexOf('Kişiler'), titles.indexOf('Site Yönetimi') + 1);
       expect(titles.indexOf('Modüller'), titles.indexOf('Kişiler') + 1);
       expect(titles.indexOf('Modül Talepleri'), titles.indexOf('Modüller') + 1);
       expect(titles.indexOf('Site Başvuruları'), titles.indexOf('Modül Talepleri') + 1);
-      expect(titles[titles.length - 2], 'Denetim Kaydı');
+      expect(titles[titles.length - 4], 'Denetim Kaydı');
+      expect(titles[titles.length - 3], 'Platform Ayarları');
+      expect(titles[titles.length - 2], 'İstemci Hataları');
       expect(titles.last, 'Çıkış Yap');
     });
 
@@ -96,6 +98,8 @@ void main() {
         expect(titles, isNot(contains('Kişiler')), reason: '$role: yalnız additionalItems ile (kurul üyesi)');
         expect(titles, isNot(contains('Denetim Kaydı')), reason: '$role');
         expect(titles, isNot(contains('Modül Talepleri')), reason: '$role');
+        expect(titles, isNot(contains('Platform Ayarları')), reason: '$role: yalnız süper kullanıcı');
+        expect(titles, isNot(contains('İstemci Hataları')), reason: '$role: yalnız süper kullanıcı');
         expect(titles, hasLength(count + (toggle ? 1 : 0) + 1), reason: '$role');
       }
     });

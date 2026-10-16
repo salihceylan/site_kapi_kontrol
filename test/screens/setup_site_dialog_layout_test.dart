@@ -14,8 +14,10 @@ import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/setup_site_dialog.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 
 import 'dialog_layout_harness.dart';
+import '../legal_fixtures.dart';
 
 class _FakeAuth extends AuthService {
   _FakeAuth({this.failWith}) : super(api: AuthApi(baseUrl: 'http://localhost'));
@@ -69,6 +71,12 @@ Future<void> _open(
 );
 
 void main() {
+  // Yasal belge uçları sahte: başvuruda onay gerektiren belge yok (DPA kutusu çıkmaz, gönderme açık kalır).
+  setUp(() {
+    LegalApi.debugDefaultFactory = () => FakeLegalServer(documents: <Map<String, dynamic>>[]).api;
+  });
+  tearDown(() => LegalApi.debugDefaultFactory = null);
+
   layoutMatrix('SetupSiteDialog (cihazlı kurulum: bloklar + kapılar)', (
     t,
     width,

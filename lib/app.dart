@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
+import 'package:site_kapi_kontrol/services/app_gate_state.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/deep_link_service.dart';
@@ -25,6 +26,8 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/pages/no_internet_page.dart';
+import 'package:site_kapi_kontrol/ui/views/legal_consent_gate.dart';
+import 'package:site_kapi_kontrol/ui/views/onboarding_tour.dart';
 import 'package:site_kapi_kontrol/ui/widgets/dynamic_qr_pass_modal.dart';
 import 'package:site_kapi_kontrol/ui/widgets/voice_control_modal.dart';
 
@@ -139,6 +142,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _handleDeepLinkAction(DeepLinkAction action) async {
+    // Bakım / zorunlu güncelleme ekranı uygulamayı gizliyken (AppGate) dışarıdan gelen eylemler yok sayılır:
+    // gizli gezginde açılan "Kapı açılsın mı?" penceresi engel kalkınca beklenmedik biçimde belirirdi.
+    // Soğuk açılışta kuyruktaki bağlantı kapının İLK kararından önce gelebilir: en çok 5 sn beklenir
+    // (kapı ağaçta değilse beklenmez, bağlantı yutulmaz).
+    await AppGateBlock.waitForFirstCheck();
+    if (AppGateBlock.active.value) {
+      return;
+    }
     if (!_authService.isLoggedIn) {
       await _voiceDoorService.speak('Lütfen önce uygulamaya giriş yapın.');
       return;
@@ -385,10 +396,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             return const StartupSplash();
           }
           if (_authService.isLoggedIn) {
-            return HomePage(
+            // "Güncellenen koşullar" kapısı: bekleyen yasal onay varsa ana sayfanın üstüne tam ekran biner;
+            // hata/zaman aşımında kilitlemez. İlk denetim bitince ilk kullanım turu (bir kez) açılır.
+            return LegalConsentGate(
               authService: _authService,
-              voiceDoorService: _voiceDoorService,
-              quickActionsService: _quickActionsService,
+              enabled: widget.networkCheckEnabled,
+              onSettled: (gateContext) => unawaited(
+                OnboardingTour.maybeShow(gateContext, authService: _authService),
+              ),
+              child: HomePage(
+                authService: _authService,
+                voiceDoorService: _voiceDoorService,
+                quickActionsService: _quickActionsService,
+              ),
             );
           }
           if (!networkReady) {

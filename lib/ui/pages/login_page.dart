@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -11,11 +12,16 @@ import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/pages/register_individual_page.dart';
+import 'package:site_kapi_kontrol/ui/views/legal_footer_links.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.authService});
+  const LoginPage({super.key, required this.authService, this.legalApi});
 
   final AuthService authService;
+
+  /// Yasal belge istemcisi (alttaki Kullanım Koşulları · Gizlilik · KVKK bağlantıları ve kayıt ekranı);
+  /// verilmezse varsayılan sunucu.
+  final LegalApi? legalApi;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -378,6 +384,7 @@ class _LoginPageState extends State<LoginPage> {
                                 MaterialPageRoute(
                                   builder: (_) => RegisterIndividualPage(
                                     authService: widget.authService,
+                                    legalApi: widget.legalApi,
                                   ),
                                 ),
                               );
@@ -389,7 +396,10 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpace.sm),
+                      const SizedBox(height: AppSpace.xs),
+                      // Yasal belgeler: oturum açmadan da okunabilir (mağaza ve KVKK gereği).
+                      LegalFooterLinks(api: widget.legalApi),
+                      const SizedBox(height: AppSpace.xs),
                       Text(
                         AppConfig.versionDisplay,
                         textAlign: TextAlign.center,

@@ -6,6 +6,7 @@ import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 
 class ManagedUserFormResult {
   const ManagedUserFormResult({
@@ -236,15 +237,14 @@ class _ManagedUserDialogState extends State<ManagedUserDialog> {
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Şifre',
+                  helperText: PasswordPolicy.hint,
                   prefixIcon: Icon(Icons.lock_rounded),
                 ),
-                validator: (value) {
-                  final text = (value ?? '').trim();
-                  if (text.length < 6) {
-                    return 'Şifre en az 6 karakter olmalı.';
-                  }
-                  return null;
-                },
+                validator: (value) => PasswordPolicy.validate(
+                  (value ?? '').trim(),
+                  email: _emailController.text.trim(),
+                  names: <String>[_fullNameController.text],
+                ),
               ),
             ] else ...[
               const SizedBox(height: AppSpace.md),

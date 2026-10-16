@@ -63,10 +63,11 @@ const List<_Cfg> _cfgs = <_Cfg>[
   // "Denetim Kaydı", site yöneticisine (yönetici modunda) "Modüller" eklendi (11 -> 14, 6 -> 7).
   // Platform Faz 2a: ikisine de "Kişiler" eklendi (14 -> 15, 7 -> 8).
   // Platform: site başvurusu: süper kullanıcıya "Site Başvuruları" eklendi (15 -> 16).
+  // Satışa hazırlık: süper kullanıcıya "Platform Ayarları" ve "İstemci Hataları" eklendi (16 -> 18).
   _Cfg(
-    'süper kullanıcı (16 öğe)',
+    'süper kullanıcı (18 öğe)',
     UserRole.superUser,
-    16,
+    18,
     selected: SirketMenuItem.siteler,
   ),
   _Cfg(

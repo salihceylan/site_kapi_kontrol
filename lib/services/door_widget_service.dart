@@ -16,7 +16,7 @@ const String kDoorWidgetAndroid = 'DoorWidgetProvider';
 
 const String kDoorWidgetIOS = 'DoorWidget';
 
-const String kDoorWidgetAppGroup = 'group.com.gudeteknoloji.sitekapikontrol';
+const String kDoorWidgetAppGroup = 'group.tr.com.gudeteknoloji.siteyonetim';
 
 /// Widget üzerinden iki "kapıyı aç" isteği arasındaki asgari süre.
 const Duration kDoorWidgetMinOpenInterval = Duration(seconds: 2);

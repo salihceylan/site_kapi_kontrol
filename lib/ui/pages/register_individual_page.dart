@@ -1,20 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/legal_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/icon_orb.dart';
 import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/helpers/password_policy.dart';
 import 'package:site_kapi_kontrol/ui/pages/verify_email_code_page.dart';
+import 'package:site_kapi_kontrol/ui/views/legal_consent_controller.dart';
+import 'package:site_kapi_kontrol/ui/views/legal_consent_field.dart';
 
 class RegisterIndividualPage extends StatefulWidget {
   const RegisterIndividualPage({
     super.key,
     required this.authService,
+    this.legalApi,
   });
 
   final AuthService authService;
+
+  /// Yasal belge istemcisi (verilmezse varsayılan sunucu); testler sahte yanıtla verir.
+  final LegalApi? legalApi;
 
   @override
   State<RegisterIndividualPage> createState() => _RegisterIndividualPageState();
@@ -33,8 +44,23 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// Yasal onay kutusu (Kullanım Koşulları, Gizlilik, KVKK). Belgeler yüklenmeden/işaretlenmeden
+  /// "Kayıt Ol" kapalıdır.
+  late final LegalConsentController _consent;
+
+  @override
+  void initState() {
+    super.initState();
+    _consent = LegalConsentController(
+      api: widget.legalApi ?? LegalApi.defaultInstance(),
+      context: LegalContexts.register,
+    );
+    unawaited(_consent.load());
+  }
+
   @override
   void dispose() {
+    _consent.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
@@ -63,6 +89,7 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
       lastName: lastName,
       email: email,
       password: password,
+      acceptedDocuments: _consent.acceptedDocuments,
     );
 
     if (!mounted) return;
@@ -71,6 +98,10 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
 
     if (error != null) {
       setState(() => _errorMessage = error);
+      // Belgeler değişmiş olabilir: işaret kaldırılır, güncel metinler yeniden okunur.
+      if (error == LegalMessages.consentRequired || error == LegalMessages.consentVersionStale) {
+        unawaited(_consent.reloadAfterRejection());
+      }
     } else {
       // Kayıt kabul edildi: hafif onay titreşimi, sonra kod doğrulama ekranına yönlendir.
       HapticFeedback.lightImpact();
@@ -232,7 +263,7 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: 'Şifre',
-                          hintText: 'En az 6 karakter',
+                          hintText: PasswordPolicy.hint,
                           prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -242,15 +273,15 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
                             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                           ),
                         ),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) {
-                            return 'Şifre zorunludur';
-                          }
-                          if (val.trim().length < 6) {
-                            return 'Şifre en az 6 karakter olmalıdır';
-                          }
-                          return null;
-                        },
+                        validator: (val) => PasswordPolicy.validate(
+                          val?.trim(),
+                          email: _emailController.text.trim(),
+                          names: <String>[
+                            _firstNameController.text,
+                            _lastNameController.text,
+                            '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+                          ],
+                        ),
                       ),
                       const SizedBox(height: AppSpace.lg),
 
@@ -279,11 +310,38 @@ class _RegisterIndividualPageState extends State<RegisterIndividualPage> {
                       ),
                       const SizedBox(height: AppSpace.xl),
 
-                      // Kayıt Ol: yüklenirken etiket yerine çark gösterilir (tıklama kapalı).
-                      PrimaryActionButton(
-                        label: 'Kayıt Ol',
-                        onPressed: _isLoading ? null : _submit,
-                        loading: _isLoading,
+                      // Yasal onay: belgeler okunup kutu işaretlenmeden gönderme kapalıdır ve NEDEN yazılıdır.
+                      LegalConsentField(controller: _consent, enabled: !_isLoading),
+                      const SizedBox(height: AppSpace.md),
+                      ListenableBuilder(
+                        listenable: _consent,
+                        builder: (context, _) {
+                          final blocked = _consent.blocksSubmit;
+                          final reason = _consent.blockReason;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (blocked && reason != null && !_isLoading) ...[
+                                Text(
+                                  reason,
+                                  key: const ValueKey<String>('register_block_reason'),
+                                  style: th.bodySmall,
+                                ),
+                                const SizedBox(height: AppSpace.sm),
+                              ],
+                              // Kayıt Ol: yüklenirken etiket yerine çark gösterilir (tıklama kapalı). Pasifse NEDENİ
+                              // düğmeye de bağlıdır (ekran okuyucu düğmeye odaklanınca ipucunu okur).
+                              Semantics(
+                                hint: (blocked && !_isLoading) ? reason : null,
+                                child: PrimaryActionButton(
+                                  label: 'Kayıt Ol',
+                                  onPressed: (_isLoading || blocked) ? null : _submit,
+                                  loading: _isLoading,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: AppSpace.lg),
 

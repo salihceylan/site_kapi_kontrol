@@ -71,6 +71,13 @@ enum SirketMenuItem {
   /// Platform Faz 4a: Borcum (sakin). Rol listesinde YOKTUR; alıcısı olabilecek ve `finance` modülü AÇIK sitesi
   /// olan sakine [YanMenu.additionalItems] ile eklenir.
   borcum,
+
+  /// Satışa hazırlık: Platform Ayarları (uygulama sürümü / bakım, destek iletişim, şirket ve yasal bilgiler).
+  /// Yalnız süper kullanıcı (rol listesinde).
+  platformAyarlari,
+
+  /// Satışa hazırlık: İstemci Hataları (uygulamalardan gelen hata raporları). Yalnız süper kullanıcı.
+  istemciHatalari,
 }
 
 class YanMenu extends StatelessWidget {
@@ -90,6 +97,7 @@ class YanMenu extends StatelessWidget {
     this.badgeCounts = const <SirketMenuItem, int>{},
     this.badgeNouns = const <SirketMenuItem, String>{},
     this.additionalItems = const <SirketMenuItem>{},
+    this.onOpenHelp,
   });
 
   final String fullName;
@@ -121,6 +129,10 @@ class YanMenu extends StatelessWidget {
   /// Örn. yalnız kurul üyesi olan bir sakine "Kişiler" eklenir ("Site Yönetimi"nin, o yoksa "Panel"in
   /// altına); rol listesinde zaten varsa tekrarlanmaz.
   final Set<SirketMenuItem> additionalItems;
+
+  /// Verilirse listenin sonunda ("Çıkış Yap"ın üstünde) "Yardım ve Destek" girişi gösterilir (varsayılan
+  /// null: menü eskisi gibidir). Giriş bir sayfa seçimi DEĞİL, ayrı bir ekran açar; çağıran çekmeceyi kapatır.
+  final VoidCallback? onOpenHelp;
 
   /// Bu yüksekliğin altında (yatay telefon, küçük pencere) başlık, liste ve sürüm satırı TEK
   /// kaydırma alanında akar: sabit başlık + sürüm satırı kısa ekranda listeye yer bırakmaz
@@ -201,10 +213,22 @@ class YanMenu extends StatelessWidget {
                 ),
               ),
         ],
+        if (onOpenHelp != null)
+          StaggeredEntry(
+            key: const ValueKey<String>('yan_menu_yardim'),
+            index: firstItemIndex + items.length + extraActions.length,
+            child: _MenuTile(
+              icon: Icons.help_outline_rounded,
+              title: 'Yardım ve Destek',
+              selected: false,
+              tone: tone,
+              onTap: onOpenHelp!,
+            ),
+          ),
         const _MenuDivider(),
         StaggeredEntry(
           key: const ValueKey<String>('yan_menu_cikis'),
-          index: firstItemIndex + items.length + extraActions.length,
+          index: firstItemIndex + items.length + extraActions.length + (onOpenHelp != null ? 1 : 0),
           child: _MenuTile(
             icon: Icons.logout_rounded,
             title: 'Çıkış Yap',
@@ -440,6 +464,8 @@ List<SirketMenuItem> _itemsForRole(
         SirketMenuItem.kayitliCihazlar,
         SirketMenuItem.bluetoothWifiKur,
         SirketMenuItem.denetimKaydi,
+        SirketMenuItem.platformAyarlari,
+        SirketMenuItem.istemciHatalari,
       ];
     case UserRole.siteManager:
       if (isResidentMode) {
@@ -525,6 +551,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Finans';
     case SirketMenuItem.borcum:
       return 'Borcum';
+    case SirketMenuItem.platformAyarlari:
+      return 'Platform Ayarları';
+    case SirketMenuItem.istemciHatalari:
+      return 'İstemci Hataları';
   }
 }
 
@@ -574,6 +604,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.account_balance_wallet_rounded;
     case SirketMenuItem.borcum:
       return Icons.receipt_long_rounded;
+    case SirketMenuItem.platformAyarlari:
+      return Icons.tune_rounded;
+    case SirketMenuItem.istemciHatalari:
+      return Icons.bug_report_rounded;
   }
 }
 
