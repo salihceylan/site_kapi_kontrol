@@ -140,7 +140,10 @@ financeRouter.post(
   financeWriteLimiter,
   managerHandler({ context: 'finance_definition_post', fallback: 'Borçlandırma yapılamadı.', write: true }, async ({ req, access }) => {
     const result = await postDefinition({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), actor: req.authUser });
-    return { status: result.replayed ? 200 : 201, body: { run: result.run, entries_count: result.entries_count } };
+    return {
+      status: result.replayed ? 200 : 201,
+      body: { run: result.run, entries_count: result.entries_count, skipped_count: result.skipped_count, redistributed: result.redistributed },
+    };
   }),
 );
 
@@ -161,7 +164,16 @@ financeRouter.post(
   financeWriteLimiter,
   managerHandler({ context: 'finance_charge_post', fallback: 'Ek borç eklenemedi.', write: true }, async ({ req, access }) => {
     const result = await postCharge({ siteCode: access.siteCode, body: bodyOf(req), actor: req.authUser });
-    return { status: result.replayed ? 200 : 201, body: { run: result.run, entries_count: result.entries_count, definition: result.definition } };
+    return {
+      status: result.replayed ? 200 : 201,
+      body: {
+        run: result.run,
+        entries_count: result.entries_count,
+        skipped_count: result.skipped_count,
+        redistributed: result.redistributed,
+        definition: result.definition,
+      },
+    };
   }),
 );
 

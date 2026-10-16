@@ -92,6 +92,7 @@ function installFakeDb() {
     if (/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/.test(sql)) return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
     if (STEP_SQLS.has(sql)) return ok();
     if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return ok([{ locked: true }]);
+    if (/^SELECT user_code FROM users WHERE user_code = \$1 FOR KEY SHARE$/.test(sql)) return ok([{ user_code: params?.[0] }]);
     if (/^SELECT DISTINCT site_code FROM \(/.test(sql)) return ok();
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 220)}`);
   };
@@ -248,14 +249,17 @@ describe('finans rotaları: zincir', () => {
 // ---------------------------------------------------------------------------
 
 describe('finans: yetki matrisi ve modül kapalı', () => {
-  const emptyDefinitions = () => [[/^SELECT d\.id, d\.name, d\.kind/, () => ok()]];
+  const emptyDefinitions = () => [
+    [/^SELECT COUNT\(\*\)::INTEGER AS total FROM fee_definitions d WHERE/, () => ok([{ total: 0 }])],
+    [/^SELECT d\.id, d\.name, d\.kind/, () => ok()],
+  ];
 
   it('GET definitions: yönetici / süper / kurul 200; görevli / sakin / ilgisiz 403 FORBIDDEN_ROLE; başka site yöneticisi 403 FORBIDDEN_SITE', async () => {
     handlers.push(...emptyDefinitions());
     for (const user of [users.mgrA, users.superUser, users.board]) {
       const res = await call('GET', `${base()}/definitions`, { user });
       assert.equal(res.status, 200, user.full_name);
-      assert.deepEqual(res.body, { items: [] });
+      assert.deepEqual(res.body, { items: [], total: 0 });
     }
     for (const user of [users.staff, users.resident, users.outsider]) {
       const res = await call('GET', `${base()}/definitions`, { user });
@@ -333,6 +337,10 @@ describe('finans: gövde doğrulaması veritabanına dokunmadan 400', () => {
     ['POST', '/definitions', { name: 'x', kind: 'recurring', distribution: 'fixed', amount_minor: 1.5, due_day: 5, start_period: '2026-01', target: { type: 'site' } }],
     ['POST', '/definitions', { name: 'x', kind: 'recurring', distribution: 'fixed', amount_minor: 100, due_day: 40, start_period: '2026-01', target: { type: 'site' } }],
     ['POST', '/charges', { name: 'x', distribution: 'equal', amount_minor: -5, target: { type: 'site' }, expected_total_minor: 1, expected_apartment_count: 1 }],
+    ['POST', '/payments', { apartment_id: 5, amount_minor: 100, entry_date: '2002-10-01', method: 'cash', idempotency_key: 'k' }],
+    ['POST', '/charges', { name: 'x', distribution: 'equal', amount_minor: 100, target: { type: 'site' }, expected_total_minor: 100, expected_apartment_count: 1, expected_hash: 'a'.repeat(64) }],
+    ['POST', '/charges', { name: 'x', distribution: 'equal', amount_minor: 100, target: { type: 'site' }, expected_total_minor: 100, expected_apartment_count: 1, idempotency_key: 'k' }],
+    ['POST', '/charges', { name: 'x', distribution: 'equal', amount_minor: 100, target: { type: 'site' }, due_date: '2002-01-01', expected_total_minor: 100, expected_apartment_count: 1, expected_hash: 'a'.repeat(64), idempotency_key: 'k' }],
     ['POST', '/entries/7/reverse', { reason: 'x'.repeat(201) }],
     ['POST', '/entries/7/correct', { amount_minor: 100, entry_date: '2026-10-01', method: 'kart', idempotency_key: 'k' }],
     ['POST', '/periods/abc/close', {}],
@@ -375,17 +383,20 @@ describe('finans: gövde doğrulaması veritabanına dokunmadan 400', () => {
 // İşlem sırası (kilit sırası) ve yeniden deneme
 // ---------------------------------------------------------------------------
 
-const PAYMENT_BODY = { apartment_id: 5, amount_minor: 50000, entry_date: '2026-01-15', method: 'cash', description: 'Nakit', idempotency_key: 'test-key-1' };
+// 40 gün önce: 5 yıllık geri sınırın içinde, gelecek değil ve aynı yıl içinde kapalı dönem yok (testin yaşı ne olursa olsun geçerli)
+const PAY_DATE = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10);
+const PAY_PERIOD = `${PAY_DATE.slice(0, 7)}-01`;
+const PAYMENT_BODY = { apartment_id: 5, amount_minor: 50000, entry_date: PAY_DATE, method: 'cash', description: 'Nakit', idempotency_key: 'test-key-1' };
 
 function paymentFlow({ balance = '-50000' } = {}) {
   const entryRow = {
-    id: '77', apartment_id: '5', kind: 'payment', amount_minor: '-50000', period: '2026-01-01', entry_date: '2026-01-15', due_date: null, description: 'Nakit', method: 'cash', payer_party: 'both',
-    definition_name: null, reverses_entry_id: null, reversed_by_entry_id: null, reversal_reason: null, created_by_name: 'Ayşe Yönetici', created_at: new Date('2026-01-15T09:00:00Z'), definition_id: null, run_id: null, idempotency_key: 'test-key-1',
+    id: '77', apartment_id: '5', kind: 'payment', amount_minor: '-50000', period: PAY_PERIOD, entry_date: PAY_DATE, due_date: null, description: 'Nakit', method: 'cash', payer_party: 'both',
+    definition_name: null, reverses_entry_id: null, reversed_by_entry_id: null, reversal_reason: null, created_by_name: 'Ayşe Yönetici', created_at: new Date(`${PAY_DATE}T09:00:00Z`), definition_id: null, run_id: null, idempotency_key: 'test-key-1',
   };
   return [
     [/^SELECT id, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE$/, () => ok([{ id: '5', responsible_party: 'both' }])],
     [/WHERE l\.site_code = \$1 AND l\.idempotency_key = \$2 LIMIT 1$/, () => ok()],
-    [/^SELECT 1 FROM finance_period_closures WHERE site_code = \$1 AND period = \$2::DATE LIMIT 1$/, () => ok()],
+    [/^SELECT 1 FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE LIMIT 1$/, () => ok()],
     [/^INSERT INTO ledger_entries \(/, () => ok([{ id: '77' }])],
     [/WHERE l\.id = \$1 AND l\.site_code = \$2 LIMIT 1$/, () => ok([entryRow])],
     [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance FROM ledger_entries WHERE site_code = \$1 AND apartment_id = \$2$/, () => ok([{ balance }])],
@@ -393,14 +404,14 @@ function paymentFlow({ balance = '-50000' } = {}) {
 }
 
 describe('finans: işlem sırası ve yeniden deneme', () => {
-  it('tahsilat: BEGIN -> sites FOR KEY SHARE -> finance_post advisory kilidi -> modül denetimi -> daire FOR KEY SHARE -> INSERT -> audit -> COMMIT; 201 { entry, balance_minor }', async () => {
+  it('tahsilat: BEGIN -> sites FOR KEY SHARE -> finance_post advisory kilidi -> modül denetimi -> daire FOR KEY SHARE -> işlemi yapan kullanıcı FOR KEY SHARE -> INSERT -> audit -> COMMIT; 201 { entry, balance_minor }', async () => {
     handlers.push(...paymentFlow());
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor']);
     assert.equal(res.body.entry.kind, 'payment');
     assert.equal(res.body.entry.amount_minor, -50000);
-    assert.equal(res.body.entry.period, '2026-01');
+    assert.equal(res.body.entry.period, PAY_PERIOD.slice(0, 7));
     assert.equal(res.body.balance_minor, -50000);
     const txLog = state.log.filter((e) => e.client);
     const order = txLog.map((e) => e.sql);
@@ -410,15 +421,16 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     const advisory = idx(/^SELECT pg_advisory_xact_lock/);
     const moduleCheck = idx(/^SELECT enabled FROM site_modules/);
     const apartment = idx(/FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE/);
+    const actorLock = idx(/^SELECT user_code FROM users WHERE user_code = \$1 FOR KEY SHARE$/);
     const insert = idx(/^INSERT INTO ledger_entries/);
     const audit = idx(/^INSERT INTO audit_log/);
     const commit = idx(/^COMMIT$/);
-    assert.ok(begin === 0 && siteLock > begin && advisory > siteLock && moduleCheck > advisory && apartment > moduleCheck && insert > apartment && audit > insert && commit > audit, JSON.stringify(order));
+    assert.ok(begin === 0 && siteLock > begin && advisory > siteLock && moduleCheck > advisory && apartment > moduleCheck && actorLock > apartment && insert > actorLock && audit > insert && commit > audit, JSON.stringify(order));
     assert.equal(txLog[advisory].params[0], `finance_post:${SITE_1}`);
     assert.equal(order.filter((s) => s === 'COMMIT').length, 1);
     // kayıt: tutar defterde NEGATİF kuruş (metin), dönem ayın ilk günü, ödeyen taraf dairenin değeri, işlem anahtarı
     const insertParams = txLog[insert].params;
-    assert.deepEqual(insertParams.slice(0, 9), [SITE_1, 5, '-50000', '2026-01-01', '2026-01-15', 'both', 'cash', 'Nakit', 'test-key-1']);
+    assert.deepEqual(insertParams.slice(0, 9), [SITE_1, 5, '-50000', PAY_PERIOD, PAY_DATE, 'both', 'cash', 'Nakit', 'test-key-1']);
   });
 
   it('kilit çıkmazı (40P01): işlem TEK SEFER baştan denenir -> 201; ilk deneme ROLLBACK', async () => {
@@ -459,7 +471,7 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
 
   it('kapalı dönem: 409 PERIOD_CLOSED, INSERT yok, ROLLBACK', async () => {
     handlers.push(...paymentFlow());
-    handlers.unshift([/^SELECT 1 FROM finance_period_closures WHERE site_code = \$1 AND period = \$2::DATE LIMIT 1$/, () => ok([{ x: 1 }])]);
+    handlers.unshift([/^SELECT 1 FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE LIMIT 1$/, () => ok([{ x: 1 }])]);
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 409);
     assert.equal(res.body.code, 'PERIOD_CLOSED');
@@ -552,6 +564,7 @@ describe('finans: okuma uçları ve kurul yanıtı temizliği', () => {
     const manager = await call('GET', `${base()}/periods`, { user: users.mgrA });
     assert.equal(manager.status, 200);
     assert.equal(manager.body.closed_through, '2026-09');
+    assert.deepEqual(manager.body.closable, ['2026-10'], 'closed_through + 1 (bu ay ya da öncesi) tek kapatılabilir ay');
     assert.deepEqual(manager.body.items.map((i) => i.period), ['2026-09', '2026-08']);
     assert.equal(manager.body.items[0].closed_by_name, 'Ayşe Yönetici');
     assert.match(manager.body.open_period, /^\d{4}-\d{2}$/);

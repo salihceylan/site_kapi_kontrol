@@ -99,7 +99,11 @@ describe('members: db.js yalnızca additive şema değişikliği içerir', () =>
     assert.equal(/DELETE\s+FROM\s+users/i.test(dbSource), false);
     assert.equal(/reset_apartment_residents_after_site_approval_flow_v1'/.test(dbSource.replace(/\/\/.*$/gm, '')), false);
     assert.equal(/DROP\s+TABLE/i.test(dbSource), false);
-    assert.equal(/TRUNCATE/i.test(dbSource), false);
+    // 034 (finans defteri): BEFORE TRUNCATE tetikleyicileri TRUNCATE'i ENGELLER (koruma, veri silme degil). Yalniz bu iki kalip ve tetikleyici adlari muaf;
+    // gercek bir TRUNCATE ifadesi hala hata verir.
+    const withoutLedgerGuards = dbSource.replace(/BEFORE\s+TRUNCATE\s+ON\s+(ledger_entries|fee_runs)\b/gi, '').replace(/\btrg_[a-z_]*truncate\b/gi, '');
+    assert.equal(/TRUNCATE/i.test(withoutLedgerGuards), false);
+    assert.equal((dbSource.match(/BEFORE\s+TRUNCATE\s+ON\b/gi) || []).length, 2);
   });
 
   it('DELETE FROM ifadesi hiç yok; zayıf md5(random()) token üretimi kaldırılmış', () => {

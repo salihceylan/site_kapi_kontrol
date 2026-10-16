@@ -56,6 +56,9 @@ CREATE INDEX IF NOT EXISTS idx_fee_definitions_site ON fee_definitions (site_cod
 CREATE INDEX IF NOT EXISTS idx_fee_definitions_created_by ON fee_definitions (created_by) WHERE created_by IS NOT NULL;
 
 -- 2. Borçlandırma çalıştırması. UNIQUE (definition_id, period): aynı ay ikinci kez borçlandırılamaz. idempotency_key: istemci yeniden denemesi aynı çalıştırmayı döndürür.
+-- request_fingerprint: isteğin kanonik gövdesinin sha256 özeti (aynı anahtar + farklı gövde = 409 IDEMPOTENCY_CONFLICT). natural_key: ek borcun doğal özeti
+-- (ad + tutar + dağıtım + hedef + vade; son 24 saatte aynı sitede tekrarı 409 DUPLICATE_CHARGE olur). Her ikisi de yalnız özet taşır (metin / kişi verisi YOK).
+-- skipped_count: skip_missing ile hariç tutulan (eksik verili) daire sayısı.
 CREATE TABLE IF NOT EXISTS fee_runs (
   id BIGSERIAL PRIMARY KEY,
   site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
@@ -63,21 +66,29 @@ CREATE TABLE IF NOT EXISTS fee_runs (
   period DATE NOT NULL,
   total_minor BIGINT NOT NULL,
   apartment_count INTEGER NOT NULL,
+  skipped_count INTEGER NOT NULL DEFAULT 0,
   idempotency_key TEXT,
+  request_fingerprint TEXT,
+  natural_key TEXT,
   posted_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
   posted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_fee_runs_definition_period UNIQUE (definition_id, period),
   CONSTRAINT chk_fee_runs_total CHECK (total_minor > 0 AND total_minor <= 100000000000000),
-  CONSTRAINT chk_fee_runs_count CHECK (apartment_count > 0),
+  CONSTRAINT chk_fee_runs_count CHECK (apartment_count > 0 AND skipped_count >= 0),
   CONSTRAINT chk_fee_runs_period CHECK (EXTRACT(DAY FROM period) = 1),
-  CONSTRAINT chk_fee_runs_key CHECK (idempotency_key IS NULL OR char_length(idempotency_key) BETWEEN 1 AND 64)
+  CONSTRAINT chk_fee_runs_key CHECK (idempotency_key IS NULL OR char_length(idempotency_key) BETWEEN 1 AND 64),
+  CONSTRAINT chk_fee_runs_digests CHECK (
+    (request_fingerprint IS NULL OR char_length(request_fingerprint) = 64) AND (natural_key IS NULL OR char_length(natural_key) = 64)
+  )
 );
 CREATE INDEX IF NOT EXISTS idx_fee_runs_site_period ON fee_runs (site_code, period);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_fee_runs_idempotency ON fee_runs (site_code, idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_fee_runs_posted_by ON fee_runs (posted_by) WHERE posted_by IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fee_runs_natural ON fee_runs (site_code, natural_key, posted_at DESC) WHERE natural_key IS NOT NULL;
 
 -- 3. Defter (append-only). amount_minor > 0 borç (daire borçlu), < 0 tahsilat / alacak; bakiye = SUM(amount_minor).
 -- charge > 0, payment < 0, reversal karşı işaret; reversal <=> reverses_entry_id dolu. Daire silinemez (RESTRICT); site silinince CASCADE geçer.
+-- definition_name: borçlandırma anındaki tanım adının ANLIK GÖRÜNTÜSÜ (tanım adı sonradan değişse de ekstre değişmez; ters kayıt asıldan kopyalar).
 CREATE TABLE IF NOT EXISTS ledger_entries (
   id BIGSERIAL PRIMARY KEY,
   site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
@@ -89,6 +100,7 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
   entry_date DATE NOT NULL,
   due_date DATE,
   definition_id BIGINT REFERENCES fee_definitions(id),
+  definition_name TEXT,
   run_id BIGINT REFERENCES fee_runs(id),
   payer_party TEXT NOT NULL,
   method TEXT,
@@ -115,7 +127,8 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
   CONSTRAINT chk_ledger_entries_text CHECK (
     (description IS NULL OR char_length(description) <= 200) AND (reversal_reason IS NULL OR char_length(reversal_reason) <= 200)
   ),
-  CONSTRAINT chk_ledger_entries_key CHECK (idempotency_key IS NULL OR char_length(idempotency_key) BETWEEN 1 AND 64)
+  CONSTRAINT chk_ledger_entries_key CHECK (idempotency_key IS NULL OR char_length(idempotency_key) BETWEEN 1 AND 64),
+  CONSTRAINT chk_ledger_entries_definition_name CHECK (definition_name IS NULL OR char_length(definition_name) BETWEEN 1 AND 80)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_entries_reverses ON ledger_entries (reverses_entry_id) WHERE reverses_entry_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ledger_entries_idempotency ON ledger_entries (site_code, idempotency_key) WHERE idempotency_key IS NOT NULL;
@@ -127,8 +140,22 @@ CREATE INDEX IF NOT EXISTS idx_ledger_entries_apartment_fk ON ledger_entries (ap
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_definition ON ledger_entries (definition_id) WHERE definition_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_created_by ON ledger_entries (created_by) WHERE created_by IS NOT NULL;
 
--- 4. Defter değişmezliği. UPDATE ve DELETE hata verir; tek istisnalar: (a) DELETE, üst sites satırı artık yoksa (site silme CASCADE),
--- (b) UPDATE yalnızca created_by'ı NULL'a çeviriyorsa (users silinince ON DELETE SET NULL referans eylemi; başka hiçbir sütun değişemez).
+-- 4. Dönem kapanışları. Bir ay, ay <= MAX(kapalı dönem) ise KAPALIDIR (ilk kapatılan aydan önceki aylar dahil). İlk kapatmada herhangi bir ay (<= bu ay),
+-- sonra yalnız closed_through + 1 ay kapatılabilir; yalnız EN SON kapatılan ay yeniden açılır (yalnız süper kullanıcı). Satır silme = yeniden açma.
+CREATE TABLE IF NOT EXISTS finance_period_closures (
+  site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
+  period DATE NOT NULL,
+  closed_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
+  closed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (site_code, period),
+  CONSTRAINT chk_finance_period_closures_period CHECK (EXTRACT(DAY FROM period) = 1)
+);
+CREATE INDEX IF NOT EXISTS idx_finance_period_closures_closed_by ON finance_period_closures (closed_by) WHERE closed_by IS NOT NULL;
+
+-- 5. Değişmezlik tetikleyicileri. Defter (ledger_entries): UPDATE ve DELETE hata verir; tek istisnalar: (a) DELETE, üst sites satırı artık yoksa (site silme CASCADE),
+-- (b) UPDATE yalnızca created_by'ı NULL'a çeviriyorsa VE o kullanıcı artık yoksa (users silinince ON DELETE SET NULL referans eylemi; başka hiçbir sütun değişemez).
+-- Aynı kurallar fee_runs (posted_by) için geçerlidir; finance_period_closures'ta UPDATE yasaktır (closed_by -> NULL istisnası aynı), DELETE serbesttir (yeniden açma).
+-- ledger_entries / fee_runs tablolarini toplu bosaltma (BEFORE tetikleyicisi) engellenir. Yeni defter satırı eklenirken ters kayıt asılı aynalamalıdır (aynı site, aynı daire, karşı tutar, asıl ters kayıt değil).
 CREATE OR REPLACE FUNCTION trg_ledger_entries_append_only() RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -137,10 +164,55 @@ BEGIN
     END IF;
   ELSIF TG_OP = 'UPDATE' THEN
     IF OLD.created_by IS NOT NULL AND NEW.created_by IS NULL
+       AND NOT EXISTS (SELECT 1 FROM users WHERE user_code = OLD.created_by)
        AND (to_jsonb(NEW) - 'created_by') = (to_jsonb(OLD) - 'created_by') THEN
       RETURN NEW;
     END IF;
   END IF;
+  RAISE EXCEPTION 'finance ledger is append-only';
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION trg_ledger_entries_reversal_check() RETURNS trigger AS $$
+DECLARE
+  original ledger_entries%ROWTYPE;
+BEGIN
+  -- Yalnız hedefli ters kayıtta çalışır (WHEN). Hedefsiz ters kayıt / hedefli borç-tahsilat CHECK kısıtıyla (chk_ledger_entries_reversal) reddedilir.
+  SELECT * INTO original FROM ledger_entries WHERE id = NEW.reverses_entry_id;
+  IF NOT FOUND OR original.kind = 'reversal' OR original.site_code <> NEW.site_code
+     OR original.apartment_id <> NEW.apartment_id OR NEW.amount_minor <> -original.amount_minor THEN
+    RAISE EXCEPTION 'finance reversal must mirror its original entry';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION trg_fee_runs_append_only() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF NOT EXISTS (SELECT 1 FROM sites WHERE site_code = OLD.site_code) THEN
+      RETURN OLD;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.posted_by IS NOT NULL AND NEW.posted_by IS NULL
+       AND NOT EXISTS (SELECT 1 FROM users WHERE user_code = OLD.posted_by)
+       AND (to_jsonb(NEW) - 'posted_by') = (to_jsonb(OLD) - 'posted_by') THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+  RAISE EXCEPTION 'finance runs are append-only';
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION trg_finance_period_closures_no_update() RETURNS trigger AS $$
+BEGIN
+  IF OLD.closed_by IS NOT NULL AND NEW.closed_by IS NULL
+     AND NOT EXISTS (SELECT 1 FROM users WHERE user_code = OLD.closed_by)
+     AND (to_jsonb(NEW) - 'closed_by') = (to_jsonb(OLD) - 'closed_by') THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'finance period closures cannot be updated';
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION trg_finance_block_truncate() RETURNS trigger AS $$
+BEGIN
   RAISE EXCEPTION 'finance ledger is append-only';
 END;
 $$ LANGUAGE plpgsql;
@@ -153,15 +225,40 @@ BEGIN
     CREATE TRIGGER trg_ledger_entries_append_only BEFORE UPDATE OR DELETE ON ledger_entries
       FOR EACH ROW EXECUTE PROCEDURE trg_ledger_entries_append_only();
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_ledger_entries_reversal_check' AND tgrelid = 'ledger_entries'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_ledger_entries_reversal_check BEFORE INSERT ON ledger_entries
+      FOR EACH ROW WHEN (NEW.kind = 'reversal' AND NEW.reverses_entry_id IS NOT NULL)
+      EXECUTE PROCEDURE trg_ledger_entries_reversal_check();
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_ledger_entries_no_truncate' AND tgrelid = 'ledger_entries'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_ledger_entries_no_truncate BEFORE TRUNCATE ON ledger_entries
+      FOR EACH STATEMENT EXECUTE PROCEDURE trg_finance_block_truncate();
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_fee_runs_append_only' AND tgrelid = 'fee_runs'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_fee_runs_append_only BEFORE UPDATE OR DELETE ON fee_runs
+      FOR EACH ROW EXECUTE PROCEDURE trg_fee_runs_append_only();
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_fee_runs_no_truncate' AND tgrelid = 'fee_runs'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_fee_runs_no_truncate BEFORE TRUNCATE ON fee_runs
+      FOR EACH STATEMENT EXECUTE PROCEDURE trg_finance_block_truncate();
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'trg_finance_period_closures_no_update' AND tgrelid = 'finance_period_closures'::regclass AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER trg_finance_period_closures_no_update BEFORE UPDATE ON finance_period_closures
+      FOR EACH ROW EXECUTE PROCEDURE trg_finance_period_closures_no_update();
+  END IF;
 END $$;
-
--- 5. Dönem kapanışları. Dönemler SIRAYLA kapanır (siteye ilk kapatmada serbest); yalnız EN SON kapatılan ay yeniden açılır (yalnız süper kullanıcı).
-CREATE TABLE IF NOT EXISTS finance_period_closures (
-  site_code BIGINT NOT NULL REFERENCES sites(site_code) ON DELETE CASCADE,
-  period DATE NOT NULL,
-  closed_by INTEGER REFERENCES users(user_code) ON DELETE SET NULL,
-  closed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (site_code, period),
-  CONSTRAINT chk_finance_period_closures_period CHECK (EXTRACT(DAY FROM period) = 1)
-);
-CREATE INDEX IF NOT EXISTS idx_finance_period_closures_closed_by ON finance_period_closures (closed_by) WHERE closed_by IS NOT NULL;

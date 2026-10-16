@@ -3,6 +3,7 @@
 // Sözleşme: docs/PLATFORM_FINANS.md. Hata gövdesi { error, code } (PlatformError). INVALID_BODY mesajları Türkçe etiketle yazılır.
 // PARA tamsayı kuruştur (finance_money.js): bu dosyada da kayan nokta ile para hesabı YAPILMAZ.
 
+import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
 import { categoryKey } from './finance_distribution.js';
 import { MAX_AMOUNT_MINOR, MAX_RUN_TOTAL_MINOR, minorToNumber, minorToNumberOrNull, parseMinor } from './finance_money.js';
@@ -38,10 +39,15 @@ export const LAST_YEAR = 2100;
 /** Borçlandırma dönemi en çok bu kadar ay ileride olabilir (yanlışlıkla çok uzak bir ay yazılmasın). */
 export const MAX_FUTURE_PERIOD_MONTHS = 12;
 
+/** Tahsilat / borç tarihi ve dönem, bugünden en fazla bu kadar yıl geriye gidebilir (2002 gibi yazım hatalarını yakalar). */
+export const ENTRY_LOOKBACK_YEARS = 5;
+
 export const DEFAULT_LIST_LIMIT = 50;
 export const MAX_LIST_LIMIT = 200;
 export const MAX_OFFSET = 1_000_000;
 export const RECENT_ENTRIES_LIMIT = 30;
+export const DEFINITIONS_MAX_LIMIT = 500;
+export const CLOSABLE_LIST_MAX = 12;
 
 // --- Hatalar ---------------------------------------------------------------------------------------------
 
@@ -64,6 +70,13 @@ export const previewIncomplete = (extra) =>
     'PREVIEW_INCOMPLETE',
     'Bazı dairelerin verisi eksik. Eksikleri tamamlayın ya da bu daireleri hariç tutarak devam edin.',
     extra,
+  );
+export const duplicateCharge = (existingRunId, postedAt) =>
+  new PlatformError(
+    409,
+    'DUPLICATE_CHARGE',
+    'Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Daire hesaplarını kontrol edin.',
+    { existing_run_id: existingRunId, posted_at: postedAt },
   );
 export const periodAlreadyPosted = () =>
   new PlatformError(409, 'PERIOD_ALREADY_POSTED', 'Bu tanım için bu dönem zaten borçlandırılmış.');
@@ -209,18 +222,63 @@ export const today = (now = new Date()) => todayIso(now);
 /** Bugünün İstanbul ayı 'YYYY-MM-01'. */
 export const currentPeriod = (now = new Date()) => periodOfDate(todayIso(now));
 
+/** Kapalı dönemlerin en büyüğü ('YYYY-MM-01') ya da hiç yoksa null. Bir ay, ay <= bu değer ise KAPALIDIR. */
+export function latestClosedPeriod(closedPeriods) {
+  let latest = null;
+  for (const period of closedPeriods) {
+    if (latest === null || period > latest) {
+      latest = period;
+    }
+  }
+  return latest;
+}
+
 /**
- * Açık dönem: bugünün ayı kapalı değilse bugünün ayı; kapalıysa bugünden sonraki ilk açık ay (ters kayıtlar ve özet bu aya yazılır).
+ * Açık dönem = closed_through sonrası ilk ay, ancak bu aydan küçükse bu ay (ters kayıtlar ve özet bu aya yazılır).
  * @param {string} currentIso 'YYYY-MM-01'
  * @param {Set<string>|string[]} closedPeriods kapalı dönemler 'YYYY-MM-01'
  */
 export function computeOpenPeriod(currentIso, closedPeriods) {
-  const closed = closedPeriods instanceof Set ? closedPeriods : new Set(closedPeriods);
-  let period = currentIso;
-  for (let guard = 0; guard < 2400 && closed.has(period); guard += 1) {
-    period = addMonths(period, 1);
+  const latest = latestClosedPeriod(closedPeriods);
+  if (latest === null) {
+    return currentIso;
   }
-  return period;
+  const next = addMonths(latest, 1);
+  return next > currentIso ? next : currentIso;
+}
+
+/**
+ * Şimdi kapatılabilecek aylar (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay (ilk kapatmada herhangi bir ay serbesttir);
+ * varsa yalnız closed_through + 1 ay (bu ay ya da öncesiyse), aksi halde boş.
+ */
+export function closableMonths(currentIso, closedPeriods) {
+  const latest = latestClosedPeriod(closedPeriods);
+  if (latest === null) {
+    return Array.from({ length: CLOSABLE_LIST_MAX }, (_, i) => addMonths(currentIso, -i));
+  }
+  const next = addMonths(latest, 1);
+  return next <= currentIso ? [next] : [];
+}
+
+/** Bugünün İstanbul tarihinden ENTRY_LOOKBACK_YEARS yıl öncesi 'YYYY-MM-DD' (29 Şubat -> 28 Şubat). */
+export function minEntryDate(now = new Date()) {
+  const [year, month, day] = todayIso(now).split('-');
+  const lowerYear = String(Number(year) - ENTRY_LOOKBACK_YEARS).padStart(4, '0');
+  return `${lowerYear}-${month}-${month === '02' && day === '29' ? '28' : day}`;
+}
+
+/** Tarih (ya da ayın ilk günü) 5 yıllık geri sınırın ötesindeyse 400 INVALID_BODY. */
+export function assertNotTooOld(iso, label, now = new Date()) {
+  if (iso < minEntryDate(now)) {
+    throw invalidBody(`${label} bugünden en fazla ${ENTRY_LOOKBACK_YEARS} yıl öncesi olabilir.`);
+  }
+}
+
+/** Dönem ('YYYY-MM-01') için aynı geri sınır: ayın ilk günü, sınırın bulunduğu ayın ilk gününden önceyse reddedilir. */
+export function assertPeriodNotTooOld(periodIso, label, now = new Date()) {
+  if (periodIso < periodOfDate(minEntryDate(now))) {
+    throw invalidBody(`${label} bugünden en fazla ${ENTRY_LOOKBACK_YEARS} yıl öncesi olabilir.`);
+  }
 }
 
 // --- Gövde alanları ---------------------------------------------------------------------------------------
@@ -532,26 +590,48 @@ export function assertDefinitionShape(shape) {
 }
 
 /** Önizleme gövdesi: aylık tanımda `period` zorunlu, tek seferlikte `due_date` isteğe bağlı. */
-export function parsePreviewInput(body, definitionKind) {
+export function parsePreviewInput(body, definitionKind, now = new Date()) {
   const input = objectOf(body);
   if (definitionKind === 'recurring') {
     if (!present(input.period)) throw invalidBody('Dönem zorunludur.');
-    return { period: parsePeriod(input.period), dueDate: null };
+    const period = parsePeriod(input.period);
+    assertPeriodNotTooOld(period, 'Dönem', now);
+    return { period, dueDate: null };
   }
-  return { period: null, dueDate: present(input.due_date) ? parseIsoDate(input.due_date, 'Vade tarihi') : null };
+  return { period: null, dueDate: parseOptionalDueDate(input.due_date, now) };
+}
+
+function parseOptionalDueDate(value, now) {
+  if (!present(value)) {
+    return null;
+  }
+  const dueDate = parseIsoDate(value, 'Vade tarihi');
+  assertNotTooOld(dueDate, 'Vade tarihi', now);
+  return dueDate;
 }
 
 /** Borçlandırma gövdesi (post): önizlemenin toplamı ve daire sayısı BEKLENEN değerlerdir (PREVIEW_STALE denetimi). */
-export function parsePostInput(body, definitionKind) {
+export function parsePostInput(body, definitionKind, now = new Date()) {
   const input = objectOf(body);
-  const preview = parsePreviewInput(input, definitionKind);
+  const preview = parsePreviewInput(input, definitionKind, now);
   return {
     ...preview,
     expectedTotal: requireMinor(input.expected_total_minor, 'Beklenen toplam', { min: 0, max: MAX_RUN_TOTAL_MINOR }),
     expectedCount: parseExpectedCount(input.expected_apartment_count),
+    expectedHash: parseExpectedHash(input.expected_hash),
     skipMissing: parseBooleanFlag(input.skip_missing, 'Eksik verili daireleri hariç tutma seçeneği'),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key),
   };
+}
+
+const HASH_PATTERN = /^[0-9a-f]{64}$/;
+
+/** Önizleme özeti (preview_hash): 64 karakterlik küçük harf sha256 hex. */
+function parseExpectedHash(value) {
+  if (typeof value !== 'string' || !HASH_PATTERN.test(value)) {
+    throw invalidBody('Önizleme özeti (expected_hash) zorunludur; önizlemeyi yenileyin.');
+  }
+  return value;
 }
 
 function parseExpectedCount(value) {
@@ -561,22 +641,28 @@ function parseExpectedCount(value) {
   return value;
 }
 
-/** Ek borç gövdesi (önizleme ve onay). `requireExpected`: onayda beklenen toplam/daire sayısı zorunlu. */
-export function parseChargeInput(body, { requireExpected }) {
+/**
+ * Ek borç gövdesi (önizleme ve onay). `requireExpected` (onay): beklenen toplam / daire sayısı / önizleme özeti VE işlem anahtarı (idempotency_key) zorunlu.
+ * `allow_duplicate: true`: son 24 saatteki aynı ek borç koruması (409 DUPLICATE_CHARGE) bilerek aşılır.
+ */
+export function parseChargeInput(body, { requireExpected, now = new Date() }) {
   const input = objectOf(body);
   const core = parseDefinitionCore(input);
   const result = {
     ...core,
     target: parseTarget(input.target),
-    dueDate: present(input.due_date) ? parseIsoDate(input.due_date, 'Vade tarihi') : null,
+    dueDate: parseOptionalDueDate(input.due_date, now),
     skipMissing: parseBooleanFlag(input.skip_missing, 'Eksik verili daireleri hariç tutma seçeneği'),
-    idempotencyKey: parseIdempotencyKey(input.idempotency_key),
+    allowDuplicate: parseBooleanFlag(input.allow_duplicate, 'Yinelenen ek borç seçeneği'),
+    idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: requireExpected === true }),
     expectedTotal: null,
     expectedCount: null,
+    expectedHash: null,
   };
-  if (requireExpected || present(input.expected_total_minor) || present(input.expected_apartment_count)) {
+  if (requireExpected || present(input.expected_total_minor) || present(input.expected_apartment_count) || present(input.expected_hash)) {
     result.expectedTotal = requireMinor(input.expected_total_minor, 'Beklenen toplam', { min: 0, max: MAX_RUN_TOTAL_MINOR });
     result.expectedCount = parseExpectedCount(input.expected_apartment_count);
+    result.expectedHash = parseExpectedHash(input.expected_hash);
   }
   return result;
 }
@@ -599,6 +685,7 @@ function parsePaymentFields(input, now) {
   if (entryDate > todayIso(now)) {
     throw invalidBody('Gelecek tarihli tahsilat girilemez.');
   }
+  assertNotTooOld(entryDate, 'Tahsilat tarihi', now);
   return {
     amountMinor: requireMinor(input.amount_minor, 'Tahsilat tutarı'),
     entryDate,
@@ -713,7 +800,14 @@ export function parseDefinitionsQuery(query = {}) {
     }
     active = text === 'true';
   }
-  return { kind, active };
+  return { kind, active, ...parseDefinitionsPage(query) };
+}
+
+function parseDefinitionsPage(query) {
+  return {
+    limit: parseIntegerQuery(query.limit, { min: 1, max: DEFINITIONS_MAX_LIMIT, fallback: DEFINITIONS_MAX_LIMIT }),
+    offset: parseIntegerQuery(query.offset, { min: 0, max: MAX_OFFSET, fallback: 0 }),
+  };
 }
 
 // --- Yanıt eşleyicileri ------------------------------------------------------------------------------------
@@ -812,3 +906,69 @@ export function redactFinanceForBoard(value) {
 }
 
 export { apartmentLabel };
+
+// --- Parmak izleri (idempotans / yinelenen ek borç) ------------------------------------------------------------
+
+/** Anahtarları sıralı, kararlı JSON (parmak izi için). */
+export function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+const targetOf = (target) => ({ type: target.type, block_ids: [...target.blockIds], apartment_ids: [...target.apartmentIds] });
+
+/** Aylık borçlandırma isteğinin parmak izi (tanım + dönem / vade + hariç tutma). */
+export function postRequestFingerprint({ definitionId, period, dueDate, skipMissing }) {
+  return sha256(canonicalJson({ v: 1, kind: 'post', definition_id: definitionId, period, due_date: dueDate, skip_missing: skipMissing === true }));
+}
+
+/** Ek borç isteğinin parmak izi: ad, tutar, dağıtım, alan esası, kategori tutarları, hedef, istenen vade ve hariç tutma. */
+export function chargeRequestFingerprint(input) {
+  return sha256(
+    canonicalJson({
+      v: 1,
+      kind: 'charge',
+      name: input.name,
+      amount_minor: input.amountMinor,
+      distribution: input.distribution,
+      area_basis: input.areaBasis,
+      category_amounts: input.categoryAmounts,
+      target: targetOf(input.target),
+      due_date: input.dueDate,
+      skip_missing: input.skipMissing === true,
+    }),
+  );
+}
+
+/**
+ * Ek borcun DOĞAL özeti (son 24 saatte aynı sitede tekrarını yakalamak için): normalize ad + tutar + dağıtım + alan esası + kategori tutarları + hedef +
+ * ETKİN vade. İstemci işlem anahtarını yeniden üretse bile aynı ek borç aynı özeti verir. `skip_missing` ve anahtar özete GİRMEZ.
+ */
+export function chargeNaturalKey(input, effectiveDueDate) {
+  const categories = input.categoryAmounts
+    ? Object.fromEntries(Object.entries(input.categoryAmounts).map(([key, value]) => [categoryKey(key), value]))
+    : null;
+  return sha256(
+    canonicalJson({
+      v: 1,
+      kind: 'natural',
+      name: categoryKey(input.name),
+      amount_minor: input.amountMinor,
+      distribution: input.distribution,
+      area_basis: input.areaBasis,
+      category_amounts: categories,
+      target: targetOf(input.target),
+      due_date: effectiveDueDate,
+    }),
+  );
+}

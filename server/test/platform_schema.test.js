@@ -114,7 +114,10 @@ describe('platform sema: migration 029', () => {
     const noComments = DB_SOURCE.replace(/\/\/.*$/gm, '').replace(/--.*$/gm, '');
     assert.equal(/\bDELETE\s+FROM\b/i.test(noComments), false);
     assert.equal(/DROP\s+TABLE/i.test(noComments), false);
-    assert.equal(/TRUNCATE/i.test(noComments), false);
+    // 034 (finans defteri): BEFORE TRUNCATE tetikleyicileri TRUNCATE'i ENGELLER (koruma). Yalniz bu iki kalip ve tetikleyici adlari muaf; gercek TRUNCATE hala hata.
+    const withoutLedgerGuards = noComments.replace(/BEFORE\s+TRUNCATE\s+ON\s+(ledger_entries|fee_runs)\b/gi, '').replace(/\btrg_[a-z_]*truncate\b/gi, '');
+    assert.equal(/TRUNCATE/i.test(withoutLedgerGuards), false);
+    assert.equal((noComments.match(/BEFORE\s+TRUNCATE\s+ON\b/gi) || []).length, 2);
     // users_role_check tek DROP CONSTRAINT'i korunur
     assert.equal((noComments.match(/DROP\s+CONSTRAINT[^;]*users_role_check/gi) || []).length, 1);
   });

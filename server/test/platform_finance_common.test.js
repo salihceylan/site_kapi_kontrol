@@ -7,7 +7,15 @@ import {
   addMonths,
   apartmentHasFinance,
   assertDefinitionShape,
+  canonicalJson,
+  chargeNaturalKey,
+  chargeRequestFingerprint,
+  closableMonths,
   computeOpenPeriod,
+  duplicateCharge,
+  latestClosedPeriod,
+  minEntryDate,
+  postRequestFingerprint,
   currentPeriod,
   definitionInactive,
   definitionLocked,
@@ -82,6 +90,7 @@ describe('finans: hata fabrikaları (sözleşme kodları ve durumları)', () => 
       [apartmentHasFinance(), 409, 'APARTMENT_HAS_FINANCE'],
       [nothingToPost(), 409, 'NOTHING_TO_POST'],
       [idempotencyConflict(), 409, 'IDEMPOTENCY_CONFLICT'],
+      [duplicateCharge(7, '2026-10-16T09:00:00.000Z'), 409, 'DUPLICATE_CHARGE'],
     ];
     for (const [error, status, code] of table) {
       assert.equal(error.statusCode, status, code);
@@ -92,6 +101,8 @@ describe('finans: hata fabrikaları (sözleşme kodları ve durumları)', () => 
     assert.equal(apartmentHasFinance().message, 'Mali kaydı olan daire silinemez.');
     assert.deepEqual(moduleDisabled().extra, { module: 'finance' });
     assert.deepEqual(previewStale({ total_minor: 5 }).extra, { total_minor: 5 });
+    assert.deepEqual(duplicateCharge(7, '2026-10-16T09:00:00.000Z').extra, { existing_run_id: 7, posted_at: '2026-10-16T09:00:00.000Z' });
+    assert.equal(duplicateCharge(7, null).message, 'Aynı ek borç kısa süre önce kaydedilmiş görünüyor. Daire hesaplarını kontrol edin.');
   });
 
   it('kilit anahtarı finance_post:<site> (kilit sırası belgesi)', () => {
@@ -142,11 +153,32 @@ describe('finans: tarih ve dönem aritmetiği', () => {
     assert.equal(today(new Date('2026-12-31T21:30:00.000Z')), '2027-01-01');
   });
 
-  it('computeOpenPeriod: bu ay açıksa bu ay; kapalıysa sonraki ilk açık ay', () => {
+  it('computeOpenPeriod = closed_through sonrası ilk ay, ancak bu aydan küçükse bu ay (boşluklu kapanışlarda da MAX esas)', () => {
     assert.equal(computeOpenPeriod('2026-10-01', []), '2026-10-01');
     assert.equal(computeOpenPeriod('2026-10-01', ['2026-08-01', '2026-09-01']), '2026-10-01');
     assert.equal(computeOpenPeriod('2026-10-01', ['2026-09-01', '2026-10-01']), '2026-11-01');
     assert.equal(computeOpenPeriod('2026-12-01', new Set(['2026-12-01', '2027-01-01'])), '2027-02-01');
+    assert.equal(computeOpenPeriod('2026-10-01', ['2026-03-01', '2026-10-01']), '2026-11-01', 'arada boşluk olsa da MAX esas');
+    assert.equal(computeOpenPeriod('2026-10-01', ['2027-02-01']), '2027-03-01');
+    assert.equal(latestClosedPeriod([]), null);
+    assert.equal(latestClosedPeriod(new Set(['2026-03-01', '2026-09-01', '2026-05-01'])), '2026-09-01');
+  });
+
+  it('closableMonths: kapalı ay yoksa bu ay ve önceki 11 ay (yeni -> eski); varsa yalnız closed_through + 1 (bu ay ya da öncesiyse), aksi boş', () => {
+    const none = closableMonths('2026-10-01', []);
+    assert.equal(none.length, 12);
+    assert.equal(none[0], '2026-10-01');
+    assert.equal(none[11], '2025-11-01');
+    assert.deepEqual(closableMonths('2026-10-01', ['2026-03-01']), ['2026-04-01']);
+    assert.deepEqual(closableMonths('2026-10-01', ['2026-08-01', '2026-09-01']), ['2026-10-01']);
+    assert.deepEqual(closableMonths('2026-10-01', ['2026-10-01']), [], 'bu ay kapalıysa sonraki ay gelecek: kapatılamaz');
+    assert.deepEqual(closableMonths('2026-01-01', ['2025-12-01']), ['2026-01-01']);
+  });
+
+  it('minEntryDate: bugünden 5 yıl önce (İstanbul takvimi, 29 Şubat -> 28 Şubat); alt sınırın ötesi 400', () => {
+    assert.equal(minEntryDate(NOW), '2021-10-16');
+    assert.equal(minEntryDate(new Date('2028-02-29T09:00:00.000Z')), '2023-02-28');
+    assert.equal(minEntryDate(new Date('2026-10-31T22:00:00.000Z')), '2021-11-01');
   });
 });
 
@@ -268,43 +300,84 @@ describe('finans: tanım gövdeleri', () => {
 });
 
 describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
-  it('önizleme: aylıkta period zorunlu, tek seferlikte due_date isteğe bağlı', () => {
-    assert.deepEqual(parsePreviewInput({ period: '2026-10' }, 'recurring'), { period: '2026-10-01', dueDate: null });
-    throwsCode(() => parsePreviewInput({}, 'recurring'), 'INVALID_BODY');
-    throwsCode(() => parsePreviewInput({ period: '2026-10-15' }, 'recurring'), 'INVALID_BODY');
-    assert.deepEqual(parsePreviewInput({ due_date: '2026-11-05' }, 'one_time'), { period: null, dueDate: '2026-11-05' });
-    assert.deepEqual(parsePreviewInput({}, 'one_time'), { period: null, dueDate: null });
-    throwsCode(() => parsePreviewInput({ due_date: 'yarın' }, 'one_time'), 'INVALID_BODY');
+  it('önizleme: aylıkta period zorunlu, tek seferlikte due_date isteğe bağlı; 5 yıldan eski dönem / vade (yazım hatası: 2002) 400', () => {
+    assert.deepEqual(parsePreviewInput({ period: '2026-10' }, 'recurring', NOW), { period: '2026-10-01', dueDate: null });
+    throwsCode(() => parsePreviewInput({}, 'recurring', NOW), 'INVALID_BODY');
+    throwsCode(() => parsePreviewInput({ period: '2026-10-15' }, 'recurring', NOW), 'INVALID_BODY');
+    throwsCode(() => parsePreviewInput({ period: '2002-10' }, 'recurring', NOW), 'INVALID_BODY');
+    assert.deepEqual(parsePreviewInput({ period: '2021-10' }, 'recurring', NOW), { period: '2021-10-01', dueDate: null });
+    throwsCode(() => parsePreviewInput({ period: '2021-09' }, 'recurring', NOW), 'INVALID_BODY');
+    assert.deepEqual(parsePreviewInput({ due_date: '2026-11-05' }, 'one_time', NOW), { period: null, dueDate: '2026-11-05' });
+    assert.deepEqual(parsePreviewInput({}, 'one_time', NOW), { period: null, dueDate: null });
+    throwsCode(() => parsePreviewInput({ due_date: 'yarın' }, 'one_time', NOW), 'INVALID_BODY');
+    throwsCode(() => parsePreviewInput({ due_date: '2002-11-05' }, 'one_time', NOW), 'INVALID_BODY');
   });
 
-  it('post: beklenen toplam / daire sayısı zorunlu tamsayı; skip_missing boolean; anahtar isteğe bağlı', () => {
-    const ok = parsePostInput({ period: '2026-10', expected_total_minor: 3000000, expected_apartment_count: 20, skip_missing: true, idempotency_key: 'k-1' }, 'recurring');
-    assert.deepEqual(ok, { period: '2026-10-01', dueDate: null, expectedTotal: 3000000, expectedCount: 20, skipMissing: true, idempotencyKey: 'k-1' });
-    assert.equal(parsePostInput({ period: '2026-10', expected_total_minor: 0, expected_apartment_count: 0 }, 'recurring').skipMissing, false);
+  it('post: beklenen toplam / daire sayısı / önizleme özeti (expected_hash) ZORUNLU; skip_missing boolean; anahtar isteğe bağlı', () => {
+    const hash = 'a'.repeat(64);
+    const ok = parsePostInput({ period: '2026-10', expected_total_minor: 3000000, expected_apartment_count: 20, expected_hash: hash, skip_missing: true, idempotency_key: 'k-1' }, 'recurring', NOW);
+    assert.deepEqual(ok, { period: '2026-10-01', dueDate: null, expectedTotal: 3000000, expectedCount: 20, expectedHash: hash, skipMissing: true, idempotencyKey: 'k-1' });
+    assert.equal(parsePostInput({ period: '2026-10', expected_total_minor: 0, expected_apartment_count: 0, expected_hash: hash }, 'recurring', NOW).skipMissing, false);
+    const base = { period: '2026-10', expected_total_minor: 100, expected_apartment_count: 1, expected_hash: hash };
     for (const bad of [
-      { period: '2026-10', expected_apartment_count: 20 }, { period: '2026-10', expected_total_minor: 1.5, expected_apartment_count: 20 }, { period: '2026-10', expected_total_minor: '100', expected_apartment_count: 20 },
-      { period: '2026-10', expected_total_minor: 100 }, { period: '2026-10', expected_total_minor: 100, expected_apartment_count: 2.5 }, { period: '2026-10', expected_total_minor: 100, expected_apartment_count: -1 },
-      { period: '2026-10', expected_total_minor: 100, expected_apartment_count: 1, skip_missing: 'evet' }, { period: '2026-10', expected_total_minor: 100, expected_apartment_count: 1, idempotency_key: 'a b' },
-      { period: '2026-10', expected_total_minor: 1e14 + 1, expected_apartment_count: 1 }, { expected_total_minor: 1, expected_apartment_count: 1 },
+      { ...base, expected_hash: undefined }, { ...base, expected_hash: 'abc' }, { ...base, expected_hash: 'A'.repeat(64) }, { ...base, expected_hash: 5 }, { ...base, expected_hash: 'g'.repeat(64) },
+      { ...base, expected_total_minor: undefined }, { ...base, expected_total_minor: 1.5 }, { ...base, expected_total_minor: '100' },
+      { ...base, expected_apartment_count: undefined }, { ...base, expected_apartment_count: 2.5 }, { ...base, expected_apartment_count: -1 },
+      { ...base, skip_missing: 'evet' }, { ...base, idempotency_key: 'a b' }, { ...base, expected_total_minor: 1e14 + 1 }, { ...base, period: undefined }, { ...base, period: '2002-10' },
     ]) {
-      throwsCode(() => parsePostInput(bad, 'recurring'), 'INVALID_BODY');
+      throwsCode(() => parsePostInput(bad, 'recurring', NOW), 'INVALID_BODY');
     }
   });
 
-  it('ek borç: önizlemede beklenen değerler isteğe bağlı, onayda zorunlu; kategori dağıtımında tutar yok', () => {
+  it('ek borç: önizlemede beklenen değerler / anahtar isteğe bağlı; onayda beklenen toplam, sayı, expected_hash VE idempotency_key ZORUNLU; allow_duplicate boolean', () => {
+    const hash = 'a'.repeat(64);
     const body = { name: 'Asansör', distribution: 'equal', amount_minor: 1000001, target: { type: 'site' }, due_date: '2026-11-15' };
-    const preview = parseChargeInput(body, { requireExpected: false });
+    const preview = parseChargeInput(body, { requireExpected: false, now: NOW });
     assert.equal(preview.expectedTotal, null);
+    assert.equal(preview.expectedHash, null);
+    assert.equal(preview.idempotencyKey, null);
+    assert.equal(preview.allowDuplicate, false);
     assert.equal(preview.dueDate, '2026-11-15');
-    throwsCode(() => parseChargeInput(body, { requireExpected: true }), 'INVALID_BODY');
-    const confirmed = parseChargeInput({ ...body, expected_total_minor: 1000001, expected_apartment_count: 20 }, { requireExpected: true });
+    const confirmBody = { ...body, expected_total_minor: 1000001, expected_apartment_count: 20, expected_hash: hash, idempotency_key: 'ek-1' };
+    throwsCode(() => parseChargeInput(body, { requireExpected: true, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...confirmBody, idempotency_key: undefined }, { requireExpected: true, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...confirmBody, expected_hash: undefined }, { requireExpected: true, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...confirmBody, expected_hash: 'xyz' }, { requireExpected: true, now: NOW }), 'INVALID_BODY');
+    const confirmed = parseChargeInput({ ...confirmBody, allow_duplicate: true, skip_missing: true }, { requireExpected: true, now: NOW });
     assert.equal(confirmed.expectedTotal, 1000001);
     assert.equal(confirmed.expectedCount, 20);
-    const category = parseChargeInput({ name: 'K', distribution: 'category', category_amounts: { a: 5 }, target: { type: 'site' } }, { requireExpected: false });
+    assert.equal(confirmed.expectedHash, hash);
+    assert.equal(confirmed.idempotencyKey, 'ek-1');
+    assert.equal(confirmed.allowDuplicate, true);
+    assert.equal(confirmed.skipMissing, true);
+    throwsCode(() => parseChargeInput({ ...confirmBody, allow_duplicate: 'evet' }, { requireExpected: true, now: NOW }), 'INVALID_BODY');
+    const category = parseChargeInput({ name: 'K', distribution: 'category', category_amounts: { a: 5 }, target: { type: 'site' } }, { requireExpected: false, now: NOW });
     assert.deepEqual(category.categoryAmounts, { a: 5 });
-    throwsCode(() => parseChargeInput({ ...body, amount_minor: 100.5 }, { requireExpected: false }), 'INVALID_BODY');
-    throwsCode(() => parseChargeInput({ ...body, name: undefined }, { requireExpected: false }), 'INVALID_BODY');
-    throwsCode(() => parseChargeInput({ ...body, due_date: '2026-02-30' }, { requireExpected: false }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...body, amount_minor: 100.5 }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...body, name: undefined }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...body, due_date: '2026-02-30' }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
+    throwsCode(() => parseChargeInput({ ...body, due_date: '2002-11-15' }, { requireExpected: false, now: NOW }), 'INVALID_BODY');
+  });
+
+  it('parmak izleri: kararlı (anahtar sırasından bağımsız); gövde değişince değişir; doğal özet vade ve kategori harf farkından etkilenmez/etkilenir', () => {
+    assert.equal(canonicalJson({ b: 1, a: [2, { d: 4, c: 3 }], e: undefined }), '{"a":[2,{"c":3,"d":4}],"b":1,"e":null}');
+    const base = { name: 'Asansör', amountMinor: 1000, distribution: 'equal', areaBasis: null, categoryAmounts: null, target: { type: 'blocks', blockIds: [2, 1], apartmentIds: [] }, dueDate: null, skipMissing: false };
+    const a = chargeRequestFingerprint(base);
+    assert.match(a, /^[0-9a-f]{64}$/);
+    assert.equal(chargeRequestFingerprint({ ...base }), a);
+    for (const change of [{ name: 'Asansör 2' }, { amountMinor: 1001 }, { distribution: 'fixed' }, { target: { type: 'blocks', blockIds: [3], apartmentIds: [] } }, { dueDate: '2026-11-01' }, { skipMissing: true }]) {
+      assert.notEqual(chargeRequestFingerprint({ ...base, ...change }), a, JSON.stringify(change));
+    }
+    const natural = chargeNaturalKey(base, '2026-11-01');
+    assert.match(natural, /^[0-9a-f]{64}$/);
+    assert.equal(chargeNaturalKey({ ...base, skipMissing: true }, '2026-11-01'), natural, 'skip_missing doğal özete girmez');
+    assert.equal(chargeNaturalKey({ ...base, name: '  ASANSÖR ' }, '2026-11-01'), natural, 'ad Türkçe harf / büyük-küçük harf duyarsız ve boşluk tekil');
+    assert.notEqual(chargeNaturalKey(base, '2026-11-02'), natural, 'vade değişince farklı');
+    assert.notEqual(chargeNaturalKey({ ...base, amountMinor: 1001 }, '2026-11-01'), natural);
+    const post = postRequestFingerprint({ definitionId: 5, period: '2026-10-01', dueDate: null, skipMissing: false });
+    assert.notEqual(postRequestFingerprint({ definitionId: 6, period: '2026-10-01', dueDate: null, skipMissing: false }), post);
+    assert.notEqual(postRequestFingerprint({ definitionId: 5, period: '2026-11-01', dueDate: null, skipMissing: false }), post);
+    assert.notEqual(postRequestFingerprint({ definitionId: 5, period: '2026-10-01', dueDate: null, skipMissing: true }), post);
   });
 
   it('tahsilat: kuruş tamsayı, yöntem, GELECEK TARİH 400, anahtar zorunlu; açıklama temizlenir', () => {
@@ -318,6 +391,10 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
     ]) {
       throwsCode(() => parsePaymentInput({ ...body, ...bad }, NOW), 'INVALID_BODY');
     }
+    // 5 yıldan eski tarih (yazım hatası: 2002) reddedilir; tam sınır günü serbest
+    throwsCode(() => parsePaymentInput({ ...body, entry_date: '2002-10-16' }, NOW), 'INVALID_BODY');
+    throwsCode(() => parsePaymentInput({ ...body, entry_date: '2021-10-15' }, NOW), 'INVALID_BODY');
+    assert.doesNotThrow(() => parsePaymentInput({ ...body, entry_date: '2021-10-16' }, NOW));
     // bugünün tarihi serbest; İstanbul'da yarın (UTC'de hâlâ bugün) kabul edilmez
     assert.doesNotThrow(() => parsePaymentInput({ ...body, entry_date: '2026-10-16' }, NOW));
     throwsCode(() => parsePaymentInput({ ...body, entry_date: '2026-11-01' }, new Date('2026-10-31T20:00:00.000Z')), 'INVALID_BODY');
@@ -358,10 +435,11 @@ describe('finans: sorgu parametreleri', () => {
   });
 
   it('tanım listesi süzgeçleri', () => {
-    assert.deepEqual(parseDefinitionsQuery({}), { kind: null, active: null });
-    assert.deepEqual(parseDefinitionsQuery({ kind: 'one_time', active: 'false' }), { kind: 'one_time', active: false });
-    assert.deepEqual(parseDefinitionsQuery({ active: 'true' }), { kind: null, active: true });
-    for (const bad of [{ kind: 'x' }, { active: 'maybe' }, { active: '1' }]) {
+    assert.deepEqual(parseDefinitionsQuery({}), { kind: null, active: null, limit: 500, offset: 0 });
+    assert.deepEqual(parseDefinitionsQuery({ kind: 'one_time', active: 'false' }), { kind: 'one_time', active: false, limit: 500, offset: 0 });
+    assert.deepEqual(parseDefinitionsQuery({ active: 'true', limit: '20', offset: '40' }), { kind: null, active: true, limit: 20, offset: 40 });
+    assert.equal(parseDefinitionsQuery({ limit: '100000' }).limit, 500);
+    for (const bad of [{ kind: 'x' }, { active: 'maybe' }, { active: '1' }, { limit: '0' }, { limit: 'abc' }, { offset: '-1' }]) {
       throwsCode(() => parseDefinitionsQuery(bad), 'INVALID_QUERY');
     }
   });

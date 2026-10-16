@@ -5,7 +5,9 @@
 //    Defter satırlarına satır kilidi KONMAZ (değişmezler; tekillik kısmi tekil indekslerle ve advisory kilitle sağlanır): kullanıcı silme
 //    (apartments -> users -> ledger SET NULL) ile ters sıra oluşmaz.
 //  - İdempotans: `idempotency_key` tekrarı AYNI kaydı döndürür (200); aynı anahtar FARKLI bir işlem için gelirse 409 IDEMPOTENCY_CONFLICT.
-//  - Kapalı döneme kayıt eklenemez (409 PERIOD_CLOSED). Ters kayıt AÇIK dönemdedir (bugünün açık ayı; bugünün ayı kapalıysa sonraki açık ay).
+//  - Kapalı döneme kayıt eklenemez (409 PERIOD_CLOSED): bir ay, ay <= MAX(kapalı dönem) ise KAPALIDIR (ilk kapatılan aydan önceki aylar dahil). Ters kayıt AÇIK
+//    dönemdedir (bugünün açık ayı; bugünün ayı kapalıysa sonraki açık ay).
+//  - Kilit sırası: ... apartments -> users(işlemi yapan; lockActorRow) -> finans satırları (kullanıcı silmeyle 40P01 olmasın).
 //  - Audit `details` yalnız tutar / sayı / dönem / tür içerir: açıklama, neden metni ve kişi adı ASLA yazılmaz.
 
 import { pool } from '../db.js';
@@ -13,6 +15,7 @@ import { actorFromAuthUser } from './audit_service.js';
 import {
   addMonths,
   apartmentNotFound,
+  closableMonths,
   computeOpenPeriod,
   currentPeriod,
   entryAlreadyReversed,
@@ -20,7 +23,9 @@ import {
   entryNotFound,
   entryNotReversible,
   idempotencyConflict,
+  latestClosedPeriod,
   mapEntryRow,
+  minEntryDate,
   parseCorrectInput,
   parsePaymentInput,
   parsePeriod,
@@ -33,7 +38,7 @@ import {
   today,
 } from './finance_common.js';
 import { minorToNumber } from './finance_money.js';
-import { recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
+import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { parsePositiveId } from './people_common.js';
 
 // ---------------------------------------------------------------------------
@@ -45,10 +50,9 @@ export const ENTRY_SELECT = `
   SELECT
     l.id, l.apartment_id, l.kind, l.amount_minor::text AS amount_minor, to_char(l.period, 'YYYY-MM-DD') AS period,
     to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, to_char(l.due_date, 'YYYY-MM-DD') AS due_date,
-    l.description, l.method, l.payer_party, d.name AS definition_name, l.reverses_entry_id, rv.id AS reversed_by_entry_id,
+    l.description, l.method, l.payer_party, l.definition_name, l.reverses_entry_id, rv.id AS reversed_by_entry_id,
     l.reversal_reason, u.full_name AS created_by_name, l.created_at, l.definition_id, l.run_id, l.idempotency_key
   FROM ledger_entries l
-  LEFT JOIN fee_definitions d ON d.id = l.definition_id
   LEFT JOIN ledger_entries rv ON rv.reverses_entry_id = l.id
   LEFT JOIN users u ON u.user_code = l.created_by
 `;
@@ -101,12 +105,17 @@ async function loadClosures(db, siteCode) {
 
 const toIsoOrNull = (value) => (value === null || value === undefined ? null : new Date(value).toISOString());
 
-/** GET periods gövdesi: { closed_through, items (yeni -> eski), open_period }. */
+/**
+ * GET periods gövdesi: { closed_through (en son kapalı ay), items (kapatma satırları, yeni -> eski), open_period, closable }.
+ * `closable` (yeni -> eski, en çok 12): kapalı ay yoksa bu ay ve önceki 11 ay (ilk kapatmada herhangi bir ay serbest); varsa yalnız closed_through + 1 ay
+ * (bu ay ya da öncesiyse), aksi halde boş. Aradaki aylar ZATEN kapalı sayılır.
+ */
 export function periodsBody(closures, now = new Date()) {
   const periods = closures.map((row) => row.period);
-  const last = periods.length > 0 ? periods[periods.length - 1] : null;
+  const last = latestClosedPeriod(periods);
   return {
     closed_through: last === null ? null : periodLabel(last),
+    closable: closableMonths(currentPeriod(now), periods).map(periodLabel),
     items: [...closures].reverse().map((row) => ({
       period: periodLabel(row.period),
       closed_at: toIsoOrNull(row.closed_at),
@@ -118,11 +127,6 @@ export function periodsBody(closures, now = new Date()) {
 
 export async function listPeriods(siteCode, now = new Date(), db = pool) {
   return periodsBody(await loadClosures(db, siteCode), now);
-}
-
-async function isClosed(db, siteCode, periodIso) {
-  const result = await db.query(`SELECT 1 FROM finance_period_closures WHERE site_code = $1 AND period = $2::DATE LIMIT 1`, [siteCode, periodIso]);
-  return Boolean(result.rows?.[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +142,7 @@ export async function recordPayment({ siteCode, body, actor, now = new Date() })
   const actorInfo = actorFromAuthUser(actor);
   return withFinanceTransaction(siteCode, async (client) => {
     const apartment = await lockApartment(client, siteCode, input.apartmentId);
+    await lockActorRow(client, actorInfo);
     const existing = await loadEntryByKey(client, siteCode, input.idempotencyKey);
     if (existing) {
       const same =
@@ -152,7 +157,7 @@ export async function recordPayment({ siteCode, body, actor, now = new Date() })
       return { replayed: true, entry: mapEntryRow(existing), balance_minor: await loadApartmentBalance(client, siteCode, input.apartmentId) };
     }
     const period = periodOfDate(input.entryDate);
-    if (await isClosed(client, siteCode, period)) {
+    if (await isPeriodClosed(client, siteCode, period)) {
       throw periodClosed();
     }
     const inserted = await client.query(
@@ -217,10 +222,10 @@ async function insertReversal(client, { siteCode, original, openPeriod, todayIso
     const inserted = await client.query(
       `
         INSERT INTO ledger_entries (
-          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, run_id, payer_party,
+          site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party,
           reverses_entry_id, reversal_reason, idempotency_key, created_by
         )
-        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14)
         RETURNING id
       `,
       [
@@ -231,6 +236,7 @@ async function insertReversal(client, { siteCode, original, openPeriod, todayIso
         todayIsoDate,
         original.due_date,
         original.definition_id === null ? null : Number(original.definition_id),
+        original.definition_name ?? null,
         original.run_id === null ? null : Number(original.run_id),
         original.payer_party,
         Number(original.id),
@@ -267,6 +273,7 @@ export async function reverseEntry({ siteCode, rawId, body, actor, now = new Dat
   return withFinanceTransaction(siteCode, async (client) => {
     const apartmentId = await apartmentOfEntry(client, siteCode, id);
     await lockApartment(client, siteCode, apartmentId);
+    await lockActorRow(client, actorInfo);
     const original = await loadEntryRow(client, siteCode, id);
     if (!original) {
       throw entryNotFound();
@@ -323,6 +330,7 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
   return withFinanceTransaction(siteCode, async (client) => {
     const apartmentId = await apartmentOfEntry(client, siteCode, id);
     const apartment = await lockApartment(client, siteCode, apartmentId);
+    await lockActorRow(client, actorInfo);
     const original = await loadEntryRow(client, siteCode, id);
     if (!original) {
       throw entryNotFound();
@@ -357,7 +365,7 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
       throw entryAlreadyReversed();
     }
     const newPeriod = periodOfDate(input.entryDate);
-    if (await isClosed(client, siteCode, newPeriod)) {
+    if (await isPeriodClosed(client, siteCode, newPeriod)) {
       throw periodClosed();
     }
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
@@ -413,8 +421,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
 // ---------------------------------------------------------------------------
 
 /**
- * POST periods/:period/close. Dönemler SIRAYLA kapanır: önceki ay kapalı olmalı (siteye ilk kapatmada serbest); gelecek ay kapatılamaz.
- * Hata: 409 PERIOD_NOT_CLOSABLE. Dönüş: GET periods gövdesi.
+ * POST periods/:period/close. İlk kapatmada herhangi bir ay serbest (<= bu ay, en çok 5 yıl öncesi); sonra YALNIZ closed_through + 1 ay kapatılabilir
+ * (aradaki aylar zaten kapalı sayılır). Gelecek ay kapatılamaz. Hata: 409 PERIOD_NOT_CLOSABLE. Dönüş: GET periods gövdesi.
  */
 export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date() }) {
   const period = parsePeriod(rawPeriod);
@@ -424,13 +432,17 @@ export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date()
       throw periodNotClosable('Gelecek dönem kapatılamaz.');
     }
     const closures = await loadClosures(client, siteCode);
-    const closed = new Set(closures.map((row) => row.period));
-    if (closed.has(period)) {
+    const latest = latestClosedPeriod(closures.map((row) => row.period));
+    if (latest === null) {
+      if (period < periodOfDate(minEntryDate(now))) {
+        throw periodNotClosable('Bu dönem çok eski; en fazla 5 yıl öncesi kapatılabilir.');
+      }
+    } else if (period <= latest) {
       throw periodNotClosable('Bu dönem zaten kapalı.');
-    }
-    if (closures.length > 0 && !closed.has(addMonths(period, -1))) {
+    } else if (period !== addMonths(latest, 1)) {
       throw periodNotClosable('Önce önceki dönemi kapatmalısınız; dönemler sırayla kapanır.');
     }
+    await lockActorRow(client, actorInfo);
     await client.query(`INSERT INTO finance_period_closures (site_code, period, closed_by) VALUES ($1, $2::DATE, $3)`, [
       siteCode,
       period,
@@ -444,7 +456,9 @@ export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date()
 /** POST periods/:period/reopen (yalnız süper kullanıcı; rota denetler). Yalnız EN SON kapatılan ay açılır. */
 export async function reopenPeriod({ siteCode, rawPeriod, actor, now = new Date() }) {
   const period = parsePeriod(rawPeriod);
+  const actorInfo = actorFromAuthUser(actor);
   return withFinanceTransaction(siteCode, async (client) => {
+    await lockActorRow(client, actorInfo);
     const closures = await loadClosures(client, siteCode);
     if (closures.length === 0) {
       throw periodNotReopenable('Kapalı dönem yok.');

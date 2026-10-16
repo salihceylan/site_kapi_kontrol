@@ -3,8 +3,10 @@
 // Sözleşme: docs/PLATFORM_FINANS.md.
 //  - Para = tamsayı kuruş; dağıtım "en büyük kalan" yöntemiyle BigInt (finance_distribution.js): pay toplamı tutara BİREBİR eşit.
 //  - Borçlandırma ATOMİKTİR ve İDEMPOTENTTİR: tek transaction, `finance_post:<site>` advisory kilidi altında; (tanım, dönem) UNIQUE; önizleme yazma anında
-//    AYNI işlemde yeniden hesaplanır ve beklenenle (toplam, daire sayısı) uyuşmazsa 409 PREVIEW_STALE (hiçbir şey yazılmaz); `idempotency_key` tekrarı
-//    aynı çalıştırmayı döndürür. Defter satırları TEK `INSERT ... SELECT ... FROM unnest(...)` ile yazılır (3000 daire < 3 sn).
+//    AYNI işlemde yeniden hesaplanır ve beklenenle (toplam, daire sayısı, `preview_hash`) uyuşmazsa 409 PREVIEW_STALE (hiçbir şey yazılmaz);
+//    `idempotency_key` tekrarı AYNI istekse (parmak izi eşleşirse) aynı çalıştırmayı döndürür, farklı istekse 409 IDEMPOTENCY_CONFLICT. Ek borçta anahtar
+//    ZORUNLUDUR ve son 24 saatteki aynı ek borç 409 DUPLICATE_CHARGE olur. Defter satırları TEK `INSERT ... SELECT ... FROM unnest(...)` ile yazılır
+//    (3000 daire < 3 sn). Borçlandırma anındaki tanım adı defter satırına ANLIK GÖRÜNTÜ olarak yazılır (`definition_name`).
 //  - Her sorguda site_code vardır (IDOR yok): başka sitenin tanımı 404 DEFINITION_NOT_FOUND.
 //  - Audit `details` yalnız toplam / sayı / dönem / alan adı içerir: tanım adı, açıklama ve kişi adı ASLA yazılmaz.
 
@@ -16,10 +18,13 @@ import {
   addDays,
   addMonths,
   assertDefinitionShape,
+  chargeNaturalKey,
+  chargeRequestFingerprint,
   currentPeriod,
   definitionInactive,
   definitionLocked,
   definitionNotFound,
+  duplicateCharge,
   idempotencyConflict,
   invalidBody,
   invalidTarget,
@@ -38,13 +43,14 @@ import {
   periodLabel,
   periodOfDate,
   POSTED_PATCH_KEYS,
+  postRequestFingerprint,
   previewIncomplete,
   previewStale,
   today,
 } from './finance_common.js';
-import { buildDistributionPlan } from './finance_distribution.js';
+import { buildDistributionPlan, planHash, redistributesOnSkip } from './finance_distribution.js';
 import { MAX_RUN_TOTAL_MINOR, bigintsToSqlArray, minorToNumber } from './finance_money.js';
-import { recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
+import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 
 // ---------------------------------------------------------------------------
 // Tanım okuma
@@ -115,7 +121,10 @@ async function attachTargetLabels(db, siteCode, definitions) {
   return definitions;
 }
 
-/** GET definitions?kind=&active= -> { items: [Definition] } (en çok 500). */
+/**
+ * GET definitions?kind=&active=&limit=&offset= -> { items: [Definition], total }. Sıra: aktifler önce, aylık (recurring) önce, yeni -> eski;
+ * varsayılan ve azami sayfa 500 (aylık tanımlar yüzlerce ek borçla listeden düşmez; sayfalama `total` ile).
+ */
 export async function listDefinitions(siteCode, query = {}, db = pool) {
   const filters = parseDefinitionsQuery(query);
   const params = [siteCode];
@@ -128,13 +137,15 @@ export async function listDefinitions(siteCode, query = {}, db = pool) {
     params.push(filters.active);
     clauses.push(`d.is_active = $${params.length}`);
   }
+  const where = clauses.join(' AND ');
+  const count = await db.query(`SELECT COUNT(*)::INTEGER AS total FROM fee_definitions d WHERE ${where}`, params);
   const result = await db.query(
-    `${DEFINITION_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY d.is_active DESC, d.kind, d.id DESC LIMIT 500`,
-    params,
+    `${DEFINITION_SELECT} WHERE ${where} ORDER BY d.is_active DESC, d.kind DESC, d.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, filters.limit, filters.offset],
   );
   const items = (result.rows ?? []).map(mapDefinitionRow);
   await attachTargetLabels(db, siteCode, items);
-  return { items };
+  return { items, total: Number(count.rows?.[0]?.total ?? 0) };
 }
 
 // ---------------------------------------------------------------------------
@@ -209,13 +220,11 @@ async function computePlan(db, siteCode, spec, options) {
   );
 }
 
-async function isPeriodClosed(db, siteCode, periodIso) {
-  const result = await db.query(`SELECT 1 FROM finance_period_closures WHERE site_code = $1 AND period = $2::DATE LIMIT 1`, [siteCode, periodIso]);
-  return Boolean(result.rows?.[0]);
-}
-
-/** Önizleme gövdesi (hem tanım hem ek borç için). */
-function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDate }) {
+/**
+ * Önizleme gövdesi (hem tanım hem ek borç için). `preview_hash`: satırlar + eksik veri kümesinin sha256 özeti (post / charges `expected_hash`).
+ * `skipped_count` / `redistributed`: eksik verili daireler (skip_missing ile hariç tutulursa) ve paylarının kalanlara yeniden dağıtılıp dağıtılmayacağı.
+ */
+function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDate, distribution, duplicateOfRunId = null }) {
   return {
     period: periodLabel(period),
     definition_id: definitionId,
@@ -223,6 +232,7 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
     currency: 'TRY',
     total_minor: minorToNumber(plan.total),
     apartment_count: plan.lines.length,
+    preview_hash: planHash(plan),
     lines: plan.lines.map((line) => ({
       apartment_id: line.apartmentId,
       label: line.label,
@@ -237,7 +247,9 @@ function previewBody({ plan, period, definitionId, alreadyPosted, closed, dueDat
       reason_code: entry.reasonCode,
     })),
     zero_amount_count: plan.zeroAmountCount,
+    ...skipSummary(plan.missing.length, distribution),
     already_posted: alreadyPosted,
+    duplicate_of_run_id: duplicateOfRunId,
     closed,
   };
 }
@@ -290,6 +302,7 @@ export async function createDefinition({ siteCode, body, actor }) {
   const actorInfo = actorFromAuthUser(actor);
   return withFinanceTransaction(siteCode, async (client) => {
     await assertTargetBelongsToSite(client, siteCode, shape.target);
+    await lockActorRow(client, actorInfo);
     const inserted = await client.query(
       `
         INSERT INTO fee_definitions (
@@ -315,7 +328,10 @@ export async function updateDefinition({ siteCode, rawId, body, actor }) {
     throw definitionNotFound();
   }
   const patch = parseDefinitionPatch(body);
+  const actorInfo = actorFromAuthUser(actor);
   return withFinanceTransaction(siteCode, async (client) => {
+    // KİLİT SIRASI: kullanıcı satırı (audit FK) tanım satırından ÖNCE; aksi halde updateDefinition x kullanıcı silme 40P01 verir.
+    await lockActorRow(client, actorInfo);
     const locked = await client.query(`SELECT id FROM fee_definitions WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
     if (!locked.rows?.[0]) {
       throw definitionNotFound();
@@ -391,7 +407,7 @@ export async function previewDefinition({ siteCode, rawId, body, now = new Date(
     throw definitionNotFound();
   }
   const shape = shapeOfRow(row);
-  const input = parsePreviewInput(body, shape.kind);
+  const input = parsePreviewInput(body, shape.kind, now);
   if (!shape.isActive) {
     throw definitionInactive();
   }
@@ -399,23 +415,27 @@ export async function previewDefinition({ siteCode, rawId, body, now = new Date(
   const alreadyPosted = await runExists(db, id, shape.kind === 'recurring' ? timing.period : null);
   const closed = await isPeriodClosed(db, siteCode, timing.period);
   const plan = await computePlan(db, siteCode, shape, { lock: false });
-  return previewBody({ plan, period: timing.period, definitionId: id, alreadyPosted, closed, dueDate: timing.dueDate });
+  return previewBody({ plan, period: timing.period, definitionId: id, alreadyPosted, closed, dueDate: timing.dueDate, distribution: shape.distribution });
 }
 
-/** POST charges/preview -> ek borç önizlemesi (YAZMAZ). */
+/** POST charges/preview -> ek borç önizlemesi (YAZMAZ). `duplicate_of_run_id`: son 24 saatte aynı ek borcun çalıştırma kimliği (varsa). */
 export async function previewCharge({ siteCode, body, now = new Date() }, db = pool) {
-  const input = parseChargeInput(body, { requireExpected: false });
+  const input = parseChargeInput(body, { requireExpected: false, now });
   await assertTargetBelongsToSite(db, siteCode, input.target);
   const todayIsoDate = today(now);
   const period = periodOfDate(todayIsoDate);
+  const dueDate = input.dueDate ?? todayIsoDate;
   const plan = await computePlan(db, siteCode, input, { lock: false });
+  const duplicate = await findRecentDuplicate(db, siteCode, chargeNaturalKey(input, dueDate));
   return previewBody({
     plan,
     period,
     definitionId: null,
     alreadyPosted: false,
     closed: await isPeriodClosed(db, siteCode, period),
-    dueDate: input.dueDate ?? todayIsoDate,
+    dueDate,
+    distribution: input.distribution,
+    duplicateOfRunId: duplicate ? Number(duplicate.id) : null,
   });
 }
 
@@ -432,18 +452,21 @@ async function runExists(db, definitionId, periodIso) {
 // Borçlandırma (post)
 // ---------------------------------------------------------------------------
 
-const RUN_RETURNING = `id, definition_id, to_char(period, 'YYYY-MM-DD') AS period, total_minor::text AS total_minor, apartment_count, posted_at`;
+const RUN_RETURNING = `id, definition_id, to_char(period, 'YYYY-MM-DD') AS period, total_minor::text AS total_minor, apartment_count, skipped_count, posted_at`;
 
-/** Aynı işlem anahtarıyla daha önce yazılmış çalıştırma (aynı site). */
+/** Aynı işlem anahtarıyla daha önce yazılmış çalıştırma (aynı site): istek parmak izi, tanım türü ve dağıtımıyla. */
 async function findRunByKey(db, siteCode, key) {
   if (key === null) {
     return null;
   }
   const result = await db.query(
     `
-      SELECT id, definition_id, to_char(period, 'YYYY-MM-DD') AS period, total_minor::text AS total_minor, apartment_count, posted_at
-      FROM fee_runs
-      WHERE site_code = $1 AND idempotency_key = $2
+      SELECT
+        r.id, r.definition_id, to_char(r.period, 'YYYY-MM-DD') AS period, r.total_minor::text AS total_minor, r.apartment_count,
+        r.skipped_count, r.posted_at, r.request_fingerprint, d.kind AS definition_kind, d.distribution AS definition_distribution
+      FROM fee_runs r
+      INNER JOIN fee_definitions d ON d.id = r.definition_id
+      WHERE r.site_code = $1 AND r.idempotency_key = $2
       LIMIT 1
     `,
     [siteCode, key],
@@ -451,8 +474,16 @@ async function findRunByKey(db, siteCode, key) {
   return result.rows?.[0] ?? null;
 }
 
-/** Plan -> yazma izni: eksik veri (PREVIEW_INCOMPLETE), boş plan, toplam sınırı ve önizleme güncelliği (PREVIEW_STALE). */
-function verifyPlan(plan, { skipMissing, expectedTotal, expectedCount }) {
+/** skip_missing ile hariç tutulan daire sayısı ve payın kalanlara yeniden dağıtılıp dağıtılmadığı (fixed / category: dağıtılmaz). */
+function skipSummary(skippedCount, distribution) {
+  return { skipped_count: skippedCount, redistributed: skippedCount > 0 && redistributesOnSkip(distribution) };
+}
+
+/**
+ * Plan -> yazma izni: eksik veri (PREVIEW_INCOMPLETE), boş plan, toplam sınırı ve önizleme güncelliği (PREVIEW_STALE: toplam, daire sayısı VE
+ * önizleme özeti `preview_hash` yeniden hesaplananla aynı olmalı; daireler takas edilmiş ya da pay değişmişse eşit toplamla geçemez).
+ */
+function verifyPlan(plan, { skipMissing, expectedTotal, expectedCount, expectedHash }) {
   if (plan.missing.length > 0 && !skipMissing) {
     throw previewIncomplete({ missing_count: plan.missing.length });
   }
@@ -462,30 +493,33 @@ function verifyPlan(plan, { skipMissing, expectedTotal, expectedCount }) {
   if (plan.total > BigInt(MAX_RUN_TOTAL_MINOR)) {
     throw invalidBody('Toplam tutar çok büyük.');
   }
-  if (plan.total !== BigInt(expectedTotal) || plan.lines.length !== expectedCount) {
-    throw previewStale({ total_minor: minorToNumber(plan.total), apartment_count: plan.lines.length });
+  const hash = planHash(plan);
+  if (plan.total !== BigInt(expectedTotal) || plan.lines.length !== expectedCount || hash !== expectedHash) {
+    throw previewStale({ total_minor: minorToNumber(plan.total), apartment_count: plan.lines.length, preview_hash: hash });
   }
 }
 
 /** Çalıştırma + defter satırları (tek INSERT ... SELECT ... FROM unnest). Çağıran kilidi ve doğrulamaları yapmış olmalıdır. */
-async function writeRun(client, { siteCode, definitionId, plan, timing, idempotencyKey, actorUserCode }) {
+async function writeRun(client, { siteCode, definitionId, definitionName, plan, timing, idempotencyKey, requestFingerprint, naturalKey, actorUserCode }) {
   const inserted = await client.query(
     `
-      INSERT INTO fee_runs (site_code, definition_id, period, total_minor, apartment_count, idempotency_key, posted_by)
-      VALUES ($1, $2, $3::DATE, $4::BIGINT, $5, $6, $7)
+      INSERT INTO fee_runs (
+        site_code, definition_id, period, total_minor, apartment_count, skipped_count, idempotency_key, request_fingerprint, natural_key, posted_by
+      )
+      VALUES ($1, $2, $3::DATE, $4::BIGINT, $5, $6, $7, $8, $9, $10)
       RETURNING ${RUN_RETURNING}
     `,
-    [siteCode, definitionId, timing.period, plan.total.toString(), plan.lines.length, idempotencyKey, actorUserCode],
+    [siteCode, definitionId, timing.period, plan.total.toString(), plan.lines.length, plan.missing.length, idempotencyKey, requestFingerprint, naturalKey, actorUserCode],
   );
   const run = inserted.rows[0];
   const lines = [...plan.lines].sort((a, b) => a.apartmentId - b.apartmentId);
   const written = await client.query(
     `
       INSERT INTO ledger_entries (
-        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, run_id, payer_party, created_by
+        site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party, created_by
       )
-      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6, t.payer, $7
-      FROM unnest($8::BIGINT[], $9::BIGINT[], $10::TEXT[]) AS t(apartment_id, amount, payer)
+      SELECT $1, t.apartment_id, 'charge', t.amount, $2::DATE, $3::DATE, $4::DATE, $5, $6::TEXT, $7, t.payer, $8
+      FROM unnest($9::BIGINT[], $10::BIGINT[], $11::TEXT[]) AS t(apartment_id, amount, payer)
       ORDER BY t.apartment_id
     `,
     [
@@ -494,6 +528,7 @@ async function writeRun(client, { siteCode, definitionId, plan, timing, idempote
       timing.entryDate,
       timing.dueDate,
       definitionId,
+      definitionName,
       Number(run.id),
       actorUserCode,
       bigintsToSqlArray(lines.map((line) => BigInt(line.apartmentId))),
@@ -507,22 +542,47 @@ async function writeRun(client, { siteCode, definitionId, plan, timing, idempote
   return mapRunRow(run);
 }
 
-/** İşlem anahtarı daha önce kullanılmışsa: aynı işlemse kayıt döner (tekrar), değilse 409 IDEMPOTENCY_CONFLICT. */
-async function replayOrConflict(client, siteCode, key, matches) {
+/**
+ * İşlem anahtarı daha önce kullanılmışsa: AYNI istek (parmak izi ve tür eşleşir) ise kayıt döner (tekrar), değilse 409 IDEMPOTENCY_CONFLICT
+ * (farklı hedef / tutar / dönem, aynı toplam olsa bile sessizce "başarı" dönmez).
+ */
+async function replayOrConflict(client, siteCode, key, { fingerprint, kind }) {
   const existing = await findRunByKey(client, siteCode, key);
   if (!existing) {
     return null;
   }
-  if (!matches(existing)) {
+  if (existing.request_fingerprint !== fingerprint || existing.definition_kind !== kind) {
     throw idempotencyConflict();
   }
-  return { replayed: true, run: mapRunRow(existing), entries_count: Number(existing.apartment_count) };
+  return {
+    replayed: true,
+    run: mapRunRow(existing),
+    entries_count: Number(existing.apartment_count),
+    ...skipSummary(Number(existing.skipped_count), existing.definition_distribution),
+  };
 }
 
+/** Son 24 saatte AYNI sitede aynı doğal özetli (ad + tutar + dağıtım + hedef + vade) ek borç çalıştırması. */
+async function findRecentDuplicate(db, siteCode, naturalKey) {
+  const result = await db.query(
+    `
+      SELECT id, posted_at
+      FROM fee_runs
+      WHERE site_code = $1 AND natural_key = $2 AND posted_at > NOW() - INTERVAL '24 hours'
+      ORDER BY posted_at DESC, id DESC
+      LIMIT 1
+    `,
+    [siteCode, naturalKey],
+  );
+  return result.rows?.[0] ?? null;
+}
+
+const isoOrNull = (value) => (value === null || value === undefined ? null : new Date(value).toISOString());
+
 /**
- * POST definitions/:id/post -> { replayed, run, entries_count }.
+ * POST definitions/:id/post -> { replayed, run, entries_count, skipped_count, redistributed }.
  * Sıra: tanım (404) -> işlem anahtarı tekrarı -> pasif/süre dışı -> kapalı dönem -> aynı dönem tekrarı -> plan (yeniden hesap) -> eksik veri
- * -> boş plan -> önizleme güncelliği -> yazma. Hata olursa hiçbir şey yazılmaz.
+ * -> boş plan -> önizleme güncelliği (toplam, sayı, özet) -> yazma. Hata olursa hiçbir şey yazılmaz.
  */
 export async function postDefinition({ siteCode, rawId, body, actor, now = new Date() }) {
   const id = parsePositiveId(rawId);
@@ -536,18 +596,10 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
       throw definitionNotFound();
     }
     const shape = shapeOfRow(row);
-    const input = parsePostInput(body, shape.kind);
+    const input = parsePostInput(body, shape.kind, now);
+    const fingerprint = postRequestFingerprint({ definitionId: id, period: input.period, dueDate: input.dueDate, skipMissing: input.skipMissing });
     // İşlem anahtarı tekrarı EN BAŞTA: ilk istek yazıldıktan sonra tanım pasifleşmiş ya da dönem kapanmış olsa bile yeniden deneme aynı kaydı alır.
-    const replay = await replayOrConflict(
-      client,
-      siteCode,
-      input.idempotencyKey,
-      (existing) =>
-        Number(existing.definition_id) === id &&
-        (shape.kind !== 'recurring' || existing.period === input.period) &&
-        BigInt(existing.total_minor) === BigInt(input.expectedTotal) &&
-        Number(existing.apartment_count) === input.expectedCount,
-    );
+    const replay = await replayOrConflict(client, siteCode, input.idempotencyKey, { fingerprint, kind: shape.kind });
     if (replay) {
       return replay;
     }
@@ -563,12 +615,16 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
     }
     const plan = await computePlan(client, siteCode, shape, { lock: true });
     verifyPlan(plan, input);
+    await lockActorRow(client, actorInfo);
     const run = await writeRun(client, {
       siteCode,
       definitionId: id,
+      definitionName: shape.name,
       plan,
       timing: resolved,
       idempotencyKey: input.idempotencyKey,
+      requestFingerprint: fingerprint,
+      naturalKey: null,
       actorUserCode: actorInfo.userCode,
     });
     await recordFinanceAudit(client, actor, 'finance.run.posted', siteCode, run.id, {
@@ -578,24 +634,21 @@ export async function postDefinition({ siteCode, rawId, body, actor, now = new D
       apartment_count: run.apartment_count,
       skipped_missing_count: plan.missing.length,
     });
-    return { replayed: false, run, entries_count: run.apartment_count };
+    return { replayed: false, run, entries_count: run.apartment_count, ...skipSummary(plan.missing.length, shape.distribution) };
   });
 }
 
 /**
- * POST charges (ek borç) -> { replayed, run, entries_count, definition }. TEK işlemde: önizleme doğrulaması + tek seferlik tanım + borçlandırma.
- * Önizleme güncel değilse tanım da OLUŞMAZ (geri alınır).
+ * POST charges (ek borç) -> { replayed, run, entries_count, skipped_count, redistributed, definition }. TEK işlemde: önizleme doğrulaması + tek seferlik
+ * tanım + borçlandırma. Önizleme güncel değilse tanım da OLUŞMAZ (geri alınır). İşlem anahtarı ZORUNLUDUR; aynı anahtar + farklı gövde = 409
+ * IDEMPOTENCY_CONFLICT. İstemci anahtarı yeniden üretse bile son 24 saatte aynı ek borç 409 DUPLICATE_CHARGE olur (`allow_duplicate: true` ile aşılır).
  */
 export async function postCharge({ siteCode, body, actor, now = new Date() }) {
-  const input = parseChargeInput(body, { requireExpected: true });
+  const input = parseChargeInput(body, { requireExpected: true, now });
   const actorInfo = actorFromAuthUser(actor);
+  const fingerprint = chargeRequestFingerprint(input);
   return withFinanceTransaction(siteCode, async (client) => {
-    const replay = await replayOrConflict(
-      client,
-      siteCode,
-      input.idempotencyKey,
-      (existing) => BigInt(existing.total_minor) === BigInt(input.expectedTotal) && Number(existing.apartment_count) === input.expectedCount,
-    );
+    const replay = await replayOrConflict(client, siteCode, input.idempotencyKey, { fingerprint, kind: 'one_time' });
     if (replay) {
       const definition = await loadDefinitionRow(client, siteCode, Number(replay.run.definition_id));
       const [mapped] = await attachTargetLabels(client, siteCode, [mapDefinitionRow(definition)]);
@@ -606,6 +659,13 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
     const timing = { period: periodOfDate(todayIsoDate), entryDate: todayIsoDate, dueDate: input.dueDate ?? todayIsoDate };
     if (await isPeriodClosed(client, siteCode, timing.period)) {
       throw periodClosed();
+    }
+    const naturalKey = chargeNaturalKey(input, timing.dueDate);
+    if (!input.allowDuplicate) {
+      const duplicate = await findRecentDuplicate(client, siteCode, naturalKey);
+      if (duplicate) {
+        throw duplicateCharge(Number(duplicate.id), isoOrNull(duplicate.posted_at));
+      }
     }
     const plan = await computePlan(client, siteCode, input, { lock: true });
     verifyPlan(plan, input);
@@ -623,6 +683,7 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       target: input.target,
     };
     assertDefinitionShape(shape);
+    await lockActorRow(client, actorInfo);
     const created = await client.query(
       `
         INSERT INTO fee_definitions (
@@ -638,9 +699,12 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
     const run = await writeRun(client, {
       siteCode,
       definitionId,
+      definitionName: input.name,
       plan,
       timing,
       idempotencyKey: input.idempotencyKey,
+      requestFingerprint: fingerprint,
+      naturalKey,
       actorUserCode: actorInfo.userCode,
     });
     await recordFinanceAudit(client, actor, 'finance.charge.posted', siteCode, run.id, {
@@ -652,6 +716,6 @@ export async function postCharge({ siteCode, body, actor, now = new Date() }) {
       skipped_missing_count: plan.missing.length,
     });
     const [definition] = await attachTargetLabels(client, siteCode, [mapDefinitionRow(await loadDefinitionRow(client, siteCode, definitionId))]);
-    return { replayed: false, run, entries_count: run.apartment_count, definition };
+    return { replayed: false, run, entries_count: run.apartment_count, ...skipSummary(plan.missing.length, input.distribution), definition };
   });
 }

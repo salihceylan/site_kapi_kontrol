@@ -47,12 +47,26 @@ describe('migration 034: aidat ve finans', () => {
 
   it('ekleyici ve idempotent: DROP / TRUNCATE / DELETE / UPDATE / INSERT yok; her CREATE ... IF NOT EXISTS; ALTER yok; fonksiyon CREATE OR REPLACE', () => {
     const clean = normalizeSql(blankSqlNoise(MIGRATION));
-    assert.equal(/DROP\s|TRUNCATE|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO|\bALTER\s+TABLE/i.test(clean.replace(/RAISE EXCEPTION ''/g, '')), false, 'yıkıcı / veri yazan ifade');
+    // BEFORE TRUNCATE tetikleyicileri TRUNCATE'i ENGELLER (çalıştırmaz); ifade olarak TRUNCATE / DROP / DELETE FROM / UPDATE ... SET / INSERT INTO yok
+    assert.equal(/DROP\s|DELETE\s+FROM|\bUPDATE\s+\w+\s+SET|\bINSERT\s+INTO|\bALTER\s+TABLE|^\s*TRUNCATE\s|;\s*TRUNCATE\s/i.test(clean.replace(/BEFORE TRUNCATE ON/g, '')), false, 'yıkıcı / veri yazan ifade');
     assert.deepEqual(SQL.match(/CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)\s+(?!IF NOT EXISTS)/gi) || [], []);
     assert.equal((SQL.match(/CREATE TABLE IF NOT EXISTS/g) || []).length, 4);
     assert.match(SQL, /CREATE OR REPLACE FUNCTION trg_ledger_entries_append_only\(\) RETURNS trigger/);
     // tetikleyici pg_trigger ile korunur (ikinci çalıştırmada hata vermez)
-    assert.match(SQL, /IF NOT EXISTS \( SELECT 1 FROM pg_trigger WHERE tgname = 'trg_ledger_entries_append_only' AND tgrelid = 'ledger_entries'::regclass AND NOT tgisinternal \) THEN CREATE TRIGGER trg_ledger_entries_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE PROCEDURE trg_ledger_entries_append_only\(\)/);
+    for (const [name, table, definition] of [
+      ['trg_ledger_entries_append_only', 'ledger_entries', 'BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE PROCEDURE trg_ledger_entries_append_only\\(\\)'],
+      ['trg_ledger_entries_reversal_check', 'ledger_entries', "BEFORE INSERT ON ledger_entries FOR EACH ROW WHEN \\(NEW\\.kind = 'reversal' AND NEW\\.reverses_entry_id IS NOT NULL\\) EXECUTE PROCEDURE trg_ledger_entries_reversal_check\\(\\)"],
+      ['trg_ledger_entries_no_truncate', 'ledger_entries', 'BEFORE TRUNCATE ON ledger_entries FOR EACH STATEMENT EXECUTE PROCEDURE trg_finance_block_truncate\\(\\)'],
+      ['trg_fee_runs_append_only', 'fee_runs', 'BEFORE UPDATE OR DELETE ON fee_runs FOR EACH ROW EXECUTE PROCEDURE trg_fee_runs_append_only\\(\\)'],
+      ['trg_fee_runs_no_truncate', 'fee_runs', 'BEFORE TRUNCATE ON fee_runs FOR EACH STATEMENT EXECUTE PROCEDURE trg_finance_block_truncate\\(\\)'],
+      ['trg_finance_period_closures_no_update', 'finance_period_closures', 'BEFORE UPDATE ON finance_period_closures FOR EACH ROW EXECUTE PROCEDURE trg_finance_period_closures_no_update\\(\\)'],
+    ]) {
+      assert.match(
+        SQL,
+        new RegExp(`IF NOT EXISTS \\( SELECT 1 FROM pg_trigger WHERE tgname = '${name}' AND tgrelid = '${table}'::regclass AND NOT tgisinternal \\) THEN CREATE TRIGGER ${name} ${definition}`),
+        name,
+      );
+    }
   });
 
   it('fee_definitions: sözleşmedeki sütunlar, tipler, varsayılanlar ve FK davranışları', () => {
@@ -108,7 +122,12 @@ describe('migration 034: aidat ve finans', () => {
     assert.match(table, /posted_at TIMESTAMPTZ NOT NULL DEFAULT NOW\(\)/);
     assert.match(table, /CONSTRAINT uq_fee_runs_definition_period UNIQUE \(definition_id, period\)/);
     assert.match(table, /CHECK \(total_minor > 0 AND total_minor <= 100000000000000\)/);
-    assert.match(table, /CHECK \(apartment_count > 0\)/);
+    assert.match(table, /CHECK \(apartment_count > 0 AND skipped_count >= 0\)/);
+    assert.match(table, /skipped_count INTEGER NOT NULL DEFAULT 0/);
+    assert.match(table, /request_fingerprint TEXT,/);
+    assert.match(table, /natural_key TEXT,/);
+    assert.match(table, /CHECK \( \(request_fingerprint IS NULL OR char_length\(request_fingerprint\) = 64\) AND \(natural_key IS NULL OR char_length\(natural_key\) = 64\) \)/);
+    assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_fee_runs_natural ON fee_runs \(site_code, natural_key, posted_at DESC\) WHERE natural_key IS NOT NULL/);
     assert.match(SQL, /CREATE UNIQUE INDEX IF NOT EXISTS uq_fee_runs_idempotency ON fee_runs \(site_code, idempotency_key\) WHERE idempotency_key IS NOT NULL/);
   });
 
@@ -149,12 +168,39 @@ describe('migration 034: aidat ve finans', () => {
     assert.match(SQL, /CREATE INDEX IF NOT EXISTS idx_ledger_entries_created_by ON ledger_entries \(created_by\) WHERE created_by IS NOT NULL/);
   });
 
-  it('değişmezlik tetikleyicisi: UPDATE / DELETE hata verir; istisnalar yalnız (a) site artık yoksa DELETE, (b) yalnız created_by -> NULL UPDATE', () => {
+  it('değişmezlik tetikleyicisi: UPDATE / DELETE hata verir; istisnalar yalnız (a) site artık yoksa DELETE, (b) yalnız created_by -> NULL UPDATE ve YALNIZ kullanıcı artık yoksa', () => {
     const fn = /CREATE OR REPLACE FUNCTION trg_ledger_entries_append_only\(\) RETURNS trigger AS \$\$ ([\s\S]*?) \$\$ LANGUAGE plpgsql;/.exec(SQL)?.[1];
     assert.ok(fn);
     assert.match(fn, /IF TG_OP = 'DELETE' THEN IF NOT EXISTS \(SELECT 1 FROM sites WHERE site_code = OLD\.site_code\) THEN RETURN OLD; END IF;/);
-    assert.match(fn, /ELSIF TG_OP = 'UPDATE' THEN IF OLD\.created_by IS NOT NULL AND NEW\.created_by IS NULL AND \(to_jsonb\(NEW\) - 'created_by'\) = \(to_jsonb\(OLD\) - 'created_by'\) THEN RETURN NEW; END IF;/);
+    assert.match(fn, /ELSIF TG_OP = 'UPDATE' THEN IF OLD\.created_by IS NOT NULL AND NEW\.created_by IS NULL AND NOT EXISTS \(SELECT 1 FROM users WHERE user_code = OLD\.created_by\) AND \(to_jsonb\(NEW\) - 'created_by'\) = \(to_jsonb\(OLD\) - 'created_by'\) THEN RETURN NEW; END IF;/);
     assert.match(fn, /RAISE EXCEPTION 'finance ledger is append-only';/);
+  });
+
+  it('ters kayıt eklenirken asılı aynalamalı: aynı site, aynı daire, karşı tutar, asıl ters kayıt değil (yalnız reversal / reverses_entry_id dolu satırlarda çalışır)', () => {
+    const fn = /CREATE OR REPLACE FUNCTION trg_ledger_entries_reversal_check\(\) RETURNS trigger AS \$\$ ([\s\S]*?) \$\$ LANGUAGE plpgsql;/.exec(SQL)?.[1];
+    assert.ok(fn);
+    assert.match(fn, /SELECT \* INTO original FROM ledger_entries WHERE id = NEW\.reverses_entry_id;/);
+    assert.match(fn, /NOT FOUND OR original\.kind = 'reversal' OR original\.site_code <> NEW\.site_code OR original\.apartment_id <> NEW\.apartment_id OR NEW\.amount_minor <> -original\.amount_minor/);
+    assert.doesNotMatch(fn, /ELSIF/, 'hedefsiz ters kayıt / hedefli borç CHECK ile reddedilir');
+  });
+
+  it('fee_runs: UPDATE / DELETE yasak (site yoksa DELETE ve yalnız posted_by -> NULL [kullanıcı yoksa] istisna); kapanışlarda UPDATE yasak (closed_by -> NULL istisnası), DELETE serbest (yeniden açma); TRUNCATE engelli', () => {
+    const runs = /CREATE OR REPLACE FUNCTION trg_fee_runs_append_only\(\) RETURNS trigger AS \$\$ ([\s\S]*?) \$\$ LANGUAGE plpgsql;/.exec(SQL)?.[1];
+    assert.ok(runs);
+    assert.match(runs, /IF NOT EXISTS \(SELECT 1 FROM sites WHERE site_code = OLD\.site_code\) THEN RETURN OLD;/);
+    assert.match(runs, /OLD\.posted_by IS NOT NULL AND NEW\.posted_by IS NULL AND NOT EXISTS \(SELECT 1 FROM users WHERE user_code = OLD\.posted_by\) AND \(to_jsonb\(NEW\) - 'posted_by'\) = \(to_jsonb\(OLD\) - 'posted_by'\)/);
+    assert.match(runs, /RAISE EXCEPTION 'finance runs are append-only';/);
+    const closures = /CREATE OR REPLACE FUNCTION trg_finance_period_closures_no_update\(\) RETURNS trigger AS \$\$ ([\s\S]*?) \$\$ LANGUAGE plpgsql;/.exec(SQL)?.[1];
+    assert.ok(closures);
+    assert.match(closures, /OLD\.closed_by IS NOT NULL AND NEW\.closed_by IS NULL AND NOT EXISTS \(SELECT 1 FROM users WHERE user_code = OLD\.closed_by\)/);
+    assert.doesNotMatch(SQL, /BEFORE UPDATE OR DELETE ON finance_period_closures/, 'kapanış satırı silinebilir (yeniden açma)');
+    assert.match(SQL, /CREATE OR REPLACE FUNCTION trg_finance_block_truncate\(\) RETURNS trigger AS \$\$ BEGIN RAISE EXCEPTION 'finance ledger is append-only'; END; \$\$ LANGUAGE plpgsql;/);
+  });
+
+  it('definition_name: borçlandırma anındaki tanım adının anlık görüntüsü (1-80 karakter)', () => {
+    const table = tableBody('ledger_entries');
+    assert.match(table, /definition_name TEXT,/);
+    assert.match(table, /CHECK \(definition_name IS NULL OR char_length\(definition_name\) BETWEEN 1 AND 80\)/);
   });
 
   it('finance_period_closures: PK (site_code, period), site CASCADE, kapatan SET NULL, dönem ayın ilk günü', () => {

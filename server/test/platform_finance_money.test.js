@@ -21,6 +21,8 @@ import {
   gcdBig,
   landShareWeights,
   lcmBig,
+  planHash,
+  redistributesOnSkip,
 } from '../src/modules/finance_distribution.js';
 
 // Deterministik rastgele sayı üretici (hata yeniden üretilebilsin)
@@ -263,11 +265,47 @@ describe('dağıtım planı (buildDistributionPlan)', () => {
     assert.equal(flat(gross), '1:50,2:50');
   });
 
-  it('land_share: 1/4 : 1/2 -> 333 / 667 (kalan kuruş büyük kalana); tanımsız ve sıfır pay eksik veri', () => {
+  it('land_share: 1/4 : 1/2 -> 333 / 667 (kalan kuruş büyük kalana); pay/payda NULL eksik veri; pay 0 (payda > 0) eksik DEĞİL: ağırlık 0, satır yok, zero_amount_count', () => {
     const plan = buildDistributionPlan({ distribution: 'land_share', amountMinor: 1000 }, [apt(1, { landNumerator: 1, landDenominator: 4 }), apt(2, { landNumerator: 1, landDenominator: 2 }), apt(3), apt(4, { landNumerator: 0, landDenominator: 10 })]);
     assert.equal(flat(plan), '1:333,2:667');
     assert.equal(plan.total, 1000n);
-    assert.deepEqual(plan.missing.map((m) => [m.apartmentId, m.reasonCode]), [[3, 'land_share_missing'], [4, 'land_share_missing']]);
+    assert.deepEqual(plan.missing.map((m) => [m.apartmentId, m.reasonCode]), [[3, 'land_share_missing']]);
+    assert.equal(plan.zeroAmountCount, 1, 'payı 0 olan daire sıfır paylı sayılır');
+    assert.equal(plan.includedCount, 3);
+    // payda tanımsız / 0 -> eksik veri
+    const noDenominator = buildDistributionPlan({ distribution: 'land_share', amountMinor: 10 }, [apt(1, { landNumerator: 1, landDenominator: null }), apt(2, { landNumerator: 1, landDenominator: 0 }), apt(3, { landNumerator: 1, landDenominator: 2 })]);
+    assert.deepEqual(noDenominator.missing.map((m) => m.apartmentId), [1, 2]);
+    assert.equal(flat(noDenominator), '3:10');
+  });
+
+  it('land_share: dahil dairelerin TÜMÜ 0 paylıysa dağıtılacak ağırlık yoktur: satır yok, toplam 0, hata fırlatmaz (çağıran NOTHING_TO_POST der)', () => {
+    const plan = buildDistributionPlan({ distribution: 'land_share', amountMinor: 500 }, [apt(1, { landNumerator: 0, landDenominator: 10 }), apt(2, { landNumerator: 0, landDenominator: 100 })]);
+    assert.equal(plan.lines.length, 0);
+    assert.equal(plan.total, 0n);
+    assert.equal(plan.zeroAmountCount, 2);
+    assert.equal(plan.missing.length, 0);
+  });
+
+  it('redistributesOnSkip: equal / land_share / area yeniden dağıtır; fixed / category dağıtmaz', () => {
+    for (const distribution of ['equal', 'land_share', 'area']) assert.equal(redistributesOnSkip(distribution), true, distribution);
+    for (const distribution of ['fixed', 'category', 'x']) assert.equal(redistributesOnSkip(distribution), false, distribution);
+  });
+
+  it('planHash: sha256 hex, deterministik (girdi sırasından bağımsız); daire takası, tutar, ödeyen taraf ya da eksik veri değişince FARKLI (eşit toplamla geçemez)', () => {
+    const apartments = [apt(1, { payerParty: 'owner' }), apt(2), apt(3, { category: 'x' })];
+    const make = (list) => buildDistributionPlan({ distribution: 'fixed', amountMinor: 100 }, list);
+    const base = planHash(make(apartments));
+    assert.match(base, /^[0-9a-f]{64}$/);
+    assert.equal(planHash(make([...apartments].reverse())), base);
+    // aynı toplam ve aynı daire sayısı, FARKLI daire kümesi (takas)
+    const swapped = make([apt(1, { payerParty: 'owner' }), apt(4), apt(3, { category: 'x' })]);
+    assert.equal(swapped.total, make(apartments).total);
+    assert.equal(swapped.lines.length, make(apartments).lines.length);
+    assert.notEqual(planHash(swapped), base);
+    assert.notEqual(planHash(make([apt(1, { payerParty: 'tenant' }), apt(2), apt(3)])), base, 'ödeyen taraf');
+    const category = (list) => buildDistributionPlan({ distribution: 'category', categoryAmounts: { a: 100 } }, list);
+    assert.notEqual(planHash(category([apt(1, { category: 'a' }), apt(2)])), planHash(category([apt(1, { category: 'a' }), apt(2, { category: 'a' })])), 'eksik veri kümesi');
+    assert.notEqual(planHash(buildDistributionPlan({ distribution: 'fixed', amountMinor: 101 }, apartments)), base, 'tutar');
   });
 
   it('eksik veri varsa kalan daireler tutarın TAMAMINI paylaşır (toplam değişmez)', () => {

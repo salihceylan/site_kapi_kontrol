@@ -10,6 +10,7 @@
 // Eksik veri (arsa payı / m² / kategori tanımsız ya da kategori haritada yok) `missing` listesine girer; karar (409 PREVIEW_INCOMPLETE
 // ya da skip_missing) çağıranındır.
 
+import { createHash } from 'node:crypto';
 import { PlatformError } from './errors.js';
 import { toBigInt } from './finance_money.js';
 
@@ -194,7 +195,8 @@ export function buildDistributionPlan(definition, apartments) {
     } else if (distribution === 'land_share') {
       const numerator = apartment.landNumerator === null || apartment.landNumerator === undefined ? null : toBigInt(apartment.landNumerator);
       const denominator = positiveBigOrNull(apartment.landDenominator);
-      if (numerator === null || denominator === null || numerator <= 0n) {
+      // Pay NULL ya da payda tanımsız -> eksik veri. Pay 0 (payda > 0) tanımlı bir paydır: ağırlık 0, satır yok (zero_amount_count).
+      if (numerator === null || denominator === null) {
         missing.push(missingEntry(apartment, 'land_share_missing'));
       } else {
         included.push({ apartment });
@@ -226,9 +228,11 @@ export function buildDistributionPlan(definition, apartments) {
     }
   } else if (included.length > 0) {
     const finalWeights = distribution === 'land_share' ? landShareWeights(shares) : weights;
-    const split = distributeLargestRemainder(toBigInt(definition.amountMinor), finalWeights);
-    for (const [id, amount] of split) {
-      amounts.set(id, amount);
+    if (finalWeights.some((item) => item.weight > 0n)) {
+      const split = distributeLargestRemainder(toBigInt(definition.amountMinor), finalWeights);
+      for (const [id, amount] of split) {
+        amounts.set(id, amount);
+      }
     }
   }
 
@@ -255,4 +259,19 @@ export function buildDistributionPlan(definition, apartments) {
   }
   missing.sort((a, b) => a.apartmentId - b.apartmentId);
   return { lines, missing, total, zeroAmountCount, includedCount: included.length };
+}
+
+/** skip_missing ile hariç tutulan dairelerin payı kalanlara yeniden dağıtılır mı? (fixed / category: hayır; equal / land_share / area: evet) */
+export function redistributesOnSkip(distribution) {
+  return distribution === 'equal' || distribution === 'land_share' || distribution === 'area';
+}
+
+/**
+ * Önizleme özeti (sha256 hex): satırların `apartment_id:amount_minor:payer_party` değerleri (apartment_id artan) ve eksik veri kümesi
+ * (`m:apartment_id:neden_kodu`) üzerinden DETERMİNİSTİK. Aynı veri -> aynı özet; daire takası, tutar / ödeyen taraf veya eksik veri değişimi -> farklı özet.
+ */
+export function planHash(plan) {
+  const lines = [...plan.lines].sort((a, b) => a.apartmentId - b.apartmentId).map((line) => `${line.apartmentId}:${line.amount}:${line.payerParty}`);
+  const missing = [...plan.missing].sort((a, b) => a.apartmentId - b.apartmentId).map((entry) => `m:${entry.apartmentId}:${entry.reasonCode}`);
+  return createHash('sha256').update(['v1', ...lines, ...missing].join('\n')).digest('hex');
 }

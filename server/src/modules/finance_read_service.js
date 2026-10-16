@@ -3,7 +3,9 @@
 // Sözleşme: docs/PLATFORM_FINANS.md.
 //  - Bakiye = defter satırlarının işaretli toplamı (pozitif = borç, negatif = alacak). Vadesi geçmiş tutar (overdue_minor) FIFO-örtük hesaplanır:
 //    bakiye - vadesi gelmemiş borçlar (due_date > bugün; ters kayıtlar aynı vadeyi taşıdığı için net sıfırlanır), en az 0.
-//  - Her sorguda site_code vardır (IDOR yok). Bakiye listesi ve ekstre indeksli sorgulardır (ledger_entries üzerinde sıralı tarama yok).
+//  - Her sorguda site_code vardır (IDOR yok). Ekstre ve sakin sorguları (site_code, apartment_id, ...) indeksiyle okunur. Bakiye listesi ve özet ise sitenin TÜM
+//    defterini her istekte toplar (O(site satırı): indeks taramasıyla, ~1 milyon satırda ~350 ms; bilinen / kabul edilen risk, bkz. rapor): ledger_entries
+//    üzerinde sıralı tarama yoktur ama sitenin tüm satırları okunur. Toplamlar JSON güvenli tamsayı sınırını aşarsa 500 (sessiz bozulma yok).
 //  - Sakin ucu YALNIZ çağıranın kendi dairelerini döndürür: dairenin responsible_party kuralı + family_member HİÇBİR durumda görmez +
 //    eşleşen güncel kişi yoksa güvenli yedek; yönetici serbest metinleri (açıklama, ters kayıt nedeni) ve oluşturan adı sızmaz.
 
