@@ -7,6 +7,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Telefon bildirimi (Firebase Cloud Messaging, docs/PLATFORM_BELGELER.md B9): google-services eklentisi YALNIZ
+// android/app/google-services.json varken uygulanır (dosya git'e GİRMEZ). Dosya yokken derleme kırılmaz; uygulama
+// açılışta Firebase'i başlatamaz ve telefon bildirimi devre dışı kalır.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Yayın (release) imzası: android/key.properties (git'e GİRMEZ, bkz. android/.gitignore).
 // Beklenen anahtarlar: storeFile, storePassword, keyAlias, keyPassword.
 // Dosya yoksa geliştirici derlemeleri bozulmasın diye debug imzasına düşülür ve yüksek sesle uyarılır;
@@ -35,6 +42,7 @@ android {
 
     defaultConfig {
         applicationId = "tr.com.gudeteknoloji.siteyonetim"
+        // flutter.minSdkVersion = 24 (Flutter 3.47); firebase_core 5 / firebase_messaging 17 de en az 24 ister.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

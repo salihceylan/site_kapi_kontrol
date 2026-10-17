@@ -3,4 +3,9 @@
     <string name="app_name">Site ve Toplu Yaşam Yönetim Sistemi</string>
     <string name="widget_name">Hızlı Kapı Aç</string>
     <string name="widget_description">Uygulamayı açmadan tek tıkla kapıyı açın.</string>
+    <!-- Telefon bildirimi kanalları (Ayarlar > Bildirimler'de kullanıcı bu adları görür). -->
+    <string name="push_channel_announcements">Duyurular</string>
+    <string name="push_channel_announcements_description">Site yönetiminin yayınladığı duyurular.</string>
+    <string name="push_channel_urgent">Acil duyurular</string>
+    <string name="push_channel_urgent_description">Site yönetiminin acil olarak işaretlediği duyurular.</string>
 </resources>

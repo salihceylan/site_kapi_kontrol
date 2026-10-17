@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:site_kapi_kontrol/app.dart';
 import 'package:site_kapi_kontrol/services/crash_reporter.dart';
+import 'package:site_kapi_kontrol/services/push_firebase_gateway.dart';
 import 'package:site_kapi_kontrol/services/theme_service.dart';
 import 'package:site_kapi_kontrol/ui/views/app_gate_view.dart';
 
@@ -15,6 +16,9 @@ Future<void> main() async {
   // Çökme raporlama kancaları (FlutterError.onError + PlatformDispatcher.onError). Debug/testte kapalı,
   // raporlama hatası uygulamayı asla bozmaz; bekleyen yerel kuyruk kısa bir gecikmeyle gönderilir.
   unawaited(CrashReporter.instance.install());
+  // Telefon bildirimi (Faz 3b-B): Firebase YALNIZ Android/iOS'ta ve try/catch içinde başlatılır; web ve
+  // masaüstünde hiç çağrılmaz. Başlatılamazsa push devre dışı kalır, uygulama normal açılır. Açılışı beklemez.
+  unawaited(startPushMessaging());
   if (!kIsWeb) {
     try {
       await SystemChrome.setPreferredOrientations([

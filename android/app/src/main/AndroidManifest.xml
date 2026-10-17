@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Telefon bildirimi (Android 13+ çalışma zamanı izni): açılışta DEĞİL, Bildirim Tercihleri'nde bağlam
+         içinde istenir. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!--
         Güvenlik notları (M1):
@@ -58,6 +61,28 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Telefon bildirimi (Firebase Cloud Messaging, docs/PLATFORM_BELGELER.md B9):
+             - kanal belirtilmeyen bildirim "Duyurular" kanalına düşer (kanallar MainActivity'de oluşturulur:
+               announcements = varsayılan önem, urgent = yüksek önem);
+             - durum çubuğu simgesi tek renkli, şeffaf ic_stat_notification (başlatıcı simgesi beyaz kare görünürdü);
+               vurgu rengi marka mavisi;
+             - otomatik başlatma KAPALI: kullanıcı bu cihazda telefon bildirimini AÇIKÇA açmadıkça (Android 12 ve
+               öncesinde izin varsayılan açık olsa da) jeton üretilmez, Google'a gitmez. Uygulama yalnız rıza
+               verilmiş cihaz kaydında açar; çıkışta ve cihaz kaldırılınca önce kapatıp jetonu siler. -->
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="announcements" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
 
         <!-- Home Screen Door Quick Access Widget -->
         <receiver

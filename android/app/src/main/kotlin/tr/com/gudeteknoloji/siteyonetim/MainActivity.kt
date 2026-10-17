@@ -1,10 +1,13 @@
 package tr.com.gudeteknoloji.siteyonetim
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -12,11 +15,48 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "tr.com.gudeteknoloji.siteyonetim/wifi_helper"
+    private val PUSH_CHANNEL = "tr.com.gudeteknoloji.siteyonetim/push"
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        createNotificationChannels()
+    }
+
+    // Telefon bildirimi (Faz 3b-B, docs/PLATFORM_BELGELER.md B5/B9): sunucu `android.notification.channel_id`
+    // ile kanalı seçer; normal duyuru "announcements" (varsayılan önem), acil duyuru "urgent" (yüksek önem).
+    // Oluşturma idempotenttir: var olan kanalın kullanıcı ayarları (ses, önem, kapalı) korunur.
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        try {
+            val manager = getSystemService(NotificationManager::class.java) ?: return
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    "announcements",
+                    getString(R.string.push_channel_announcements),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply { description = getString(R.string.push_channel_announcements_description) }
+            )
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    "urgent",
+                    getString(R.string.push_channel_urgent),
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = getString(R.string.push_channel_urgent_description) }
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Telefon bildirimi: Android API düzeyi (13 öncesinde bildirim izni sorulamaz, yalnız ayarlardan açılır).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PUSH_CHANNEL).setMethodCallHandler { call, result ->
+            if (call.method == "sdkInt") result.success(Build.VERSION.SDK_INT) else result.notImplemented()
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {

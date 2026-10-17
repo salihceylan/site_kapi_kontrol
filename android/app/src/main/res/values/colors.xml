@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Telefon bildirimi vurgu rengi (simge zemini / başlık): marka mavisi (lib/styles/app_colors.dart primary). -->
+    <color name="notification_color">#FF2563EB</color>
+</resources>

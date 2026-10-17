@@ -89,3 +89,13 @@ ekran_yazilimi/firmware_releases/**/*.bin
 /cihaz_kontrol/host_test/*.ilk
 /cihaz_kontrol/host_test/vectors.txt
 /cihaz_kontrol/host_test/_calistir_*.bat
+
+# Firebase (push, Faz 3b-B). Depo herkese acik: istemci yapilandirmalari elle yerlestirilir (bkz. *.example),
+# FCM hizmet hesabi JSON u ASLA depoya girmez (sunucuda FCM_SERVICE_ACCOUNT_FILE, depo disi 0600 dosya).
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+*firebase-adminsdk*.json
+firebase-sunucu*.json
+# Sozlesme B6 desenleri (varsayilan yol /etc/kapi/fcm-service-account.json)
+*service-account*.json
+fcm-*.json

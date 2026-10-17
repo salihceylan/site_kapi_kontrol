@@ -1,0 +1,30 @@
+{
+  "_ornek": "YER TUTUCU - gercek deger YOK. Gercek dosya: Firebase Konsolu > Proje ayarlari > Android uygulamasi (paket tr.com.gudeteknoloji.siteyonetim) > google-services.json indir -> android/app/google-services.json (git'e GIRMEZ, .gitignore). Dosya yokken derleme kirilmaz, telefon bildirimi devre disi kalir. API anahtari Google Cloud'da uygulama kimligi + SHA-1/SHA-256 ile kisitlanmalidir (docs/PLATFORM_BELGELER.md B0, B6).",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "firebase-proje-kimligi",
+    "storage_bucket": "firebase-proje-kimligi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "tr.com.gudeteknoloji.siteyonetim"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "API-ANAHTARI-YER-TUTUCU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
