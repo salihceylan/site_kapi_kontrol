@@ -7,6 +7,7 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart' show FinanceDiscardGuard;
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
@@ -15,6 +16,7 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/fee_spec_form.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Tanım penceresi kapanırken döner.
@@ -75,7 +77,7 @@ class FinanceDefinitionFormDialog extends StatefulWidget {
   State<FinanceDefinitionFormDialog> createState() => _FinanceDefinitionFormDialogState();
 }
 
-class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialog> {
+class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialog> with FinanceDiscardGuard {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey<FeeSpecFormState> _specKey = GlobalKey<FeeSpecFormState>();
   late final TextEditingController _name = TextEditingController(
@@ -94,6 +96,9 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
   String? _error;
 
   bool get _editing => widget.definition != null;
+
+  @override
+  bool get closeLocked => _submitting;
 
   /// Hiç borçlandırılmamış (ya da yeni) tanımda dağıtım / tutar / hedef düzenlenir.
   bool get _specEditable => !_editing || widget.definition!.neverPosted;
@@ -246,8 +251,9 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
     final initial = widget.definition;
     final recurring = _kind == FeeKind.recurring;
     return PopScope(
-      canPop: !_submitting,
+      canPop: canPopNow,
       onPopInvokedWithResult: (didPop, _) {
+        handleBlockedPop(didPop);
         if (didPop) _notifyRefreshOnClose();
       },
       child: AppDialog(
@@ -256,7 +262,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
         icon: _editing ? Icons.edit_rounded : Icons.post_add_rounded,
         actions: [
           TextButton(
-            onPressed: _submitting ? null : () => popIfCurrent(context),
+            onPressed: _submitting ? null : requestClose,
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
@@ -267,11 +273,12 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
         ],
         child: Form(
           key: _formKey,
+          onChanged: markDirty,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_error != null) CrmFormError(message: _error!, announce: true),
+              if (_error != null) FinanceSubmitError(message: _error!),
               TextFormField(
                 key: const ValueKey<String>('finance_definition_name'),
                 controller: _name,
@@ -326,7 +333,12 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                         key: ValueKey<String>('finance_kind_${kind.apiValue}'),
                         label: Text(kind.label),
                         selected: _kind == kind,
-                        onSelected: _submitting ? null : (_) => setState(() => _kind = kind),
+                        onSelected: _submitting
+                            ? null
+                            : (_) => setState(() {
+                                markDirty();
+                                _kind = kind;
+                              }),
                       ),
                   ],
                 ),
@@ -353,7 +365,12 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                     for (var day = 1; day <= 28; day++)
                       DropdownMenuItem<int>(value: day, child: Text("Her ayın $day'i")),
                   ],
-                  onChanged: _submitting ? null : (value) => setState(() => _dueDay = value),
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() {
+                          markDirty();
+                          _dueDay = value;
+                        }),
                   validator: (value) => value == null ? 'Vade gününü seçin.' : null,
                 ),
               ],
@@ -373,6 +390,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                   value: _start,
                   keyPrefix: 'finance_start',
                   onChanged: (value) => setState(() {
+                    markDirty();
                     _start = value;
                     if (_end < _start) _end = _start;
                   }),
@@ -386,7 +404,12 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                   title: const Text('Bitiş dönemi belirle'),
                   subtitle: const Text('Kapalıysa tanım süresizdir.'),
                   value: _hasEnd,
-                  onChanged: _submitting ? null : (value) => setState(() => _hasEnd = value),
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() {
+                          markDirty();
+                          _hasEnd = value;
+                        }),
                 ),
                 if (_hasEnd)
                   _stepper(
@@ -395,7 +418,10 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                     value: _end,
                     keyPrefix: 'finance_end',
                     min: _start,
-                    onChanged: (value) => setState(() => _end = value),
+                    onChanged: (value) => setState(() {
+                      markDirty();
+                      _end = value;
+                    }),
                   ),
               ],
               const SizedBox(height: AppSpace.lg),
@@ -409,6 +435,7 @@ class _FinanceDefinitionFormDialogState extends State<FinanceDefinitionFormDialo
                   initialCategoryAmounts: initial?.categoryAmounts ?? const <String, int>{},
                   initialTarget: initial?.target ?? const FeeTarget(),
                   enabled: !_submitting,
+                  onChanged: markDirty,
                   keyPrefix: 'def_spec',
                 )
               else

@@ -422,6 +422,9 @@ class BalanceRowCard extends StatelessWidget {
 /// - [related]: aynı ekstredeki kayıtlar (kimliğe göre). Ters kayıt / iptal edilen kayıt satırı, kayıt NUMARASI
 ///   yerine ilgili kaydın tarihi ve tutarını yazar; kayıt listede yoksa numarasız genel metin kullanılır.
 /// - [onCorrect] / [onReverse] yalnız yönetici içindir (kurul / sakinde null).
+/// - Faz 4b: [onOpenReceipt] makbuzu olan satırda "Makbuz MK-..." düğmesini, [onIssueReceipt] makbuzu olmayan tahsilatta
+///   (yalnız yönetici) "Makbuz Düzenle" düğmesini, [onExplainLateFee] sakin ekranında gecikme tazminatı satırında
+///   "Nasıl hesaplandı?" düğmesini çizer. Gecikme tazminatı satırı rozetle işaretlidir.
 class LedgerEntryTile extends StatelessWidget {
   const LedgerEntryTile({
     super.key,
@@ -432,6 +435,9 @@ class LedgerEntryTile extends StatelessWidget {
     this.onCorrect,
     this.onReverse,
     this.actionsEnabled = true,
+    this.onOpenReceipt,
+    this.onIssueReceipt,
+    this.onExplainLateFee,
   });
 
   final LedgerEntry entry;
@@ -441,6 +447,9 @@ class LedgerEntryTile extends StatelessWidget {
   final VoidCallback? onCorrect;
   final VoidCallback? onReverse;
   final bool actionsEnabled;
+  final VoidCallback? onOpenReceipt;
+  final VoidCallback? onIssueReceipt;
+  final VoidCallback? onExplainLateFee;
 
   /// "05.10.2026 • 500,00 ₺" (tarih ve tutar); kayıt bilinmiyorsa null.
   static String? _brief(LedgerEntry? e) =>
@@ -494,10 +503,16 @@ class LedgerEntryTile extends StatelessWidget {
     final reversesText = _reversesText();
     final reversedByText = _reversedByText();
     final canAct = actionsEnabled && (onCorrect != null || onReverse != null);
+    final hasExtraActions = (onOpenReceipt != null && e.receipt != null) ||
+        (onIssueReceipt != null && (e.receipt == null || e.receipt!.isCancelled)) ||
+        (onExplainLateFee != null && e.isLateFee);
 
     final semantic = StringBuffer('$kindLabel. ${formatCrmDate(e.entryDate)}.');
     if (e.isReversed) semantic.write(' İptal edildi.');
     semantic.write(' ${e.amountMinor > 0 ? 'Borç artar' : 'Borç azalır'}: ${moneySemanticLabel(e.amountMinor.abs())}.');
+    if (e.isLateFee) semantic.write(' Gecikme tazminatı.');
+    final receipt = e.receipt;
+    if (receipt != null) semantic.write(' Makbuz ${receipt.number}${receipt.isCancelled ? ', iptal edildi' : ''}.');
     if (title.isNotEmpty) semantic.write(' $title.');
     if (e.method != null) semantic.write(' ${e.method!.label}.');
     if (reversesText != null) semantic.write(' ${spokenMoneyText(reversesText)}.');
@@ -528,6 +543,8 @@ class LedgerEntryTile extends StatelessWidget {
                           icon: Icons.block_rounded,
                         ),
                       if (e.method != null) DialogMetaPill(e.method!.label),
+                      if (e.isLateFee)
+                        const DialogMetaPill('Gecikme tazminatı', tone: AppTone.warning, icon: Icons.gavel_rounded),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),
@@ -571,13 +588,37 @@ class LedgerEntryTile extends StatelessWidget {
               ),
             ),
           ),
-          if (canAct) ...[
+          if (canAct || hasExtraActions) ...[
             const SizedBox(height: AppSpace.sm),
             Wrap(
               spacing: AppSpace.sm,
               runSpacing: AppSpace.xs,
               children: [
-                if (onCorrect != null)
+                if (onOpenReceipt != null && receipt != null)
+                  TextButton.icon(
+                    key: ValueKey<String>('ledger_receipt_${e.id}'),
+                    onPressed: actionsEnabled ? onOpenReceipt : null,
+                    icon: Icon(receipt.isCancelled ? Icons.receipt_long_outlined : Icons.receipt_long_rounded, size: 18),
+                    label: Text('Makbuz ${receipt.number}'),
+                    style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  ),
+                if (onIssueReceipt != null && (receipt == null || receipt.isCancelled))
+                  TextButton.icon(
+                    key: ValueKey<String>('ledger_issue_receipt_${e.id}'),
+                    onPressed: actionsEnabled ? onIssueReceipt : null,
+                    icon: const Icon(Icons.note_add_rounded, size: 18),
+                    label: const Text('Makbuz Düzenle'),
+                    style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  ),
+                if (onExplainLateFee != null && e.isLateFee)
+                  TextButton.icon(
+                    key: ValueKey<String>('ledger_latefee_explain_${e.id}'),
+                    onPressed: actionsEnabled ? onExplainLateFee : null,
+                    icon: const Icon(Icons.help_outline_rounded, size: 18),
+                    label: const Text('Nasıl hesaplandı?'),
+                    style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  ),
+                if (canAct && onCorrect != null)
                   TextButton.icon(
                     key: ValueKey<String>('ledger_correct_${e.id}'),
                     onPressed: actionsEnabled ? onCorrect : null,
@@ -585,7 +626,7 @@ class LedgerEntryTile extends StatelessWidget {
                     label: const Text('Düzelt'),
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                   ),
-                if (onReverse != null)
+                if (canAct && onReverse != null)
                   TextButton.icon(
                     key: ValueKey<String>('ledger_reverse_${e.id}'),
                     onPressed: actionsEnabled ? onReverse : null,

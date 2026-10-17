@@ -72,6 +72,12 @@ enum SirketMenuItem {
   /// olan sakine [YanMenu.additionalItems] ile eklenir.
   borcum,
 
+  /// Platform Faz 3b-A: Belgeler (dosya deposu). Rol listesinde YOKTUR; `documents` modülü AÇIK olan sitenin
+  /// yöneticisine / süper kullanıcıya / kurul üyesine (salt okunur) ve kitlesinde belge olabilecek sakine
+  /// [YanMenu.additionalItems] ile eklenir ("Finans" / "Borcum"un, yoksa "Duyurular"ın altına). Modül kapalıyken
+  /// ya da modül verisi yokken eklenmez. Görevli (STAFF) için yoktur.
+  belgeler,
+
   /// Satışa hazırlık: Platform Ayarları (uygulama sürümü / bakım, destek iletişim, şirket ve yasal bilgiler).
   /// Yalnız süper kullanıcı (rol listesinde).
   platformAyarlari,
@@ -423,6 +429,18 @@ List<SirketMenuItem> _withExtras(
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.duyurular);
       if (anchor < 0) anchor = result.indexOf(SirketMenuItem.kisiler);
     }
+    // "Belgeler" "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir.
+    if (extra == SirketMenuItem.belgeler) {
+      for (final above in const <SirketMenuItem>[
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -551,6 +569,8 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Finans';
     case SirketMenuItem.borcum:
       return 'Borcum';
+    case SirketMenuItem.belgeler:
+      return 'Belgeler';
     case SirketMenuItem.platformAyarlari:
       return 'Platform Ayarları';
     case SirketMenuItem.istemciHatalari:
@@ -604,6 +624,8 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.account_balance_wallet_rounded;
     case SirketMenuItem.borcum:
       return Icons.receipt_long_rounded;
+    case SirketMenuItem.belgeler:
+      return Icons.folder_rounded;
     case SirketMenuItem.platformAyarlari:
       return Icons.tune_rounded;
     case SirketMenuItem.istemciHatalari:

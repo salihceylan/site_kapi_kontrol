@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/document_models.dart' show DocumentAttachment;
 import 'package:site_kapi_kontrol/models/vehicle_record.dart'
     show crmInt, crmIntOrNull, crmText;
 
@@ -162,6 +163,7 @@ class AnnouncementSummary {
     this.readCount = 0,
     this.createdAt,
     this.createdByName,
+    this.attachmentCount = 0,
   });
 
   final int id;
@@ -170,6 +172,9 @@ class AnnouncementSummary {
   final AnnouncementImportance importance;
   final AnnouncementStatus status;
   final AnnouncementTargetType targetType;
+
+  /// Ekli belge sayısı (Faz 3b-A; eski sunucuda alan yok = 0).
+  final int attachmentCount;
   final DateTime? publishAt;
   final DateTime? publishedAt;
   final DateTime? editedAt;
@@ -211,6 +216,7 @@ class AnnouncementSummary {
       readCount: json.containsKey('read_count') ? crmIntOrNull(json['read_count']) : 0,
       createdAt: announcementInstant(json['created_at']),
       createdByName: crmText(json['created_by_name']),
+      attachmentCount: crmInt(json['attachment_count']),
     );
   }
 
@@ -472,15 +478,20 @@ class AnnouncementDetail extends AnnouncementSummary {
     super.readCount,
     super.createdAt,
     super.createdByName,
+    super.attachmentCount,
     this.body = '',
     this.target = const AnnouncementTarget(),
     this.stats = const AnnouncementStats(),
     this.editCount = 0,
+    this.attachments = const <DocumentAttachment>[],
   });
 
   final String body;
   final AnnouncementTarget target;
   final AnnouncementStats stats;
+
+  /// Ekli belgeler (Faz 3b-A; eski sunucuda alan yok = boş).
+  final List<DocumentAttachment> attachments;
 
   /// Yayından sonra kaç kez düzenlendi (alan yoksa 0; [editedAt] doluysa en az bir kez).
   final int editCount;
@@ -491,7 +502,10 @@ class AnnouncementDetail extends AnnouncementSummary {
     final target = AnnouncementTarget.fromJson(json['target']);
     final stats = AnnouncementStats.fromJson(json['stats']);
     final body = _text(json['body']);
+    final attachments = DocumentAttachment.listFrom(json['attachments']);
     return AnnouncementDetail(
+      attachments: attachments,
+      attachmentCount: json['attachment_count'] == null ? attachments.length : base.attachmentCount,
       id: base.id,
       title: base.title,
       bodyPreview: base.bodyPreview.isEmpty ? body : base.bodyPreview,
@@ -633,6 +647,7 @@ class ResidentAnnouncement {
     this.publishedAt,
     this.editedAt,
     this.isRead = false,
+    this.attachments = const <DocumentAttachment>[],
   });
 
   final int id;
@@ -645,6 +660,9 @@ class ResidentAnnouncement {
   final DateTime? publishedAt;
   final DateTime? editedAt;
   final bool isRead;
+
+  /// Ekli belgeler (Faz 3b-A; liste satırında olmayabilir, ayrıntıda gelir; eski sunucuda boş).
+  final List<DocumentAttachment> attachments;
 
   bool get isUrgent => importance == AnnouncementImportance.urgent;
   bool get isEdited => editedAt != null;
@@ -663,6 +681,7 @@ class ResidentAnnouncement {
     publishedAt: publishedAt,
     editedAt: editedAt,
     isRead: isRead ?? this.isRead,
+    attachments: attachments,
   );
 
   factory ResidentAnnouncement.fromJson(Map<String, dynamic> raw) {
@@ -678,6 +697,7 @@ class ResidentAnnouncement {
       publishedAt: announcementInstant(json['published_at']),
       editedAt: announcementInstant(json['edited_at']),
       isRead: _flag(json['is_read']),
+      attachments: DocumentAttachment.listFrom(json['attachments']),
     );
   }
 }
@@ -770,32 +790,50 @@ class NotificationPrefs {
     this.pushAnnouncements = true,
     this.pushAvailable = false,
     this.emailSuppressed = false,
+    this.emailFinanceReminders = true,
   });
 
   /// ETKİN e-posta tercihi: saklanan tercih VE adresin e-postadaki "abonelikten çık" bağlantısıyla
   /// bastırılmamış olması. [emailSuppressed] iken her zaman false.
   final bool emailAnnouncements;
+
+  /// ETKİN borç hatırlatma e-postası tercihi (`email_finance_reminders`, Faz 4b): [emailAnnouncements] ile
+  /// AYNI kural (saklanan tercih VE bastırılmamış; [emailSuppressed] iken her zaman false). Alan yoksa
+  /// (eski sunucu) açık sayılır.
+  final bool emailFinanceReminders;
   final bool pushAnnouncements;
   final bool pushAvailable;
 
   /// Adres e-postadaki "abonelikten çık" bağlantısıyla bastırılmış mı? Alan yoksa (eski sunucu) false.
   final bool emailSuppressed;
 
-  /// Alan yoksa e-posta tercihi [fallbackEmail] (PUT yanıtında istenen değer), o da yoksa açık.
-  factory NotificationPrefs.fromJson(Map<String, dynamic> json, {bool? fallbackEmail}) {
+  /// Alan yoksa e-posta tercihi [fallbackEmail] (PUT yanıtında istenen değer), o da yoksa açık. Aynı kural
+  /// borç hatırlatma tercihi için [fallbackFinance].
+  factory NotificationPrefs.fromJson(
+    Map<String, dynamic> json, {
+    bool? fallbackEmail,
+    bool? fallbackFinance,
+  }) {
     final suppressed = _flag(json['email_suppressed']);
     return NotificationPrefs(
       // Bastırılmışken etkin değer ASLA açık değildir (sunucu da öyle döner; savunmacı).
       emailAnnouncements:
           !suppressed && _flag(json['email_announcements'], fallback: fallbackEmail ?? true),
+      emailFinanceReminders:
+          !suppressed && _flag(json['email_finance_reminders'], fallback: fallbackFinance ?? true),
       pushAnnouncements: _flag(json['push_announcements'], fallback: true),
       pushAvailable: _flag(json['push_available']),
       emailSuppressed: suppressed,
     );
   }
 
-  NotificationPrefs copyWith({bool? emailAnnouncements, bool? emailSuppressed}) => NotificationPrefs(
+  NotificationPrefs copyWith({
+    bool? emailAnnouncements,
+    bool? emailFinanceReminders,
+    bool? emailSuppressed,
+  }) => NotificationPrefs(
     emailAnnouncements: emailAnnouncements ?? this.emailAnnouncements,
+    emailFinanceReminders: emailFinanceReminders ?? this.emailFinanceReminders,
     pushAnnouncements: pushAnnouncements,
     pushAvailable: pushAvailable,
     emailSuppressed: emailSuppressed ?? this.emailSuppressed,

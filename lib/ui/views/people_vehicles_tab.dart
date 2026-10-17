@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters;
 import 'package:site_kapi_kontrol/models/vehicle_record.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -71,6 +72,9 @@ class PeopleVehiclesTabState extends State<PeopleVehiclesTab> {
 
   /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi).
   Future<void> reload() => _loader.reload();
+
+  /// Dışa aktarmanın kullanacağı süzgeçler (listede UYGULANMIŞ arama).
+  BulkExportFilters get exportFilters => BulkExportFilters(query: _query);
 
   // Son çalıştırılan sorgunun imzası: aynı sorgu tekrar çağrılmaz (okuma hız sınırı düşüktür).
   String _lastSignature = '';

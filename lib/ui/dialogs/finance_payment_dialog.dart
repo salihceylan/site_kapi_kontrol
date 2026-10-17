@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
+import 'package:site_kapi_kontrol/models/cash_models.dart';
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -12,7 +13,9 @@ import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_write_mixin.dart' show FinanceDiscardGuard;
 import 'package:site_kapi_kontrol/ui/helpers/focus_helpers.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
@@ -22,6 +25,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/money_field.dart';
 
@@ -46,6 +50,10 @@ class FinancePaymentOutcome {
 ///   bile) AYNI anahtarı kullanır, sonucu belirsiz istek çift kayıt yaratmaz. Açıklama imzada YOKTUR (yalnız metni
 ///   düzelten kullanıcı yeni anahtar almaz). Başarıdan sonra o imzanın anahtarı atılır: aynı tutarda ikinci
 ///   gerçek tahsilat yeni anahtar alır.
+/// - Faz 4b: sitede aktif kasa / banka hesabı varsa HESAP seçimi ZORUNLUDUR (sunucu `ACCOUNT_REQUIRED`); yönteme göre
+///   yalnız ÖNERİ yapılır (nakit -> kasa, havale / çek -> banka), kullanıcı değiştirebilir. Hesap listesi okunamazsa
+///   uyarı + "Tekrar Dene" gösterilir ve sunucu gerekirse hesap ister. Başarıda düzenlenen makbuz yanıttaki
+///   `receipt` ile sonuca eklenir. Düzeltmede hesap sorulmaz (sunucu eski ödemenin hesabını kullanır).
 /// - Sunucu reddi (kapalı dönem vb.) Türkçe mesajla pencerede gösterilir ve pencere AÇIK kalır. Dönem bilgisi
 ///   yüklüyse ve seçilen ay kapalıysa tarih alanının altında bilgi amaçlı uyarı görünür (kesin karar sunucuda).
 class FinancePaymentDialog extends StatefulWidget {
@@ -103,7 +111,7 @@ class FinancePaymentDialog extends StatefulWidget {
   State<FinancePaymentDialog> createState() => _FinancePaymentDialogState();
 }
 
-class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
+class _FinancePaymentDialogState extends State<FinancePaymentDialog> with FinanceDiscardGuard {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final GlobalKey _apartmentKey = GlobalKey();
   final GlobalKey _methodKey = GlobalKey();
@@ -128,6 +136,21 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
   late final IdempotencyKeys _keys = sessionIdempotencyKeys(widget.scope.authService, 'pay');
   final RetryLock _retry = RetryLock();
 
+  // Faz 4b: kasa / banka hesabı seçimi (yalnız yeni tahsilatta).
+  final GlobalKey _accountKey = GlobalKey();
+  final FocusNode _accountFocus = FocusNode(skipTraversal: true, canRequestFocus: false);
+  CashOverview? _cash;
+  bool _cashLoading = false;
+  String? _cashError;
+  int? _accountId;
+  bool _accountTouched = false;
+  String? _accountError;
+  int _cashToken = 0;
+
+  // Düzeltmede hesap İSTEĞE BAĞLIDIR (eski ödemenin hesabı kullanılır); eski ödeme hesaba eşlenmemişse sunucu hesap ister
+  // (ACCOUNT_REQUIRED): o zaman seçim zorunlu olur.
+  bool _accountRequiredByServer = false;
+
   bool _submitting = false;
   bool _picking = false;
   bool _needsRefreshOnClose = false;
@@ -139,6 +162,9 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
 
   bool get _correcting => widget.correcting != null;
 
+  @override
+  bool get closeLocked => _submitting;
+
   DateTime _today() {
     final wall = istanbulNow(widget.now?.call());
     return DateTime(wall.year, wall.month, wall.day);
@@ -148,10 +174,13 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
   void initState() {
     super.initState();
     unawaited(_loadPeriods());
+    unawaited(_loadAccounts());
   }
 
   @override
   void dispose() {
+    ++_cashToken;
+    _accountFocus.dispose();
     _retry.dispose();
     _apartmentFocus.dispose();
     _methodFocus.dispose();
@@ -173,12 +202,103 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
     }
   }
 
+  /// Aktif kasa / banka hesapları.
+  List<CashAccount> get _activeAccounts => _cash?.activeAccounts ?? const <CashAccount>[];
+
+  static bool _openedBy(CashAccount account, DateTime? date) =>
+      date == null || account.openingDate == null || !account.openingDate!.isAfter(date);
+
+  /// Seçilen tarihte kullanılabilir hesaplar: aktif VE açılış tarihi tahsilat tarihinden önce ya da aynı gün (sunucu:
+  /// `opening_date <= entry_date`; aksi halde BEFORE_OPENING_DATE).
+  List<CashAccount> get _selectableAccounts {
+    final date = parseDateField(_date.text);
+    return <CashAccount>[
+      for (final a in _activeAccounts)
+        if (_openedBy(a, date)) a,
+    ];
+  }
+
+  /// Tarihte açık (açılışı gelmiş) hesap var ama HEPSİ pasif: sunucu hesapsız tahsilatı da kabul etmez (ACCOUNT_INACTIVE).
+  bool get _allAccountsInactiveForDate {
+    final items = _cash?.items ?? const <CashAccount>[];
+    final date = parseDateField(_date.text);
+    final opened = items.where((a) => _openedBy(a, date)).toList();
+    return opened.isNotEmpty && !opened.any((a) => a.isActive);
+  }
+
+  /// Yeni tahsilatta tarihte kullanılabilir hesap varsa hesap ZORUNLU (sunucu ACCOUNT_REQUIRED); tahsilat tarihi tüm hesapların
+  /// açılışından ÖNCEYSE hesap sorulmaz (4a gibi hesapsız yazılır). Düzeltmede yalnız sunucu isterse zorunlu.
+  bool get _accountRequired {
+    if (_selectableAccounts.isEmpty) return false;
+    return !_correcting || _accountRequiredByServer;
+  }
+
+  /// Tarih değişince artık kullanılamayan hesap seçimi bırakılır.
+  void _syncAccountToDate() {
+    final selectable = _selectableAccounts;
+    if (_accountId != null && !selectable.any((a) => a.id == _accountId)) {
+      _accountId = null;
+      _accountTouched = false;
+    }
+    if (_accountId == null && selectable.length == 1 && !_correcting) _accountId = selectable.first.id;
+    if (_accountId == null && !_correcting) _suggestAccount();
+  }
+
+  Future<void> _loadAccounts() async {
+    if (!mounted) return;
+    final token = ++_cashToken;
+    setState(() {
+      _cashLoading = true;
+      _cashError = null;
+    });
+    try {
+      final overview = await widget.scope.f4Call((api, t, s) => api.listAccounts(token: t, siteCode: s));
+      if (!mounted || token != _cashToken) return;
+      setState(() {
+        _cash = overview;
+        _cashLoading = false;
+        final active = _selectableAccounts;
+        if (_accountId != null && !active.any((a) => a.id == _accountId)) _accountId = null;
+        // Düzeltmede hesap önceden seçilmez (eski ödemenin hesabı kullanılır); yeni tahsilatta tek hesap ön seçilir.
+        if (!_correcting) {
+          if (_accountId == null && active.length == 1) _accountId = active.first.id;
+          if (_accountId == null) _suggestAccount();
+        }
+      });
+    } catch (e) {
+      if (!mounted || token != _cashToken) return;
+      setState(() {
+        _cashLoading = false;
+        _cashError = financeMessageOf(
+          e,
+          'Kasa ve banka hesapları yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        );
+      });
+    }
+  }
+
+  /// Yönteme göre ÖNERİ (kullanıcı kendisi seçtiyse dokunulmaz): nakit -> kasa, havale / çek -> banka.
+  void _suggestAccount() {
+    if (_accountTouched || _correcting) return; // düzeltmede hesap önerilmez (eski ödemenin hesabı kullanılır)
+    final method = _method;
+    final active = _selectableAccounts;
+    if (method == null || active.isEmpty) return;
+    final wanted = method == PaymentMethod.cash ? CashAccountKind.cash : CashAccountKind.bank;
+    for (final account in active) {
+      if (account.kind == wanted) {
+        _accountId = account.id;
+        return;
+      }
+    }
+  }
+
   Future<void> _pickApartment() async {
     if (_picking || _submitting) return;
     _picking = true;
     try {
       final picked = await showApartmentPicker(context, widget.scope);
       if (picked == null || !mounted) return;
+      markDirty();
       setState(() {
         _apartment = (id: picked.id, label: picked.fullLabel);
         _apartmentError = null;
@@ -221,11 +341,13 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
 
   /// Daire / yöntem seçimi eksikse hatayı alanın altında gösterir; ikisi de tamamsa true.
   bool _validateChoices() {
+    final accountMissing = _accountRequired && _accountId == null;
     setState(() {
       _apartmentError = _apartment == null ? 'Daire seçin.' : null;
       _methodError = _method == null ? 'Tahsilat yöntemini seçin.' : null;
+      _accountError = accountMissing ? 'Tahsilatın gireceği hesabı seçin.' : null;
     });
-    return _apartment != null && _method != null;
+    return _apartment != null && _method != null && !accountMissing;
   }
 
   bool _showAndFocus(GlobalKey key, FocusNode focus) {
@@ -240,7 +362,8 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
   void _revealFirstProblem(BuildContext formContext) {
     if (_apartmentError != null && _showAndFocus(_apartmentKey, _apartmentFocus)) return;
     if (revealFirstInvalidField(formContext)) return;
-    if (_methodError != null) _showAndFocus(_methodKey, _methodFocus);
+    if (_methodError != null && _showAndFocus(_methodKey, _methodFocus)) return;
+    if (_accountError != null) _showAndFocus(_accountKey, _accountFocus);
   }
 
   Future<void> _submit() async {
@@ -266,8 +389,10 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
     final correcting = widget.correcting;
     // Veri imzası: aynı veriyle yeniden deneme AYNI anahtarı, değişen veri yeni anahtarı kullanır. Açıklama
     // imzada YOKTUR (yalnız metni düzeltmek yeni kayıt anahtarı üretmez).
+    final useAccounts = _accountId != null && _selectableAccounts.any((a) => a.id == _accountId);
+    final accountId = useAccounts ? _accountId : null;
     final signature =
-        '${widget.scope.siteCode}|${correcting?.id ?? 0}|${apartment.id}|$minor|${crmDateParam(date)}|${method.apiValue}';
+        '${widget.scope.siteCode}|${correcting?.id ?? 0}|${apartment.id}|$minor|${crmDateParam(date)}|${method.apiValue}|${accountId ?? 0}';
     final key = _keys.keyFor(signature);
 
     FocusScope.of(context).unfocus();
@@ -279,7 +404,37 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
       final auth = widget.scope.authService;
       final siteCode = widget.scope.siteCode;
       final LedgerWriteResult result;
-      if (correcting == null) {
+      if (correcting == null && useAccounts) {
+        // Hesap seçimli tahsilat (Faz 4b): kayıt + hesap hareketi + makbuz TEK işlemde.
+        result = await widget.scope.f4Call(
+          (api, t, s) => api.recordPayment(
+            token: t,
+            siteCode: s,
+            apartmentId: apartment.id,
+            amountMinor: minor,
+            entryDate: date,
+            method: method,
+            description: note,
+            accountId: accountId,
+            idempotencyKey: key,
+          ),
+        );
+      } else if (correcting != null && useAccounts) {
+        // Düzeltme + hesap seçildi (eski ödeme hesaba eşlenmemişti ya da hesap değişiyor): hesap gövdede gider.
+        result = await widget.scope.f4Call(
+          (api, t, s) => api.correctPayment(
+            token: t,
+            siteCode: s,
+            entryId: correcting.id,
+            amountMinor: minor,
+            entryDate: date,
+            method: method,
+            description: note,
+            accountId: accountId,
+            idempotencyKey: key,
+          ),
+        );
+      } else if (correcting == null) {
         result = await auth.recordFeePayment(
           siteCode,
           apartmentId: apartment.id,
@@ -323,6 +478,11 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
         _keys.clear(signature);
         _needsRefreshOnClose = true;
       }
+      // Sunucu hesap istiyor ama liste henüz yüklenmemişti / pasif hesap seçilmişti: hesaplar yeniden okunur.
+      if (hasErrorCode(e, 'ACCOUNT_REQUIRED') || hasErrorCode(e, 'ACCOUNT_INACTIVE')) {
+        if (_correcting && hasErrorCode(e, 'ACCOUNT_REQUIRED')) _accountRequiredByServer = true;
+        unawaited(_loadAccounts());
+      }
       if (!mounted) return;
       final limited = _retry.lockIfRateLimited(e, () {
         if (mounted) setState(() {});
@@ -355,8 +515,9 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
     final closedWarning = _closedMonthWarning();
     return PopScope(
       // Gönderim sürerken geri tuşu pencereyi kapatmaz (işlem yarıda kalmış gibi görünmesin).
-      canPop: !_submitting,
+      canPop: canPopNow,
       onPopInvokedWithResult: (didPop, _) {
+        handleBlockedPop(didPop);
         if (didPop) _notifyRefreshOnClose();
       },
       child: AppDialog(
@@ -366,7 +527,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
         tone: AppTone.success,
         actions: [
           TextButton(
-            onPressed: _submitting ? null : () => popIfCurrent(context),
+            onPressed: _submitting ? null : requestClose,
             child: const Text('Vazgeç'),
           ),
           ElevatedButton(
@@ -377,11 +538,12 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
         ],
         child: Form(
           key: _formKey,
+          onChanged: markDirty,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_error != null) CrmFormError(message: _error!, announce: true),
+              if (_error != null) FinanceSubmitError(message: _error!),
               if (correcting != null) ...[
                 DialogPanel(
                   key: const ValueKey<String>('finance_payment_original'),
@@ -454,7 +616,10 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [DateInputFormatter(onRejected: _onDateRejected)],
                 autovalidateMode: AutovalidateMode.onUserInteraction,
-                onChanged: (_) => setState(() => _dateOverflow = false),
+                onChanged: (_) => setState(() {
+                  _dateOverflow = false;
+                  _syncAccountToDate();
+                }),
                 decoration: InputDecoration(
                   labelText: 'Tahsilat tarihi',
                   hintText: 'GG.AA.YYYY',
@@ -497,8 +662,10 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
                           onSelected: _submitting
                               ? null
                               : (_) => setState(() {
+                                  markDirty();
                                   _method = method;
                                   _methodError = null;
+                                  _suggestAccount();
                                 }),
                         ),
                     ],
@@ -509,6 +676,7 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
                 const SizedBox(height: AppSpace.sm),
                 CrmFormError(message: _methodError!, reveal: false),
               ],
+              ..._buildAccountSection(context),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const ValueKey<String>('finance_payment_note'),
@@ -543,6 +711,97 @@ class _FinancePaymentDialogState extends State<FinancePaymentDialog> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildAccountSection(BuildContext context) {
+    final th = Theme.of(context).textTheme;
+    final p = context.palette;
+    if (_cashLoading && _cash == null) {
+      return const [
+        SizedBox(height: AppSpace.lg),
+        DialogLoadingNote(text: 'Kasa ve banka hesapları yükleniyor...'),
+      ];
+    }
+    if (_cashError != null && _cash == null) {
+      return [
+        const SizedBox(height: AppSpace.lg),
+        InlineNotice(
+          key: const ValueKey<String>('finance_payment_accounts_error'),
+          tone: AppTone.warning,
+          message: _cashError!,
+          onRetry: _loadAccounts,
+        ),
+      ];
+    }
+    final active = _selectableAccounts;
+    if (_allAccountsInactiveForDate) {
+      return const [
+        SizedBox(height: AppSpace.lg),
+        InlineNotice(
+          key: ValueKey<String>('finance_payment_accounts_inactive'),
+          tone: AppTone.warning,
+          message:
+              'Tüm kasa ve banka hesapları pasif. Tahsilat girmek için önce Kasa bölümünden bir hesabı yeniden etkinleştirin.',
+        ),
+      ];
+    }
+    if (active.isEmpty) {
+      // Tarih tüm hesapların açılışından önceyse tahsilat hesaba işlenmez (4a gibi); kullanıcı nedenini bilsin.
+      if (_activeAccounts.isEmpty) return const <Widget>[];
+      return const [
+        SizedBox(height: AppSpace.lg),
+        InlineNotice(
+          key: ValueKey<String>('finance_payment_before_opening'),
+          tone: AppTone.info,
+          message: 'Seçilen tarih kasa / banka hesaplarının açılış tarihinden önce; bu tahsilat bir hesaba işlenmeyecek.',
+        ),
+      ];
+    }
+    return [
+      const SizedBox(height: AppSpace.lg),
+      const FinanceGroupTitle('Hesap'),
+      const SizedBox(height: AppSpace.xs),
+      Text(
+        _correcting && !_accountRequiredByServer
+            ? 'İsteğe bağlı: eski tahsilat bir hesaba işlenmişse aynı hesap kullanılır. İşlenmemişse yeni tahsilat için hesap seçin.'
+            : 'Tahsilat seçtiğiniz kasa ya da banka hesabına işlenir.',
+        style: th.bodySmall?.copyWith(color: p.textSecondary),
+      ),
+      const SizedBox(height: AppSpace.sm),
+      KeyedSubtree(
+        key: _accountKey,
+        child: Focus(
+          focusNode: _accountFocus,
+          child: Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: [
+              for (final account in active)
+                ChoiceChip(
+                  key: ValueKey<String>('finance_payment_account_${account.id}'),
+                  avatar: Icon(cashKindIcon(account.kind), size: 18),
+                  label: Text(account.name),
+                  selected: _accountId == account.id,
+                  onSelected: _submitting
+                      ? null
+                      : (_) => setState(() {
+                          // Düzeltmede seçili çipe yeniden dokunmak seçimi kaldırır (hesap isteğe bağlı).
+                          markDirty();
+                          final unselect = _correcting && !_accountRequiredByServer && _accountId == account.id;
+                          _accountId = unselect ? null : account.id;
+                          _accountTouched = true;
+                          _accountError = null;
+                        }),
+                ),
+            ],
+          ),
+        ),
+      ),
+      if (_accountError != null) ...[
+        const SizedBox(height: AppSpace.sm),
+        CrmFormError(message: _accountError!, reveal: false),
+      ],
+    ];
   }
 
   static IconData _methodIcon(PaymentMethod method) => switch (method) {

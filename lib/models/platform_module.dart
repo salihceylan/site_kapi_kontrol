@@ -7,6 +7,9 @@ abstract final class PlatformModuleCodes {
   static const String people = 'people';
   static const String announcements = 'announcements';
   static const String finance = 'finance';
+
+  /// Belgeler (dosya deposu; Faz 3b-A). Varsayılan KAPALI.
+  static const String documents = 'documents';
   static const String reservation = 'reservation';
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';

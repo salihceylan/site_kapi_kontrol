@@ -10,6 +10,13 @@ import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_consent_page.dart';
 import 'package:site_kapi_kontrol/ui/views/legal_markdown.dart';
 
+/// Kapının anlık durumu, dışarıdan tetiklenen gezinmeler için (telefon bildirimine dokunma, Faz 3b-B): kapı
+/// etkinken İLK denetim sürerken ya da bekleyen onay sayfası açıkken `true`; kapı ağaçta değilse, devre dışıysa,
+/// denetim hata verdiyse (kapı kilitlemez) `false`. Bekleyen yönlendirme bu `false` olunca teslim edilir.
+abstract final class LegalConsentBlock {
+  static final ValueNotifier<bool> active = ValueNotifier<bool>(false);
+}
+
 /// Giriş yapmış kullanıcı için "Güncellenen koşullar" kapısı.
 ///
 /// [child] (ana sayfa) her zaman ağaçta kalır; kapı açılışta `GET /me/consents` çağırır:
@@ -92,6 +99,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.enabled) {
+      LegalConsentBlock.active.value = true; // İlk denetim bitene dek dışarıdan gezinme bekler.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_check());
       });
@@ -102,6 +110,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    if (widget.enabled) LegalConsentBlock.active.value = false;
     super.dispose();
   }
 
@@ -130,7 +139,10 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
       return;
     }
     final token = widget.authService.session?.token;
-    if (token == null) return;
+    if (token == null) {
+      LegalConsentBlock.active.value = false;
+      return;
+    }
     _checking = true;
     _lastCheckAt = _now();
     _timer?.cancel();
@@ -142,6 +154,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
       _lastSuccessAt = _now();
       final wasBlocked = _pending.isNotEmpty;
       setState(() => _pending = consents.pending);
+      LegalConsentBlock.active.value = consents.pending.isNotEmpty;
       if (consents.pending.isEmpty) {
         if (wasBlocked) announcePolite(context, 'Onay gerekmiyor; devam edebilirsiniz.');
         _notifySettled();
@@ -149,6 +162,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
     } catch (error) {
       if (!mounted) return;
       _lastFailed = true;
+      LegalConsentBlock.active.value = _pending.isNotEmpty; // Hata kapıyı kilitlemez.
       final unauthorized = error is ApiException && error.isUnauthorized;
       if (unauthorized) {
         // Oturum geçersiz olabilir: sunucudan doğrula (gerekirse çıkış yapılır); kapı kilitlemez.
@@ -189,6 +203,7 @@ class _LegalConsentGateState extends State<LegalConsentGate> with WidgetsBinding
     // Sunucu hâlâ bekleyen belge bildiriyorsa kapı açık kalır (yeni listeyle); aksi hâlde kapanır.
     final next = remaining ?? const <PendingConsent>[];
     setState(() => _pending = next);
+    LegalConsentBlock.active.value = next.isNotEmpty;
     if (next.isEmpty) {
       announcePolite(context, 'Koşullar onaylandı.');
       _notifySettled();

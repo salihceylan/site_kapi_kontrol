@@ -2,14 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters, ImportKind;
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/bulk_api.dart' show BulkService;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/views/bulk_import_view.dart';
 import 'package:site_kapi_kontrol/ui/views/people_apartments_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_persons_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/people_vehicles_tab.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sources.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// "Kişiler" ekranı (Platform Faz 2a, çekirdek `people` modülü): site seçici + üç sekme
@@ -214,6 +220,34 @@ class PeopleViewState extends State<PeopleView> {
     setState(() => _resetTabs(code));
   }
 
+  /// «Toplu Yükle» sihirbazını açar (Platform Faz 2b). Kayıtlar değiştiyse görünen sekme yeniden çekilir, diğerleri
+  /// bayatlar; «Kişilere git» ilgili sekmeye geçirir.
+  Future<void> _openBulkImport(PeopleScope scope, {ImportKind? kind}) async {
+    final outcome = await BulkImportView.open(context, scope: scope, initialKind: kind);
+    if (!mounted || outcome == null || scope.siteCode != _siteCode) return;
+    if (outcome.changed) {
+      _markOthersDirty(_tab);
+      _reloadVisibleTab();
+    }
+    final tab = outcome.goToTab;
+    if (tab != null && tab != _tab) _selectTab(tab);
+  }
+
+  /// «Dışa Aktar» alt sayfası; açık sekmenin süzgeçleri önseçili gelir.
+  Future<void> _openBulkExport(PeopleScope scope) {
+    return ExportSheet.show(
+      context,
+      initialIndex: _tab,
+      sources: buildCrmExportSources(
+        service: BulkService(authService: widget.authService),
+        siteCode: scope.siteCode,
+        persons: () => _personsKey.currentState?.exportFilters ?? const BulkExportFilters(),
+        apartments: () => _apartmentsKey.currentState?.exportFilters ?? const BulkExportFilters(),
+        vehicles: () => _vehiclesKey.currentState?.exportFilters ?? const BulkExportFilters(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final th = Theme.of(context).textTheme;
@@ -309,6 +343,13 @@ class PeopleViewState extends State<PeopleView> {
           ),
           const SizedBox(height: AppSpace.md),
         ],
+        if (site.canWrite) ...[
+          BulkEntryActions(
+            onImport: () => unawaited(_openBulkImport(scope)),
+            onExport: () => unawaited(_openBulkExport(scope)),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         Wrap(
           spacing: AppSpace.sm,
           runSpacing: AppSpace.sm,
@@ -346,6 +387,9 @@ class PeopleViewState extends State<PeopleView> {
           key: _personsKey,
           scope: scope,
           onDataChanged: changed,
+          onImportRequested: scope.canWrite
+              ? () => unawaited(_openBulkImport(scope, kind: ImportKind.people))
+              : null,
         );
       case 1:
         return PeopleApartmentsTab(

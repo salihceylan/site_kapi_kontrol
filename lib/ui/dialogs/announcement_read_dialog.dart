@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
@@ -13,6 +14,7 @@ import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_attachments_list.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Sakinin duyuru okuma penceresi (Platform Faz 3a): tam metin, yayın zamanı ve "düzenlendi" notu.
@@ -32,10 +34,14 @@ class AnnouncementReadDialog extends StatefulWidget {
     required this.announcement,
     this.onRead,
     this.onGone,
+    this.documentService,
   });
 
   final AuthService authService;
   final ResidentAnnouncement announcement;
+
+  /// Ek indirme servisi (Faz 3b-A); verilmezse oturumdan kurulur (testlerde sahte verilir).
+  final DocumentService? documentService;
 
   /// Sunucu okundu yazımını onayladıktan sonra çağrılır.
   final ValueChanged<ResidentAnnouncement>? onRead;
@@ -66,6 +72,8 @@ class AnnouncementReadDialog extends StatefulWidget {
 }
 
 class _AnnouncementReadDialogState extends State<AnnouncementReadDialog> {
+  late final DocumentService _documents =
+      widget.documentService ?? DocumentService(authService: widget.authService);
   late ResidentAnnouncement _announcement = widget.announcement;
   bool _loaded = false;
   bool _loading = false;
@@ -221,6 +229,19 @@ class _AnnouncementReadDialogState extends State<AnnouncementReadDialog> {
             'Düzenlendi: ${formatIstanbulDateTime(a.editedAt)}',
             key: const ValueKey<String>('announcement_edited_note'),
             style: th.bodySmall?.copyWith(color: p.textSecondary),
+          ),
+        ],
+        if (a.attachments.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.md),
+          DocumentAttachmentsList(
+            attachments: a.attachments,
+            download: (attachment) => (onProgress, cancel) => _documents.downloadAnnouncementAttachment(
+              a.id,
+              attachment.documentId,
+              fallbackName: attachment.fileName.isEmpty ? 'belge' : attachment.fileName,
+              onProgress: onProgress,
+              cancel: cancel,
+            ),
           ),
         ],
         if (_marking) ...[

@@ -113,6 +113,7 @@ class AnnouncementAdminCard extends StatelessWidget {
       );
     }
     if (a.sendEmail) semantic.write(' E-posta da gönderilir.');
+    if (a.attachmentCount > 0) semantic.write(' ${a.attachmentCount} ek belge.');
     if (a.editedAt != null && a.status == AnnouncementStatus.published) {
       semantic.write(' Düzenlendi.');
     }
@@ -165,6 +166,7 @@ class AnnouncementAdminCard extends StatelessWidget {
                     child: InfoChip('Okunma: —'),
                   ),
                 if (a.sendEmail) const InfoChip('E-posta da gönderilir'),
+                if (a.attachmentCount > 0) InfoChip('${a.attachmentCount} ek'),
                 if (a.editedAt != null &&
                     a.status == AnnouncementStatus.published)
                   const InfoChip('Düzenlendi'),

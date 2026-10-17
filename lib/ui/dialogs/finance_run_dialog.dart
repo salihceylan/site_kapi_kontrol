@@ -22,8 +22,8 @@ import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
-import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/fee_spec_form.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart' show filledToneStyle;
 
@@ -601,7 +601,7 @@ class _FinanceRunDialogState extends State<FinanceRunDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_error != null) CrmFormError(message: _error!, announce: true),
+            if (_error != null) FinanceSubmitError(message: _error!),
             // Önizleme gösterilirken form AĞAÇTA kalır (girilen değerler korunur, "Geri" ile dönülür) ama yer
             // kaplamaz VE odaklanamaz: Offstage tek başına klavye / ekran okuyucu odağını kapatmaz.
             ExcludeFocus(

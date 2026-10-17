@@ -1583,6 +1583,7 @@ class AuthApi {
     bool sendEmail = false,
     String publish = 'draft',
     DateTime? publishAt,
+    List<int>? documentIds,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
@@ -1597,6 +1598,8 @@ class AuthApi {
         'publish': publish,
         if (publish == 'schedule' && publishAt != null)
           'publish_at': publishAt.toUtc().toIso8601String(),
+        // Belge ekleri (Faz 3b-A; en çok 5, yalnız sakinlere açık belgeler).
+        if (documentIds != null && documentIds.isNotEmpty) 'document_ids': documentIds,
       },
     );
     _ensureStatus(response, 201);
@@ -1761,23 +1764,35 @@ class AuthApi {
     return _parsePayload('Bildirim tercihleri', () => NotificationPrefs.fromJson(payload));
   }
 
-  /// E-posta tercihini yazar. `push_*` anahtarları GÖNDERİLMEZ (şimdilik değişmez). Yanıtta tercih alanı
-  /// yoksa istenen değer geçerli sayılır.
+  /// E-posta tercihlerini yazar: yalnız VERİLEN anahtar(lar) gövdeye girer (`email_announcements` ve/veya
+  /// `email_finance_reminders`; verilmeyen sunucuda değişmez). İkisi de null ise [ArgumentError]. `push_*`
+  /// anahtarları GÖNDERİLMEZ (şimdilik değişmez). Yanıtta tercih alanı yoksa istenen değer geçerli sayılır.
   Future<NotificationPrefs> setNotificationPreferences({
     required String token,
-    required bool emailAnnouncements,
+    bool? emailAnnouncements,
+    bool? emailFinanceReminders,
   }) async {
+    if (emailAnnouncements == null && emailFinanceReminders == null) {
+      throw ArgumentError('En az bir e-posta tercihi verilmelidir.');
+    }
     final response = await _authorizedRequest(
       method: 'PUT',
       path: '/app/notification-preferences',
       token: token,
-      body: {'email_announcements': emailAnnouncements},
+      body: {
+        'email_announcements': ?emailAnnouncements,
+        'email_finance_reminders': ?emailFinanceReminders,
+      },
     );
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return _parsePayload(
       'Bildirim tercihleri',
-      () => NotificationPrefs.fromJson(payload, fallbackEmail: emailAnnouncements),
+      () => NotificationPrefs.fromJson(
+        payload,
+        fallbackEmail: emailAnnouncements,
+        fallbackFinance: emailFinanceReminders,
+      ),
     );
   }
 

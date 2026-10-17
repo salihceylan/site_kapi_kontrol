@@ -6,7 +6,8 @@
 // - SharedPreferences: "beni hatırla" (kayıtlı giriş adı = e-posta), sesli komut ayarı ve uygulamanın diğer tüm
 //   anahtarları. TEMA tercihi korunur: hesaba bağlı olmayan, yalnız cihaz görünümü ayarıdır,
 // - ana ekran kısayolları (kapı adı taşır),
-// - diskte kalmış kişisel veri dışa aktarma geçici dosyaları,
+// - diskte kalmış kişisel veri dışa aktarma geçici dosyaları (hesap dışa aktarma, toplu yükleme dışa aktarma /
+//   şablon / hata raporu, belge indirme kopyaları) ve eklentilerin önbellek kopyaları (share_plus, file_picker),
 // - bellekteki görüntü önbelleği.
 // YAN ETKİ (kasıtlı, uygulama içi silmeyle de uzaktan silmeyle de AYNI): güvenli depolama komple `deleteAll` edilir,
 // yani aynı cihazdaki DİĞER hesapların güvenilir cihaz belirteçleri (`login_device_tokens_v1` haritası) da gider
@@ -24,6 +25,9 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/services/account_export_share.dart';
+import 'package:site_kapi_kontrol/services/bulk_file_delivery.dart';
+import 'package:site_kapi_kontrol/services/document_file_share.dart';
+import 'package:site_kapi_kontrol/services/local_cache_purge.dart';
 import 'package:site_kapi_kontrol/services/quick_actions_service.dart';
 import 'package:site_kapi_kontrol/services/theme_service.dart';
 
@@ -43,7 +47,9 @@ class LocalDataWiper {
     Future<void> Function()? clearShortcuts,
     Set<String> keepPreferenceKeys = const <String>{ThemeService.storageKey},
     Directory? exportTempRoot,
+    Future<void> Function()? purgeCaches,
   }) : _exportTempRoot = exportTempRoot,
+       _purgeCaches = purgeCaches,
        _secureStorage = secureStorage ?? const FlutterSecureStorage(),
        _preferences = preferences ?? SharedPreferences.getInstance,
        _clearShortcuts = clearShortcuts ?? QuickActionsService().clearShortcuts,
@@ -59,6 +65,26 @@ class LocalDataWiper {
 
   /// Dışa aktarma geçici klasörlerinin süpürüleceği kök (null: sistem geçici dizini). Testler içindir.
   final Directory? _exportTempRoot;
+
+  /// Eklenti önbelleklerini silen işlev (null: [purgeLocalSharedCaches]). Testler içindir.
+  final Future<void> Function()? _purgeCaches;
+
+  /// Kişisel veri içeren TÜM yerel geçici paylaşım dosyalarını siler: hesap dışa aktarma (`kisisel_veri_*`), toplu
+  /// yükleme (`toplu_dosya_*`), belge (`kisisel_veri_belge_*`) klasörleri — bu süreçte kullanılanlar ve bekleyen
+  /// silme zamanlayıcıları dahil — ile eklenti önbellekleri (share_plus, file_picker). Hata fırlatmaz.
+  ///
+  /// [wipe] bunu çağırır; ÇIKIŞTA (logout) da çağrılmalıdır (oturumu kapatan kod `AuthService.logout` sonrası
+  /// `unawaited(LocalDataWiper.sweepSharedFiles())` ile).
+  static Future<void> sweepSharedFiles({Directory? root, Future<void> Function()? purgeCaches}) async {
+    await AccountExportSharer.sweepAll(staleAfter: Duration.zero, root: root, includeLive: true);
+    await BulkFileSharer.sweepAll(staleAfter: Duration.zero, root: root, includeLive: true);
+    await DocumentFileSharer.sweepAll(staleAfter: Duration.zero, root: root, includeLive: true);
+    try {
+      await (purgeCaches ?? purgeLocalSharedCaches)();
+    } catch (_) {
+      // En iyi çaba.
+    }
+  }
 
   /// Kayıtlı giriş adını (e-posta) siler. Çıkıştan ÖNCE çağrılır: çıkış giriş ekranını hemen kurar ve ekran
   /// açılışta bu değeri okuyup alana yazar; silinmiş hesabın e-postası ekranda görünmesin.
@@ -99,7 +125,7 @@ class LocalDataWiper {
     // Kişisel veri dışa aktarmasının geçici JSON kopyaları: diskte kalmış olanlar (süreç öldürüldüyse silme
     // zamanlayıcısı hiç çalışmamıştır) VE bu süreçte paylaşımı süren / gecikmeli silinecek olanlar (hesap artık yok:
     // alıcıyı beklemenin anlamı yok, bekleyen zamanlayıcılar iptal edilir). Hata fırlatmaz (en iyi çaba).
-    await AccountExportSharer.sweepAll(staleAfter: Duration.zero, root: _exportTempRoot, includeLive: true);
+    await sweepSharedFiles(root: _exportTempRoot, purgeCaches: _purgeCaches);
 
     try {
       final cache = PaintingBinding.instance.imageCache;

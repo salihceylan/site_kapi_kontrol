@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters;
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -11,6 +12,7 @@ import 'package:site_kapi_kontrol/ui/dialogs/person_card_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/person_form_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
+import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart' show BulkEmptyImportAction;
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/person_card.dart';
 
@@ -25,10 +27,14 @@ class PeoplePersonsTab extends StatefulWidget {
     super.key,
     required this.scope,
     required this.onDataChanged,
+    this.onImportRequested,
   });
 
   final PeopleScope scope;
   final VoidCallback onDataChanged;
+
+  /// Boş listede «Excel'den yükle» eylemini gösterir (yalnız yazma yetkisi olanda); null ise gösterilmez.
+  final VoidCallback? onImportRequested;
 
   @override
   State<PeoplePersonsTab> createState() => PeoplePersonsTabState();
@@ -79,6 +85,10 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
 
   /// Listeyi yeniden çeker (sayfa kabuğunun çekip yenilemesi ve yenile düğmesi).
   Future<void> reload() => _loader.reload();
+
+  /// Dışa aktarmanın kullanacağı süzgeçler (listede UYGULANMIŞ arama / ilişki / durum).
+  BulkExportFilters get exportFilters =>
+      BulkExportFilters(query: _query, status: _status, relation: _relation?.apiValue);
 
   // Son çalıştırılan sorgunun imzası: okuma hız sınırı düşük olduğundan AYNI sorgu tekrar çağrılmaz
   // (Enter + gecikme sayacı, aynı süzgeci yeniden seçme).
@@ -282,6 +292,9 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
               : null,
           filteredTitle: 'Bu arama ve süzgeç için kişi bulunamadı.',
           filtered: _filtered,
+          emptyAction: widget.scope.canWrite && widget.onImportRequested != null
+              ? BulkEmptyImportAction(onImport: widget.onImportRequested!)
+              : null,
           itemBuilder: (context, person) =>
               PersonCard(person: person, onTap: () => _open(person)),
         ),

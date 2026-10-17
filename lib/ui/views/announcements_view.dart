@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/push_service.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_admin_view.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_inbox_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/push_soft_prompt_card.dart';
 
 /// "Duyurular" ekranı (Platform Faz 3a, çekirdek `announcements` modülü). Kullanıcının rolüne göre iki
 /// görünüm barındırır:
@@ -57,10 +60,14 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
   final GlobalKey<AnnouncementsAdminViewState> _adminKey =
       GlobalKey<AnnouncementsAdminViewState>();
 
+  // Telefon bildirimi (Faz 3b-B): açıklama cümlesi bu cihazın durumuna göre seçilir; gelen kutusunda "Aç" kartı.
+  late final PushService _push = PushService.instance;
+
   @override
   void initState() {
     super.initState();
     widget.notifier?.addListener(_onNotifier);
+    _push.activeHere.addListener(_onNotifier);
     if (widget.preferInbox) _chosen = _Mode.inbox;
   }
 
@@ -77,11 +84,20 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
   @override
   void dispose() {
     widget.notifier?.removeListener(_onNotifier);
+    _push.activeHere.removeListener(_onNotifier);
     super.dispose();
   }
 
   void _onNotifier() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // Telefon bildirimi durumu bir kare kurulurken değişebilir: yeniden çizim sonraki kareye bırakılır.
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    setState(() {});
   }
 
   bool get _hasManage => widget.manageSites || widget.readOnlySites.isNotEmpty;
@@ -136,13 +152,18 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
           message: 'Duyurular, bir siteye bağlı olduğunuzda burada görünür.',
         );
     }
+    // Telefon bildirimi YALNIZ bu cihazda açık, kayıtlı ve sunucuda push açıkken gelir (Faz 3b-B); normal duyurular
+    // ayrıca kullanıcının tercihlerine (anahtar, sessiz saatler) bağlıdır.
+    final closedNote = _push.activeHere.value
+        ? 'uygulama kapalıyken bu cihaza telefon bildirimi gelir (Bildirim Tercihleri\'nize göre).'
+        : 'uygulama kapalıyken bu cihaza telefon bildirimi gelmez.';
     final description = switch (mode) {
       _Mode.inbox =>
         (widget.notifier?.isDegraded ?? false)
             ? 'Yönetimin size gönderdiği duyurular burada görünür. Bağlantı sorunu: yeni duyurular '
-                  'daha seyrek kontrol ediliyor; uygulama kapalıyken telefon bildirimi gelmez.'
+                  'daha seyrek kontrol ediliyor; $closedNote'
             : 'Yönetimin size gönderdiği duyurular burada görünür. Yeni duyurular uygulama açıkken '
-                  'yaklaşık 20 saniyede bir kontrol edilir; uygulama kapalıyken telefon bildirimi gelmez.',
+                  'yaklaşık 20 saniyede bir kontrol edilir; $closedNote',
       _Mode.manage =>
         'Sitenizdeki sakinlere duyuru gönderin, okunma durumunu izleyin. Duyurular uygulamada '
             've (isterseniz) e-postayla iletilir.',
@@ -155,6 +176,9 @@ class AnnouncementsViewState extends State<AnnouncementsView> {
         const SizedBox(height: AppSpace.sm),
         Text(description, style: th.bodyMedium),
         const SizedBox(height: AppSpace.lg),
+        // Yalnız koşullar sağlanınca görünür; aksi hâlde yer kaplamaz.
+        if (mode == _Mode.inbox)
+          PushSoftPromptCard(authService: widget.authService, pushService: _push),
         if (_hasInbox && _hasManage) ...[
           Wrap(
             spacing: AppSpace.sm,

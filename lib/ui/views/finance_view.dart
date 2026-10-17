@@ -5,21 +5,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsRole;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/expense_attachments.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_flow.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_run_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_settings_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_balances_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_cash_tab.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_definitions_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_expenses_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_late_fee_section.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_periods_tab.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_reminder_card.dart';
+import 'package:site_kapi_kontrol/ui/views/finance_reports_tab.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_settings_controller.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Yönetici "Finans" ekranı (Platform Faz 4a, `finance` modülü): site seçici, mali özet kartı, eylemler
-/// (Tahsilat Ekle, Ek Borç Ekle) ve üç sekme (Daireler | Tanımlar | Dönemler).
+/// (Tahsilat Ekle, Ek Borç Ekle, Finans Ayarları) ve altı sekme (Daireler | Tanımlar | Dönemler | Kasa | Giderler |
+/// Raporlar). Faz 4b: Daireler sekmesinin üstünde borç hatırlatma kartı, Dönemler sekmesinde gecikme tazminatı bölümü;
+/// tazminat ve hatırlatma yalnız sistem bayrağı (`legal_ok`) VE site ayarı açıkken kullanılır, aksi halde nedenini
+/// açıklayan pasif kart gösterilir.
 ///
 /// - [manageAllSites] true (süper kullanıcı): tüm onaylı siteler listelenir, yazma yetkisi vardır. [sites]:
 ///   açıkça verilen siteler (`GET /app/my-modules`: `finance` modülü AÇIK olan yönetilen siteler yazma, kurul
@@ -39,6 +51,7 @@ class FinanceView extends StatefulWidget {
     this.sites = const <PeopleSite>[],
     this.canReopen = false,
     this.onOpenModules,
+    this.expenseAttachmentSource,
     this.now,
   });
 
@@ -52,6 +65,9 @@ class FinanceView extends StatefulWidget {
   /// Modül kapalı bilgisinde "Modüller" düğmesi (yalnız modülü açabilen / talep edebilen kullanıcıya verilir).
   final VoidCallback? onOpenModules;
 
+  /// Gider belgesi (fatura / fiş) eki: Belgeler modülü açıkken sağlanır; null ise gider formunda ek alanı GİZLİDİR.
+  final ExpenseAttachmentSource? expenseAttachmentSource;
+
   /// Şimdiki zaman (testler içindir).
   final DateTime Function()? now;
 
@@ -64,6 +80,9 @@ class FinanceViewState extends State<FinanceView> {
     ('Daireler', Icons.apartment_rounded),
     ('Tanımlar', Icons.request_quote_rounded),
     ('Dönemler', Icons.calendar_month_rounded),
+    ('Kasa', Icons.account_balance_rounded),
+    ('Giderler', Icons.shopping_cart_checkout_rounded),
+    ('Raporlar', Icons.insights_rounded),
   ];
 
   List<PeopleSite> _sites = const <PeopleSite>[];
@@ -80,6 +99,13 @@ class FinanceViewState extends State<FinanceView> {
   GlobalKey<FinanceBalancesTabState> _balancesKey = GlobalKey<FinanceBalancesTabState>();
   GlobalKey<FinanceDefinitionsTabState> _definitionsKey = GlobalKey<FinanceDefinitionsTabState>();
   GlobalKey<FinancePeriodsTabState> _periodsKey = GlobalKey<FinancePeriodsTabState>();
+  GlobalKey<FinanceLateFeeSectionState> _lateFeeKey = GlobalKey<FinanceLateFeeSectionState>();
+  GlobalKey<FinanceCashTabState> _cashKey = GlobalKey<FinanceCashTabState>();
+  GlobalKey<FinanceExpensesTabState> _expensesKey = GlobalKey<FinanceExpensesTabState>();
+  GlobalKey<FinanceReportsTabState> _reportsKey = GlobalKey<FinanceReportsTabState>();
+
+  // Faz 4b ayarları (makbuz / tazminat / hatırlatma): site başına tek yükleyici; site değişince atılır.
+  FinanceSettingsController? _settings;
 
   FinanceSummary? _summary;
   String? _summaryError;
@@ -108,6 +134,7 @@ class FinanceViewState extends State<FinanceView> {
   void dispose() {
     ++_sitesToken;
     ++_summaryToken;
+    _settings?.dispose();
     super.dispose();
   }
 
@@ -127,6 +154,7 @@ class FinanceViewState extends State<FinanceView> {
     final site = _site;
     if (site == null) return;
     unawaited(_loadSummary());
+    unawaited(_settings?.load() ?? Future<void>.value());
     _reloadVisibleTab();
     _markOthersDirty(_tab);
   }
@@ -204,14 +232,25 @@ class FinanceViewState extends State<FinanceView> {
     _balancesKey = GlobalKey<FinanceBalancesTabState>();
     _definitionsKey = GlobalKey<FinanceDefinitionsTabState>();
     _periodsKey = GlobalKey<FinancePeriodsTabState>();
+    _lateFeeKey = GlobalKey<FinanceLateFeeSectionState>();
+    _cashKey = GlobalKey<FinanceCashTabState>();
+    _expensesKey = GlobalKey<FinanceExpensesTabState>();
+    _reportsKey = GlobalKey<FinanceReportsTabState>();
     ++_summaryToken;
     _summary = null;
     _summaryError = null;
     _moduleOff = false;
+    // Eski sitenin ayarı yeni sitenin ekranında görünmesin: denetleyici atılır, yenisi kurulur.
+    _settings?.dispose();
+    _settings = null;
+    final next = _site;
+    if (siteCode != null && next != null) _settings = FinanceSettingsController(_scopeOf(next));
     if (siteCode != null) {
       // Özet bu çerçeveden sonra çekilir (setState içinde başka setState çağırılmaz).
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _siteCode == siteCode) unawaited(_loadSummary());
+        if (!mounted || _siteCode != siteCode) return;
+        unawaited(_loadSummary());
+        unawaited(_settings?.load() ?? Future<void>.value());
       });
     }
   }
@@ -253,6 +292,13 @@ class FinanceViewState extends State<FinanceView> {
         unawaited(_definitionsKey.currentState?.reload() ?? Future<void>.value());
       case 2:
         unawaited(_periodsKey.currentState?.reload() ?? Future<void>.value());
+        unawaited(_lateFeeKey.currentState?.reload() ?? Future<void>.value());
+      case 3:
+        unawaited(_cashKey.currentState?.reload() ?? Future<void>.value());
+      case 4:
+        unawaited(_expensesKey.currentState?.reload() ?? Future<void>.value());
+      case 5:
+        unawaited(_reportsKey.currentState?.reload() ?? Future<void>.value());
     }
   }
 
@@ -320,6 +366,41 @@ class FinanceViewState extends State<FinanceView> {
     if (outcome == null || !mounted) return;
     showFinanceSnack(context, outcome.message);
     _refreshAll();
+    // Her tahsilatta makbuz otomatik düzenlenir (Q1): makbuz penceresi açılır.
+    _opening = true;
+    try {
+      await openReceiptAfterPayment(context, scope: _scopeOf(site), outcome: outcome, onChanged: _refreshAll);
+    } finally {
+      _opening = false;
+    }
+  }
+
+  /// "Finans Ayarları": ayarlar okunamadıysa pencere AÇILMAZ (varsayılan değerle üstüne yazılmasın); önce yeniden okunur.
+  Future<void> _openSettings(PeopleSite site) async {
+    if (_opening) return;
+    final controller = _settings;
+    if (controller == null) return;
+    _opening = true;
+    try {
+      if (controller.settings == null) {
+        await controller.load();
+        if (!mounted) return;
+      }
+      if (controller.settings == null) {
+        showFinanceSnack(context, controller.error ?? 'Ayarlar yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+        return;
+      }
+      final saved = await FinanceSettingsDialog.show(
+        context,
+        scope: _scopeOf(site),
+        controller: controller,
+        now: widget.now,
+      );
+      if (!saved || !mounted) return;
+      showFinanceSnack(context, 'Finans ayarları kaydedildi.');
+    } finally {
+      _opening = false;
+    }
   }
 
   Future<void> _addCharge(PeopleSite site) async {
@@ -463,6 +544,14 @@ class FinanceViewState extends State<FinanceView> {
               variant: AppButtonVariant.tonal,
               onPressed: () => _addCharge(site),
             ),
+            const SizedBox(height: AppSpace.sm),
+            PrimaryActionButton(
+              key: const ValueKey<String>('finance_open_settings'),
+              label: 'Finans Ayarları',
+              icon: Icons.tune_rounded,
+              variant: AppButtonVariant.tonal,
+              onPressed: () => _openSettings(site),
+            ),
             const SizedBox(height: AppSpace.md),
           ],
           // Sekme çubuğu: ekran okuyucu "sekme" rolünü ve seçili durumu okur.
@@ -549,11 +638,26 @@ class FinanceViewState extends State<FinanceView> {
   Widget _buildTab(int index, PeopleScope scope) {
     switch (index) {
       case 0:
-        return FinanceBalancesTab(
-          key: _balancesKey,
-          scope: scope,
-          now: widget.now,
-          onDataChanged: () => _afterWrite(0),
+        final remindSettings = _settings;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (remindSettings != null) ...[
+              FinanceReminderCard(
+                scope: scope,
+                settings: remindSettings,
+                onOpenSettings: () => _openSettings(_siteOf(scope)),
+                onDataChanged: () => _afterWrite(0),
+              ),
+              const SizedBox(height: AppSpace.md),
+            ],
+            FinanceBalancesTab(
+              key: _balancesKey,
+              scope: scope,
+              now: widget.now,
+              onDataChanged: () => _afterWrite(0),
+            ),
+          ],
         );
       case 1:
         return FinanceDefinitionsTab(
@@ -562,14 +666,51 @@ class FinanceViewState extends State<FinanceView> {
           now: widget.now,
           onDataChanged: () => _afterWrite(1),
         );
-      default:
-        return FinancePeriodsTab(
-          key: _periodsKey,
-          scope: scope,
-          canReopen: widget.canReopen,
-          now: widget.now,
-          onDataChanged: () => _afterWrite(2),
+      case 2:
+        final lateSettings = _settings;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FinancePeriodsTab(
+              key: _periodsKey,
+              scope: scope,
+              canReopen: widget.canReopen,
+              now: widget.now,
+              onDataChanged: () => _afterWrite(2),
+            ),
+            if (lateSettings != null) ...[
+              const SizedBox(height: AppSpace.lg),
+              FinanceLateFeeSection(
+                key: _lateFeeKey,
+                scope: scope,
+                settings: lateSettings,
+                now: widget.now,
+                onOpenSettings: () => _openSettings(_siteOf(scope)),
+                onDataChanged: () => _afterWrite(2),
+              ),
+            ],
+          ],
         );
+      case 3:
+        return FinanceCashTab(
+          key: _cashKey,
+          scope: scope,
+          now: widget.now,
+          onDataChanged: () => _afterWrite(3),
+        );
+      case 4:
+        return FinanceExpensesTab(
+          key: _expensesKey,
+          scope: scope,
+          now: widget.now,
+          attachmentSource: widget.expenseAttachmentSource,
+          onDataChanged: () => _afterWrite(4),
+        );
+      default:
+        return FinanceReportsTab(key: _reportsKey, scope: scope, now: widget.now);
     }
   }
+
+  PeopleSite _siteOf(PeopleScope scope) =>
+      _sites.firstWhere((s) => s.code == scope.siteCode, orElse: () => PeopleSite(code: scope.siteCode, name: scope.siteName, canWrite: scope.canWrite));
 }

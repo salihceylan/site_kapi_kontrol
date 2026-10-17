@@ -131,9 +131,11 @@ import 'package:site_kapi_kontrol/ui/views/people_view.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/services/announcement_notifier.dart';
+import 'package:site_kapi_kontrol/services/push_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/announcement_read_dialog.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
+import 'package:site_kapi_kontrol/ui/views/document_view.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
@@ -242,6 +244,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       GlobalKey<AnnouncementsViewState>();
   final GlobalKey<FinanceViewState> _financeViewKey = GlobalKey<FinanceViewState>();
   final GlobalKey<MyFinanceViewState> _myFinanceViewKey = GlobalKey<MyFinanceViewState>();
+  final GlobalKey<DocumentsViewState> _documentsKey = GlobalKey<DocumentsViewState>();
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -746,7 +749,56 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessAnnouncements(role)) SirketMenuItem.duyurular,
         if (_canAccessFinance(role)) SirketMenuItem.finans,
         if (_hasFinanceInbox(role)) SirketMenuItem.borcum,
+        if (_canAccessDocuments(role)) SirketMenuItem.belgeler,
       };
+
+  // --- Belgeler (Faz 3b-A) ---
+
+  /// Belgeler ekranının YÖNETİM görünümündeki siteler: `documents` modülü AÇIK olan yönetilen siteler (yazma;
+  /// yalnız yönetici modunda) ve kurul üyesi olunan siteler (salt okunur). Süper kullanıcıda boştur (ekran tüm
+  /// siteleri çeker). FAIL-OPEN YOK: modül verisi hiç gelmediyse hiçbir site yoktur ve menü AÇILMAZ; sitede
+  /// `documents` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu her çağrıda yetkiyi ve modül
+  /// durumunu yine doğrular.
+  List<PeopleSite> _documentManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <PeopleSite>[];
+    final canManage = _canManagePeople(role);
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.documents))
+          if (site.role == 'manager' && canManage)
+            PeopleSite(code: site.siteCode, name: site.siteName, canWrite: true)
+          else if (site.isBoardMember)
+            PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// Belgeler ekranının SAKİN görünümündeki siteler: alıcısı olabilecek ve `documents` modülü AÇIK siteler.
+  /// Yalnız daire sakini ve sakin modundaki yönetici için; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli
+  /// bağ için boş. Modül verisi yokken (fail-open) boştur.
+  List<PeopleSite> _documentResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.documents))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Belgeler" menüsü: süper kullanıcı ya da `documents` modülü açık bir sitede yönetici / kurul üyesi / sakin.
+  /// Görevli (STAFF) ve bireysel kullanıcı için yoktur.
+  bool _canAccessDocuments(UserRole role) =>
+      role == UserRole.superUser ||
+      _documentManageSites(role).isNotEmpty ||
+      _documentResidentSites(role).isNotEmpty;
 
   // --- Aidat ve Finans (Faz 4a) ---
 
@@ -883,6 +935,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _announcements.addListener(_onAnnouncementsChanged);
     _announcements.start(immediately: true);
     _announcementsWereEligible = _isAnnouncementPollingEligible();
+    _initPush();
   }
 
   void _disposeAnnouncements() {
@@ -893,6 +946,45 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else {
       _announcements.stop();
     }
+    _disposePush();
+  }
+
+  // --- Telefon bildirimi (Faz 3b-B) ---
+
+  // Uygulama genelindeki örnek (yalnız Android/iOS'ta ve Firebase başlatıldıysa etkin; değilse hiçbir şey yapmaz).
+  late final PushService _push = PushService.instance;
+  StreamSubscription<int>? _pushForeground;
+  StreamSubscription<void>? _pushTests;
+
+  /// Çıkış / hesap değişimi kancası ve kayıt tazeleme bağlanır; ön planda gelen bildirim özeti HEMEN tazeler
+  /// (sistem bildirimi gösterilmez); ön planda gelen TEST bildirimi uygulama içinde söylenir; bildirime dokunma,
+  /// ana sayfa ilk kez çizilince duyuruyu açar.
+  void _initPush() {
+    _push.attach(widget.authService);
+    _pushForeground = _push.foregroundAnnouncements.listen((_) => unawaited(_announcements.notePush()));
+    _pushTests = _push.foregroundTests.listen((_) {
+      if (!mounted || widget.authService.session == null) return;
+      AppSnack.show(context, 'Test bildirimi bu cihaza ulaştı.', kind: AppSnackKind.success);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _push.bindAnnouncementOpener(_openAnnouncementFromPush);
+    });
+  }
+
+  void _disposePush() {
+    unawaited(_pushForeground?.cancel());
+    unawaited(_pushTests?.cancel());
+    _push.unbindAnnouncementOpener(_openAnnouncementFromPush);
+    _push.detach(widget.authService);
+  }
+
+  /// Telefon bildirimine dokunuldu (arka plan / kapalıyken; numara beyaz listeden geçti). Olay bir kare kurulurken
+  /// gelebilir: pencere bir sonraki karede, merkezi menü kapısından ([_openAnnouncement]) açılır.
+  void _openAnnouncementFromPush(int id) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openAnnouncement(id);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// Rozet / acil şerit değişti: menü ve Panel yeniden kurulur.
@@ -1072,6 +1164,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _hasFinanceInbox(role);
     }
 
+    // Belgeler: `documents` modülü açık siteye bağlı yönetici, kurul (salt okunur) ya da sakin; modül kapalıyken
+    // ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.belgeler) {
+      return _canAccessDocuments(role);
+    }
+
     switch (role) {
 
       case UserRole.superUser:
@@ -1197,6 +1295,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.borcum:
         return 'Borcum';
+
+      case SirketMenuItem.belgeler:
+        return 'Belgeler';
 
       case SirketMenuItem.siteBasvurulari:
         return 'Site Başvuruları';
@@ -4513,6 +4614,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.borcum:
         await _myFinanceViewKey.currentState?.reload();
         break;
+      case SirketMenuItem.belgeler:
+        await _documentsKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -5376,6 +5480,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.borcum:
         return MyFinanceView(key: _myFinanceViewKey, authService: widget.authService);
+
+      case SirketMenuItem.belgeler:
+        return DocumentsView(
+          key: _documentsKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          manageSites: _documentManageSites(session.role),
+          showResident: _documentResidentSites(session.role).isNotEmpty,
+          residentSites: _documentResidentSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
+        );
 
       case SirketMenuItem.katilimVeKurulum:
         return JoinAndSetupView(

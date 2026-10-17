@@ -777,6 +777,39 @@ class FeePostResult {
 
 // --- Defter ----------------------------------------------------------------------------------
 
+/// Makbuz numarası: `MK-2026-000123` (yıl 4, sıra en az 6 hane).
+String formatReceiptNumber(int year, int no) =>
+    'MK-${year.toString().padLeft(4, '0')}-${no.toString().padLeft(6, '0')}';
+
+/// Ekstre satırına bağlı makbuz özeti (Platform Faz 4b): `receipt: { id, number, status? }`. [status]
+/// `active` ya da `cancelled`; iptal makbuzunda ve bilinmiyorsa null.
+@immutable
+class ReceiptRef {
+  const ReceiptRef({required this.id, required this.number, this.status});
+
+  final int id;
+  final String number;
+  final String? status;
+
+  bool get isCancelled => status == 'cancelled';
+
+  /// Bozuk ya da eksik veride null (satırda makbuz simgesi çizilmez; uydurma numara yazılmaz).
+  static ReceiptRef? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = crmIntOrNull(raw['id']);
+    if (id == null) return null;
+    var number = crmText(raw['number']);
+    if (number == null) {
+      final year = crmIntOrNull(raw['receipt_year']);
+      final no = crmIntOrNull(raw['receipt_no']);
+      if (year != null && no != null) number = formatReceiptNumber(year, no);
+    }
+    if (number == null) return null;
+    final status = crmText(raw['status'])?.toLowerCase();
+    return ReceiptRef(id: id, number: number, status: status);
+  }
+}
+
 /// Defter satırı (`Entry`). `amount_minor` İŞARETLİDİR: > 0 borç, < 0 tahsilat / alacak.
 @immutable
 class LedgerEntry {
@@ -796,6 +829,9 @@ class LedgerEntry {
     this.reversalReason,
     this.createdByName,
     this.createdAt,
+    this.receipt,
+    this.isLateFee = false,
+    this.lateFeeRunId,
   });
 
   final int id;
@@ -813,6 +849,13 @@ class LedgerEntry {
   final String? reversalReason;
   final String? createdByName;
   final DateTime? createdAt;
+
+  /// Tahsilata bağlı AKTİF makbuz (varsa; Faz 4b). Sunucu göndermediyse null.
+  final ReceiptRef? receipt;
+
+  /// Gecikme tazminatı kalemi mi (`kind='charge'` + `late_fee_run_id`; Faz 4b)?
+  final bool isLateFee;
+  final int? lateFeeRunId;
 
   /// Bu kayıt bir ters kayıt mı?
   bool get isReversal => kind == LedgerKind.reversal || reversesEntryId != null;
@@ -844,13 +887,34 @@ class LedgerEntry {
     reversalReason: crmText(json['reversal_reason']),
     createdByName: crmText(json['created_by_name']),
     createdAt: announcementInstant(json['created_at']),
+    receipt: ReceiptRef.tryParse(json['receipt']),
+    isLateFee: _isLateFeeJson(json),
+    lateFeeRunId: crmIntOrNull(json['late_fee_run_id']),
   );
+
+  /// Tazminat kalemi: `kind = charge` VE (açık bayrak / harita ya da `late_fee_run_id`). Sunucu tazminatın TERS kaydına da
+  /// `late_fee_run_id` ve tanım adını kopyalar: ters kayıt tazminat satırı sayılmaz. Tanım adı tek başına ölçüt DEĞİLDİR
+  /// (4a'da elle açılmış aynı adlı bir ek borç sunucu tazminatı olmaz; açıklaması 404 verirdi).
+  static bool _isLateFeeJson(Map<String, dynamic> json) {
+    if (LedgerKind.fromApi(json['kind']) != LedgerKind.charge) return false;
+    final flag = json['late_fee'];
+    if (flag == false) return false;
+    if (flag == true || flag is Map) return true;
+    return crmIntOrNull(json['late_fee_run_id']) != null;
+  }
 }
 
 /// Tahsilat / iptal yanıtı: yeni kayıt + güncel bakiye (`balance_minor`; yoksa null, bakiye listeden yenilenir).
+/// Faz 4b: tahsilatta düzenlenen makbuz ([receipt]) ve hesap hareketi ([movementId]) de gelebilir.
 @immutable
 class LedgerWriteResult {
-  const LedgerWriteResult({required this.entry, this.reversal, this.balanceMinor});
+  const LedgerWriteResult({
+    required this.entry,
+    this.reversal,
+    this.balanceMinor,
+    this.receipt,
+    this.movementId,
+  });
 
   final LedgerEntry entry;
 
@@ -858,16 +922,23 @@ class LedgerWriteResult {
   final LedgerEntry? reversal;
   final int? balanceMinor;
 
+  /// Tahsilatla birlikte düzenlenen makbuz (otomatik düzenleme kapalıysa ya da eski sunucuda null).
+  final ReceiptRef? receipt;
+  final int? movementId;
+
   factory LedgerWriteResult.fromJson(Map<String, dynamic> json) {
     final entry = json['entry'];
     if (entry is! Map) throw const FormatException('Kayıt okunamadı: entry');
     final reversal = json['reversal'];
+    final parsedEntry = LedgerEntry.fromJson(Map<String, dynamic>.from(entry));
     return LedgerWriteResult(
-      entry: LedgerEntry.fromJson(Map<String, dynamic>.from(entry)),
+      entry: parsedEntry,
       reversal: reversal is Map
           ? LedgerEntry.fromJson(Map<String, dynamic>.from(reversal))
           : null,
       balanceMinor: _optionalMinor(json, 'balance_minor'),
+      receipt: ReceiptRef.tryParse(json['receipt']) ?? parsedEntry.receipt,
+      movementId: crmIntOrNull(json['movement_id']),
     );
   }
 }
@@ -1198,6 +1269,62 @@ String? financeActionLabel(String action) {
       return 'Mali dönem kapatıldı';
     case 'finance.period.reopened':
       return 'Mali dönem yeniden açıldı';
+    case 'finance.settings.updated':
+      return 'Finans ayarları güncellendi';
+    case 'finance.receipt.issued':
+      return 'Makbuz düzenlendi';
+    case 'finance.receipt.printed':
+      return 'Makbuz basımı kaydedildi';
+    case 'finance.receipt.cancelled':
+      return 'Makbuz iptal edildi';
+    case 'finance.latefee.posted':
+      return 'Gecikme tazminatı yazıldı';
+    case 'finance.latefee.voided':
+      return 'Gecikme tazminatı iptal edildi';
+    case 'finance.account.created':
+      return 'Kasa / banka hesabı eklendi';
+    case 'finance.account.updated':
+      return 'Kasa / banka hesabı güncellendi';
+    case 'finance.account.adjusted':
+      return 'Hesap düzeltmesi yapıldı';
+    case 'finance.transfer.created':
+      return 'Hesaplar arası aktarım yapıldı';
+    case 'finance.transfer.voided':
+      return 'Hesaplar arası aktarım iptal edildi';
+    case 'finance.reconciliation.recorded':
+      return 'Hesap mutabakatı kaydedildi';
+    case 'finance.payments.assigned':
+      return 'Tahsilatlar hesaba eşlendi';
+    case 'finance.expense.created':
+      return 'Gider eklendi';
+    case 'finance.expense.corrected':
+      return 'Gider düzeltildi';
+    case 'finance.expense.voided':
+      return 'Gider iptal edildi';
+    case 'finance.expense.document_attached':
+      return 'Gider belgesi eklendi';
+    case 'finance.expense.document_removed':
+      return 'Gider belgesi kaldırıldı';
+    case 'finance.category.created':
+      return 'Gider kategorisi eklendi';
+    case 'finance.category.updated':
+      return 'Gider kategorisi güncellendi';
+    case 'finance.supplier.created':
+      return 'Tedarikçi eklendi';
+    case 'finance.supplier.updated':
+      return 'Tedarikçi güncellendi';
+    case 'finance.report.debtor_list':
+      return 'Borçlu listesi görüntülendi';
+    case 'finance.reminder.sent':
+      return 'Borç hatırlatma gönderildi';
+    case 'finance.reminder.cancelled':
+      return 'Borç hatırlatma iptal edildi';
+    case 'finance.reminder.exclusion_added':
+      return 'Daire hatırlatmadan muaf tutuldu';
+    case 'finance.reminder.exclusion_removed':
+      return 'Hatırlatma muafiyeti kaldırıldı';
+    case 'finance.legal_gate.updated':
+      return 'Finans hukuk onayı bayrağı güncellendi';
     default:
       return null;
   }

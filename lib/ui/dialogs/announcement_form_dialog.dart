@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart' show ApartmentSummary;
+import 'package:site_kapi_kontrol/models/document_models.dart' show DocumentAttachment;
 import 'package:site_kapi_kontrol/models/site_block_record.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -20,6 +22,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/helpers/time_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_attachment_field.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Duyurunun ne zaman yayınlanacağı (formdaki "Yayın" seçimi).
@@ -147,6 +150,7 @@ class AnnouncementFormDialog extends StatefulWidget {
     this.announcement,
     this.now,
     this.onRefreshNeeded,
+    this.documentService,
   });
 
   final PeopleScope scope;
@@ -157,6 +161,9 @@ class AnnouncementFormDialog extends StatefulWidget {
   /// Duyurunun sunucudaki durumu pencere açıkken değiştiğinde (409 `INVALID_STATE`, 404
   /// `ANNOUNCEMENT_NOT_FOUND`) çağrılır: pencere sonuçsuz kapansa da çağıran ayrıntıyı / listeyi tazeleyebilsin.
   final VoidCallback? onRefreshNeeded;
+
+  /// Belge eki alanı için servis (Faz 3b-A); verilmezse oturumdan kurulur (testlerde sahte verilir).
+  final DocumentService? documentService;
 
   /// Şimdiki zaman (zamanlama doğrulaması; testler içindir).
   final DateTime Function()? now;
@@ -171,6 +178,7 @@ class AnnouncementFormDialog extends StatefulWidget {
     AnnouncementDetail? announcement,
     DateTime Function()? now,
     VoidCallback? onRefreshNeeded,
+    DocumentService? documentService,
   }) {
     return showDialog<AnnouncementFormResult>(
       context: context,
@@ -180,6 +188,7 @@ class AnnouncementFormDialog extends StatefulWidget {
         announcement: announcement,
         now: now,
         onRefreshNeeded: onRefreshNeeded,
+        documentService: documentService,
       ),
     );
   }
@@ -218,6 +227,10 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
   List<String> _keptApartmentLabels = const <String>[];
 
   bool _submitting = false;
+
+  // Belge ekleri (Faz 3b-A; en çok 5). Yayınlanmış duyuruda değişmez.
+  late List<DocumentAttachment> _attachments =
+      List<DocumentAttachment>.of(widget.announcement?.attachments ?? const <DocumentAttachment>[]);
 
   // Seçici pencereleri çift dokunuşta iki kez açılmasın.
   bool _picking = false;
@@ -566,6 +579,9 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
             AnnouncementPublishMode.schedule => 'schedule',
           },
           publishAt: instant,
+          documentIds: _attachments.isEmpty
+              ? null
+              : <int>[for (final a in _attachments) a.documentId],
         );
       } else {
         var current = initial;
@@ -646,6 +662,13 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
     if (_importance != initial.importance) fields['importance'] = _importance.apiValue;
     if (_sendEmail != initial.sendEmail) fields['send_email'] = _sendEmail;
     if (_targetChanged(initial)) fields['target'] = _targetInput.toJson();
+    if (!_sameIds(
+      <int>[for (final a in initial.attachments) a.documentId],
+      <int>[for (final a in _attachments) a.documentId],
+    )) {
+      // PATCH ek listesini DEĞİŞTİRİR (boş liste = tüm ekleri kaldır).
+      fields['document_ids'] = <int>[for (final a in _attachments) a.documentId];
+    }
     switch (_mode) {
       case AnnouncementPublishMode.draft:
         // Zamanlamayı kaldırmak: publish_at null (sunucu durumu taslağa döndürür).
@@ -784,6 +807,13 @@ class _AnnouncementFormDialogState extends State<AnnouncementFormDialog> {
               if (locked)
                 _buildLockedPanel(context)
               else ...[
+                DocumentAttachmentField(
+                  scope: widget.scope,
+                  service: widget.documentService,
+                  value: _attachments,
+                  enabled: !_submitting,
+                  onChanged: (value) => setState(() => _attachments = value),
+                ),
                 _buildImportance(context),
                 const SizedBox(height: AppSpace.lg),
                 _buildTarget(context),

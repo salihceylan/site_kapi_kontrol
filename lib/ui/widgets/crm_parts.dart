@@ -134,6 +134,7 @@ class CrmListBody<T> extends StatelessWidget {
     this.filtered = false,
     this.skeletonRows = 3,
     this.hideItemsOnError = false,
+    this.emptyAction,
   });
 
   final PagedLoader<T> loader;
@@ -152,6 +153,9 @@ class CrmListBody<T> extends StatelessWidget {
   /// diye kullanılır. Varsayılan false: eski liste hata kutusuyla birlikte kalır.
   final bool hideItemsOnError;
 
+  /// Süzgeçsiz boş durumda kartın içine konan eylem (örn. «Excel'den yükle»); süzgeçli boş sonuçta gösterilmez.
+  final Widget? emptyAction;
+
   @override
   Widget build(BuildContext context) {
     final items = loader.items;
@@ -167,6 +171,7 @@ class CrmListBody<T> extends StatelessWidget {
         icon: emptyIcon,
         title: filtered ? (filteredTitle ?? emptyTitle) : emptyTitle,
         message: emptyMessage,
+        child: filtered ? null : emptyAction,
       );
     }
     if (hideItemsOnError && error != null) {

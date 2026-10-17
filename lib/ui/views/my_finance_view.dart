@@ -6,12 +6,14 @@ import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_late_fee_explain_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/my_finance_4b_parts.dart';
 
 /// Sakin "Borcum" ekranı (Platform Faz 4a, `finance` modülü): kendi dairelerinin toplam borcu / alacağı,
 /// vadesi geçen tutar, sıradaki vade ve son hareketler. YALNIZ GÖRÜNTÜLEME: hiçbir yazma eylemi yoktur,
@@ -23,10 +25,15 @@ import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 ///   açıklama gösterilir.
 /// - Eski / yavaş yanıt yenisini ezmez (jeton); dispose sonrası yanıt yok sayılır. [MyFinanceViewState.reload]
 ///   sayfa kabuğunun aşağı çekip yenilemesinden çağrılır.
+/// - Faz 4b: her dairenin kartında **Makbuzlarım** ve **Ekstre** PDF'i; makbuzlu satırda "Makbuz MK-..." ve tazminat
+///   satırında "Nasıl hesaplandı?" (hepsi salt okuma; sakin hiçbir şey yazmaz).
 class MyFinanceView extends StatefulWidget {
-  const MyFinanceView({super.key, required this.authService});
+  const MyFinanceView({super.key, required this.authService, this.now});
 
   final AuthService authService;
+
+  /// Şimdiki zaman (ekstre PDF dönemi için; testler içindir).
+  final DateTime Function()? now;
 
   @override
   State<MyFinanceView> createState() => MyFinanceViewState();
@@ -157,6 +164,8 @@ class MyFinanceViewState extends State<MyFinanceView> {
               key: ValueKey<String>('my_finance_${item.siteCode}_${item.apartmentId}'),
               item: item,
               showSite: multi || item.siteName.trim().isNotEmpty,
+              authService: widget.authService,
+              now: widget.now,
             ),
           ),
       ],
@@ -215,10 +224,14 @@ class _TotalsCard extends StatelessWidget {
 /// Sakinin bir dairesinin mali durumu: site / daire, bakiye (borç / alacak / borç yok), vadesi geçen tutar,
 /// sıradaki vade ve son hareketler (ilk 5; "Tümünü göster" ile 30'a kadar).
 class MyFinanceCard extends StatefulWidget {
-  const MyFinanceCard({super.key, required this.item, this.showSite = false});
+  const MyFinanceCard({super.key, required this.item, this.showSite = false, this.authService, this.now});
 
   final MyFinanceApartment item;
   final bool showSite;
+
+  /// Verilirse Faz 4b eylemleri (makbuzlar, ekstre PDF, tazminat açıklaması) çizilir; verilmezse yalnız 4a görünümü.
+  final AuthService? authService;
+  final DateTime Function()? now;
 
   static const int collapsedCount = 5;
 
@@ -228,6 +241,29 @@ class MyFinanceCard extends StatefulWidget {
 
 class _MyFinanceCardState extends State<MyFinanceCard> {
   bool _expanded = false;
+  bool _opening = false;
+
+  Future<void> _openReceipt(ReceiptRef ref) async {
+    final auth = widget.authService;
+    if (auth == null || _opening) return;
+    _opening = true;
+    try {
+      await openResidentReceipt(context, auth, widget.item, ref);
+    } finally {
+      _opening = false;
+    }
+  }
+
+  Future<void> _explainLateFee(LedgerEntry entry) async {
+    final auth = widget.authService;
+    if (auth == null || _opening) return;
+    _opening = true;
+    try {
+      await FinanceLateFeeExplainDialog.show(context, scope: residentScopeOf(auth, widget.item), entryId: entry.id);
+    } finally {
+      _opening = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +373,8 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
                   // Sakin yönetici notu görmez (açıklama, iptal nedeni); ters kayıt satırı için aynı listedeki
                   // kayıtlar verilir.
                   related: {for (final e in recent) e.id: e},
+                  onOpenReceipt: widget.authService == null || entry.receipt == null ? null : () => _openReceipt(entry.receipt!),
+                  onExplainLateFee: widget.authService == null || !entry.isLateFee ? null : () => _explainLateFee(entry),
                 ),
               ),
             if (hidden > 0 || _expanded && recent.length > MyFinanceCard.collapsedCount)
@@ -351,6 +389,10 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
               ),
+          ],
+          if (widget.authService != null) ...[
+            const SizedBox(height: AppSpace.md),
+            MyFinanceActions(authService: widget.authService!, item: item, now: widget.now),
           ],
         ],
       ),

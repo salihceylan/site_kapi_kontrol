@@ -23,6 +23,19 @@ AppTone auditToneOf(String action) {
     case 'finance.run.posted':
     case 'finance.charge.posted':
     case 'finance.payment.recorded':
+    case 'finance.receipt.issued':
+    case 'finance.latefee.posted':
+    case 'finance.account.created':
+    case 'finance.transfer.created':
+    case 'finance.expense.created':
+    case 'finance.expense.document_attached':
+    case 'finance.category.created':
+    case 'finance.supplier.created':
+    case 'finance.reminder.sent':
+    case 'document.created':
+    case 'document.version_added':
+    case 'document.restored':
+    case 'document.attached':
       return AppTone.success;
     case 'module.disabled':
     case 'person.deactivated':
@@ -31,6 +44,14 @@ AppTone auditToneOf(String action) {
     case 'finance.definition.deactivated':
     case 'finance.entry.reversed':
     case 'finance.period.closed':
+    case 'finance.receipt.cancelled':
+    case 'finance.latefee.voided':
+    case 'finance.transfer.voided':
+    case 'finance.expense.voided':
+    case 'finance.legal_gate.updated':
+    case 'document.deleted':
+    case 'document.version_deleted':
+    case 'document.detached':
       return AppTone.warning;
     case 'staff_role.removed':
     case 'module_request.cancelled':
@@ -38,6 +59,9 @@ AppTone auditToneOf(String action) {
     case 'vehicle.removed':
     case 'announcement.deleted':
     case 'site_application.cancelled':
+    case 'finance.expense.document_removed':
+    case 'finance.reminder.cancelled':
+    case 'finance.reminder.exclusion_removed':
       return AppTone.neutral;
     case 'module_request.created':
     case 'announcement.updated':
@@ -47,9 +71,22 @@ AppTone auditToneOf(String action) {
     case 'finance.definition.updated':
     case 'finance.entry.corrected':
     case 'finance.period.reopened':
+    case 'finance.settings.updated':
+    case 'finance.receipt.printed':
+    case 'finance.account.updated':
+    case 'finance.account.adjusted':
+    case 'finance.reconciliation.recorded':
+    case 'finance.payments.assigned':
+    case 'finance.expense.corrected':
+    case 'finance.category.updated':
+    case 'finance.supplier.updated':
+    case 'finance.report.debtor_list':
+    case 'finance.reminder.exclusion_added':
+    case 'document.updated':
       return AppTone.info;
     case 'module_request.rejected':
     case 'site_application.rejected':
+    case 'document.purged':
       return AppTone.danger;
     default:
       return AppTone.info;

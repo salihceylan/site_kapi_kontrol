@@ -89,6 +89,11 @@ class AuthService extends ChangeNotifier {
   /// eşzamanlı bir isteğin TOKEN_REVOKED 401'i oturumu yanlışlıkla kapatmasın diye sayılır.
   int _credentialSwapDepth = 0;
 
+  /// Telefon bildirimi (Faz 3b-B): [logout] oturumu silmeden HEMEN ÖNCE, belirteç hâlâ elde iken çağrılır.
+  /// `PushService` cihaz kaydını bu belirteçle sunucudan siler ve FCM jetonunu geçersiz kılar. Beklenmez
+  /// (arayüz giriş ekranına hemen döner); hatası çıkışı bozmaz.
+  void Function(UserSession ending)? onSessionEnding;
+
   UserSession? get session => _session;
 
   /// Oturum bilgisinin (rol dahil) sunucudaki `/me` ile SON BAŞARILI doğrulandığı an; hiç doğrulanmadıysa
@@ -571,6 +576,13 @@ class AuthService extends ChangeNotifier {
 
   Future<void> logout() async {
     final hadSession = _session != null;
+    // Telefon bildirimi: cihaz kaydının silinmesi oturum belirteci silinmeden ÖNCE yola çıkar (en iyi çaba).
+    final ending = _session;
+    if (ending != null) {
+      try {
+        onSessionEnding?.call(ending);
+      } catch (_) {}
+    }
     _session = null;
     _lastSessionCheckAt = null;
     _lastMyDoors = null;
@@ -597,6 +609,10 @@ class AuthService extends ChangeNotifier {
         await DoorWidgetService.instance.clearDoorData();
       } catch (_) {}
     }
+
+    // Kişisel veri içeren yerel geçici dosyalar (dışa aktarma, toplu yükleme, belge kopyaları ve eklenti
+    // önbellekleri) çıkışta da silinir; yalnız hesap silmede değil. En iyi çaba, hata fırlatmaz.
+    unawaited(LocalDataWiper.sweepSharedFiles());
   }
 
   Future<ManagedUserPage> listManagedUsers({
@@ -1568,6 +1584,7 @@ class AuthService extends ChangeNotifier {
     bool sendEmail = false,
     String publish = 'draft',
     DateTime? publishAt,
+    List<int>? documentIds,
   }) {
     return _runAuthorized(
       (token) => api.createAnnouncement(
@@ -1580,6 +1597,7 @@ class AuthService extends ChangeNotifier {
         sendEmail: sendEmail,
         publish: publish,
         publishAt: publishAt,
+        documentIds: documentIds,
       ),
     );
   }
@@ -1676,11 +1694,19 @@ class AuthService extends ChangeNotifier {
     return _runAuthorized((token) => api.getNotificationPreferences(token: token));
   }
 
-  Future<NotificationPrefs> setNotificationPreferences({required bool emailAnnouncements}) {
+  /// Yalnız verilen e-posta tercihi(leri) yazılır; ikisi de null ise [ArgumentError] (istek gitmez).
+  Future<NotificationPrefs> setNotificationPreferences({
+    bool? emailAnnouncements,
+    bool? emailFinanceReminders,
+  }) {
+    if (emailAnnouncements == null && emailFinanceReminders == null) {
+      throw ArgumentError('En az bir e-posta tercihi verilmelidir.');
+    }
     return _runAuthorized(
       (token) => api.setNotificationPreferences(
         token: token,
         emailAnnouncements: emailAnnouncements,
+        emailFinanceReminders: emailFinanceReminders,
       ),
     );
   }

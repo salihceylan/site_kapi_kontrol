@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
@@ -35,6 +36,22 @@ class PdfFontSet {
       medium: _bytesOf(fonts[2]),
     );
   }
+
+  /// Uygulamaya GÖMÜLÜ Roboto (`assets/fonts`, Apache-2.0): AĞ YOK, çevrimdışıyken de ş ğ ı İ ö ü ç ve ₺
+  /// glifleri vardır. Makbuz ve finans raporları (Platform Faz 4b) bunu kullanır; [loadRoboto] ağdan indirir ve
+  /// çevrimdışıyken Helvetica'ya düşüp Türkçe harfleri kaybeder. Orta ağırlık ayrı gömülmez: [medium] normal
+  /// ağırlıkla aynıdır.
+  static Future<PdfFontSet> loadBundled({AssetBundle? bundle}) async {
+    final source = bundle ?? rootBundle;
+    Uint8List copy(ByteData d) => Uint8List.fromList(d.buffer.asUint8List(d.offsetInBytes, d.lengthInBytes));
+    // Ardışık yükleme (iki küçük varlık): Future.wait testlerdeki SynchronousFuture ile boş liste döndürebiliyor.
+    final regular = copy(await source.load(bundledRegularAsset));
+    final bold = copy(await source.load(bundledBoldAsset));
+    return PdfFontSet(regular: regular, bold: bold, medium: regular);
+  }
+
+  static const String bundledRegularAsset = 'assets/fonts/Roboto-Regular.ttf';
+  static const String bundledBoldAsset = 'assets/fonts/Roboto-Bold.ttf';
 
   /// Yazı tipi TTF ise sıkıştırılmış (ofset 0) bir bayt kopyası; Helvetica yedeğinde null.
   static Uint8List? _bytesOf(pw.Font font) {

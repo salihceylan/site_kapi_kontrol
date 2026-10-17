@@ -296,6 +296,15 @@ class AnnouncementNotifier extends ChangeNotifier {
   /// Ön plana dönüşte ya da elle yenilemede geri çekilmeyi sıfırlar.
   void resetBackoff() => _poller.resetBackoff();
 
+  /// Uygulama ön plandayken telefon bildirimi geldi (Faz 3b-B, docs/PLATFORM_BELGELER.md B8/B10): özet ~20 sn'lik
+  /// yoklamayı beklemeden HEMEN çekilir. Yoklama aralığı değişmez; "yeni duyuru" olayı yine YALNIZ sunucu
+  /// özetinden üretilir (push ile yoklama aynı yoldan geçer, çift uyarı çıkmaz).
+  Future<bool?> notePush() {
+    if (_disposed) return Future<bool?>.value(null);
+    _poller.resetBackoff();
+    return refresh();
+  }
+
   /// Çıkış ya da kullanıcı değişimi: durumu sıfırlar (yeni kullanıcıya eski kullanıcının duyuruları
   /// sızmaz). Uçuştaki eski yanıt yok sayılır; taban çizgisi yeniden kurulur.
   void clear() {

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/models/document_models.dart' show documentActionLabel;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
@@ -41,6 +42,7 @@ class AuditLogEntry {
     'people': 'Kişi ve Daire Kayıtları',
     'announcements': 'Duyuru ve Bildirim',
     'finance': 'Aidat ve Finans',
+    'documents': 'Belgeler (Dosya Deposu)',
     'reservation': 'Rezervasyon ve Konsiyerj',
     'work_tracking': 'İş Takibi',
     'metering': 'Sayaç Okuma ve Faturalandırma',
@@ -83,6 +85,7 @@ class AuditLogEntry {
       default:
         return peopleActionLabel(action) ??
             announcementActionLabel(action) ??
+            documentActionLabel(action) ??
             siteApplicationActionLabel(action) ??
             financeActionLabel(action) ??
             'Diğer işlem';
@@ -125,6 +128,9 @@ class AuditLogEntry {
       case 'site_application':
         // Site adı / gerekçe / not denetim kaydına yazılmaz; yalnız başvuru numarası gösterilir.
         return _numbered('Başvuru');
+      case 'document':
+        // Başlık / dosya adı denetim kaydına yazılmaz; yalnız numara gösterilir.
+        return _numbered('Belge');
       case 'finance':
         return _financeTarget();
       case 'platform_settings':
@@ -151,6 +157,20 @@ class AuditLogEntry {
     if (action.startsWith('finance.run.')) return 'Borçlandırma #$id';
     if (action.startsWith('finance.charge.')) return 'Ek borç #$id';
     if (action.startsWith('finance.payment.')) return 'Tahsilat #$id';
+    // Faz 4b: makbuz, tazminat, kasa / banka, gider, hatırlatma (yalnız numara; ad / not / tutar yazılmaz).
+    if (action.startsWith('finance.receipt.')) return 'Makbuz #$id';
+    if (action.startsWith('finance.latefee.')) return 'Tazminat çalıştırması #$id';
+    if (action.startsWith('finance.account.')) return 'Hesap #$id';
+    if (action.startsWith('finance.transfer.')) return 'Aktarım #$id';
+    if (action.startsWith('finance.reconciliation.')) return 'Mutabakat #$id';
+    if (action.startsWith('finance.expense.')) return 'Gider #$id';
+    if (action.startsWith('finance.category.')) return 'Gider kategorisi #$id';
+    if (action.startsWith('finance.supplier.')) return 'Tedarikçi #$id';
+    if (action.startsWith('finance.reminder.')) return 'Hatırlatma #$id';
+    if (action.startsWith('finance.settings.')) return 'Finans ayarları';
+    if (action.startsWith('finance.legal_gate.')) return 'Hukuk onayı bayrağı';
+    if (action.startsWith('finance.report.')) return 'Rapor';
+    if (action.startsWith('finance.payments.')) return 'Tahsilat eşleme';
     return 'Mali kayıt #$id';
   }
 

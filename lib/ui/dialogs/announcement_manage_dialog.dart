@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -19,6 +20,7 @@ import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_recipients_panel.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/document_attachments_list.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 
 /// Yönetici duyuru ayrıntı penceresi (Platform Faz 3a): tam metin, hedef, yayın zamanı, okundu
@@ -39,10 +41,14 @@ class AnnouncementManageDialog extends StatefulWidget {
     required this.announcementId,
     this.initialTitle = '',
     this.onChanged,
+    this.documentService,
   });
 
   final PeopleScope scope;
   final int announcementId;
+
+  /// Ek indirme servisi (Faz 3b-A); verilmezse oturumdan kurulur (testlerde sahte verilir).
+  final DocumentService? documentService;
 
   /// Ayrıntı gelene kadar başlıkta görünen ad (liste satırından).
   final String initialTitle;
@@ -73,6 +79,8 @@ class AnnouncementManageDialog extends StatefulWidget {
 }
 
 class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
+  late final DocumentService _documents =
+      widget.documentService ?? DocumentService(authService: widget.scope.authService);
   AnnouncementDetail? _detail;
   bool _loading = false;
   String? _error;
@@ -486,6 +494,19 @@ class _AnnouncementManageDialogState extends State<AnnouncementManageDialog> {
             ],
           ),
         ),
+        if (detail.attachments.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.md),
+          DocumentAttachmentsList(
+            attachments: detail.attachments,
+            download: (attachment) => (onProgress, cancel) => _documents.downloadManaged(
+              widget.scope.siteCode,
+              attachment.documentId,
+              fallbackName: attachment.fileName.isEmpty ? 'belge' : attachment.fileName,
+              onProgress: onProgress,
+              cancel: cancel,
+            ),
+          ),
+        ],
         if (detail.hasAudience) ...[
           const SizedBox(height: AppSpace.md),
           _buildReadPanel(context, detail, th, secondary),

@@ -6,14 +6,20 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_payment_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_reminder_exempt_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_flow.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/finance_receipt_list_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/finance_reverse_dialog.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/large_dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
+import 'package:site_kapi_kontrol/ui/helpers/finance_4b_access.dart';
 import 'package:site_kapi_kontrol/ui/helpers/finance_errors.dart';
 import 'package:site_kapi_kontrol/ui/helpers/money.dart';
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
+import 'package:site_kapi_kontrol/ui/widgets/finance_4b_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 /// Daire hesap ekstresi penceresi (Platform Faz 4a): güncel bakiye (borç / alacak simge + metinle), vadesi
@@ -25,6 +31,10 @@ import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 ///   salt okur. Her yazmadan sonra ekstre yeniden okunur ve [onChanged] çağrılır (liste / özet tazelenir).
 /// - Hata asla "borç yok / hareket yok" demez: bakiye okunamadıysa hata + "Tekrar Dene" gösterilir; eski /
 ///   yavaş yanıt yenisini ezmez ([CursorLoader] jetonu ve başlık sırası).
+/// - Faz 4b: tahsilattan sonra makbuz penceresi açılır; makbuzu olan satırda "Makbuz MK-..." ve makbuzu olmayan
+///   (otomatik düzenleme kapalıyken ya da eski) tahsilatta yönetici için "Makbuz Düzenle" vardır; "Makbuzlar" bu
+///   dairenin makbuz listesini açar (kurul da okur); yönetici "Hatırlatmadan Muaf Tut" ile daireyi borç hatırlatmalarından
+///   muaf tutar / muafiyeti kaldırır (spec §7).
 class FinanceAccountDialog extends StatefulWidget {
   const FinanceAccountDialog({
     super.key,
@@ -71,6 +81,8 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
   AccountView? _header;
   int _headerSeq = 0;
   bool _opening = false;
+  bool _issuing = false;
+  String? _actionError;
 
   late final CursorLoader<LedgerEntry> _loader = CursorLoader<LedgerEntry>(
     fetch: (before) async {
@@ -144,7 +156,115 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     } finally {
       _opening = false;
     }
-    if (outcome != null) _afterChange(outcome.message);
+    if (outcome == null) return;
+    _afterChange(outcome.message);
+    await _showReceipt(outcome);
+  }
+
+  /// Tahsilat sonrası makbuz penceresi (makbuz varsa).
+  Future<void> _showReceipt(FinancePaymentOutcome outcome) async {
+    if (!mounted || outcome.result.receipt == null) return;
+    _opening = true;
+    try {
+      await openReceiptAfterPayment(context, scope: widget.scope, outcome: outcome, onChanged: _refreshOnly);
+    } finally {
+      _opening = false;
+    }
+  }
+
+  Future<void> _openReceipt(LedgerEntry entry) async {
+    final ref = entry.receipt;
+    if (ref == null || _opening || _issuing) return;
+    _opening = true;
+    try {
+      await FinanceReceiptDialog.show(
+        context,
+        scope: widget.scope,
+        receiptId: ref.id,
+        initialNumber: ref.number,
+        onChanged: _refreshOnly,
+      );
+    } finally {
+      _opening = false;
+    }
+  }
+
+  Future<void> _openReceipts() async {
+    if (_opening || _issuing) return;
+    _opening = true;
+    try {
+      await FinanceReceiptListDialog.show(
+        context,
+        scope: widget.scope,
+        apartmentId: widget.apartmentId,
+        apartmentLabel: _title,
+        now: widget.now,
+        onChanged: _refreshOnly,
+      );
+    } finally {
+      _opening = false;
+    }
+  }
+
+  /// Daireyi borç hatırlatmalarından muaf tutar / muafiyeti kaldırır (spec §7; durum sunucudan okunur).
+  Future<void> _openExempt() async {
+    if (_opening || _issuing) return;
+    _opening = true;
+    final String? message;
+    try {
+      message = await FinanceReminderExemptDialog.show(
+        context,
+        scope: widget.scope,
+        apartmentId: widget.apartmentId,
+        apartmentLabel: _title,
+      );
+    } finally {
+      _opening = false;
+    }
+    if (message == null || !mounted) return;
+    widget.onChanged?.call();
+    showFinanceSnack(context, message);
+  }
+
+  /// Makbuzu olmayan tahsilat için makbuz düzenler (sunucuda idempotent: aktif makbuz varsa onu döndürür).
+  Future<void> _issueReceipt(LedgerEntry entry) async {
+    if (_opening || _issuing) return;
+    setState(() {
+      _issuing = true;
+      _actionError = null;
+    });
+    try {
+      final result = await widget.scope.f4Call((api, t, s) => api.issueReceipt(token: t, siteCode: s, entryId: entry.id));
+      if (!mounted) return;
+      setState(() => _issuing = false);
+      widget.onChanged?.call();
+      unawaited(_loader.reload());
+      _opening = true;
+      try {
+        await FinanceReceiptDialog.show(
+          context,
+          scope: widget.scope,
+          receiptId: result.receipt.id,
+          initialNumber: result.receipt.number,
+          justIssued: result.created,
+          onChanged: _refreshOnly,
+        );
+      } finally {
+        _opening = false;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _issuing = false;
+        _actionError = financeWriteMessage(
+          e,
+          'Makbuz düzenlenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+          hint: kFinanceUncertainStateHint,
+        );
+      });
+      // Durum değişmiş olabilir (makbuz başkası tarafından düzenlenmiş vb.): ekstre yeniden okunur.
+      unawaited(_loader.reload());
+    }
   }
 
   Future<void> _correct(LedgerEntry entry) async {
@@ -164,7 +284,9 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     } finally {
       _opening = false;
     }
-    if (outcome != null) _afterChange(outcome.message);
+    if (outcome == null) return;
+    _afterChange(outcome.message);
+    await _showReceipt(outcome);
   }
 
   Future<void> _reverse(LedgerEntry entry) async {
@@ -184,6 +306,11 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
     }
     if (outcome != null) _afterChange(outcome.message);
   }
+
+  /// Makbuz düzenlenebilir tahsilat: iptal edilmemiş, ters kayıt olmayan ve AKTİF makbuzu bulunmayan ödeme. Makbuzu
+  /// "hatalı düzenlendi" diye iptal edilmiş ödeme için yeni makbuz düzenlenebilir (iptal penceresinin vaadi; sunucu izin verir).
+  static bool _canIssueReceipt(LedgerEntry e) =>
+      e.kind == LedgerKind.payment && !e.isReversal && !e.isReversed && (e.receipt == null || e.receipt!.isCancelled);
 
   String get _title {
     final header = _header;
@@ -223,6 +350,30 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
               onPressed: _addPayment,
             ),
           ],
+          if (header != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            PrimaryActionButton(
+              key: const ValueKey<String>('finance_account_receipts'),
+              label: 'Makbuzlar',
+              icon: Icons.receipt_long_rounded,
+              variant: AppButtonVariant.tonal,
+              onPressed: _opening || _issuing ? null : _openReceipts,
+            ),
+          ],
+          if (header != null && _canWrite) ...[
+            const SizedBox(height: AppSpace.sm),
+            PrimaryActionButton(
+              key: const ValueKey<String>('finance_account_reminder_exempt'),
+              label: 'Hatırlatmadan Muaf Tut',
+              icon: Icons.do_not_disturb_on_rounded,
+              variant: AppButtonVariant.tonal,
+              onPressed: _opening || _issuing ? null : _openExempt,
+            ),
+          ],
+          if (_actionError != null) ...[
+            const SizedBox(height: AppSpace.md),
+            FinanceSubmitError(key: const ValueKey<String>('finance_account_action_error'), message: _actionError!),
+          ],
           const SizedBox(height: AppSpace.md),
           Row(
             children: [
@@ -256,9 +407,11 @@ class _FinanceAccountDialogState extends State<FinanceAccountDialog> {
                 // Yönetici notları (açıklama, iptal nedeni) yalnız yazma yetkisi olan ekranda; kurul görmez.
                 showNotes: _canWrite,
                 related: related,
-                actionsEnabled: !_opening,
+                actionsEnabled: !_opening && !_issuing,
                 onCorrect: _canWrite && entry.canCorrect ? () => _correct(entry) : null,
                 onReverse: _canWrite && entry.canReverse ? () => _reverse(entry) : null,
+                onOpenReceipt: entry.receipt == null ? null : () => _openReceipt(entry),
+                onIssueReceipt: _canWrite && _canIssueReceipt(entry) ? () => _issueReceipt(entry) : null,
               ),
             ),
           ),

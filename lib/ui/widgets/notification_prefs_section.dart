@@ -3,34 +3,46 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/push_service.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/push_prefs_panel.dart';
 
-/// Profilde "Bildirim Tercihleri" bölümü (Platform Faz 3a): "E-posta ile duyuru al" anahtarı ve pasif
-/// "Telefon bildirimi — Yakında…" satırı.
+/// Profilde "Bildirim Tercihleri" bölümü (Platform Faz 3a, Faz 4b): "E-posta ile duyuru al" ve "Borç hatırlatma
+/// e-postaları" anahtarları ve pasif "Telefon bildirimi — Yakında…" satırı.
 ///
 /// - Tercih sunucudan okunur; yüklenirken iskelet, hata olursa hata + "Tekrar Dene" (varsayılan bir anahtar
 ///   ASLA çizilmez: yanlış değeri doğruymuş gibi göstermesin).
-/// - Anahtar değişince `PUT` gider; sürerken anahtar kilitlidir (çift dokunuş yok). Başarısızsa eski değere
-///   DÖNER ve hata görünür kalır. Yanıt eski bir bölümü ezmez (jeton).
+/// - Anahtar değişince `PUT` gider (yalnız o anahtar; öteki değişmez); sürerken İKİ anahtar da kilitlidir (çift
+///   dokunuş yok). Başarısızsa eski değere DÖNER ve hata görünür kalır. Yanıt eski bir bölümü ezmez (jeton).
 /// - Açıklama: kapalıyken normal duyurular e-postayla gelmez; ACİL duyurunun e-postası bu tercihten etkilenmez
-///   (uygulamada her zaman görünür).
-/// - E-posta adresi e-postadaki "abonelikten çık" bağlantısıyla bastırılmışsa (`email_suppressed`) anahtar KAPALI
-///   gösterilir ve altında notu yazar. Kullanıcı anahtarı AÇARSA bastırma kalkar (yanıt `email_suppressed:false`).
-///   Açtıktan sonra yanıt HÂLÂ bastırılmış dönerse (dahili hesabın iletişim adresi) anahtar kapalı kalır ve
-///   hata değil BİLGİ olarak "yönetici/destek ile açılabilir" yazılır. Alan yoksa (eski sunucu) eski davranış.
+///   (uygulamada her zaman görünür). Borç hatırlatması kapalıyken yalnız o e-posta gelmez; duyurular ve borç
+///   bilgileri uygulamada görünmeye devam eder.
+/// - E-posta adresi e-postadaki "abonelikten çık" bağlantısıyla bastırılmışsa (`email_suppressed`; adres düzeyinde,
+///   iki tercihi birden durdurur) İKİ anahtar da KAPALI gösterilir ve altında not BİR kez yazar. Kullanıcı
+///   anahtarlardan birini AÇARSA bastırma kalkar (yanıt `email_suppressed:false`). Açtıktan sonra yanıt HÂLÂ
+///   bastırılmış dönerse (dahili hesabın iletişim adresi) anahtar kapalı kalır ve hata değil BİLGİ olarak
+///   "yönetici/destek ile açılabilir" yazılır. Alan yoksa (eski sunucu) eski davranış.
 /// - Hesap değişince (yeni [authService]) yeniden yüklenir.
+/// - Telefon bildirimi (Faz 3b-B): sunucu `push_available: true` dediğinde pasif "Yakında…" satırının yerine
+///   [PushPrefsPanel] gelir (anahtar, başlık önizlemesi, sessiz saatler, cihazlarım, test bildirimi).
 class NotificationPrefsSection extends StatefulWidget {
-  const NotificationPrefsSection({super.key, required this.authService});
+  const NotificationPrefsSection({super.key, required this.authService, this.pushService});
 
   final AuthService authService;
+
+  /// Verilmezse uygulama genelindeki [PushService.instance] (testler sahtesini verir).
+  final PushService? pushService;
 
   @override
   State<NotificationPrefsSection> createState() => NotificationPrefsSectionState();
 }
+
+/// Bölümdeki iki e-posta anahtarı.
+enum _EmailPref { announcements, financeReminders }
 
 class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
   NotificationPrefs? _prefs;
@@ -98,30 +110,37 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
     }
   }
 
-  Future<void> _setEmail(bool value) async {
+  /// Tek bir e-posta tercihini yazar (duyuru VEYA borç hatırlatma). Yalnız o anahtar sunucuya gider ve yalnız
+  /// o anahtar iyimser güncellenir: öteki anahtarın saklanan değeri ezilmez. Kilit, jeton ve geri alma iki
+  /// anahtar için ortaktır (aynı anda tek kayıt).
+  Future<void> _setPref(_EmailPref which, bool value) async {
     final before = _prefs;
     if (before == null || _saving) return;
     final token = ++_token;
+    final announcements = which == _EmailPref.announcements;
     setState(() {
       _saving = true;
       _saveError = null;
       _saveInfo = null;
       // Açarken bastırma kalkacağı varsayılır (yanıt kesinleştirir); kapatırken bastırma durumu değişmez.
       _prefs = before.copyWith(
-        emailAnnouncements: value,
+        emailAnnouncements: announcements ? value : null,
+        emailFinanceReminders: announcements ? null : value,
         emailSuppressed: value ? false : null,
       );
     });
     try {
       final saved = await widget.authService.setNotificationPreferences(
-        emailAnnouncements: value,
+        emailAnnouncements: announcements ? value : null,
+        emailFinanceReminders: announcements ? null : value,
       );
       if (!mounted || token != _token) return;
       setState(() {
         _prefs = saved;
         _saving = false;
         // Açılmak istendi ama adres hâlâ bastırılmış: anahtar kapalı kalır, bu bir HATA değil bilgidir.
-        _saveInfo = value && saved.emailSuppressed && !saved.emailAnnouncements ? supportNote : null;
+        final effective = announcements ? saved.emailAnnouncements : saved.emailFinanceReminders;
+        _saveInfo = value && saved.emailSuppressed && !effective ? supportNote : null;
       });
     } catch (e) {
       if (!mounted || token != _token) return;
@@ -175,8 +194,20 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
               'etkilenmez; uygulamada her zaman görünürler.',
             ),
             value: prefs.emailAnnouncements,
-            onChanged: _saving ? null : _setEmail,
+            onChanged: _saving ? null : (v) => unawaited(_setPref(_EmailPref.announcements, v)),
           ),
+          SwitchListTile(
+            key: const ValueKey<String>('notification_finance_reminders_switch'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Borç hatırlatma e-postaları'),
+            subtitle: const Text(
+              'Aidat borcunuz için site yönetiminin gönderdiği hatırlatma e-postaları. Kapalıyken bu '
+              'hatırlatmalar e-postayla gelmez; duyurular ve borç bilgileriniz uygulamada görünmeye devam eder.',
+            ),
+            value: prefs.emailFinanceReminders,
+            onChanged: _saving ? null : (v) => unawaited(_setPref(_EmailPref.financeReminders, v)),
+          ),
+          // Bastırma adres düzeyindedir (e-postadaki bağlantı iki tercihi birden durdurur): not BİR kez görünür.
           if (prefs.emailSuppressed) ...[
             const SizedBox(height: AppSpace.xs),
             Row(
@@ -190,28 +221,35 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
             ),
           ],
           const SizedBox(height: AppSpace.sm),
-          MergeSemantics(
-            child: Row(
-              children: [
-                Icon(Icons.phone_android_rounded, size: 20, color: p.textSecondary),
-                const SizedBox(width: AppSpace.md),
-                Expanded(
-                  child: Text(
-                    'Telefon bildirimi',
-                    style: th.bodyLarge?.copyWith(color: p.textSecondary),
-                  ),
-                ),
-                const SizedBox(width: AppSpace.sm),
-                const Flexible(
-                  child: StatusChip(
-                    label: 'Yakında…',
-                    tone: AppTone.neutral,
-                    icon: Icons.schedule_rounded,
-                  ),
-                ),
-              ],
+          if (prefs.pushAvailable) ...[
+            const Divider(height: AppSpace.lg),
+            PushPrefsPanel(
+              authService: widget.authService,
+              pushService: widget.pushService ?? PushService.instance,
             ),
-          ),
+          ] else
+            MergeSemantics(
+              child: Row(
+                children: [
+                  Icon(Icons.phone_android_rounded, size: 20, color: p.textSecondary),
+                  const SizedBox(width: AppSpace.md),
+                  Expanded(
+                    child: Text(
+                      'Telefon bildirimi',
+                      style: th.bodyLarge?.copyWith(color: p.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  const Flexible(
+                    child: StatusChip(
+                      label: 'Yakında…',
+                      tone: AppTone.neutral,
+                      icon: Icons.schedule_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       );
     }
@@ -223,7 +261,7 @@ class NotificationPrefsSectionState extends State<NotificationPrefsSection> {
           const SectionHeader(title: 'Bildirim Tercihleri'),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Duyuruları nasıl almak istediğinizi seçin.',
+            'Duyuruları ve borç hatırlatmalarını nasıl almak istediğinizi seçin.',
             style: th.bodySmall,
           ),
           const SizedBox(height: AppSpace.md),
