@@ -12,7 +12,8 @@
 # Saklama: dis kopyalar EN FAZLA OFFSITE_PRUNE_DAYS (varsayilan 210 gun) tutulur; gonderim basarili olduktan sonra uzak taraftaki
 # bu yastan eski gunluk-veritabani ve yapilandirma dosyalari silinir (rsync: yerel dizin veya ssh uzerinden; rclone: `rclone delete
 # --min-age`). sftp-only hedeflerde uzak budama YAPILAMAZ: eski dosyalari elle silmeniz gerekir. Firmware arsivleri (kapi_firmware_*)
-# budanmaz (degismedikce tek yedek kopyadir).
+# budanmaz (degismedikce tek yedek kopyadir). Belge deposu arsivleri (kapi_documents_*) EN YENISI HARIC ayni yastan (210 gun) sonra silinir:
+# en yeni arsiv yasi ne olursa olsun korunur (belge kumesi degismediyse tek geri yukleme kopyasidir).
 #
 # Kullanim: bash ~/ops/offsite_push.sh [--all] [--check]
 #   --all    daha once gonderilmis olanlari da yeniden gonder
@@ -131,6 +132,37 @@ prune_remote() {
   esac
 }
 
+# Belge arsivleri (kapi_documents_*): EN YENISI HARIC, PRUNE_DAYS'ten eskiler silinir. En yeni arsiv asla silinmez.
+prune_docs_remote() {
+  [ "$PRUNE_DAYS" -gt 0 ] || return 0
+  local hostpart rpath out script cutoff
+  script="cd \"\$1\" 2>/dev/null || exit 0
+ls -1t kapi_documents_*.tgz.enc 2>/dev/null | tail -n +2 | while IFS= read -r f; do
+  if [ -n \"\$(find \"\$f\" -maxdepth 0 -mtime +$PRUNE_DAYS 2>/dev/null)\" ]; then rm -f -- \"\$f\" && echo \"\$f\"; fi
+done"
+  case "$METHOD" in
+    rsync)
+      if [[ "$TARGET" == /* ]]; then
+        [[ "$TARGET" =~ ^/[^/]+/[^/]+ ]] || return 0
+        out="$(sh -c "$script" sh "$TARGET" 2>/dev/null)"
+      else
+        hostpart="${TARGET%%:*}"; rpath="${TARGET#*:}"
+        [[ "$rpath" =~ ^[A-Za-z0-9_./~-]+$ ]] || return 0
+        out="$(printf '%s\n' "$script" | nolock timeout 120 ssh "${SSH_OPTS[@]}" "$hostpart" sh -s "'$rpath'" 2>/dev/null)"
+      fi
+      ;;
+    rclone)
+      cutoff="$(date -d "-${PRUNE_DAYS} days" '+%Y-%m-%d %H:%M:%S')"
+      out="$(nolock timeout 120 rclone lsf "$TARGET" --files-only --include 'kapi_documents_*.tgz.enc' --format tp --separator '|' 2>/dev/null \
+        | LC_ALL=C sort -r | tail -n +2 | while IFS='|' read -r t n; do
+            if [[ -n "$n" && "$t" < "$cutoff" ]]; then nolock timeout 60 rclone deletefile "$TARGET/$n" >/dev/null 2>&1 && echo "$n"; fi
+          done)"
+      ;;
+    *) return 0 ;;
+  esac
+  [ -z "$out" ] || printf '%s\n' "$out" | while read -r l; do log "uzak budama (belge arsivi): silindi $l"; done
+}
+
 SENT=0
 case "$METHOD" in
   rsync)
@@ -200,5 +232,6 @@ for f in "${TO_SEND[@]}"; do grep -qxF "$f" "$PUSHED_LIST" 2>/dev/null || echo "
 write_status "$STATUS_FILE" "result=OK" "epoch=$(now_epoch)" "method=$METHOD" "pushed=$SENT"
 log "=== dis kopya BASARILI: $SENT dosya gonderildi ve dogrulandi ($METHOD) ==="
 prune_remote
+prune_docs_remote
 trim_log
 exit 0

@@ -73,7 +73,7 @@ load_env_file() {
 app_env_get() {
   local key="$1"
   case "$key" in
-    DB_NAME|DB_HOST|DB_PORT|DB_USER|PORT|MQTT_HOST|MQTT_PORT|MQTT_CONNECT_HOST) ;;
+    DB_NAME|DB_HOST|DB_PORT|DB_USER|PORT|MQTT_HOST|MQTT_PORT|MQTT_CONNECT_HOST|DOCUMENTS_DIR|DOCUMENTS_STORAGE_DIR) ;;
     *) return 1 ;;
   esac
   [ -r "$APP_ENV_FILE" ] || return 1
@@ -81,6 +81,19 @@ app_env_get() {
 }
 
 load_env_file "$OPS_CONF"
+
+# Belge deposu kokunun yolu (yol SIR DEGILDIR). Uygulamayla ayni cozum sirasi: DOCUMENTS_DIR, eski ad DOCUMENTS_STORAGE_DIR,
+# yoksa ~/kapi-documents. KAPI_DOCUMENTS_DIR yalniz ops tarafi gecersiz kilmasidir (kapi-ops.env / deneme). Yol mutlak ve ".." icermeyen olmali.
+documents_root() {
+  local d
+  d="${KAPI_DOCUMENTS_DIR:-}"
+  [ -n "$d" ] || d="$(app_env_get DOCUMENTS_DIR 2>/dev/null)"
+  [ -n "$d" ] || d="$(app_env_get DOCUMENTS_STORAGE_DIR 2>/dev/null)"
+  [ -n "$d" ] || d="$HOME/kapi-documents"
+  case "$d" in /*) ;; *) d="$HOME/kapi-documents" ;; esac
+  case "$d" in *..*) d="$HOME/kapi-documents" ;; esac
+  printf '%s' "${d%/}"
+}
 
 DB_NAME="${DB_NAME:-$(app_env_get DB_NAME 2>/dev/null)}"
 DB_NAME="${DB_NAME:-site_kapi_kontrol}"

@@ -7,6 +7,8 @@
 #   monthly/  ayin ilk yedegi, SIFRELI (.sql.gz.enc)                                             (6 adet)
 #   config/   kapi_config_<TS>.tgz.enc     .env + nginx sitesi + MQTT yapilandirmasi + data/public + roller + silinen hesap listesi
 #             kapi_firmware_<TS>.tgz.enc   server/firmware (OTA ikilileri; YALNIZ icerik degisince yeni arsiv, son 5 tutulur)
+#             kapi_documents_<TS>.tgz.enc  belge deposu (DOCUMENTS_DIR/sites; _tmp HARIC; DB dokumunden SONRA; YALNIZ icerik degisince;
+#                                          son 5 tutulur, en yenisi disinda 210 gunden eskiler silinir)
 #   offsite/  kapi_<TS>.sql.gz.enc + config/firmware arsivleri (YALNIZ sifreli; offsite_push.sh gonderir)
 #
 # Sifreleme: openssl enc -aes-256-cbc -pbkdf2 -iter 200000; anahtar ~/.config/kapi-backup.key (600), ASLA yazdirilmaz.
@@ -37,6 +39,9 @@ int_or_default KEEP_WEEKLY 8 1
 int_or_default KEEP_MONTHLY 6 1
 int_or_default KEEP_OFFSITE 14 1
 int_or_default KEEP_FIRMWARE 5 1
+int_or_default KEEP_DOCUMENTS 5 1
+int_or_default DOCUMENTS_MAX_AGE_DAYS 210 1
+int_or_default DOCUMENTS_BACKUP_MAX_MB 3000 1
 int_or_default MIN_DUMP_BYTES 8000 1000
 int_or_default MIN_TABLES 30 1
 REQUIRED_TABLES="${REQUIRED_TABLES:-users sites site_memberships audit_log}"
@@ -57,13 +62,15 @@ CFG_OUT="$CONFIGD/kapi_config_${TS}.tgz.enc"
 CFG_TMP="$CONFIGD/.kapi_config_${TS}.tgz.enc.part"
 FW_OUT="$CONFIGD/kapi_firmware_${TS}.tgz.enc"
 FW_TMP="$CONFIGD/.kapi_firmware_${TS}.tgz.enc.part"
+DOC_OUT="$CONFIGD/kapi_documents_${TS}.tgz.enc"
+DOC_TMP="$CONFIGD/.kapi_documents_${TS}.tgz.enc.part"
 OFF_DB="$OFFSITE/kapi_${TS}.sql.gz.enc"
 STAGE=""
 ERRF="$OPS_STATE/backup.pgdump.err"
 START_EPOCH="$(now_epoch)"
 
 cleanup() {
-  rm -f -- "$TMP_DUMP" "$CFG_TMP" "$FW_TMP" "$OFF_DB.part" 2>/dev/null
+  rm -f -- "$TMP_DUMP" "$CFG_TMP" "$FW_TMP" "$DOC_TMP" "$OFF_DB.part" 2>/dev/null
   [ -n "$STAGE" ] && rm -rf -- "$STAGE" 2>/dev/null
   true
 }
@@ -214,7 +221,7 @@ if [ -e "$OUT" ]; then
 fi
 
 # ---- 1. pg_dump -> gzip ------------------------------------------------------------------
-log "[1/7] pg_dump ($DB_NAME) -> gzip"
+log "[1/8] pg_dump ($DB_NAME) -> gzip"
 nolock timeout --foreground 900 docker exec "$DB_CONTAINER" pg_dump -U postgres -d "$DB_NAME" --lock-wait-timeout=60s 2>"$ERRF" | gzip -6 >"$TMP_DUMP"
 rc=("${PIPESTATUS[@]}")
 if [ "${rc[0]}" -ne 0 ] || [ "${rc[1]}" -ne 0 ]; then
@@ -223,7 +230,7 @@ fi
 chmod 600 "$TMP_DUMP"
 
 # ---- 2. butunluk dogrulamasi -------------------------------------------------------------
-log "[2/7] dogrulama (gzip -t, boyut esigi, bitis isareti, beklenen tablolar, kullanici sayisi)"
+log "[2/8] dogrulama (gzip -t, boyut esigi, bitis isareti, beklenen tablolar, kullanici sayisi)"
 gzip -t "$TMP_DUMP" 2>/dev/null || fail 1 "gzip -t basarisiz (bozuk arsiv)"
 size="$(stat -c %s "$TMP_DUMP")"
 [ "$size" -ge "$MIN_DUMP_BYTES" ] || fail 1 "yedek cok kucuk ($size bayt < $MIN_DUMP_BYTES)"
@@ -264,7 +271,7 @@ log "   tamam: kapi_${TS}.sql.gz $(human_bytes "$size") tablo=$n_tables kullanic
 
 # ---- 3. sifreli kopya (dis kopya + haftalik/aylik + eski gunluklerin yerine) -------------
 ENC_RESULT="OK"
-log "[3/7] sifreli kopya (anahtar parmak izi + sifre cozme dogrulamasi)"
+log "[3/8] sifreli kopya (anahtar parmak izi + sifre cozme dogrulamasi)"
 if key_fingerprint_ok; then
   if enc_file "$OUT" "$OFF_DB.part" && [ "$(dec_cmd -in "$OFF_DB.part" 2>/dev/null | sha256sum | cut -d' ' -f1)" = "$sha" ]; then
     mv -- "$OFF_DB.part" "$OFF_DB"
@@ -281,7 +288,7 @@ fi
 [ "$ENC_RESULT" = "FAIL" ] && log "HATA: $REASON"
 
 # ---- 4. haftalik / aylik kopyalar (sifreli) ------------------------------------------------
-log "[4/7] haftalik/aylik kopyalar (sifreli)"
+log "[4/8] haftalik/aylik kopyalar (sifreli)"
 [ "$ENC_RESULT" = "OK" ] && promote "$OFF_DB"
 
 # ---- 5. yapilandirma yedegi (sifreli) ----------------------------------------------------
@@ -299,6 +306,7 @@ config_backup() {
     echo "db_yedegi=kapi_${TS}.sql.gz"
     echo "icerik=server/.env, nginx sitesi, MQTT broker yapilandirmasi (ozel anahtarlar HARIC), kapi-mqtt-sync, server/data, server/public, server/ecosystem.config.cjs, globals.sql (roller), deleted_accounts.csv, crontab.txt"
     echo "firmware=ayri arsiv: kapi_firmware_*.tgz.enc"
+    echo "belgeler=ayri arsiv: kapi_documents_*.tgz.enc (DOCUMENTS_DIR/sites; geri yukleme sonrasi: node scripts/documents_fsck.mjs)"
     echo "geri_yukleme=docs/OPERASYON_YEDEK_IZLEME.md"
   } >"$STAGE/INFO.txt"
   nolock timeout --foreground 120 docker exec "$DB_CONTAINER" pg_dumpall -U postgres --globals-only >"$STAGE/globals.sql" 2>/dev/null </dev/null || { REASON="pg_dumpall --globals-only basarisiz"; return 1; }
@@ -345,7 +353,7 @@ config_backup() {
   log "   tamam: kapi_config_${TS}.tgz.enc $(human_bytes "$(stat -c %s "$CFG_OUT")") (arsiv girdisi: $(printf '%s\n' "$listing" | wc -l), silinmis hesap kaydi: $(($(wc -l <"$STAGE/deleted_accounts.csv") - 1)))"
   return 0
 }
-log "[5/7] sifreli yapilandirma yedegi"
+log "[5/8] sifreli yapilandirma yedegi"
 if [ "$ENC_RESULT" != "OK" ]; then
   CFG_RESULT="FAIL"
   log "ATLANDI: anahtar sorunu nedeniyle sifreli yapilandirma yedegi alinmadi"
@@ -384,7 +392,7 @@ firmware_backup() {
   log "   tamam: kapi_firmware_${TS}.tgz.enc $(human_bytes "$(stat -c %s "$FW_OUT")") (dosya: $(printf '%s\n' "$listing" | grep -vc '/$'))"
   return 0
 }
-log "[6/7] firmware (OTA ikilileri) sifreli arsivi"
+log "[6/8] firmware (OTA ikilileri) sifreli arsivi"
 if [ "$ENC_RESULT" != "OK" ]; then
   FW_RESULT="FAIL"
   log "ATLANDI: anahtar sorunu nedeniyle firmware arsivi alinmadi"
@@ -393,8 +401,82 @@ elif ! firmware_backup; then
   log "HATA: $REASON"
 fi
 
-# ---- 7. eski duz yedekleri sifrele + tutma kurallari --------------------------------------
-log "[7/7] tutma ve sifreleme: gunluk=$KEEP_DAILY haftalik=$KEEP_WEEKLY aylik=$KEEP_MONTHLY"
+# ---- 7. belge deposu (DOCUMENTS_DIR) arsivi: DB dokumunden SONRA, yalniz icerik degisince --------
+# Dosyalar yazilir-silinmez ve adlari benzersizdir (bir surumun dosyasi BIR KEZ yazilir); dokumden sonra alindigi icin dosya kumesi DB'nin
+# ust kumesidir (DB satiri olup dosyasi yedekte olmayan durum dogmaz). <kok>/sites ve <kok>/.instance (depolama kimligi) alinir: _tmp/ (yarim yuklemeler) ve
+# _orphans/ (yetim karantinasi) HARIC. .instance arsivde yoksa geri yuklenen dizin DB ile eslesmez ve bakim yetim temizligini reddeder (R16 P2-4); .instance yoksa HATA verilmez.
+# Dizin yoksa / bos ise (modul kapali ya da hic kullanilmadiysa) HATA verilmez, atlanir. Arsiv sifrelidir (config/ + offsite/), 600 izinli.
+DOC_RESULT="OK"
+documents_backup() {
+  local root hash prev listing nfiles sz_mb avail r
+  local -a scope
+  root="$(documents_root)"
+  if [ ! -d "$root" ]; then
+    log "   belge dizini yok ($root): atlandi (modul kapali/henuz kullanilmadi olabilir)"
+    return 0
+  fi
+  if [ -L "$root" ]; then
+    REASON="belge dizini bir sembolik baglanti ($root): yedek alinmadi"
+    return 1
+  fi
+  if [ ! -d "$root/sites" ]; then
+    log "   belge dizininde sites/ yok: atlandi"
+    return 0
+  fi
+  nfiles="$(find "$root/sites" -type f 2>/dev/null | wc -l)"
+  nfiles="$(num "$nfiles" 0)"
+  if [ "$nfiles" -eq 0 ]; then
+    log "   belge dizini bos: atlandi"
+    return 0
+  fi
+  scope=(sites)
+  if [ -f "$root/.instance" ] && [ ! -L "$root/.instance" ]; then scope+=(.instance); fi
+  hash="$(cd "$root" && find "${scope[@]}" -type f -printf '%p\t%s\t%T@\n' 2>/dev/null | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"
+  [ -n "$hash" ] || { REASON="belge dizini ozeti hesaplanamadi"; return 1; }
+  prev="$(cat "$OPS_STATE/documents.sha256" 2>/dev/null)"
+  if [ "$hash" = "$prev" ] && ls "$CONFIGD"/kapi_documents_*.tgz.enc >/dev/null 2>&1; then
+    log "   belge dizini degismedi ($nfiles dosya): yeni arsiv yok"
+    return 0
+  fi
+  sz_mb="$(num "$(du -sm "$root/sites" 2>/dev/null | cut -f1)" 0)"
+  if [ "$sz_mb" -gt "$DOCUMENTS_BACKUP_MAX_MB" ]; then
+    REASON="belge dizini ${sz_mb} MB > sinir ${DOCUMENTS_BACKUP_MAX_MB} MB (DOCUMENTS_BACKUP_MAX_MB): tam arsiv stratejisi yetersiz, artimli yedege gecmek gerekir"
+    return 1
+  fi
+  avail="$(df -P -BM "$CONFIGD" | awk 'NR==2{gsub(/M/,"",$4); print $4}')"
+  if [ "$(num "$avail" 0)" -lt "$((sz_mb * 2 + 200))" ]; then
+    REASON="belge arsivi icin yetersiz disk alani (${avail:-?} MB bos, gereken >= $((sz_mb * 2 + 200)) MB)"
+    return 1
+  fi
+  tar -czf - -C "$root" "${scope[@]}" 2>"$OPS_STATE/backup.tar.err" | enc_file /dev/stdin "$DOC_TMP"
+  r=("${PIPESTATUS[@]}")
+  if [ "${r[0]}" -gt 1 ] || [ "${r[1]}" -ne 0 ]; then
+    REASON="belge arsivi/sifreleme hata kodu (tar=${r[0]} openssl=${r[1]})"
+    return 1
+  fi
+  listing="$(dec_cmd -in "$DOC_TMP" 2>/dev/null | tar -tzf - 2>/dev/null)"
+  if [ "$(printf '%s\n' "$listing" | grep -vc '/$')" -lt 1 ] || printf '%s\n' "$listing" | grep -qE '(^/|\.\./)'; then
+    REASON="belge arsivi dogrulamasi basarisiz (liste bos ya da guvensiz yol)"
+    return 1
+  fi
+  chmod 600 "$DOC_TMP"
+  mv -- "$DOC_TMP" "$DOC_OUT"
+  cp -p -- "$DOC_OUT" "$OFFSITE/kapi_documents_${TS}.tgz.enc"
+  printf '%s\n' "$hash" >"$OPS_STATE/documents.sha256"
+  log "   tamam: kapi_documents_${TS}.tgz.enc $(human_bytes "$(stat -c %s "$DOC_OUT")") (dosya: $(printf '%s\n' "$listing" | grep -vc '/$'), kaynak ${sz_mb} MB; _tmp ve _orphans haric; ${#scope[@]} kok oge: ${scope[*]})"
+  return 0
+}
+log "[7/8] belge deposu (DOCUMENTS_DIR) sifreli arsivi"
+if [ "$ENC_RESULT" != "OK" ]; then
+  DOC_RESULT="FAIL"
+  log "ATLANDI: anahtar sorunu nedeniyle belge arsivi alinmadi"
+elif ! documents_backup; then
+  DOC_RESULT="FAIL"
+  log "HATA: $REASON"
+fi
+
+# ---- 8. eski duz yedekleri sifrele + tutma kurallari --------------------------------------
+log "[8/8] tutma ve sifreleme: gunluk=$KEEP_DAILY haftalik=$KEEP_WEEKLY aylik=$KEEP_MONTHLY"
 if [ "$ENC_RESULT" = "OK" ]; then
   # en son (gelecek tarihli OLMAYAN) gunluk yedek duz kalir
   newest_plain="kapi_$(keys_of "$DAILY" kapi | head -n1).sql.gz"
@@ -417,11 +499,22 @@ prune_keep "$CONFIGD" kapi_firmware "$KEEP_FIRMWARE"
 prune_keep "$OFFSITE" kapi "$KEEP_OFFSITE" 1
 prune_keep "$OFFSITE" kapi_config "$KEEP_OFFSITE" 1
 prune_keep "$OFFSITE" kapi_firmware "$KEEP_FIRMWARE" 1
+prune_keep "$CONFIGD" kapi_documents "$KEEP_DOCUMENTS"
+prune_keep "$OFFSITE" kapi_documents "$KEEP_DOCUMENTS" 1
+# belge arsivleri: en yenisi disinda DOCUMENTS_MAX_AGE_DAYS (210) gunden eskiler silinir (silinmis belgeler gizlilik suresinden uzun yedekte kalmasin)
+for ddir in "$CONFIGD" "$OFFSITE"; do
+  newest_doc="$(keys_of "$ddir" kapi_documents | head -n1)"
+  while IFS= read -r oldf; do
+    [ -n "$oldf" ] || continue
+    [ "$(basename "$oldf")" = "kapi_documents_${newest_doc}.tgz.enc" ] && continue
+    rm -f -- "$oldf" && log "tutma kurali (yas > ${DOCUMENTS_MAX_AGE_DAYS} gun): silindi $(basename "$ddir")/$(basename "$oldf")"
+  done < <(find "$ddir" -maxdepth 1 -type f -name 'kapi_documents_*.tgz.enc' -mtime "+$DOCUMENTS_MAX_AGE_DAYS" 2>/dev/null)
+done
 
 dur="$(($(now_epoch) - START_EPOCH))"
-if [ "$ENC_RESULT" = "FAIL" ] || [ "$CFG_RESULT" = "FAIL" ] || [ "$FW_RESULT" = "FAIL" ]; then
-  write_status "$STATUS_FILE" "result=FAIL" "epoch=$(now_epoch)" "ts=$TS" "file=kapi_${TS}.sql.gz" "bytes=$size" "tables=$n_tables" "users=$n_users" "reason=${REASON:-sifreli kopya/yapilandirma/firmware basarisiz} (duz veritabani yedegi TAMAM)" "notified=1"
-  send_mail "[KAPI-OPS] SORUN: sifreli kopya/yapilandirma yedegi basarisiz (DB yedegi tamam)" "Veritabani yedegi alindi ve dogrulandi, ancak sifreli kopya, yapilandirma veya firmware arsivi uretilemedi.
+if [ "$ENC_RESULT" = "FAIL" ] || [ "$CFG_RESULT" = "FAIL" ] || [ "$FW_RESULT" = "FAIL" ] || [ "$DOC_RESULT" = "FAIL" ]; then
+  write_status "$STATUS_FILE" "result=FAIL" "epoch=$(now_epoch)" "ts=$TS" "file=kapi_${TS}.sql.gz" "bytes=$size" "tables=$n_tables" "users=$n_users" "reason=${REASON:-sifreli kopya/yapilandirma/firmware/belge arsivi basarisiz} (duz veritabani yedegi TAMAM)" "notified=1"
+  send_mail "[KAPI-OPS] SORUN: sifreli kopya/yapilandirma yedegi basarisiz (DB yedegi tamam)" "Veritabani yedegi alindi ve dogrulandi, ancak sifreli kopya, yapilandirma, firmware veya belge deposu arsivi uretilemedi.
 Zaman : $(stamp_local) (Europe/Istanbul)
 Neden : ${REASON:-bilinmiyor}
 Gunluk: ~/ops/logs/backup.log" || true

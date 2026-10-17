@@ -6,6 +6,9 @@
 # Varsayilan olarak IKI dosya sinanir: (1) en son gunluk (duz) yedek, (2) en son SIFRELI dis kopya (offsite/*.sql.gz.enc;
 # sifre cozulur). Boylece sifreleme anahtari ve sifreli kopyalar da geri yuklenebilirlik acisindan kanitlanir.
 #
+# Belge deposu tutarliligi (YALNIZ varsayilan calismada): geri yuklenen veritabanindaki 'ready' belge surumlerinin (aktif belgeler) storage_key'leri,
+# en son sifreli belge arsivinin (config/kapi_documents_*.tgz.enc) icinde olmali; eksik varsa FAIL. Belge modulu hic kullanilmadiysa atlanir.
+#
 # Kullanim:  bash ~/ops/restore_test.sh [--file <yedek.sql.gz | yedek.sql.gz.enc>]
 # Cikis kodu: 0 PASS, 1 FAIL, 64 kullanim hatasi, 75 kilit alinamadi.
 # Canli veritabanina hicbir YAZMA yapilmaz; yalnizca kendi olusturdugu kapi_restoretest_* veritabani silinir.
@@ -32,6 +35,9 @@ REPORT="$OPS_LOGS/restore_test_${RUN_TS}.txt"
 WORK=""
 RDB=""
 CREATED=0
+CHECK_DOCS=0
+DOC_ARCHIVE=""
+DOC_LIST=""
 
 # Yalnizca KENDI olusturdugu kapi_restoretest_<TS> veritabanini siler (ad deseni dogrulanir).
 drop_temp_db() {
@@ -51,6 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 WORK="$(mktemp -d "$OPS_HOME/tmp.XXXXXX")" || { echo "gecici dizin olusturulamadi"; exit 1; }
+DOC_LIST="$WORK/docs.list"
 
 FILES=()
 while [ $# -gt 0 ]; do
@@ -94,7 +101,7 @@ scan_dump() {
 
 # restore_one <dosya> : 0 = PASS, 1 = FAIL (FAIL_REASON dolu). Sonuc degiskenleri: R_*
 restore_one() {
-  local f="$1" plain="" errors first rows_line keyfail rc
+  local f="$1" plain="" errors first rows_line keyfail rc docs_reason has_docs nready nmissing
   FAIL_REASON=""
   R_TABLES_R=0; R_TABLES_L=0; R_ROWS_R=0; R_ROWS_L=0; R_ERR=0
   [ -f "$f" ] && [ -r "$f" ] || { FAIL_REASON="yedek dosyasi okunamiyor: $f"; return 1; }
@@ -188,11 +195,33 @@ restore_one() {
     echo "Yukleme hatasi             : $errors"
   } | tee -a "$REPORT"
 
+  # belge deposu tutarliligi (veritabani hala yukluyken): DB'deki hazir surumler arsivde olmali
+  docs_reason=""
+  if [ "$CHECK_DOCS" -eq 1 ]; then
+    has_docs="$(dpsql -d "$RDB" -Atc "select to_regclass('public.document_versions') is not null" 2>/dev/null </dev/null)"
+    if [ "$has_docs" = "t" ]; then
+      dpsql -d "$RDB" -At -c "select 'sites/' || v.storage_key from document_versions v join documents d on d.id = v.document_id where v.status = 'ready' and d.status = 'active' order by 1" 2>/dev/null </dev/null | LC_ALL=C sort >"$WORK/db.keys"
+      nready="$(num "$(wc -l <"$WORK/db.keys")" 0)"
+      if [ "$nready" -eq 0 ]; then
+        echo "Belge tutarliligi          : DB'de hazir belge surumu yok (atlandi)" | tee -a "$REPORT"
+      elif [ -z "$DOC_ARCHIVE" ]; then
+        docs_reason="veritabaninda $nready hazir belge surumu var ama sifreli belge arsivi (config/kapi_documents_*) yok"
+      else
+        nmissing="$(num "$(LC_ALL=C comm -23 "$WORK/db.keys" "$DOC_LIST" | wc -l)" 0)"
+        echo "Belge tutarliligi          : DB hazir surum $nready, arsivde eksik $nmissing" | tee -a "$REPORT"
+        [ "$nmissing" -eq 0 ] || docs_reason="belge arsivinde eksik dosya: $nmissing / $nready (DB'de var, arsivde yok; yedek anindan sonra kalici silinmis olabilir, degilse belge yedegi eksik)"
+      fi
+    else
+      echo "Belge tutarliligi          : document_versions tablosu yok (atlandi)" | tee -a "$REPORT"
+    fi
+  fi
+
   drop_temp_db   # gecici veritabanini HEMEN sil (sonraki dosya icin)
   [ "$errors" -eq 0 ] || { FAIL_REASON="yukleme sirasinda $errors hata (rapor: $REPORT)"; return 1; }
   [ "$R_TABLES_R" -ge "$MIN_TABLES" ] || { FAIL_REASON="yuklenen tablo sayisi az ($R_TABLES_R < $MIN_TABLES)"; return 1; }
   [ "$R_ROWS_R" -gt 0 ] || { FAIL_REASON="yuklenen veritabaninda hic satir yok"; return 1; }
   [ -z "$keyfail" ] || { FAIL_REASON="kritik tablo(lar) yedekte bos ama canlida dolu: $keyfail"; return 1; }
+  [ -z "$docs_reason" ] || { FAIL_REASON="$docs_reason"; return 1; }
   return 0
 }
 
@@ -219,11 +248,26 @@ if [ "${#FILES[@]}" -eq 0 ]; then
   latest="$(ls -1 "$BACKUP_ROOT/daily" 2>/dev/null | grep -E "$DB_PAT" | sort | tail -n1)"
   [ -n "$latest" ] || fail_all "daily/ icinde duz yedek yok"
   FILES+=("$BACKUP_ROOT/daily/$latest")
+  CHECK_DOCS=1
   latest_enc="$(ls -1 "$BACKUP_ROOT/offsite" 2>/dev/null | grep -E "$ENC_PAT" | sort | tail -n1)"
   if [ -n "$latest_enc" ] && [ -s "$KEY_FILE" ]; then
     FILES+=("$BACKUP_ROOT/offsite/$latest_enc")
   else
     log "bilgi: sifreli dis kopya dosyasi veya anahtar yok; yalniz duz yedek sinanacak"
+  fi
+fi
+
+# belge arsivi listesi (yalniz varsayilan calismada)
+if [ "$CHECK_DOCS" -eq 1 ]; then
+  doc_name="$(ls -1 "$BACKUP_ROOT/config" 2>/dev/null | grep -E '^kapi_documents_[0-9]{8}_[0-9]{4}\.tgz\.enc$' | sort | tail -n1)"
+  if [ -n "$doc_name" ]; then
+    DOC_ARCHIVE="$BACKUP_ROOT/config/$doc_name"
+    [ -s "$KEY_FILE" ] || fail_all "belge arsivi var ama sifreleme anahtari yok" "$DOC_ARCHIVE"
+    dec_cmd -in "$DOC_ARCHIVE" 2>/dev/null | tar -tzf - 2>/dev/null | grep -v '/$' | sed 's#^\./##' | LC_ALL=C sort >"$DOC_LIST"
+    [ -s "$DOC_LIST" ] || fail_all "belge arsivi cozulemedi veya bos ($doc_name)" "$DOC_ARCHIVE"
+    log "belge arsivi: $doc_name ($(wc -l <"$DOC_LIST") dosya)"
+  else
+    log "bilgi: belge arsivi yok (belge modulu kullanilmamis olabilir)"
   fi
 fi
 

@@ -75,6 +75,17 @@ Aranacak desen: `[KARAR/BİLGİ GEREKLİ: …]`. Her madde için hangi belgede g
 17. **Koşullarda değişiklik için önceden bildirim süresi.** Kullanım Koşulları bölüm 13. Öneri: esaslı değişikliklerde en az 15 gün.
 18. **Yetkili mahkeme ve icra daireleri.** Kullanım Koşulları bölüm 14; DPA bölüm 7. Öneri: Güde'nin ticari merkezinin bulunduğu il mahkemeleri ve icra daireleri (tüketici işlemlerinde tüketici mevzuatı saklıdır). Şirket merkezi ilini bildirin.
 
+### 2.5 P1 modülleri (2026-10-17 eki): telefon bildirimi, belgeler, finans 4b
+
+19. **Telefon bildirimi canlıya ne zaman ve hangi koşulla açılacak?** Gizlilik 3.8; DPA Ek-3. Sunucuda `PUSH_ENABLED` varsayılan 0'dır (`server/.env.example:166`); açmak için Firebase projesi, `google-services.json` / `GoogleService-Info.plist` (Android/iOS), APNs anahtarı ve yalnız FCM gönderim yetkili özel hizmet hesabı gerekir; hizmet hesabı dosyası depo dışında `FCM_SERVICE_ACCOUNT_FILE` ile gösterilir (`docs/PLATFORM_BELGELER.md` Bölüm B, açılış koşulları 1-9). Öneri: yasal metinler (özellikle Gizlilik 3.8 ve Google/Apple'ın rolü, madde 34-35) avukat onayından geçmeden `PUSH_ENABLED=1` yapmayın. Firebase projesinin sahibi (hangi Google hesabı), proje bölgesi ve Analytics'in KAPALI olduğunu bildirin (belge öneriyor, doğrulanamadı).
+20. **Mağaza beyanları.** Google Play "Veri güvenliği" ve App Store gizlilik etiketi: telefon bildirimi için "cihaz veya diğer kimlikler" (FCM jetonu) beyanı; Firebase bileşeninin kendiliğinden gönderdiği teknik veri doğrulanana kadar (avukat listesi madde 35) beyan kesinleşmez.
+21. **Belge saklama süreleri** (belgeler, gider belgeleri, makbuz ve finans kayıtları, tedarikçi kayıtları, hatırlatma geçmişi). Gizlilik 7; Hesap Silme 3 ve 5. Öneri: avukat listesi madde 36, 37, 39; kodda bu kayıtlar için temizlik işi yoktur (belgeler yalnız yönetim silince 30 gün; gider belgeleri hiç silinmez).
+22. **Belge deposu yedeği üretimde devrede mi?** Gizlilik 7; DPA Ek-2. `deploy/ops/backup_db.sh` belge arşivi yedeği (şifreli, son 5, 210 gün) üretimde zamanlanmış ve dış kopya hedefi yapılandırılmış mı; geri yükleme denemesi (`restore_test.sh`) yapıldı mı? Disk üzerindeki belgeler uygulama düzeyinde şifrelenmez (avukat listesi madde 36).
+23. **`finance.legal_ok` hukuk kapısı kimde?** Gecikme tazminatı ve borç hatırlatma bu anahtar açılmadan açılamaz; anahtarı yalnız süper kullanıcı `PUT /admin/finance-legal-gate` ile açar (`finance_4b_routes.js:492-503`). Avukat onayını kimin vereceği ve kaydedileceği (madde 37-38) belirlenmeli; anahtar kapatılırsa gönderilmemiş hatırlatmalar iptal edilir.
+24. **Makbuz şablonu ve hatırlatma e-posta metni avukat onayı.** Taslak metinler: `finance_receipts.js:43-51`, `finance_reminder_mail.js` (tam metin avukat listesi madde 38'de). Onaydan sonra makbuz `template_version` yükseltilir.
+25. **Toplu yükleme onay penceresindeki KVKK metni.** `docs/PLATFORM_TOPLU_ISLEMLER.md` satır 144'te "KVKK onay kutusu" geçer; metni sizin/avukatın görmesi gerekir (madde 40).
+26. **Tedarikçi ve gider belgesi için silme/anonimleştirme talebi nasıl karşılanacak?** Kodda silme ucu yok (madde 36); geçici çözüm olarak talebin Güde'ye e-postayla gelmesi ve elle düzeltilmesi mi, yoksa geliştirme mi?
+
 ---
 
 ## 3. Metne yazdığımız taahhütlerin onayı
@@ -103,6 +114,10 @@ Metinler aşağıdaki sayısal ve operasyonel taahhütleri içerir. Güde'nin bu
 4. Hesapsız kişiler için aydınlatma (şablon veya otomatik e-posta) ve misafir sayfasına kısa bilgilendirme.
 5. İstemci `device_token` saklamaya başlarsa Gizlilik Politikası bölüm 3.7 güncellemesi.
 6. Sunucu `complete` hesabı: `server/src/modules/legal_documents.js` yalnız `{{…}}` ve `[……]` boşluklarını eksik sayar; `[KARAR/BİLGİ GEREKLİ …]` ve `[AVUKAT DOĞRULASIN …]` işaretlerini saymaz. Bu yüzden her dosyada `complete: false` satırı bırakıldı. İsterseniz sunucu tarafında bu iki işareti de "eksik" sayacak küçük bir değişiklik yapılabilir (bu görev kapsamında kod değiştirilmedi).
+7. (2026-10-17) Hesap silme önizlemesi (`account_deletion_service.js` `will_keep`/`will_remove`) ile `server/legal/account_deletion.md` birebir uyumlu tutulmalı; önizlemede olmayan ama yasal metinde yazan iki madde: gönderilmiş aidat hatırlatma geçmişinin (kişi, daire, durum, zaman) kalması ve gecikme tazminatı/gider/tedarikçi kayıtlarının hesap silmeden etkilenmemesi. Önizleme makbuz satırı KMK/VUK saklama yükümlülüğünü kesin ifadeyle yazıyor; dayanak avukat onayına kadar doğrulanmadı.
+8. (2026-10-17) Hatırlatma e-postası altbilgisi hesaplı kullanıcıya "uygulamadaki Bildirim Tercihleri'ni kullanabilir" diyor; `lib/` altında `email_finance_reminders` için ekran anahtarı bulunamadı (sunucu API'si var). Anahtar eklenmeli ya da altbilgi değişmeli.
+9. (2026-10-17) `finance_reminder_items` temizleme/saklama işi; tedarikçi, kategori ve kasa/banka hesabı için silme veya anonimleştirme ucu; gider belgeleri için süre sonu silme işi; telefon bildirimi soft istemine Google/Apple aktarım cümlesi; "acil bildirimi de kapat" seçeneği (madde 34).
+10. (2026-10-17) Firebase bileşeninin açılışta Google'a gönderdiği teknik verinin ağ trafiğiyle doğrulanması (madde 35).
 
 ## 5. Önerilen sıra
 

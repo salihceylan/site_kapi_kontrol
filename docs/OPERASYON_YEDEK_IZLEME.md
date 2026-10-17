@@ -20,6 +20,7 @@ Bu belgedeki komut ve sonuçlar şu şekilde işaretlidir:
 | Tutma | 14 günlük + 8 haftalık + 6 aylık (adet sayısıyla; başarısız çalışma hiçbir şey silmez). Dış kopyalar en çok ~**210 gün** |
 | Yapılandırma yedeği (şifreli) | `.env`, nginx sitesi, MQTT broker yapılandırması, `data/`, `public/`, `ecosystem.config.cjs`, veritabanı rolleri, silinmiş hesap listesi |
 | Firmware (OTA ikilileri) | `server/firmware` ayrı şifreli arşiv (yalnızca içerik değişince yenilenir) |
+| Belge deposu (`DOCUMENTS_DIR`) | `sites/` ağacı + `.instance` (depolama kimliği) ayrı şifreli arşiv `kapi_documents_*.tgz.enc`: DB dökümünden **sonra**, `_tmp/` ve `_orphans/` (yetim karantinası) hariç, yalnızca içerik değişince; dizin yoksa/boşsa yedek **hata vermez** (bölüm 4 adım 7, bölüm 5.9) |
 | Geri yükleme kanıtı | `restore_test.sh` (düz + şifreli kopyayı sınar); her ayın 2'si 04:15 (İstanbul) + elle |
 | Dış kopya | **Henüz yapılandırılmadı** (karar sizde, bölüm 6); izleme bunu hatırlatır |
 | Sunucu içi izleme | Her 5 dakikada `healthcheck.sh`; sorun olursa e-posta |
@@ -47,7 +48,7 @@ Bu belgedeki komut ve sonuçlar şu şekilde işaretlidir:
 | `~/ops/logs/` | Günlükler (`backup.log`, `healthcheck.log`, `alerts.log`, `restore_test_*.txt`, ...) |
 | `~/backups/scheduled/daily` | En son `*.sql.gz` (düz) + eski günlükler `*.sql.gz.enc` (şifreli) + `.sha256` |
 | `~/backups/scheduled/weekly`, `monthly` | Şifreli `*.sql.gz.enc` ve `kapi_config_*.tgz.enc` |
-| `~/backups/scheduled/config/` | Şifreli `kapi_config_*.tgz.enc` ve `kapi_firmware_*.tgz.enc` |
+| `~/backups/scheduled/config/` | Şifreli `kapi_config_*.tgz.enc`, `kapi_firmware_*.tgz.enc` ve `kapi_documents_*.tgz.enc` |
 | `~/backups/scheduled/offsite/` | Dış kopyaya gidecek **yalnızca şifreli** dosyalar |
 | `~/.config/kapi-backup.key` | Şifreleme anahtarı (izin 600) |
 | `~/.config/kapi-ops.env` (isteğe bağlı) | Alıcı / eşik / `HEARTBEAT_URL` ayarları. Örnek: `deploy/ops/kapi-ops.env.example` |
@@ -101,7 +102,7 @@ Anahtarı değiştirmek isterseniz yeni anahtar yalnızca **sonraki** yedekleri 
 
 ## 4. Yedekler: ne, nasıl, nasıl doğrulanır
 
-`backup_db.sh` sırası (7 adım):
+`backup_db.sh` sırası (8 adım):
 
 1. `docker exec site_kapi_kontrol_postgres pg_dump -U postgres -d site_kapi_kontrol --lock-wait-timeout=60s | gzip` (zaman aşımlı) → `.kapi_<TS>.sql.gz.part`.
 2. **Doğrulama** (hepsi geçmeden dosya yerine konmaz): `gzip -t`; boyut ≥ 8000 bayt (mevcut yedekler ≈ 21 KB); belge sonunda `-- PostgreSQL database dump complete` işareti (kesik yedeği yakalar); ≥ 30 tablo (şu an 42); `users`, `sites`, `site_memberships`, `audit_log` tablolarının varlığı; `users` için `COPY` bölümü; **`users` tablosunda 0 satır varsa FAIL** (önceki yedeğin yarısından azsa UYARI); önceki yedeğin yarısından küçükse UYARI. Disk kontrolü dinamiktir: en az 500 MB ve (son dump + son yapılandırma) × saklama adedi × 3.
@@ -109,7 +110,8 @@ Anahtarı değiştirmek isterseniz yeni anahtar yalnızca **sonraki** yedekleri 
 4. Haftalık (ISO haftasının ilk yedeği) ve aylık (ayın ilk yedeği) kopyalar **şifreli** olarak alınır (+ `.sha256`). Kaçırılan günlere dayanıklıdır.
 5. **Yapılandırma yedeği** (`config/kapi_config_<TS>.tgz.enc`): `server/.env`, `server/data/`, `server/public/`, `server/ecosystem.config.cjs`, nginx sitesi, MQTT broker yapılandırması (özel anahtarlar hariç) ve ACL eşitleme sarmalayıcısı `kapi-mqtt-sync`, `globals.sql` (veritabanı rolleri; parola özetleri içerir), **`deleted_accounts.csv`** (yalnızca `user_code,deleted_at_utc`; kişisel veri yok; hesap silme özelliği devredeyken `audit_log` `account.deleted` kayıtlarından üretilir), `crontab.txt`, `INFO.txt`. Oluşturulduktan sonra şifresi çözülüp `tar -t` ile `.env`, `globals.sql` ve `deleted_accounts.csv` varlığı doğrulanır.
 6. **Firmware arşivi** (`config/kapi_firmware_<TS>.tgz.enc`): OTA ikilileri (`server/firmware`, `.gitignore`'da olduğu için depoda yoktur; ≈ 5 MB). Günlük 5 MB tekrarını önlemek için yalnızca **içerik özeti değişince** yeni arşiv alınır (son 5 tutulur, yaşa göre silinmez).
-7. **Şifreleme ve tutma:** en son günlük dışındaki düz yedekler, şifreli kopyaları **doğrulandıktan sonra** (şifresi çözülen içeriğin SHA-256'sı aynı) şifreliye çevrilir. Tutma: günlük 14, haftalık 8, aylık 6 (yapılandırma yedeği için günlük 22, haftalık 8, aylık 6), firmware 5, `offsite/` 14. Adet esaslıdır: cron bir hafta çalışmasa bile eski yedekler silinmez. **Gelecek tarihli** (saati ileri alınmış) dosyalar saklama yuvası saymaz ve silinmez. Dış kopyaya henüz **gönderilmemiş** yerel `offsite/` dosyaları (dış kopya yapılandırılmışsa) budanmaz.
+7. **Belge deposu arşivi** (`config/kapi_documents_<TS>.tgz.enc`; **DB dökümünden SONRA** alınır): belge modülünün dosya deposu `DOCUMENTS_DIR` (`server/.env`'deki `DOCUMENTS_DIR` ya da eski adı `DOCUMENTS_STORAGE_DIR`; ikisi de yoksa `~/kapi-documents`; sunucu kodu dizini dışındadır). `sites/` ağacı ve **`.instance`** (depolama kimliği; yoksa hata verilmez) alınır, **`_tmp/` (yarım yüklemeler) ve `_orphans/` (yetim karantinası) hariçtir**. `.instance` arşivde yoksa geri yüklenen dizin veritabanıyla eşleşmez ve bakım işi yetim temizliğini reddeder (bölüm 5.9, adım 5). Belge dosyaları *yazılır-silinmez* ve adları benzersizdir; döküm önce, dosyalar sonra alındığı için dosya kümesi veritabanının üst kümesidir (DB satırı olup dosyası yedekte olmayan durum doğmaz). Dizin **yoksa ya da boşsa** (modül kapalı / hiç kullanılmadı) yedek **hata vermez**, adım atlanır. Arşiv şifrelidir (`openssl`, anahtar aynı), 600 izinli, `config/` ve `offsite/` altına yazılır; yalnızca dosya listesi/boyut/zaman özeti **değişince** yeni arşiv alınır. Şifresi çözülüp `tar -t` ile doğrulanır (liste boş ya da `..`/mutlak yol içeriyorsa hata). Tutma: son `KEEP_DOCUMENTS` (5) arşiv; ayrıca **en yenisi hariç** `DOCUMENTS_MAX_AGE_DAYS` (210) günden eskiler silinir (silinmiş belgeler gizlilik süresinden uzun yedekte kalmasın; en yeni arşiv yaşı ne olursa olsun korunur). Tam arşiv yaklaşımının sınırı: dizin `DOCUMENTS_BACKUP_MAX_MB` (3000) MB'ı aşarsa ya da boş disk yetmezse yedek **exit 2 ile uyarı verir** (artımlı yedeğe geçilmesi gerektiğinin işaretidir; sessizce atlanmaz).
+8. **Şifreleme ve tutma:** en son günlük dışındaki düz yedekler, şifreli kopyaları **doğrulandıktan sonra** (şifresi çözülen içeriğin SHA-256'sı aynı) şifreliye çevrilir. Tutma: günlük 14, haftalık 8, aylık 6 (yapılandırma yedeği için günlük 22, haftalık 8, aylık 6), firmware 5, belge arşivi 5, `offsite/` 14. Adet esaslıdır: cron bir hafta çalışmasa bile eski yedekler silinmez. **Gelecek tarihli** (saati ileri alınmış) dosyalar saklama yuvası saymaz ve silinmez. Dış kopyaya henüz **gönderilmemiş** yerel `offsite/` dosyaları (dış kopya yapılandırılmışsa) budanmaz.
 
 Geçiş notu: şifreli düzene **2026-10-16 20:14'te** geçildi. O andan önce alınmış düz test yedekleri (2026-10-16 18:03–18:13 günlük / haftalık / aylık) silinmedi ve düz kaldı; günlükler en geç 14 gün içinde kendiliğinden gider. Haftalık/aylık düz test kopyasını da şifrelemek isterseniz: `echo 1 > ~/ops/state/enc_scheme_since` yazıp bir sonraki yedeği bekleyin (en son günlük dışındaki tüm düz yedekleri doğrulayarak şifreler).
 
@@ -143,6 +145,8 @@ ssh -p 22667 salihceylan@<sunucu> "bash ~/ops/restore_test.sh"
 Varsayılan olarak **iki** dosyayı sınar: (1) en son düz günlük yedek, (2) en son **şifreli** dış kopya (`offsite/*.sql.gz.enc`; şifresi çözülür). Her biri `kapi_restoretest_<TS>` adlı geçici bir veritabanına yüklenir, tablo ve satır sayıları canlıyla karşılaştırılır (canlı tarafta oturum `default_transaction_read_only=on`, `lock_timeout=5s`, `statement_timeout=60s` ile salt okunurdur), geçici veritabanı silinir; sonuç `~/ops/state/restore_test.status` ve `~/ops/logs/restore_test_<TS>.txt` dosyalarına yazılır. Yalnızca kendi oluşturduğu `kapi_restoretest_*` veritabanını siler. Tek dosya için: `--file <yol>` (`.sql.gz` veya `.sql.gz.enc`).
 
 **Güvenlik taraması:** yedek dosyası yüklenmeden önce taranır; `\connect`, `DROP/CREATE/ALTER DATABASE` veya beklenmeyen psql meta-komutları (`\!` gibi) içeriyorsa **reddedilir** (aksi halde psql başka/canlı veritabanına bağlanıp işlem yapabilirdi). Bu tarama ve şifreli dosya akışı yalıtılmış düzenekte sahte `docker` ile [doğrulandı]; **son sürümün canlı veritabanı üzerinde tam çalıştırılması henüz yapılmadı [denenmedi]** — ilk sürümün (yalnızca düz dosya) canlı sonucu aşağıdadır, aylık cron ilk kez 2026-11-02'de çalışır.
+
+**Belge deposu tutarlılığı (yalnızca varsayılan çalışmada):** geri yüklenen veritabanında `document_versions` tablosu varsa, aktif belgelerin `ready` sürümlerinin `storage_key`'leri en son `kapi_documents_*` arşivinin içinde olmalıdır; eksik varsa ya da veritabanında hazır sürüm olduğu halde belge arşivi hiç yoksa **FAIL** (e-posta gider). Tablo yoksa ya da hazır sürüm yoksa atlanır (modül hiç kullanılmadıysa). Nadir yanlış alarm: yedek anından sonra, arşiv alınmadan önce *kalıcı silinen* bir belge. Bu denetim yalıtılmış düzenekte gerçek arşivle [doğrulandı]; canlıda henüz belge olmadığı için [denenmedi].
 
 **İlk sürümün canlı sonucu (2026-10-16 18:03 İstanbul):** `PASS`; yükleme hatası **0**; tablo 42/42; toplam satır 243/243; yapı sayıları (indeks 164, kısıt 203, tetikleyici 7, sıra 29) eşit; süre 4 sn; geçici veritabanı silindi.
 
@@ -205,6 +209,7 @@ docker exec -i site_kapi_kontrol_postgres psql -U postgres -c 'CREATE DATABASE s
 gzip -dc "$F" | docker exec -i site_kapi_kontrol_postgres psql -U postgres -X -q -d site_kapi_kontrol -v ON_ERROR_STOP=0 2>~/restore.err
 grep -c 'ERROR:' ~/restore.err                # 0 olmalı
 docker exec -i site_kapi_kontrol_postgres psql -U postgres -d site_kapi_kontrol -Atc "select count(*) from users"
+# 4b) Belge dosyaları (belge modülü kullanıldıysa): DB ile BİRLİKTE geri yükleyin, sonra bütünlük denetimi: bölüm 5.9
 # 5) Geri yükleme sonrası adımlar (bölüm 5.7): silinmiş hesapları yeniden kimliksizleştir, MQTT kimlik bilgilerini eşitle, e-posta kuyruğunu incele
 # 6) API'yi başlat ve sağlık ucunu doğrula
 pm2 start kapi-api
@@ -218,7 +223,7 @@ Notlar:
 
 ### 5.5 Senaryo C — sunucu tamamen kayboldu (yeni VPS'te tam kurtarma)
 
-Elinizde olması gerekenler: (1) en az bir **şifreli dış kopya** (`kapi_<TS>.sql.gz.enc`, `kapi_config_<TS>.tgz.enc` ve gerekirse `kapi_firmware_<TS>.tgz.enc`), (2) **`kapi-backup.key` kopyası**, (3) GitHub deposu. Bu senaryo uçtan uca [denenmedi]; adımlar sunucuda kullanılan kurulumdan (`sunucu_kurulum.txt`, `docker-compose.yml`, `deploy/README.md`, `MQTT_kurulum.txt`) türetilmiştir. Süre tahmini: 2–4 saat.
+Elinizde olması gerekenler: (1) en az bir **şifreli dış kopya** (`kapi_<TS>.sql.gz.enc`, `kapi_config_<TS>.tgz.enc`, gerekirse `kapi_firmware_<TS>.tgz.enc` ve belge modülü kullanıldıysa `kapi_documents_<TS>.tgz.enc`), (2) **`kapi-backup.key` kopyası**, (3) GitHub deposu. Bu senaryo uçtan uca [denenmedi]; adımlar sunucuda kullanılan kurulumdan (`sunucu_kurulum.txt`, `docker-compose.yml`, `deploy/README.md`, `MQTT_kurulum.txt`) türetilmiştir. Süre tahmini: 2–4 saat.
 
 1. **Yeni VPS**: Ubuntu 22.04+, SSH portu 22667, `salihceylan` kullanıcısı, güvenlik duvarı (22667, 80, 443, 8883). `sudo apt install docker.io docker-compose-v2 nginx certbot python3-certbot-nginx mosquitto rsync`, Node.js 24, `sudo npm i -g pm2`.
 2. **Dosyaları aç** (yeni sunucuda, güvenli geçici dizine):
@@ -244,12 +249,13 @@ Elinizde olması gerekenler: (1) en az bir **şifreli dış kopya** (`kapi_<TS>.
    gzip -dc ~/kurtar/db.sql.gz | docker exec -i site_kapi_kontrol_postgres psql -U postgres -X -q -d site_kapi_kontrol -v ON_ERROR_STOP=0 2>~/restore.err
    grep -c 'ERROR:' ~/restore.err    # 0 olmalı
    ```
-5. **Geri yükleme sonrası adımlar** (bölüm 5.7): `deleted_accounts.csv` içindeki hesapları yeniden kimliksizleştirin (liste en son yedek anına kadar olanları kapsar), e-posta kuyruğunu inceleyin.
-6. **API**: `cd /var/www/site_kapi_kontrol/server && pm2 start ecosystem.config.cjs && pm2 save && pm2 startup` (başlatma komutunu `pm2 startup` yazdırır). `curl -s http://127.0.0.1:8080/health`.
-7. **nginx + TLS**: `sudo cp ~/kurtar/api.gudeteknoloji.com.tr /etc/nginx/sites-available/` ve `sites-enabled` bağlantısı; içindeki `ssl_certificate` yolları eski sertifikaya işaret eder → önce geçici olarak yalnızca `listen 80` bloğuyla başlatıp `sudo certbot --nginx -d api.gudeteknoloji.com.tr` çalıştırın. DNS (`api...` → yeni IP) ve Cloudflare ayarlarını güncelleyin.
-8. **MQTT (Mosquitto)**: yapılandırma yedeğindeki `mosquitto/` dizinindeki dosyaları `/etc/mosquitto/` altına, `kapi-mqtt-sync` dosyasını `/usr/local/bin/` altına (755) alın; sudoers kuralını yeniden tanımlayın (`salihceylan ALL=(root) NOPASSWD: /usr/local/bin/kapi-mqtt-sync`). Broker için TLS sertifikasını `mqtt.gudeteknoloji.com.tr` adına yeniden üretin (özel anahtarlar yedeğe alınmaz), Mosquitto'yu yeniden başlatın ve **parola/ACL dosyalarını veritabanından yeniden üretmek için** `sudo -n /usr/local/bin/kapi-mqtt-sync` çalıştırın (ayrıntı: depodaki `MQTT_kurulum.txt`).
-9. **Ops araçlarını yeniden kur**: `scp deploy/ops/* ...`; **önce eski anahtarı** `~/.config/kapi-backup.key` olarak (izin 600) geri koyun, **sonra** `bash ~/ops/install_ops.sh` çalıştırın (aksi halde yeni anahtar üretilir; yedekler farklı anahtarla şifrelenir).
-10. **Doğrulama**: uygulamadan giriş yapın; `bash ~/ops/restore_test.sh`; `bash ~/ops/healthcheck.sh --dry-run -v`.
+5. **Belge dosyaları** (belge modülü kullanıldıysa): bölüm 5.9'daki adımlarla `kapi_documents_<TS>.tgz.enc` dosyasını `DOCUMENTS_DIR` içine açın ve `node scripts/documents_fsck.mjs --report` çalıştırın (API'yi başlatmadan önce).
+6. **Geri yükleme sonrası adımlar** (bölüm 5.7): `deleted_accounts.csv` içindeki hesapları yeniden kimliksizleştirin (liste en son yedek anına kadar olanları kapsar), e-posta kuyruğunu inceleyin.
+7. **API**: `cd /var/www/site_kapi_kontrol/server && pm2 start ecosystem.config.cjs && pm2 save && pm2 startup` (başlatma komutunu `pm2 startup` yazdırır). `curl -s http://127.0.0.1:8080/health`.
+8. **nginx + TLS**: `sudo cp ~/kurtar/api.gudeteknoloji.com.tr /etc/nginx/sites-available/` ve `sites-enabled` bağlantısı; içindeki `ssl_certificate` yolları eski sertifikaya işaret eder → önce geçici olarak yalnızca `listen 80` bloğuyla başlatıp `sudo certbot --nginx -d api.gudeteknoloji.com.tr` çalıştırın. DNS (`api...` → yeni IP) ve Cloudflare ayarlarını güncelleyin.
+9. **MQTT (Mosquitto)**: yapılandırma yedeğindeki `mosquitto/` dizinindeki dosyaları `/etc/mosquitto/` altına, `kapi-mqtt-sync` dosyasını `/usr/local/bin/` altına (755) alın; sudoers kuralını yeniden tanımlayın (`salihceylan ALL=(root) NOPASSWD: /usr/local/bin/kapi-mqtt-sync`). Broker için TLS sertifikasını `mqtt.gudeteknoloji.com.tr` adına yeniden üretin (özel anahtarlar yedeğe alınmaz), Mosquitto'yu yeniden başlatın ve **parola/ACL dosyalarını veritabanından yeniden üretmek için** `sudo -n /usr/local/bin/kapi-mqtt-sync` çalıştırın (ayrıntı: depodaki `MQTT_kurulum.txt`).
+10. **Ops araçlarını yeniden kur**: `scp deploy/ops/* ...`; **önce eski anahtarı** `~/.config/kapi-backup.key` olarak (izin 600) geri koyun, **sonra** `bash ~/ops/install_ops.sh` çalıştırın (aksi halde yeni anahtar üretilir; yedekler farklı anahtarla şifrelenir).
+11. **Doğrulama**: uygulamadan giriş yapın; `bash ~/ops/restore_test.sh`; `bash ~/ops/healthcheck.sh --dry-run -v`.
 
 ### 5.6 Hesap silme ve yedekler: silinmiş hesaplar geri gelmesin
 
@@ -298,7 +304,44 @@ Hesap silme (kimliksizleştirme) canlıda yapılır; yedekten dönüşte, yedek 
 | `restore_test.sh`: "yedek dosyasi REDDEDILDI" | Dosya `\connect` / `DROP|CREATE|ALTER DATABASE` / `\!` gibi satırlar içeriyor: bu bir `pg_dump -C` / `pg_dumpall` çıktısı ya da kurcalanmış bir dosyadır. Bu betikle yüklemeyin. |
 | `restore_test.sh` FAIL: "kritik tablo yedekte boş" | Yedek yapısal olarak sağlam ama veri yok: en son iyi yedeğe (weekly/monthly) bakın, `backup.log` ve `pg_dump` hatasını inceleyin, hemen elle yedek alın. |
 | `restore_test.sh` "ATLANDI: baska bir ops isi calisiyor" | Yedek/dış kopya çalışıyor; kilit 15 dk sonra bırakılır. Tekrar deneyin. |
+| Yedek durumu FAIL: "belge dizini N MB > sinir" | Tam arşiv yaklaşımının sınırı aşıldı (`DOCUMENTS_BACKUP_MAX_MB`, varsayılan 3000). Geçici çözüm: sınırı disk durumuna göre yükseltin (`~/.config/kapi-ops.env`); kalıcı çözüm artımlı (yalnızca yeni dosyalar) yedeğe geçmektir. DB yedeği bu durumda TAMAMDIR (exit 2). |
+| `restore_test.sh` FAIL: "belge arsivinde eksik dosya" | Veritabanında hazır belge sürümü var ama dosyası belge arşivinde yok: arşiv eski olabilir (`bash ~/ops/backup_db.sh` ile yeniden alın) ya da disk dosyası kaybolmuştur (`node scripts/documents_fsck.mjs --report`, bölüm 5.9). |
 | Yedek durumu FAIL: "sifreleme anahtari DEGISMIS" | Anahtar dosyası kayıtlı parmak iziyle uyuşmuyor. Doğru anahtarı geri koyun; bilerek değiştirdiyseniz `install_ops.sh --accept-new-key` (eski anahtarı saklayın). |
+
+### 5.9 Belge deposu (`DOCUMENTS_DIR`): geri yükleme ve bütünlük denetimi
+
+Belge modülü (Faz 3b-A) yüklenen dosyaları veritabanı dışında `DOCUMENTS_DIR` altında tutar (`sites/<site_code>/<uuid>`, dosya 0600, dizin 0700, geçici yüklemeler `_tmp/`). Yedek ve geri yükleme **birlikte** düşünülür: veritabanı satırları dosyaları tanımlar, dosyalar veritabanı olmadan anlamsızdır. Bölüm 4 adım 7 arşivi üretir. Geri yükleme (API **durdurulmuşken**, veritabanı geri yüklemesiyle aynı oturumda) [denenmedi — canlıda henüz belge yok; arşiv üretimi ve açma akışı yalıtılmış düzenekte sınandı]:
+
+```bash
+# 1) hedef dizin: .env'deki DOCUMENTS_DIR (ya da DOCUMENTS_STORAGE_DIR), ikisi de yoksa ~/kapi-documents. Kod dizininin (/var/www/...) İÇİNDE OLMAMALI.
+DOCS=/home/salihceylan/kapi-documents            # kendi yolunuzla değiştirin
+umask 077; mkdir -p "$DOCS"; chmod 700 "$DOCS"
+# 2) şifreli belge arşivi (en yenisi; DB yedeğiyle aynı ya da daha yeni olmalı) -- önce YALNIZCA listeleyin: yalnız göreli "sites/..." yolları görmelisiniz
+A=~/backups/scheduled/config/kapi_documents_YYYYmmdd_HHMM.tgz.enc          # dış kopyadan geliyorsa önce dosyayı sunucuya alın
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:ANAHTAR -in "$A" | tar -tzf - | head
+# 3) aç (var olan dosyanın üzerine YAZMAZ), izinleri sıkılaştır
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:ANAHTAR -in "$A" | tar -xzf - -C "$DOCS" --skip-old-files
+find "$DOCS" -type d -exec chmod 700 {} +; find "$DOCS" -type f -exec chmod 600 {} +
+# 4) bütünlük denetimi -- API'yi başlatmadan ÖNCE (veritabanı geri yüklenmiş olmalı)
+cd /var/www/site_kapi_kontrol/server
+node scripts/documents_fsck.mjs --report            # salt okunur; çıkış kodu: 0 temiz, 1 yetim/uyarı, 2 EKSİK dosya ya da boyut/hash uyuşmazlığı
+node scripts/documents_fsck.mjs --verify-hash       # isteğe bağlı: tüm hazır sürümlerin sha256'sını diskten doğrular (yavaş olabilir; --limit N)
+# 5) depolama kimliği: raporda "depolama kimliği" satırında file=present db=present match=true görmelisiniz. match=false ise (ör. .instance arşivde yoktu, ya da eski bir
+#    DB dökümü / başka sunucu geri yüklendi) bakım işi yetim temizliğini ve site dizini silmeyi REDDEDER (ERROR günlüğü: "depolama kimligi DOGRULANAMADI"); dizin ile DB'nin
+#    AYNI kuruluma ait olduğundan emin olduktan sonra:
+node scripts/documents_fsck.mjs --adopt-storage-id   # dizinde var/DB'de yok -> DB'ye yaz; DB'de var/dizinde yok -> dizine yaz; İKİSİ DE var ve FARKLIYSA hata verir (elle karar)
+```
+
+`documents_fsck.mjs` `.env`'deki `DB_*` ve `DOCUMENTS_DIR` ayarlarını sunucuyla aynı biçimde kullanır; çıktıda dosya adı ya da belge başlığı yoktur (yalnız belge kimliği, sürüm no, depolama anahtarı). Sonuçların yorumu:
+
+- **Çıkış 0:** temiz; API'yi başlatın.
+- **Çıkış 1 (yetim dosya / bayat `uploading`):** zararsızdır. Yetim = diskte olup veritabanında olmayan dosya (DB'si dosyalardan *eskiyse* beklenir). `--fix-orphans` yalnızca 24 saatten eski yetimleri `_orphans/` karantinasına alır (silmez; çalıştırma başına en çok 200); acele etmeyin.
+- **Çıkış 2 (eksik dosya / boyut ya da hash uyuşmazlığı):** veri kaybı şüphesi. Çoğunlukla veritabanı belge arşivinden **yeni** demektir (DB dökümü, arşivdeki dosyalardan sonra yüklenen belgeleri bilir): daha yeni bir belge arşivi arayın (dış kopya). Bulunamazsa raporlanan belge/sürümler geri getirilemez; yöneticilerin yeniden yüklemesi gerekir. **Çıkış 2 iken kullanıcılara hizmet açmak** o belgelerde indirme hatası (404/503) demektir.
+- Sıra kuralı: DB ve belge arşivi eşleştirilirken **arşiv, DB'den yeni ya da aynı anda** olmalıdır. Eski DB + yeni arşiv → yetim dosyalar; yeni DB + eski arşiv → eksik dosyalar (çıkış 2).
+- **Eski DB dökümü + güncel dizin (aynı depolama kimliği)** tehlikeli bir birleşimdir: satırı dökümde olmayan ama dosyası duran belgeler bakım işince yetim sayılır. Bu dosyalar artık **silinmez, `_orphans/<site>/<uuid>` KARANTİNASINA taşınır** ve `DOCUMENTS_ORPHAN_QUARANTINE_DAYS` (varsayılan 14) gün sonra silinir. Geri yüklemeden sonra `--report` çıktısının "karantina" satırına bakın; kaydı veritabanında görünen karantina dosyaları "geri alınabilir" sayılır: daha yeni bir DB dökümünü geri yükleyip ya da kayıtları yeniden oluşturup `node scripts/documents_fsck.mjs --restore-quarantine` ile yerine koyun. Karantina yedeğe girmez; 14 gün içinde karar verilmelidir. Aynı döküm nedeniyle site satırı kaybolmuş ama dizini duran siteler 7 gün sonra silinir (bakım turu): geri yüklemeden sonra bu süre dolmadan `--report` ile doğrulayın.
+- `--fix-orphans` artık da silmez, aynı karantinaya taşır.
+
+Gizlilik: kalıcı silinen bir belgenin dosyası, eski arşivlerde en çok `DOCUMENTS_MAX_AGE_DAYS` (210) gün kalır (bölüm 6); yedekten dönüşte silinmiş hesapların kimliksizleştirilmesi için bölüm 5.6–5.7'yi de uygulayın.
 
 ---
 
@@ -311,6 +354,7 @@ Kural: **yedek yalnızca aynı sunucuda durursa sunucuyla birlikte kaybolur.** `
 - rsync / rclone hedefi: `offsite_push.sh` başarılı gönderimden sonra uzaktaki 210 günden eski günlük-veritabanı ve yapılandırma dosyalarını siler (`OFFSITE_PRUNE_DAYS`, varsayılan 210, 0 = kapalı). Yerel dizin hedefiyle [doğrulandı]; ssh üzerinden `find -delete` ve `rclone delete --min-age` yolları [denenmedi].
 - **sftp-only hedefte uzak silme yapılamaz**: eski dosyaları hedefte elle silin (ya da rsync/rclone kullanın).
 - Firmware arşivleri (`kapi_firmware_*`) yaşa göre silinmez (değişmedikçe tek yedek kopyadır).
+- Belge deposu arşivlerinde (`kapi_documents_*`) **en yenisi her zaman korunur**, ondan eskiler 210 günü aşınca silinir (yerelde `backup_db.sh`, uzakta rsync/rclone için `offsite_push.sh`, Windows'ta `-PruneDays`). Uzak silme rsync (yerel dizin) ve sahte `rclone` ile [doğrulandı]; ssh üzerinden ve gerçek `rclone` ile [denenmedi]. sftp-only hedefte elle silin.
 - Bu süre, yerel tutma ile de uyumludur (günlük 14 gün, haftalık ≈ 56 gün, aylık ≈ 6 ay).
 
 | Seçenek | Maliyet | Artı | Eksi | Kurulum |
@@ -392,7 +436,7 @@ Her iki durumda ilk gönderim: `bash ~/ops/offsite_push.sh --all`. Sonra cron (0
 | `disk` | `/` doluluk ≥ %85 WARN, ≥ %95 CRIT; inode ≥ %90 | |
 | `memory` | Kullanılabilir bellek < %10 WARN, < %5 CRIT; takas ≥ %80 | |
 | `backup_age` | Son günlük yedek < 26 saat (gelecek tarihli dosyalar sayılmaz) | CRIT |
-| `backup_run` | Son yedek çalışması başarılı mı | CRIT/WARN |
+| `backup_run` | Son yedek çalışması başarılı mı (DB, yapılandırma, firmware ve belge arşivi dahil) | CRIT/WARN |
 | `backup_key` | Şifreleme anahtarı var mı ve kayıtlı parmak iziyle aynı mı | CRIT |
 | `restore_test` | Geri yükleme testi hiç çalışmadı / FAIL / 40 günden eski | WARN/CRIT |
 | `offsite` | Dış kopya yapılandırılmadı / başarısız / 26 saatten eski | WARN/CRIT |
@@ -480,7 +524,8 @@ Başka projelerin PM2 günlükleri bu kuralın dışındadır; sahipleri kendi d
 4. **Elle yedek klasörlerinin temizliği** kararı (bölüm 4.1).
 5. MQTT güvenlik ve sertifika yapılandırması ayrıca gözden geçirilecek (ayrıntılar bu belgede tutulmaz; ayrı iletildi). İzleme bu alandaki sertifika bitişini ve erişilebilirliği denetler.
 6. Süreç yönetimi (PM2) tanımının depodaki `ecosystem.config.cjs` ile hizalanması planlı bir bakımda değerlendirilecek (ayrıntı ayrı notta).
-7. Aylık geri yükleme provasının yeni sürümünün (düz + şifreli kopya) canlıda ilk tam çalışması 2026-11-02 01:15 UTC'de olacak; önceden elle çalıştırmak isterseniz bölüm 5.1.
+7. **Belge modülü ilk açıldığında:** ilk belge yüklendikten sonra `bash ~/ops/backup_db.sh` ile belge arşivinin oluştuğunu (`~/ops/logs/backup.log` "belge" satırı) ve `node scripts/documents_fsck.mjs --report` çıkışının 0 olduğunu doğrulayın; `bash ~/ops/restore_test.sh` belge tutarlılığı satırı da yeşil olmalı.
+8. Aylık geri yükleme provasının yeni sürümünün (düz + şifreli kopya) canlıda ilk tam çalışması 2026-11-02 01:15 UTC'de olacak; önceden elle çalıştırmak isterseniz bölüm 5.1.
 
 ---
 
@@ -521,6 +566,28 @@ bash ~/ops/install_ops.sh --no-cron           # parmak izi/dizin/sözdizimi kont
 cat ~/ops/state/backup.status ~/ops/state/restore_test.status ~/ops/state/offsite.status
 ls -la ~/backups/scheduled/daily ~/backups/scheduled/offsite
 crontab -l
+# belge deposu (modül kullanıldıysa)
+ls -la ~/backups/scheduled/config | grep documents
+cd /var/www/site_kapi_kontrol/server && node scripts/documents_fsck.mjs --report
 ```
 
 Dağıtım sonrası doğrulama listesine eklenecek: `bash ~/ops/healthcheck.sh --dry-run -v` (hepsi OK, yalnızca bilinen WARN'lar).
+
+---
+
+## 14. Dağıtım doğrulaması: 038–041 (toplu yükleme, belgeler, finans 4b, push)
+
+Dağıtımdan **önce** `deploy/remote_rehearse_schema.sh` (yedeği geçici veritabanına yükler, yeni `ensureDbSchema()`'yı iki kez çalıştırır, canlıya dokunmaz), **sonra** `deploy/remote_verify.sh` (`ssh ... 'bash -s' < deploy/remote_verify.sh`; sunucunun kendi loopback'inden, az sayıda istekle) çalıştırılır. Betikler sır ya da `.env` değeri yazdırmaz.
+
+**`remote_rehearse_schema.sh` — 038–041 kontrolleri ve `PROVA_OK` koşulları:**
+- `ok035` (mevcut), `ok038` (`bulk_import_runs` + 2 yabancı anahtar + 3 indeks), `ok039` (`documents`, `document_versions`, `announcement_attachments` + 4 kısıt + 3 indeks), `ok040` (finans 4b: 19 tablo, 30 tetikleyici, `ledger_entries.late_fee_run_id`, `notification_preferences.email_finance_reminders`, 2 kısıt), `ok041` (`push_devices`, `push_outbox`, 4 push tercih sütunu, kısıt ve indeksler) ve **idempotans**: ikinci `ensureDbSchema()` turundan sonra tüm `public` şemasının parmak izi (kolonlar+varsayılanlar, kısıtlar, indeksler, tetikleyiciler, işlev gövdeleri) ilk turla **aynı** olmalı.
+- Satır sayıları, yeni modüllerin hiçbir sitede açık olmadığı (`documents`, `finance`) ve eski 031–036 kontrolleri bilgi olarak yazdırılır; eski kontroller korunmuştur. (034 tetikleyici sayısı artık 10'dur: 034'ün 6'sı + 040'ın 4'ü.)
+- **Yalıtılmış gerçek PostgreSQL'de [doğrulandı]:** migration 001–037 şeması + güncel `ensureDbSchema()` ×2 → `PROVA_OK`, `ok038..ok041=t`, `idempotent=t`; ayrıca bir tetikleyici/kısıt/indeks/FK eksilince ilgili `ok0xx` değerlerinin `f` olduğu görüldü (negatif test). Canlı yedek üzerindeki gerçek prova dağıtımda yapılır.
+
+**`remote_verify.sh` — yeni bölümler:**
+- Yeni tablolar: 25 beklenir (1 + 3 + 19 + 2). `site_modules` içinde `documents` ve `finance` için açık site sayısı **0** olmalı (yeni modüller varsayılan kapalı).
+- Kimliksiz uç duman testleri (hepsi **401** beklenir; 5xx olmamalı): toplu yükleme `imports/spec` ve önizleme, sakin belge listesi ve indirme, yönetici belge listesi, push cihaz kaydı/listesi, push durumu.
+- **Push / FCM hizmet hesabı dosyası:** `PUSH_ENABLED` değeri ve `FCM_SERVICE_ACCOUNT_FILE` tanımlıysa dosya modunun **600**, sahibinin API kullanıcısı olduğu denetlenir (**yol ve içerik yazdırılmaz**); tanımsızsa "push kapalı (beklenen)" bilgisi verilir; push açıkken dosya yoksa ya da izni gevşekse `SORUNLU`. Bu dosya bilinçli olarak yedeğe **alınmaz** (kaybolursa konsoldan yenisi üretilir).
+- **Belge dizini:** var mı (yoksa bilgi: modül kapalı olabilir), sembolik bağlantı değil, mod **700**, sahibi API kullanıcısı, yazılabilir (`_tmp` dahil), kod dizini ya da `/tmp` altında değil, boş alan `DOCUMENTS_MIN_FREE_BYTES` (varsayılan 2 GiB) üstünde, dosya modu 600 / dizin modu 700 sapması yok; dosya varken şifreli belge yedeği (`config/kapi_documents_*`) yoksa uyarı. Dizin oluşturulmaz/yazılmaz (yalnız okunur).
+- Çıktıda `SORUNLU` ile başlayan her satır, dağıtımı tamamlamadan önce açıklanmalıdır.
+- Betik mantığı yerelde sahte `curl`/`docker`/`pm2`/`stat` ile [doğrulandı] (push kapalı, FCM izni 644/600, belge dizini yok/izin sapması, uç 500, modül açık, FCM dosyası yok); canlıda ilk çalıştırma dağıtımda yapılır.

@@ -22,10 +22,11 @@ Betikler sır içermez. Parola/anahtar yazılmaz; `.env` dosyası dağıtım pak
    ssh -p 22667 salihceylan@178.210.161.55 "sha256sum /home/salihceylan/kapi_deploy_$TS.tgz"   # yereldeki özetle aynı olmalı
    ```
 4. **Hazırlık (canlıya dokunmaz):** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS prepare"` → yedek (`~/backups/kapi_$TS/server_code.tgz` [.env ve data dahil], `db.sql.gz`), `node --check`, aşamalı `npm ci --omit=dev`. Çıktı `PREPARE_OK` ile bitmeli.
+4b. **Şema provası (canlıya dokunmaz; migration içeren her dağıtımdan önce):** `scp -P 22667 deploy/remote_rehearse_schema.sh salihceylan@178.210.161.55:/home/salihceylan/kapi_rehearse_$TS.sh` ardından `ssh ... "bash /home/salihceylan/kapi_rehearse_$TS.sh $TS"`. Yedeği geçici veritabanına yükler, yeni `ensureDbSchema()`'yı iki kez çalıştırır ve çıktının sonunda `PROVA_OK` bekler (035/036 ve 038–041 varlık kontrolleri + sema parmak izi idempotansı; ayrıntı: `docs/OPERASYON_YEDEK_IZLEME.md` bölüm 14).
 5. **İsteğe bağlı kuru çalıştırma (ACL):** yeni kodun ürettiği MQTT ACL'ini canlı DB ile görmek için sunucuda hazırlık dizininden `node scripts/sync_mqtt_acl.js --dry-run` çalıştırın. **`.env` dosyasını `source` ETMEYİN** (satırlardaki boşluklu değerler komut olarak çalışır).
 6. **Etkinleştirme:** `ssh ... "bash /home/salihceylan/kapi_remote_deploy_$TS.sh $TS activate"` → `COMPANY_API_KEY` yoksa üretir, kodu yerleştirir, `node_modules` değiştirir, `pm2 restart kapi-api --update-env`, `/health` bekler. Sağlık başarısızsa **otomatik geri alma** yapılır.
 7. **MQTT ACL (cihaz konuları değiştiyse):** yedekten sonra `sudo -n /usr/local/bin/kapi-mqtt-sync` (NOPASSWD sarmalayıcı; ACL'yi DB'den üretir ve mosquitto'yu yeniden yükler).
-8. **Doğrulama:** `ssh ... 'bash -s' < deploy/remote_verify.sh` ve `pm2 logs kapi-api --lines 40 --nostream`.
+8. **Doğrulama:** `ssh ... 'bash -s' < deploy/remote_verify.sh` ve `pm2 logs kapi-api --lines 40 --nostream`. `remote_verify.sh` ayrıca yeni tabloları, `documents`/`finance` modüllerinin kapalı olduğunu, yeni uçların kimliksiz 401 verdiğini, FCM hizmet hesabı dosyasının izninin 600 olduğunu (yol/içerik yazdırılmaz) ve belge dizininin (var/700/yazılır/boş alan) durumunu denetler; `SORUNLU` ile başlayan satırlar dağıtım tamamlanmadan açıklanmalıdır.
 
 ## Geri alma
 
