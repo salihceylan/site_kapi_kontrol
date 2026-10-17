@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/finance_parts.dart';
 
 import 'dialog_layout_harness.dart';
+import 'finance_4b_harness.dart' show f4ExpectDiscardGuard;
 import 'finance_fixtures.dart';
 import 'site_application_fixtures.dart' show captureAnnouncements;
 import 'list_fixtures.dart' show tapFinder, tapText;
@@ -328,6 +329,9 @@ void main() {
       auth.finError = null;
       await tapText(t, 'Vazgeç');
       await settleFor(t);
+      // Yazılmış veri var: kapatmadan önce onay sorulur (R14).
+      await tapText(t, 'Vazgeç ve Kapat');
+      await settleFor(t);
       expect(out.refreshes, 1, reason: 'sonuç belirsizdi: kapanırken liste tazelenir');
     });
 
@@ -339,6 +343,19 @@ void main() {
       await _save(t);
       expect(find.text('Bu işlem için yetkiniz yok.'), findsOneWidget);
       expect(out.closed, isFalse);
+    });
+
+    testWidgets('R14: yazılmış veri varken Vazgeç / geri tuşu onay sorar; hiçbir şey yazılmaz', (t) async {
+      final auth = FinanceFakeAuth.seeded();
+      await f4ExpectDiscardGuard(
+        t,
+        markerKey: 'finance_definition_submit',
+        open: () async {
+          await _openForm(t, auth);
+        },
+        edit: () async => _enter(t, 'finance_definition_name', 'Aidat'),
+      );
+      expect(auth.definitionCreateCalls, isEmpty);
     });
 
     testWidgets('gönderim sürerken çift dokunuş tek istek; geri tuşu kapatmaz', (t) async {

@@ -1,0 +1,43 @@
+{
+ "kind": "apartments",
+ "spec_version": 1,
+ "totals": {
+  "rows": 3,
+  "ok": 2,
+  "unchanged": 0,
+  "error": 1,
+  "with_warnings": 0
+ },
+ "plan": {
+  "apartment_update": 2,
+  "cells_set": 10,
+  "overwritten_cells": 0,
+  "cells_kept": 0
+ },
+ "issues": [
+  {
+   "n": 4,
+   "severity": "error",
+   "field": "blok",
+   "code": "BLOCK_NOT_FOUND",
+   "message": "Blok bulunamadı: «C». Sitedeki bloklar: A Blok, B Blok."
+  }
+ ],
+ "issues_truncated": false,
+ "samples": [
+  {
+   "n": 2,
+   "action": "update",
+   "summary": "A Blok - Daire 1 (7 alan)"
+  },
+  {
+   "n": 3,
+   "action": "update",
+   "summary": "A Blok - Daire 2 (3 alan)"
+  }
+ ],
+ "checks": {
+  "land_share": null
+ },
+ "preview_hash": "6ef3f8e428fa938e809153dd27e63a0782495fec87f3f327b01ec5c318fb42d1"
+}

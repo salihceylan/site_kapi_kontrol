@@ -362,6 +362,10 @@ void main() {
       auth.paymentError = null;
       await tapText(t, 'Vazgeç');
       await settleFor(t);
+      // Yazılmış veri var: kapatmadan önce onay sorulur (R14), kapanınca çağıran listeyi tazeler.
+      expect(find.text('Değişiklikler silinsin mi?'), findsOneWidget);
+      await tapText(t, 'Vazgeç ve Kapat');
+      await settleFor(t);
       expect(out.closed, isTrue);
       expect(out.refreshes, 1);
     });
@@ -423,6 +427,9 @@ void main() {
       expect(auth.ledger.where((e) => e['kind'] == 'payment').length, 1, reason: 'yalnız tohum tahsilatı');
       await tapText(t, 'Vazgeç');
       await settleFor(t);
+      await tapText(t, 'Vazgeç ve Kapat');
+      await settleFor(t);
+      expect(out.closed, isTrue);
       expect(out.refreshes, 0, reason: 'kesin ret: liste tazelenmez');
     });
 
@@ -628,6 +635,8 @@ void main() {
       await fillPayment(t);
       await _submit(t, 'finance_payment_submit');
       await tapText(t, 'Vazgeç');
+      await settleFor(t);
+      await tapText(t, 'Vazgeç ve Kapat');
       await settleFor(t);
       expect(first.closed, isTrue);
       expect(first.refreshes, 1, reason: 'sonuç belirsiz: liste tazelenir');

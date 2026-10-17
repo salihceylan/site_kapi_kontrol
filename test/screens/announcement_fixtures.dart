@@ -226,6 +226,9 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   Object? prefsSaveError;
   bool prefsEmail = true;
 
+  /// Saklanan borç hatırlatma e-postası tercihi (sunucu `email_finance_reminders`; etkin değer bastırmayla birlikte).
+  bool prefsFinance = true;
+
   /// Adres e-postadaki "abonelikten çık" bağlantısıyla bastırılmış (sunucu `email_suppressed`).
   bool prefsSuppressed = false;
 
@@ -245,7 +248,14 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   final List<int?> readAllCalls = <int?>[];
   int summaryCalls = 0;
   int prefsGetCalls = 0;
+  /// `email_announcements` değeri içeren PUT'lar (yalnız o anahtar verilmişse).
   final List<bool> prefsSetCalls = <bool>[];
+
+  /// `email_finance_reminders` değeri içeren PUT'lar (yalnız o anahtar verilmişse).
+  final List<bool> prefsFinanceSetCalls = <bool>[];
+
+  /// Her PUT'ta VERİLEN anahtarlar (verilmeyen null): hangi anahtarların gövdeye girdiğini doğrular.
+  final List<({bool? announcements, bool? finance})> prefsSetRequests = <({bool? announcements, bool? finance})>[];
 
   Future<void> _gate(List<Completer<void>> queue) async {
     if (queue.isEmpty) return;
@@ -353,6 +363,8 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
               'email': <String, dynamic>{'requested': requested, ...counts},
             },
       'edit_count': row['edit_count'],
+      // Belge ekleri (Faz 3b-A): satırda `attachments` varsa sunucu gibi döner.
+      if (row['attachments'] != null) 'attachments': row['attachments'],
     };
   }
 
@@ -473,6 +485,19 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     if (error != null) throw error;
   }
 
+  /// Belge eki satırları (başlık sahte: "Belge N").
+  static List<Map<String, dynamic>> _attachmentRows(List<int> ids) => <Map<String, dynamic>>[
+    for (final id in ids)
+      <String, dynamic>{
+        'document_id': id,
+        'title': 'Belge $id',
+        'file_name': 'belge-$id.pdf',
+        'mime_type': 'application/pdf',
+        'size_bytes': 1048576,
+        'available': true,
+      },
+  ];
+
   static String _normalize(String text) => text.trim().replaceAll(RegExp(r'[ \t]+'), ' ');
 
   void _validateText(String title, String body) {
@@ -520,6 +545,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     bool sendEmail = false,
     String publish = 'draft',
     DateTime? publishAt,
+    List<int>? documentIds,
   }) async {
     announcementCreateCalls.add(<String, Object?>{
       'title': title,
@@ -529,6 +555,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       'send_email': sendEmail,
       'publish': publish,
       'publish_at': publishAt,
+      'document_ids': ?documentIds,
     });
     await _writeWait();
     _validateText(title, body);
@@ -555,6 +582,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       publishAt: publish == 'schedule' ? publishAt!.toUtc() : null,
       createdAt: clock().toUtc(),
     );
+    if (documentIds != null && documentIds.isNotEmpty) row['attachments'] = _attachmentRows(documentIds);
     rows[id] = row;
     if (publish == 'now') {
       try {
@@ -624,6 +652,9 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
         row['edit_count'] = (row['edit_count'] as int) + 1;
       }
       return;
+    }
+    if (fields.containsKey('document_ids')) {
+      row['attachments'] = _attachmentRows((fields['document_ids']! as List).cast<int>());
     }
     if (fields.containsKey('importance')) row['importance'] = fields['importance'];
     if (fields.containsKey('send_email')) row['send_email'] = fields['send_email'];
@@ -711,6 +742,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
       'edited_at': _iso(row['edited_at'] as DateTime?),
       'is_read': row['read_at'] != null,
       if (full) 'read_at': _iso(row['read_at'] as DateTime?),
+      if (full && row['attachments'] != null) 'attachments': row['attachments'],
     };
   }
 
@@ -809,6 +841,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     'push_announcements': true,
     'push_available': false,
     if (!prefsLegacy) 'email_suppressed': prefsSuppressed,
+    if (!prefsLegacy) 'email_finance_reminders': prefsFinance && !prefsSuppressed,
   };
 
   @override
@@ -822,16 +855,30 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   }
 
   @override
-  Future<NotificationPrefs> setNotificationPreferences({required bool emailAnnouncements}) async {
-    prefsSetCalls.add(emailAnnouncements);
+  Future<NotificationPrefs> setNotificationPreferences({
+    bool? emailAnnouncements,
+    bool? emailFinanceReminders,
+  }) async {
+    if (emailAnnouncements == null && emailFinanceReminders == null) {
+      throw ArgumentError('En az bir e-posta tercihi verilmelidir.');
+    }
+    prefsSetRequests.add((announcements: emailAnnouncements, finance: emailFinanceReminders));
+    if (emailAnnouncements != null) prefsSetCalls.add(emailAnnouncements);
+    if (emailFinanceReminders != null) prefsFinanceSetCalls.add(emailFinanceReminders);
     final gate = prefsSaveGate;
     if (gate != null) await gate.future;
     final error = prefsSaveError;
     if (error != null) throw error;
-    prefsEmail = emailAnnouncements;
+    if (emailAnnouncements != null) prefsEmail = emailAnnouncements;
+    if (emailFinanceReminders != null) prefsFinance = emailFinanceReminders;
     // Açmak, gerçek hesap e-postasının bastırmasını kaldırır; dahili hesap adresinde kalkmaz.
-    if (emailAnnouncements && prefsSuppressed && !prefsSuppressionPersists) prefsSuppressed = false;
-    return NotificationPrefs.fromJson(_prefsJson(), fallbackEmail: emailAnnouncements);
+    final opened = emailAnnouncements == true || emailFinanceReminders == true;
+    if (opened && prefsSuppressed && !prefsSuppressionPersists) prefsSuppressed = false;
+    return NotificationPrefs.fromJson(
+      _prefsJson(),
+      fallbackEmail: emailAnnouncements,
+      fallbackFinance: emailFinanceReminders,
+    );
   }
 }
 

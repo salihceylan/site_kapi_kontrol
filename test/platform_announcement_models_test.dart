@@ -606,6 +606,86 @@ void main() {
       expect(opened.emailAnnouncements, isTrue);
       expect(opened.emailSuppressed, isFalse);
     });
+
+    test('borç hatırlatma (email_finance_reminders): alan var / yok / bastırılmış; duyuru tercihinden bağımsız', () {
+      // Alan var: değer olduğu gibi okunur.
+      final off = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': true,
+        'email_finance_reminders': false,
+        'email_suppressed': false,
+      });
+      expect(off.emailFinanceReminders, isFalse);
+      expect(off.emailAnnouncements, isTrue, reason: 'iki tercih birbirinden bağımsız');
+      final on = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': false,
+        'email_finance_reminders': true,
+      });
+      expect(on.emailFinanceReminders, isTrue);
+      expect(on.emailAnnouncements, isFalse);
+
+      // Alan yok (eski sunucu): açık sayılır.
+      final legacy = NotificationPrefs.fromJson(<String, dynamic>{'email_announcements': false});
+      expect(legacy.emailFinanceReminders, isTrue);
+      expect(NotificationPrefs.fromJson(<String, dynamic>{}).emailFinanceReminders, isTrue);
+      expect(const NotificationPrefs().emailFinanceReminders, isTrue, reason: 'varsayılan açık');
+      // Alan bool değilse de varsayılana düşer (savunmacı).
+      expect(
+        NotificationPrefs.fromJson(<String, dynamic>{'email_finance_reminders': 'false'}).emailFinanceReminders,
+        isTrue,
+      );
+
+      // PUT yanıtında alan yoksa istenen değer; alan varsa yanıt öncelikli.
+      expect(NotificationPrefs.fromJson(<String, dynamic>{}, fallbackFinance: false).emailFinanceReminders, isFalse);
+      expect(
+        NotificationPrefs.fromJson(
+          <String, dynamic>{'email_finance_reminders': true},
+          fallbackFinance: false,
+        ).emailFinanceReminders,
+        isTrue,
+      );
+      // fallbackEmail yalnız duyuruyu, fallbackFinance yalnız borç hatırlatmayı etkiler.
+      final mixed = NotificationPrefs.fromJson(<String, dynamic>{}, fallbackEmail: false);
+      expect(mixed.emailAnnouncements, isFalse);
+      expect(mixed.emailFinanceReminders, isTrue);
+
+      // Bastırılmış adres: etkin değer ASLA açık değil (sunucu çelişkili dönse bile).
+      final suppressed = NotificationPrefs.fromJson(<String, dynamic>{
+        'email_announcements': true,
+        'email_finance_reminders': true,
+        'email_suppressed': true,
+      });
+      expect(suppressed.emailFinanceReminders, isFalse);
+      expect(suppressed.emailAnnouncements, isFalse);
+      expect(suppressed.emailSuppressed, isTrue);
+      expect(
+        NotificationPrefs.fromJson(
+          <String, dynamic>{'email_suppressed': true},
+          fallbackFinance: true,
+        ).emailFinanceReminders,
+        isFalse,
+        reason: 'istenen değer bastırmayı aşamaz',
+      );
+    });
+
+    test('copyWith: borç hatırlatma yalnız kendini değiştirir; öteki alanlar (push dahil) korunur', () {
+      const prefs = NotificationPrefs(
+        emailAnnouncements: false,
+        emailFinanceReminders: true,
+        pushAnnouncements: false,
+        pushAvailable: true,
+        emailSuppressed: true,
+      );
+      final changed = prefs.copyWith(emailFinanceReminders: false);
+      expect(changed.emailFinanceReminders, isFalse);
+      expect(changed.emailAnnouncements, isFalse);
+      expect(changed.pushAnnouncements, isFalse);
+      expect(changed.pushAvailable, isTrue);
+      expect(changed.emailSuppressed, isTrue);
+      // Duyuruyu değiştirmek borç hatırlatmayı değiştirmez.
+      final announce = prefs.copyWith(emailAnnouncements: true);
+      expect(announce.emailFinanceReminders, isTrue);
+      expect(prefs.copyWith().emailFinanceReminders, isTrue);
+    });
   });
 
   group('modül kartı: Duyuru ve Bildirim', () {

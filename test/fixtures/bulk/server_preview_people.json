@@ -1,0 +1,74 @@
+{
+ "kind": "people",
+ "spec_version": 1,
+ "totals": {
+  "rows": 5,
+  "ok": 3,
+  "unchanged": 0,
+  "error": 2,
+  "with_warnings": 1
+ },
+ "plan": {
+  "people_create": 3,
+  "people_link": 0,
+  "people_reactivate": 0,
+  "people_filled": 0,
+  "residency_add": 3,
+  "residency_upgrade": 0,
+  "residency_unchanged": 0,
+  "vehicle_add": 2,
+  "vehicle_unchanged": 0
+ },
+ "issues": [
+  {
+   "n": 4,
+   "severity": "error",
+   "field": "ad_soyad",
+   "code": "FORMULA_LIKE",
+   "message": "Ad Soyad formül gibi görünüyor («=» ile başlıyor). İşareti kaldırın."
+  },
+  {
+   "n": 5,
+   "severity": "error",
+   "field": "e_posta",
+   "code": "EMAIL_INVALID",
+   "message": "E-posta biçimi geçersiz: «gecersiz»."
+  },
+  {
+   "n": 5,
+   "severity": "error",
+   "field": "blok",
+   "code": "BLOCK_NOT_FOUND",
+   "message": "Blok bulunamadı: «Z». Sitedeki bloklar: A Blok, B Blok."
+  },
+  {
+   "n": 6,
+   "severity": "warning",
+   "field": "plaka",
+   "code": "PLATE_INVALID",
+   "message": "Plaka atlandı (biçim geçersiz): «XX»."
+  }
+ ],
+ "issues_truncated": false,
+ "samples": [
+  {
+   "n": 2,
+   "action": "create",
+   "summary": "Ahmet Yılmaz → A Blok - Daire 3 (Malik) + 2 plaka"
+  },
+  {
+   "n": 3,
+   "action": "create",
+   "summary": "Ayşe Demir → A Blok - Daire 3 (Kiracı)"
+  },
+  {
+   "n": 6,
+   "action": "create",
+   "summary": "Zeynep Aslan → B Blok - Daire 1 (Aile Üyesi)"
+  }
+ ],
+ "checks": {
+  "land_share": null
+ },
+ "preview_hash": "1503ccd10e018a710710f779dd8f4dad49160edb23e08bc3f06ddfe362e760f1"
+}

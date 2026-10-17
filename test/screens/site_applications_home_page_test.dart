@@ -211,6 +211,9 @@ void main() {
       expect(badge, findsOneWidget);
       expect(find.descendant(of: badge, matching: find.text('2')), findsOneWidget);
 
+      // Süper kullanıcının çekmecesi uzundur (Belgeler vb. eklendikçe uzar): öğe görünür alana kaydırılır.
+      await t.ensureVisible(find.text('Site Başvuruları').last);
+      await t.pump();
       await t.tap(find.text('Site Başvuruları').last);
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));

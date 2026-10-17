@@ -23,6 +23,7 @@ import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 
+import 'finance_4b_fixtures.dart';
 import 'people_fixtures.dart';
 
 /// Sunucudaki bir tanım satırı (`mapDefinitionRow`).
@@ -110,7 +111,12 @@ Map<String, dynamic> finEntry(
 class FinanceFakeAuth extends PeopleFakeAuth {
   FinanceFakeAuth({super.role, super.sites, super.blocks, super.apartments}) {
     clock = () => DateTime.utc(2026, 10, 16, 9);
+    // Faz 4b uçları (hesaplar, makbuz, ayarlar ...) ağa çıkmasın: sahte 4b API'si kayıtlıdır.
+    f4 = registerFakeFinance4b(this);
   }
+
+  /// Faz 4b sahte API'si (kasa / banka, makbuz, gider, tazminat, hatırlatma).
+  late final FakeFinance4bApi f4;
 
   /// Standart veri: 3 daire (301: 3+1, 120,5 m², 35/1000; 302: kategorisiz; 303: B blok), 2 tanım, birkaç hareket.
   factory FinanceFakeAuth.seeded({UserRole role = UserRole.siteManager}) {
@@ -373,6 +379,9 @@ class FinanceFakeAuth extends PeopleFakeAuth {
       'reversal_reason': resident ? null : row['reversal_reason'],
       'created_by_name': resident ? null : row['created_by_name'],
       'created_at': row['created_at'],
+      // Faz 4b: makbuz bağlantısı ve tazminat çalıştırması (satırda yoksa null).
+      'receipt': row['receipt'],
+      'late_fee_run_id': row['late_fee_run_id'],
     };
   }
 

@@ -767,7 +767,20 @@ void main() {
       await t.pump();
       expect(find.text('Bildirim Tercihleri'), findsOneWidget);
       expect(find.text('E-posta ile duyuru al'), findsOneWidget);
-      expect(t.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(
+        t
+            .widget<Switch>(
+              find.descendant(
+                of: find.byKey(const ValueKey<String>('notification_email_switch')),
+                matching: find.byType(Switch),
+              ),
+            )
+            .value,
+        isFalse,
+      );
+      // Profilde ikinci anahtar da var (Faz 4b): aidat borç hatırlatma e-postaları.
+      expect(find.text('Borç hatırlatma e-postaları'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('notification_finance_reminders_switch')), findsOneWidget);
       expect(find.text('Telefon bildirimi'), findsOneWidget);
       expect(find.text('Yakında…'), findsOneWidget);
       await _disposeHome(t);

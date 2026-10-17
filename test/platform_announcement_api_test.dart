@@ -472,6 +472,76 @@ void main() {
       expect(after.emailAnnouncements, isFalse);
     });
 
+    test('bildirim tercihleri: GET email_finance_reminders okunur; PUT yalnız VERİLEN anahtarı gönderir', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) {
+        if (r.method == 'PUT') {
+          return _json(<String, dynamic>{
+            'email_announcements': true,
+            'email_finance_reminders': false,
+            'push_announcements': true,
+            'push_available': false,
+            'email_suppressed': false,
+          });
+        }
+        return _json(<String, dynamic>{
+          'email_announcements': true,
+          'email_finance_reminders': true,
+          'push_announcements': true,
+          'push_available': false,
+          'email_suppressed': false,
+        });
+      });
+      final before = await api.getNotificationPreferences(token: 'tok');
+      expect(before.emailFinanceReminders, isTrue);
+
+      // Yalnız borç hatırlatma: email_announcements gövdede YOK (sunucuda değişmez).
+      final after = await api.setNotificationPreferences(token: 'tok', emailFinanceReminders: false);
+      expect(rec.last.method, 'PUT');
+      expect(rec.last.url.path, '/app/notification-preferences');
+      expect(rec.lastBody, <String, dynamic>{'email_finance_reminders': false});
+      expect(after.emailFinanceReminders, isFalse);
+      expect(after.emailAnnouncements, isTrue, reason: 'duyuru tercihi sunucu yanıtından gelir');
+
+      // Yalnız duyuru: email_finance_reminders gövdede YOK.
+      await api.setNotificationPreferences(token: 'tok', emailAnnouncements: true);
+      expect(rec.lastBody, <String, dynamic>{'email_announcements': true});
+
+      // İkisi birlikte.
+      await api.setNotificationPreferences(token: 'tok', emailAnnouncements: false, emailFinanceReminders: true);
+      expect(rec.lastBody, <String, dynamic>{'email_announcements': false, 'email_finance_reminders': true});
+    });
+
+    test('bildirim tercihleri: PUT yanıtında alan yoksa istenen değer geçerli sayılır (borç hatırlatma dahil)', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json(<String, dynamic>{'push_announcements': true, 'push_available': false}));
+      final off = await api.setNotificationPreferences(token: 'tok', emailFinanceReminders: false);
+      expect(off.emailFinanceReminders, isFalse);
+      final bothOff = await api.setNotificationPreferences(
+        token: 'tok',
+        emailAnnouncements: false,
+        emailFinanceReminders: false,
+      );
+      expect(bothOff.emailAnnouncements, isFalse);
+      expect(bothOff.emailFinanceReminders, isFalse);
+      // Bastırılmış adres: yanıttaki etkin değer istenen değerden önceliklidir.
+      final suppressed = _api(rec, (r) => _json(<String, dynamic>{
+        'email_announcements': false,
+        'email_finance_reminders': false,
+        'email_suppressed': true,
+      }));
+      final stillOff = await suppressed.setNotificationPreferences(token: 'tok', emailFinanceReminders: true);
+      expect(stillOff.emailFinanceReminders, isFalse);
+      expect(stillOff.emailSuppressed, isTrue);
+    });
+
+    test('bildirim tercihleri: hiçbir anahtar verilmezse ArgumentError ve ağ isteği yapılmaz', () async {
+      final rec = _Recorder();
+      final api = _api(rec, (r) => _json(<String, dynamic>{}));
+      await expectLater(api.setNotificationPreferences(token: 'tok'), throwsArgumentError);
+      expect(rec.requests, isEmpty);
+    });
+
     test('sakin uçlarında 404 / 429 Türkçe mesajla ApiException olur', () async {
       final rec = _Recorder();
       final notFound = _api(rec, (r) => _json(_error('ANNOUNCEMENT_NOT_FOUND', 'Duyuru bulunamadı.'), 404));
@@ -628,6 +698,15 @@ void main() {
       final saved = await s.setNotificationPreferences(emailAnnouncements: true);
       expect(h.rec.last.method, 'PUT');
       expect(saved.emailAnnouncements, isFalse, reason: 'sunucu yanıtı geçerlidir');
+      expect(h.rec.lastBody, <String, dynamic>{'email_announcements': true});
+      await s.setNotificationPreferences(emailFinanceReminders: false);
+      expect(h.rec.last.url.path, '/app/notification-preferences');
+      expect(h.rec.last.headers['Authorization'], 'Bearer tok-A');
+      expect(h.rec.lastBody, <String, dynamic>{'email_finance_reminders': false});
+      // Hiçbir anahtar verilmezse istek ASLA gitmez.
+      final sent = h.rec.requests.length;
+      expect(() => s.setNotificationPreferences(), throwsArgumentError);
+      expect(h.rec.requests.length, sent);
     });
 
     test('oturum yokken Türkçe ApiException ve ağ isteği yapılmaz', () async {

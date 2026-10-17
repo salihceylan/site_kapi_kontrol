@@ -321,6 +321,9 @@ void main() {
       expect(_tileTitle('Kayıtlı Cihazlar').evaluate().isEmpty, isTrue,
           reason: 'süper kullanıcıda öğe adı "Şirket Cihaz Envanteri"dir');
       expect(_tileTitle('Şirket Cihaz Envanteri'), findsOneWidget);
+      // Süper kullanıcının çekmecesi uzundur (Finans, Belgeler ... eklendikçe uzar): öğe görünür alana kaydırılır.
+      await t.ensureVisible(find.text('Modüller').last);
+      await t.pump();
       await t.tap(find.text('Modüller').last);
       await t.pump();
       await t.pump(const Duration(milliseconds: 600));
