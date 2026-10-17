@@ -122,3 +122,18 @@ describe('F5 SERVER_SKIP_START production\'da yok sayılır', () => {
     assert.equal(test.status, 0, 'test ortamında başlatma atlanır (DB bağlantısı denenmez)');
   });
 });
+
+describe('validateEnv: ANNOUNCEMENT_INBOX_RETENTION_DAYS', () => {
+  const retentionWarnings = (value) =>
+    validateEnv({ ...base, ...(value === undefined ? {} : { ANNOUNCEMENT_INBOX_RETENTION_DAYS: value }) }).warnings.filter((warning) => /ANNOUNCEMENT_INBOX_RETENTION_DAYS/.test(warning));
+
+  it('tanımsız, 0 ve makul sayılar için uyarı yok; geçersiz değer (sınırsız olur) ve 3650 üstü UYARILIR', () => {
+    for (const ok of [undefined, '0', '90', '3650']) assert.deepEqual(retentionWarnings(ok), [], String(ok));
+    for (const bad of ['abc', '-1', '1.5']) {
+      const warnings = retentionWarnings(bad);
+      assert.equal(warnings.length, 1, bad);
+      assert.match(warnings[0], /SINIRSIZ/);
+    }
+    assert.match(retentionWarnings('5000')[0], /3650/);
+  });
+});

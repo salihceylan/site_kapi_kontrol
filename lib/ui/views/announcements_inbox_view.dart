@@ -59,6 +59,9 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
   // Duyuru penceresi çift dokunuşta iki kez açılmasın.
   bool _opening = false;
 
+  // Sunucu gelen kutusu yanıtındaki `retention_days` (yoksa null): "Duyurular son N gün gösterilir." satırı.
+  int? _retentionDays;
+
   // Liste yüklenirken "en son duyuru" imzası değişirse yeniden yükleme ertelenir ve yükleme bitince BİR kez
   // daha çekilir (aksi halde yeni duyuru sonraki özet değişimine dek listeye girmezdi).
   bool _reloadPending = false;
@@ -70,6 +73,7 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
         beforeId: before,
         siteCode: _siteFilter,
       );
+      if (page.retentionDays != null) _retentionDays = page.retentionDays;
       return (items: page.items, next: page.nextBeforeId);
     },
     keyOf: (a) => a.id,
@@ -276,6 +280,14 @@ class AnnouncementsInboxViewState extends State<AnnouncementsInboxView> {
             ),
           ),
           const SizedBox(height: AppSpace.md),
+        ],
+        if (_retentionDays != null) ...[
+          Text(
+            'Duyurular son $_retentionDays gün gösterilir.',
+            key: const ValueKey<String>('announcements_retention_note'),
+            style: th.bodySmall?.copyWith(color: p.textSecondary),
+          ),
+          const SizedBox(height: AppSpace.sm),
         ],
         SectionHeader(
           title: 'Gelen duyurular',

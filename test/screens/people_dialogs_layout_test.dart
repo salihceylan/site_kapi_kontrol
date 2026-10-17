@@ -587,9 +587,9 @@ void main() {
       expect(find.text('Giriş tarihi (isteğe bağlı)'), findsOneWidget);
       await _enter(t, 'person_email', 'yeni@example.com');
       await t.pump();
-      expect(find.text('E-posta, kişi siteye katıldığında hesabıyla eşleştirilir.'), findsOneWidget);
-      expect(find.textContaining('hesap açılır'), findsNothing, reason: 'hesap var/yok ima eden metin yok');
-      expect(find.textContaining('giriş bilgileri'), findsNothing);
+      expect(find.textContaining('Dairenin sakin hesabı yoksa bu kişiye giriş bilgileri (kullanıcı adı ve PIN) e-postayla gönderilir.'), findsOneWidget);
+      expect(find.text('Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.'), findsOneWidget);
+      expect(find.textContaining('hesap açılır'), findsNothing, reason: 'bu e-postanın hesabı var / yok ima edilmez');
     });
 
     layoutMatrix('hesabı olan kişi düzenleme: ad / telefon / e-posta salt okunur + yardım metni', (t, w, h, s, dark) async {
@@ -610,6 +610,45 @@ void main() {
           findsOneWidget, reason: 'tek bilgilendirme bandı');
       expect(find.textContaining('Bu kişinin hesabı var.'), findsOneWidget);
       expect(find.text('Daire (isteğe bağlı)'), findsNothing, reason: 'düzenlemede daire yok');
+    });
+  });
+
+  group('kişi formu: hesap açıklaması (saha F2.03; sunucu: people_service.createPerson)', () {
+    const noEmail = 'E-posta girmezseniz kişi yalnız kayıt olarak tutulur; giriş hesabı açılmaz.';
+    const noApartment =
+        'Daire seçmezseniz kişi yalnız kayıt olarak tutulur; giriş hesabı açılmaz. '
+        'Kişi siteye katılınca e-postası hesabıyla eşleştirilir.';
+    const withApartment =
+        'Dairenin sakin hesabı yoksa bu kişiye giriş bilgileri (kullanıcı adı ve PIN) e-postayla gönderilir. '
+        'Sakin hesabı varsa kişi yalnız kayıt olarak tutulur. '
+        'E-posta bu sitedeki kayıtlı bir hesaba aitse kişi o hesaba bağlanır.';
+    const phoneHelp = 'Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
+
+    testWidgets('yardım metni duruma göre değişir: e-posta yok / e-posta var daire yok / e-posta + daire', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth)));
+      expect(find.text(noEmail), findsOneWidget);
+      expect(find.text(phoneHelp), findsOneWidget);
+
+      await _enter(t, 'person_email', 'yeni@example.com');
+      expect(find.text(noApartment), findsOneWidget);
+      expect(find.text(noEmail), findsNothing);
+
+      await _pickApartment(t, 'person_apartment', 'B Blok - 2');
+      expect(find.text(withApartment), findsOneWidget);
+      expect(find.text(noApartment), findsNothing);
+
+      await _enter(t, 'person_email', 'gecersiz');
+      expect(find.text(noEmail), findsOneWidget, reason: 'geçerli e-posta yokken e-posta yok sayılır');
+    });
+
+    testWidgets('düzenlemede ekleme yardım metinleri çıkmaz', (t) async {
+      final auth = PeopleFakeAuth.seeded();
+      final detail = await auth.getPerson(11, 1);
+      await _open(t, (c) => PersonFormDialog.show(c, scope: _scope(auth), person: detail));
+      expect(find.text(noEmail), findsNothing);
+      expect(find.text(noApartment), findsNothing);
+      expect(find.text(withApartment), findsNothing);
     });
   });
 

@@ -8,6 +8,8 @@ import { pool } from '../db.js';
 import { PlatformError } from './errors.js';
 import {
   announcementNotFound,
+  inboxRetentionDays,
+  inboxWindowSql,
   invalidField,
   mapInboxRow,
   parseInboxQuery,
@@ -39,15 +41,22 @@ const MINE_FROM = `
 /**
  * GET /app/announcements -> { items: [...], next_before_id }. Sıra: published_at DESC, id DESC. Sayfa imleci `before_id`
  * (imleç satırının (published_at, id) çiftinden küçükler); sonraki sayfa yoksa next_before_id null.
+ * `retention_days`: saklama penceresi (gün; null = sınırsız). Yalnız pencere içindeki + okunmamış acil duyurular listelenir (bkz. inboxWindowSql);
+ * özetteki okunmamış sayıları AYNI pencereyi kullanır. Veri silinmez, yalnız görünürlük süzülür.
  */
 export async function listMyAnnouncements(authUser, query = {}, db = pool) {
   const filters = parseInboxQuery(query);
   const userCode = userCodeOf(authUser);
+  const retentionDays = inboxRetentionDays();
   if (userCode === null) {
-    return { items: [], next_before_id: null };
+    return { items: [], next_before_id: null, retention_days: retentionDays };
   }
   const params = [userCode];
   const clauses = ['sp.user_code = $1'];
+  const windowClause = inboxWindowSql(retentionDays);
+  if (windowClause !== null) {
+    clauses.push(windowClause);
+  }
   if (filters.siteCode !== null) {
     params.push(filters.siteCode);
     clauses.push(`a.site_code = $${params.length}`);
@@ -86,7 +95,7 @@ export async function listMyAnnouncements(authUser, query = {}, db = pool) {
   for (const item of items) {
     item.attachments = attachments.get(item.id) ?? [];
   }
-  return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null };
+  return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null, retention_days: retentionDays };
 }
 
 /** GET /app/announcements/:id (tam kayıt). OKUNDU YAZMAZ. Alıcı değil / yayında değil -> 404 ANNOUNCEMENT_NOT_FOUND. */
@@ -205,12 +214,14 @@ export async function getNotificationSummary(authUser, db = pool) {
   if (userCode === null) {
     return emptySummary();
   }
+  // Saklama penceresi: liste ile AYNI koşul (okunmamış sayısı = listede görünen okunmamışlar; son yayın da pencere içindeki en yenidir).
+  const windowClause = inboxWindowSql();
   const result = await db.query(
     `
       WITH mine AS (
         SELECT a.id, a.importance, a.published_at, r.read_at
         ${MINE_FROM}
-        WHERE sp.user_code = $1
+        WHERE sp.user_code = $1${windowClause === null ? '' : ` AND ${windowClause}`}
       )
       SELECT
         (SELECT COUNT(*) FROM mine WHERE read_at IS NULL)::INTEGER AS unread,

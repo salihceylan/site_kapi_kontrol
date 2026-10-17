@@ -67,6 +67,45 @@ export function announcementLimits(env = process.env) {
   };
 }
 
+// --- Gelen kutusu saklama penceresi (YALNIZ görünürlük; hiçbir veri silinmez) ------------------------------------------
+// Sakin / daire kullanıcısı / kurul gelen kutusu, okunmamış sayıları, bildirim özeti ve acil şerit YALNIZ son N günde yayınlanmış
+// duyuruları gösterir. N tek yerden: ANNOUNCEMENT_INBOX_RETENTION_DAYS (varsayılan 90; 0 / geçersiz = sınırsız; en çok 3650).
+// İstisna: okunmamış ACİL duyuru süre dolsa da okunana kadar görünür, ama 365 günden eskiyse görünmez. Yönetici listeleri, ayrıntı
+// ucu (id ile), okundu işaretleme, e-posta ve push bu pencereden ETKİLENMEZ.
+export const INBOX_RETENTION_DEFAULT_DAYS = 90;
+export const INBOX_RETENTION_MAX_DAYS = 3650;
+export const INBOX_URGENT_UNREAD_MAX_DAYS = 365;
+
+/** Saklama günü: tanımsız/boş -> 90; "0", sayı olmayan ya da negatif -> null (sınırsız); 3650'den büyük -> 3650. */
+export function inboxRetentionDays(env = process.env) {
+  const raw = env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+  const text = raw === undefined || raw === null ? '' : String(raw).trim();
+  if (text === '') {
+    return INBOX_RETENTION_DEFAULT_DAYS;
+  }
+  if (!/^\d+$/.test(text)) {
+    return null;
+  }
+  const parsed = Number(text);
+  if (!Number.isSafeInteger(parsed) || parsed === 0) {
+    return null;
+  }
+  return Math.min(parsed, INBOX_RETENTION_MAX_DAYS);
+}
+
+/**
+ * Pencere koşulu (SQL boolean; `a` = announcements, `r` = announcement_recipients takma adları). Sınırsızsa null (koşul eklenmez).
+ * Saat cinsinden sabit aralık kullanılır (gün aralığı oturum saat dilimine / yaz saatine bağlı olurdu); sayılar doğrulanmış tam sayıdır.
+ * Liste, okunmamış sayısı ve özet AYNI ifadeyi kullanır (sayı ≠ liste tutarsızlığı olmasın).
+ */
+export function inboxWindowSql(days = inboxRetentionDays()) {
+  if (!Number.isSafeInteger(days) || days <= 0) {
+    return null;
+  }
+  const urgentUnread = `(a.importance = 'urgent' AND r.read_at IS NULL AND a.published_at >= NOW() - INTERVAL '${INBOX_URGENT_UNREAD_MAX_DAYS * 24} hours')`;
+  return `(a.published_at >= NOW() - INTERVAL '${days * 24} hours' OR ${urgentUnread})`;
+}
+
 const ISTANBUL_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 

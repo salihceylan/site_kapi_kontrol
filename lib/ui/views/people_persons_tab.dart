@@ -139,11 +139,18 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
       case false:
         AppSnack.show(
           context,
-          'Kişi eklendi. E-posta gönderilemedi.',
+          'Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi.',
           kind: AppSnackKind.warning,
         );
       case null:
-        AppSnack.show(context, 'Kişi eklendi.', kind: AppSnackKind.success);
+        // Hesap açılmadı: e-posta bu sitedeki kayıtlı bir hesaba aitse kişi o hesaba bağlanır, değilse yalnız kayıt.
+        AppSnack.show(
+          context,
+          created.hasAccount
+              ? 'Kişi eklendi ve mevcut hesabına bağlandı.'
+              : 'Kişi eklendi. Yalnız kayıt olarak tutuldu; giriş hesabı açılmadı.',
+          kind: AppSnackKind.success,
+        );
     }
     _afterChange();
   }

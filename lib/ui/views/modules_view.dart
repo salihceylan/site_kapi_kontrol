@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
-import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -15,11 +14,10 @@ import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/module_request_dialog.dart';
-import 'package:site_kapi_kontrol/ui/dialogs/staff_role_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_card.dart';
 import 'package:site_kapi_kontrol/ui/widgets/module_request_card.dart';
-import 'package:site_kapi_kontrol/ui/widgets/staff_role_card.dart';
+import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
 
 /// Geçiş Kontrol kapatılırken gösterilen uyarı (sunucunun `MODULE_CONFIRM_REQUIRED` metniyle aynı).
 const String doorControlOffWarning =
@@ -62,9 +60,8 @@ class ModulesViewState extends State<ModulesView> {
   bool _loadingState = false;
   String? _stateError;
 
-  List<StaffRoleRecord>? _roles;
-  bool _loadingRoles = false;
-  String? _rolesError;
+  // Ek roller bölümü kendi verisini çeker; sayfa yenilemesinde bu anahtarla tazelenir.
+  final GlobalKey<StaffRolesSectionState> _rolesKey = GlobalKey<StaffRolesSectionState>();
 
   // Site yöneticisinin modül talepleri (süper kullanıcıda yüklenmez).
   List<ModuleRequest>? _requests;
@@ -72,12 +69,10 @@ class ModulesViewState extends State<ModulesView> {
   String? _requestsError;
 
   final Set<String> _busyModules = <String>{};
-  final Set<int> _busyRoles = <int>{};
 
   // Yarış koruması: yalnız en son başlatılan istek sonucu uygulanır.
   int _sitesToken = 0;
   int _modulesToken = 0;
-  int _rolesToken = 0;
   int _requestsToken = 0;
 
   /// Anahtar yalnız süper kullanıcıdadır; site yöneticisi talep eder (Faz 1.1).
@@ -120,7 +115,6 @@ class ModulesViewState extends State<ModulesView> {
         _siteCode = next;
         if (next == null) {
           _state = null;
-          _roles = null;
           _requests = null;
         }
       });
@@ -142,10 +136,8 @@ class ModulesViewState extends State<ModulesView> {
     setState(() {
       _siteCode = siteCode;
       _state = null;
-      _roles = null;
       _requests = null;
       _stateError = null;
-      _rolesError = null;
       _requestsError = null;
     });
     await _loadSiteData(siteCode);
@@ -162,7 +154,10 @@ class ModulesViewState extends State<ModulesView> {
   }) async {
     await Future.wait(<Future<void>>[
       if (modules) _loadModules(siteCode, silent: silent),
-      if (roles) _loadRoles(siteCode, silent: silent),
+      // Ek roller bölümü kendi verisini çeker; aynı siteyi gösteriyorsa yeniden okutulur (site değişiminde bölüm
+      // kendi `didUpdateWidget`ında yükler: eski siteye boşuna istek atılmaz).
+      if (roles && _rolesKey.currentState?.widget.siteCode == siteCode)
+        _rolesKey.currentState!.reload(silent: silent),
       if (requests && !_isSuper) _loadRequests(siteCode, silent: silent),
     ]);
   }
@@ -225,37 +220,6 @@ class ModulesViewState extends State<ModulesView> {
           _stateError = _messageOf(
             e,
             'Modüller yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
-          );
-        }
-      });
-    }
-  }
-
-  Future<void> _loadRoles(int siteCode, {bool silent = false}) async {
-    if (!mounted || _siteCode != siteCode) return;
-    final token = ++_rolesToken;
-    if (!silent) {
-      setState(() {
-        _loadingRoles = true;
-        _rolesError = null;
-      });
-    }
-    try {
-      final next = await widget.authService.listStaffRoles(siteCode);
-      if (!mounted || token != _rolesToken || _siteCode != siteCode) return;
-      setState(() {
-        _roles = next;
-        _loadingRoles = false;
-        _rolesError = null;
-      });
-    } catch (e) {
-      if (!mounted || token != _rolesToken || _siteCode != siteCode) return;
-      setState(() {
-        _loadingRoles = false;
-        if (!silent) {
-          _rolesError = _messageOf(
-            e,
-            'Ek roller yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
           );
         }
       });
@@ -448,54 +412,6 @@ class ModulesViewState extends State<ModulesView> {
     return null;
   }
 
-  // --- Ek roller ---------------------------------------------------------------------------
-
-  Future<void> _addRole() async {
-    final code = _siteCode;
-    if (code == null) return;
-    final site = _sites.where((s) => s.id == code).firstOrNull;
-    final added = await StaffRoleDialog.show(
-      context,
-      authService: widget.authService,
-      siteCode: code,
-      siteName: site?.name,
-    );
-    if (added == true && mounted) {
-      AppSnack.show(context, 'Ek rol atandı.', kind: AppSnackKind.success);
-      unawaited(_loadRoles(code));
-    }
-  }
-
-  Future<void> _removeRole(StaffRoleRecord record) async {
-    final code = _siteCode;
-    if (code == null || _busyRoles.contains(record.userCode)) return;
-    final who = record.fullName.trim().isEmpty ? record.email : record.fullName;
-    final ok = await _confirm(
-      title: 'Rol Kaldırılsın mı?',
-      message:
-          '$who kişisinin "${record.roleLabel}" rolü kaldırılacak. Kişi dairesindeki yetkileriyle kalır.',
-      confirmLabel: 'Kaldır',
-      icon: Icons.person_remove_rounded,
-    );
-    if (!ok || !mounted) return;
-    setState(() => _busyRoles.add(record.userCode));
-    try {
-      await widget.authService.removeStaffRole(code, record.userCode);
-      if (!mounted) return;
-      AppSnack.show(context, 'Ek rol kaldırıldı.', kind: AppSnackKind.success);
-      unawaited(_loadRoles(code));
-    } catch (e) {
-      if (!mounted) return;
-      AppSnack.show(
-        context,
-        _messageOf(e, 'Rol kaldırılamadı. Sunucuya bağlanılamadı.'),
-        kind: AppSnackKind.error,
-      );
-    } finally {
-      if (mounted) setState(() => _busyRoles.remove(record.userCode));
-    }
-  }
-
   // --- Görünüm -----------------------------------------------------------------------------
 
   @override
@@ -531,7 +447,12 @@ class ModulesViewState extends State<ModulesView> {
             ..._buildRequestsSection(context, code),
           ],
           const SizedBox(height: AppSpace.xl),
-          ..._buildRolesSection(context, code),
+          StaffRolesSection(
+            key: _rolesKey,
+            authService: widget.authService,
+            siteCode: code,
+            siteName: _sites.where((s) => s.id == code).firstOrNull?.name,
+          ),
         ],
       );
     }
@@ -684,59 +605,6 @@ class ModulesViewState extends State<ModulesView> {
             child: StaggeredEntry(
               index: i,
               child: ModuleRequestCard(request: shown[i]),
-            ),
-          ),
-      ],
-    ];
-  }
-
-  List<Widget> _buildRolesSection(BuildContext context, int siteCode) {
-    final th = Theme.of(context).textTheme;
-    final roles = _roles;
-    return [
-      SectionHeader(
-        title: 'Ek Roller',
-        trailing: TextButton.icon(
-          onPressed: _addRole,
-          icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-          label: const Text('Rol Ekle'),
-        ),
-      ),
-      const SizedBox(height: AppSpace.sm),
-      Text(
-        'Yönetim Kurulu / Denetçi ve Görevli rolleri isteğe bağlıdır. '
-        'Atamazsanız bu rollerin işi site yöneticisinde kalır.',
-        style: th.bodyMedium,
-      ),
-      const SizedBox(height: AppSpace.md),
-      if (_loadingRoles && roles == null)
-        const ListSkeleton(rows: 2)
-      else ...[
-        // Yükleme hatası HER durumda gösterilir (liste boşken "Ek rol atanmamış." diye gizlenmez).
-        if (_rolesError != null) ...[
-          InlineNotice(
-            message: _rolesError!,
-            onRetry: () => unawaited(_loadRoles(siteCode)),
-          ),
-          if (roles != null && roles.isNotEmpty) const SizedBox(height: AppSpace.md),
-        ],
-        if (roles != null && roles.isEmpty && _rolesError == null)
-          const EmptyCard(
-            icon: Icons.groups_rounded,
-            title: 'Ek rol atanmamış.',
-            message:
-                'İsterseniz bir kişiye Yönetim Kurulu / Denetçi ya da Görevli rolü verebilirsiniz.',
-          ),
-        for (var i = 0; i < (roles?.length ?? 0); i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.md),
-            child: StaggeredEntry(
-              index: i,
-              child: StaffRoleCard(
-                record: roles![i],
-                busy: _busyRoles.contains(roles[i].userCode),
-                onRemove: () => unawaited(_removeRole(roles[i])),
-              ),
             ),
           ),
       ],

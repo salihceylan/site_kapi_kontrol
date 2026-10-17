@@ -83,6 +83,29 @@ bool _isRead(WidgetTester t, String title) =>
 Finder _unreadDot() => find.byKey(const ValueKey<String>('announcement_unread_dot'));
 
 void main() {
+  group('saklama süresi satırı (sunucu retention_days)', () {
+    testWidgets('alan varsa tek satır bilgi; yoksa hiçbir şey', (t) async {
+      final auth = _auth()..retentionDays = 90;
+      await _pump(t, auth);
+      expect(find.text('Duyurular son 90 gün gösterilir.'), findsOneWidget);
+
+      final without = _auth();
+      await _pump(t, without);
+      expect(find.textContaining('gün gösterilir'), findsNothing);
+
+      final zero = _auth()..retentionDays = 0;
+      await _pump(t, zero);
+      expect(find.textContaining('gün gösterilir'), findsNothing, reason: 'geçersiz değer gösterilmez');
+    });
+
+    testWidgets('320x640 x2,0 koyu temada taşmaz', (t) async {
+      final auth = _auth()..retentionDays = 30;
+      await _pump(t, auth, width: 320, height: 640, scale: 2.0, dark: true);
+      expect(find.text('Duyurular son 30 gün gösterilir.'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+  });
+
   group('taşma matrisi', () {
     listMatrix('dolu görünüm (okunmamış nokta, kalın başlık, acil rozeti, İstanbul saati)', (t, w, h, s, dark) async {
       final auth = _auth();

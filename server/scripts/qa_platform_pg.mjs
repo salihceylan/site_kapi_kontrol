@@ -4061,6 +4061,118 @@ async function sectionAnnouncements() {
     await q(`DELETE FROM users WHERE user_code = $1`, [cursorUser]);
   }
 
+  // --- F3.04: gelen kutusu saklama penceresi (YALNIZ gorunurluk; veri SILINMEZ; liste = sayi) ----------------------------------------
+  console.log('--- F3.04: gelen kutusu saklama penceresi ---');
+  {
+    const { inboxWindowSql } = await import('../src/modules/announcement_common.js');
+    const S33 = 1000000033;
+    const s33 = await makeSite(S33, 'Saklama Sitesi', { 'W Blok': [1, 2] });
+    await q(`INSERT INTO site_manager_sites (site_code, manager_user_code) VALUES ($1, $2)`, [S33, MGR]);
+    const keepUser = await mkUser('Saklama Sakini', 'saklama.sakin@example.com');
+    await addMembership(s33.aptIds.W1, keepUser);
+    await syncSitePeople(S33);
+    const mk = async (title, importance, ago) => {
+      const created = (await create(S33, MGR, { title, body: 'x', importance, publish: 'now' })).body;
+      await q(`UPDATE announcements SET published_at = NOW() - $2::interval WHERE id = $1`, [created.id, ago]);
+      return created.id;
+    };
+    const ids = {
+      fresh: await mk('Saklama taze', 'normal', '1 day'),
+      in89: await mk('Saklama 2159 saat', 'normal', '2159 hours'), // 90 gunun (2160 saat) 1 saat ICINDE
+      out91: await mk('Saklama 2161 saat', 'normal', '2161 hours'), // 90 gunun 1 saat DISINDA
+      old400: await mk('Saklama 400 gun', 'normal', '400 days'),
+      urgOld: await mk('Saklama acil 120 gun okunmamis', 'urgent', '120 days'),
+      urgRead: await mk('Saklama acil 120 gun okunmus', 'urgent', '120 days'),
+      urgAncient: await mk('Saklama acil 400 gun', 'urgent', '400 days'),
+    };
+    const allIds = Object.values(ids);
+    const byId = (...values) => values.sort((a, b) => a - b);
+    const withRetention = async (value, fn) => {
+      const before = process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+      if (value === undefined) delete process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+      else process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS = value;
+      try {
+        return await fn();
+      } finally {
+        if (before === undefined) delete process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+        else process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS = before;
+      }
+    };
+    // tum sayfalar (limit=2 imecli) + ozet
+    const inbox = async () => {
+      const items = [];
+      let cursor = null;
+      let retention;
+      for (let pageNo = 0; pageNo < 12; pageNo += 1) {
+        const page = await call('GET', `/app/announcements?limit=2${cursor === null ? '' : `&before_id=${cursor}`}`, keepUser);
+        retention = page.body.retention_days;
+        items.push(...page.body.items);
+        cursor = page.body.next_before_id;
+        if (cursor === null) break;
+      }
+      const summary = (await call('GET', '/app/notifications/summary', keepUser)).body;
+      return { items, ids: byId(...items.map((i) => i.id)), retention, summary, unread: items.filter((i) => !i.is_read).length };
+    };
+    const rowCountBefore = (await q(`SELECT (SELECT COUNT(*) FROM announcements WHERE site_code = $1)::int AS a, (SELECT COUNT(*) FROM announcement_recipients r JOIN announcements a ON a.id = r.announcement_id WHERE a.site_code = $1)::int AS r`, [S33])).rows[0];
+    await call('POST', `/app/announcements/${ids.urgRead}/read`, keepUser);
+
+    const def = await withRetention(undefined, inbox);
+    check('F3.04: varsayilan 90 gun: pencere ici (taze, 2159 saat) + OKUNMAMIS acil (120 gun) listede; 2161 saat, 400 gun, OKUNMUS acil ve 400 gunluk acil YOK; retention_days 90; imecli sayfalama kopyasiz',
+      same(def.ids, byId(ids.fresh, ids.in89, ids.urgOld)) && new Set(def.items.map((i) => i.id)).size === def.items.length && def.retention === 90, [def.ids, def.retention]);
+    check('F3.04: ozet AYNI pencere: unread = listedeki okunmamis = 3, unread_urgent = 1 (120 gunluk okunmamis acil), latest = taze duyuru (sayi ≠ liste tutarsizligi YOK)',
+      def.summary.unread_announcements === def.unread && def.unread === 3 && def.summary.unread_urgent === 1 && def.summary.latest_announcement_id === ids.fresh, [def.summary, def.unread]);
+    const publishedOrder = def.items.map((i) => Date.parse(i.published_at));
+    check('F3.04: pencere icindeki liste published_at azalan sirada', publishedOrder.every((t, index) => index === 0 || publishedOrder[index - 1] >= t), publishedOrder);
+
+    const unlimited = await withRetention('0', inbox);
+    const invalidCfg = await withRetention('abc', inbox);
+    const capped = await withRetention('5000', inbox);
+    check('F3.04: 0 ve gecersiz deger = SINIRSIZ (7 duyurunun hepsi, retention_days null; ozet: 6 okunmamis, 2 acil okunmamis); 5000 -> 3650 gun (400 gunluk de gorunur)',
+      same(unlimited.ids, byId(...allIds)) && unlimited.retention === null && same(invalidCfg.ids, byId(...allIds)) && invalidCfg.retention === null && unlimited.summary.unread_announcements === 6 && unlimited.summary.unread_urgent === 2 && unlimited.summary.unread_announcements === unlimited.unread
+      && same(capped.ids, byId(...allIds)) && capped.retention === 3650, [unlimited.ids, unlimited.summary, capped.retention]);
+    const thirty = await withRetention('30', inbox);
+    check('F3.04: 30 gun: yalniz taze + okunmamis acil (120 gun); 2159 saatlik artik gizli; retention_days 30; sayi = liste',
+      same(thirty.ids, byId(ids.fresh, ids.urgOld)) && thirty.retention === 30 && thirty.summary.unread_announcements === thirty.unread && thirty.unread === 2, [thirty.ids, thirty.summary]);
+
+    // saat / zaman dilimi siniri: pencere sabit saat araligidir; oturum saat dilimi (yaz saati dahil) sonucu DEGISTIRMEZ
+    const zoneResults = [];
+    for (const zone of ['UTC', 'Europe/Istanbul', 'America/Los_Angeles', 'Pacific/Auckland']) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`SELECT set_config('TimeZone', $1, true)`, [zone]);
+        const rows = (await client.query(`SELECT a.id FROM announcements a INNER JOIN announcement_recipients r ON r.announcement_id = a.id WHERE a.site_code = $1 AND ${inboxWindowSql(90)} ORDER BY a.id`, [S33])).rows;
+        zoneResults.push(rows.map((r) => Number(r.id)));
+        await client.query('ROLLBACK');
+      } finally {
+        client.release();
+      }
+    }
+    check('F3.04: saat dilimi siniri: 2159 saat IC, 2161 saat DIS; sonuc 4 farkli oturum saat diliminde (UTC, Istanbul, Los Angeles, Auckland) AYNI',
+      zoneResults.every((ids90) => same(ids90, byId(ids.fresh, ids.in89, ids.urgOld))), zoneResults);
+    check('F3.04: pencere SQL\'i koşulsuz (sinirsiz) icin null; gecersiz sayi null', inboxWindowSql(null) === null && inboxWindowSql(0) === null && typeof inboxWindowSql(90) === 'string');
+
+    // yonetici listesi ETKILENMEZ (tum duyurular), pencere disi ayrinti hala acilir, hicbir satir silinmedi
+    const mgrDefault = await withRetention(undefined, () => call('GET', `${P(S33)}?status=published&limit=100`, MGR));
+    const mgrShort = await withRetention('1', () => call('GET', `${P(S33)}?status=published&limit=100`, MGR));
+    const hiddenDetail = await withRetention(undefined, () => call('GET', `/app/announcements/${ids.old400}`, keepUser));
+    check('F3.04: yonetici listesi pencereden ETKILENMEZ (7/7, retention 1 gunde de); pencere disindaki duyurunun ayrintisi (e-posta / push baglantisi) hala 200',
+      mgrDefault.status === 200 && mgrDefault.body.total === 7 && same(byId(...mgrDefault.body.items.map((i) => i.id)), byId(...allIds)) && mgrShort.body.total === 7 && hiddenDetail.status === 200 && hiddenDetail.body.id === ids.old400,
+      [mgrDefault.body.total, mgrShort.body.total, hiddenDetail.status]);
+
+    // acil kural: okunmamis acil okununca (suresi dolmus) listeden ve sayidan duser
+    const readUrgent = await call('POST', `/app/announcements/${ids.urgOld}/read`, keepUser);
+    const afterRead = await withRetention(undefined, inbox);
+    check('F3.04: suresi dolmus okunmamis acil duyuru okunana kadar gorunur, OKUNUNCA listeden ve ozetten duser (unread_urgent 0); 400 gunluk acil hic gorunmez',
+      readUrgent.status === 200 && same(afterRead.ids, byId(ids.fresh, ids.in89)) && afterRead.summary.unread_urgent === 0 && afterRead.summary.unread_announcements === 2 && !afterRead.ids.includes(ids.urgAncient), [afterRead.ids, afterRead.summary]);
+
+    const rowCountAfter = (await q(`SELECT (SELECT COUNT(*) FROM announcements WHERE site_code = $1)::int AS a, (SELECT COUNT(*) FROM announcement_recipients r JOIN announcements a ON a.id = r.announcement_id WHERE a.site_code = $1)::int AS r`, [S33])).rows[0];
+    check('F3.04: hicbir veri FIZIKSEL silinmedi (duyuru ve alici satir sayilari ayni; okundu kayitlari korunur)', same(rowCountAfter, rowCountBefore) && rowCountAfter.a === 7, [rowCountBefore, rowCountAfter]);
+    check('F3.04: ortam degiskeni geri yuklendi (sonraki bolumler varsayilan pencereyi gorur)', process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS === undefined);
+    await q(`DELETE FROM sites WHERE site_code = $1`, [S33]);
+    await q(`DELETE FROM users WHERE user_code = $1`, [keepUser]);
+  }
+
   // --- D6: kurul uyesine kucuk hedefte sayilar gosterilmez ------------------------------------------------------------------------
   console.log('--- D6: kurul + kucuk hedef ---');
   {

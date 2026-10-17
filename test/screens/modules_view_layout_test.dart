@@ -46,6 +46,9 @@ Future<GlobalKey<ModulesViewState>> _pump(
     scale: scale,
     dark: dark,
   );
+  // Ek roller bölümü ([StaffRolesSection]) kendi verisini siteler gelip bölüm kurulunca çeker: bir kare daha.
+  await t.pump();
+  await t.pump();
   return key;
 }
 
@@ -596,7 +599,13 @@ void main() {
 
       expect(find.byType(AppDialog), findsOneWidget);
       expect(find.byType(InlineNotice), findsOneWidget);
-      expect(find.text('Bu e-posta ile kayıtlı hesap yok.'), findsOneWidget);
+      expect(
+        find.text(
+          'Bu e-posta ile kayıtlı hesap yok. Kişinin önce uygulamaya kayıt olması gerekir; '
+          'kayıt olduktan sonra rolü verebilirsiniz.',
+        ),
+        findsOneWidget,
+      );
       expect(auth.assignCalls.single.role, 'BOARD_MEMBER');
 
       // Düzeltilip yeniden denenebilir.

@@ -517,4 +517,102 @@ void main() {
       unawaited(sub.cancel());
     });
   });
+
+  group('Panel kartı (okunmamış, acil olmayan en yeni duyuru)', () {
+    testWidgets('acil olanı atlar; kalan sayı "+N"; imza değişmedikçe gelen kutusu tekrar çekilmez', (t) async {
+      final server = _Server()
+        ..summary = _summary(unread: 4, urgent: 1, latestId: 9, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[
+          _item(9, title: 'Acil su', urgent: true),
+          _item(8, title: 'Asansör bakımı'),
+          _item(7, title: 'Aidat'),
+          _item(6, title: 'Eski', read: true),
+          _item(5, title: 'Otopark'),
+        ];
+      final notifier = _make(server);
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement?.id, 8, reason: 'acil duyuru şeritte; kart onu tekrarlamaz');
+      expect(notifier.urgentAnnouncement?.id, 9);
+      expect(notifier.cardMoreCount, 2, reason: '4 okunmamış - 1 acil - kartın kendisi');
+
+      await notifier.refresh();
+      await _tick(t);
+      await notifier.refresh();
+      await _tick(t);
+      expect(server.inboxCalls, 1, reason: 'ek yoklama yok: aynı imza');
+      notifier.dispose();
+    });
+
+    testWidgets('yalnız acil okunmamışsa kart yok; hiç okunmamış yoksa gelen kutusu çekilmez', (t) async {
+      final server = _Server()
+        ..summary = _summary(unread: 1, urgent: 1, latestId: 9, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(9, urgent: true)];
+      final notifier = _make(server);
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement, isNull);
+      expect(notifier.cardMoreCount, 0);
+
+      final empty = _Server()..summary = _summary(latestId: 9, latestAt: t0);
+      final quiet = _make(empty);
+      await quiet.refresh();
+      await _tick(t);
+      expect(quiet.cardAnnouncement, isNull);
+      expect(empty.inboxCalls, 0);
+      notifier.dispose();
+      quiet.dispose();
+    });
+
+    testWidgets('noteRead kartı hemen kaldırır; okundu sunucuya yansıyınca sıradaki duyuru gelir', (t) async {
+      final server = _Server()
+        ..summary = _summary(unread: 2, latestId: 8, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(8, title: 'Yeni'), _item(7, title: 'Eski okunmamış')];
+      final notifier = _make(server);
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement?.id, 8);
+      expect(notifier.cardMoreCount, 1);
+
+      var notified = 0;
+      notifier.addListener(() => notified++);
+      notifier.noteRead(8, urgent: false);
+      expect(notified, greaterThan(0));
+      expect(notifier.cardAnnouncement?.id, 7, reason: 'sıradaki okunmamış');
+      expect(notifier.cardMoreCount, 0);
+
+      server
+        ..summary = _summary(unread: 1, latestId: 8, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(8, title: 'Yeni', read: true), _item(7, title: 'Eski okunmamış')];
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement?.id, 7);
+
+      server
+        ..summary = _summary(unread: 0, latestId: 8, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(8, read: true), _item(7, read: true)];
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement, isNull);
+      notifier.dispose();
+    });
+
+    testWidgets('noteAllRead ve clear kartı kaldırır', (t) async {
+      final server = _Server()
+        ..summary = _summary(unread: 1, latestId: 8, latestAt: t0)
+        ..inbox = <ResidentAnnouncement>[_item(8)];
+      final notifier = _make(server);
+      await notifier.refresh();
+      await _tick(t);
+      expect(notifier.cardAnnouncement, isNotNull);
+      notifier.noteAllRead(allSites: true);
+      expect(notifier.cardAnnouncement, isNull);
+
+      await notifier.refresh();
+      await _tick(t);
+      notifier.clear();
+      expect(notifier.cardAnnouncement, isNull);
+      notifier.dispose();
+    });
+  });
 }

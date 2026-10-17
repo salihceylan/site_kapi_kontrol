@@ -55,6 +55,13 @@ Yetki: yazma = yönetici/süper (`hasSiteManagementAccess`); okuma = yönetici/s
 - `GET /app/notification-preferences` → `{ email_announcements, push_announcements, push_available: false }`; `PUT` gövde `{ email_announcements: bool }` (diğer anahtarlar 400/yoksayılır; `push_*` şimdilik değişmez).
 - Hız sınırları: yazma uçları kullanıcı başına ~120/saat; `summary` 600/saat; liste/detay 1200/saat; yönetici okuma 1200/saat.
 
+### Gelen kutusu saklama penceresi (eski duyurular sonsuza kadar kalmaz)
+
+- Sakin / daire kullanıcısı / kurul gelen kutusunda (`GET /app/announcements`), okunmamış sayılarında ve bildirim özetinde (`/app/notifications/summary`: `unread_*`, `latest_*`; acil şerit bunu kullanır) YALNIZ son **N gün** içinde yayınlanmış (`published_at`) duyurular sayılır/listelenir. `N` = `ANNOUNCEMENT_INBOX_RETENTION_DAYS` (`server/.env.example`), varsayılan **90**; `0` ya da geçersiz değer = sınırsız; en çok 3650. Tek yerden değişir (`announcement_common.js` `inboxRetentionDays`).
+- İstisna: **okunmamış ACİL** duyuru süre dolsa da okunana kadar görünür; 365 günden eskiyse görünmez. Liste ile sayılar AYNI SQL koşulunu kullanır (`inboxWindowSql`), bu yüzden sayı ≠ liste tutarsızlığı olmaz. Pencere sabit saat aralığıdır (`N × 24 saat`; saat dilimine bağlı değil).
+- `GET /app/announcements` yanıtına üst alan **`retention_days`** (sayı, `null` = sınırsız) eklenir; istemci bunu "Son N günün duyuruları gösteriliyor" bilgi satırı için kullanır.
+- Bu YALNIZ görünürlük süzgecidir: hiçbir veri silinmez. Yönetici/süper kullanıcı listesi değişmez (tüm duyurular; yönetici duyuruyu `announcement.deleted` akışıyla silebilir), okundu kayıtları, e-posta kuyruğu ve push değişmez. `GET /app/announcements/:id` (e-posta/push bağlantısı), `…/read` ve `read-all` pencereden bağımsız çalışır (`read-all` pencere dışı okunmamışları da okundu yapar).
+
 ## E-posta
 
 - `send_email=true` ve yayın anında: her alıcı için `email_status` belirlenir: adres yok → `no_address`; hesabı var ve `email_announcements=false` ve duyuru `normal` → `skipped_pref` (**`urgent` tercihi yok sayar**); site günlük sınırı (env `ANNOUNCEMENT_EMAIL_MAX_PER_DAY_PER_SITE`, varsayılan 500) aşılırsa → `capped`; aksi `pending` + adres satıra yazılır.

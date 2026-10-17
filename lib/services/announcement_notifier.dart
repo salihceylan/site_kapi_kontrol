@@ -67,6 +67,7 @@ class AnnouncementNotifier extends ChangeNotifier {
   int _unread = 0;
   int _unreadUrgent = 0;
   ResidentAnnouncement? _urgent;
+  List<ResidentAnnouncement> _unreadItems = const <ResidentAnnouncement>[];
   String _urgentSignature = '';
   bool _urgentResolveFailed = false;
   bool _hasBaseline = false;
@@ -92,6 +93,24 @@ class AnnouncementNotifier extends ChangeNotifier {
 
   /// Şeridin açacağı en yeni okunmamış acil duyuru; henüz bulunamadıysa null.
   ResidentAnnouncement? get urgentAnnouncement => _urgent;
+
+  /// Panel'deki "yeni duyuru" kartının duyurusu: en yeni OKUNMAMIŞ ve ACİL OLMAYAN duyuru (acil olanlar kırmızı
+  /// şeritte gösterilir; kart aynı duyuruyu tekrarlamaz). Gelen kutusunun ilk sayfasında yoksa ya da henüz
+  /// alınamadıysa null. Ek yoklama yoktur: aynı özet turunun "imza değişti" gelen kutusu okumasından beslenir.
+  ResidentAnnouncement? get cardAnnouncement {
+    if (_unread <= 0) return null;
+    for (final item in _unreadItems) {
+      if (!item.isUrgent) return item;
+    }
+    return null;
+  }
+
+  /// Kartta gösterilmeyen, okunmamış ACİL OLMAYAN duyuru sayısı ("+N duyuru daha").
+  int get cardMoreCount {
+    if (cardAnnouncement == null) return 0;
+    final more = _unread - _unreadUrgent - 1;
+    return more < 0 ? 0 : more;
+  }
 
   /// Son sunucu özeti; hiç alınmadıysa null.
   NotificationSummary? get summary => _server;
@@ -192,6 +211,10 @@ class AnnouncementNotifier extends ChangeNotifier {
       _urgent = null;
       urgentChanged = true;
     }
+    if (_unread == 0 && _unreadItems.isNotEmpty) {
+      _unreadItems = const <ResidentAnnouncement>[];
+      urgentChanged = true;
+    }
     if (changed || urgentChanged) notifyListeners();
 
     if (pendingAlert != null) _alerts.add(pendingAlert);
@@ -217,12 +240,14 @@ class AnnouncementNotifier extends ChangeNotifier {
   }
 
   void _maybeResolveUrgent(int generation) {
-    if (_unreadUrgent <= 0) {
+    // Gelen kutusu (tek istek) okunmamış her duyuruda okunur: acil şerit başlığı ve Panel kartı aynı yanıttan
+    // beslenir. İmza (sayılar + en son duyuru) değişmedikçe yeniden okunmaz.
+    if (_unread <= 0) {
       _urgentSignature = '';
       _urgentResolveFailed = false;
       return;
     }
-    final signature = '$_unreadUrgent|${_server?.latestAnnouncementId}';
+    final signature = '$_unread|$_unreadUrgent|${_server?.latestAnnouncementId}';
     if (signature == _urgentSignature && !_urgentResolveFailed) return;
     _urgentSignature = signature;
     unawaited(_resolveUrgent(generation));
@@ -233,21 +258,38 @@ class AnnouncementNotifier extends ChangeNotifier {
       final page = await _fetchInbox();
       if (_disposed || generation != _generation) return;
       ResidentAnnouncement? found;
+      final unread = <ResidentAnnouncement>[];
       for (final item in page.items) {
-        if (item.isUrgent && !item.isRead) {
-          found = item;
-          break;
-        }
+        if (item.isRead) continue;
+        unread.add(item);
+        // Özet yetkilidir: acil sayısı 0 iken gelen kutusundaki (bayat) acil kayıt şerit üretmez.
+        if (found == null && item.isUrgent && _unreadUrgent > 0) found = item;
       }
       _urgentResolveFailed = false;
+      var changed = false;
       if (_urgent?.id != found?.id) {
         _urgent = found;
-        notifyListeners();
+        changed = true;
       }
+      if (!_sameItems(_unreadItems, unread)) {
+        _unreadItems = List<ResidentAnnouncement>.unmodifiable(unread);
+        changed = true;
+      }
+      if (changed) notifyListeners();
     } catch (_) {
       if (_disposed || generation != _generation) return;
       _urgentResolveFailed = true;
     }
+  }
+
+  static bool _sameItems(List<ResidentAnnouncement> a, List<ResidentAnnouncement> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].title != b[i].title || a[i].bodyPreview != b[i].bodyPreview) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Sakin [id] numaralı duyuruyu okudu (sunucuya yazıldı): görüntülenen sayılar hemen düşer. Ardından
@@ -265,10 +307,16 @@ class AnnouncementNotifier extends ChangeNotifier {
     }
     if (_urgent?.id == id) {
       _urgent = null;
-      // Başka okunmamış acil duyuru varsa bir sonraki turda yeniden aranır.
-      _urgentResolveFailed = _unreadUrgent > 0;
       changed = true;
     }
+    if (_unreadItems.any((item) => item.id == id)) {
+      _unreadItems = List<ResidentAnnouncement>.unmodifiable(
+        _unreadItems.where((item) => item.id != id),
+      );
+      changed = true;
+    }
+    // Başka okunmamış duyuru (acil ya da kartta gösterilecek) varsa bir sonraki turda yeniden aranır.
+    if (changed && _unread > 0) _urgentResolveFailed = true;
     if (changed) notifyListeners();
   }
 
@@ -276,10 +324,11 @@ class AnnouncementNotifier extends ChangeNotifier {
   /// ise yalnız [refresh] gerekir (kalan sayı sunucudan okunur).
   void noteAllRead({required bool allSites}) {
     if (_disposed || !allSites) return;
-    if (_unread != 0 || _unreadUrgent != 0 || _urgent != null) {
+    if (_unread != 0 || _unreadUrgent != 0 || _urgent != null || _unreadItems.isNotEmpty) {
       _unread = 0;
       _unreadUrgent = 0;
       _urgent = null;
+      _unreadItems = const <ResidentAnnouncement>[];
       notifyListeners();
     }
   }
@@ -309,11 +358,16 @@ class AnnouncementNotifier extends ChangeNotifier {
   /// sızmaz). Uçuştaki eski yanıt yok sayılır; taban çizgisi yeniden kurulur.
   void clear() {
     _generation++;
-    final had = _server != null || _unread != 0 || _unreadUrgent != 0 || _urgent != null;
+    final had = _server != null ||
+        _unread != 0 ||
+        _unreadUrgent != 0 ||
+        _urgent != null ||
+        _unreadItems.isNotEmpty;
     _server = null;
     _unread = 0;
     _unreadUrgent = 0;
     _urgent = null;
+    _unreadItems = const <ResidentAnnouncement>[];
     _urgentSignature = '';
     _urgentResolveFailed = false;
     _hasBaseline = false;

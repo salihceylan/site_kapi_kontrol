@@ -242,6 +242,8 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
   Completer<void>? readGate;
   Completer<void>? prefsGate;
   Completer<void>? prefsSaveGate;
+  /// Gelen kutusu yanıtındaki isteğe bağlı `retention_days` (null: alan yok).
+  int? retentionDays;
   final List<({int limit, int? before, int? site})> inboxCalls = <({int limit, int? before, int? site})>[];
   final List<int> myDetailCalls = <int>[];
   final List<int> readCalls = <int>[];
@@ -764,6 +766,7 @@ class AnnouncementFakeAuth extends PeopleFakeAuth {
     final result = ResidentAnnouncementPage.fromJson(<String, dynamic>{
       'items': [for (final r in page) _inboxJson(r, full: false)],
       'next_before_id': visible.length > size && page.isNotEmpty ? page.last['id'] : null,
+      if (retentionDays != null) 'retention_days': retentionDays,
     });
     await _gate(inboxGates);
     final error = inboxError;

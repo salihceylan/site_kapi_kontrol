@@ -22,6 +22,20 @@ class StaffRoleDialog extends StatefulWidget {
   final int siteCode;
   final String? siteName;
 
+  /// Sunucu reddinin düz Türkçe, ne yapılacağını söyleyen karşılığı (kayıtlı olmayan / etkin olmayan hesap).
+  static String messageFor(ApiException e) {
+    switch (e.code) {
+      case 'USER_NOT_FOUND':
+        return 'Bu e-posta ile kayıtlı hesap yok. Kişinin önce uygulamaya kayıt olması gerekir; '
+            'kayıt olduktan sonra rolü verebilirsiniz.';
+      case 'USER_NOT_ACTIVE':
+        return 'Bu hesap henüz etkin değil. Kişinin kaydını (e-posta doğrulaması dahil) '
+            'tamamlaması gerekir.';
+      default:
+        return e.message;
+    }
+  }
+
   static Future<bool?> show(
     BuildContext context, {
     required AuthService authService,
@@ -79,7 +93,7 @@ class _StaffRoleDialogState extends State<StaffRoleDialog> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _error = StaffRoleDialog.messageFor(e);
         _submitting = false;
       });
     } catch (_) {

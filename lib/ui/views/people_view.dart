@@ -17,6 +17,7 @@ import 'package:site_kapi_kontrol/ui/widgets/bulk_entry_buttons.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sheet.dart';
 import 'package:site_kapi_kontrol/ui/widgets/bulk_export_sources.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/staff_roles_section.dart';
 
 /// "Kişiler" ekranı (Platform Faz 2a, çekirdek `people` modülü): site seçici + üç sekme
 /// (Kişiler | Daireler | Araçlar).
@@ -347,6 +348,25 @@ class PeopleViewState extends State<PeopleView> {
           BulkEntryActions(
             onImport: () => unawaited(_openBulkImport(scope)),
             onExport: () => unawaited(_openBulkExport(scope)),
+          ),
+          const SizedBox(height: AppSpace.md),
+          // Yönetim Kurulu / Denetçi ve Görevli rolleri (yalnız yönetim yetkisi olanda): Modüller ekranındaki
+          // bölümle AYNI bileşen ([StaffRolesSection]) bir pencerede açılır.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey<String>('people_staff_roles'),
+              onPressed: () => unawaited(
+                StaffRolesDialog.show(
+                  context,
+                  authService: widget.authService,
+                  siteCode: site.code,
+                  siteName: site.name,
+                ),
+              ),
+              icon: const Icon(Icons.badge_rounded, size: 18),
+              label: const Text('Yönetim Kurulu ve Görevliler'),
+            ),
           ),
           const SizedBox(height: AppSpace.md),
         ],

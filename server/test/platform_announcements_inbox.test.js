@@ -4,6 +4,7 @@ import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { pool } from '../src/db.js';
 import { emailHashSalts } from '../src/modules/announcement_email_security.js';
+import { inboxRetentionDays, inboxWindowSql } from '../src/modules/announcement_common.js';
 import {
   getMyAnnouncement,
   getNotificationPreferences,
@@ -23,6 +24,7 @@ let log;
 let handlers;
 
 beforeEach(() => {
+  delete process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
   log = [];
   handlers = [];
   pool.query = async (text, params) => {
@@ -104,8 +106,88 @@ describe('gelen kutusu: liste', () => {
     await assert.rejects(() => listMyAnnouncements(user, { before_id: 'abc' }), (e) => e.code === 'INVALID_QUERY');
     await assert.rejects(() => listMyAnnouncements(user, { site_code: '0' }), (e) => e.code === 'INVALID_QUERY');
     assert.equal(log.length, 0);
-    assert.deepEqual(await listMyAnnouncements({}, {}), { items: [], next_before_id: null });
+    assert.deepEqual(await listMyAnnouncements({}, {}), { items: [], next_before_id: null, retention_days: 90 });
     assert.equal(log.length, 0);
+  });
+});
+
+describe('gelen kutusu: saklama penceresi (yalnız görünürlük)', () => {
+  const WINDOW_90 = /a\.published_at >= NOW\(\) - INTERVAL '2160 hours' OR \(a\.importance = 'urgent' AND r\.read_at IS NULL AND a\.published_at >= NOW\(\) - INTERVAL '8760 hours'\)/;
+  const withEnv = async (value, fn) => {
+    const before = process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+    if (value === undefined) delete process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+    else process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS = value;
+    try {
+      return await fn();
+    } finally {
+      if (before === undefined) delete process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS;
+      else process.env.ANNOUNCEMENT_INBOX_RETENTION_DAYS = before;
+    }
+  };
+
+  it('inboxRetentionDays: tanımsız/boş 90; 0, geçersiz, negatif, ondalık -> null (sınırsız); 3650 üstü 3650', () => {
+    assert.equal(inboxRetentionDays({}), 90);
+    assert.equal(inboxRetentionDays({ ANNOUNCEMENT_INBOX_RETENTION_DAYS: '  ' }), 90);
+    assert.equal(inboxRetentionDays({ ANNOUNCEMENT_INBOX_RETENTION_DAYS: '30' }), 30);
+    for (const bad of ['0', 'abc', '-5', '1.5', '9e2', '99999999999999999999']) {
+      assert.equal(inboxRetentionDays({ ANNOUNCEMENT_INBOX_RETENTION_DAYS: bad }), null, bad);
+    }
+    assert.equal(inboxRetentionDays({ ANNOUNCEMENT_INBOX_RETENTION_DAYS: '5000' }), 3650);
+    assert.equal(inboxWindowSql(null), null);
+    assert.equal(inboxWindowSql(0), null);
+  });
+
+  it('liste: varsayılan 90 gün -> pencere koşulu (acil okunmamış istisnası 365 gün) + retention_days 90; parametre sırası değişmez', async () => {
+    handlers.push([/^SELECT a\.id/, () => ok([row(1)])]);
+    const result = await withEnv(undefined, () => listMyAnnouncements(user, { limit: '5' }));
+    assert.deepEqual(log[0].params, [20004, 6]);
+    assert.match(log[0].sql, WINDOW_90);
+    assert.match(log[0].sql, /WHERE sp\.user_code = \$1 AND \(a\.published_at >= NOW\(\)/);
+    assert.equal(result.retention_days, 90);
+  });
+
+  it('liste: özel gün sayısı saate çevrilir; 0 / geçersiz -> koşul YOK ve retention_days null; sınır 3650', async () => {
+    handlers.push([/^SELECT a\.id/, () => ok()]);
+    const r30 = await withEnv('30', () => listMyAnnouncements(user, {}));
+    assert.match(log[0].sql, /INTERVAL '720 hours' OR/);
+    assert.equal(r30.retention_days, 30);
+    for (const value of ['0', 'abc']) {
+      log.length = 0;
+      const unlimited = await withEnv(value, () => listMyAnnouncements(user, {}));
+      assert.doesNotMatch(log[0].sql, /INTERVAL/);
+      assert.equal(unlimited.retention_days, null);
+    }
+    log.length = 0;
+    const capped = await withEnv('99999', () => listMyAnnouncements(user, {}));
+    assert.match(log[0].sql, /INTERVAL '87600 hours' OR/);
+    assert.equal(capped.retention_days, 3650);
+  });
+
+  it('özet: liste ile AYNI pencere ifadesi (sayı = liste); sınırsızda koşul yok', async () => {
+    handlers.push([/^SELECT a\.id/, () => ok()], [/^WITH mine AS/, () => ok([{ unread: 0, unread_urgent: 0, latest_id: null, latest_published_at: null, server_time: new Date() }])]);
+    await withEnv(undefined, async () => {
+      await listMyAnnouncements(user, {});
+      await getNotificationSummary(user);
+    });
+    const windowOf = (sql) => /(\(a\.published_at >= NOW\(\).*?hours'\))\)/.exec(sql)?.[1];
+    assert.ok(windowOf(log[0].sql), 'listede pencere var');
+    assert.equal(windowOf(log[1].sql), windowOf(log[0].sql));
+    assert.match(log[1].sql, WINDOW_90);
+    assert.match(log[1].sql, /WHERE sp\.user_code = \$1 AND \(a\.published_at >= NOW\(\)/);
+    log.length = 0;
+    await withEnv('0', () => getNotificationSummary(user));
+    assert.doesNotMatch(log[0].sql, /INTERVAL/);
+  });
+
+  it('ayrıntı, okundu ve hepsini okundu pencereden bağımsızdır (e-posta / push bağlantısı eski duyuruda da açılır)', async () => {
+    handlers.push(
+      [/^SELECT a\.id, a\.site_code, s\.name AS site_name, a\.title, a\.body/, () => ok([{ ...row(2), body: 'Tam', body_head: undefined }])],
+      [/^UPDATE announcement_recipients r SET read_at/, () => ok([{ read_at: new Date('2026-10-16T09:00:00.000Z') }])],
+    );
+    await getMyAnnouncement(user, '2');
+    await markAnnouncementRead(user, '2');
+    await markAllAnnouncementsRead(user, {});
+    assert.ok(log.every((entry) => !/INTERVAL/.test(entry.sql)));
   });
 });
 

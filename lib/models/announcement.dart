@@ -708,10 +708,15 @@ class ResidentAnnouncementPage {
   const ResidentAnnouncementPage({
     this.items = const <ResidentAnnouncement>[],
     this.nextBeforeId,
+    this.retentionDays,
   });
 
   final List<ResidentAnnouncement> items;
   final int? nextBeforeId;
+
+  /// Gelen kutusunun kaç gün geriye gösterildiği (sunucunun EKLEMELİ `retention_days` alanı). Alan yoksa ya da
+  /// geçersizse (<= 0) null: ekranda hiçbir şey gösterilmez.
+  final int? retentionDays;
 
   bool get hasMore => nextBeforeId != null;
 
@@ -725,9 +730,12 @@ class ResidentAnnouncementPage {
                 .toList(growable: false)
           : const <ResidentAnnouncement>[],
       nextBeforeId: crmIntOrNull(json['next_before_id']),
+      retentionDays: _positiveOrNull(crmIntOrNull(json['retention_days'])),
     );
   }
 }
+
+int? _positiveOrNull(int? value) => value != null && value > 0 ? value : null;
 
 /// `GET /app/notifications/summary`: okunmamış sayıları ve en son duyuru numarası.
 @immutable

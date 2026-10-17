@@ -139,6 +139,7 @@ import 'package:site_kapi_kontrol/ui/views/document_view.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
 import 'package:site_kapi_kontrol/ui/widgets/door_control_disabled_card.dart';
 import 'package:site_kapi_kontrol/models/site_application.dart';
@@ -1020,6 +1021,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Şerit / bildirimden gelindi: Duyurular ekranı (yönetici modundaki yönetici dahil) GELEN KUTUSUYLA açılır.
   bool _forceAnnouncementInbox = false;
 
+  /// Okuma penceresini açar (şerit, bildirim ve Panel'deki "Yeni duyuru" kartı ortak kullanır). Okununca rozet, şerit
+  /// ve kart güncellenir; duyuru bu arada geri çekildiyse (404) liste yenilenir.
+  void _showAnnouncementReadDialog(ResidentAnnouncement announcement) {
+    if (!mounted || _openingAnnouncement) return;
+    _openingAnnouncement = true;
+    void refreshAfterChange() {
+      unawaited(_announcements.refresh());
+      unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
+    }
+
+    unawaited(
+      AnnouncementReadDialog.show(
+        context,
+        authService: widget.authService,
+        announcement: announcement,
+        onRead: (updated) {
+          _announcements.noteRead(updated.id, urgent: updated.isUrgent);
+          refreshAfterChange();
+        },
+        onGone: refreshAfterChange,
+      ).whenComplete(() => _openingAnnouncement = false),
+    );
+  }
+
   /// Duyuruyu açar (şerit ya da bildirimden). Duyurular ekranı DOĞRUDAN gelen kutusu görünümüyle açılır
   /// (yönetici modundaki yönetici ve kurul üyesinde de; yönetim görünümü seçici ile ayrıdır) ve numara
   /// biliniyorsa okuma penceresi de açılır; okununca rozet ve şerit güncellenir.
@@ -1027,25 +1052,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final session = widget.authService.session;
     if (!mounted || session == null) return;
     void showReadDialog() {
-      if (id == null || _openingAnnouncement) return;
-      _openingAnnouncement = true;
-      void refreshAfterChange() {
-        unawaited(_announcements.refresh());
-        unawaited(_announcementsKey.currentState?.reload() ?? Future<void>.value());
-      }
-
-      unawaited(
-        AnnouncementReadDialog.show(
-          context,
-          authService: widget.authService,
-          announcement: known ?? ResidentAnnouncement(id: id),
-          onRead: (updated) {
-            _announcements.noteRead(updated.id, urgent: updated.isUrgent);
-            refreshAfterChange();
-          },
-          onGone: refreshAfterChange,
-        ).whenComplete(() => _openingAnnouncement = false),
-      );
+      if (id == null) return;
+      _showAnnouncementReadDialog(known ?? ResidentAnnouncement(id: id));
     }
 
     if (_receivesAnnouncements(session.role)) {
@@ -1090,6 +1098,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             onTap: () => _openAnnouncement(urgent?.id, known: urgent),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Sakin Panel'inin en üstündeki "Yeni duyuru" kartı: en yeni okunmamış (acil OLMAYAN) duyuru; acil olanlar kırmızı
+  /// şeritte gösterilir ve burada tekrarlanmaz. Okununca kalkar (duyuru Duyurular ekranında durur). Veri, mevcut
+  /// duyuru yoklamasından ([AnnouncementNotifier]) gelir; ek yoklama yoktur. Yuva her zaman bir çocuktur (kartsız
+  /// hâl boş `SizedBox`): kart gelip giderken Panel alt ağacı yeniden kurulmaz.
+  Widget _unreadAnnouncementCardSlot(UserSession session) {
+    final item = _announcements.cardAnnouncement;
+    if (item == null || !_hasAnnouncementInbox(session.role)) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.lg),
+      child: UnreadAnnouncementCard(
+        announcement: item,
+        moreCount: _announcements.cardMoreCount,
+        onOpen: () => _showAnnouncementReadDialog(item),
+        onOpenAll: () => _openAnnouncement(null),
       ),
     );
   }
@@ -4978,6 +5004,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
           view,
         ],
+      );
+    }
+    // Sakin Panel'i: en üstte okunmamış duyuru kartı. Sarmalayıcı, kart olmasa da sakin rolünde sabit kalır.
+    final residentPanel = _selectedMenu == SirketMenuItem.dashboard &&
+        (session.role == UserRole.apartmentOwner ||
+            (session.role == UserRole.siteManager && _isResidentMode));
+    if (residentPanel) {
+      child = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [_unreadAnnouncementCardSlot(session), child],
       );
     }
     return PageEntry(

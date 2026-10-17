@@ -27,6 +27,7 @@ import 'package:site_kapi_kontrol/ui/pages/home_page.dart';
 import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/notification_prefs_section.dart';
+import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
 import 'announcement_fixtures.dart';
 import 'list_fixtures.dart' show fxDoors, tapFinder;
@@ -754,6 +755,142 @@ void main() {
       expect(find.byType(AnnouncementInboxCard), findsNWidgets(2));
       expect(t.takeException(), isNull);
       await _disposeHome(t);
+    });
+  });
+
+  group('Panel: Yeni duyuru kartı (saha F3.03)', () {
+    final card = find.byType(UnreadAnnouncementCard);
+    Finder inCard(Finder f) => find.descendant(of: card, matching: f);
+
+    Future<_HomeAnnouncementAuth> pumpResident(
+      WidgetTester t,
+      List<Map<String, dynamic>> rows, {
+      double width = 400,
+      double height = 900,
+      double scale = 1.0,
+      bool dark = false,
+    }) async {
+      final auth = _HomeAnnouncementAuth(role: UserRole.apartmentOwner, seeded: false)..inboxRows.addAll(rows);
+      final access = await _access(() => <MySiteModules>[_my('resident')]);
+      await _pumpHome(t, auth, access: access, width: width, height: height, scale: scale, dark: dark);
+      await _poll(t, seconds: 1);
+      await settleFor(t);
+      return auth;
+    }
+
+    testWidgets('girer girmez Panelin en üstünde en yeni okunmamış duyuru; Oku -> okundu -> kart kalkar, Duyurular ekranında durur', (t) async {
+      final auth = await pumpResident(t, <Map<String, dynamic>>[
+        inboxRow(12, title: 'Su kesintisi'),
+        inboxRow(11, title: 'Asansör bakımı'),
+      ]);
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: find.byType(PageEntry), matching: card), findsOneWidget);
+      expect(inCard(find.text('Su kesintisi')), findsOneWidget, reason: 'en yeni okunmamış');
+      expect(inCard(find.text('+1 duyuru daha')), findsOneWidget);
+      expect(inCard(find.textContaining('Yarın 09:00')), findsOneWidget, reason: 'kısa özet');
+
+      await t.tap(find.byKey(const ValueKey<String>('unread_announcement_open')));
+      await t.pump();
+      await settleFor(t);
+      expect(find.byType(AnnouncementReadDialog), findsOneWidget);
+      expect(auth.readCalls, <int>[12]);
+      await t.tap(find.text('Kapat'));
+      await settleFor(t);
+
+      expect(inCard(find.text('Asansör bakımı')), findsOneWidget, reason: 'sıradaki okunmamış');
+      expect(inCard(find.textContaining('duyuru daha')), findsNothing);
+
+      await t.tap(find.byKey(const ValueKey<String>('unread_announcement_open')));
+      await t.pump();
+      await settleFor(t);
+      await t.tap(find.text('Kapat'));
+      await settleFor(t);
+      expect(card, findsNothing, reason: 'hepsi okundu: panelde görünmez');
+
+      await _tapMenu(t, 'Duyurular');
+      expect(find.byType(AnnouncementInboxCard), findsNWidgets(2), reason: 'duyurulardan görülür');
+      await _disposeHome(t);
+    });
+
+    testWidgets('acil okunmamış duyuru şeritte kalır; kart onu TEKRARLAMAZ, diğerleri kartta', (t) async {
+      await pumpResident(t, <Map<String, dynamic>>[
+        inboxRow(12, title: 'Su kesintisi', importance: 'urgent'),
+        inboxRow(11, title: 'Asansör bakımı'),
+      ]);
+      expect(find.byKey(const ValueKey<String>('urgent_announcement_banner')), findsOneWidget);
+      expect(card, findsOneWidget);
+      expect(inCard(find.text('Asansör bakımı')), findsOneWidget);
+      expect(inCard(find.textContaining('Su kesintisi')), findsNothing);
+      expect(inCard(find.textContaining('duyuru daha')), findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('yalnız acil okunmamışsa kart yok (şerit yeter); okunmamış yoksa kart yok', (t) async {
+      await pumpResident(t, <Map<String, dynamic>>[inboxRow(12, title: 'Su kesintisi', importance: 'urgent')]);
+      expect(find.byKey(const ValueKey<String>('urgent_announcement_banner')), findsOneWidget);
+      expect(card, findsNothing);
+      await _disposeHome(t);
+
+      await pumpResident(t, <Map<String, dynamic>>[inboxRow(12, title: 'Su kesintisi', read: true)]);
+      expect(card, findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('"+N duyuru daha" Duyurular gelen kutusuna götürür (pencere açılmaz)', (t) async {
+      final auth = await pumpResident(t, <Map<String, dynamic>>[
+        inboxRow(13, title: 'Üçüncü'),
+        inboxRow(12, title: 'İkinci'),
+        inboxRow(11, title: 'Birinci'),
+      ]);
+      expect(inCard(find.text('+2 duyuru daha')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey<String>('unread_announcement_more')));
+      await t.pump();
+      await settleFor(t);
+      expect(find.byType(AnnouncementsView), findsOneWidget);
+      expect(find.byType(AnnouncementInboxCard), findsNWidgets(3));
+      expect(find.byType(AnnouncementReadDialog), findsNothing);
+      expect(auth.readCalls, isEmpty);
+      await _disposeHome(t);
+    });
+
+    testWidgets('ek yoklama yok: özet değişmedikçe gelen kutusu yeniden çekilmez', (t) async {
+      final auth = await pumpResident(t, <Map<String, dynamic>>[inboxRow(12, title: 'Su kesintisi')]);
+      expect(card, findsOneWidget);
+      final lists = auth.inboxCalls.length;
+      await _poll(t);
+      await _poll(t);
+      expect(auth.inboxCalls.length, lists);
+      expect(card, findsOneWidget);
+      await _disposeHome(t);
+    });
+
+    testWidgets('site yöneticisi (yönetici modu) Panelinde kart yok', (t) async {
+      final auth = _HomeAnnouncementAuth();
+      final access = await _access(() => <MySiteModules>[_my('manager')]);
+      await _pumpHome(t, auth, access: access);
+      await _poll(t, seconds: 1);
+      await settleFor(t);
+      expect(card, findsNothing);
+      await _disposeHome(t);
+    });
+
+    testWidgets('taşma matrisi: 320x640@2,0 koyu, 360x640@1,5, 640x360@2,0, tablet; çok uzun başlık + acil şerit', (t) async {
+      final rows = <Map<String, dynamic>>[
+        inboxRow(13, title: 'Su kesintisi', importance: 'urgent'),
+        inboxRow(12, title: 'Çok uzun başlıklı genel kurul toplantısı ve bütçe görüşmesi duyurusu ' * 2),
+        inboxRow(11, title: 'Asansör bakımı'),
+      ];
+      for (final cell in const <(double, double, double, bool)>[
+        (320, 640, 2.0, true),
+        (360, 640, 1.5, false),
+        (640, 360, 2.0, false),
+        (800, 1280, 1.0, true),
+      ]) {
+        await pumpResident(t, rows, width: cell.$1, height: cell.$2, scale: cell.$3, dark: cell.$4);
+        expect(card, findsOneWidget, reason: '${cell.$1}x${cell.$2}@${cell.$3}');
+        expect(t.takeException(), isNull);
+        await _disposeHome(t);
+      }
     });
   });
 

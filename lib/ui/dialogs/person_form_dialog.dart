@@ -108,6 +108,27 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
       widget.person?.hasAccount == true &&
       widget.person?.isInternalAccount != true;
 
+  /// E-posta alanının altındaki durum bazlı yardım metni (yalnız ekleme). Sunucu davranışı (people_service.createPerson):
+  /// e-posta + daire varsa ve dairenin sakin hesabı yoksa dahili sakin hesabı açılıp giriş bilgisi (kullanıcı adı + PIN)
+  /// e-postayla gönderilir; e-posta bu sitede erişimi olan kayıtlı bir hesaba aitse kişi o hesaba bağlanır; aksi
+  /// halde (e-posta yok, daire yok ya da dairenin sakin hesabı var) yalnız kayıt tutulur. Hesabın var olup
+  /// olmadığı ima edilmez: yalnız kurallar anlatılır.
+  static String emailHelp({required bool hasEmail, required bool hasApartment}) {
+    if (!hasEmail) {
+      return 'E-posta girmezseniz kişi yalnız kayıt olarak tutulur; giriş hesabı açılmaz.';
+    }
+    if (!hasApartment) {
+      return 'Daire seçmezseniz kişi yalnız kayıt olarak tutulur; giriş hesabı açılmaz. '
+          'Kişi siteye katılınca e-postası hesabıyla eşleştirilir.';
+    }
+    return 'Dairenin sakin hesabı yoksa bu kişiye giriş bilgileri (kullanıcı adı ve PIN) e-postayla gönderilir. '
+        'Sakin hesabı varsa kişi yalnız kayıt olarak tutulur. '
+        'E-posta bu sitedeki kayıtlı bir hesaba aitse kişi o hesaba bağlanır.';
+  }
+
+  /// Telefon alanının altındaki yardım metni.
+  static const String phoneHelp = 'Telefon yalnız iletişim içindir; giriş telefonla yapılmaz.';
+
   @override
   void dispose() {
     _name.dispose();
@@ -302,9 +323,11 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 inputFormatters: _identityLocked
                     ? null
                     : const [PhoneInputFormatter()],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Telefon (isteğe bağlı)',
-                  prefixIcon: Icon(Icons.phone_rounded),
+                  prefixIcon: const Icon(Icons.phone_rounded),
+                  helperText: _identityLocked ? null : phoneHelp,
+                  helperMaxLines: 3,
                 ),
                 validator: (value) =>
                     _identityLocked ? null : validatePhoneField(value),
@@ -318,14 +341,18 @@ class _PersonFormDialogState extends State<PersonFormDialog> {
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 enableSuggestions: false,
+                onChanged: _editing ? null : (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: 'E-posta (isteğe bağlı)',
                   prefixIcon: const Icon(Icons.email_rounded),
-                  // Hesap var / yok ima etmez: sunucu e-postayı kişi siteye katılınca hesapla eşleştirir.
+                  // Hesap var / yok ima etmez: yalnız kurallar anlatılır (bkz. [emailHelp]).
                   helperText: _editing
                       ? null
-                      : 'E-posta, kişi siteye katıldığında hesabıyla eşleştirilir.',
-                  helperMaxLines: 3,
+                      : emailHelp(
+                          hasEmail: _emailPattern.hasMatch(_email.text.trim()),
+                          hasApartment: _apartment != null,
+                        ),
+                  helperMaxLines: 6,
                 ),
                 validator: (value) {
                   if (_emailLocked) return null;

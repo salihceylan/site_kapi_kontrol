@@ -594,13 +594,16 @@ void main() {
     testWidgets('false: "E-posta gönderilemedi" uyarısı', (t) async {
       final auth = PeopleFakeAuth.seeded()..nextCredentialsSent = false;
       await addPerson(t, auth);
-      expect(find.text('Kişi eklendi. E-posta gönderilemedi.'), findsOneWidget);
+      expect(
+        find.text('Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('alan yoksa (null): ek mesaj gösterilmez', (t) async {
+    testWidgets('alan yoksa (null) ve hesap açılmadıysa: "yalnız kayıt olarak tutuldu" söylenir', (t) async {
       final auth = PeopleFakeAuth.seeded();
       await addPerson(t, auth);
-      expect(find.text('Kişi eklendi.'), findsOneWidget);
+      expect(find.text('Kişi eklendi. Yalnız kayıt olarak tutuldu; giriş hesabı açılmadı.'), findsOneWidget);
       expect(find.textContaining('Giriş bilgileri'), findsNothing);
       expect(find.textContaining('gönderilemedi'), findsNothing);
     });

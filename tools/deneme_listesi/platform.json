@@ -389,11 +389,11 @@
         },
         {
           "id": "F1.20",
-          "baslik": "Yönetici modülü kendisi açıp kapatamaz (geliştirici)",
+          "baslik": "Site yöneticisi modülü kendisi açıp kapatamaz, talep eder",
           "adimlar": [
             "Site yöneticisi hesabıyla PUT /manager/sites/:siteCode/modules/door_control isteği gönderin."
           ],
-          "beklenen": "403 “Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.” (kod MODULE_ADMIN_ONLY). Süper kullanıcıda aynı istek çalışır.",
+          "beklenen": "Site yöneticisi 'Modüller' ekranında bir modülü kendisi açıp kapatamaz; 'Modül Talep Et' ile talep gönderir. Talebi yalnızca süper kullanıcı onaylar ya da reddeder. Yönetici doğrudan açmaya çalışırsa \"Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.\" iletisi çıkar. Süper kullanıcı modülü doğrudan açıp kapatabilir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "API aracı",
           "yeni": true,

@@ -311,6 +311,16 @@ export function validateEnv(env = process.env) {
     }
   }
 
+  // Duyuru gelen kutusu saklama penceresi (announcement_common.js inboxRetentionDays ile ayni kural): gecersiz deger SINIRSIZ sayilir.
+  if (isSet(env, 'ANNOUNCEMENT_INBOX_RETENTION_DAYS')) {
+    const retention = String(env.ANNOUNCEMENT_INBOX_RETENTION_DAYS).trim();
+    if (!/^\d+$/.test(retention)) {
+      warnings.push('ANNOUNCEMENT_INBOX_RETENTION_DAYS gecersiz (0 ya da pozitif tam sayi olmali); duyuru gelen kutusu SINIRSIZ gosterilir (eski duyurular kalir).');
+    } else if (Number(retention) > 3650) {
+      warnings.push('ANNOUNCEMENT_INBOX_RETENTION_DAYS 3650 gunden buyuk; 3650 olarak uygulanir.');
+    }
+  }
+
   if (!isSet(env, 'COMPANY_API_KEY')) {
     warnings.push('COMPANY_API_KEY tanimli degil; /api/company/* yalnizca super_user JWT ile calisir.');
   } else if (String(env.COMPANY_API_KEY).trim().length < 24) {
