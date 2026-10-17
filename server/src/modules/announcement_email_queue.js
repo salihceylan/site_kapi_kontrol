@@ -146,7 +146,8 @@ async function claimBatch(batchSize, attempted) {
           (
             EXISTS (SELECT 1 FROM announcement_email_suppressions sup WHERE sup.email_hash = r.email_hash)
             OR ${suppressedSql('r.email', '$6')}
-          ) AS suppressed
+          ) AS suppressed,
+          (SELECT COUNT(*)::INTEGER FROM announcement_attachments aat WHERE aat.announcement_id = r.announcement_id) AS attachment_count
         FROM announcement_recipients r
         INNER JOIN announcements a ON a.id = r.announcement_id
         INNER JOIN sites s ON s.site_code = a.site_code
@@ -259,6 +260,7 @@ async function sendOne(row) {
       body: row.body,
       importance: row.importance,
       hasAccount: row.has_account === true,
+      attachmentCount: Number(row.attachment_count ?? 0),
       unsubscribeUrl: unsubscribeUrl(row.email_hash || hashEmail(row.email)),
     });
     return { row, ok: true, permanent: false, code: null };

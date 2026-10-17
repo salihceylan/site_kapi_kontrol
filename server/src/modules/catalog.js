@@ -56,6 +56,14 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
+    code: 'documents',
+    name: 'Belgeler (Dosya Deposu)',
+    description: 'Yönetmelik, tutanak, sözleşme gibi belgelerin yüklenmesi ve sakinlere, kurula ya da yöneticilere dağıtılması.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
     code: 'reservation',
     name: 'Rezervasyon ve Konsiyerj',
     description: 'Ortak alan rezervasyonu ve konsiyerj talepleri.',

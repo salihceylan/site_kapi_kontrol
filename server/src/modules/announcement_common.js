@@ -341,7 +341,8 @@ export function parseCreateInput(body, now = new Date()) {
   return result;
 }
 
-export const PATCH_KEYS = Object.freeze(['title', 'body', 'importance', 'target', 'send_email', 'publish_at', 'publish']);
+// document_ids (Faz 3b-A, belge eki): değer announcement_service'te document_attachments.parseDocumentIds ile doğrulanır; yayındaki duyuruda 409 INVALID_STATE.
+export const PATCH_KEYS = Object.freeze(['title', 'body', 'importance', 'target', 'send_email', 'publish_at', 'publish', 'document_ids']);
 
 /**
  * PATCH gövdesi -> yalnız gönderilen alanlar. `publish_at: null` zamanlamayı kaldırır (taslağa döner); dolu değer zamanlar.

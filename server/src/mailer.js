@@ -646,7 +646,7 @@ const ANNOUNCEMENT_RECIPIENT_PATTERN = /^[^\s@,;<>"()]+@[^\s@,;<>"()]+\.[^\s@,;<
  * tercihten bağımsızdır, bağlantı acil dahil her şeyi durdurur - metin bunu söyler); hesapsız alıcıya (uygulaması yok) abonelikten çık bağlantısı. `unsubscribeUrl` (http/https) verilirse RFC 8058 uyumlu `List-Unsubscribe` ve
  * `List-Unsubscribe-Post: List-Unsubscribe=One-Click` başlıkları HER alıcıya eklenir.
  */
-export function buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount = true, unsubscribeUrl = null }) {
+export function buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount = true, unsubscribeUrl = null, attachmentCount = 0 }) {
   const recipient = String(to ?? '').trim();
   if (recipient.length > 254 || !ANNOUNCEMENT_RECIPIENT_PATTERN.test(recipient)) {
     const error = new Error('Gecersiz alici adresi.');
@@ -662,6 +662,9 @@ export function buildAnnouncementEmail({ to, siteName, title, body, importance, 
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
     .trim();
+  // Belgeler (Faz 3b-A): E-postaya dosya EKLENMEZ (kişisel veri SMTP'ye çıkmasın); yalnız ek sayısı bildirilir.
+  const attachments = Math.max(0, Math.floor(Number(attachmentCount) || 0));
+  const attachmentNote = attachments > 0 ? `Bu duyurunun ${attachments} eki var; uygulamadan görüntüleyin.` : '';
   const link = safeHttpUrl(unsubscribeUrl);
   const sentBy = `Bu e-posta ${site} yönetimi tarafından gönderildi.`;
   let footerText = sentBy;
@@ -680,12 +683,13 @@ export function buildAnnouncementEmail({ to, siteName, title, body, importance, 
     footerText = `${sentBy} ${prompt} ${link}`;
     footerHtml = `${escapeHtml(sentBy)} ${escapeHtml(prompt)} <a href="${escapeHtml(link)}" style="color: #6b7280;">Abonelikten çık</a>`;
   }
-  const text = `${urgent ? 'ACİL DUYURU\n\n' : ''}${titleText}\n\n${bodyText}\n\n--\n${footerText}`;
+  const text = `${urgent ? 'ACİL DUYURU\n\n' : ''}${titleText}\n\n${bodyText}${attachmentNote ? `\n\n${attachmentNote}` : ''}\n\n--\n${footerText}`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
       ${urgent ? '<p style="color: #b91c1c; font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 0 0 8px 0;">ACİL DUYURU</p>' : ''}
       <h2 style="color: #111827; margin: 0 0 16px 0; font-size: 20px;">${escapeHtml(titleText)}</h2>
       <div style="color: #374151; font-size: 15px; line-height: 1.6;">${escapeHtml(bodyText).replace(/\n/g, '<br />')}</div>
+      ${attachmentNote ? `<p style="color: #374151; font-size: 14px; font-weight: 700; margin: 16px 0 0 0;">${escapeHtml(attachmentNote)}</p>` : ''}
       <hr style="border: none; border-top: 1px solid #f3f4f6; margin: 24px 0;" />
       <p style="color: #9ca3af; font-size: 12px; margin: 0;">${footerHtml}</p>
     </div>
@@ -698,12 +702,25 @@ export function buildAnnouncementEmail({ to, siteName, title, body, importance, 
 }
 
 /** Site yönetiminin duyurusunu bir sakine e-postayla gönderir (düz yazı; HTML kaçırılır). Kuyruk işçisi çağırır; SMTP'yi yavaş varsayar. */
-export async function sendAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl }) {
+export async function sendAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl, attachmentCount }) {
   const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!from) {
     throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
   }
-  const message = buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl });
+  const message = buildAnnouncementEmail({ to, siteName, title, body, importance, hasAccount, unsubscribeUrl, attachmentCount });
+  const transporter = createTransporter();
+  await transporter.sendMail({ from, ...message });
+}
+
+/**
+ * Hazırlanmış bir iletiyi ({ to, subject, text, html, headers? }) gönderir. İçeriği çağıran (örn. finans borç hatırlatma şablonu) üretir ve doğrular;
+ * burada yalnız gönderen adresi + taşıyıcı bulunur. SMTP'yi yavaş varsayar (kuyruk işçisi çağırır).
+ */
+export async function sendPreparedEmail(message) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!from) {
+    throw new Error('SMTP_FROM veya SMTP_USER env degiskeni eksik.');
+  }
   const transporter = createTransporter();
   await transporter.sendMail({ from, ...message });
 }

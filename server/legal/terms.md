@@ -61,6 +61,7 @@ Platformu bir site için kullanan Site Yönetimi şunları kabul eder:
 - Kişisel verileri yalnızca ilgili kişilerle, kapalı ve kontrollü kanallar üzerinden paylaşmayı; özellikle borç ve ödeme bilgilerini bina girişi, asansör veya koridor gibi ortak alanlarda herkesin görebileceği biçimde ilan etmemeyi [AVUKAT DOĞRULASIN: Kişisel Verileri Koruma Kurulu'nun apartman ve site borç listelerine ilişkin ilke kararı];
 - Kapı yetkilerini, kurul ve görevli atamalarını güncel tutmayı; taşınan veya ayrılan kişilerin yetkilerini kaldırmayı; kaybolan telefon veya paylaşılan karekod durumunda ilgili yetkiyi iptal etmeyi;
 - Duyuruların içeriğinden sorumlu olduğunu ve duyuruları ticari amaçla kullanmayacağını;
+- Yüklediği belgelerin içeriğinden, hangi kitleye açıldığından ve belgelerde bulunabilecek kişisel verilerden (T.C. kimlik numarası, IBAN gibi) sorumlu olduğunu; gereksiz kişisel verileri karartacağını ve belgeyi yalnızca ilgili kitleye açacağını; toplu yükleme ve dışa aktarmayla işlediği kişi listelerinin doğruluğundan ve bu listelerin korunmasından sorumlu olduğunu;
 - Kapı cihazlarının kurulumunun, güç ve ağ bağlantısının, fiziksel güvenliğinin ve bakımının kendi sorumluluğunda olduğunu.
 
 Site Yönetimi ile sakinler veya malikler arasındaki uyuşmazlıklarda Güde taraf değildir ve yönetimin kararlarından sorumlu tutulamaz.
@@ -70,7 +71,9 @@ Site Yönetimi ile sakinler veya malikler arasındaki uyuşmazlıklarda Güde ta
 - Aidat ve Finans modülü, Site Yönetiminin aidat ve borç kayıtlarını tutmasına yardımcı bir **kayıt aracıdır**.
 - Güde bir ödeme hizmeti sağlayıcısı, banka, muhasebe veya mali müşavirlik hizmeti sağlayıcısı değildir. Platform para tahsil etmez, para tutmaz ve para aktarmaz; Platformda online ödeme alınmaz. [AVUKAT DOĞRULASIN: platformun ödeme hizmetleri mevzuatı kapsamı dışında kaldığı]
 - Tahsilatlar, Site Yönetiminin elle girdiği kayıtlardır (nakit, havale/EFT veya çek). Güde bu ödemelerin gerçekten yapıldığını doğrulamaz.
-- Platformdaki kayıtlar tek başına ticari defter, fatura, makbuz veya vergi belgesi yerine geçmez. Mevzuatın aradığı belge ve defterlerin düzenlenmesi Site Yönetiminin sorumluluğundadır. [AVUKAT DOĞRULASIN: kayıtların yasal geçerliliği ve belge yerine geçmediği ifadesi]
+- Platformdaki kayıtlar, Platformun düzenlediği makbuz ve raporlar da dâhil olmak üzere, tek başına ticari defter, fatura, vergi belgesi, noter onaylı karar defteri veya diğer yasal defterlerin yerine geçmez. Mevzuatın aradığı belge ve defterlerin düzenlenmesi Site Yönetiminin sorumluluğundadır. [AVUKAT DOĞRULASIN: kayıtların ve Platformun düzenlediği makbuzun yasal geçerliliği ve belge yerine geçmediği ifadesi]
+- Makbuz metni sabittir: tahsil edilen tutarın vadesi en eski borçtan başlayarak mahsup edildiğini ve önceki dönem borçlarına, gecikme tazminatına ve diğer haklara ilişkin hakların saklı olduğunu belirtir. [AVUKAT DOĞRULASIN: makbuzdaki mahsup ve çekince ifadelerinin yeterliliği]
+- Gecikme tazminatı ve borç hatırlatma e-postası, yalnızca Site Yönetimi ilgili ayarı açarsa ve Platform işleticisinin hukuki onay anahtarı açıkken kullanılabilir. Oranın, gün hesabının ve hatırlatma yapılmasının yönetim planı, kat malikleri kurulu kararları ve mevzuata uygunluğu Site Yönetiminin sorumluluğundadır; Güde bu hesapların hukuka uygunluğunu denetlemez. [AVUKAT DOĞRULASIN: gecikme tazminatı ve hatırlatma için Güde ve Site Yönetimi arasındaki sorumluluk dağılımı]
 - Borçlandırmada seçilen dağıtım yöntemi (eşit, sabit, arsa payı, alan, kategori) ve tutarlar Site Yönetiminin tanımına göre hesaplanır; bunların yönetim planı ve kat malikleri kurulu kararlarına uygunluğu ile onaydan önce önizlemenin kontrol edilmesi Site Yönetiminin sorumluluğundadır.
 - Kayıtlar değiştirilemez ve silinemez; hata ters kayıtla düzeltilir. Kapatılmış döneme kayıt eklenemez. Tek istisna: bir site Platformdan kalıcı olarak silindiğinde sitenin defteri de silinir.
 - Sakinin ekranında görünen bakiye bilgilendirme amaçlıdır; uyuşmazlık halinde Site Yönetiminin kayıtları ve ilgili belgeler esas alınır. [AVUKAT DOĞRULASIN]
@@ -78,6 +81,7 @@ Site Yönetimi ile sakinler veya malikler arasındaki uyuşmazlıklarda Güde ta
 ## 7. Kapı geçişi ve güvenlik uyarıları
 
 - Kapı geçiş modülü bir erişim yönetim aracıdır; tek başına mutlak güvenlik sağladığı garanti edilmez.
+- Telefon bildirimi ikincil bir kanaldır: Google ve Apple hizmetlerine ve telefonun ayarlarına bağlıdır, bildirimin ulaşması veya zamanında ulaşması garanti edilmez. Duyuruların asıl kaynağı uygulamadaki duyuru listesidir.
 - İnternet, elektrik, Wi-Fi, kapı cihazı, sunucu veya güncelleme kaynaklı aksaklıklar kapının açılmamasına veya gecikmesine yol açabilir. Kritik kapılar için yedek yöntem (mekanik anahtar, manuel açma veya görevli) bulundurulmalıdır.
 - Kapı kontrol modülü, mevzuatın öngördüğü yangın, tahliye, acil çıkış ve can güvenliği tedbirlerinin yerine geçmez; bu tedbirlerin alınması ve acil çıkış yollarının serbest kalması Site Yönetiminin sorumluluğundadır.
 - Karekodlar kısa ömürlüdür (süre site ayarına bağlıdır) ve tek kullanımlıktır; başkalarıyla paylaşmayınız. Misafir bağlantısını bilen herkes, bağlantının geçerlilik süresi ve hakkı boyunca kapıyı açabilir; bağlantıyı yalnızca güvendiğiniz kişilere ve kısa sürelerle verin.

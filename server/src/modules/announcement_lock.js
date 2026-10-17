@@ -13,7 +13,14 @@
 import { pool } from '../db.js';
 
 export const ANNOUNCEMENT_LOCK_CLASS = 0x414e4e43; // 1095650883 = "ANNC" (ASCII)
-export const ANNOUNCEMENT_LOCK_JOBS = Object.freeze({ scheduler: 1, emailQueue: 2, emailGlobal: 3 });
+// Aynı sınıfı kullanan HER iş burada, tekil numarayla (çakışan numara iki işi sessizce birbirine bekletir).
+export const ANNOUNCEMENT_LOCK_JOBS = Object.freeze({
+  scheduler: 1,
+  emailQueue: 2,
+  emailGlobal: 3,
+  financeReminder: 4, // finans borç hatırlatma kuyruğu (finance_reminder_queue.js)
+  pushQueue: 5, // telefon bildirimi kuyruğu + bakımı (Faz 3b-B, push_worker.js)
+});
 
 /**
  * @param {number} job ANNOUNCEMENT_LOCK_JOBS değerlerinden biri

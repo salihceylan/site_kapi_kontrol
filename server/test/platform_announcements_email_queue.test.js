@@ -106,7 +106,7 @@ function emulate(sql, params) {
     return ok([], hit.length);
   }
   // talep sorgusu (GERÇEK koşullar uygulanır)
-  if (/^SELECT r\.announcement_id, r\.person_id, r\.email, r\.email_hash, r\.email_attempts, a\.title, a\.body, a\.importance, s\.name AS site_name, pc\.person_active, pc\.has_account, pc\.current_email, \( EXISTS \(SELECT 1 FROM announcement_email_suppressions sup WHERE sup\.email_hash = r\.email_hash\) OR EXISTS \(SELECT 1 FROM unnest\(\$6::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = .* \) AS suppressed FROM announcement_recipients r/.test(sql)) {
+  if (/^SELECT r\.announcement_id, r\.person_id, r\.email, r\.email_hash, r\.email_attempts, a\.title, a\.body, a\.importance, s\.name AS site_name, pc\.person_active, pc\.has_account, pc\.current_email, \( EXISTS \(SELECT 1 FROM announcement_email_suppressions sup WHERE sup\.email_hash = r\.email_hash\) OR EXISTS \(SELECT 1 FROM unnest\(\$6::TEXT\[\]\) AS salts\(salt\) INNER JOIN announcement_email_suppressions sup ON sup\.email_hash = .* \) AS suppressed(?:, \(SELECT COUNT\(\*\)::INTEGER FROM announcement_attachments aat WHERE aat\.announcement_id = r\.announcement_id\) AS attachment_count)? FROM announcement_recipients r/.test(sql)) {
     const [maxAttempts, doneA, doneP, limit, staleMins, salts] = params;
     claimSalts.push(salts);
     const done = new Set(doneA.map((a, i) => `${a}:${doneP[i]}`));
@@ -286,7 +286,8 @@ describe('e-posta kuyruğu: gruplar, bekleme, sonuçlar', () => {
       active -= 1;
     };
     await runEmailQueue();
-    assert.deepEqual(Object.keys(sent[0]).sort(), ['body', 'hasAccount', 'importance', 'siteName', 'title', 'to', 'unsubscribeUrl']);
+    assert.deepEqual(Object.keys(sent[0]).sort(), ['attachmentCount', 'body', 'hasAccount', 'importance', 'siteName', 'title', 'to', 'unsubscribeUrl']);
+    assert.equal(sent[0].attachmentCount, 0, 'Belgeler (Faz 3b-A): ek sayısı iletilir; satır yoksa 0');
     assert.equal(sent[0].siteName, 'Gül Sitesi');
     assert.equal(sent[0].to, 'kisi1@example.com');
     assert.equal(sent[0].hasAccount, true);

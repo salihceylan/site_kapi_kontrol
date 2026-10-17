@@ -37,7 +37,18 @@ import {
   periodOfDate,
   today,
 } from './finance_common.js';
+import { periodHasLateFeeRun } from './finance_4b_common.js';
+import {
+  assertNoUnassignedPayments,
+  findCollectionMovement,
+  insertCollectionMovement,
+  lockAccountRows,
+  mirrorCollectionForEntry,
+  resolvePaymentAccount,
+} from './finance_accounts.js';
 import { minorToNumber } from './finance_money.js';
+import { activeReceiptRef, cancelActiveReceiptForEntry, ensureReceiptForPayment, receiptRef } from './finance_receipts.js';
+import { loadEffectiveSettings } from './finance_settings.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { parsePositiveId } from './people_common.js';
 
@@ -51,10 +62,17 @@ export const ENTRY_SELECT = `
     l.id, l.apartment_id, l.kind, l.amount_minor::text AS amount_minor, to_char(l.period, 'YYYY-MM-DD') AS period,
     to_char(l.entry_date, 'YYYY-MM-DD') AS entry_date, to_char(l.due_date, 'YYYY-MM-DD') AS due_date,
     l.description, l.method, l.payer_party, l.definition_name, l.reverses_entry_id, rv.id AS reversed_by_entry_id,
-    l.reversal_reason, u.full_name AS created_by_name, l.created_at, l.definition_id, l.run_id, l.idempotency_key
+    l.reversal_reason, u.full_name AS created_by_name, l.created_at, l.definition_id, l.run_id, l.idempotency_key, l.late_fee_run_id,
+    rc.id AS receipt_id, rc.receipt_year, rc.receipt_no, rc.cancel_year AS receipt_cancel_year, rc.cancel_no AS receipt_cancel_no
   FROM ledger_entries l
   LEFT JOIN ledger_entries rv ON rv.reverses_entry_id = l.id
   LEFT JOIN users u ON u.user_code = l.created_by
+  LEFT JOIN LATERAL (
+    SELECT r.id, r.receipt_year, r.receipt_no, c.receipt_year AS cancel_year, c.receipt_no AS cancel_no
+    FROM receipts r LEFT JOIN receipts c ON c.cancels_receipt_id = r.id
+    WHERE r.ledger_entry_id = l.id AND r.kind = 'collection'
+    ORDER BY r.id DESC LIMIT 1
+  ) rc ON l.kind = 'payment'
 `;
 
 async function loadEntryRow(db, siteCode, id) {
@@ -133,9 +151,61 @@ export async function listPeriods(siteCode, now = new Date(), db = pool) {
 // Tahsilat
 // ---------------------------------------------------------------------------
 
+/** Yeni tahsilat satırı (ortak: recordPayment ve correctPayment). */
+async function insertPaymentRow(client, { siteCode, apartmentId, responsibleParty, input, period, actorUserCode }) {
+  const inserted = await client.query(
+    `
+      INSERT INTO ledger_entries (
+        site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, description, idempotency_key, created_by
+      )
+      VALUES ($1, $2, 'payment', $3::BIGINT, $4::DATE, $5::DATE, $6, $7, $8, $9, $10)
+      RETURNING id
+    `,
+    [
+      siteCode,
+      apartmentId,
+      String(-input.amountMinor),
+      period,
+      input.entryDate,
+      responsibleParty,
+      input.method,
+      input.description,
+      input.idempotencyKey,
+      actorUserCode,
+    ],
+  );
+  return Number(inserted.rows[0].id);
+}
+
 /**
- * POST payments -> { replayed, entry, balance_minor }. Tahsilat tutarı pozitif girilir, defterde negatif yazılır. Fazla ödeme alacak olur.
- * Dönem = tahsilat tarihinin ayı; kapalıysa 409 PERIOD_CLOSED. Aynı işlem anahtarı = aynı kayıt.
+ * Yeni tahsilatın Faz 4b yan etkileri (AYNI işlemde): hesap hareketi (hesap çözüldüyse) ve makbuz (site ayarı `receipts_auto_issue` açıksa).
+ * @returns {Promise<{ movement_id: number|null, receipt: { id: number, number: string }|null }>}
+ */
+async function applyPaymentSideEffects(client, { siteCode, entryId, input, account, actor, actorInfo }) {
+  let movementId = null;
+  if (account) {
+    movementId = await insertCollectionMovement(client, {
+      siteCode,
+      accountId: account.id,
+      amountMinor: input.amountMinor,
+      entryDate: input.entryDate,
+      ledgerEntryId: entryId,
+      actorUserCode: actorInfo.userCode,
+    });
+  }
+  const settings = await loadEffectiveSettings(client, siteCode);
+  let receipt = null;
+  if (settings.receipts_auto_issue) {
+    const issued = await ensureReceiptForPayment(client, { siteCode, entryId, actor, actorInfo });
+    receipt = receiptRef(issued.row);
+  }
+  return { movement_id: movementId, receipt };
+}
+
+/**
+ * POST payments -> { replayed, entry, balance_minor, receipt, movement_id }. Tahsilat tutarı pozitif girilir, defterde negatif yazılır. Fazla ödeme alacak olur.
+ * Dönem = tahsilat tarihinin ayı; kapalıysa 409 PERIOD_CLOSED. Aynı işlem anahtarı = aynı kayıt. Faz 4b: `account_id` (hesap varsa zorunlu) AYNI işlemde
+ * `collection` hareketini yazar; site ayarı açıksa makbuz AYNI işlemde düzenlenir.
  */
 export async function recordPayment({ siteCode, body, actor, now = new Date() }) {
   const input = parsePaymentInput(body, now);
@@ -145,53 +215,52 @@ export async function recordPayment({ siteCode, body, actor, now = new Date() })
     await lockActorRow(client, actorInfo);
     const existing = await loadEntryByKey(client, siteCode, input.idempotencyKey);
     if (existing) {
+      const movement = await findCollectionMovement(client, Number(existing.id));
       const same =
         existing.kind === 'payment' &&
         Number(existing.apartment_id) === input.apartmentId &&
         BigInt(existing.amount_minor) === -BigInt(input.amountMinor) &&
         existing.entry_date === input.entryDate &&
-        existing.method === input.method;
+        existing.method === input.method &&
+        (input.accountId === null || (movement !== null && Number(movement.account_id) === input.accountId));
       if (!same) {
         throw idempotencyConflict();
       }
-      return { replayed: true, entry: mapEntryRow(existing), balance_minor: await loadApartmentBalance(client, siteCode, input.apartmentId) };
+      return {
+        replayed: true,
+        entry: mapEntryRow(existing),
+        balance_minor: await loadApartmentBalance(client, siteCode, input.apartmentId),
+        receipt: await activeReceiptRef(client, siteCode, Number(existing.id)),
+        movement_id: movement ? Number(movement.id) : null,
+      };
     }
     const period = periodOfDate(input.entryDate);
     if (await isPeriodClosed(client, siteCode, period)) {
       throw periodClosed();
     }
-    const inserted = await client.query(
-      `
-        INSERT INTO ledger_entries (
-          site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, description, idempotency_key, created_by
-        )
-        VALUES ($1, $2, 'payment', $3::BIGINT, $4::DATE, $5::DATE, $6, $7, $8, $9, $10)
-        RETURNING id
-      `,
-      [
-        siteCode,
-        input.apartmentId,
-        String(-input.amountMinor),
-        period,
-        input.entryDate,
-        apartment.responsible_party,
-        input.method,
-        input.description,
-        input.idempotencyKey,
-        actorInfo.userCode,
-      ],
-    );
-    const entryId = Number(inserted.rows[0].id);
+    const account = await resolvePaymentAccount(client, siteCode, { accountId: input.accountId, entryDate: input.entryDate });
+    const entryId = await insertPaymentRow(client, {
+      siteCode,
+      apartmentId: input.apartmentId,
+      responsibleParty: apartment.responsible_party,
+      input,
+      period,
+      actorUserCode: actorInfo.userCode,
+    });
+    const effects = await applyPaymentSideEffects(client, { siteCode, entryId, input, account, actor, actorInfo });
     await recordFinanceAudit(client, actor, 'finance.payment.recorded', siteCode, entryId, {
       apartment_id: input.apartmentId,
       amount_minor: input.amountMinor,
       period: periodLabel(period),
       method: input.method,
+      account_id: account ? account.id : null,
     });
     return {
       replayed: false,
       entry: mapEntryRow(await loadEntryRow(client, siteCode, entryId)),
       balance_minor: await loadApartmentBalance(client, siteCode, input.apartmentId),
+      receipt: effects.receipt,
+      movement_id: effects.movement_id,
     };
   });
 }
@@ -223,9 +292,9 @@ async function insertReversal(client, { siteCode, original, openPeriod, todayIso
       `
         INSERT INTO ledger_entries (
           site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, definition_id, definition_name, run_id, payer_party,
-          reverses_entry_id, reversal_reason, idempotency_key, created_by
+          reverses_entry_id, reversal_reason, idempotency_key, created_by, late_fee_run_id
         )
-        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, 'reversal', $3::BIGINT, $4::DATE, $5::DATE, $6::DATE, $7, $8::TEXT, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id
       `,
       [
@@ -243,6 +312,7 @@ async function insertReversal(client, { siteCode, original, openPeriod, todayIso
         reason,
         key,
         actorUserCode,
+        original.late_fee_run_id === null || original.late_fee_run_id === undefined ? null : Number(original.late_fee_run_id),
       ],
     );
     return Number(inserted.rows[0].id);
@@ -294,6 +364,19 @@ export async function reverseEntry({ siteCode, rawId, body, actor, now = new Dat
       throw entryAlreadyReversed();
     }
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
+    let receiptCancelled = false;
+    let movementMirrored = false;
+    if (original.kind === 'payment') {
+      // Faz 4b: aktif makbuz AYNI işlemde iptal makbuzuyla iptal edilir; eşlenmiş hesap hareketinin AYNASI yazılır.
+      // KİLİT SIRASI (sözleşme 7): hesap satırı, makbuz / sayaç / ayna satırlarından ÖNCE kilitlenir (R10 P2-15).
+      const collection = await findCollectionMovement(client, id);
+      if (collection) {
+        await lockAccountRows(client, siteCode, [Number(collection.account_id)]);
+      }
+      receiptCancelled = (await cancelActiveReceiptForEntry(client, { siteCode, entryId: id, reasonCode: 'payment_reversed', actor, actorInfo })) !== null;
+      movementMirrored =
+        (await mirrorCollectionForEntry(client, { siteCode, entryId: id, openPeriod, todayIsoDate: today(now), actorUserCode: actorInfo.userCode })) !== null;
+    }
     const newId = await insertReversal(client, {
       siteCode,
       original,
@@ -308,6 +391,8 @@ export async function reverseEntry({ siteCode, rawId, body, actor, now = new Dat
       reversed_kind: original.kind,
       amount_minor: minorToNumber(-BigInt(original.amount_minor)),
       period: periodLabel(openPeriod),
+      receipt_cancelled: receiptCancelled,
+      movement_mirrored: movementMirrored,
     });
     return {
       replayed: false,
@@ -338,12 +423,15 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
     const existing = await loadEntryByKey(client, siteCode, input.idempotencyKey);
     if (existing) {
       const reversal = await client.query(`${ENTRY_SELECT} WHERE l.reverses_entry_id = $1 AND l.site_code = $2 LIMIT 1`, [id, siteCode]);
+      const replayMovement = await findCollectionMovement(client, Number(existing.id));
       const same =
         existing.kind === 'payment' &&
         Number(existing.apartment_id) === apartmentId &&
         BigInt(existing.amount_minor) === -BigInt(input.amountMinor) &&
         existing.entry_date === input.entryDate &&
         existing.method === input.method &&
+        // gövdede hesap verildiyse yeni tahsilat O hesaba yazılmış olmalı (R10 P2-2)
+        (input.accountId === null || (replayMovement !== null && replayMovement !== undefined && Number(replayMovement.account_id) === input.accountId)) &&
         Boolean(reversal.rows?.[0]);
       if (!same) {
         throw idempotencyConflict();
@@ -353,6 +441,8 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
         reversal: mapEntryRow(reversal.rows[0]),
         entry: mapEntryRow(existing),
         balance_minor: await loadApartmentBalance(client, siteCode, apartmentId),
+        receipt: await activeReceiptRef(client, siteCode, Number(existing.id)),
+        movement_id: replayMovement ? Number(replayMovement.id) : null,
       };
     }
     if (original.kind === 'reversal') {
@@ -368,7 +458,14 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
     if (await isPeriodClosed(client, siteCode, newPeriod)) {
       throw periodClosed();
     }
+    // Faz 4b: yeni ödemenin hesabı gövdede verilmezse eskisinin hesabı kullanılır; her iki hesap satırı id sırasıyla ÖNCE kilitlenir.
+    const oldMovement = await findCollectionMovement(client, id);
+    const fallbackAccountId = input.accountId ?? (oldMovement ? Number(oldMovement.account_id) : null);
+    await lockAccountRows(client, siteCode, [oldMovement ? Number(oldMovement.account_id) : null, fallbackAccountId].filter((value) => value !== null));
+    const account = await resolvePaymentAccount(client, siteCode, { accountId: fallbackAccountId, entryDate: input.entryDate });
     const openPeriod = await resolveOpenPeriod(client, siteCode, now);
+    const receiptCancelled = (await cancelActiveReceiptForEntry(client, { siteCode, entryId: id, reasonCode: 'payment_corrected', actor, actorInfo })) !== null;
+    await mirrorCollectionForEntry(client, { siteCode, entryId: id, openPeriod, todayIsoDate: today(now), actorUserCode: actorInfo.userCode });
     const reversalId = await insertReversal(client, {
       siteCode,
       original,
@@ -378,40 +475,31 @@ export async function correctPayment({ siteCode, rawId, body, actor, now = new D
       key: null,
       actorUserCode: actorInfo.userCode,
     });
-    const inserted = await client.query(
-      `
-        INSERT INTO ledger_entries (
-          site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, description, idempotency_key, created_by
-        )
-        VALUES ($1, $2, 'payment', $3::BIGINT, $4::DATE, $5::DATE, $6, $7, $8, $9, $10)
-        RETURNING id
-      `,
-      [
-        siteCode,
-        apartmentId,
-        String(-input.amountMinor),
-        newPeriod,
-        input.entryDate,
-        apartment.responsible_party,
-        input.method,
-        input.description,
-        input.idempotencyKey,
-        actorInfo.userCode,
-      ],
-    );
-    const newId = Number(inserted.rows[0].id);
+    const newId = await insertPaymentRow(client, {
+      siteCode,
+      apartmentId,
+      responsibleParty: apartment.responsible_party,
+      input,
+      period: newPeriod,
+      actorUserCode: actorInfo.userCode,
+    });
+    const effects = await applyPaymentSideEffects(client, { siteCode, entryId: newId, input, account, actor, actorInfo });
     await recordFinanceAudit(client, actor, 'finance.entry.corrected', siteCode, newId, {
       reversed_entry_id: id,
       reversal_entry_id: reversalId,
       old_amount_minor: minorToNumber(-BigInt(original.amount_minor)),
       new_amount_minor: input.amountMinor,
       period: periodLabel(newPeriod),
+      receipt_cancelled: receiptCancelled,
+      account_id: account ? account.id : null,
     });
     return {
       replayed: false,
       reversal: mapEntryRow(await loadEntryRow(client, siteCode, reversalId)),
       entry: mapEntryRow(await loadEntryRow(client, siteCode, newId)),
       balance_minor: await loadApartmentBalance(client, siteCode, apartmentId),
+      receipt: effects.receipt,
+      movement_id: effects.movement_id,
     };
   });
 }
@@ -443,6 +531,8 @@ export async function closePeriod({ siteCode, rawPeriod, actor, now = new Date()
       throw periodNotClosable('Önce önceki dönemi kapatmalısınız; dönemler sırayla kapanır.');
     }
     await lockActorRow(client, actorInfo);
+    // Faz 4b: kapanan aya sonradan hareket yazılamayacağından, hesaba eşlenmemiş tahsilat varken ay kapatılamaz (hesap tanımlıysa).
+    await assertNoUnassignedPayments(client, siteCode, period);
     await client.query(`INSERT INTO finance_period_closures (site_code, period, closed_by) VALUES ($1, $2::DATE, $3)`, [
       siteCode,
       period,
@@ -466,6 +556,15 @@ export async function reopenPeriod({ siteCode, rawPeriod, actor, now = new Date(
     const latest = closures[closures.length - 1].period;
     if (period !== latest) {
       throw periodNotReopenable('Yalnızca en son kapatılan dönem yeniden açılabilir.');
+    }
+    // Faz 4b: yeniden açıldıktan sonra kapalı kalacak son ayın (closed_through') ötesinde AKTİF gecikme tazminatı çalıştırması varsa engellenir.
+    const remainingThrough = closures.length >= 2 ? closures[closures.length - 2].period : null;
+    const lateFee = await client.query(
+      `SELECT 1 FROM late_fee_runs WHERE site_code = $1 AND status = 'active' AND ($2::DATE IS NULL OR period > $2::DATE) LIMIT 1`,
+      [siteCode, remainingThrough],
+    );
+    if (lateFee.rows?.[0]) {
+      throw periodHasLateFeeRun();
     }
     await client.query(`DELETE FROM finance_period_closures WHERE site_code = $1 AND period = $2::DATE`, [siteCode, period]);
     await recordFinanceAudit(client, actor, 'finance.period.reopened', siteCode, periodLabel(period), { period: periodLabel(period) });

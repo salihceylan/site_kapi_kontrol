@@ -60,16 +60,35 @@ function codeOnly(text) {
 }
 
 describe('finans kaynakları: para hesabında kayan nokta YOK', () => {
-  it('finance_*.js dosyaları bulundu (money, distribution, common, access, tx, service, ledger_service, read_service, routes)', () => {
+  it('finance_*.js dosyaları bulundu (4a: money, distribution, common, access, tx, service, ledger_service, read_service, routes + 4b: şema, ortak, koruma, ayarlar, makbuz, kasa, gider, belge adaptörü, tazminat, M1, rapor, dışa aktarma, hatırlatma)', () => {
     assert.deepEqual(financeFiles, [
+      'finance_4b_common.js',
+      'finance_4b_guard.js',
+      'finance_4b_routes.js',
+      'finance_4b_schema.js',
       'finance_access.js',
+      'finance_accounts.js',
       'finance_common.js',
       'finance_distribution.js',
+      'finance_documents_adapter.js',
+      'finance_expense_documents.js',
+      'finance_expenses.js',
+      'finance_export_tables.js',
+      'finance_late_fee.js',
+      'finance_late_fee_calc.js',
       'finance_ledger_service.js',
+      'finance_m1.js',
       'finance_money.js',
       'finance_read_service.js',
+      'finance_receipts.js',
+      'finance_reminder_mail.js',
+      'finance_reminder_queue.js',
+      'finance_reminder_scheduler.js',
+      'finance_reminders.js',
+      'finance_reports.js',
       'finance_routes.js',
       'finance_service.js',
+      'finance_settings.js',
       'finance_tx.js',
     ]);
   });

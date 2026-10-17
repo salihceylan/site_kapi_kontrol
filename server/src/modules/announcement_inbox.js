@@ -18,6 +18,9 @@ import { emailHashSalts } from './announcement_email_security.js';
 import { asciiLowerSql, canonicalEmailSql, emailHashSql, suppressedSql } from './announcement_recipients.js';
 import { CONTACT_EMAIL_SQL, PERSON_FROM } from './people_service.js';
 import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { loadAttachmentsSafe } from './document_attachments.js';
+import { lockLiveUser } from './push_devices.js';
+import { parsePushPreferenceInput, withPushPreferences, writePushPreferences } from './push_preferences.js';
 
 const INT32_MAX = 2147483647;
 
@@ -78,6 +81,11 @@ export async function listMyAnnouncements(authUser, query = {}, db = pool) {
   const rows = result.rows ?? [];
   const hasMore = rows.length > filters.limit;
   const items = rows.slice(0, filters.limit).map(mapInboxRow);
+  // Belgeler (Faz 3b-A): duyuru ekleri (EKLEMELİ alan; belge tabloları okunamazsa boş liste)
+  const attachments = await loadAttachmentsSafe(db, items.map((item) => item.id), { userCode });
+  for (const item of items) {
+    item.attachments = attachments.get(item.id) ?? [];
+  }
   return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null };
 }
 
@@ -101,6 +109,8 @@ export async function getMyAnnouncement(authUser, rawId, db = pool) {
   if (!row) {
     throw announcementNotFound();
   }
+  // Belgeler (Faz 3b-A): duyuru ekleri (EKLEMELİ alan)
+  const attachments = (await loadAttachmentsSafe(db, [Number(row.id)], { userCode })).get(Number(row.id)) ?? [];
   return {
     id: Number(row.id),
     site_code: Number(row.site_code),
@@ -112,6 +122,7 @@ export async function getMyAnnouncement(authUser, rawId, db = pool) {
     edited_at: toIso(row.edited_at),
     is_read: row.read_at !== null && row.read_at !== undefined,
     read_at: toIso(row.read_at),
+    attachments,
   };
 }
 
@@ -236,8 +247,11 @@ function emptySummary() {
  */
 const preferencesBody = (row, suppressed) => {
   const stored = row ? row.email_announcements === true : true;
+  // Faz 4b: borç hatırlatma e-postası tercihi (varsayılan açık); bastırma listesi duyuru ile ORTAKTIR (bağlantıyla çıkış ikisini de durdurur).
+  const storedFinance = row && row.email_finance_reminders !== undefined ? row.email_finance_reminders === true : true;
   return {
     email_announcements: stored && suppressed !== true,
+    email_finance_reminders: storedFinance && suppressed !== true,
     push_announcements: row ? row.push_announcements === true : true,
     push_available: false,
     email_suppressed: suppressed === true,
@@ -271,22 +285,27 @@ async function ownAddressSuppressed(userCode, db) {
   return result.rows?.[0]?.suppressed === true;
 }
 
-/** GET /app/notification-preferences -> { email_announcements (ETKİN), push_announcements, push_available: false, email_suppressed } (kayıt yoksa varsayılan açık). */
+/**
+ * GET /app/notification-preferences -> { email_announcements (ETKİN), push_announcements, push_available, email_suppressed, push_show_preview, push_quiet, push_devices }
+ * (kayıt yoksa varsayılan açık; push alanları Faz 3b-B, push_preferences.js).
+ */
 export async function getNotificationPreferences(authUser, db = pool) {
   const userCode = userCodeOf(authUser);
   if (userCode === null) {
-    return preferencesBody(null, false);
+    return withPushPreferences(preferencesBody(null, false), null, db);
   }
   const result = await db.query(
-    `SELECT email_announcements, push_announcements FROM notification_preferences WHERE user_code = $1`,
+    `SELECT email_announcements, email_finance_reminders, push_announcements FROM notification_preferences WHERE user_code = $1`,
     [userCode],
   );
-  return preferencesBody(result.rows?.[0] ?? null, await ownAddressSuppressed(userCode, db));
+  // Faz 3b-B (EKLEMELİ): push_available (gerçek durum), push_show_preview, push_quiet { enabled, start, end }, push_devices.
+  return withPushPreferences(preferencesBody(result.rows?.[0] ?? null, await ownAddressSuppressed(userCode, db)), userCode, db);
 }
 
 /**
- * PUT /app/notification-preferences gövde { email_announcements: bool }. Diğer anahtarlar (push_* dahil) YOKSAYILIR: push_* şimdilik
- * değişmez (Faz 3b). Acil duyurular tercihi yok sayar (e-posta kuyruğu).
+ * PUT /app/notification-preferences gövde { email_announcements?: bool, email_finance_reminders?: bool } (en az biri; Faz 4b) ve/veya Faz 3b-B push_* anahtarları
+ * (push_announcements, push_show_preview, push_quiet_enabled, push_quiet_start / _end "HH:MM"; push_preferences.js). Bilinmeyen anahtarlar YOKSAYILIR; hiç bilinen
+ * yoksa 400. Acil duyurular tercihi yok sayar (e-posta kuyruğu).
  * `false` yalnız tercihi false yapar. `true` tercihi true yapar VE çağıranın DOĞRULANMIŞ GERÇEK hesap e-postasının (users.email; dahili
  * @ahbu.local değil, email_verified) bastırma kaydını (güncel + eski tuzlarla) siler: e-postadaki bağlantıyla yapılmış çıkış uygulamadan geri
  * alınabilir. İletişim e-postaları (apartments.resident_email, site_people.email) silme kaynağı DEĞİLDİR: bunları yönetici doğrulamasız yazar,
@@ -298,23 +317,64 @@ export async function setNotificationPreferences(authUser, body = {}, db = pool)
   if (userCode === null) {
     throw new PlatformError(401, 'UNAUTHORIZED', 'Yetkisiz erişim.');
   }
-  const value = body && typeof body === 'object' ? body.email_announcements : undefined;
-  if (typeof value !== 'boolean') {
+  const input = body && typeof body === 'object' ? body : {};
+  const announcements = input.email_announcements;
+  const finance = input.email_finance_reminders;
+  const invalid = (v) => v !== undefined && typeof v !== 'boolean';
+  // Faz 3b-B: push_* anahtarları da bilinir (KISMİ güncelleme); hepsi YAZMADAN önce doğrulanır.
+  const push = parsePushPreferenceInput(input);
+  if (invalid(announcements) || invalid(finance) || (announcements === undefined && finance === undefined && !push.present)) {
     throw invalidField('E-posta tercihi geçersiz (açık veya kapalı olmalıdır).');
   }
-  const result = await db.query(
-    `
-      INSERT INTO notification_preferences (user_code, email_announcements)
-      VALUES ($1, $2)
-      ON CONFLICT (user_code) DO UPDATE SET email_announcements = EXCLUDED.email_announcements, updated_at = NOW()
-      RETURNING email_announcements, push_announcements
-    `,
-    [userCode, value],
-  );
-  if (value === true) {
-    await removeOwnAccountSuppression(userCode, db);
+  // TEK İŞLEM (e-posta + push birlikte): kısmi PUT ya tamamen yazılır ya hiç (eskiden push ayrı işlemde, e-posta işlem dışı yazılırdı) ve KULLANICI SATIRI
+  // `deleted_at IS NULL AND is_active ... FOR KEY SHARE` ile kilitlenir (lockLiveUser): hesap silme `UPDATE users`'ı bu işlem bitene dek bekler; silme önce
+  // commit ettiyse 401 ACCOUNT_DELETED ve SİLİNMİŞ hesaba notification_preferences YAZILMAZ. Kilit sırası users -> notification_preferences -> bastırma listesi
+  // (hesap silme ile aynı yön; silme tercih satırını users güncellemesinden SONRA siler).
+  const client = await db.connect();
+  let began = false;
+  let result;
+  try {
+    await client.query('BEGIN');
+    began = true;
+    await lockLiveUser(client, userCode);
+    if (push.present) {
+      await writePushPreferences(client, userCode, push.values);
+    }
+    result = await client.query(
+      `
+        INSERT INTO notification_preferences (user_code, email_announcements, email_finance_reminders)
+        VALUES ($1, COALESCE($2::BOOLEAN, TRUE), COALESCE($3::BOOLEAN, TRUE))
+        ON CONFLICT (user_code) DO UPDATE SET
+          email_announcements = COALESCE($2::BOOLEAN, notification_preferences.email_announcements),
+          email_finance_reminders = COALESCE($3::BOOLEAN, notification_preferences.email_finance_reminders),
+          updated_at = NOW()
+        RETURNING email_announcements, email_finance_reminders, push_announcements
+      `,
+      [userCode, announcements ?? null, finance ?? null],
+    );
+    if (announcements === true || finance === true) {
+      await removeOwnAccountSuppression(userCode, client);
+    }
+    await client.query('COMMIT');
+    began = false;
+  } finally {
+    if (began) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_rollbackError) {
+        // bağlantı zaten kopmuş olabilir; asıl hata yukarıda fırlatılır
+      }
+    }
+    client.release();
   }
-  return preferencesBody(result.rows?.[0] ?? { email_announcements: value, push_announcements: true }, await ownAddressSuppressed(userCode, db));
+  return withPushPreferences(
+    preferencesBody(
+      result.rows?.[0] ?? { email_announcements: announcements ?? true, email_finance_reminders: finance ?? true, push_announcements: true },
+      await ownAddressSuppressed(userCode, db),
+    ),
+    userCode,
+    db,
+  );
 }
 
 /**

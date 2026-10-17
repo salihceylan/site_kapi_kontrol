@@ -290,7 +290,7 @@ export async function getSummary(siteCode, now = new Date(), db = pool) {
 // Sakin: Borcum
 // ---------------------------------------------------------------------------
 
-const ALLOWED_RELATIONS_SQL = `(
+export const ALLOWED_RELATIONS_SQL = `(
   CASE a.responsible_party
     WHEN 'owner' THEN ARRAY['owner']::TEXT[]
     WHEN 'tenant' THEN ARRAY['tenant']::TEXT[]
@@ -303,7 +303,7 @@ const ALLOWED_RELATIONS_SQL = `(
  * belirsiz ilişki (resident); family_member HİÇBİR durumda görmez. Eşleşen güncel (aktif) kişi hiç yoksa güvenli yedek: dairenin güncel
  * resident/owner/tenant ilişkili kişileri görür (borç sahipsiz kalmasın). Yalnız onaylı siteler.
  */
-async function loadVisibleApartments(db, userCode) {
+export async function loadVisibleApartments(db, userCode) {
   const result = await db.query(
     `
       SELECT DISTINCT
@@ -333,7 +333,7 @@ async function loadVisibleApartments(db, userCode) {
 }
 
 /** Modülü AÇIK siteler (katalog varsayılanı + site_modules satırı). */
-async function enabledFinanceSites(db, siteCodes) {
+export async function enabledFinanceSites(db, siteCodes) {
   if (siteCodes.length === 0) {
     return new Set();
   }

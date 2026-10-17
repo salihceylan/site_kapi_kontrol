@@ -4,6 +4,8 @@
 // `deleted-<user_code>@deleted.invalid`, telefon / kullanıcı adı NULL, parola özeti kullanılamaz rastgele değer, `is_active = FALSE`, `deleted_at` dolu.
 // Hesabın ürettiği / yönetim kayıtları (denetim, finans, duyuru vb.) tombstone satırına bağlı kalır; kişisel iz (ad anlık görüntüleri, IP, konum, jeton,
 // misafir adı, okundu, bekleyen e-posta) silinir ya da kimliksizleştirilir. FK politika tablosu: docs / rapor ("account_deletion" bölümü).
+// Belgeler (Faz 3b-A): documents.created_by / documents.deleted_by / document_versions.uploaded_by tombstone satırına bağlı KALIR (belge siteye aittir, silinmez;
+// yükleyen adı JOIN ile "Silinmiş Kullanıcı" görünür). Dosya adı / içeriği kişisel veri dışa aktarmaya GİRMEZ (kişinin kendi verisi değil; EXPORT_EXCLUDED).
 //
 // KİLİT SIRASI (deadlock olmaması için HEPSİ mevcut akışlarla AYNI yönde; ters sıra yok):
 //   küresel advisory `account_deletion` (silmeleri sıraya sokar: çift silme, son-yönetici yarışı) ->
@@ -51,6 +53,7 @@ import {
 import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
 import { peopleLockKey } from './people_sync.js';
+import { deletePushDataForUser } from './push_devices.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -95,6 +98,68 @@ export async function pickDeletedEmail(client, userCode, randomSuffix = () => cr
     candidate = deletedEmailFor(userCode, randomSuffix());
   }
   throw accountBusy();
+}
+
+/**
+ * Kullanıcının hesabına bağlı kişi kayıtlarının aidat hatırlatma kalemlerini (finance_reminder_items) temizler: e-posta adresi ve özeti NULL, bekleyen kalem 'resolved' (kuyruk
+ * işçisinin "kişi artık geçerli değil" sonucuyla aynı durum), claim / sonraki deneme alanları temizlenir. Satırlar (run_id, person_id) sırasıyla kilitlenir (işçinin
+ * `FOR UPDATE SKIP LOCKED` sırasıyla aynı -> kilitlenme yok). Tablo yoksa (040 öncesi şema) atlanır. Kalem satırları silinmez (çalıştırma sayaçları / geçmiş).
+ *
+ * DAİRE ARALIK KAYITLARI (finance_reminder_apartments): çalıştırma, daireleri "hatırlatıldı" diye kaydeder; sonraki planlar bu kayıtla asgari aralık / art arda sayısını hesaplar
+ * (finance_reminders.loadCandidateApartments -> hist). Bekleyen kalemi burada 'resolved' yapınca GÖNDERİM OLMADAN kalan kayıt, o dairenin başka sorumlusuna hatırlatmayı
+ * (aralık) geciktirirdi; kuyruğun kendi yolu (RELEASE_INTERVALS_SQL) bunu serbest bırakır, burada aynı mantık AYNI işlemde yinelenir: etkilenen çalıştırmalarda, hiçbir
+ * 'sent' / 'pending' kalemin kapsamadığı ve en az bir gönderilmemiş (failed / resolved / skipped_pref / cancelled) kalemin kapsadığı daire kayıtları silinir. Kilit sırası:
+ * kalemler (run_id, person_id) -> aralık kayıtları (run_id, apartment_id).
+ * @returns {Promise<number>} güncellenen kalem sayısı
+ */
+export async function clearReminderItems(client, userCode) {
+  const present = (await client.query(`SELECT to_regclass('public.finance_reminder_items') IS NOT NULL AS present`)).rows?.[0]?.present === true;
+  if (!present) {
+    return 0;
+  }
+  const result = await client.query(
+    `
+      UPDATE finance_reminder_items i
+      SET email = NULL, email_hash = NULL, email_claimed_at = NULL, email_next_at = NULL,
+          email_status = CASE WHEN i.email_status = 'pending' THEN 'resolved' ELSE i.email_status END
+      WHERE (i.run_id, i.person_id) IN (
+        SELECT i2.run_id, i2.person_id
+        FROM finance_reminder_items i2
+        INNER JOIN site_people sp ON sp.id = i2.person_id AND sp.user_code = $1
+        WHERE i2.email IS NOT NULL OR i2.email_hash IS NOT NULL OR i2.email_status = 'pending'
+        ORDER BY i2.run_id, i2.person_id
+        FOR UPDATE OF i2
+      )
+      RETURNING i.run_id
+    `,
+    [userCode],
+  );
+  const runIds = [...new Set((result.rows ?? []).map((row) => Number(row.run_id)))].sort((a, b) => a - b);
+  if (runIds.length > 0) {
+    await client.query(
+      `
+        DELETE FROM finance_reminder_apartments fa
+        WHERE (fa.apartment_id, fa.run_id) IN (
+          SELECT fa2.apartment_id, fa2.run_id
+          FROM finance_reminder_apartments fa2
+          WHERE fa2.run_id = ANY($1::BIGINT[])
+            AND EXISTS (
+              SELECT 1 FROM finance_reminder_items gone
+              WHERE gone.run_id = fa2.run_id AND fa2.apartment_id = ANY(gone.apartment_ids)
+                AND gone.email_status IN ('failed', 'resolved', 'skipped_pref', 'cancelled')
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM finance_reminder_items keep
+              WHERE keep.run_id = fa2.run_id AND keep.email_status IN ('sent', 'pending') AND fa2.apartment_id = ANY(keep.apartment_ids)
+            )
+          ORDER BY fa2.run_id, fa2.apartment_id
+          FOR UPDATE OF fa2
+        )
+      `,
+      [runIds],
+    );
+  }
+  return Number(result.rowCount ?? 0);
 }
 
 async function bestEffort(client, name, work) {
@@ -184,6 +249,36 @@ export async function findLastManagerSites(db, userCode) {
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
+ * Önizleme sayıları: isteğe bağlı (sonradan eklenen migration) tablolar katalog kontrolüyle; tablo yoksa 0. Yalnız çağıranın kendi kayıtları.
+ * @returns {Promise<{ pushDevices: number, uploadedDocuments: number, pendingReminders: number }>}
+ */
+async function previewOptionalCounts(db, userCode) {
+  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0 };
+  const flags = (
+    await db.query(
+      `
+        SELECT (to_regclass('public.push_devices') IS NOT NULL) AS has_push_devices,
+               (to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
+               (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders
+      `,
+    )
+  ).rows?.[0];
+  const count = async (sql) => num((await db.query(sql, [userCode])).rows?.[0]?.n ?? 0);
+  if (flags?.has_push_devices === true) {
+    out.pushDevices = await count('SELECT COUNT(*)::INTEGER AS n FROM push_devices WHERE user_code = $1');
+  }
+  if (flags?.has_documents === true) {
+    out.uploadedDocuments = await count('SELECT COUNT(*)::INTEGER AS n FROM document_versions WHERE uploaded_by = $1');
+  }
+  if (flags?.has_reminders === true) {
+    out.pendingReminders = await count(
+      `SELECT COUNT(*)::INTEGER AS n FROM finance_reminder_items i INNER JOIN site_people sp ON sp.id = i.person_id AND sp.user_code = $1 WHERE i.email_status = 'pending' AND i.email IS NOT NULL`,
+    );
+  }
+  return out;
+}
+
+/**
  * POST /me/account-deletion/preview -> { can_delete, blockers, will_remove, will_keep }.
  * Yazma yapmaz, kilit almaz. Sayılar yalnız çağıranın KENDİ kayıtlarındandır.
  */
@@ -223,6 +318,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
     )
   ).rows[0];
 
+  // Sonradan eklenen migration tabloları (yoksa 0): telefon bildirimi cihazları (041), yüklenen belgeler (039), bekleyen aidat hatırlatma kalemleri (040).
+  const optionalCounts = await previewOptionalCounts(db, userCode);
+
   // Metinler server/legal/account_deletion.md (§2 "Silinen veya kimliksizleştirilen veriler", §3 "Saklanan veriler") ile TUTARLI tutulur: biri değişirse diğeri de
   // değişmelidir (test/account_deletion_service.test.js bu metinlerin yasal belgeyle aynı maddeleri taşıdığını sınar). Süre / dayanak iddiası yazılmaz (belge kararları bekliyor).
   const willRemove = [
@@ -244,6 +342,12 @@ export async function previewAccountDeletion(authUser, db = pool) {
   if (num(counts.devices) > 0) {
     willRemove.push(`Hesabınıza bağlı cihazların (${num(counts.devices)}) sahiplik bilginiz kaldırılır.`);
   }
+  if (optionalCounts.pushDevices > 0) {
+    willRemove.push(`Telefon bildirimi için kayıtlı cihazlarınız (${optionalCounts.pushDevices}) ve bunların bildirim jetonları ile bekleyen telefon bildirimleriniz silinir.`);
+  }
+  if (optionalCounts.pendingReminders > 0) {
+    willRemove.push(`Size gönderilmek üzere bekleyen aidat hatırlatma e-postalarının (${optionalCounts.pendingReminders}) kayıtlarındaki e-posta adresiniz silinir; bu hatırlatmalar gönderilmez.`);
+  }
 
   const willKeep = [
     CRM_KEEP_NAME
@@ -256,6 +360,12 @@ export async function previewAccountDeletion(authUser, db = pool) {
     'Duyuru e-postalarından çıktıysanız, çıkış tercihinizin korunması için e-posta adresinizin geri döndürülemez özeti listede kalır.',
     'Sunucu günlükleri ve yedeklerdeki kopyalar kendi saklama döngüleri dolana kadar kalır, sonra yok edilir.',
   ];
+  if (optionalCounts.uploadedDocuments > 0) {
+    willKeep.push(`Yüklediğiniz belgeler (${optionalCounts.uploadedDocuments} dosya sürümü) site yönetiminde kalır (belgeler siteye aittir); yükleyen adı "Silinmiş Kullanıcı" olarak görünür.`);
+  }
+  if (num(counts.apartment_links) + num(counts.site_links) > 0) {
+    willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');
+  }
   if (num(counts.closed_applications) > 0) {
     willKeep.push('Daha önce sonuçlanmış (onaylanmış veya reddedilmiş) site başvurularınızdaki site bilgileri ve notlar, kimliksizleştirilmiş hesaba bağlı olarak kalır.');
   }
@@ -541,6 +651,13 @@ async function runAttempt(userCode) {
     );
     await client.query('DELETE FROM notification_preferences WHERE user_code = $1', [userCode]);
     summary.announcement_rows = recipients.rowCount ?? 0;
+    // Telefon bildirimi (Faz 3b-B): cihaz jetonları + bildirim kuyruğu satırları AYNI işlemde (satır kimliksizleştiği için CASCADE çalışmaz; tablo yoksa atlanır).
+    const pushSummary = await deletePushDataForUser(client, userCode);
+    summary.push_devices = num(pushSummary?.devices ?? 0);
+    summary.push_outbox = num(pushSummary?.outbox ?? 0);
+    // Aidat hatırlatma kuyruğu (Faz 4b): kişiye bağlı kalemlerdeki düz e-posta adresi + özet silinir, bekleyenler 'resolved' olur (gönderilmez). Kişi satırının hesap bağlantısı
+    // (site_people.user_code) bu adımdan SONRA (15) kopar; bu yüzden burada eşleşir.
+    summary.reminder_rows = await clearReminderItems(client, userCode);
 
     // 14. Açık site başvurusu geri çekilir (iptal akışıyla aynı yön: kullanıcı satırı elde -> başvuru satırı).
     const pending = await client.query(

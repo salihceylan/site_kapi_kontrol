@@ -23,14 +23,21 @@ import { moduleRouter } from './modules/module_routes.js';
 import { moduleRequestRouter } from './modules/module_request_routes.js';
 import { siteApplicationRouter } from './modules/site_application_routes.js';
 import { peopleRouter } from './modules/people_routes.js';
+import { bulkImportRouter, bulkPreviewGate, bulkCommitGate, BULK_PREVIEW_PATH, BULK_COMMIT_PATH } from './modules/bulk_import_routes.js';
 import { announcementRouter } from './modules/announcement_routes.js';
 import { announcementPublicRouter } from './modules/announcement_public_routes.js';
 import { financeRouter } from './modules/finance_routes.js';
+import { finance4bRouter } from './modules/finance_4b_routes.js';
 import { accountRouter } from './modules/account_routes.js';
 import { startAnnouncementScheduler, stopAnnouncementScheduler } from './modules/announcement_scheduler.js';
+import { startFinanceReminderScheduler, stopFinanceReminderScheduler } from './modules/finance_reminder_scheduler.js';
 import { platformServicesRouter } from './modules/platform_config_routes.js';
 import { clientErrorBodyParser } from './modules/client_error_routes.js';
 import { startClientErrorPurge, stopClientErrorPurge } from './modules/client_error_purge.js';
+import { documentRouter } from './modules/document_routes.js';
+import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
+import { pushRouter } from './modules/push_routes.js';
+import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
 
 import { buildCorsAllowlist, createCorsOptionsDelegate } from './config/cors.js';
 import { resolveServerStart, validateEnv } from './config/env.js';
@@ -77,6 +84,10 @@ app.use(createRequestLogger());
 app.post('/api/company/labeled-devices', companyAccessLimiter, requireCompanyAccess, express.json({ limit: '5mb' }));
 // Istemci hata raporu: kimliksiz uc icin KUCUK govde siniri (32 KB), genel 1 MB ayristiriciden ONCE (sonrakiler ayristirilmis govdeyi atlar).
 app.post('/public/client-errors', clientErrorBodyParser);
+// Toplu yukleme (Faz 2b): preview/commit icin 5 MB govde siniri YALNIZ authRequired + yetki + hiz sinirlayicidan SONRA (anonim istek 5 MB okutamaz);
+// genel 1 MB ayristiriciden ONCE baglanir (ayni zincir bulkImportRouter'da da var, ikinci gecis bayrakla atlanir).
+app.post(BULK_PREVIEW_PATH, ...bulkPreviewGate);
+app.post(BULK_COMMIT_PATH, ...bulkCommitGate);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -94,9 +105,15 @@ app.use(moduleRouter);
 app.use(moduleRequestRouter);
 app.use(siteApplicationRouter);
 app.use(peopleRouter);
+app.use(bulkImportRouter);
 app.use(announcementRouter);
 app.use(announcementPublicRouter);
 app.use(financeRouter);
+app.use(finance4bRouter);
+// Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).
+app.use(documentRouter);
+// Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
+app.use(pushRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).
 app.use(accountRouter);
 // Platform hizmetleri: yasal belgeler (/public/legal-documents, /legal/:id, /me/consents), /public/app-config, /public/client-errors, /admin/platform-config.
@@ -172,7 +189,10 @@ async function shutdown(signal) {
       });
     }
     await stopAnnouncementScheduler();
+    await stopFinanceReminderScheduler();
     await stopClientErrorPurge();
+    await stopDocumentsMaintenance();
+    await stopPushWorker();
     await stopMqttBridge();
     await pool.end();
   } catch (error) {
@@ -196,10 +216,17 @@ async function startServer() {
     checkEnvOrExit();
     await ensureDbSchema();
     startMqttBridge();
+    // Telefon bildirimi (Faz 3b-B): hizmet hesabi BIR KEZ yuklenir (sir loglanmaz; okunamazsa configured:false, sunucu yine acilir) + push bakimi
+    // (tek calisan advisory kilidi). Kuyruk turlari zamanlayici tikinde / yayindan sonra tetiklenir. ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile bakim kapali.
+    startPushWorker();
     // Duyuru zamanlayicisi (zamani gelen duyurulari yayinlar, e-posta kuyrugunu surer); ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile kapali.
     startAnnouncementScheduler();
+    // Borc hatirlatma kuyrugu (bekleyen satir varsa surer; FINANCE_REMINDER_SCHEDULER_DISABLED=1 / ANNOUNCEMENT_SCHEDULER_DISABLED=1 ile kapali).
+    startFinanceReminderScheduler();
     // Istemci hata raporlari 90 gun sonra silinir (tek calisan advisory kilidi); CLIENT_ERROR_PURGE_DISABLED=1 ile kapali.
     startClientErrorPurge();
+    // Belgeler bakim isi (bayat yukleme / suresi dolan silinmis belge / yetim dosya supurmesi; tek calisan advisory kilidi); DOCUMENTS_MAINTENANCE_DISABLED=1 ile kapali.
+    startDocumentsMaintenance();
     void runCleanupSafely();
     // Zamanlayıcı süreci açık tutmasın (düzgün kapanmayı engellemesin).
     setInterval(runCleanupSafely, 24 * 60 * 60 * 1000).unref();

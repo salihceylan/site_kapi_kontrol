@@ -62,6 +62,17 @@
 //             rastgele yarislar (cift silme, silme x giris / uye cikarma / admin silme / yonetici cikarma / basvuru onayi / duyuru yayini / kuyruk / CRM),
 //             ters sira KONTROL DENEYI, disa aktarma (sozlesme sekli, SIZDIRMA YOK, izolasyon, IDOR, 5 MB siniri, 24 saatte 3 + paralel + iade),
 //             buyuk ayak izi, degismez defter, FK butunlugu, sunucu gunlugunde kisisel veri yok, 40P01 = 0. QA_ONLY=account ile ayri kosulur.
+//   bulk_import  Toplu yukleme / disa aktarma (Faz 2b; docs/PLATFORM_TOPLU_ISLEMLER.md; govde scripts/qa_bulk_import.mjs): 038 sema (CHECK/FK/indeks, CASCADE,
+//             SET NULL, ensureDbSchema idempotans + yalniz katalog sorgusu), daireler/kisiler/araclar onizleme (YAZMAZ) -> onay, hepsi-ya-da-hic (strict),
+//             idempotans (ayni dosya ikinci kez = 0 degisiklik, replay, IDEMPOTENCY_CONFLICT), PREVIEW_STALE, eslesme matrisi (e-posta / daire+ad / ad+telefon,
+//             telefon tek basina eslestirmez, hesapli kisi alanlari ezilmez, hesapliya yeni daire eklenmez, resident -> owner, pasif yeniden etkinlestirme,
+//             RELATION_TAKEN, baba/ogul), plaka kurallari, ERISIM YOK (uyelik/kullanici/e-posta degismez), eslemeyle LINK (hayalet kisi yok), kilitler
+//             (cift onay, IMPORT_IN_PROGRESS, SITE_BUSY, CRM yazmalari bekler, finance_post, kilit turlari: 40P01 = 0), olcek (5000 satir / 15.000 kisi:
+//             sure, sorgu sayisi, bellek, EXPLAIN), disa aktarma (liste ile suzgec esdegerligi, yetki, 20.000 siniri, audit, gidis-donus), gizlilik. QA_ONLY=bulk_import.
+//   push      Telefon bildirimi (Faz 3b-B, 041; govde scripts/qa_push_section.mjs; sahte oauth2 + FCM sunucusu, gercek Google'a baglanilmaz): sema, cihaz kaydi
+//             (devir, 10 cihaz, eszamanli ayni jeton -> tek sahip, kayit x hesap silme), yayinda outbox (3000 alici, PUSH_ENABLED=0 -> 0 satir, UNIQUE), kilit
+//             turlari (40P01 = 0), isci (iki isci, SKIP LOCKED, bayat talep, olu jeton, sessiz saat, ust sinir, geri cekme), hesap silme kancasi, bakim,
+//             tercihler, disa aktarma, durum, HTTP, gunluk gizliligi. QA_ONLY=push.
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -86,6 +97,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { sectionDocuments } from './qa_documents_section.mjs';
+import { sectionPush } from './qa_push_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -155,10 +168,22 @@ const CATALOG_TABLES = [
   'fee_runs',
   'ledger_entries',
   'finance_period_closures',
+  'receipts',
+  'receipt_counters',
+  'late_fee_runs',
+  'expenses',
+  'account_movements',
+  'finance_reminder_runs',
   'user_consents',
   'client_error_reports',
   'pending_registrations',
   'account_data_exports',
+  'bulk_import_runs',
+  'documents',
+  'document_versions',
+  'announcement_attachments',
+  'push_devices',
+  'push_outbox',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -281,6 +306,10 @@ function runSection(section, databaseName, extraEnv = {}) {
     env: { ...process.env, QA_SECTION: section, DB_NAME: databaseName, ...extraEnv },
     stdio: 'inherit',
   });
+  if (result.status !== 0) {
+    // Sessiz cocuk cikislarini (denetleyici / OOM / sinyal) ayirt edebilmek icin neden yazilir.
+    console.log(`\n[bolum ${section}] cocuk surec cikis kodu=${result.status} sinyal=${result.signal ?? '-'}${result.error ? ` hata=${result.error.message}` : ''}`);
+  }
   return result.status === 0;
 }
 
@@ -298,8 +327,12 @@ async function runParent() {
     announcements: `${prefix}_announcements`,
     site_applications: `${prefix}_site_applications`,
     finance: `${prefix}_finance`,
+    finance4b: `${prefix}_finance4b`,
     platform_services: `${prefix}_platform_services`,
     account: `${prefix}_account`,
+    bulk_import: `${prefix}_bulk_import`,
+    documents: `${prefix}_documents`,
+    push: `${prefix}_push`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -358,7 +391,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('platform_services') || wants('account')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -396,7 +429,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'platform_services', 'account']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -3023,7 +3056,7 @@ async function sectionAnnouncements() {
   check('liste: yayinlananlar published_at azalan sirada', publishedOrder.every((t, index) => index === 0 || publishedOrder[index - 1] >= t));
   const item = res.body.items.find((i) => i.id === mainId);
   check('AnnouncementSummary alanlari (id, title, body_preview, importance, status, target_type, publish_at, published_at, edited_at, send_email, recipient_count, read_count, created_at, created_by_name)',
-    same(Object.keys(item).sort(), ['body_preview', 'created_at', 'created_by_name', 'edited_at', 'id', 'importance', 'published_at', 'publish_at', 'read_count', 'recipient_count', 'send_email', 'status', 'target_type', 'title'].sort()), Object.keys(item));
+    same(Object.keys(item).sort(), ['attachment_count', 'body_preview', 'created_at', 'created_by_name', 'edited_at', 'id', 'importance', 'published_at', 'publish_at', 'read_count', 'recipient_count', 'send_email', 'status', 'target_type', 'title'].sort()) && item.attachment_count === 0, Object.keys(item)); // attachment_count: Belgeler (Faz 3b-A) EKLEMELI alani
   res = await call('GET', `${P(S4)}?status=published&limit=2&offset=0`, MGR);
   const page2 = await call('GET', `${P(S4)}?status=published&limit=2&offset=2`, MGR);
   check('suzgec + sayfalama: status=published, limit/offset; total sabit; sayfalar ayri', res.body.items.length === 2 && page2.body.items.length >= 1 && res.body.total === page2.body.total && !page2.body.items.some((i) => res.body.items.some((j) => j.id === i.id)) && res.body.items.every((i) => i.status === 'published'));
@@ -3076,7 +3109,7 @@ async function sectionAnnouncements() {
     res.status === 200 && res.body.items.length === 2 && res.body.items[0].id === b1.id && res.body.items[1].id === a3Draft.id && res.body.items[1].is_read === false && Number.isInteger(res.body.next_before_id) && res.body.next_before_id === a3Draft.id, res.body.items.map((i) => i.id));
   const firstItem = res.body.items[1];
   check('gelen kutusu satiri: { id, site_code, site_name, title, body_preview, importance, published_at, edited_at, is_read }',
-    same(Object.keys(firstItem).sort(), ['body_preview', 'edited_at', 'id', 'importance', 'is_read', 'published_at', 'site_code', 'site_name', 'title'].sort()) && firstItem.site_name === 'Gelen Kutusu Sitesi', Object.keys(firstItem));
+    same(Object.keys(firstItem).sort(), ['attachments', 'body_preview', 'edited_at', 'id', 'importance', 'is_read', 'published_at', 'site_code', 'site_name', 'title'].sort()) && Array.isArray(firstItem.attachments) && firstItem.attachments.length === 0 && firstItem.site_name === 'Gelen Kutusu Sitesi', Object.keys(firstItem)); // attachments: Belgeler (Faz 3b-A) EKLEMELI alani
   const everything = [];
   let cursor = null;
   for (let pageNo = 0; pageNo < 10; pageNo += 1) {
@@ -3147,9 +3180,10 @@ async function sectionAnnouncements() {
   // tercihler
   console.log('--- tercihler ---');
   res = await call('GET', '/app/notification-preferences', R1);
-  check('tercih varsayilani: { email_announcements:true, push_announcements:true, push_available:false }', res.status === 200 && same(res.body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }), res.body);
+  // Faz 4b (email_finance_reminders) ve Faz 3b-B (push_show_preview / push_quiet / push_devices) EKLEMELI alanlari dahil tam govde
+  check('tercih varsayilani: { email_announcements:true, push_announcements:true, push_available:false } + EKLEMELI alanlar', res.status === 200 && same(res.body, { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 }), res.body);
   res = await call('PUT', '/app/notification-preferences', R1, { email_announcements: false, push_announcements: false, baska: 1 });
-  check('PUT email_announcements:false; push_* ve bilinmeyen anahtarlar YOKSAYILIR (push degismez)', res.status === 200 && res.body.email_announcements === false && res.body.push_announcements === true && res.body.push_available === false, res.body);
+  check('PUT email_announcements:false; bilinmeyen anahtarlar YOKSAYILIR; push_announcements Faz 3b-B ile BILINIR (kismi guncelleme)', res.status === 200 && res.body.email_announcements === false && res.body.push_announcements === false && res.body.push_available === false && !('baska' in res.body), res.body);
   res = await call('GET', '/app/notification-preferences', R1);
   check('tercih kalici; baska kullaniciyi etkilemez', res.body.email_announcements === false && (await call('GET', '/app/notification-preferences', R2)).body.email_announcements === true);
   res = await call('PUT', '/app/notification-preferences', R1, { email_announcements: 'hayir' });
@@ -4814,7 +4848,7 @@ async function sectionAnnouncements() {
     const hesapHash = emailSec.hashEmail('e4hesap@gmail.com');
     const post = (hash) => rawCall('POST', '/public/announcement-unsubscribe', { form: `t=${encodeURIComponent(emailSec.signUnsubscribeToken(hash))}` });
     const suppressed = async (hash) => (await q(`SELECT COUNT(*)::int AS n FROM announcement_email_suppressions WHERE email_hash = $1`, [hash])).rows[0].n;
-    check('E4 hazirlik: kimsenin saklanan tercihi yok; GET varsayilan { true, email_suppressed false }', (await prefOf(gmailUser)) === null && same(await getPref(gmailUser), { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }));
+    check('E4 hazirlik: kimsenin saklanan tercihi yok; GET varsayilan { true, email_suppressed false }', (await prefOf(gmailUser)) === null && same(await getPref(gmailUser), { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 }));
 
     // F2: POST ucuz: yalniz bastirma kaydi (+ indeksli bekleyen kapatma); users / apartments / notification_preferences'a dokunmaz
     hooks.log = [];
@@ -4825,7 +4859,7 @@ async function sectionAnnouncements() {
       posted.status === 200 && postQueries.length === 2 && /^INSERT INTO announcement_email_suppressions/.test(postQueries[0]) && /^UPDATE announcement_recipients/.test(postQueries[1]) && !postQueries.some((sql) => /\busers\b|apartments|site_people|notification_preferences|sha256/i.test(sql)), postQueries.map((sql) => sql.slice(0, 80)));
     check('F2: POST saklanan tercihi DEGISTIRMEZ (kimsenin satiri olusmadi)', (await prefOf(gmailUser)) === null && (await prefOf(controlUser)) === null && (await prefOf(roommate)) === null && (await prefOf(internalUser)) === null);
     const gmailPref = await getPref(gmailUser);
-    check('F2: GET ETKIN deger hesaplar: hesap e-postasi (e4.hesap@gmail.com, kanonik e4hesap@gmail.com) bastirildi -> email_announcements false + email_suppressed true; saklanan tercih true kalir', same(gmailPref, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: true }) && (await prefOf(gmailUser)) === null, gmailPref);
+    check('F2: GET ETKIN deger hesaplar: hesap e-postasi (e4.hesap@gmail.com, kanonik e4hesap@gmail.com) bastirildi -> email_announcements false + email_suppressed true; saklanan tercih true kalir', same(gmailPref, { email_announcements: false, email_finance_reminders: false, push_announcements: true, push_available: false, email_suppressed: true, push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 }) && (await prefOf(gmailUser)) === null, gmailPref);
     check('F2 YANLIS HESAP KAPANMAZ: ayni dairedeki baska hesap (farkli adres) ve baska daire hesabi etkin degerde true kalir', (await getPref(roommate)).email_announcements === true && (await getPref(roommate)).email_suppressed === false && (await getPref(controlUser)).email_suppressed === false);
     // dahili hesabin iletisim adresi (resident_email) bastirilirsa o hesap GET'te bastirilmis gorunur
     check('F2: dahili daire hesabinin iletisim adresi (apartments.resident_email) bastirilinca GET email_suppressed true (yalniz GOSTERIM)', (await post(emailSec.hashEmail('e4.iletisim@example.com'))).status === 200 && (await getPref(internalUser)).email_suppressed === true && (await getPref(internalUser)).email_announcements === false);
@@ -4859,7 +4893,7 @@ async function sectionAnnouncements() {
     // gercek hesap kendi adresininkini siler
     const ownPut = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: true });
     check('E4b/F1: hesap sahibinin PUT true\'su KENDI e-postasinin (kanonik e4hesap@gmail.com) bastirmasini siler; yanit etkin true + email_suppressed false; baskasinin bastirmalari KALIR',
-      ownPut.status === 200 && same(ownPut.body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false }) && (await suppressed(hesapHash)) === 0 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1 && (await suppressed(victimHash)) === 1, ownPut.body);
+      ownPut.status === 200 && same(ownPut.body, { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 }) && (await suppressed(hesapHash)) === 0 && (await suppressed(emailSec.hashEmail('baska.kisi@example.com'))) === 1 && (await suppressed(victimHash)) === 1, ownPut.body);
     const afterUndo = (await create(S28, MGR, { title: 'E4 geri alindi', body: 'x', send_email: true, publish: 'now', target: { type: 'apartments', apartment_ids: [s28.aptIds.H1] } })).body;
     check('E4b: geri alma sonrasi hesap sahibinin adresine duyuru e-postasi yeniden pending (artik bastirilmiyor)', afterUndo.stats.email.pending === 2 && afterUndo.stats.email.skipped_pref === 0, afterUndo.stats.email);
     const putFalse = await call('PUT', '/app/notification-preferences', gmailUser, { email_announcements: false });
@@ -7228,7 +7262,7 @@ async function sectionFinance() {
   check('G7: ESZAMANLI cift tahsilat (ayni anahtar): biri 201 digeri 200, TEK defter satiri (cift tahsilat olmaz)', same([ccA.status, ccB.status].sort(), [200, 201]) && ccA.body.entry.id === ccB.body.entry.id && (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries WHERE site_code = $1 AND idempotency_key = $2`, [fs3.code, concurrentKey])).rows[0].n === 1);
   const [dA, dB] = await Promise.all([call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d1') })), call('POST', `${b3}/payments`, MGR, payBody(P3(5).id, { amount_minor: 1000, idempotency_key: key('d2') }))]);
   check('G7b: ESZAMANLI iki FARKLI anahtarli tahsilat ikisi de yazilir (gercek iki tahsilat); bakiye 400000 - 2000', dA.status === 201 && dB.status === 201 && (await balanceOf(fs3.code, P3(5).id)) === 398000n);
-  check('G8: audit finance.payment.recorded: details { apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['amount_minor', 'apartment_id', 'method', 'period']) && !JSON.stringify(r.details).includes('Nakit')));
+  check('G8: audit finance.payment.recorded: details { account_id (Faz 4b), apartment_id, amount_minor, period, method } - aciklama YOK', (await auditRows(fs3.code, 'finance.payment.recorded')).every((r) => same(Object.keys(r.details).sort(), ['account_id', 'amount_minor', 'apartment_id', 'method', 'period']) && !JSON.stringify(r.details).includes('Nakit')));
 
   // --- ters kayit
   const reverseUrl = (id) => `${b3}/entries/${id}/reverse`;
@@ -8271,7 +8305,7 @@ async function sectionFinance() {
     const def = (await call('POST', `${bV}/definitions`, actor, { name: `V7 ilk ${label}`, kind: 'recurring', distribution: 'fixed', amount_minor: 100, due_day: 1, start_period: ym(-1), target: { type: 'site' } })).body;
     const deadlocksBefore = hooks.deadlocks;
     const errorsBefore = serverErrors.length;
-    hooks.rewrite = removeActorLock ? (text) => text.replace('SELECT user_code FROM users WHERE user_code = $1 FOR KEY SHARE', 'SELECT $1::bigint AS user_code') : null;
+    hooks.rewrite = removeActorLock ? (text) => text.replace('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE', 'SELECT $1::bigint AS user_code') : null;
     let openGate;
     hooks.pause = { match: /INSERT INTO audit_log/, gate: new Promise((resolve) => { openGate = resolve; }), hit: false };
     const patching = call('PATCH', `${bV}/definitions/${def.id}`, actor, { name: `V7 yeni ${label}` });
@@ -8382,7 +8416,7 @@ async function sectionFinance() {
   const leakyAudits = financeAudits.filter((r) => forbidden.test(JSON.stringify(r.details)));
   check('N3: audit details\'te tanim adi, aciklama, neden metni, kisi adi HICBIR satirda yok (yalniz toplam / sayi / donem / alan adi)', leakyAudits.length === 0, leakyAudits.slice(0, 2));
   const allDetailKeys = new Set(financeAudits.flatMap((r) => Object.keys(r.details)));
-  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor'].includes(k)), [...allDetailKeys]);
+  check('N4: audit details anahtarlari beyaz listede', [...allDetailKeys].every((k) => ['kind', 'distribution', 'target_type', 'start_period', 'fields', 'definition_id', 'period', 'total_minor', 'apartment_count', 'skipped_missing_count', 'apartment_id', 'amount_minor', 'method', 'reversed_entry_id', 'reversed_kind', 'reversal_entry_id', 'old_amount_minor', 'new_amount_minor', 'account_id', 'ledger_entry_id', 'reason_code', 'cancelled_receipt_id', 'receipt_cancelled', 'movement_mirrored'].includes(k)), [...allDetailKeys]); // Faz 4b ekleri: hepsi kimlik / kod / bayrak (metin YOK)
 
   // son tutarlilik (tum veritabani)
   const apartmentSites = (await q(`SELECT COUNT(*)::int AS n FROM ledger_entries l JOIN apartments a ON a.id = l.apartment_id WHERE a.site_code <> l.site_code`)).rows[0].n;
@@ -9601,10 +9635,34 @@ async function sectionAccount() {
     'announcements.created_by': 'TOMBSTONE',
     'announcements.published_by': 'TOMBSTONE',
     'announcements.email_requested_by': 'TOMBSTONE',
+    'documents.created_by': 'TOMBSTONE (belge siteye aittir; yukleyen adi JOIN ile Silinmis Kullanici)',
+    'documents.deleted_by': 'TOMBSTONE',
+    'document_versions.uploaded_by': 'TOMBSTONE (belge siteye aittir; yukleyen adi JOIN ile Silinmis Kullanici)',
     'fee_definitions.created_by': 'TOMBSTONE (degismez defter)',
     'fee_runs.posted_by': 'TOMBSTONE (degismez defter)',
     'finance_period_closures.closed_by': 'TOMBSTONE (degismez defter)',
     'ledger_entries.created_by': 'TOMBSTONE (degismez defter)',
+    // Finans Faz 4b (040): hepsi degismez belge / defter ya da yonetim kaydi -> TOMBSTONE (UPDATE yok; *_by yalniz FK SET NULL ile NULL olur)
+    'finance_settings.updated_by': 'TOMBSTONE',
+    'late_fee_runs.posted_by': 'TOMBSTONE (degismez defter)',
+    'late_fee_runs.voided_by': 'TOMBSTONE (degismez defter)',
+    'receipts.issued_by': 'TOMBSTONE (degismez makbuz; snapshot adi yasal saklama)',
+    'receipt_print_events.printed_by': 'TOMBSTONE (degismez)',
+    'finance_accounts.created_by': 'TOMBSTONE',
+    'finance_suppliers.created_by': 'TOMBSTONE',
+    'expenses.created_by': 'TOMBSTONE (degismez gider)',
+    'expense_voids.voided_by': 'TOMBSTONE (degismez)',
+    'expense_documents.added_by': 'TOMBSTONE (belge saklama KMK m.36)',
+    'expense_documents.removed_by': 'TOMBSTONE (belge saklama KMK m.36)',
+    'account_transfers.created_by': 'TOMBSTONE (degismez)',
+    'account_movements.created_by': 'TOMBSTONE (degismez)',
+    'account_reconciliations.reconciled_by': 'TOMBSTONE (degismez)',
+    'finance_reminder_exclusions.created_by': 'TOMBSTONE',
+    'finance_reminder_runs.created_by': 'TOMBSTONE',
+    'finance_reminder_runs.cancelled_by': 'TOMBSTONE',
+    'bulk_import_runs.created_by': 'TOMBSTONE (toplu yukleme kaydi: yalniz sayilar, kisisel veri yok; kayit kalir)',
+    // Telefon bildirimi (Faz 3b-B, 041): cihaz jetonu kisisel tanimlayici -> hesap silme isleminde SILINIR (push_outbox.user_code FK'siz; o da ayni islemde silinir)
+    'push_devices.user_code': 'SIL (cihaz jetonlari; push_outbox satirlari da ayni islemde)',
   };
   const fkRows = (
     await q(`
@@ -10838,6 +10896,282 @@ async function sectionAccount() {
     await q(`UPDATE users SET role = 'individual' WHERE user_code = $1`, [control.mgr]);
     resetDeadlocks();
   }
+
+  // ---- R9 / R10 (P1 modulleri): Belgeler (039), Finans 4b (040) ve Push (041) icin disa aktarma + silme kapsami (gercek PG)
+  {
+    resetDeadlocks();
+    const s = await mkSite('P1 Kapsam Sitesi', 3);
+    const L = await seedAda(s, { fresh: true, name: 'P1 Kapsam Sakin' });
+    const FCM_MARK = `FCM-JETON-GIZLI-${L.ada}`;
+    const PAYER_MARK = 'ODEYEN-ADI-GIZLI';
+    const STORAGE_MARK = `${s.code}/${uniq('depo-anahtari-gizli')}`;
+    for (const [n, platform] of [[1, 'android'], [2, 'ios']]) {
+      await q(`INSERT INTO push_devices (user_code, install_id, platform, fcm_token, app_version, notifications_enabled, last_success_at) VALUES ($1, $2, $3, $4, '1.4.0', TRUE, NOW())`,
+        [L.ada, `kurulum-${L.ada}-${n}`.padEnd(24, 'x'), platform, `${FCM_MARK}-${n}`.padEnd(40, 'T')]);
+    }
+    await q(`INSERT INTO push_outbox (kind, site_code, announcement_id, user_code, importance, expires_at) VALUES ('announcement', $1, $2, $3, 'normal', NOW() + INTERVAL '1 day')`, [s.code, L.annId, L.ada]);
+    await q(`UPDATE notification_preferences SET email_finance_reminders = FALSE, push_show_preview = TRUE, push_quiet_enabled = TRUE, push_quiet_start = 1350, push_quiet_end = 405 WHERE user_code = $1`, [L.ada]);
+    const doc = Number((await q(`INSERT INTO documents (site_code, category, title, audience, status, current_version_no, version_count, next_version_no, created_by) VALUES ($1, 'minutes', 'P1 Toplanti Tutanagi', 'managers', 'active', 1, 1, 2, $2) RETURNING id`, [s.code, L.ada])).rows[0].id);
+    await q(`INSERT INTO document_versions (document_id, site_code, version_no, status, storage_key, display_name, mime_type, declared_size_bytes, size_bytes, sha256, uploaded_by, completed_at) VALUES ($1, $2, 1, 'ready', $3, 'tutanak-2026.pdf', 'application/pdf', 2048, 2048, $4, $5, NOW())`, [doc, s.code, STORAGE_MARK, 'ab'.repeat(32), L.ada]);
+    const idem = (label) => uniq(label).slice(0, 60);
+    const run1 = Number((await q(`INSERT INTO finance_reminder_runs (site_code, status, tone, params, apartment_count, person_count, with_amount_count, preview_hash, idempotency_key, request_fingerprint, run_on, created_by) VALUES ($1, 'active', 'friendly', '{}'::jsonb, 1, 2, 1, $2, $3, $4, CURRENT_DATE, $5) RETURNING id`, [s.code, 'a'.repeat(64), idem('hat1'), 'b'.repeat(64), L.mgr])).rows[0].id);
+    const run2 = Number((await q(`INSERT INTO finance_reminder_runs (site_code, status, tone, params, apartment_count, person_count, with_amount_count, preview_hash, idempotency_key, request_fingerprint, run_on, created_by, cancelled_by, cancelled_at) VALUES ($1, 'cancelled', 'standard', '{}'::jsonb, 1, 1, 0, $2, $3, $4, CURRENT_DATE - 3, $5, $5, NOW()) RETURNING id`, [s.code, 'c'.repeat(64), idem('hat2'), 'd'.repeat(64), L.mgr])).rows[0].id);
+    await q(`INSERT INTO finance_reminder_items (run_id, person_id, apartment_ids, with_amount, has_account, email, email_hash, email_status) VALUES ($1, $2, ARRAY[$3::BIGINT], TRUE, TRUE, $4, $5, 'pending')`, [run1, L.person, L.apt1, L.email, 'e'.repeat(64)]);
+    await q(`INSERT INTO finance_reminder_items (run_id, person_id, apartment_ids, with_amount, has_account, email, email_hash, email_status, sent_at) VALUES ($1, $2, ARRAY[$3::BIGINT], FALSE, TRUE, $4, $5, 'sent', NOW())`, [run2, L.person, L.apt1, L.email, 'f'.repeat(64)]);
+    await q(`INSERT INTO finance_reminder_items (run_id, person_id, apartment_ids, with_amount, has_account, email, email_hash, email_status) VALUES ($1, $2, ARRAY[$3::BIGINT], TRUE, TRUE, $4, $5, 'pending')`, [run1, L.boraPerson, L.apt1, `bora${L.bora}@qa.example`, '9'.repeat(64)]);
+    const payment = Number((await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, payer_party, method, created_by) VALUES ($1, $2, 'payment', -40000, date_trunc('month', CURRENT_DATE)::date, CURRENT_DATE, 'both', 'cash', $3) RETURNING id`, [s.code, L.apt1, L.mgr])).rows[0].id);
+    await q(`INSERT INTO receipts (site_code, receipt_year, receipt_no, kind, ledger_entry_id, apartment_id, amount_minor, paid_on, issued_on, snapshot, snapshot_sha256, verification_code, issued_by) VALUES ($1, EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER, 1, 'collection', $2, $3, 40000, CURRENT_DATE, CURRENT_DATE, $4::jsonb, $5, 'ABCDEF123456', $6)`,
+      [s.code, payment, L.apt1, JSON.stringify({ apartment: { label: 'A Blok - Daire 1' }, payer: { name: PAYER_MARK }, issuer: { name: MARK.managerName } }), '1'.repeat(64), L.mgr]);
+    const receiptBefore = (await q(`SELECT snapshot, snapshot_sha256 FROM receipts WHERE ledger_entry_id = $1`, [payment])).rows[0];
+
+    // --- disa aktarma
+    res = await exportOf(L.ada);
+    const X = res.body ?? {};
+    check('G19a: tercihlerin TAMAMI dosyada: duyuru + aidat hatirlatma e-postasi + telefon + baslik gosterme + sessiz saatler ("SS:DD")',
+      res.status === 200 && X.notification_preferences?.email_announcements === false && X.notification_preferences?.email_finance_reminders === false && X.notification_preferences?.push_announcements === true
+        && X.notification_preferences?.push_show_preview === true && same(X.notification_preferences?.push_quiet, { enabled: true, start: '22:30', end: '06:45' }), X.notification_preferences);
+    check('G19b: telefon bildirimi cihaz kayitlari dosyada (platform, surum, tarihler); FCM jetonu ve kurulum kimligi ASLA (dosyanin hicbir yerinde yok)',
+      Array.isArray(X.push_devices) && X.push_devices.length === 2 && X.push_devices.every((d) => ['android', 'ios'].includes(d.platform) && d.app_version === '1.4.0') && !res.text.includes(FCM_MARK) && !res.text.includes('kurulum-'), X.push_devices);
+    check('G19c: yuklenen belge KAYDI dosyada (YALNIZ kullanicinin verdigi alanlar: kategori, dosya adi, tur, boyut, tarih, surum no); baslik / durum, depolama anahtari, icerik ozeti, kitle YOK',
+      X.uploaded_documents?.length === 1 && X.uploaded_documents[0].file_name === 'tutanak-2026.pdf' && X.uploaded_documents[0].size_bytes === 2048
+        && X.uploaded_documents[0].mime_type === 'application/pdf' && X.uploaded_documents[0].category === 'minutes' && X.uploaded_documents[0].version_no === 1 && typeof X.uploaded_documents[0].recorded_at === 'string'
+        && same(Object.keys(X.uploaded_documents[0]).sort(), ['category', 'completed_at', 'document_id', 'file_name', 'mime_type', 'recorded_at', 'site_code', 'site_name', 'size_bytes', 'version_no', 'version_status'])
+        && !res.text.includes('P1 Toplanti Tutanagi') && !res.text.includes(STORAGE_MARK) && !res.text.includes('ab'.repeat(32)), X.uploaded_documents);
+    check('G19d: aidat hatirlatma GECMISI dosyada (yalniz KENDI kisi kaydinin 2 kalemi: bekleyen + gonderilen); adres / ozet / not / tutar YOK; komsunun kalemi YOK',
+      X.finance_reminders_received?.length === 2 && X.finance_reminders_received.every((r) => !('email' in r) && !('email_hash' in r) && !('note' in r) && Number(r.site_code) === s.code) && X.finance_reminders_received.map((r) => r.email_status).sort().join(',') === 'pending,sent' && !res.text.includes(`bora${L.bora}@qa.example`), X.finance_reminders_received);
+    check('G19e: makbuz OZETI dosyada (numara, tur, durum, tutar, tarih, daire); odeyen adi, yonetici adi, dogrulama kodu, anlik goruntu YOK',
+      X.receipts?.length === 1 && X.receipts[0].amount_minor === 40000 && X.receipts[0].kind === 'collection' && X.receipts[0].apartment_label === 'A Blok - Daire 1' && typeof X.receipts[0].number === 'string'
+        && !res.text.includes(PAYER_MARK) && !res.text.includes('ABCDEF123456') && !('snapshot' in X.receipts[0]) && !('payer_name' in X.receipts[0]) && !('issued_by_name' in X.receipts[0]), X.receipts);
+    check('G19f: hariç tutulanlar listesi yeni bolumleri ve nedenlerini aciklar (belge icerigi / makbuz anlik goruntusu / hatirlatma metni / FCM jetonu)',
+      ['uploaded_documents', 'receipts', 'finance_reminders_received', 'FCM'].every((word) => (X.excluded ?? []).some((line) => line.includes(word))), (X.excluded ?? []).length);
+
+    // --- onizleme
+    res = await preview(L.ada);
+    check('G19g: onizleme: silinenler arasinda telefon bildirimi cihazlari (2) + bekleyen hatirlatma adresi (1); saklananlar arasinda yuklenen belgeler (1) ve makbuz / tahsilat kayitlari (KMK / VUK, anlik goruntu degismez)',
+      ok200(res) && res.body.will_remove.some((l) => /Telefon bildirimi için kayıtlı cihazlarınız \(2\)/.test(l)) && res.body.will_remove.some((l) => /bekleyen aidat hatırlatma e-postalarının \(1\)/.test(l))
+        && res.body.will_keep.some((l) => /Yüklediğiniz belgeler \(1 dosya sürümü\) site yönetiminde kalır.*"Silinmiş Kullanıcı" olarak görünür/.test(l)) && res.body.will_keep.some((l) => /Makbuz ve tahsilat kayıtları.*yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez/.test(l)), res.body);
+
+    // --- silme
+    res = await del(L.ada);
+    await settle();
+    const remaining = (sql) => countOf(sql, [L.ada]);
+    check('G19h: silme: telefon cihaz kayitlari (jetonlar) ve bildirim kuyrugu satirlari AYNI islemde silindi; bildirim tercihi satiri yok',
+      res.status === 200 && (await remaining(`SELECT COUNT(*)::int AS n FROM push_devices WHERE user_code = $1`)) === 0 && (await remaining(`SELECT COUNT(*)::int AS n FROM push_outbox WHERE user_code = $1`)) === 0 && (await remaining(`SELECT COUNT(*)::int AS n FROM notification_preferences WHERE user_code = $1`)) === 0, res.status);
+    const items = (await q(`SELECT person_id, run_id, email, email_hash, email_status, email_claimed_at, email_next_at FROM finance_reminder_items WHERE person_id IN ($1, $2) ORDER BY run_id, person_id`, [L.person, L.boraPerson])).rows;
+    const adaItems = items.filter((r) => Number(r.person_id) === L.person);
+    const boraItem = items.find((r) => Number(r.person_id) === L.boraPerson);
+    check('G19i: aidat hatirlatma kalemleri: silinenin 2 kaleminde adres + ozet NULL, bekleyen -> resolved (gonderilmez), gonderilmis durumu korunur; komsunun bekleyen kalemi DOKUNULMAZ (adres + ozet duruyor)',
+      adaItems.length === 2 && adaItems.every((r) => r.email === null && r.email_hash === null && r.email_claimed_at === null && r.email_next_at === null) && adaItems.map((r) => r.email_status).sort().join(',') === 'resolved,sent'
+        && boraItem.email === `bora${L.bora}@qa.example` && boraItem.email_hash === '9'.repeat(64) && boraItem.email_status === 'pending', { adaItems, boraItem });
+    const docAfter = (await q(`SELECT d.title, d.status, u.full_name FROM document_versions v JOIN documents d ON d.id = v.document_id JOIN users u ON u.user_code = v.uploaded_by WHERE v.uploaded_by = $1`, [L.ada])).rows;
+    check('G19j: yuklenen belge KALIR (siteye aittir): belge aktif, yukleyen tombstone\'a bagli, JOIN ile adi "Silinmis Kullanici"',
+      docAfter.length === 1 && docAfter[0].title === 'P1 Toplanti Tutanagi' && docAfter[0].status === 'active' && docAfter[0].full_name === 'Silinmiş Kullanıcı', docAfter);
+    const receiptAfter = (await q(`SELECT snapshot, snapshot_sha256 FROM receipts WHERE ledger_entry_id = $1`, [payment])).rows[0];
+    check('G19k: makbuz anlik goruntusu DEGISMEDI (odeyen / yonetici adi dahil; yasal saklama): ayni JSON ve ayni ozet',
+      receiptAfter && same(receiptAfter.snapshot, receiptBefore.snapshot) && receiptAfter.snapshot_sha256 === receiptBefore.snapshot_sha256 && receiptAfter.snapshot.payer.name === PAYER_MARK, receiptAfter?.snapshot);
+    const deletedAudit = (await q(`SELECT details FROM audit_log WHERE action = 'account.deleted' AND target_id = $1`, [String(L.ada)])).rows[0]?.details;
+    check('G19l: "account.deleted" denetimi yeni sayilari tasir (push_devices 2, push_outbox 1, reminder_rows 2) ve yalniz sayi / rol icerir; kisisel veri yok',
+      deletedAudit && deletedAudit.push_devices === 2 && deletedAudit.push_outbox === 1 && deletedAudit.reminder_rows === 2 && Object.entries(deletedAudit).every(([key, value]) => key === 'previous_role' || typeof value === 'number')
+        && !JSON.stringify(deletedAudit).includes(L.email), deletedAudit);
+    check('G19m: 40P01 = 0', deadlocks() === 0, deadlocks());
+  }
+
+  // ---- R10 (announcement_inbox.setNotificationPreferences): kismi PUT TEK islem + kullanici satiri kilidi (silinmis hesaba tercih yazilmaz)
+  {
+    resetDeadlocks();
+    const putPrefs = (u, body) => inbox.setNotificationPreferences({ user_code: u }, body);
+    const prefRows = (u) => countOf(`SELECT COUNT(*)::int AS n FROM notification_preferences WHERE user_code = $1`, [u]);
+
+    // (a) silme ONCE: servis katmani 401, satir yazilmaz
+    const dead = await mkUser('Tercih Silinmis');
+    await del(dead);
+    const lateEmail = await outcomeOf(putPrefs(dead, { email_announcements: false }));
+    const latePush = await outcomeOf(putPrefs(dead, { push_show_preview: true }));
+    check('G20a: silinmis hesap: yalniz e-posta anahtariyla da, push anahtariyla da 401 ACCOUNT_DELETED; notification_preferences satiri YAZILMAZ',
+      !lateEmail.ok && lateEmail.status === 401 && lateEmail.code === 'ACCOUNT_DELETED' && !latePush.ok && latePush.status === 401 && (await prefRows(dead)) === 0, { lateEmail, latePush });
+
+    // (b) yaris: PUT kullanici kilidinden ONCE bekletilir, bu arada silme commit eder -> kilit satiri dondurmez, hicbir sey yazilmaz
+    const racing = async (label, { control }) => {
+      const u = await mkUser(label);
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      // kontrol deneyinde metin hook tarafindan ONCE yeniden yazilir (rewrite -> pause sirasi): her iki biçimi de yakala
+      const pause = { match: /^\s*SELECT user_code FROM users WHERE user_code = \$1( AND deleted_at IS NULL AND is_active = TRUE FOR KEY SHARE)?\s*$/, gate, hit: false };
+      if (control) hooks.rewrite = (text) => text.replace('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL AND is_active = TRUE FOR KEY SHARE', 'SELECT user_code FROM users WHERE user_code = $1');
+      hooks.pause = pause;
+      let putting;
+      let deleted;
+      try {
+        putting = outcomeOf(putPrefs(u, { email_announcements: false, push_show_preview: true }));
+        const reached = await waitFor(() => pause.hit === true, 15000);
+        if (!reached) throw new Error('PUT bekletilemedi');
+        hooks.pause = null;
+        deleted = await del(u);
+      } finally {
+        hooks.pause = null;
+        release();
+      }
+      const result = await putting;
+      hooks.rewrite = null;
+      return { u, result, deleted };
+    };
+    const fixed = await racing('Tercih Yarisi Duzeltme', { control: false });
+    check('G20b: PUT kullanici kilidinden ONCE bekletilirken hesap silinir: PUT 401 ACCOUNT_DELETED, e-posta + push tercihi HIC yazilmadi (tek islem geri alindi); 40P01 = 0',
+      fixed.deleted.status === 200 && !fixed.result.ok && fixed.result.status === 401 && fixed.result.code === 'ACCOUNT_DELETED' && (await prefRows(fixed.u)) === 0 && deadlocks() === 0, { status: fixed.result.status, code: fixed.result.code });
+    const control = await racing('Tercih Yarisi Kontrol', { control: true });
+    const controlRows = await prefRows(control.u);
+    check('G20c: KONTROL DENEYI: kilit + silinmemis kosulu YOKKEN ayni yaris SILINMIS hesaba tercih satiri yazar - test hatayi yakaliyor, duzeltme onu kapatiyor',
+      control.deleted.status === 200 && control.result.ok === true && controlRows === 1, { ok: control.result.ok, controlRows });
+    await q(`DELETE FROM notification_preferences WHERE user_code = $1`, [control.u]); // kontrol deneyinin kirlettigi satiri temizle
+    resetDeadlocks();
+
+    // (c) PUT kilidi TUTARKEN silme BEKLER; ikisi de biter, tercih satiri silmeyle gider
+    const holder = await mkUser('Tercih Kilit Tutan');
+    const held = await flowHoldsThenDeletion(holder, () => putPrefs(holder, { email_announcements: false, push_quiet_enabled: true }), /INSERT INTO notification_preferences/);
+    check('G20d: PUT kullanici satirini KEY SHARE tutarken (UPSERT oncesi) silme BEKLER; PUT tamamlanir, silme 200; sonunda tercih satiri YOK (silme sildi); 40P01 = 0',
+      held.reached && held.blocked === 'blocked' && held.flow.ok && held.deleteStatus === 200 && (await prefRows(holder)) === 0 && deadlocks() === 0, held);
+
+    // (d) tek islem: push dogrulamasi (sessiz saat cakismasi) e-posta tercihini de geri alir
+    const atomic = await mkUser('Tercih Atomik');
+    await putPrefs(atomic, { email_announcements: true, push_quiet_start: '23:00' });
+    const conflict = await outcomeOf(putPrefs(atomic, { email_announcements: false, push_quiet_end: '23:00' }));
+    const stored = (await q(`SELECT email_announcements, push_quiet_start, push_quiet_end FROM notification_preferences WHERE user_code = $1`, [atomic])).rows[0];
+    check('G20e: kismi PUT TEK islem: sessiz saat cakismasi (baslangic = bitis, saklı degerle birlesik) 400 INVALID_BODY; AYNI istekteki e-posta tercihi de YAZILMADI (email_announcements hala true)',
+      !conflict.ok && conflict.status === 400 && conflict.code === 'INVALID_BODY' && stored.email_announcements === true && stored.push_quiet_start === 1380 && stored.push_quiet_end === 420, { conflict, stored });
+    const both = await putPrefs(atomic, { email_announcements: false, email_finance_reminders: false, push_announcements: false, push_show_preview: true, push_quiet_enabled: true, push_quiet_start: '22:00', push_quiet_end: '06:30' });
+    const storedBoth = (await q(`SELECT email_announcements, email_finance_reminders, push_announcements, push_show_preview, push_quiet_enabled, push_quiet_start, push_quiet_end FROM notification_preferences WHERE user_code = $1`, [atomic])).rows[0];
+    check('G20f: e-posta + push birlikte KISMI PUT: hepsi tek seferde yazilir, yanit etkin degerleri tasir',
+      storedBoth.email_announcements === false && storedBoth.email_finance_reminders === false && storedBoth.push_announcements === false && storedBoth.push_show_preview === true && storedBoth.push_quiet_enabled === true
+        && storedBoth.push_quiet_start === 1320 && storedBoth.push_quiet_end === 390 && both.push_quiet?.start === '22:00' && both.push_quiet?.end === '06:30' && both.email_finance_reminders === false, { storedBoth, both });
+    resetDeadlocks();
+  }
+
+  // ---- R16 P2-3: dışa aktarma hakkı / denetimi x hesap silmenin COMMIT'i (silinmiş hesaba hak satırı ve denetim yazılmaz)
+  {
+    resetDeadlocks();
+    const exportRace = async (label, { control }) => {
+      const u = await mkUser(label);
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const pause = { match: /^COMMIT$/, gate, hit: false }; // silme TEK bagli islem: bu anda yalniz o COMMIT eder
+      hooks.pause = pause;
+      const deleting = del(u);
+      const reached = await waitFor(() => pause.hit === true, 15000);
+      hooks.pause = null;
+      if (control) hooks.rewrite = (text) => text.replace('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE', 'SELECT deleted_at FROM users WHERE user_code = $1 LIMIT 1');
+      const exporting = exportOf(u);
+      const exportState = await settledState(exporting, 800);
+      release();
+      const [deleted, exported] = [await deleting, await exporting];
+      hooks.rewrite = null;
+      return { u, reached, exportState, deleted, exported };
+    };
+    const slotRows = (u) => countOf(`SELECT COUNT(*)::int AS n FROM account_data_exports WHERE user_code = $1`, [u]);
+    const exportAudits = (u) => countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'account.data_exported' AND target_id = $1`, [String(u)]);
+    const fixed = await exportRace('Export Yarisi Duzeltme', { control: false });
+    check('G21a: disa aktarma, hesap silmenin COMMIT\'inden HEMEN ONCE hak alirken silmenin satir kilidini BEKLER (blocked); silme commit edince 401 ACCOUNT_DELETED, dosya DONMEZ; silinmis hesaba hak satiri ve "account.data_exported" denetimi YAZILMADI; 40P01 = 0',
+      fixed.reached && fixed.exportState === 'blocked' && fixed.deleted.status === 200 && fixed.exported.status === 401 && fixed.exported.body?.code === 'ACCOUNT_DELETED' && !fixed.exported.headers.get('content-disposition')
+        && (await slotRows(fixed.u)) === 0 && (await exportAudits(fixed.u)) === 0 && deadlocks() === 0, { state: fixed.exportState, del: fixed.deleted.status, exp: fixed.exported.status, code: fixed.exported.body?.code });
+    // KONTROL DENEYI: kilitsiz eski okuma ("SELECT deleted_at") ile ayni yaris SILINMIS hesaba hak satiri yazar ve dosya verir
+    const realAudit = exportSvc.exportDeps.audit;
+    exportSvc.exportDeps.audit = async () => {}; // kontrol deneyi denetim satiri BIRAKMASIN (audit_log degismezdir)
+    let control;
+    try {
+      control = await exportRace('Export Yarisi Kontrol', { control: true });
+    } finally {
+      exportSvc.exportDeps.audit = realAudit;
+    }
+    const controlSlots = await slotRows(control.u);
+    check('G21b: KONTROL DENEYI: kilitsiz eski okumayla ayni yaris SILINMIS hesaba hak satiri yazar ve dosya verir (200) - test hatayi yakaliyor, duzeltme onu kapatiyor',
+      control.reached && control.deleted.status === 200 && control.exported.status === 200 && controlSlots === 1, { del: control.deleted.status, exp: control.exported.status, controlSlots });
+    await q(`DELETE FROM account_data_exports WHERE user_code = $1`, [control.u]);
+
+    // URETIMDEN SONRA silme: hak alindi + dosya hazir, denetimden once hesap silinir -> denetim kilidi 401, dosya donmez, hak iade edilir
+    const late = await mkUser('Export Gec Silme');
+    const realCollect = exportSvc.exportDeps.collect;
+    exportSvc.exportDeps.collect = async (userCode, options) => {
+      const out = await realCollect(userCode, options);
+      await deletion.performAccountDeletion(userCode);
+      return out;
+    };
+    let lateRes;
+    try {
+      lateRes = await exportOf(late);
+    } finally {
+      exportSvc.exportDeps.collect = realCollect;
+    }
+    check('G21c: dosya hazirlanirken hesap silinirse denetim kilidi 401 ACCOUNT_DELETED verir: dosya DONMEZ, hak iade edilir (satir 0), silinmis hesap adina "account.data_exported" YAZILMAZ',
+      lateRes.status === 401 && lateRes.body?.code === 'ACCOUNT_DELETED' && (await slotRows(late)) === 0 && (await exportAudits(late)) === 0, { status: lateRes.status, code: lateRes.body?.code });
+    resetDeadlocks();
+  }
+
+  // ---- R16 P2-6: dışa aktarma belge KAYDI yalnız kullanıcının verdiği alanları taşır (başkasının sonradan yazdığı başlık sızmaz)
+  {
+    const s = await mkSite('Belge Basligi Sitesi', 2);
+    const u = await mkUser('Eski Yonetici', 'site_manager');
+    await linkManager(s.code, u);
+    const doc = Number((await q(`INSERT INTO documents (site_code, category, title, audience, status, current_version_no, version_count, next_version_no, created_by) VALUES ($1, 'notice', 'Eski Yonetici Basligi', 'residents', 'active', 1, 1, 2, $2) RETURNING id`, [s.code, u])).rows[0].id);
+    await q(`INSERT INTO document_versions (document_id, site_code, version_no, status, storage_key, display_name, mime_type, declared_size_bytes, size_bytes, sha256, uploaded_by, completed_at) VALUES ($1, $2, 1, 'ready', $3, 'duyuru-eki.pdf', 'application/pdf', 4096, 4096, $4, $5, NOW())`, [doc, s.code, `${s.code}/${uniq('baslik-anahtari')}`, 'cd'.repeat(32), u]);
+    // kullanici yoneticilikten cikarildi; baska bir yonetici belgenin basligini yonetici-yalniz ve hassas bir metinle degistirdi
+    await q(`DELETE FROM site_manager_sites WHERE manager_user_code = $1`, [u]);
+    await q(`UPDATE documents SET title = 'Daire 7 Ayse Yilmaz icra dosyasi (baska yonetici yazdi)', audience = 'managers', status = 'deleted', deleted_at = NOW() WHERE id = $1`, [doc]);
+    res = await exportOf(u);
+    const rows = res.body?.uploaded_documents ?? [];
+    check('G22: yoneticilikten cikarilmis kullanicinin dosyasinda belge BASLIGI / DURUMU YOK (baska yoneticinin sonradan yazdigi "icra dosyasi" metni sizmaz); dosya adi, tur, boyut, kategori, surum no kendi alanlari KALIR',
+      res.status === 200 && rows.length === 1 && !res.text.includes('icra') && !res.text.includes('Ayse Yilmaz') && !res.text.includes('Eski Yonetici Basligi') && !('title' in rows[0]) && !('document_status' in rows[0]) && !('deleted_at' in rows[0])
+        && rows[0].file_name === 'duyuru-eki.pdf' && rows[0].mime_type === 'application/pdf' && rows[0].size_bytes === 4096 && rows[0].category === 'notice' && rows[0].version_no === 1, rows);
+  }
+
+  // ---- R16: silinen kullanicinin bekleyen hatirlatma kalemleri 'resolved' olunca daire ARALIK kayitlari (finance_reminder_apartments) serbest birakilir
+  {
+    resetDeadlocks();
+    const remindersSvc = await import('../src/modules/finance_reminders.js');
+    const intervalCase = async (label, { control }) => {
+      const gs = await mkSite(label, 3);
+      const mgr = await mkUser(`${label} Yonetici`, 'site_manager');
+      await linkManager(gs.code, mgr);
+      const resident = await mkUser(`${label} Sakin`, 'apartment_owner');
+      const [aptOnly, aptShared] = gs.apts;
+      for (const apt of [aptOnly, aptShared]) {
+        await q(`INSERT INTO ledger_entries (site_code, apartment_id, kind, amount_minor, period, entry_date, due_date, payer_party, created_by) VALUES ($1, $2, 'charge', 100000, date_trunc('month', CURRENT_DATE - INTERVAL '2 months')::date, CURRENT_DATE - 60, CURRENT_DATE - 30, 'both', $3)`, [gs.code, apt, mgr]);
+      }
+      const person = Number((await q(`INSERT INTO site_people (site_code, user_code, is_active) VALUES ($1, $2, TRUE) RETURNING id`, [gs.code, resident])).rows[0].id);
+      const other = Number((await q(`INSERT INTO site_people (site_code, full_name, is_active) VALUES ($1, 'Hesapsiz Diger Sakin', TRUE) RETURNING id`, [gs.code])).rows[0].id);
+      const run = Number((await q(`INSERT INTO finance_reminder_runs (site_code, status, tone, params, apartment_count, person_count, with_amount_count, preview_hash, idempotency_key, request_fingerprint, run_on, created_by) VALUES ($1, 'active', 'standard', '{}'::jsonb, 2, 2, 0, $2, $3, $4, CURRENT_DATE, $5) RETURNING id`, [gs.code, 'a'.repeat(64), uniq('aralik').slice(0, 60), 'b'.repeat(64), mgr])).rows[0].id);
+      // aptOnly: tek alici = silinecek sakin (bekleyen). aptShared: silinecek sakin (bekleyen) + baska kisi (GONDERILMIS) -> kayit KORUNMALI
+      await q(`INSERT INTO finance_reminder_items (run_id, person_id, apartment_ids, with_amount, has_account, email, email_hash, email_status) VALUES ($1, $2, ARRAY[$3::BIGINT, $4::BIGINT], FALSE, TRUE, $5, $6, 'pending')`, [run, person, aptOnly, aptShared, `aralik-${resident}@qa.example`, 'a1'.repeat(32)]);
+      await q(`INSERT INTO finance_reminder_items (run_id, person_id, apartment_ids, with_amount, has_account, email, email_hash, email_status, sent_at) VALUES ($1, $2, ARRAY[$3::BIGINT], FALSE, FALSE, 'diger@qa.example', $4, 'sent', NOW())`, [run, other, aptShared, 'b2'.repeat(32)]);
+      for (const apt of [aptOnly, aptShared]) {
+        await q(`INSERT INTO finance_reminder_apartments (site_code, apartment_id, run_id, reminded_at) VALUES ($1, $2, $3, NOW())`, [gs.code, apt, run]);
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const before = (await remindersSvc.loadCandidateApartments(pool, gs.code, today, [aptOnly, aptShared])).map((a) => ({ id: a.id, hasHistory: a.lastDay !== null, consecutive: a.consecutive }));
+      if (control) {
+        hooks.rewrite = (text) => (/^\s*DELETE FROM finance_reminder_apartments fa\s+WHERE \(fa\.apartment_id/.test(text) ? 'SELECT $1::BIGINT[]' : text);
+      }
+      const deleted = await del(resident);
+      hooks.rewrite = null;
+      const records = (await q(`SELECT apartment_id FROM finance_reminder_apartments WHERE run_id = $1 ORDER BY apartment_id`, [run])).rows.map((r) => Number(r.apartment_id));
+      const after = (await remindersSvc.loadCandidateApartments(pool, gs.code, today, [aptOnly, aptShared])).map((a) => ({ id: a.id, hasHistory: a.lastDay !== null, consecutive: a.consecutive }));
+      const item = (await q(`SELECT email, email_hash, email_status FROM finance_reminder_items WHERE run_id = $1 AND person_id = $2`, [run, person])).rows[0];
+      return { deleted, records, after, before, aptOnly, aptShared, item };
+    };
+    const byId = (list, id) => list.find((a) => a.id === id);
+    const fixedCase = await intervalCase('Aralik Duzeltme', { control: false });
+    check('G23a: tek aliciyi silinen dairenin ARALIK kaydi serbest birakilir (daire gecmisi yok: sonraki sorumluya hatirlatma GECIKMEZ); gonderilmis kalemin kapsadigi ortak daire kaydi KORUNUR; kalem adres + ozet NULL, resolved',
+      fixedCase.deleted.status === 200 && fixedCase.before.every((b) => b.hasHistory === true) && same(fixedCase.records, [fixedCase.aptShared]) && byId(fixedCase.after, fixedCase.aptOnly).hasHistory === false && byId(fixedCase.after, fixedCase.aptOnly).consecutive === 0
+        && byId(fixedCase.after, fixedCase.aptShared).hasHistory === true && fixedCase.item.email === null && fixedCase.item.email_hash === null && fixedCase.item.email_status === 'resolved' && deadlocks() === 0,
+      { records: fixedCase.records, before: fixedCase.before, after: fixedCase.after, item: fixedCase.item });
+    const controlCase = await intervalCase('Aralik Kontrol', { control: true });
+    check('G23b: OLCUM / KONTROL DENEYI: serbest birakma YOKKEN tek alicili dairenin aralik kaydi KALIR ve daire "yakin zamanda hatirlatildi" sayilir (gecmis dolu, art arda sayisi 1) -> baska sorumluya hatirlatma gecikirdi; duzeltme bunu kapatiyor',
+      controlCase.deleted.status === 200 && controlCase.records.length === 2 && byId(controlCase.after, controlCase.aptOnly).hasHistory === true && byId(controlCase.after, controlCase.aptOnly).consecutive === 1,
+      { records: controlCase.records, after: controlCase.after });
+    resetDeadlocks();
+  }
   // <g-section-end>
 
   // F3: ensureDbSchema (sunucu acilisi) tombstone\'lar varken HATASIZ ve no-op; hesap satirlari ayni
@@ -10881,6 +11215,37 @@ async function sectionAccount() {
 
 // --------------------------------------------------------------------------------------------------------------
 
+// <finance4b-section-start>
+// CHILD bolum: finance4b (Finans Faz 4b; docs/PLATFORM_FINANS_4B.md). Govde scripts/qa_finance4b.mjs icindedir (bu dosyaya yalniz delege eden ince kanca eklenir).
+async function sectionFinance4b() {
+  const { runFinance4bSection } = await import('./qa_finance4b.mjs');
+  await runFinance4bSection({
+    check,
+    same,
+    sleep,
+    waitFor,
+    childEnv,
+    installPoolHooks,
+    finishChild,
+    mails,
+    serverErrors,
+    migrationFiles,
+    MIGRATIONS_DIR,
+    SERVER_DIR,
+    connectConfig,
+    runMigrate,
+  });
+}
+// <finance4b-section-end>
+
+// <bulk-import-section-start>
+// CHILD bolum: bulk_import (Toplu yukleme / disa aktarma Faz 2b; docs/PLATFORM_TOPLU_ISLEMLER.md). Govde scripts/qa_bulk_import.mjs icindedir (bu dosyaya yalniz delege eden ince kanca eklenir).
+async function sectionBulkImport() {
+  const { runBulkImportSection } = await import('./qa_bulk_import.mjs');
+  await runBulkImportSection({ check, same, sleep, waitFor, childEnv, installPoolHooks, installQueryCounter, finishChild, mails, serverErrors, SERVER_DIR, connectConfig });
+}
+// <bulk-import-section-end>
+
 const SECTIONS = {
   chain: sectionChain,
   upgrade: sectionUpgrade,
@@ -10891,8 +11256,13 @@ const SECTIONS = {
   site_applications: sectionSiteApplications,
   finance: sectionFinance,
   finance_upgrade: sectionFinanceUpgrade,
+  finance4b: sectionFinance4b,
   platform_services: sectionPlatformServices,
   account: sectionAccount,
+  bulk_import: sectionBulkImport,
+  documents: () => sectionDocuments({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, S1 }),
+  // Telefon bildirimi (Faz 3b-B); govde scripts/qa_push_section.mjs
+  push: () => sectionPush({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

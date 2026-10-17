@@ -11,6 +11,7 @@
 import { pool } from '../db.js';
 import { recordAudit } from './audit_service.js';
 import { assertFinanceEnabled } from './finance_access.js';
+import { accountDeleted } from './account_common.js';
 import { financeLockKey, siteNotFound } from './finance_common.js';
 
 async function runOnce(siteCode, work) {
@@ -69,13 +70,17 @@ export async function recordFinanceAudit(client, actor, action, siteCode, target
 
 /**
  * İşlemi yapan kullanıcının satırını FOR KEY SHARE kilitler (created_by / posted_by / audit FK'leri için). Çağıran, daire kilitlerini (varsa) ÖNCE almış
- * olmalıdır: sıra apartments -> users(işlemi yapan) -> finans satırları (kullanıcı silme tetikleyicisinin sırası). Kullanıcı yoksa sessizce geçer.
+ * olmalıdır: sıra apartments -> users(işlemi yapan) -> finans satırları (kullanıcı silme tetikleyicisinin sırası). Hesap SİLİNMİŞSE (deleted_at dolu / satır yok) 401 ACCOUNT_DELETED:
+ * silinmiş hesaba yeni finans satırı (created_by / audit) yazılmaz (kimlik doğrulamadan sonra eşzamanlı silinmiş olabilir).
  */
 export async function lockActorRow(client, actorInfo) {
   if (actorInfo?.userCode === null || actorInfo?.userCode === undefined) {
     return;
   }
-  await client.query('SELECT user_code FROM users WHERE user_code = $1 FOR KEY SHARE', [actorInfo.userCode]);
+  const found = await client.query('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE', [actorInfo.userCode]);
+  if (!found.rows?.[0]) {
+    throw accountDeleted();
+  }
 }
 
 /**

@@ -70,7 +70,8 @@ export function createCorsOptionsDelegate(allowlist) {
         origin: true,
         credentials: true,
         maxAge: 600,
-        exposedHeaders: ['Retry-After'],
+        // Content-Disposition: web istemci belge indirmede dosya adini okuyabilsin (Belgeler, Faz 3b-A)
+        exposedHeaders: ['Retry-After', 'Content-Disposition'],
         optionsSuccessStatus: 204,
       });
       return;

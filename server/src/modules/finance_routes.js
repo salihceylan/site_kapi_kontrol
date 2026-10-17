@@ -71,14 +71,14 @@ export const financeResidentLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
-const bodyOf = (req) => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {});
-const canSeeManagerFields = (access) => access.kind === 'super' || access.kind === 'manager';
+export const bodyOf = (req) => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {});
+export const canSeeManagerFields = (access) => access.kind === 'super' || access.kind === 'manager';
 
 /**
  * Yönetici sarmalayıcı: yetki + site + modül -> iş -> JSON. `write`: yalnız yönetici/süper; `superOnly`: yalnız süper kullanıcı.
  * `run` { status?, body } döndürür. Kurul yanıtından yönetici adları çıkarılır.
  */
-function managerHandler({ context, fallback, write = false, superOnly = false }, run) {
+export function managerHandler({ context, fallback, write = false, superOnly = false }, run) {
   return async (req, res) => {
     try {
       const access = await resolveFinanceAccess(req, res, { write, superOnly });
@@ -93,7 +93,7 @@ function managerHandler({ context, fallback, write = false, superOnly = false },
   };
 }
 
-const BASE = '/manager/sites/:siteCode/finance';
+export const BASE = '/manager/sites/:siteCode/finance';
 
 // --- Tanımlar ---------------------------------------------------------------------------------------------
 
@@ -214,7 +214,10 @@ financeRouter.post(
   financeWriteLimiter,
   managerHandler({ context: 'finance_payment', fallback: 'Tahsilat kaydedilemedi.', write: true }, async ({ req, access }) => {
     const result = await recordPayment({ siteCode: access.siteCode, body: bodyOf(req), actor: req.authUser });
-    return { status: result.replayed ? 200 : 201, body: { entry: result.entry, balance_minor: result.balance_minor } };
+    return {
+      status: result.replayed ? 200 : 201,
+      body: { entry: result.entry, balance_minor: result.balance_minor, receipt: result.receipt ?? null, movement_id: result.movement_id ?? null },
+    };
   }),
 );
 
@@ -234,7 +237,10 @@ financeRouter.post(
   financeWriteLimiter,
   managerHandler({ context: 'finance_correct', fallback: 'Tahsilat düzeltilemedi.', write: true }, async ({ req, access }) => {
     const result = await correctPayment({ siteCode: access.siteCode, rawId: req.params.id, body: bodyOf(req), actor: req.authUser });
-    return { status: result.replayed ? 200 : 201, body: { reversal: result.reversal, entry: result.entry, balance_minor: result.balance_minor } };
+    return {
+      status: result.replayed ? 200 : 201,
+      body: { reversal: result.reversal, entry: result.entry, balance_minor: result.balance_minor, receipt: result.receipt ?? null, movement_id: result.movement_id ?? null },
+    };
   }),
 );
 

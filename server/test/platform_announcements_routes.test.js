@@ -647,10 +647,15 @@ describe('sakin uçları (kimliği doğrulanmış her kullanıcı)', () => {
       [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE r\.announcement_id = \$1/, () => ok([{ read_at: new Date('2026-10-16T10:00:00.000Z') }])],
       [/^UPDATE announcement_recipients r SET read_at = NOW\(\) FROM site_people sp, announcements a, sites s WHERE sp\.id = r\.person_id/, () => ok([], 2)],
       [/^WITH mine AS/, () => ok([{ unread: 2, unread_urgent: 0, latest_id: '2', latest_published_at: new Date('2026-10-16T08:00:00.000Z'), server_time: new Date('2026-10-16T09:00:00.000Z') }])],
-      [/^SELECT email_announcements, push_announcements FROM notification_preferences/, () => ok()],
-      [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: false, push_announcements: true }])],
+      [/^SELECT email_announcements, email_finance_reminders, push_announcements FROM notification_preferences/, () => ok()],
+      // PUT TEK İŞLEM: kullanıcı satırı KEY SHARE kilidi (silinmiş hesaba tercih yazılmaz; R10)
+      [/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL AND is_active = TRUE FOR KEY SHARE$/, (_sql, params) => ok([{ user_code: params[0] }])],
+      [/^INSERT INTO notification_preferences/, () => ok([{ email_announcements: false, email_finance_reminders: true, push_announcements: true }])],
       [/^SELECT EXISTS \( SELECT 1 FROM \( SELECT translate\(btrim\(u\.email\)/, () => ok([{ suppressed: false }])],
+      // Faz 3b-B: tercih yanıtına EKLEMELİ push alanları (kayıt yok -> varsayılanlar)
+      [/^SELECT np\.push_show_preview, np\.push_quiet_enabled/, () => ok([{ push_show_preview: null, push_quiet_enabled: null, push_quiet_start: null, push_quiet_end: null, device_count: 0 }])],
     );
+    const pushDefaults = { push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 };
     const as = { user: users.resident };
     const list = await call('GET', '/app/announcements?limit=5', as);
     assert.equal(list.status, 200);
@@ -662,8 +667,8 @@ describe('sakin uçları (kimliği doğrulanmış her kullanıcı)', () => {
     const summary = await call('GET', '/app/notifications/summary', as);
     assert.equal(summary.body.unread_announcements, 2);
     assert.equal(summary.body.latest_announcement_id, 2);
-    assert.deepEqual((await call('GET', '/app/notification-preferences', as)).body, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false });
-    assert.deepEqual((await call('PUT', '/app/notification-preferences', { ...as, body: { email_announcements: false } })).body, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: false });
+    assert.deepEqual((await call('GET', '/app/notification-preferences', as)).body, { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...pushDefaults });
+    assert.deepEqual((await call('PUT', '/app/notification-preferences', { ...as, body: { email_announcements: false } })).body, { email_announcements: false, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...pushDefaults });
     // tüm sakin sorguları çağıranın kullanıcı kodunu (20004) parametre olarak taşır; istekten gelen kimlik kullanılmaz
     const userParams = state.log.filter((q) => /site_people|notification_preferences/.test(q.sql)).map((q) => q.params);
     assert.ok(userParams.length >= 6);

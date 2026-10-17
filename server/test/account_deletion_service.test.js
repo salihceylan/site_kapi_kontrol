@@ -51,6 +51,9 @@ function defaultState() {
     pendingApplications: [],
     rowCounts: {},
     takenEmails: [], // tombstone adresi önceden başka satırca alınmış (küçük harf)
+    optionalTables: {}, // { reminders, push, documents }: sonradan eklenen migration tabloları var mı (katalog yanıtı)
+    optionalCounts: {}, // { pushDevices, uploadedDocuments, pendingReminders }
+    reminderRows: 0, // finance_reminder_items UPDATE'inin etkilediği satır
   };
 }
 
@@ -82,6 +85,19 @@ function handle(sql, params) {
   if (/^SELECT id FROM devices WHERE assigned_user_code = \$1 OR owner_user_id = \$2 ORDER BY id/.test(sql)) {
     return ok(state.devices.map((id) => ({ id: String(id) })));
   }
+  if (/^SELECT to_regclass\('public\.finance_reminder_items'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.reminders === true }]);
+  if (/^SELECT to_regclass\('public\.push_devices'\) IS NOT NULL AS has_devices, to_regclass\('public\.push_outbox'\) IS NOT NULL AS has_outbox$/.test(sql)) {
+    return ok([{ has_devices: state.optionalTables.push === true, has_outbox: state.optionalTables.push === true }]);
+  }
+  if (/^SELECT \(to_regclass\('public\.push_devices'\) IS NOT NULL\) AS has_push_devices/.test(sql)) {
+    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true }]);
+  }
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM push_devices WHERE user_code = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.pushDevices ?? 0 }]);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.uploadedDocuments ?? 0 }]);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM finance_reminder_items i /.test(sql)) return ok([{ n: state.optionalCounts.pendingReminders ?? 0 }]);
+  if (/^UPDATE finance_reminder_items i SET /.test(sql)) return { rows: (state.reminderRunIds ?? []).map((id) => ({ run_id: String(id) })), rowCount: state.reminderRows };
+  if (/^DELETE FROM push_devices WHERE id IN/.test(sql)) return ok([], 2);
+  if (/^DELETE FROM push_outbox WHERE id IN/.test(sql)) return ok([], 3);
   if (/^SELECT 1 FROM users WHERE LOWER\(email\) = LOWER\(\$1\) AND user_code <> \$2 LIMIT 1$/.test(sql)) {
     return state.takenEmails.includes(String(params[0]).toLowerCase()) ? ok([{ '?column?': 1 }]) : ok();
   }
@@ -347,6 +363,66 @@ describe('hesap silme: kimliksizleştirme ifadesi', () => {
     assert.equal(client.queries, 3);
     const always = { async query() { return { rows: [{ x: 1 }] }; } };
     await assert.rejects(() => pickDeletedEmail(always, 7, () => 'cccc'), (error) => error.code === 'ACCOUNT_DELETE_BUSY' && error.statusCode === 409);
+  });
+
+  it('R10: aidat hatırlatma kalemleri ve push verisi AYNI işlemde temizlenir: bildirim tercihi -> push (cihaz + kuyruk) -> hatırlatma kalemleri -> ... -> kişi kayıtlarının hesaptan KOPMASI (kalemler site_people.user_code ile eşleştiği için ÖNCE)', async () => {
+    state.optionalTables = { push: true, reminders: true };
+    state.reminderRows = 4;
+    const result = await performAccountDeletion(12345);
+    const update = sqls(/^UPDATE finance_reminder_items i SET /)[0];
+    assert.ok(update, 'kalem güncellemesi çalıştı');
+    assert.deepEqual(update.params, [12345]);
+    assert.ok(update.sql.includes('email = NULL, email_hash = NULL, email_claimed_at = NULL, email_next_at = NULL'));
+    assert.ok(update.sql.includes("email_status = CASE WHEN i.email_status = 'pending' THEN 'resolved' ELSE i.email_status END"), 'bekleyen -> resolved (gönderilmez)');
+    assert.ok(update.sql.includes('INNER JOIN site_people sp ON sp.id = i2.person_id AND sp.user_code = $1'), 'yalnız çağıranın hesabına bağlı kişi kayıtları');
+    assert.ok(update.sql.includes('ORDER BY i2.run_id, i2.person_id FOR UPDATE OF i2'), 'işçiyle aynı kilit sırası (run_id, person_id)');
+    const prefs = indexOf(/^DELETE FROM notification_preferences WHERE user_code = \$1$/);
+    const pushDevices = indexOf(/^DELETE FROM push_devices WHERE id IN/);
+    const pushOutbox = indexOf(/^DELETE FROM push_outbox WHERE id IN/);
+    const reminders = indexOf(/^UPDATE finance_reminder_items i SET /);
+    const unlink = indexOf(/^UPDATE site_people SET/);
+    assert.ok(prefs >= 0 && prefs < pushDevices && pushDevices < pushOutbox && pushOutbox < reminders && reminders < unlink, [prefs, pushDevices, pushOutbox, reminders, unlink].join(','));
+    assert.equal(result.summary.reminder_rows, 4);
+    assert.equal(result.summary.push_devices, 2);
+    assert.equal(result.summary.push_outbox, 3);
+    const audit = log.find((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'account.deleted');
+    const details = JSON.parse(audit.params[7]);
+    assert.equal(details.reminder_rows, 4);
+    assert.ok(Object.entries(details).every(([key, value]) => key === 'previous_role' || typeof value === 'number'), 'denetim ayrıntısı yalnız sayı');
+  });
+
+  it('R16: gönderilmeden çözülen hatırlatma kalemlerinin DAİRE ARALIK kayıtları (finance_reminder_apartments) AYNI işlemde serbest bırakılır: yalnız etkilenen çalıştırmalar (tekil, artan), kalem güncellemesinden SONRA, kişi kopmadan ÖNCE; sent / pending kapsayan daire kaydı KORUNUR', async () => {
+    state.optionalTables = { reminders: true };
+    state.reminderRows = 3;
+    state.reminderRunIds = [12, 9, 12];
+    await performAccountDeletion(12345);
+    const release = sqls(/^DELETE FROM finance_reminder_apartments fa WHERE /)[0];
+    assert.ok(release, 'aralık kayıtları serbest bırakıldı');
+    assert.deepEqual(release.params, [[9, 12]]);
+    assert.ok(release.sql.includes("gone.email_status IN ('failed', 'resolved', 'skipped_pref', 'cancelled')"));
+    assert.ok(release.sql.includes("keep.email_status IN ('sent', 'pending') AND fa2.apartment_id = ANY(keep.apartment_ids)"), 'gönderilmiş / bekleyen kalemin kapsadığı daire kaydı korunur');
+    assert.ok(release.sql.includes('ORDER BY fa2.run_id, fa2.apartment_id FOR UPDATE OF fa2'), 'kilit sırası (run_id, apartment_id)');
+    const items = indexOf(/^UPDATE finance_reminder_items i SET /);
+    const at = indexOf(/^DELETE FROM finance_reminder_apartments fa WHERE /);
+    const unlink = indexOf(/^UPDATE site_people SET/);
+    assert.ok(items >= 0 && items < at && at < unlink, [items, at, unlink].join(','));
+  });
+
+  it('R16: kalem güncellenmediyse (kullanıcının hatırlatma kalemi yok) aralık kayıtlarına HİÇ dokunulmaz', async () => {
+    state.optionalTables = { reminders: true };
+    state.reminderRows = 0;
+    state.reminderRunIds = [];
+    await performAccountDeletion(12345);
+    assert.equal(sqls(/^DELETE FROM finance_reminder_apartments/).length, 0);
+  });
+
+  it('R10: finance_reminder_items / push tabloları yoksa (eski şema) bu adımlar atlanır; silme yine tamamlanır', async () => {
+    state.optionalTables = {};
+    const result = await performAccountDeletion(12345);
+    assert.equal(sqls(/^UPDATE finance_reminder_items/).length, 0);
+    assert.equal(sqls(/^DELETE FROM push_/).length, 0);
+    assert.equal(result.summary.reminder_rows, 0);
+    assert.ok(log.some((entry) => entry.sql === 'COMMIT'));
   });
 
   it('parola özeti: her çağrıda farklı, geçerli bcrypt biçiminde DEĞİL (hiçbir parola eşleşmez)', async () => {
@@ -786,6 +862,43 @@ describe('hesap silme: önizleme', () => {
     assert.equal(/Bekleyen site başvurunuz/.test(all), false);
     assert.equal(/cihazların/.test(all), false);
     assert.equal(/yasal onayların/.test(all), false);
+  });
+
+  it('R10/R9: önizleme — silinenler: telefon bildirimi cihazları (sayı) + bekleyen aidat hatırlatma adresi; saklananlar: yüklenen belgeler ("Silinmiş Kullanıcı" yükleyen), makbuz / tahsilat kayıtları KMK / VUK gereği DEĞİŞTİRİLMEDEN (ad anlık görüntüsü anonimleştirilmez)', async () => {
+    previewHandlers();
+    state.optionalTables = { push: true, documents: true, reminders: true };
+    state.optionalCounts = { pushDevices: 2, uploadedDocuments: 3, pendingReminders: 1 };
+    const preview = await previewAccountDeletion(USER);
+    const remove = preview.will_remove.join('\n');
+    const keep = preview.will_keep.join('\n');
+    assert.match(remove, /Telefon bildirimi için kayıtlı cihazlarınız \(2\) ve bunların bildirim jetonları ile bekleyen telefon bildirimleriniz silinir/);
+    assert.match(remove, /bekleyen aidat hatırlatma e-postalarının \(1\) kayıtlarındaki e-posta adresiniz silinir; bu hatırlatmalar gönderilmez/);
+    assert.match(keep, /Yüklediğiniz belgeler \(3 dosya sürümü\) site yönetiminde kalır \(belgeler siteye aittir\); yükleyen adı "Silinmiş Kullanıcı" olarak görünür/);
+    assert.match(keep, /Makbuz ve tahsilat kayıtları .*yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez/);
+    assert.equal(/\d+ (yıl|ay)\b/.test(keep), false, 'saklama süresi uydurulmaz');
+    assert.equal(JSON.stringify(preview).includes('Ada'), false);
+  });
+
+  it('R10: sayaçlar 0 / tablo yoksa bu satırlar çıkmaz (belge, push, hatırlatma); makbuz satırı üyeliği olmayan hesapta çıkmaz', async () => {
+    previewHandlers();
+    const original = pool.query;
+    pool.query = async (text, params) => {
+      const sql = norm(text);
+      if (/^SELECT \(SELECT COUNT\(\*\) FROM apartment_memberships/.test(sql)) {
+        return ok([{ apartment_links: 0, site_links: 0, active_passes: 0, active_qr: 0, pending_applications: 0, closed_applications: 0, devices: 0, has_consents: false }]);
+      }
+      return original(text, params);
+    };
+    state.optionalTables = { push: true, documents: true, reminders: true };
+    state.optionalCounts = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0 };
+    let preview = await previewAccountDeletion(USER);
+    let all = preview.will_keep.concat(preview.will_remove).join('\n');
+    assert.equal(/Telefon bildirimi için|bekleyen aidat hatırlatma|Yüklediğiniz belgeler|Makbuz ve tahsilat/.test(all), false);
+    state.optionalTables = {};
+    state.optionalCounts = { pushDevices: 5, uploadedDocuments: 5, pendingReminders: 5 };
+    preview = await previewAccountDeletion(USER);
+    all = preview.will_keep.concat(preview.will_remove).join('\n');
+    assert.equal(/Telefon bildirimi için|bekleyen aidat hatırlatma|Yüklediğiniz belgeler/.test(all), false, 'tablo yoksa sayılmaz (katalog bayrağı)');
   });
 
   it('süper kullanıcı: SUPER_USER engeli; son yönetici: LAST_SITE_MANAGER + site_id', async () => {

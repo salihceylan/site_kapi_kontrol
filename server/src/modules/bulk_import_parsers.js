@@ -1,0 +1,491 @@
+// Toplu yükleme (Faz 2b) değer ayrıştırıcıları: TEK modül, saf (DB/ağ bağımsız), hiçbir girdi için özel hata FIRLATMAZ.
+//
+// Sözleşme: docs/PLATFORM_TOPLU_ISLEMLER.md ("Değer kuralları"). İstemci ayrıştırması yalnız kolaylıktır; sunucu HER hücreyi güvenilmez sayar ve burada
+// yeniden doğrular. Her okuyucu `{ value, error?, warnings? }` döndürür: `error` bir satır-hata kodudur (REQUIRED hariç, çağıran üretir);
+// `warnings` uyarı kodlarıdır. `value === null` hücre boş demektir (HİÇBİR ZAMAN mevcut değeri silmez).
+
+import { isDroppedCodePoint, cleanText } from '../utils/safe_text.js';
+import {
+  foldText,
+  normalizePersonEmail,
+  normalizePersonName,
+  normalizePersonPhone,
+  normalizePlate,
+} from './people_common.js';
+import { INTERNAL_EMAIL_SUFFIX } from './people_sync_sql.js';
+import { CELL_MAX_LENGTH, RELATION_WORDS, RESPONSIBLE_WORDS, foldHeader } from './bulk_import_spec.js';
+
+export const MAX_PLATES_PER_CELL = 5;
+export const AREA_MAX = 999999.99;
+export const FLOOR_MIN = -20;
+export const FLOOR_MAX = 500;
+export const LAND_SHARE_MAX = 1_000_000_000;
+
+const lengthOf = (text) => Array.from(text).length;
+
+// --- Metin ---------------------------------------------------------------------------------------------------
+
+/** JSON hücre değeri -> ham metin (sayılar düz biçimde). Metin/sayı dışı -> null. */
+export function cellToText(raw) {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  if (typeof raw === 'string') {
+    return raw;
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    if (Number.isInteger(raw)) {
+      return String(raw);
+    }
+    const plain = String(raw);
+    return /e/i.test(plain) ? raw.toFixed(10).replace(/0+$/, '').replace(/\.$/, '') : plain;
+  }
+  return null;
+}
+
+const TAB = 9;
+const CR = 13;
+
+/**
+ * Ham metnin ilk "anlamlı" karakteri: görünmez/yön karakterleri, kontrol karakterleri ve boşluk atlanır; TAB ve CR atlanMAZ (formül öneki sayılır).
+ * Sözleşme: kırpılmış metin `=`, `@`, TAB ya da CR ile başlıyorsa FORMULA_LIKE.
+ */
+export function leadingChar(text) {
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    if (code === TAB || code === CR) {
+      return ch;
+    }
+    if (code === 0x20 || code === 0xa0 || isDroppedCodePoint(code)) {
+      continue;
+    }
+    return ch;
+  }
+  return '';
+}
+
+function collapseSpaces(text) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function collapseKeepingLines(text) {
+  return text
+    .split('\n')
+    .map((line) => line.replace(/[^\S\n]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Metin hücresi: NFC, kontrol ve görünmez/yön karakterleri silinir, NBSP/ardışık boşluk tekile, kırpılır; boş = yok.
+ * `=`, `@`, TAB, CR ile başlayan hücre FORMULA_LIKE; `forbidSigned` iken `+`/`-` ile başlayan da FORMULA_LIKE (ad, e-posta, blok, tip, plaka).
+ * `max` kod noktası aşılırsa TOO_LONG. Sessiz "temizleme" YOK: kullanıcı neyin reddedildiğini görür.
+ */
+export function readText(raw, { max = CELL_MAX_LENGTH, forbidSigned = false, multiline = false } = {}) {
+  const text = cellToText(raw);
+  if (text === null) {
+    return { value: null };
+  }
+  const lead = leadingChar(text);
+  // Önce görünmezler atılır, SONRA NFC (atılan karakter birleşik harf dizisini bölmüş olabilir; sonuç idempotent kalır).
+  const cleaned = (multiline ? collapseKeepingLines(cleanText(text, { multiline: true })) : collapseSpaces(cleanText(text))).normalize('NFC');
+  if (cleaned === '') {
+    return { value: null };
+  }
+  for (const ch of new Set([lead, cleaned[0]])) {
+    if (ch === '=' || ch === '@' || ch === '\t' || ch === '\r' || (forbidSigned && (ch === '+' || ch === '-'))) {
+      return { value: null, error: 'FORMULA_LIKE', lead: ch };
+    }
+  }
+  if (lengthOf(cleaned) > max) {
+    return { value: null, error: 'TOO_LONG', max };
+  }
+  return { value: cleaned };
+}
+
+/** Ad Soyad (2-100 karakter). */
+export function readName(raw) {
+  const text = readText(raw, { forbidSigned: true });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  try {
+    return { value: normalizePersonName(text.value, 'ad_soyad') };
+  } catch (_error) {
+    return { value: null, error: 'NAME_INVALID' };
+  }
+}
+
+/** Telefon -> +90XXXXXXXXXX. Excel'in baştaki sıfırı attığı 10 haneli numara da kabul edilir. */
+export function readPhone(raw) {
+  const text = readText(raw);
+  if (text.error || text.value === null) {
+    return text;
+  }
+  try {
+    return { value: normalizePersonPhone(text.value, 'telefon') };
+  } catch (_error) {
+    return { value: null, error: 'PHONE_INVALID' };
+  }
+}
+
+/** E-posta (küçük harf). `@ahbu.local` EMAIL_INTERNAL. */
+export function readEmail(raw) {
+  const text = readText(raw, { forbidSigned: true });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  let email;
+  try {
+    email = normalizePersonEmail(text.value, 'e_posta');
+  } catch (_error) {
+    return { value: null, error: 'EMAIL_INVALID' };
+  }
+  if (email !== null && email.endsWith(INTERNAL_EMAIL_SUFFIX)) {
+    return { value: null, error: 'EMAIL_INTERNAL' };
+  }
+  return { value: email };
+}
+
+// --- Sayı (m²) -----------------------------------------------------------------------------------------------
+
+const isThousandsGroups = (parts) =>
+  parts.length >= 2 && /^[1-9]\d{0,2}$/.test(parts[0]) && parts.slice(1).every((part) => /^\d{3}$/.test(part));
+
+/**
+ * m² sayısı. JSON number olduğu gibi. Metinde: boşluk/NBSP silinir, sondaki m2/m²/㎡ atılır; hem `.` hem `,` varsa SONUNCUSU ondalık, öbürü binlik
+ * (3'lü gruplar şart); yalnız `,` -> ondalık; yalnız `.`: ondalık (125.5) ya da tam 3 rakamlı gruplarla binlik (1.250 -> 1250); aksi NUMBER_INVALID.
+ * 2'den fazla ondalık yuvarlanır (ROUNDED). 0 < değer <= 999999.99 (NUMBER_RANGE); < 10 ya da > 2000 m² AREA_UNUSUAL (uyarı).
+ */
+export function readArea(raw) {
+  if (raw === null || raw === undefined) {
+    return { value: null };
+  }
+  const warnings = [];
+  let number;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) {
+      return { value: null, error: 'NUMBER_INVALID' };
+    }
+    number = raw;
+    if (Math.abs(number * 100 - Math.round(number * 100)) > 1e-6) {
+      warnings.push('ROUNDED');
+    }
+  } else {
+    const text = readText(raw);
+    if (text.error || text.value === null) {
+      return text;
+    }
+    let source = text.value.replace(/\s/g, '').replace(/(?:m2|m²|㎡)$/i, '');
+    let sign = 1;
+    if (source.startsWith('-') || source.startsWith('+')) {
+      sign = source.startsWith('-') ? -1 : 1;
+      source = source.slice(1);
+    }
+    if (source === '' || !/^[0-9.,]+$/.test(source) || !/\d/.test(source)) {
+      return { value: null, error: 'NUMBER_INVALID' };
+    }
+    let intPart;
+    let fracPart = '';
+    const hasDot = source.includes('.');
+    const hasComma = source.includes(',');
+    if (hasDot && hasComma) {
+      const decimalSeparator = source.lastIndexOf('.') > source.lastIndexOf(',') ? '.' : ',';
+      const thousandsSeparator = decimalSeparator === '.' ? ',' : '.';
+      const pieces = source.split(decimalSeparator);
+      if (pieces.length !== 2 || pieces[1].includes(thousandsSeparator)) {
+        return { value: null, error: 'NUMBER_INVALID' };
+      }
+      const groups = pieces[0].split(thousandsSeparator);
+      if (groups.length > 1 && !isThousandsGroups(groups)) {
+        return { value: null, error: 'NUMBER_INVALID' };
+      }
+      intPart = groups.join('');
+      fracPart = pieces[1];
+    } else if (hasComma) {
+      const pieces = source.split(',');
+      if (pieces.length !== 2) {
+        return { value: null, error: 'NUMBER_INVALID' };
+      }
+      [intPart, fracPart] = pieces;
+    } else if (hasDot) {
+      const pieces = source.split('.');
+      if (isThousandsGroups(pieces)) {
+        intPart = pieces.join('');
+      } else if (pieces.length === 2) {
+        [intPart, fracPart] = pieces;
+      } else {
+        return { value: null, error: 'NUMBER_INVALID' };
+      }
+    } else {
+      intPart = source;
+    }
+    if (!/^\d*$/.test(intPart) || !/^\d*$/.test(fracPart) || (intPart === '' && fracPart === '')) {
+      return { value: null, error: 'NUMBER_INVALID' };
+    }
+    if (fracPart.replace(/0+$/, '').length > 2) {
+      warnings.push('ROUNDED');
+    }
+    number = sign * Number(`${intPart === '' ? '0' : intPart}.${fracPart === '' ? '0' : fracPart}`);
+  }
+  const value = Math.round(number * 100) / 100;
+  if (!Number.isFinite(value) || value <= 0 || value > AREA_MAX) {
+    return { value: null, error: 'NUMBER_RANGE' };
+  }
+  if (value < 10 || value > 2000) {
+    warnings.push('AREA_UNUSUAL');
+  }
+  return { value, warnings };
+}
+
+/**
+ * Arsa payı parçası (pay ya da payda): tam sayı. Metinde 3'lü binlik noktası kabul edilir (1.000 -> 1000). Aralık LAND_SHARE_INVALID.
+ */
+export function readLandShareInt(raw, { min }) {
+  if (raw === null || raw === undefined) {
+    return { value: null };
+  }
+  let number;
+  if (typeof raw === 'number') {
+    number = raw;
+  } else {
+    const text = readText(raw);
+    if (text.error || text.value === null) {
+      return text;
+    }
+    const source = text.value.replace(/\s/g, '');
+    const pieces = source.split('.');
+    if (/^\d+$/.test(source)) {
+      number = Number(source);
+    } else if (isThousandsGroups(pieces)) {
+      number = Number(pieces.join(''));
+    } else {
+      return { value: null, error: 'LAND_SHARE_INVALID' };
+    }
+  }
+  if (!Number.isInteger(number) || number < min || number > LAND_SHARE_MAX) {
+    return { value: null, error: 'LAND_SHARE_INVALID' };
+  }
+  return { value: number };
+}
+
+/** Kat: tam sayı -20..500; zemin/giriş = 0, bodrum = -1 (N. bodrum = -N), "3. kat" = 3. */
+export function readFloor(raw) {
+  if (raw === null || raw === undefined) {
+    return { value: null };
+  }
+  let value;
+  if (typeof raw === 'number') {
+    value = raw;
+  } else {
+    const text = readText(raw);
+    if (text.error || text.value === null) {
+      return text;
+    }
+    const folded = foldText(text.value).replace(/\s+/g, ' ').trim();
+    let match;
+    if (/^(?:zemin|giris)(?: kat)?$/.test(folded)) {
+      value = 0;
+    } else if (/^bodrum(?: kat)?$/.test(folded)) {
+      value = -1;
+    } else if ((match = /^([1-4])\s*\.?\s*bodrum(?: kat)?$/.exec(folded))) {
+      value = -Number(match[1]);
+    } else if ((match = /^(?:kat\s*)?([+-]?\d{1,3})\s*\.?\s*(?:kat)?$/.exec(folded))) {
+      value = Number(match[1]);
+    } else {
+      return { value: null, error: 'FLOOR_INVALID' };
+    }
+  }
+  if (!Number.isInteger(value) || value < FLOOR_MIN || value > FLOOR_MAX) {
+    return { value: null, error: 'FLOOR_INVALID' };
+  }
+  return { value };
+}
+
+// --- Tarih ---------------------------------------------------------------------------------------------------
+
+function addDaysIso(iso, days) {
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return `${String(date.getUTCFullYear()).padStart(4, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Giriş tarihi: GG.AA.YYYY, G.A.YYYY, GG/AA/YYYY, GG-AA-YYYY, YYYY-AA-GG (ISO saat eki yok sayılır). 2 haneli yıl DATE_INVALID.
+ * 1900..bugün+366 gün: gelecek tarih FUTURE_DATE (uyarı); ötesi DATE_RANGE.
+ * @param {string} today Istanbul bugünü (YYYY-MM-DD)
+ */
+export function readDate(raw, today) {
+  if (raw === null || raw === undefined) {
+    return { value: null };
+  }
+  if (typeof raw === 'number') {
+    return { value: null, error: 'DATE_INVALID' };
+  }
+  const text = readText(raw);
+  if (text.error || text.value === null) {
+    return text;
+  }
+  const source = text.value.replace(/[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/i, '');
+  let year;
+  let month;
+  let day;
+  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(source);
+  if (match) {
+    [, year, month, day] = match;
+  } else {
+    match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(source);
+    if (!match) {
+      return { value: null, error: 'DATE_INVALID' };
+    }
+    [, day, month, year] = match;
+  }
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  const probe = new Date(Date.UTC(y, m - 1, d));
+  if (y < 1000 || probe.getUTCFullYear() !== y || probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) {
+    return { value: null, error: 'DATE_INVALID' };
+  }
+  const iso = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  if (y < 1900 || iso > addDaysIso(today, 366)) {
+    return { value: null, error: 'DATE_RANGE' };
+  }
+  return { value: iso, warnings: iso > today ? ['FUTURE_DATE'] : [] };
+}
+
+// --- Enum'lar ------------------------------------------------------------------------------------------------
+
+function wordMap(words) {
+  const map = new Map();
+  for (const [value, list] of Object.entries(words)) {
+    for (const word of list) {
+      map.set(foldHeader(word), value);
+    }
+  }
+  return map;
+}
+
+const RELATION_MAP = wordMap(RELATION_WORDS);
+const RESPONSIBLE_MAP = wordMap(RESPONSIBLE_WORDS);
+
+/** İlişki sözcüğü -> owner | tenant | family_member | resident; boş -> null (görüş yok). Bilinmeyen RELATION_INVALID. */
+export function readRelation(raw) {
+  const text = readText(raw, { forbidSigned: true, max: 80 });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  const relation = RELATION_MAP.get(foldHeader(text.value));
+  return relation ? { value: relation } : { value: null, error: 'RELATION_INVALID' };
+}
+
+/** Borç sorumlusu: Malik / Kiracı / İkisi -> owner | tenant | both. */
+export function readResponsible(raw) {
+  const text = readText(raw, { forbidSigned: true, max: 80 });
+  if (text.error || text.value === null) {
+    return text;
+  }
+  const party = RESPONSIBLE_MAP.get(foldHeader(text.value));
+  return party ? { value: party } : { value: null, error: 'RESPONSIBLE_INVALID' };
+}
+
+// --- Plaka ---------------------------------------------------------------------------------------------------
+
+/**
+ * Plaka hücresi: en çok 5 plaka; ayırıcı `,` `;` `/` `|` satır sonu. Geçerli plakalar (normalize, yinelenen atılır) ve geçersiz parçalar ayrı döner.
+ * `=`/`@`/TAB/CR/`+`/`-` ile başlayan hücre FORMULA_LIKE; 5'ten fazla parça TOO_MANY_PLATES.
+ */
+export function readPlates(raw) {
+  const text = cellToText(raw);
+  if (text === null) {
+    return { plates: [], invalid: [] };
+  }
+  const lead = leadingChar(text);
+  const cleaned = collapseKeepingLines(cleanText(text, { multiline: true })).normalize('NFC');
+  if (cleaned === '') {
+    return { plates: [], invalid: [] };
+  }
+  for (const ch of new Set([lead, cleaned[0]])) {
+    if (ch === '=' || ch === '@' || ch === '\t' || ch === '\r' || ch === '+' || ch === '-') {
+      return { plates: [], invalid: [], error: 'FORMULA_LIKE', lead: ch };
+    }
+  }
+  if (lengthOf(cleaned) > CELL_MAX_LENGTH) {
+    return { plates: [], invalid: [], error: 'TOO_LONG', max: CELL_MAX_LENGTH };
+  }
+  const parts = cleaned
+    .split(/[,;/|\n]/)
+    .map((part) => collapseSpaces(part))
+    .filter((part) => part !== '');
+  if (parts.length > MAX_PLATES_PER_CELL) {
+    return { plates: [], invalid: [], error: 'TOO_MANY_PLATES' };
+  }
+  const plates = [];
+  const invalid = [];
+  const seen = new Set();
+  for (const part of parts) {
+    try {
+      const { plate, display } = normalizePlate(part);
+      if (!seen.has(plate)) {
+        seen.add(plate);
+        plates.push({ plate, display });
+      }
+    } catch (_error) {
+      invalid.push(Array.from(part).slice(0, 40).join(''));
+    }
+  }
+  return { plates, invalid };
+}
+
+// --- Daire etiketi eşleşmesi ---------------------------------------------------------------------------------
+
+function blockNorm(text) {
+  return foldText(text).replace(/[._\-/,:;]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function stripBlockWord(norm) {
+  const tokens = norm.split(' ');
+  if (tokens.length > 1 && tokens[0] === 'blok') {
+    tokens.shift();
+  } else if (tokens.length > 1 && tokens[tokens.length - 1] === 'blok') {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
+
+/**
+ * Blok eşleşmesi: önce katlanmış TAM ad; yoksa baştaki/sondaki "blok" sözcüğü atılmış hâl ("A", "A Blok", "Blok A" aynı).
+ * @param {{ id: number, name: string }[]} blocks
+ * @returns {{ block?: object, error?: 'BLOCK_NOT_FOUND'|'BLOCK_AMBIGUOUS' }}
+ */
+export function matchBlock(input, blocks) {
+  const wanted = blockNorm(input);
+  if (wanted === '') {
+    return { error: 'BLOCK_NOT_FOUND' };
+  }
+  const normalized = blocks.map((block) => ({ block, norm: blockNorm(block.name) }));
+  const exact = normalized.filter((entry) => entry.norm === wanted);
+  if (exact.length === 1) {
+    return { block: exact[0].block };
+  }
+  if (exact.length > 1) {
+    return { error: 'BLOCK_AMBIGUOUS' };
+  }
+  const stripped = stripBlockWord(wanted);
+  const loose = normalized.filter((entry) => stripBlockWord(entry.norm) === stripped);
+  if (loose.length === 1) {
+    return { block: loose[0].block };
+  }
+  return { error: loose.length > 1 ? 'BLOCK_AMBIGUOUS' : 'BLOCK_NOT_FOUND' };
+}
+
+/**
+ * Daire anahtarı: "5", "05", "Daire 5", "D5", "No: 5", "Daire No: 5" -> `n:5`; başka etiket -> `l:<katlanmış etiket>`.
+ * Aynı fonksiyon veritabanındaki unit_label ("Daire N") için de çalışır.
+ */
+export function apartmentKey(text) {
+  const norm = foldText(text).replace(/[.:#\-_/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const match = /^(?:daire|kapi|apt|bagimsiz bolum|numara|nr|no|d)?\s*(?:no|numara|nr)?\s*(\d{1,6})$/.exec(norm);
+  return match ? `n:${Number(match[1])}` : `l:${norm}`;
+}

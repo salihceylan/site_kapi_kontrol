@@ -382,8 +382,12 @@ describe('finans: borçlandırma / ek borç / tahsilat gövdeleri', () => {
 
   it('tahsilat: kuruş tamsayı, yöntem, GELECEK TARİH 400, anahtar zorunlu; açıklama temizlenir', () => {
     const body = { apartment_id: 9, amount_minor: 50000, entry_date: '2026-10-16', method: 'cash', description: '  Nakit  tahsilat ', idempotency_key: 'k-1' };
-    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1' });
+    assert.deepEqual(parsePaymentInput(body, NOW), { apartmentId: 9, amountMinor: 50000, entryDate: '2026-10-16', method: 'cash', description: 'Nakit tahsilat', idempotencyKey: 'k-1', accountId: null });
     assert.equal(parsePaymentInput({ ...body, apartment_id: '9', description: undefined }, NOW).description, null);
+    // Faz 4b: isteğe bağlı kasa / banka hesabı kimliği
+    assert.equal(parsePaymentInput({ ...body, account_id: 4 }, NOW).accountId, 4);
+    throwsCode(() => parsePaymentInput({ ...body, account_id: 'abc' }, NOW), 'INVALID_BODY');
+    throwsCode(() => parsePaymentInput({ ...body, account_id: -2 }, NOW), 'INVALID_BODY');
     for (const method of METHODS) assert.equal(parsePaymentInput({ ...body, method }, NOW).method, method);
     for (const bad of [
       { entry_date: '2026-10-17' }, { entry_date: '2027-01-01' }, { entry_date: '2026-02-30' }, { entry_date: undefined }, { amount_minor: 0 }, { amount_minor: -5 }, { amount_minor: 50.5 }, { amount_minor: '500' },
@@ -478,7 +482,12 @@ describe('finans: yanıt eşleyicileri ve gizlilik', () => {
     assert.deepEqual(entry, {
       id: 12, kind: 'payment', amount_minor: -50000, period: '2026-10', entry_date: '2026-10-16', due_date: null, description: 'Nakit', method: 'cash', payer_party: 'both', definition_name: null,
       reverses_entry_id: null, reversed_by_entry_id: 13, reversal_reason: null, created_by_name: 'Ali', created_at: '2026-10-16T09:00:00.000Z',
+      late_fee_run_id: null, receipt: null,
     });
+    // Faz 4b: makbuz özeti (eklemeli alanlar)
+    const withReceipt = mapEntryRow({ id: '12', kind: 'payment', amount_minor: '-50000', period: '2026-10-01', entry_date: '2026-10-16', payer_party: 'both', late_fee_run_id: '5', receipt_id: '8', receipt_year: 2026, receipt_no: 12, receipt_cancel_year: 2026, receipt_cancel_no: 13 });
+    assert.equal(withReceipt.late_fee_run_id, 5);
+    assert.deepEqual(withReceipt.receipt, { id: 8, number: 'MK-2026-000012', status: 'cancelled', cancelled_by_number: 'MK-2026-000013' });
     const run = mapRunRow({ id: '3', definition_id: '7', period: '2026-10-01', total_minor: '3000000', apartment_count: '20', posted_at: new Date('2026-10-16T09:00:00Z') });
     assert.deepEqual(run, { id: 3, definition_id: 7, period: '2026-10', total_minor: 3000000, apartment_count: 20, posted_at: '2026-10-16T09:00:00.000Z' });
   });

@@ -692,7 +692,20 @@ function parsePaymentFields(input, now) {
     method: parseEnum(input.method, METHODS, 'Ödeme yöntemi (nakit, havale veya çek)'),
     description: normalizeFreeText(input.description, { label: 'Açıklama', max: DESCRIPTION_MAX }),
     idempotencyKey: parseIdempotencyKey(input.idempotency_key, { required: true }),
+    accountId: parseOptionalAccountId(input.account_id),
   };
+}
+
+/** Kasa / banka hesabı kimliği (Faz 4b; isteğe bağlı): yoksa null, geçersizse 400 INVALID_BODY. */
+function parseOptionalAccountId(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const id = parsePositiveId(value);
+  if (id === null) {
+    throw invalidBody('Hesap seçimi geçersiz.');
+  }
+  return id;
 }
 
 /** Tahsilat düzeltme gövdesi (apartment_id yok: kayıttan gelir). */
@@ -880,6 +893,23 @@ export function mapEntryRow(row) {
     reversal_reason: row.reversal_reason ?? null,
     created_by_name: row.created_by_name ?? null,
     created_at: toIso(row.created_at),
+    late_fee_run_id: row.late_fee_run_id === null || row.late_fee_run_id === undefined ? null : Number(row.late_fee_run_id),
+    receipt: mapEntryReceipt(row),
+  };
+}
+
+/** Ödeme satırının makbuzu (Faz 4b): { id, number, status, cancelled_by_number } ya da null. */
+function mapEntryReceipt(row) {
+  if (row.receipt_id === null || row.receipt_id === undefined) {
+    return null;
+  }
+  const number = (year, no) => `MK-${year}-${String(no).padStart(6, '0')}`;
+  const cancelled = row.receipt_cancel_no !== null && row.receipt_cancel_no !== undefined;
+  return {
+    id: Number(row.receipt_id),
+    number: number(row.receipt_year, row.receipt_no),
+    status: cancelled ? 'cancelled' : 'active',
+    cancelled_by_number: cancelled ? number(row.receipt_cancel_year, row.receipt_cancel_no) : null,
   };
 }
 
@@ -888,7 +918,18 @@ export function redactEntryForResident(entry) {
   return { ...entry, description: null, reversal_reason: null, created_by_name: null };
 }
 
-const BOARD_HIDDEN_KEYS = new Set(['created_by_name', 'closed_by_name', 'posted_by_name']);
+const BOARD_HIDDEN_KEYS = new Set([
+  'created_by_name',
+  'closed_by_name',
+  'posted_by_name',
+  'issued_by_name',
+  'voided_by_name',
+  'reconciled_by_name',
+  'added_by_name',
+  'removed_by_name',
+  'cancelled_by_name',
+  'cancel_note',
+]);
 
 /** Kurul (salt okuma) yanıtından yönetici adları çıkarılır (anahtarlar kalır, değer null). Girdi değişmez. */
 export function redactFinanceForBoard(value) {

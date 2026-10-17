@@ -43,11 +43,11 @@ afterEach(() => {
 });
 
 describe('acquireSessionLock', () => {
-  it('sabitler: sınıf "ANNC" (0x414E4E43), işler birbirinden ayrı (zamanlayıcı 1, e-posta kuyruğu 2, küresel e-posta 3); int4 aralığında', () => {
+  it('sabitler: sınıf "ANNC" (0x414E4E43), işler birbirinden ayrı (zamanlayıcı 1, e-posta kuyruğu 2, küresel e-posta 3, finans hatırlatma 4, push kuyruğu 5); int4 aralığında', () => {
     assert.equal(ANNOUNCEMENT_LOCK_CLASS, 0x414e4e43);
     assert.ok(ANNOUNCEMENT_LOCK_CLASS > 0 && ANNOUNCEMENT_LOCK_CLASS < 2 ** 31);
-    assert.deepEqual({ ...ANNOUNCEMENT_LOCK_JOBS }, { scheduler: 1, emailQueue: 2, emailGlobal: 3 });
-    assert.equal(new Set(Object.values(ANNOUNCEMENT_LOCK_JOBS)).size, 3);
+    assert.deepEqual({ ...ANNOUNCEMENT_LOCK_JOBS }, { scheduler: 1, emailQueue: 2, emailGlobal: 3, financeReminder: 4, pushQueue: 5 });
+    assert.equal(new Set(Object.values(ANNOUNCEMENT_LOCK_JOBS)).size, 5);
     assert.throws(() => {
       ANNOUNCEMENT_LOCK_JOBS.scheduler = 9;
     }, TypeError, 'dondurulmuş');

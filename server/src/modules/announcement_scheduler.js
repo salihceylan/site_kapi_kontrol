@@ -17,6 +17,8 @@ import { MAX_PUBLISH_ATTEMPTS } from './announcement_common.js';
 import { purgeStaleEmailHashes } from './announcement_email_queue.js';
 import { ANNOUNCEMENT_LOCK_JOBS, acquireSessionLock } from './announcement_lock.js';
 import { publishDueAnnouncement, recordPublishFailure } from './announcement_service.js';
+import { hasPendingPush } from './push_outbox.js';
+import { kickPushQueue } from './push_worker.js';
 
 export const SCHEDULER_INTERVAL_MS = 30 * 1000;
 export const SCHEDULER_FIRST_TICK_DELAY_MS = 5 * 1000;
@@ -32,6 +34,9 @@ export const schedulerHooks = {
   closeStaleEmails: () => failStaleRows(pool),
   hasPendingEmails: () => hasPendingEmails(),
   kickEmailQueue: () => kickEmailQueue(),
+  // Faz 3b-B telefon bildirimi: push kapalı / yapılandırılmamışsa hasPendingPush sorgusuz false döner.
+  hasPendingPush: () => hasPendingPush(),
+  kickPushQueue: () => kickPushQueue(),
 };
 
 let intervalTimer = null;
@@ -131,6 +136,15 @@ async function doTick() {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[announcement-scheduler] kuyruk kontrolu basarisiz:', error?.code || error?.message || 'hata');
+  }
+  // Telefon bildirimi kuyruğu (Faz 3b-B): bekleyen varsa arka planda (kendi tek-çalışan kilidi, push_worker.js); push hazır değilse sorgu bile yok.
+  try {
+    if (!stopped && (await schedulerHooks.hasPendingPush())) {
+      void schedulerHooks.kickPushQueue();
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[announcement-scheduler] push kuyruk kontrolu basarisiz:', error?.code || error?.message || 'hata');
   }
   return summary;
 }

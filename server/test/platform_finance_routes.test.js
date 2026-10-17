@@ -92,7 +92,7 @@ function installFakeDb() {
     if (/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/.test(sql)) return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
     if (STEP_SQLS.has(sql)) return ok();
     if (/^SELECT pg_try_advisory_xact_lock/.test(sql)) return ok([{ locked: true }]);
-    if (/^SELECT user_code FROM users WHERE user_code = \$1 FOR KEY SHARE$/.test(sql)) return ok([{ user_code: params?.[0] }]);
+    if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) return ok([{ user_code: params?.[0] }]);
     if (/^SELECT DISTINCT site_code FROM \(/.test(sql)) return ok();
     throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 220)}`);
   };
@@ -397,6 +397,9 @@ function paymentFlow({ balance = '-50000' } = {}) {
     [/^SELECT id, responsible_party FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE$/, () => ok([{ id: '5', responsible_party: 'both' }])],
     [/WHERE l\.site_code = \$1 AND l\.idempotency_key = \$2 LIMIT 1$/, () => ok()],
     [/^SELECT 1 FROM finance_period_closures WHERE site_code = \$1 AND period >= \$2::DATE LIMIT 1$/, () => ok()],
+    // Faz 4b: hesap gereksinimi (hesap yok) ve ayarlar (makbuz otomatik düzenleme KAPALI: bu test makbuz yolunu sınamaz; makbuz / hesap akışı finance4b_* testleri ve QA)
+    [/^SELECT bool_or\(is_active\) AS has_active FROM finance_accounts WHERE site_code = \$1 AND opening_date <= \$2::DATE HAVING COUNT\(\*\) > 0$/, () => ok()],
+    [/^SELECT receipts_auto_issue, .* FROM finance_settings WHERE site_code = \$1$/, () => ok([{ receipts_auto_issue: false, late_fee_enabled: false, late_fee_rate_bp: 500, late_fee_method: 'daily_30', late_fee_grace_days: 0, late_fee_start_period: null, reminders_enabled: false, reminder_min_overdue_minor: '5000', reminder_min_days_overdue: 5, reminder_min_interval_days: 14, reminder_max_consecutive: 3, settings_version: 1 }])],
     [/^INSERT INTO ledger_entries \(/, () => ok([{ id: '77' }])],
     [/WHERE l\.id = \$1 AND l\.site_code = \$2 LIMIT 1$/, () => ok([entryRow])],
     [/^SELECT COALESCE\(SUM\(amount_minor\), 0\)::TEXT AS balance FROM ledger_entries WHERE site_code = \$1 AND apartment_id = \$2$/, () => ok([{ balance }])],
@@ -408,7 +411,9 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     handlers.push(...paymentFlow());
     const res = await call('POST', `${base()}/payments`, { body: PAYMENT_BODY });
     assert.equal(res.status, 201, JSON.stringify(res.body));
-    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor']);
+    assert.deepEqual(Object.keys(res.body), ['entry', 'balance_minor', 'receipt', 'movement_id']);
+    assert.equal(res.body.receipt, null, 'makbuz otomatik düzenleme kapalı');
+    assert.equal(res.body.movement_id, null, 'hesap yok: 4a davranışı');
     assert.equal(res.body.entry.kind, 'payment');
     assert.equal(res.body.entry.amount_minor, -50000);
     assert.equal(res.body.entry.period, PAY_PERIOD.slice(0, 7));
@@ -421,7 +426,7 @@ describe('finans: işlem sırası ve yeniden deneme', () => {
     const advisory = idx(/^SELECT pg_advisory_xact_lock/);
     const moduleCheck = idx(/^SELECT enabled FROM site_modules/);
     const apartment = idx(/FROM apartments WHERE id = \$1 AND site_code = \$2 FOR KEY SHARE/);
-    const actorLock = idx(/^SELECT user_code FROM users WHERE user_code = \$1 FOR KEY SHARE$/);
+    const actorLock = idx(/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/);
     const insert = idx(/^INSERT INTO ledger_entries/);
     const audit = idx(/^INSERT INTO audit_log/);
     const commit = idx(/^COMMIT$/);

@@ -8,10 +8,12 @@ import {
   EXPORT_NOTICE,
   SHRINKABLE_SECTIONS,
   acquireExportSlot,
+  collectHooks,
   collectPersonalData,
   exportDeps,
   exportInternals,
   exportMyData,
+  recordExportAudit,
   releaseExportSlot,
   serializeWithinLimit,
 } from '../src/modules/account_export_service.js';
@@ -193,13 +195,13 @@ describe('dışa aktarma: boyut sınırı ve kısaltma', () => {
 });
 
 describe('dışa aktarma: hız sınırı sayacı (24 saatte 3)', () => {
-  function fakeDb({ used = 0, retryAfter = 7200, user = { deleted_at: null } } = {}) {
+  function fakeDb({ used = 0, retryAfter = 7200, user = { user_code: 12345 } } = {}) {
     const log = [];
     const client = {
       query: async (text, params) => {
         const sql = norm(text);
         log.push({ sql, params: params ?? [] });
-        if (/^SELECT deleted_at FROM users/.test(sql)) return ok(user ? [user] : []);
+        if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) return ok(user ? [user] : []);
         if (/^SELECT COUNT\(\*\)::INTEGER AS used/.test(sql)) return ok([{ used, retry_after: retryAfter }]);
         if (/^INSERT INTO account_data_exports/.test(sql)) return ok([{ id: '901' }]);
         return ok();
@@ -217,6 +219,11 @@ describe('dışa aktarma: hız sınırı sayacı (24 saatte 3)', () => {
     assert.equal(sqls[0], 'BEGIN');
     assert.ok(/^SELECT pg_advisory_xact_lock\(hashtext\(\$1\)\)$/.test(sqls[1]));
     assert.equal(log[1].params[0], 'account_export:12345');
+    // R16 P2-3: canlı kullanıcı kilidi (deleted_at IS NULL ... FOR KEY SHARE) sayım ve EKLEMEDEN önce, aynı işlemde
+    const lockAt = sqls.findIndex((s) => /FOR KEY SHARE$/.test(s));
+    assert.ok(lockAt > 1 && lockAt < sqls.findIndex((s) => /^SELECT COUNT/.test(s)), sqls.join(' | '));
+    assert.deepEqual(log[lockAt].params, [12345]);
+    assert.equal(sqls.some((s) => /^SELECT deleted_at FROM users/.test(s)), false, 'kilitsiz deleted_at okuması kalmadı');
     assert.ok(sqls.findIndex((s) => /^SELECT COUNT/.test(s)) < sqls.findIndex((s) => /^INSERT INTO/.test(s)), 'sayım ekleme öncesi (aynı kilit altında)');
     assert.equal(sqls.at(-1), 'COMMIT');
     const count = log.find((entry) => /^SELECT COUNT/.test(entry.sql));
@@ -238,11 +245,12 @@ describe('dışa aktarma: hız sınırı sayacı (24 saatte 3)', () => {
   });
 
   it('silinmiş / olmayan hesap: 401 ACCOUNT_DELETED, ekleme yok', async () => {
-    for (const user of [null, { deleted_at: new Date() }]) {
-      const { log, db } = fakeDb({ user });
-      await assert.rejects(acquireExportSlot(12345, db), (error) => error.code === 'ACCOUNT_DELETED' && error.statusCode === 401);
-      assert.equal(log.some((entry) => /^INSERT/.test(entry.sql)), false);
-    }
+    // satır dönmez: kullanıcı yok YA DA silinmiş (sorgu deleted_at IS NULL ister; silme COMMIT'ini bekledikten sonra satır eşleşmez)
+    const { log, db } = fakeDb({ user: null });
+    await assert.rejects(acquireExportSlot(12345, db), (error) => error.code === 'ACCOUNT_DELETED' && error.statusCode === 401);
+    assert.equal(log.some((entry) => /^INSERT/.test(entry.sql)), false);
+    assert.equal(log.some((entry) => /^COMMIT$/.test(entry.sql)), false);
+    assert.equal(log.at(-1).sql, 'ROLLBACK');
   });
 
   it('hak iadesi: belirli kaydı siler; veritabanı hatası yutulur ve yalnız kodla loglanır', async () => {
@@ -333,6 +341,16 @@ describe('dışa aktarma: istek akışı (parola -> hak -> üretim; başarısız
     assert.deepEqual(order.at(-1), ['release', 77]);
   });
 
+  it('R16 P2-3: denetim sırasında hesap silinmişse 401 ACCOUNT_DELETED; dosya DÖNMEZ ve hak İADE edilir (üretimden SONRA silme yarışı)', async () => {
+    exportDeps.audit = async () => {
+      order.push(['audit']);
+      throw Object.assign(new Error('Bu hesap silinmiş.'), { code: 'ACCOUNT_DELETED', statusCode: 401 });
+    };
+    await assert.rejects(exportMyData({ authUser: { user_code: 12345 }, body: { current_password: 'Parola-1' } }), (e) => e.code === 'ACCOUNT_DELETED' && e.statusCode === 401);
+    assert.deepEqual(order.map((entry) => entry[0]), ['password', 'slot', 'collect', 'audit', 'release']);
+    assert.deepEqual(order.at(-1), ['release', 77]);
+  });
+
   it('kimlik çözülemezse 401 ACCOUNT_DELETED ve hiçbir adım çalışmaz', async () => {
     await assert.rejects(exportMyData({ authUser: {}, body: {} }), (e) => e.code === 'ACCOUNT_DELETED');
     assert.deepEqual(order, []);
@@ -352,6 +370,48 @@ describe('dışa aktarma: istek akışı (parola -> hak -> üretim; başarısız
     );
     assert.deepEqual(order.map((entry) => entry[0]), ['password', 'slot', 'collect', 'release']);
     assert.deepEqual(order.at(-1), ['release', 77]);
+  });
+});
+
+describe('dışa aktarma denetimi: canlı kullanıcı kilidi altında (R16 P2-3)', () => {
+  function fakeAuditDb({ live = true } = {}) {
+    const log = [];
+    const client = {
+      query: async (text, params) => {
+        const sql = norm(text);
+        log.push({ sql, params: params ?? [] });
+        if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) return ok(live ? [{ user_code: params[0] }] : []);
+        return ok();
+      },
+      release() {},
+    };
+    return { log, db: { connect: async () => client } };
+  }
+
+  it('canlı hesap: BEGIN -> kullanıcı satırı KEY SHARE -> audit INSERT (yalnız kullanıcı kodu + bayt + kısaltma) -> COMMIT', async () => {
+    const { log, db } = fakeAuditDb();
+    await recordExportAudit(12345, { bytes: 4096, truncated: false }, db);
+    const sqls = log.map((entry) => entry.sql);
+    const lock = sqls.findIndex((sql) => /FOR KEY SHARE$/.test(sql));
+    const insert = sqls.findIndex((sql) => /^INSERT INTO audit_log/.test(sql));
+    assert.ok(sqls[0] === 'BEGIN' && lock > 0 && lock < insert && insert < sqls.indexOf('COMMIT'), sqls.join(' | '));
+    const audit = log[insert];
+    assert.equal(audit.params[0], 12345, 'actor_user_code');
+    assert.equal(audit.params[1], null, 'actor adı yok');
+    assert.equal(audit.params[3], 'account.data_exported');
+    assert.deepEqual(JSON.parse(audit.params[7]), { bytes: 4096, truncated: false });
+  });
+
+  it('silinmiş hesap: 401 ACCOUNT_DELETED, audit satırı YAZILMAZ, ROLLBACK (silinmiş hesap adına denetim kaydı oluşmaz)', async () => {
+    const { log, db } = fakeAuditDb({ live: false });
+    await assert.rejects(recordExportAudit(12345, { bytes: 1, truncated: false }, db), (e) => e.code === 'ACCOUNT_DELETED' && e.statusCode === 401);
+    assert.equal(log.some((entry) => /^INSERT INTO audit_log/.test(entry.sql)), false);
+    assert.equal(log.some((entry) => entry.sql === 'COMMIT'), false);
+    assert.equal(log.at(-1).sql, 'ROLLBACK');
+  });
+
+  it('varsayılan exportDeps.audit bu işlevi kullanır (kilitsiz doğrudan recordAudit değil)', () => {
+    assert.match(exportDeps.audit.toString(), /recordExportAudit/);
   });
 });
 
@@ -388,7 +448,10 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
       people: [{ id: '31', site_code: '1000000001', site_name: 'Gül Sitesi', full_name: null, phone: null, email: null, is_active: true, created_at: new Date('2026-01-03T00:00:00Z'), updated_at: new Date('2026-01-03T00:00:00Z') }],
       residencies: [{ id: '41', person_id: '31', apartment_id: '501', site_code: '1000000001', block_name: 'A Blok', unit_label: 'Daire 1', relation: 'owner', is_current: true, move_in_date: '2026-01-03', move_out_date: null, created_at: new Date('2026-01-03T00:00:00Z') }],
       vehicles: [{ id: '51', site_code: '1000000001', person_id: '31', plate_display: '34 ABC 123', plate: '34ABC123', is_active: true, created_at: new Date('2026-01-04T00:00:00Z') }],
-      notificationPreferences: [{ email_announcements: false, push_announcements: true, updated_at: new Date('2026-01-05T00:00:00Z') }],
+      notificationPreferencesBase: [{ email_announcements: false, push_announcements: true, updated_at: new Date('2026-01-05T00:00:00Z') }],
+      notificationPreferences: [{ email_announcements: false, email_finance_reminders: true, push_announcements: true, push_show_preview: true, push_quiet_enabled: true, push_quiet_start: 1350, push_quiet_end: 405, updated_at: new Date('2026-01-05T00:00:00Z') }],
+      uploadedDocuments: [],
+      financeReminders: [],
       announcements: [{ id: '61', site_code: '1000000001', site_name: 'Gül Sitesi', title: 'Su kesintisi', body: 'Yarın 10-12.', importance: 'normal', published_at: new Date('2026-01-06T00:00:00Z'), read_at: null }],
       siteApplications: [],
       guestPasses: [{ id: '71', site_code: '1000000001', door_name: 'Ana Kapı', title: 'Kargo', pass_type: 'single_use', expires_at: new Date('2026-01-07T00:00:00Z'), max_uses: 1, used_count: 0, is_active: true, created_at: new Date('2026-01-06T00:00:00Z') }],
@@ -406,6 +469,10 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
         log.push({ sql, params: params ?? [] });
         if (/^(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return ok();
         if (/^SELECT to_regclass\('public\.user_consents'\)/.test(sql)) return ok([{ t: extra.consentsTable === false ? null : 'user_consents' }]);
+        // sonradan eklenen migration nesneleri (katalog bakışı; $1 yok): varsayılan hiçbiri yok -> eski şekil / boş bölümler
+        if (/^SELECT \(SELECT COUNT\(\*\) FROM information_schema\.columns/.test(sql)) {
+          return ok([{ has_preference_extras: false, has_documents: false, has_reminders: false, has_receipts: false, ...(extra.optional ?? {}) }]);
+        }
         if (/^SELECT \* FROM user_consents WHERE user_code = \$1/.test(sql)) {
           return ok(extra.consentRows ?? [{ id: '1', user_code: 12345, document_id: 'terms', version: '2026-10-16', accepted_at: new Date('2026-01-01T00:00:00Z'), source: 'register', ip_address: '1.2.3.4' }]);
         }
@@ -472,6 +539,82 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
     const { data, truncated } = await collectPersonalData(12345, { db });
     assert.equal(data.door_events.length, 5000);
     assert.deepEqual(truncated, [{ section: 'door_events', included: 5000, reason: 'row_limit' }]);
+  });
+
+  it('R10/bd: bildirim tercihleri TAMAMI dosyada (duyuru + aidat hatırlatma e-postası + telefon + başlık gösterme + sessiz saatler "SS:DD"); ek sütunlar yoksa eski şekil', async () => {
+    let snapshot = fakeSnapshot({ optional: { has_preference_extras: true } });
+    let { data } = await collectPersonalData(12345, { db: snapshot.db });
+    assert.deepEqual(data.notification_preferences, {
+      email_announcements: false,
+      email_finance_reminders: true,
+      push_announcements: true,
+      push_show_preview: true,
+      push_quiet: { enabled: true, start: '22:30', end: '06:45' },
+      updated_at: new Date('2026-01-05T00:00:00Z'),
+    });
+    assert.ok(snapshot.log.some((entry) => entry.sql.startsWith('SELECT email_announcements, email_finance_reminders, push_announcements, push_show_preview')));
+    snapshot = fakeSnapshot();
+    ({ data } = await collectPersonalData(12345, { db: snapshot.db }));
+    assert.deepEqual(Object.keys(data.notification_preferences), ['email_announcements', 'push_announcements', 'updated_at']);
+    assert.equal(snapshot.log.some((entry) => entry.sql.startsWith('SELECT email_announcements, email_finance_reminders')), false, 'sütun yoksa eski sorgu');
+  });
+
+  it('R10: yüklenen belge KAYIT bilgisi, aidat hatırlatma geçmişi ve makbuz özeti dosyada; dosya içeriği / adres / ödeyen adı / hash YOK; sayılar sayıya çevrilir; tablolar yoksa bölümler boş ve sorgu çalışmaz', async () => {
+    const savedHook = collectHooks.listReceipts;
+    collectHooks.listReceipts = async (userCode) => ({
+      items: [
+        { id: 5, number: '2026-000012', kind: 'collection', status: 'valid', paid_on: '2026-09-01', issued_on: '2026-09-02', amount_minor: 150000, apartment: { id: 501, label: 'A Blok - Daire 1' }, payer_name: 'Baska Kisi' },
+      ],
+      next_before_id: userCode === 12345 ? 4 : null,
+    });
+    try {
+      const snapshot = fakeSnapshot({
+        optional: { has_documents: true, has_reminders: true, has_receipts: true },
+        uploadedDocuments: [{ document_id: '7', version_no: 2, site_code: '1000000001', site_name: 'Gül Sitesi', category: 'regulation', file_name: 'plan.pdf', mime_type: 'application/pdf', size_bytes: '1048576', version_status: 'ready', recorded_at: new Date('2026-09-03T00:00:00Z'), completed_at: new Date('2026-09-03T00:00:05Z') }],
+        financeReminders: [{ run_id: '9', site_code: '1000000001', site_name: 'Gül Sitesi', run_on: '2026-09-10', tone: 'friendly', with_amount: true, email_status: 'sent', sent_at: new Date('2026-09-10T08:00:00Z'), apartment_count: 1 }],
+      });
+      const { data, truncated } = await collectPersonalData(12345, { db: snapshot.db });
+      assert.deepEqual(data.uploaded_documents[0], {
+        document_id: 7, version_no: 2, site_code: 1000000001, site_name: 'Gül Sitesi', category: 'regulation',
+        file_name: 'plan.pdf', mime_type: 'application/pdf', size_bytes: 1048576, version_status: 'ready', recorded_at: new Date('2026-09-03T00:00:00Z'), completed_at: new Date('2026-09-03T00:00:05Z'),
+      });
+      assert.equal('title' in data.uploaded_documents[0], false, 'belge başlığı dosyaya girmez (başkası sonradan değiştirebilir)');
+      assert.equal(data.finance_reminders_received[0].run_id, 9);
+      assert.equal(data.finance_reminders_received[0].email_status, 'sent');
+      assert.deepEqual(data.receipts, [{ id: 5, number: '2026-000012', kind: 'collection', status: 'valid', paid_on: '2026-09-01', issued_on: '2026-09-02', amount_minor: 150000, apartment_id: 501, apartment_label: 'A Blok - Daire 1' }]);
+      assert.equal(JSON.stringify(data).includes('Baska Kisi'), false, 'ödeyen adı dosyaya girmez');
+      assert.deepEqual(truncated, [{ section: 'receipts', included: 1, reason: 'row_limit' }], 'makbuz sayfası doluysa kısaltma bildirilir');
+      const text = serializeWithinLimit(data).text.toLowerCase();
+      for (const word of ['storage_key', 'sha256', 'email_hash', 'token']) {
+        assert.equal(text.includes(word), false, word);
+      }
+    } finally {
+      collectHooks.listReceipts = savedHook;
+    }
+    const absent = fakeSnapshot();
+    const { data } = await collectPersonalData(12345, { db: absent.db });
+    assert.deepEqual([data.uploaded_documents, data.finance_reminders_received, data.receipts], [[], [], []]);
+    assert.equal(absent.log.some((entry) => /FROM document_versions|FROM finance_reminder_items/.test(entry.sql)), false);
+  });
+
+  it('R10: yeni sorgular çağıranın kodunu ($1) alır ve yasak sütun seçmez (içerik / depolama anahtarı / hash / adres / not / kitle)', () => {
+    for (const name of ['uploadedDocuments', 'financeReminders', 'notificationPreferences', 'notificationPreferencesBase']) {
+      const sql = exportInternals.SQL[name];
+      assert.ok(sql.includes('$1'), name);
+      for (const pattern of [/storage_key/i, /sha256/i, /\bnote\b/i, /\bdescription\b/i, /\baudience\b/i, /target_/i, /declared_size/i, /\bi?\.?email\b/i, /email_hash/i, /\bparams\b/i, /uploaded_by,/i]) {
+        assert.equal(pattern.test(sql), false, `${name}: ${pattern}`);
+      }
+    }
+    assert.match(norm(exportInternals.SQL.uploadedDocuments), /WHERE v\.uploaded_by = \$1 ORDER BY v\.id DESC$/);
+    // R16 P2-6: yalnız KULLANICININ verdiği alanlar (sürümün dosya adı / türü / boyutu / tarihi / sürüm no + kategori); başlık ve durum başkasının sonradan değiştirdiği alanlardır
+    for (const pattern of [/\btitle\b/i, /document_status/i, /d\.status/i, /deleted_at/i, /deleted_by/i, /created_by/i]) {
+      assert.equal(pattern.test(exportInternals.SQL.uploadedDocuments), false, String(pattern));
+    }
+    assert.ok(/v\.display_name AS file_name, v\.mime_type, v\.size_bytes/.test(norm(exportInternals.SQL.uploadedDocuments)));
+    assert.match(norm(exportInternals.SQL.financeReminders), /INNER JOIN site_people sp ON sp\.id = i\.person_id AND sp\.user_code = \$1/);
+    for (const name of ['receipts', 'finance_reminders_received', 'uploaded_documents']) {
+      assert.ok(SHRINKABLE_SECTIONS.includes(name), `${name} boyut sınırında kısaltılabilir`);
+    }
   });
 
   it('kullanıcı satırı yoksa 401 ACCOUNT_DELETED ve işlem kapatılır', async () => {

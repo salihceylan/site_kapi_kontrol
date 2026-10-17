@@ -1,6 +1,7 @@
 // Ortam degiskenleri dogrulamasi (sirlari ASLA loglamaz; yalnizca uzunluk/ad bilgisi verir).
 
 import { resolveTrustProxy } from '../security/trust_proxy.js';
+import { pushEnvWarnings } from '../modules/push_config.js';
 
 export const MIN_RECOMMENDED_JWT_SECRET_LENGTH = 32;
 
@@ -323,6 +324,9 @@ export function validateEnv(env = process.env) {
   if (String(env.NODE_ENV || '').trim() !== 'production') {
     warnings.push('NODE_ENV=production degil (Express gelistirme varsayilanlari aktif); oneri: NODE_ENV=production. Hata yanitlari ortamdan bagimsiz guvenlidir.');
   }
+
+  // Telefon bildirimi (Faz 3b-B): hizmet hesabi dosyasi depo icinde / izinleri acik / okunamiyor -> UYARI (sunucu yine acilir; dosya icerigi okunmaz).
+  warnings.push(...pushEnvWarnings(env));
 
   return { errors, warnings };
 }

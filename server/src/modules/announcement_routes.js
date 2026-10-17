@@ -25,6 +25,7 @@ import {
   setNotificationPreferences,
 } from './announcement_inbox.js';
 import { kickEmailQueue } from './announcement_email_queue.js';
+import { kickPushQueue } from './push_worker.js';
 import { redactForBoard } from './announcement_common.js';
 import {
   createAnnouncement,
@@ -42,9 +43,11 @@ import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 
 export const announcementRouter = express.Router();
 
-/** Test için değiştirilebilir: yayından sonra e-posta kuyruğunu arka planda başlatır (yanıtı BEKLETMEZ). */
+/** Test için değiştirilebilir: yayından sonra e-posta / push kuyruğunu arka planda başlatır (yanıtı BEKLETMEZ). */
 export const announcementRouteHooks = {
   kickEmailQueue: () => kickEmailQueue(),
+  // Faz 3b-B: push kapalı / yapılandırılmamışsa sorgusuz hemen döner.
+  kickPushQueue: () => kickPushQueue(),
 };
 
 // Yazma uçları (yönetici yazmaları + sakin okundu / tercih yazmaları): kullanıcı başına 120/saat (sözleşme).
@@ -89,6 +92,13 @@ function afterWrite(detail) {
       void Promise.resolve(announcementRouteHooks.kickEmailQueue()).catch(() => {});
     } catch (_error) {
       // tetikleme hatası yayını bozmaz; zamanlayıcı tikinde kuyruk sürer
+    }
+  }
+  if (detail && detail.status === 'published') {
+    try {
+      void Promise.resolve(announcementRouteHooks.kickPushQueue()).catch(() => {});
+    } catch (_error) {
+      // tetikleme hatası yayını bozmaz; zamanlayıcı tikinde (hasPendingPush) push kuyruğu sürer
     }
   }
 }

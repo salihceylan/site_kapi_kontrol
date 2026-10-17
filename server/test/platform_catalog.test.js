@@ -25,12 +25,13 @@ import { mapSiteRow } from '../src/utils/helpers.js';
 const def = (code) => getModuleDefinition(code);
 
 describe('platform katalog: sozlesme tablosu', () => {
-  it('8 modul, sozlesmedeki sirayla ve alanlarla', () => {
+  it('9 modul, sozlesmedeki sirayla ve alanlarla', () => {
     assert.deepEqual(MODULE_CODES, [
       'door_control',
       'people',
       'announcements',
       'finance',
+      'documents',
       'reservation',
       'work_tracking',
       'metering',
@@ -42,6 +43,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       people: [true, 'available'], // Faz 2a: Kişi ve Daire Kayıtları çekirdek + kullanılabilir (hep açık)
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
       finance: [false, 'available'], // Faz 4a: Aidat ve Finans kullanılabilir (varsayılan KAPALI; süper açar, yönetici modül talep eder)
+      documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'coming_soon'],
       work_tracking: [false, 'coming_soon'],
       metering: [false, 'coming_soon'],
@@ -62,7 +64,7 @@ describe('platform katalog: sozlesme tablosu', () => {
 
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
-    assert.equal(catalog.length, 8);
+    assert.equal(catalog.length, 9);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -76,10 +78,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control ve Faz 4a ile finance)', () => {
+  it('toggleable = !core && status === available (door_control, finance ve Faz 3b-A ile documents)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance'],
+      ['door_control', 'finance', 'documents'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -179,7 +181,7 @@ describe('platform katalog: enabled hesabi', () => {
     const list = computeSiteModuleList([
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
-    assert.equal(list.length, 8);
+    assert.equal(list.length, 9);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',

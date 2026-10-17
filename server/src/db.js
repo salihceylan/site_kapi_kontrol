@@ -4,6 +4,10 @@ import pg from 'pg';
 import dotenv from 'dotenv';
 import { generateLocalControlToken } from './utils/helpers.js';
 import { runPeopleBackfill } from './modules/people_backfill.js';
+import { ensureBulkImportSchema } from './modules/bulk_import_schema.js';
+import { ensureFinance4bSchema } from './modules/finance_4b_schema.js';
+import { ensureDocumentsSchema } from './modules/document_schema.js';
+import { ensurePushSchema } from './modules/push_schema.js';
 
 dotenv.config();
 
@@ -1845,6 +1849,15 @@ export async function ensureDbSchema() {
 
     await ensurePendingConsentsColumn(client);
     await ensureAccountDeletionSchema(client);
+    // 038 (toplu yukleme, faz 2b): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (bulk_import_schema.js = migrations/038).
+    await ensureBulkImportSchema(client);
+    // 040 (finans faz 4b): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (finance_4b_schema.js = migrations/040).
+    await ensureFinance4bSchema(client);
+    // 039 (belgeler, faz 3b-A): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (document_schema.js = migrations/039).
+    await ensureDocumentsSchema(client);
+    // 041 (telefon bildirimi, faz 3b-B): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (push_schema.js = migrations/041).
+    // notification_preferences'a ALTER yalniz sutunlar eksikse calisir (normal acilista hic kilit yok).
+    await ensurePushSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

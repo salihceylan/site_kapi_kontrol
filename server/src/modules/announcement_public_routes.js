@@ -79,7 +79,7 @@ const INVALID_PAGE = page(
 const DONE_PAGE = page(
   'Abonelikten çıkıldı',
   `    <h1>Abonelikten çıkıldı</h1>
-    <p>Bu e-posta adresine bundan sonra site duyuru e-postaları gönderilmeyecek. Uygulamayı kullanıyorsanız duyurularınızı uygulamada görmeye devam edersiniz. Fikrinizi değiştirirseniz uygulamadaki Bildirim Tercihleri'nden e-posta bildirimlerini yeniden açabilirsiniz.</p>`,
+    <p>Bu e-posta adresine bundan sonra site duyuru ve borç hatırlatma e-postaları gönderilmeyecek. Uygulamayı kullanıyorsanız duyurularınızı uygulamada görmeye devam edersiniz. Fikrinizi değiştirirseniz uygulamadaki Bildirim Tercihleri'nden e-posta bildirimlerini yeniden açabilirsiniz.</p>`,
 );
 
 const ERROR_PAGE = page(
@@ -98,8 +98,8 @@ function confirmPage(token) {
   // Belirteç yalnız [0-9a-f], '.', base64url karakterlerinden oluşur (verifyUnsubscribeToken doğruladı): HTML'e güvenle girer.
   return page(
     'Abonelikten çık',
-    `    <h1>Duyuru e-postalarından çıkmak istiyor musunuz?</h1>
-    <p>Onaylarsanız bu e-posta adresine site yönetiminin duyuru e-postaları artık gönderilmeyecek (acil duyurular dahil).</p>
+    `    <h1>Duyuru ve borç hatırlatma e-postalarından çıkmak istiyor musunuz?</h1>
+    <p>Onaylarsanız bu e-posta adresine site yönetiminin duyuru ve borç hatırlatma e-postaları artık gönderilmeyecek (acil duyurular dahil).</p>
     <form method="post" action="/public/announcement-unsubscribe">
       <input type="hidden" name="t" value="${token}" />
       <button type="submit">Evet, abonelikten çık</button>

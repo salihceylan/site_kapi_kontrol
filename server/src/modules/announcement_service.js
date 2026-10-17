@@ -59,6 +59,8 @@ import {
   previewAudience,
   snapshotRecipients,
 } from './announcement_recipients.js';
+import { loadAttachmentCountsSafe, loadAttachmentsSafe, parseDocumentIds, setAnnouncementAttachments } from './document_attachments.js';
+import { enqueueAnnouncementPush } from './push_outbox.js';
 
 /** Zamanlayıcı yayınlarının audit "kim" alanı. */
 export const SYSTEM_ACTOR = Object.freeze({ full_name: 'Sistem', role: 'system' });
@@ -168,8 +170,14 @@ export async function listAnnouncements(siteCode, query = {}, db = pool) {
     `,
     [...where.params, filters.limit, filters.offset],
   );
+  const items = (page.rows ?? []).map(mapSummaryRow);
+  // Belgeler (Faz 3b-A): duyuru başına ek sayısı (EKLEMELİ alan; belge tabloları okunamazsa 0).
+  const attachmentCounts = await loadAttachmentCountsSafe(db, items.map((item) => item.id));
+  for (const item of items) {
+    item.attachment_count = attachmentCounts.get(item.id) ?? 0;
+  }
   return {
-    items: (page.rows ?? []).map(mapSummaryRow),
+    items,
     total: Number(count.rows?.[0]?.total ?? 0),
   };
 }
@@ -263,6 +271,11 @@ export async function loadAnnouncementDetail(db, siteCode, id) {
       email: emailCountsFromRows(statRows),
     },
   };
+  // Belgeler (Faz 3b-A): ekler (EKLEMELİ; available=false: belge silinmiş, modül kapalı ya da kitlesi artık residents değil).
+  // YÖNETİCİ / KURUL görünümü: kullanılamayan ekin başlık / dosya adı / tür / boyutu KORUNUR (yönetici hangi belgenin sorunlu olduğunu görmeli); sakin görünümü
+  // (announcement_inbox.js) varsayılan olarak bu alanları null döndürür (sözleşme A12, R9 F7 / R16 P2-2).
+  detail.attachments = (await loadAttachmentsSafe(db, [Number(row.id)], { forManager: true })).get(Number(row.id)) ?? [];
+  detail.attachment_count = detail.attachments.length;
   // canlı alıcı satırı sayısı (yanıta girmez): kurul için küçük hedef kararında kullanılır
   return attachLiveCount(detail, recipients);
 }
@@ -585,6 +598,8 @@ export async function publishWithinTransaction(
       duplicate: snapshot.email.duplicate,
     },
   });
+  // Telefon bildirimi (Faz 3b-B): outbox AYNI işlemde, alıcılar eklendikten SONRA (kilit sırasının sonu); push kapalıyken sorgu yok, satır yok.
+  await enqueueAnnouncementPush(client, { announcementId: id, siteCode, importance: row.importance });
   return { published: true, recipientCount: snapshot.total, email: snapshot.email };
 }
 
@@ -684,6 +699,7 @@ export async function recordPublishFailure({ id, siteCode, code }) {
 /** POST announcements -> AnnouncementDetail. publish: 'draft' (varsayılan) | 'now' | 'schedule'. */
 export async function createAnnouncement({ siteCode, body, actor, now = new Date() }) {
   const input = parseCreateInput(body, now);
+  const documentIds = parseDocumentIds(body?.document_ids);
   await assertTargetBelongsToSite(pool, siteCode, input.target);
   if (input.publish === 'now' && input.sendEmail) {
     // Erken ve kilitsiz kapı: > 1000 adres varsa reddedilen yayın site kişi kilidini hiç tutmaz (kesin denetim işlem içinde de yapılır).
@@ -744,6 +760,10 @@ export async function createAnnouncement({ siteCode, body, actor, now = new Date
       if (status === 'scheduled') {
         await audit(client, actor, 'announcement.scheduled', siteCode, createdId, { publish_at: input.publishAt.toISOString() });
       }
+      // Belge ekleri (Faz 3b-A): duyuru satırından SONRA, documents satırları FOR KEY SHARE (kilit sırası: announcements -> documents -> ek bağları)
+      if (documentIds !== undefined && documentIds.length > 0) {
+        await setAnnouncementAttachments(client, { siteCode, announcementId: createdId, documentIds, actor });
+      }
       if (input.publish === 'now') {
         await publishWithinTransaction(client, { id: createdId, siteCode, actor, now });
       }
@@ -770,6 +790,7 @@ export async function updateAnnouncement({ siteCode, id: rawId, body, actor, now
     throw announcementNotFound();
   }
   const patch = parsePatchInput(body, now);
+  const documentIds = patch.keys.includes('document_ids') ? parseDocumentIds(body?.document_ids) : undefined;
   if (patch.target) {
     await assertTargetBelongsToSite(pool, siteCode, patch.target);
   }
@@ -919,6 +940,10 @@ export async function updateAnnouncement({ siteCode, id: rawId, body, actor, now
       if (sets.length > 0) {
         sets.push('updated_at = NOW()');
         await client.query(`UPDATE announcements SET ${sets.join(', ')} WHERE id = $1 AND site_code = $2`, values);
+      }
+      if (documentIds !== undefined) {
+        // Belge ekleri yalnız taslak / zamanlanmış duyuruda değişir (yayında yukarıdaki 409 INVALID_STATE kapısı zaten durdurur).
+        await setAnnouncementAttachments(client, { siteCode, announcementId: id, documentIds, actor });
       }
       if (fields.length > 0) {
         await audit(client, actor, 'announcement.updated', siteCode, id, { fields });

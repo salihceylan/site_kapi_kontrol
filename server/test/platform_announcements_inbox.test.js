@@ -194,31 +194,45 @@ describe('bildirim özeti', () => {
 });
 
 describe('bildirim tercihleri', () => {
-  const PREF_SELECT = /^SELECT email_announcements, push_announcements FROM notification_preferences WHERE user_code = \$1$/;
-  const UPSERT = /^INSERT INTO notification_preferences \(user_code, email_announcements\) VALUES \(\$1, \$2\) ON CONFLICT \(user_code\) DO UPDATE SET email_announcements = EXCLUDED\.email_announcements, updated_at = NOW\(\) RETURNING email_announcements, push_announcements$/;
+  const PREF_SELECT = /^SELECT email_announcements, email_finance_reminders, push_announcements FROM notification_preferences WHERE user_code = \$1$/;
+  const UPSERT = /^INSERT INTO notification_preferences \(user_code, email_announcements, email_finance_reminders\) VALUES \(\$1, COALESCE\(\$2::BOOLEAN, TRUE\), COALESCE\(\$3::BOOLEAN, TRUE\)\) ON CONFLICT \(user_code\) DO UPDATE SET email_announcements = COALESCE\(\$2::BOOLEAN, notification_preferences\.email_announcements\), email_finance_reminders = COALESCE\(\$3::BOOLEAN, notification_preferences\.email_finance_reminders\), updated_at = NOW\(\) RETURNING email_announcements, email_finance_reminders, push_announcements$/;
   const SUPPRESSED = /^SELECT EXISTS \( SELECT 1 FROM \( SELECT translate\(btrim\(u\.email\), /;
   const DELETE_OWN = /^DELETE FROM announcement_email_suppressions s USING users u WHERE u\.user_code = \$1 AND /;
   const suppressedAnswer = (value) => [SUPPRESSED, () => ok([{ suppressed: value }])];
+  // PUT TEK İŞLEMDİR (pool.connect istemcisi): BEGIN / COMMIT / ROLLBACK + kullanıcı satırı KEY SHARE kilidi (silinmiş hesaba yazılmaz). Sahte istemci aynı sorgu günlüğünü kullanır.
+  const LIVE_LOCK = /^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL AND is_active = TRUE FOR KEY SHARE$/;
+  beforeEach(() => {
+    handlers.push([/^(BEGIN|COMMIT|ROLLBACK)$/, () => ok()], [LIVE_LOCK, (_sql, params) => ok([{ user_code: params[0] }])]);
+    pool.connect = async () => ({ query: (text, params) => pool.query(text, params), release() {} });
+  });
+  afterEach(() => {
+    delete pool.connect;
+  });
+  const paramsOf = (pattern) => log.find((q) => pattern.test(q.sql)).params;
+  // Faz 3b-B: yanıta EKLEMELİ push alanları (push_preferences.withPushPreferences; ayrıntı test/push_preferences.test.js)
+  const PUSH_PREFS = /^SELECT np\.push_show_preview, np\.push_quiet_enabled, np\.push_quiet_start, np\.push_quiet_end, \(SELECT COUNT\(\*\)::INTEGER FROM push_devices d WHERE d\.user_code = \$1\) AS device_count FROM \(SELECT \$1::INTEGER AS user_code\) me/;
+  const pushAnswer = [PUSH_PREFS, () => ok([{ push_show_preview: null, push_quiet_enabled: null, push_quiet_start: null, push_quiet_end: null, device_count: 0 }])];
+  const PUSH_DEFAULTS = { push_show_preview: false, push_quiet: { enabled: false, start: '23:00', end: '07:00' }, push_devices: 0 };
 
   it('kayıt yoksa varsayılan { email:true, push:true, push_available:false, email_suppressed:false }', async () => {
-    handlers.push([PREF_SELECT, () => ok()], suppressedAnswer(false));
-    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false });
+    handlers.push([PREF_SELECT, () => ok()], suppressedAnswer(false), pushAnswer);
+    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
     assert.deepEqual(log[0].params, [20004]);
   });
 
   it('F2 GET ETKİN değer: saklanan tercih VE çağıranın kendi adreslerinden hiçbiri bastırılmamış; bastırılmışsa email_announcements false + email_suppressed true (saklanan değer true kalsa da)', async () => {
-    handlers.push([PREF_SELECT, () => ok([{ email_announcements: true, push_announcements: true }])], suppressedAnswer(true));
-    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: true });
+    handlers.push([PREF_SELECT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], suppressedAnswer(true), pushAnswer);
+    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: false, email_finance_reminders: false, push_announcements: true, push_available: false, email_suppressed: true, ...PUSH_DEFAULTS });
     handlers.length = 0;
-    handlers.push([PREF_SELECT, () => ok([{ email_announcements: false, push_announcements: true }])], suppressedAnswer(false));
-    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: false }, 'saklanan false -> etkin false, bastırma yok');
+    handlers.push([PREF_SELECT, () => ok([{ email_announcements: false, email_finance_reminders: true, push_announcements: true }])], suppressedAnswer(false), pushAnswer);
+    assert.deepEqual(await getNotificationPreferences(user), { email_announcements: false, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS }, 'saklanan false -> etkin false, bastırma yok');
     handlers.length = 0;
-    handlers.push([PREF_SELECT, () => ok([{ email_announcements: true, push_announcements: true }])], suppressedAnswer(false));
+    handlers.push([PREF_SELECT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], suppressedAnswer(false), pushAnswer);
     assert.equal((await getNotificationPreferences(user)).email_announcements, true);
   });
 
   it('F2 bastırma sorgusu yalnız ÇAĞIRANIN adreslerine bakar (hesap e-postası + kişi iletişim e-postası), kanonik özet, güncel + eski tuzlar; dahili adres atlanır', async () => {
-    handlers.push([PREF_SELECT, () => ok()], suppressedAnswer(false));
+    handlers.push([PREF_SELECT, () => ok()], suppressedAnswer(false), pushAnswer);
     await getNotificationPreferences(user);
     const query = log.find((q) => SUPPRESSED.test(q.sql));
     assert.deepEqual(query.params[0], 20004);
@@ -229,18 +243,18 @@ describe('bildirim tercihleri', () => {
     assert.doesNotMatch(query.sql, /DELETE|UPDATE|INSERT/);
   });
 
-  it('PUT false: yalnız tercihi yazar (UPSERT); push_* ve bilinmeyen anahtarlar YOKSAYILIR; bastırma listesine DOKUNMAZ; yanıt etkin değer + email_suppressed', async () => {
-    handlers.push([UPSERT, () => ok([{ email_announcements: false, push_announcements: true }])], suppressedAnswer(false));
-    const result = await setNotificationPreferences(user, { email_announcements: false, push_announcements: false, baska: 1 });
-    assert.deepEqual(log[0].params, [20004, false]);
-    assert.deepEqual(result, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: false });
+  it('PUT false: yalnız tercihi yazar (UPSERT); bilinmeyen anahtarlar YOKSAYILIR (push_* Faz 3b-B ile bilinir: test/push_preferences.test.js); bastırma listesine DOKUNMAZ; yanıt etkin değer + email_suppressed', async () => {
+    handlers.push([UPSERT, () => ok([{ email_announcements: false, email_finance_reminders: true, push_announcements: true }])], suppressedAnswer(false), pushAnswer);
+    const result = await setNotificationPreferences(user, { email_announcements: false, baska: 1 });
+    assert.deepEqual(paramsOf(UPSERT), [20004, false, null]);
+    assert.deepEqual(result, { email_announcements: false, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
     assert.equal(log.some((q) => DELETE_OWN.test(q.sql)), false);
   });
 
   it('F1 PUT true YALNIZ doğrulanmış GERÇEK hesap e-postasının bastırmasını siler: tek DELETE, users.email_verified, dahili @ahbu.local değil, kanonik özet güncel + eski tuzlarla; iletişim e-postası kaynakları (resident_email, site_people.email) silme kaynağı DEĞİL', async () => {
-    handlers.push([UPSERT, () => ok([{ email_announcements: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 1)], suppressedAnswer(false));
+    handlers.push([UPSERT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 1)], suppressedAnswer(false), pushAnswer);
     const result = await setNotificationPreferences(user, { email_announcements: true });
-    assert.deepEqual(result, { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false });
+    assert.deepEqual(result, { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
     const removal = log.find((q) => DELETE_OWN.test(q.sql));
     assert.deepEqual(removal.params, [20004, emailHashSalts()], 'yalnız çağıranın kendi kullanıcı kodu ve tuzlar');
     assert.match(removal.sql, /u\.email IS NOT NULL AND u\.email_verified = TRUE AND u\.email NOT LIKE '%@ahbu\.local' AND s\.email_hash IN \( SELECT encode\(sha256\(convert_to\(t\.salt::TEXT \|\| ':' \|\| \(CASE WHEN split_part\(translate\(btrim\(u\.email\), /);
@@ -251,9 +265,55 @@ describe('bildirim tercihleri', () => {
   });
 
   it('F2 PUT true sonrası iletişim adresi hâlâ bastırılmışsa (dahili hesap; uygulamadan açılamaz) yanıt email_suppressed:true ve ETKİN email_announcements:false', async () => {
-    handlers.push([UPSERT, () => ok([{ email_announcements: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 0)], suppressedAnswer(true));
+    handlers.push([UPSERT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 0)], suppressedAnswer(true), pushAnswer);
     const result = await setNotificationPreferences(user, { email_announcements: true });
-    assert.deepEqual(result, { email_announcements: false, push_announcements: true, push_available: false, email_suppressed: true });
+    assert.deepEqual(result, { email_announcements: false, email_finance_reminders: false, push_announcements: true, push_available: false, email_suppressed: true, ...PUSH_DEFAULTS });
+  });
+
+  it('Faz 4b: PUT { email_finance_reminders } tek başına geçerlidir (duyuru tercihi DEĞİŞMEZ: COALESCE); true bastırmayı (hesap e-postası) siler; GET etkin değeri bastırmaya bağlı döner', async () => {
+    handlers.push([UPSERT, () => ok([{ email_announcements: true, email_finance_reminders: false, push_announcements: true }])], suppressedAnswer(false), pushAnswer);
+    const off = await setNotificationPreferences(user, { email_finance_reminders: false });
+    assert.deepEqual(paramsOf(UPSERT), [20004, null, false], 'duyuru tercihi null (dokunulmaz), finans false');
+    assert.deepEqual(off, { email_announcements: true, email_finance_reminders: false, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
+    assert.equal(log.some((q) => DELETE_OWN.test(q.sql)), false);
+    log.length = 0;
+    handlers.length = 0;
+    handlers.push([/^(BEGIN|COMMIT|ROLLBACK)$/, () => ok()], [LIVE_LOCK, (_sql, params) => ok([{ user_code: params[0] }])]);
+    handlers.push([UPSERT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 1)], suppressedAnswer(false), pushAnswer);
+    const on =await setNotificationPreferences(user, { email_finance_reminders: true });
+    assert.equal(on.email_finance_reminders, true);
+    assert.equal(log.filter((q) => DELETE_OWN.test(q.sql)).length, 1, 'finans tercihi true da hesap e-postasının bastırmasını siler (ortak liste)');
+    for (const body of [{ email_finance_reminders: 'x' }, { email_finance_reminders: 1, email_announcements: true }]) {
+      await assert.rejects(() => setNotificationPreferences(user, body), (e) => e.code === 'INVALID_BODY' && !/email_|_/.test(e.message));
+    }
+  });
+
+  it('PUT TEK İŞLEM: BEGIN -> kullanıcı satırı KEY SHARE (deleted_at IS NULL) -> UPSERT -> (true ise bastırma silme) -> COMMIT; etkin değer sorguları COMMIT\'ten SONRA', async () => {
+    handlers.push([UPSERT, () => ok([{ email_announcements: true, email_finance_reminders: true, push_announcements: true }])], [DELETE_OWN, () => ok([], 1)], suppressedAnswer(false), pushAnswer);
+    await setNotificationPreferences(user, { email_announcements: true });
+    const at = (pattern) => log.findIndex((q) => pattern.test(q.sql));
+    const order = [at(/^BEGIN$/), at(LIVE_LOCK), at(UPSERT), at(DELETE_OWN), at(/^COMMIT$/), at(SUPPRESSED), at(PUSH_PREFS)];
+    assert.ok(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1])), `sıra: ${order.join(',')}`);
+    assert.equal(log.filter((q) => /^BEGIN$/.test(q.sql)).length, 1, 'tek işlem');
+    assert.deepEqual(log[at(LIVE_LOCK)].params, [20004]);
+  });
+
+  it('R7/P1: silinmiş / pasif hesap -> 401 ACCOUNT_DELETED; SADECE e-posta anahtarıyla bile tercih YAZILMAZ (UPSERT yok), işlem geri alınır', async () => {
+    handlers.length = 0;
+    handlers.push([/^(BEGIN|COMMIT|ROLLBACK)$/, () => ok()], [LIVE_LOCK, () => ok()]);
+    await assert.rejects(() => setNotificationPreferences(user, { email_announcements: false }), (e) => e.statusCode === 401 && e.code === 'ACCOUNT_DELETED');
+    assert.equal(log.some((q) => UPSERT.test(q.sql)), false);
+    assert.equal(log.some((q) => DELETE_OWN.test(q.sql)), false);
+    assert.ok(log.some((q) => q.sql === 'ROLLBACK') && !log.some((q) => q.sql === 'COMMIT'));
+  });
+
+  it('yazma sırasında hata: ROLLBACK, COMMIT yok, bağlantı bırakılır; hata yukarı çıkar (kısmi yazım kalmaz)', async () => {
+    let released = false;
+    pool.connect = async () => ({ query: (text, params) => pool.query(text, params), release() { released = true; } });
+    handlers.push([UPSERT, () => { throw Object.assign(new Error('boom'), { code: 'XX000' }); }]);
+    await assert.rejects(() => setNotificationPreferences(user, { email_announcements: true }), (e) => e.code === 'XX000');
+    assert.ok(log.some((q) => q.sql === 'ROLLBACK') && !log.some((q) => q.sql === 'COMMIT'));
+    assert.equal(released, true);
   });
 
   it('PUT: boolean olmayan / eksik değer -> 400 INVALID_BODY (alan adı yok); kullanıcı yoksa 401', async () => {
@@ -265,7 +325,7 @@ describe('bildirim tercihleri', () => {
   });
 
   it('kullanıcı kodu yoksa GET varsayılan döner ve DB sorgusu yok', async () => {
-    assert.deepEqual(await getNotificationPreferences({}), { email_announcements: true, push_announcements: true, push_available: false, email_suppressed: false });
+    assert.deepEqual(await getNotificationPreferences({}), { email_announcements: true, email_finance_reminders: true, push_announcements: true, push_available: false, email_suppressed: false, ...PUSH_DEFAULTS });
     assert.equal(log.length, 0);
   });
 });

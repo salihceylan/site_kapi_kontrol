@@ -28,7 +28,10 @@ import {
 import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
 import { getMyFinance } from './finance_read_service.js';
+import { listMyReceipts } from './finance_receipts.js';
 import { syncUserPeopleSafe } from './people_sync.js';
+import { formatHhmm } from './push_common.js';
+import { PUSH_EXPORT_EXCLUDED_NOTE, exportPushDevices } from './push_devices.js';
 
 export const EXPORT_FORMAT_VERSION = 1;
 
@@ -43,13 +46,52 @@ export const EXPORT_EXCLUDED = Object.freeze([
   'Site yönetiminin kişi kaydınıza, aracınıza, katılım talebinize, kapı iznine ve başvurunuza yazdığı iç notlar, karar ve ret gerekçeleri: yönetim kaydı olduğu için dışarıda bırakılmıştır.',
   'Misafir geçişi erişim kodları ve karekod belirteçleri: güvenlik nedeniyle dışarıda bırakılmıştır (yalnız geçişin kendisi ve oluşturma bilgileri yer alır). Misafir geçişiyle kapıyı açan kişinin IP adresi, o kişiye ait olduğu için kapı olaylarında boş bırakılmıştır.',
   'Cihazların bağlantı sırları (MQTT parolası, yerel kontrol anahtarı) ve envanter notları: güvenlik nedeniyle dışarıda bırakılmıştır.',
-  'Yönetici olarak yaptığınız işlemlerin içeriği (duyuru, finans kayıtları, tanımlar) ve sistem denetim günlükleri: site yönetiminin / platformun kaydı olduğu için dışarıda bırakılmıştır.',
+  'Yönetici olarak yaptığınız işlemlerin içeriği (duyuru, belge, finans kayıtları, tanımlar) ve sistem denetim günlükleri: site yönetiminin / platformun kaydı olduğu için dışarıda bırakılmıştır.',
   'Finans ekstresi "Borcum" ekranındaki görünümle aynıdır: her daire için son 30 hareket; yönetici açıklamaları ve işlemi yapan kişinin adı çıkarılmıştır. Tam defter site yönetiminin kaydıdır.',
+  'Yüklediğiniz belgelerin dosya içerikleri, depolama anahtarları, içerik özetleri (hash), kitle / hedef bilgisi ve sürüm notları: site yönetiminin kaydı ve güvenlik nedeniyle dışarıda bırakılmıştır; yalnız sizin verdiğiniz kayıt bilgisi (dosya adı, tür, boyut, yükleme tarihi, sürüm no, kategori) "uploaded_documents" bölümünde yer alır. Belgenin başlığı ve durumu dosyaya konmaz: bunları site yöneticileri sonradan değiştirebilir ve başkasının yazdığı bilgi içerebilir.',
+  'Makbuzlar ve tahsilat belgeleri: yalnız sizin görebildiğiniz dairelerin makbuz özeti (numara, tür, durum, tutar, tarih, daire) "receipts" bölümündedir; makbuzu düzenleyen yönetici adı, ödeyen kişinin adı (başkasına ait olabilir), doğrulama kodu ve belge anlık görüntüsü site yönetiminin resmi kaydı olduğu için dışarıda bırakılmıştır (makbuz belgeniz uygulamadaki makbuz ekranından alınır).',
+  'Aidat hatırlatma e-postaları: yalnız size gönderilen hatırlatmaların geçmişi (tarih, ton, durum) "finance_reminders_received" bölümündedir; e-postanın metni, tutarlar, yönetici notu ve gönderim adresinin özeti yönetim / güvenlik kaydı olduğu için dışarıda bırakılmıştır.',
+  PUSH_EXPORT_EXCLUDED_NOTE,
 ]);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Hız sınırı (kullanıcı başına 24 saatte 3)
 // ---------------------------------------------------------------------------------------------------------------
+
+/** Kullanıcı satırını işlem sonuna dek KEY SHARE ile kilitler; silinmiş / olmayan hesapta 401 ACCOUNT_DELETED. */
+async function lockLiveExportUser(client, userCode) {
+  const user = await client.query('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR KEY SHARE', [userCode]);
+  if (!user.rows?.[0]) {
+    throw accountDeleted();
+  }
+}
+
+/**
+ * Dışa aktarma denetimi (`account.data_exported`): KİM + ne zaman + boyut. Yazım, canlı kullanıcı kilidi (KEY SHARE) altında AYNI işlemde yapılır: hesap silme
+ * dosya hazırlanırken commit ettiyse 401 ACCOUNT_DELETED (dosya DÖNMEZ, hak iade edilir) ve silinmiş hesap adına denetim satırı YAZILMAZ. Denetim satırının kendisi
+ * başarısız olursa dışa aktarma bozulmaz (recordAudit hatayı yutar; SAVEPOINT).
+ */
+export async function recordExportAudit(userCode, details, db = pool) {
+  const client = await db.connect();
+  let began = false;
+  try {
+    await client.query('BEGIN');
+    began = true;
+    await lockLiveExportUser(client, userCode);
+    await recordAudit(client, { actor: { userCode }, action: 'account.data_exported', targetType: 'user', targetId: String(userCode), details }, { inTransaction: true });
+    await client.query('COMMIT');
+    began = false;
+  } finally {
+    if (began) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_rollbackError) {
+        // bağlantı zaten kopmuş olabilir; asıl hata yukarıda fırlatılır
+      }
+    }
+    client.release();
+  }
+}
 
 /**
  * Bir dışa aktarma hakkı alır; sınır aşılmışsa 429 EXPORT_RATE_LIMITED. Sayım ve ekleme aynı kilit altında yapılır.
@@ -62,10 +104,10 @@ export async function acquireExportSlot(userCode, db = pool) {
     await client.query('BEGIN');
     began = true;
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`account_export:${userCode}`]);
-    const user = await client.query('SELECT deleted_at FROM users WHERE user_code = $1 LIMIT 1', [userCode]);
-    if (!user.rows?.[0] || user.rows[0].deleted_at) {
-      throw accountDeleted();
-    }
+    // CANLI KULLANICI KİLİDİ: `deleted_at IS NULL ... FOR KEY SHARE` (lockLiveUser kalıbı). Eskiden kilitsiz `SELECT deleted_at` + INSERT'in FK beklemesi, silmenin COMMIT'iyle
+    // yarışınca SİLİNMİŞ hesaba hak satırı yazılıyordu (7 günlük temizlik de o satırı silmiyordu). Şimdi: devam eden silme varsa bu sorgu COMMIT'ini bekler ve satır
+    // dönmez (401 ACCOUNT_DELETED); silme sonra gelirse `UPDATE users` bu işlem bitene dek bekler ve hak satırını (adım 16) kendisi siler.
+    await lockLiveExportUser(client, userCode);
     await client.query(`DELETE FROM account_data_exports WHERE user_code = $1 AND requested_at < NOW() - INTERVAL '7 days'`, [userCode]);
     const usage = await client.query(
       `
@@ -165,8 +207,36 @@ const SQL = Object.freeze({
     FROM vehicles v INNER JOIN site_people sp ON sp.id = v.person_id AND sp.user_code = $1
     ORDER BY v.id DESC
   `,
+  // Tercihlerin TAMAMI (duyuru + aidat hatırlatma e-postası + telefon bildirimi + başlık gösterme + sessiz saatler). Eklenen sütunlar sonraki migration'lardandır
+  // (040: email_finance_reminders, 041: push_*); sütunlar yoksa notificationPreferencesBase kullanılır (OPTIONAL_OBJECTS_SQL bayrağı).
   notificationPreferences: `
+    SELECT email_announcements, email_finance_reminders, push_announcements, push_show_preview, push_quiet_enabled, push_quiet_start, push_quiet_end, updated_at
+    FROM notification_preferences WHERE user_code = $1 LIMIT 1
+  `,
+  notificationPreferencesBase: `
     SELECT email_announcements, push_announcements, updated_at FROM notification_preferences WHERE user_code = $1 LIMIT 1
+  `,
+  // Yüklediğiniz belgelerin KAYIT bilgisi (Faz 3b-A): YALNIZ sizin verdiğiniz / ürettiğiniz alanlar — sürümün dosya adı, türü, boyutu, yükleme tarihi, sürüm no ve kategori.
+  // Belgenin BAŞLIĞI (documents.title), durumu ve silinme zamanı SEÇİLMEZ: bunları başka yöneticiler sonradan değiştirebilir (örn. başkasının yazdığı bir başlık, yönetici olmayan
+  // kullanıcının dosyasına sızardı; R16 P2-6). Dosya içeriği, depolama anahtarı, içerik özeti (hash), kitle / hedef ve sürüm notu da seçilmez.
+  uploadedDocuments: `
+    SELECT d.id AS document_id, v.version_no, d.site_code, s.name AS site_name, d.category,
+           v.display_name AS file_name, v.mime_type, v.size_bytes, v.status AS version_status, v.created_at AS recorded_at, v.completed_at
+    FROM document_versions v
+    INNER JOIN documents d ON d.id = v.document_id
+    INNER JOIN sites s ON s.site_code = d.site_code
+    WHERE v.uploaded_by = $1
+    ORDER BY v.id DESC
+  `,
+  // Size gönderilen aidat hatırlatmalarının GEÇMİŞİ (Faz 4b): hesabınıza bağlı kişi kaydına eklenen kalemler. Gönderilen e-posta adresi / özeti, yönetici notu, tutar
+  // ve daire kimlikleri seçilmez (adres zaten user.email; not ve tutar e-postanın içeriğidir ve yönetim kaydıdır).
+  financeReminders: `
+    SELECT r.id AS run_id, r.site_code, s.name AS site_name, r.run_on, r.tone, i.with_amount, i.email_status, i.sent_at, cardinality(i.apartment_ids) AS apartment_count
+    FROM finance_reminder_items i
+    INNER JOIN site_people sp ON sp.id = i.person_id AND sp.user_code = $1
+    INNER JOIN finance_reminder_runs r ON r.id = i.run_id
+    INNER JOIN sites s ON s.site_code = r.site_code
+    ORDER BY r.id DESC
   `,
   announcements: `
     SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at
@@ -219,7 +289,63 @@ const SQL = Object.freeze({
   `,
 });
 
+/**
+ * Sonradan eklenen migration'ların nesneleri (kullanıcı koduna BAĞLI DEĞİL; katalog bakışı): yoksa ilgili bölüm boş / eski şekil. 040: aidat hatırlatma + makbuz,
+ * 039: belgeler, 041: bildirim tercihi push_* sütunları. Tek sorgu, aynı salt okunur işlemde, kilit almaz.
+ */
+const OPTIONAL_OBJECTS_SQL = `
+  SELECT
+    (SELECT COUNT(*) FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'notification_preferences'
+         AND column_name IN ('email_finance_reminders', 'push_show_preview', 'push_quiet_enabled', 'push_quiet_start', 'push_quiet_end')) = 5 AS has_preference_extras,
+    (to_regclass('public.documents') IS NOT NULL AND to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
+    (to_regclass('public.finance_reminder_items') IS NOT NULL AND to_regclass('public.finance_reminder_runs') IS NOT NULL) AS has_reminders,
+    (to_regclass('public.receipts') IS NOT NULL) AS has_receipts
+`;
+
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
+
+/** Test / QA için değiştirilebilir bağımlılık: makbuz listesi (sakin ucunun işlevi; yetki mantığı kopyalanmaz). */
+export const collectHooks = {
+  listReceipts: (userCode, client) => listMyReceipts({ user_code: userCode }, { limit: EXPORT_ROW_LIMITS.receipts }, client),
+};
+
+/** Makbuz özeti -> dosya şekli: numara, tür, durum, tarihler, tutar (kuruş), daire. Ödeyen adı / yönetici adı / doğrulama kodu / anlık görüntü YOK. */
+function mapReceiptForExport(item) {
+  return {
+    id: numOrNull(item.id),
+    number: item.number ?? null,
+    kind: item.kind ?? null,
+    status: item.status ?? null,
+    paid_on: item.paid_on ?? null,
+    issued_on: item.issued_on ?? null,
+    amount_minor: numOrNull(item.amount_minor),
+    apartment_id: numOrNull(item.apartment?.id),
+    apartment_label: item.apartment?.label ?? null,
+  };
+}
+
+/** Bildirim tercihi satırı -> dosya şekli (sessiz saatler API'deki gibi "SS:DD"). Eski şemada (ek sütunlar yok) yalnız eski alanlar. */
+function mapPreferences(row) {
+  if (!row) {
+    return {};
+  }
+  const out = { email_announcements: row.email_announcements };
+  if ('email_finance_reminders' in row) {
+    out.email_finance_reminders = row.email_finance_reminders;
+  }
+  out.push_announcements = row.push_announcements;
+  if ('push_show_preview' in row) {
+    out.push_show_preview = row.push_show_preview === true;
+    out.push_quiet = {
+      enabled: row.push_quiet_enabled === true,
+      start: formatHhmm(Number(row.push_quiet_start), 1380),
+      end: formatHhmm(Number(row.push_quiet_end), 420),
+    };
+  }
+  out.updated_at = row.updated_at;
+  return out;
+}
 
 /**
  * Tek tutarlı görünümden (REPEATABLE READ, salt okunur) çağıranın verisini toplar.
@@ -253,7 +379,9 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const people = await q(SQL.people);
     const residencies = await q(SQL.residencies);
     const vehicles = await q(SQL.vehicles);
-    const notificationRow = (await q(SQL.notificationPreferences))[0] ?? null;
+    // Sonradan eklenen migration nesneleri (yoksa ilgili bölüm boş): tercih sütunları, belgeler, aidat hatırlatma, makbuz.
+    const optional = (await client.query(OPTIONAL_OBJECTS_SQL)).rows?.[0] ?? {};
+    const notificationRow = (await q(optional.has_preference_extras === true ? SQL.notificationPreferences : SQL.notificationPreferencesBase))[0] ?? null;
     const announcements = await bounded('announcements_received', SQL.announcements, EXPORT_ROW_LIMITS.announcements_received);
     const applications = await bounded('site_applications', SQL.siteApplications, EXPORT_ROW_LIMITS.site_applications);
     const guestPasses = await bounded('guest_passes', SQL.guestPasses, EXPORT_ROW_LIMITS.guest_passes);
@@ -262,6 +390,21 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const doorPermissions = await q(SQL.doorPermissions);
     const qrRequests = await bounded('qr_requests', SQL.qrRequests, EXPORT_ROW_LIMITS.qr_requests);
     const devices = await q(SQL.devices);
+    // Telefon bildirimi cihaz kayıtları (Faz 3b-B): platform, sürüm, tarihler; jeton / kurulum kimliği HARİÇ. Tablo yoksa boş.
+    const pushDevices = await exportPushDevices(client, userCode);
+    // Yüklediğiniz belgelerin kayıt bilgisi (Faz 3b-A) ve aidat hatırlatma geçmişiniz (Faz 4b). Dosya içeriği / adres / not HARİÇ (sorgu açıklamaları).
+    const uploadedDocuments = optional.has_documents === true ? await bounded('uploaded_documents', SQL.uploadedDocuments, EXPORT_ROW_LIMITS.uploaded_documents) : [];
+    const financeReminders = optional.has_reminders === true ? await bounded('finance_reminders_received', SQL.financeReminders, EXPORT_ROW_LIMITS.finance_reminders_received) : [];
+    // Makbuzlar: sakin ucunun (GET /app/my-finance/receipts) görünürlük kuralları AYNEN yeniden kullanılır (yetki mantığı kopyalanmaz; aynı bağlantı = aynı anlık görüntü).
+    // Yanıt özetidir; ödeyen adı (başkasına ait olabilir) dosyaya KONMAZ (mapReceiptForExport).
+    let receipts = [];
+    if (optional.has_receipts === true) {
+      const page = await collectHooks.listReceipts(userCode, client);
+      receipts = page.items ?? [];
+      if (page.next_before_id !== null && page.next_before_id !== undefined) {
+        truncated.push({ section: 'receipts', included: receipts.length, reason: 'row_limit' });
+      }
+    }
 
     // user_consents (migration 035, S-B): tablo yoksa atlanır; sütunlar beyaz listeyle seçilir.
     let consents = [];
@@ -309,15 +452,16 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
       })),
       vehicles: withIds(vehicles, ['id', 'site_code', 'person_id']),
       consents,
-      notification_preferences: notificationRow
-        ? {
-            email_announcements: notificationRow.email_announcements,
-            push_announcements: notificationRow.push_announcements,
-            updated_at: notificationRow.updated_at,
-          }
-        : {},
+      notification_preferences: mapPreferences(notificationRow),
       announcements_received: withIds(announcements),
       finance_statements: finance.items ?? [],
+      receipts: receipts.map(mapReceiptForExport),
+      finance_reminders_received: withIds(financeReminders, ['run_id', 'site_code']),
+      uploaded_documents: withIds(uploadedDocuments, ['document_id', 'site_code']).map((row) => ({
+        ...row,
+        version_no: numOrNull(row.version_no),
+        size_bytes: numOrNull(row.size_bytes),
+      })),
       site_applications: withIds(applications),
       guest_passes: withIds(guestPasses),
       door_events: withIds(doorEvents),
@@ -330,6 +474,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
         request_accuracy: numOrNull(row.request_accuracy),
       })),
       devices: withIds(devices),
+      push_devices: pushDevices,
       excluded: [...EXPORT_EXCLUDED],
     };
     return { data, truncated };
@@ -362,6 +507,9 @@ export const SHRINKABLE_SECTIONS = Object.freeze([
   'guest_passes',
   'site_applications',
   'finance_statements',
+  'receipts',
+  'finance_reminders_received',
+  'uploaded_documents',
   'people_records',
   'vehicles',
   'devices',
@@ -423,9 +571,8 @@ export const exportDeps = {
   acquireSlot: (userCode) => acquireExportSlot(userCode),
   releaseSlot: (slotId) => releaseExportSlot(slotId),
   collect: (userCode, options) => collectPersonalData(userCode, options),
-  // Denetim: KİM + ne zaman + boyut; ad / e-posta yazılmaz (yalnız user_code; audit_log değişmezdir, kişisel veri biriktirilmez). Hata dışa aktarmayı bozmaz.
-  audit: (userCode, details) =>
-    recordAudit(pool, { actor: { userCode }, action: 'account.data_exported', targetType: 'user', targetId: String(userCode), details }),
+  // Denetim: KİM + ne zaman + boyut; ad / e-posta yazılmaz (yalnız user_code; audit_log değişmezdir, kişisel veri biriktirilmez). Canlı kullanıcı kilidi altında (recordExportAudit).
+  audit: (userCode, details) => recordExportAudit(userCode, details),
 };
 
 /**

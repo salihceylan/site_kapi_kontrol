@@ -43,6 +43,9 @@ export const EXPORT_ROW_LIMITS = Object.freeze({
   guest_passes: 1000,
   join_requests: 200,
   qr_requests: 200,
+  uploaded_documents: 500,
+  finance_reminders_received: 300,
+  receipts: 200,
 });
 
 // --- Silme engelleri --------------------------------------------------------------------------------------
