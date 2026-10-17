@@ -8,11 +8,14 @@
 import 'dart:async';
 
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
+import 'package:site_kapi_kontrol/models/door_record.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/residency_relation.dart';
 import 'package:site_kapi_kontrol/models/site_page.dart';
+import 'package:site_kapi_kontrol/models/site_manager_record.dart';
 import 'package:site_kapi_kontrol/models/site_record.dart';
+import 'package:site_kapi_kontrol/models/staff_role_record.dart';
 import 'package:site_kapi_kontrol/models/site_structure_record.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/models/user_session.dart';
@@ -488,6 +491,54 @@ class PeopleFakeAuth extends AuthService with ModuleRequestFixtures {
     if (error != null) throw error;
     return result;
   }
+
+  // Kişi kartı "Roller" bölümü (ek roller, yöneticiler / davetler, kapılar).
+  final List<StaffRoleRecord> staffRoles = <StaffRoleRecord>[];
+  final List<SiteManagerRecord> siteManagers = <SiteManagerRecord>[];
+  final List<SiteManagerInvitationRecord> managerInvitations = <SiteManagerInvitationRecord>[];
+  final List<DoorRecord> myDoors = <DoorRecord>[];
+  final List<({String email, String role})> staffAssignCalls = <({String email, String role})>[];
+  final List<int> staffRemoveCalls = <int>[];
+  final List<String> managerInviteCalls = <String>[];
+  Object? staffAssignError;
+
+  @override
+  Future<List<StaffRoleRecord>> listStaffRoles(int siteCode) async => List<StaffRoleRecord>.of(staffRoles);
+
+  @override
+  Future<SiteManagersData?> getSiteManagers(int siteCode) async =>
+      SiteManagersData(managers: List.of(siteManagers), invitations: List.of(managerInvitations));
+
+  @override
+  Future<StaffRoleRecord> assignStaffRole(int siteCode, String email, String role) async {
+    staffAssignCalls.add((email: email, role: role));
+    final error = staffAssignError;
+    if (error != null) throw error;
+    final person = peopleJson.values.firstWhere((p) => p['email'] == email);
+    final record = StaffRoleRecord(
+      userCode: person['user_code'] as int,
+      fullName: person['full_name'] as String? ?? '',
+      email: email,
+      role: role,
+    );
+    staffRoles.add(record);
+    return record;
+  }
+
+  @override
+  Future<void> removeStaffRole(int siteCode, int userCode) async {
+    staffRemoveCalls.add(userCode);
+    staffRoles.removeWhere((r) => r.userCode == userCode);
+  }
+
+  @override
+  Future<(bool, String?)> inviteSiteManager(int siteCode, {required String email, String? fullName}) async {
+    managerInviteCalls.add(email);
+    return (true, null);
+  }
+
+  @override
+  Future<(List<DoorRecord>?, String?)> listMyDoors() async => (List<DoorRecord>.of(myDoors), null);
 
   @override
   Future<PersonDetail> getPerson(int siteCode, int personId) async {

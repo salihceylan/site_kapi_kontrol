@@ -22,8 +22,10 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/phone_input.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/person_roles_panel.dart';
 
-/// Kişi kartı penceresi (Platform Faz 2a): bilgiler, daireler ve ilişki geçmişi, araçlar, not.
+/// Kişi kartı penceresi (Platform Faz 2a): bilgiler, roller ([PersonRolesPanel], yalnız yönetimde), daireler ve
+/// ilişki geçmişi, araçlar, not.
 ///
 /// Kişi ayrıntısı açılışta çekilir (liste satırında not / ilişki geçmişi / araçlar yoktur): yüklenirken
 /// iskelet, hata olursa "Tekrar Dene" gösterilir (boş kart ASLA çizilmez). Yazma düğmeleri ("Düzenle",
@@ -361,6 +363,17 @@ class _PersonCardDialogState extends State<PersonCardDialog> {
           ),
         ),
         const SizedBox(height: AppSpace.md),
+        // Roller (tanıtımdaki beş rol tek yerde): yalnız yönetim yetkisi olana; kurul üyesi salt okur.
+        if (_canWrite) ...[
+          PersonRolesPanel(
+            key: ValueKey<int>(detail.id),
+            scope: widget.scope,
+            detail: detail,
+            onAddResidency: _addResidency,
+            onChanged: widget.onChanged,
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         DialogPanel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
