@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/app.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
 
 import '../design/harness.dart';
@@ -50,7 +51,8 @@ void main() {
 
           expect(find.byType(LoginHero), findsOneWidget);
           expect(find.byType(CircularProgressIndicator), findsOneWidget);
-          expect(find.byType(Image), findsOneWidget);
+          expect(find.byType(AnimatedGudeLogo), findsOneWidget);
+          expect(find.byType(Image), findsNothing, reason: 'bitmap logo yok');
           // Yalnız logo: başlık / alt başlık yok (giriş ekranına özgü).
           expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsNothing);
           expect(
@@ -82,24 +84,25 @@ void main() {
     });
 
     testWidgets(
-      'logonun aurası (halkanın dışına taşan boyama) kaydırıcının görünüm alanında kırpılmaz',
+      'logo (parıltısı dahil) kaydırıcının görünüm alanında kırpılmaz: ışık logonun kendi alanının içinde kalır',
       (t) async {
         for (final dark in const <bool>[false, true]) {
           await _pumpSplash(t, width: 360, height: 640, dark: dark);
           final hero = t.getRect(find.byType(LoginHero));
-          final aura = hero.inflate(LoginHero.auraReach);
+          final logo = t.getRect(find.byType(AnimatedGudeLogo));
           final viewport = t.getRect(
             find.descendant(
               of: find.byType(StartupSplash),
               matching: find.byType(SingleChildScrollView),
             ),
           );
-          expect(viewport.left, lessThanOrEqualTo(aura.left), reason: 'dark=$dark');
-          expect(viewport.top, lessThanOrEqualTo(aura.top), reason: 'dark=$dark');
-          expect(viewport.right, greaterThanOrEqualTo(aura.right), reason: 'dark=$dark');
-          // Alt kenar: aura ile çark arasında boşluk kalır (çark auranın içine girmez).
+          expect(viewport.left, lessThanOrEqualTo(logo.left), reason: 'dark=$dark');
+          expect(viewport.top, lessThanOrEqualTo(logo.top), reason: 'dark=$dark');
+          expect(viewport.right, greaterThanOrEqualTo(logo.right), reason: 'dark=$dark');
+          expect(hero.contains(logo.center), isTrue);
+          // Çark logonun altındadır ve ona binmez.
           final spinner = t.getRect(find.byType(CircularProgressIndicator));
-          expect(spinner.top, greaterThanOrEqualTo(aura.bottom - 1));
+          expect(spinner.top, greaterThanOrEqualTo(logo.bottom - 1));
         }
       },
     );

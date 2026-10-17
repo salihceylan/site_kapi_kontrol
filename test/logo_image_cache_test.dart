@@ -1,10 +1,11 @@
-// FAZ 5 / P-f: uygulama logosu (1024x1024 PNG) giriş sayfasında 82 dp, çekmecede 52 dp gösterilir.
-// Tam çözünürlükte çözmek ~4 MB bitmap + gereksiz raster demektir; görüntü boyutuna göre
-// (logical px x devicePixelRatio) küçük çözülür. Görünüm aynı kalır.
+// FAZ 5 / P-f -> Güde Teknoloji logosu: uygulama logosu artık VEKTÖR (lib/brand); eskiden 1024x1024 PNG giriş sayfasında
+// 82 dp, çekmecede 52 dp gösteriliyor ve görüntü boyutuna göre küçük çözülüyordu. Vektör logo bitmap çözmez:
+// ImageCache'e hiçbir şey girmez (bellek ~0), görünüm ise aynı kalır.
 // ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
@@ -12,7 +13,7 @@ import 'package:site_kapi_kontrol/ui/pages/login_page.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 void main() {
-  testWidgets('ÖLÇÜM: giriş sayfası logosu görüntü boyutuna göre çözülür (bellek)', (tester) async {
+  testWidgets('ÖLÇÜM: giriş sayfası logosu vektördür; ImageCache boş kalır (bellek)', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
@@ -23,29 +24,18 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: LoginPage(authService: AuthService(api: AuthApi(baseUrl: 'http://localhost')))),
     );
-    // Görüntü gerçek kodlayıcıyla çözülsün (gerçek zaman).
-    await tester.runAsync(() async {
-      final logo = find.byType(Image);
-      expect(logo, findsWidgets);
-      for (final element in logo.evaluate()) {
-        final image = element.widget as Image;
-        await precacheImage(image.image, element);
-      }
-    });
     await tester.pump();
 
-    final image = tester.widget<Image>(find.byType(Image).first);
-    final bytes = cache.currentSizeBytes;
-    print('ÖLÇÜM logo: ImageCache ${(bytes / 1024).toStringAsFixed(0)} KB, sağlayıcı=${image.image.runtimeType}');
-
-    // 82 dp x 3.0 = 246 px -> ~240 KB (RGBA); tam çözünürlük 1024x1024 = 4096 KB.
-    expect(image.image, isA<ResizeImage>(), reason: 'logo görüntü boyutuna göre küçük çözülmeli');
-    expect(bytes, lessThan(1024 * 1024), reason: 'tam çözünürlüklü (4 MB) bitmap önbellekte tutulmamalı');
+    print('ÖLÇÜM logo: ImageCache ${cache.currentSizeBytes} B, canlı görüntü=${cache.liveImageCount}');
+    expect(find.byType(AnimatedGudeLogo), findsOneWidget);
+    expect(find.byType(Image), findsNothing, reason: 'bitmap logo yok');
+    expect(cache.currentSizeBytes, 0, reason: 'vektör logo bitmap çözmez');
+    expect(cache.liveImageCount, 0);
     expect(find.text('Site ve Toplu Yaşam Yönetim Sistemi'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('çekmece avatarı (52 dp) logoyu görüntü boyutuna göre çözer; menü görünümü aynı', (tester) async {
+  testWidgets('çekmece avatarı (52 dp) yaprak işaretini vektör çizer; bitmap çözülmez; menü görünümü aynı', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3.0;
     addTearDown(tester.view.reset);
@@ -73,8 +63,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     final avatar = tester.widget<CircleAvatar>(find.byType(CircleAvatar).first);
-    expect(avatar.backgroundImage, isA<ResizeImage>());
-    expect((avatar.backgroundImage! as ResizeImage).width, 156, reason: '52 dp x 3.0');
+    expect(avatar.backgroundImage, isNull, reason: 'bitmap arka plan yok');
+    expect(avatar.child, isA<AnimatedGudeLeafMark>());
+    expect(tester.getSize(find.byType(AnimatedGudeLeafMark)), const Size(52, 52));
+    expect(cache.currentSizeBytes, 0);
     expect(find.text('Ali Veli'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

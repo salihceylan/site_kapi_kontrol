@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marka acilis rengi. Uretici: tool/icons/apply_icons.py (kaynak tool/icons/brand_spec.json). -->
+<resources>
+    <color name="launch_background">#FF06080B</color>
+</resources>

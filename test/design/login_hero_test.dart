@@ -1,13 +1,17 @@
 // FAZ 5 / A1b-(iii): LoginHero widget testleri.
 //
-// Durumlar (başlık+alt başlık / yalnız başlık / yalnız logo), logonun gösterim boyutunda çözülmesi,
-// giriş animasyonu ve hareket azaltma, pumpAndSettle'ın bitmesi, taşma matrisi (320/360/412/820 x
-// 1,0/1,5/2,0 x açık/koyu) ve Semantics.
+// Marka başlığı artık Güde Teknoloji'nin ışıklı VEKTÖR logosunu ([AnimatedGudeLogo]) gösterir (eski dairesel
+// çerçeveli PNG logo kalktı). Durumlar (başlık+alt başlık / yalnız başlık / yalnız logo), logonun boyutu ve
+// temaya uyumu (bitmap çözümü yok), ışık animasyonunun varsayılan anahtarla ve hareket azaltmayla bağı,
+// giriş animasyonu ve hareket azaltma, pumpAndSettle'ın bitmesi, taşma matrisi (320/360/412/820 x 1,0/1,5/2,0 x
+// açık/koyu + 320x640@2,0 / 360x640@1,5 / 640x360@2,0 pencereleri) ve Semantics.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
+import 'package:site_kapi_kontrol/brand/logo_palette.dart';
 import 'package:site_kapi_kontrol/ui/design/gloss.dart';
 import 'package:site_kapi_kontrol/ui/design/login_hero.dart';
-import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
 import 'harness.dart';
 
@@ -32,15 +36,21 @@ double _dy(WidgetTester t) {
   return t.widget<Transform>(f).transform.getTranslation().y;
 }
 
-/// Logo halkasının (gradyanlı kap) süslemesi.
-BoxDecoration _ringDecoration(WidgetTester t) {
-  final f = find
-      .descendant(of: find.byType(LoginHero), matching: find.byType(Container))
-      .first;
-  return t.widget<Container>(f).decoration! as BoxDecoration;
-}
+final Finder _logoFinder = find.byType(AnimatedGudeLogo);
 
-Image _logo(WidgetTester t) => t.widget<Image>(find.byType(Image));
+Finder _sweepLayer() => find.descendant(
+  of: _logoFinder,
+  matching: find.byWidgetPredicate(
+    (w) => w is CustomPaint && w.painter is GudeLogoSweepPainter,
+  ),
+);
+
+Finder _glowLayer() => find.descendant(
+  of: _logoFinder,
+  matching: find.byWidgetPredicate(
+    (w) => w is CustomPaint && w.painter is GudeLogoGlowPainter,
+  ),
+);
 
 void main() {
   group('LoginHero: durumlar', () {
@@ -48,14 +58,14 @@ void main() {
       await pumpAt(t, _full, scale: 1.0);
       expect(find.text('Giriş'), findsOneWidget);
       expect(find.text('Akıllı Kapı & Site Otomasyon Paneli'), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
+      expect(_logoFinder, findsOneWidget);
     });
 
     testWidgets('yalnız başlık: alt başlık yok', (t) async {
       await pumpAt(t, const LoginHero(title: _title), scale: 1.0);
       expect(find.text(_title), findsOneWidget);
       expect(find.text(_subtitle), findsNothing);
-      expect(find.byType(Image), findsOneWidget);
+      expect(_logoFinder, findsOneWidget);
     });
 
     testWidgets('yalnız alt başlık: başlık yok', (t) async {
@@ -67,60 +77,105 @@ void main() {
     testWidgets('ikisi de null: yalnız logo (açılış/ara ekran)', (t) async {
       await pumpAt(t, const LoginHero(), scale: 1.0);
       expect(find.byType(Text), findsNothing);
-      expect(find.byType(Image), findsOneWidget);
-      expect(t.getSize(find.byType(LoginHero)).width, LoginHero.ringDiameter);
+      expect(_logoFinder, findsOneWidget);
+      expect(
+        t.getSize(find.byType(LoginHero)).width,
+        closeTo(LoginHero.logoHeight * GudeLogo.aspect, 0.01),
+      );
     });
+  });
 
-    testWidgets('boyutlar: 96 dp halka, 80 dp logo (cover, daire kırpma)', (
-      t,
-    ) async {
-      await pumpAt(t, const LoginHero(), scale: 1.0);
-      expect(LoginHero.ringDiameter, 96);
-      expect(LoginHero.logoDiameter, 80);
-      expect(t.getSize(find.byType(LoginHero)), const Size(96, 96));
-      expect(t.getSize(find.byType(Image)), const Size(80, 80));
-      expect(_logo(t).fit, BoxFit.cover);
-      expect(find.byType(ClipOval), findsOneWidget);
-    });
-
-    testWidgets('logo varlığı DEĞİŞMEZ: assets/images/app_logo.png', (t) async {
-      await pumpAt(t, const LoginHero(), scale: 1.0);
-      final provider = _logo(t).image;
-      expect(provider, isA<ResizeImage>());
-      final inner = (provider as ResizeImage).imageProvider;
-      expect(inner, isA<AssetImage>());
-      expect((inner as AssetImage).assetName, 'assets/images/app_logo.png');
-      expect(LoginHero.logoAsset, 'assets/images/app_logo.png');
-    });
-
+  group('LoginHero: logo (vektör, çerçevesiz, temaya uyumlu)', () {
     testWidgets(
-      'halka: birincil gradyan, iç yüzey palet yüzeyi; BoxShadow YOK (tek ışıma = aura)',
+      'boyut: 120 dp yükseklik, en/boy oranı logoyla aynı; daire/halka/kırpma yok',
       (t) async {
-        for (final dark in const [false, true]) {
-          await pumpAt(t, const LoginHero(), scale: 1.0, dark: dark);
-          final p = dark ? AppPalette.dark : AppPalette.light;
-          final ring = _ringDecoration(t);
-          expect(ring.shape, BoxShape.circle);
-          expect(ring.gradient, AppTone.primary.gradient);
-          // Görsel sözleşme (bilerek değişti): eski nötr `p.shadow(2)` gölgesi yerine halkanın ARKASINDA
-          // tek, yumuşak renkli aura vardır (bkz. 'premium halka'): yüzeyde ikinci bir gölge katmanı yok.
-          expect(ring.boxShadow, isNull, reason: 'çift gölge yok: ışıma aura');
-          final inner = t.widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(LoginHero),
-                  matching: find.byType(DecoratedBox),
-                )
-                .at(1),
-          );
-          expect(
-            (inner.decoration as BoxDecoration).color,
-            p.surface,
-            reason: 'dark=$dark',
-          );
-        }
+        await pumpAt(t, const LoginHero(), scale: 1.0);
+        expect(LoginHero.logoHeight, 120);
+        final size = t.getSize(_logoFinder);
+        expect(size.height, 120);
+        expect(size.width / size.height, closeTo(GudeLogo.aspect, 1e-6));
+        expect(t.getSize(find.byType(LoginHero)), size);
+        expect(find.byType(ClipOval), findsNothing, reason: 'daireye kırpma yok');
+        expect(find.byType(Gloss), findsNothing, reason: 'eski halka cilası yok');
+        expect(
+          find.descendant(
+            of: find.byType(LoginHero),
+            matching: find.byWidgetPredicate(
+              (w) =>
+                  w is DecoratedBox &&
+                  w.decoration is BoxDecoration &&
+                  (w.decoration as BoxDecoration).shape == BoxShape.circle,
+            ),
+          ),
+          findsNothing,
+          reason: 'dairesel çerçeve yok',
+        );
       },
     );
+
+    testWidgets('bitmap logo kullanılmaz: Image widget\'ı ve ImageCache boş', (
+      t,
+    ) async {
+      PaintingBinding.instance.imageCache
+        ..clear()
+        ..clearLiveImages();
+      await pumpAt(t, _full, scale: 1.0);
+      expect(find.byType(Image), findsNothing);
+      expect(PaintingBinding.instance.imageCache.currentSizeBytes, 0);
+      expect(PaintingBinding.instance.imageCache.liveImageCount, 0);
+    });
+
+    testWidgets('yatayda ortalı (genişleyen üst öğe içinde de)', (t) async {
+      await pumpAt(
+        t,
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [_full],
+        ),
+        width: 360,
+        scale: 1.0,
+      );
+      expect(t.getCenter(_logoFinder).dx, closeTo(180, 0.01));
+      expect(t.getCenter(find.text(_title)).dx, closeTo(180, 0.01));
+    });
+
+    testWidgets('kullanılabilir genişlik logodan darsa en/boy oranı korunarak küçülür', (
+      t,
+    ) async {
+      await pumpAt(
+        t,
+        const SizedBox(width: 150, child: LoginHero()),
+        scale: 1.0,
+      );
+      final size = t.getSize(_logoFinder);
+      expect(size.width, closeTo(150, 0.01));
+      expect(size.width / size.height, closeTo(GudeLogo.aspect, 1e-6));
+      expect(size.height, lessThan(LoginHero.logoHeight));
+    });
+
+    testWidgets('renkler temaya göre: koyuda koyu palet, açıkta açık palet', (
+      t,
+    ) async {
+      for (final dark in const [false, true]) {
+        await pumpAt(t, const LoginHero(), scale: 1.0, dark: dark);
+        final art =
+            (t.widget<CustomPaint>(_sweepLayer().first).painter!
+                    as GudeLogoSweepPainter)
+                .art;
+        expect(art, isA<GudeLogoPainter>());
+        expect(
+          (art as GudeLogoPainter).palette,
+          dark ? LogoPalette.dark : LogoPalette.light,
+          reason: 'dark=$dark',
+        );
+        expect(
+          (t.widget<CustomPaint>(_glowLayer().first).painter!
+                  as GudeLogoGlowPainter)
+              .dark,
+          dark,
+        );
+      }
+    });
 
     testWidgets('yasaklı pahalı efektler yok (BackdropFilter / ShaderMask)', (
       t,
@@ -161,98 +216,8 @@ void main() {
       expect(t.takeException(), isNull);
       expect(t.getSize(find.byType(LoginHero)).width, 360);
     });
-  });
 
-  group('LoginHero: premium halka (aura + cila)', () {
-    final aura = find.byWidgetPredicate(
-      (w) => w is CustomPaint && w.painter is LoginHeroAuraPainter,
-    );
-
-    testWidgets('cila: halkada tek daire Gloss; iç yüzeyin ve logonun ALTINDA', (
-      t,
-    ) async {
-      await pumpAt(t, const LoginHero(), scale: 1.0);
-      final gloss = find.descendant(
-        of: find.byType(LoginHero),
-        matching: find.byType(Gloss),
-      );
-      expect(gloss, findsOneWidget);
-      expect(t.widget<Gloss>(gloss).shape, GlossShape.circle);
-      // Boyama sırası: önce cila, sonra iç yüzey + logo (cila yalnız halka kuşağında görünür; logo
-      // görselinin üstüne beyaz parıltı binmez).
-      final stack = t.widget<Stack>(
-        find.ancestor(of: gloss, matching: find.byType(Stack)).first,
-      );
-      expect(stack.children.first, isA<Positioned>());
-      expect((stack.children.first as Positioned).child, isA<Gloss>());
-      expect(stack.children.last, isA<DecoratedBox>());
-    });
-
-    testWidgets(
-      'aura: tek MaskFilter.blur dairesi, kendi RepaintBoundary içinde; halkanın dışına taşar, düzeni değiştirmez',
-      (t) async {
-        for (final dark in const [false, true]) {
-          await pumpAt(t, const LoginHero(), scale: 1.0, dark: dark);
-          expect(aura, findsOneWidget, reason: 'dark=$dark');
-          // Kendi katmanı: statik aura yalnız renk/tema değişince yeniden boyanır.
-          final boundary = find.ancestor(
-            of: aura,
-            matching: find.byType(RepaintBoundary),
-          );
-          expect(
-            t.widget<RepaintBoundary>(boundary.first).child,
-            isA<CustomPaint>(),
-          );
-          // Boyama: halkadan biraz büyük TEK bulanık daire; renk birincil ton, koyuda daha belirgin.
-          expect(
-            t.renderObject(aura),
-            paints
-              ..circle(
-                radius: LoginHero.ringDiameter * 0.54,
-                color: LoginHeroAuraPainter.tone.a.withValues(
-                  alpha: dark
-                      ? LoginHeroAuraPainter.alphaDark
-                      : LoginHeroAuraPainter.alphaLight,
-                ),
-                hasMaskFilter: true,
-              ),
-            reason: 'dark=$dark',
-          );
-          expect(
-            (t.widget<CustomPaint>(aura).painter! as LoginHeroAuraPainter).dark,
-            dark,
-          );
-          // Tuval halkadan her yönde auraReach büyüktür; ama düzen boyutu yalnız halkadır.
-          const side = LoginHero.ringDiameter + 2 * LoginHero.auraReach;
-          expect(t.getSize(aura), const Size(side, side));
-          expect(
-            t.getTopLeft(aura),
-            t.getTopLeft(find.byType(LoginHero)) -
-                const Offset(LoginHero.auraReach, LoginHero.auraReach),
-          );
-          expect(t.getSize(find.byType(LoginHero)), const Size(96, 96));
-        }
-      },
-    );
-
-    testWidgets('aura bulanıklığı makul: sigma x 2 <= 16 (BoxShadow eşdeğeri); yalnız tek aura', (
-      t,
-    ) async {
-      expect(LoginHero.auraSigma * 2, lessThanOrEqualTo(16));
-      expect(LoginHero.auraReach, greaterThanOrEqualTo(LoginHero.auraSigma * 3));
-      await pumpAt(t, _full, scale: 1.0);
-      expect(aura, findsOneWidget);
-    });
-
-    testWidgets('boyayıcı yalnız koyu/açık değişince yeniden boyanır', (t) async {
-      const light = LoginHeroAuraPainter(dark: false);
-      expect(light.shouldRepaint(const LoginHeroAuraPainter(dark: false)), isFalse);
-      expect(light.shouldRepaint(const LoginHeroAuraPainter(dark: true)), isTrue);
-    });
-
-    testWidgets('yüksek karşıtlıkta aura ve cila çizilmez (süs yok); logo kalır', (
-      t,
-    ) async {
+    testWidgets('yüksek karşıtlıkta da logo ve başlık çizilir', (t) async {
       await t.pumpWidget(
         harnessApp(
           Builder(
@@ -264,67 +229,56 @@ void main() {
         ),
       );
       await t.pump(const Duration(milliseconds: 450));
-      expect(aura, findsNothing);
-      expect(
-        find.descendant(
-          of: find.byType(Gloss),
-          matching: find.byType(CustomPaint),
-        ),
-        findsNothing,
-      );
-      expect(find.byType(Image), findsOneWidget);
+      expect(_logoFinder, findsOneWidget);
       expect(find.text(_title), findsOneWidget);
       expect(t.takeException(), isNull);
     });
+  });
 
-    testWidgets('kararlı durumda ticker yok (aura/cila durağan); pumpAndSettle biter', (
+  group('LoginHero: ışık animasyonu (varsayılan anahtar + hareket azaltma)', () {
+    GudeLogoGlowPainter glow(WidgetTester t) =>
+        t.widget<CustomPaint>(_glowLayer().first).painter! as GudeLogoGlowPainter;
+
+    testWidgets('testlerde varsayılan kapalı: ticker yok, pumpAndSettle biter', (
       t,
     ) async {
+      expect(GudeLogoAnimation.enabledByDefault, isFalse);
       await t.pumpWidget(harnessApp(_full));
       await t.pumpAndSettle();
       expect(t.binding.transientCallbackCount, 0);
+      expect(glow(t).progress.value, 0);
     });
-  });
 
-  group('LoginHero: logo gösterim boyutunda çözülür', () {
-    for (final dpr in const [1.0, 2.0, 3.0, 3.5]) {
-      testWidgets('devicePixelRatio $dpr: cacheWidth = ceil(80 x dpr)', (
-        t,
-      ) async {
-        t.view.physicalSize = Size(360 * dpr, 640 * dpr);
-        t.view.devicePixelRatio = dpr;
-        addTearDown(t.view.reset);
-        await t.pumpWidget(harnessApp(const LoginHero()));
-        final provider = _logo(t).image as ResizeImage;
-        expect(provider.width, (80 * dpr).ceil());
-        expect(provider.height, isNull, reason: 'en-boy oranı korunur');
-        expect(t.takeException(), isNull);
-      });
-    }
+    testWidgets('anahtar açıkken logo canlı: tur ilerler, süpürme oynar', (
+      t,
+    ) async {
+      GudeLogoAnimation.enabledByDefault = true;
+      addTearDown(() => GudeLogoAnimation.enabledByDefault = false);
+      await t.pumpWidget(harnessApp(_full));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 1700));
+      expect(glow(t).progress.value, closeTo(1700 / 7000, 0.003));
+      expect(
+        (t.widget<CustomPaint>(_sweepLayer().first).painter!
+                as GudeLogoSweepPainter)
+            .sweep
+            .value,
+        closeTo(0.5, 0.02),
+      );
+      expect(t.takeException(), isNull);
+    });
 
-    testWidgets(
-      'gerçek çözümleme: 1024x1024 tam çözünürlük bellekte TUTULMAZ (3.0 dpr: ~225 KB)',
-      (t) async {
-        t.view.physicalSize = const Size(1080, 2400);
-        t.view.devicePixelRatio = 3.0;
-        addTearDown(t.view.reset);
-        final cache = PaintingBinding.instance.imageCache;
-        cache.clear();
-        cache.clearLiveImages();
-
-        await t.pumpWidget(harnessApp(const LoginHero()));
-        await t.runAsync(() async {
-          final element = t.element(find.byType(Image));
-          await precacheImage(_logo(t).image, element);
-        });
-        await t.pump();
-        expect(
-          cache.currentSizeBytes,
-          lessThan(1024 * 1024),
-          reason: 'tam çözünürlüklü (4 MB) bitmap tutulmamalı',
-        );
-      },
-    );
+    testWidgets('hareket azaltma: anahtar açık olsa da logo durağan, ticker yok', (
+      t,
+    ) async {
+      GudeLogoAnimation.enabledByDefault = true;
+      addTearDown(() => GudeLogoAnimation.enabledByDefault = false);
+      await t.pumpWidget(harnessApp(_full, reduce: true));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 2000));
+      expect(glow(t).progress.value, 0);
+      expect(t.binding.transientCallbackCount, 0);
+    });
   });
 
   group('LoginHero: giriş animasyonu ve hareket azaltma', () {
@@ -417,7 +371,7 @@ void main() {
         expect(labelled, [
           _title,
           _subtitle,
-        ], reason: 'logo (resim) anlamsal ağaçta yok');
+        ], reason: 'logo anlamsal ağaçta yok (dekoratif)');
         handle.dispose();
       },
     );
@@ -471,6 +425,42 @@ void main() {
         }
       });
     });
+
+    testWidgets(
+      'belirli pencereler (320x640@2,0 / 360x640@1,5 / 640x360@2,0 / tablet), ışık animasyonu AÇIKKEN de taşmaz',
+      (t) async {
+        GudeLogoAnimation.enabledByDefault = true;
+        addTearDown(() => GudeLogoAnimation.enabledByDefault = false);
+        const cells = <(double, double, double)>[
+          (320, 640, 2.0),
+          (360, 640, 1.5),
+          (640, 360, 2.0),
+          (820, 1180, 1.0),
+        ];
+        for (final (w, h, s) in cells) {
+          for (final dark in const [false, true]) {
+            await pumpAt(
+              t,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _full,
+              ),
+              width: w,
+              height: h,
+              scale: s,
+              dark: dark,
+            );
+            // Süpürmenin içinde de çiz.
+            await t.pump(const Duration(milliseconds: 1250));
+            expect(t.takeException(), isNull, reason: '${w}x$h @$s dark=$dark');
+            expect(
+              t.getRect(find.byType(LoginHero)).width,
+              lessThanOrEqualTo(w),
+            );
+          }
+        }
+      },
+    );
 
     testWidgets(
       'çok uzun başlık/alt başlık ve bölünemeyen uzun sözcük satır sarar, taşmaz',

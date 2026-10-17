@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive simge arka plani: derin lacivert-siyah radyal gradyan. Yaprak ve altin isima on planda (mipmap/ic_launcher_foreground).
+     Uretici: tool/icons/apply_icons.py (kaynak tool/icons/brand_spec.json). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:type="radial"
+        android:centerX="0.5"
+        android:centerY="0.46"
+        android:gradientRadius="54%"
+        android:startColor="#0F2050"
+        android:centerColor="#070E20"
+        android:endColor="#03060B" />
+</shape>

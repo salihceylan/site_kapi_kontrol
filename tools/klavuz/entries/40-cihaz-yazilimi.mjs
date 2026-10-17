@@ -74,7 +74,7 @@ export default {
     { file: ECFG, note: 'Ekran: UART, dokunmatik, LED ve düğme pinleri; ekran firmware sürümü' },
     { file: ETOUCH, note: 'Ekran: CST816D dokunmatik I2C sürücüsü' },
     { file: EPIO, note: 'Ekran derleme ortamı ve TFT_eSPI pin/sürücü bayrakları' },
-    { file: DENE, note: 'Cihaz Dene (AHBU Cihaz Deneme) seri aracı: durum tablosu, röle butonları' },
+    { file: DENE, note: 'Cihaz Dene (SmartKeyPass Cihaz Deneme) seri aracı: durum tablosu, röle butonları' },
     { file: 'OTA_KURULUM.txt', note: 'OTA akışı, manifest alanları, sunucu dizin yapısı (c3 / wroom ayrı)' },
     { file: 'docs/YEREL_KONTROL_V2.md', note: 'Yerel kontrol protokol sözleşmesi (LOCALCTRL_V2)' },
   ],
@@ -130,7 +130,7 @@ export default {
         'Kart atölye modunda (kayıtlı Wi-Fi yok) olduğu için h/l/p seri komutları açık',
       ],
       checks: [
-        'Seri "?" çıktısı: "WiFi kayitli: Yok", "Bluetooth provisioning: aktif" ve "Bluetooth adi: AHBU<UID>"',
+        'Seri "?" çıktısı: "WiFi kayitli: Yok", "Bluetooth provisioning: aktif" ve "Bluetooth adi: SmartKeyPass<UID>" (eski firmware: AHBU<UID>)',
         'Uygulamadan cihaz ekleme (BLE) akışını başlatın; başarısızsa cihaz-ble-kurulum-basarisiz',
       ],
       logs: ['Kayitli WiFi yok, BLE provisioning baslatiliyor.', 'BLE WiFi provisioning aktif: %s'],
@@ -138,10 +138,10 @@ export default {
     },
     {
       id: 'cihaz-ble-gorunmuyor',
-      symptom: 'Telefon BLE taramasında "AHBU..." adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor',
-      keywords: ['BLE', 'bluetooth', 'AHBU', 'görünmüyor', 'kurulum', 'provisioning', 'tarama'],
+      symptom: 'Telefon BLE taramasında "SmartKeyPass..." (eski kartlarda "AHBU...") adlı cihaz görünmüyor, Wi-Fi kurulumu başlatılamıyor',
+      keywords: ['BLE', 'bluetooth', 'SmartKeyPass', 'AHBU', 'görünmüyor', 'kurulum', 'provisioning', 'tarama'],
       refs: [
-        { file: WIFI, find: 'return "AHBU" + cihazUniqueId();', note: 'BLE cihaz adı: "AHBU" + 12 haneli UID (efuse MAC)' },
+        { file: WIFI, find: 'return "SmartKeyPass" + cihazUniqueId();', note: 'BLE cihaz adı: "SmartKeyPass" + 12 haneli UID (efuse MAC); eski firmware "AHBU" + UID yayınlardı' },
         { file: WIFI, find: 'inline void wifiStartProvisioningMode() {', note: 'BLE sunucusu/servis/özellikler kurulur ve yayın (advertising) başlar' },
         { file: WIFI, find: 'if (gProvisioningMode && wifiHasMqttCredentials()) {', note: 'Wi-Fi bağlanıp MQTT kimliği de varsa BLE kurulum modu KAPATILIR' },
         { file: WIFI, find: 'Kayitli WiFi yok, BLE provisioning baslatiliyor.', note: 'BLE yalnız kayıtlı Wi-Fi YOKKEN açılışta başlar' },
@@ -267,7 +267,7 @@ export default {
       checks: [
         'Seri "?": "MQTT kimligi: cihaz ozel kimlikli" mi, "MQTT sunucu: host:port" doğru mu',
         'rc=4/5 sonrası cihaz 5 dk bekler; hemen denemek için cihazı yeniden başlatın',
-        'Broker günlüğünde aynı clientId ("AHBU-<UID>") için red nedenini arayın',
+        'Broker günlüğünde aynı clientId ("SmartKeyPass-<UID>"; eski firmware "AHBU-<UID>") için red nedenini arayın',
       ],
       logs: ['MQTT baglaniyor (id=', 'Hata rc=', ' tekrar denenecek', 'baglandi'],
       tests: [T_MQTT],
@@ -1017,7 +1017,7 @@ export default {
         { file: YEREL, find: 'inline void yerelStatusHandler(', note: 'Durum cevabı: device_uid, firmware_version, wifi_connected, ip, door_locked, local_control_available (sır yok)' },
         { file: YEREL, find: 'inline YerelOkuSonuc yerelHttpIstekOku(', note: '512 bayt ve 300 ms sınırı; aşılırsa 431 (istek_cok_buyuk), bozuk/zaman aşımı 400 (gecersiz_istek)' },
         { file: YEREL, find: 'inline bool yerelUidEslesiyor(const String& gelenUid) {', note: 'X-AHBU-Device-UID başlığı verilmişse cihaz UID\'siyle eşleşmeli (büyük/küçük harf duyarsız), değilse 404' },
-        { file: YEREL, find: 'MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);', note: 'mDNS adı ahbu-<uid>.local; ağ mDNS\'i filtreliyorsa IP ile deneyin' },
+        { file: YEREL, find: 'MDNS.addService("ahbu", "tcp", YEREL_KAPI_KONTROL_PORT);', note: 'mDNS adı smartkeypass-<uid>.local (eski firmware ahbu-<uid>.local; servis türü _ahbu._tcp protokol kimliği olarak kalır); ağ mDNS\'i filtreliyorsa IP ile deneyin' },
       ],
       causes: [
         'Eski istemci POST /ahbu/open kullanıyor: v2 ile kaldırıldı, UDP imzalı açma kullanılmalı',
@@ -1225,7 +1225,7 @@ export default {
       refs: [
         { file: BAT, find: 'call pio run -e esp32_relay_wroom -t upload --upload-port %PORT%', note: 'app0 (0x10000) USB ile yazılır; varsayılan port COM7, ilk argümanla değişir' },
         { file: BAT, find: 'erase_region 0xe000 0x2000', note: 'otadata sıfırlanır: bootloader yeni app0\'ı seçsin (OTA ile app1\'e geçilmişse eski imaj açılmasını önler)' },
-        { file: BAT, find: 'Lutfen AHBU Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak kapatin!', note: 'Seri port başka program tarafından tutuluyorsa yükleme başarısız olur' },
+        { file: BAT, find: 'Lutfen SmartKeyPass Cihaz Deneme veya Seri Monitor baglantisini Kes butonuna basarak kapatin!', note: 'Seri port başka program tarafından tutuluyorsa yükleme başarısız olur' },
         { file: PART, find: 'otadata,', note: 'otadata 0xe000 / 0x2000 bayt; bat betiği tam bu bölgeyi siler' },
         { file: PART, find: 'app0,', note: 'app0 0x10000, app1 0x1F0000; her biri 0x1E0000 bayt' },
         { file: BAT, find: 'set PORT=COM7', note: 'Varsayılan port; farklı portta ilk argüman verilmeli' },

@@ -1,4 +1,4 @@
-# 📌 AHBU & SİTE KAPI KONTROL - BEKLEYEN İŞLER VE YOL HARİTASI (ROADMAP)
+# 📌 SmartKeyPass & SİTE KAPI KONTROL - BEKLEYEN İŞLER VE YOL HARİTASI (ROADMAP)
 
 **Son Güncelleme:** 2026-10-01  
 **Proje:** Site Kapı Kontrol Ekosistemi (`site_kapi_kontrol`, `ahbu`, `cihaz_kontrol`, `company_qr_tool`)

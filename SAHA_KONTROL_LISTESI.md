@@ -159,11 +159,11 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 - [ ] **8.5. İlk Açılış Donanım Self-Testi (Röle Çek-Bırak + GM60 Flaş/Bip):**
   - **Nasıl Test Edilir:** Cihazı yeniden başlatın (veya USB'yi takın).
   - **Beklenen Sonuç:** Açılışta 120 ms süreli röle mekanik çek-bırak sesi duyulmalı, ardından GM60 kamera ışıkları 300 ms yanıp sönmeli, buzzer bip sesi vermelidir. Seri ekranda `[TEST 1/2] Role mekanik test ediliyor... [OK]`, `[TEST 2/2] GM60 Kamera test ediliyor... [OK / YANIT ALINDI]`, `[SELF-TEST] Donanim hazir.` yazmalıdır.
-- [ ] **8.6. Seri Monitör ve AHBU Test Arayüzünde Kamera Bağlantı Durumu:**
-  - **Nasıl Test Edilir:** Cihazın `--- ESP32 SISTEM BILGISI ---` çıktısını veya AHBU Cihaz Deneme aracındaki "Kamera / QR Okuyucu" alanını kontrol edin.
+- [ ] **8.6. Seri Monitör ve SmartKeyPass Cihaz Deneme Arayüzünde Kamera Bağlantı Durumu:**
+  - **Nasıl Test Edilir:** Cihazın `--- ESP32 SISTEM BILGISI ---` çıktısını veya SmartKeyPass Cihaz Deneme aracındaki "Kamera / QR Okuyucu" alanını kontrol edin.
   - **Beklenen Sonuç:** Kamera bağlıysa `Kamera / QR Okuyucu: Bagli (Hazir)`, bağlı değilse veya yanıt yoksa `Bagli Degil` olarak görünmeli ve anlık güncellenmelidir.
 - [ ] **8.7. Manuel Kamera Testi (Seri 'k' Komutu ve Arayüz Butonu):**
-  - **Nasıl Test Edilir:** AHBU Test aracındaki `Kamera Test (Isik/Bip)` butonuna basın veya seri terminale `k` gönderin.
+  - **Nasıl Test Edilir:** SmartKeyPass Cihaz Deneme aracındaki `Kamera Test (Isik/Bip)` butonuna basın veya seri terminale `k` gönderin.
   - **Beklenen Sonuç:** GM60 flaş ışığı yanıp söner, bip sesi çalar ve seri logda `[GM60 TEST] Kamera Durumu: Bagli (Hazir)` teyit edilir.
 
 ---
@@ -194,16 +194,16 @@ Sahada veya uygulamada test ettikçe ilgili kutucukları `- [x]` olarak işaretl
 
 ---
 
-## 10. 🏷️ AHBU Cihaz Etiketleyici & Harici CH340 / USB-TTL Desteği
+## 10. 🏷️ SmartKeyPass Cihaz Etiketleyici & Harici CH340 / USB-TTL Desteği
 
 - [ ] **10.1. Kilitlenmesiz Anlık UID Okuma (0.3 saniye):**
-  - **Nasıl Test Edilir:** ESP32-WROOM veya ESP32-C3 cihazını bilgisayara bağlayın. AHBU Cihaz Etiketleyici uygulamasında portu seçip "Seçili cihaz UID oku" butonuna basın.
+  - **Nasıl Test Edilir:** ESP32-WROOM veya ESP32-C3 cihazını bilgisayara bağlayın. SmartKeyPass Cihaz Etiketleyici uygulamasında portu seçip "Seçili cihaz UID oku" butonuna basın.
   - **Beklenen Sonuç:** Uygulama kilitlenmeden, cihazı yeniden başlatmaya zorlamadan 0.3 saniye içinde cihazın Unique ID'sini (`00861A0D5020`) ve donanım tipini okuyup ekrana yansıtmalı.
 - [ ] **10.2. CH340 Uyumlu USB Firmware Yükleme (Baud Rate & Write Timeout Koruması):**
   - **Nasıl Test Edilir:** CH340 dönüştürücü ile bağlı ESP32-WROOM modülü için "Sürümü USB ile cihaza yükle" butonuna basın (harici dönüştürücülerde karttaki BOOT butonuna basılı tutup EN'e basarak indirme moduna alın).
   - **Beklenen Sonuç:** Yükleme 460800 baud hızında başlatılmalı, pySerial `Write timeout` hatası vermeden firmware yazımı %100 tamamlanmalı ve başarı mesajı görüntülenmelidir.
 - [ ] **10.3. ESP32-WROOM Röle Kartı GPIO16 ve Durum LED (GPIO23) Doğrulaması:**
-  - **Nasıl Test Edilir:** v3.0.5 yüklendikten sonra "AHBU Cihaz Deneme" ekranında COM7'ye bağlanın, "Role Pulse", "Role Pin HIGH" ve "Role Pin LOW" butonlarına basın.
+  - **Nasıl Test Edilir:** v3.0.5 yüklendikten sonra "SmartKeyPass Cihaz Deneme" ekranında COM7'ye bağlanın, "Role Pulse", "Role Pin HIGH" ve "Role Pin LOW" butonlarına basın.
   - **Beklenen Sonuç:** GPIO 16 üzerinden röle mekanik "tık" sesiyle tetiklenmeli; GPIO 23 üzerindeki LED ise cihaz açılışında 4 kez flaş yapıp sistem canlılık göstergesi olarak açık kalmalıdır.
 - [ ] **10.4. OTA Sonrası Otomatik Wi-Fi RF Temiz Başlatma & Yeniden Bağlanma:**
   - **Nasıl Test Edilir:** Cihaza OTA üzerinden güncelleme gönderin. Güncelleme tamamlanıp cihaz kendi kendine yeniden başladığında seri logu ve ağ durumunu izleyin (cihaza fiziksel olarak dokunmayın).
@@ -1232,7 +1232,7 @@ Daire kullanıcısı (Daire Sakini) ana ekranında artık yalnız kapılar ve yu
 
 - [ ] **58.1. Sade Ana Ekran:**
   - **Nasıl Test Edilir:** Daire kullanıcısı olarak giriş yapın.
-  - **Beklenen Sonuç:** Ekranda yalnız tek kart görünür: tek kapı varsa kapı adı, birden çok kapı varsa kapı seçici çipler; altında büyük yuvarlak düğme (`KAPIYI AÇ`). "AHBU AKILLI GEÇİŞ" rozeti, "Çevrimiçi - Kapıyı açmak için dokunun" cümlesi, IP rozetleri, saat, sesli banner ve QR / misafir düğmeleri görünmemelidir.
+  - **Beklenen Sonuç:** Ekranda yalnız tek kart görünür: tek kapı varsa kapı adı, birden çok kapı varsa kapı seçici çipler; altında büyük yuvarlak düğme (`KAPIYI AÇ`). "SmartKeyPass AKILLI GEÇİŞ" rozeti, "Çevrimiçi - Kapıyı açmak için dokunun" cümlesi, IP rozetleri, saat, sesli banner ve QR / misafir düğmeleri görünmemelidir.
 - [ ] **58.2. Kapı Seçimi ve Açma:**
   - **Nasıl Test Edilir:** Birden çok kapısı olan hesapta çiplerle kapı değiştirin, düğmeye dokunun; cihazı çevrimdışı yapıp tekrar dokunun.
   - **Beklenen Sonuç:** Seçilen kapı vurgulanır, düğme o kapıyı açar (AÇILIYOR, GÖNDERİLDİ efektleri aynı). Çevrimdışıyken düğme `ÇEVRİMDIŞI` yazar ve dokununca "… şu an çevrimdışı" uyarısı çıkar.

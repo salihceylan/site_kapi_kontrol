@@ -1,10 +1,11 @@
 {
     "name": "Site ve Toplu Yaşam Yönetim Sistemi",
     "short_name": "Site Yönetimi",
+    "lang": "tr",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0F172A",
-    "theme_color": "#0F172A",
+    "background_color": "#06080B",
+    "theme_color": "#06080B",
     "description": "Site ve Toplu Yaşam Yönetim Sistemi",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,

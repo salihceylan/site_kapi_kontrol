@@ -7,7 +7,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 # ad -> (baslik, ust etiket, vurgu, vurgu acik, vurgu koyu, vurgu acik koyu)
 LISTELER = {
-    "platform": ("Platform Faz Kontrol Listesi", "AHBU Site Yönetim Platformu · Faz listesi",
+    "platform": ("Platform Faz Kontrol Listesi", "Site ve Toplu Yaşam Yönetim Sistemi · Faz listesi",
                  "#1d4fb0", "#dbe6fb", "#7fa9f2", "#1b2e52"),
 }
 GELISTIRME = {"hazir", "yapiliyor", "planli", "yakinda"}

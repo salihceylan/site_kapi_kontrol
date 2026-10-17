@@ -13,6 +13,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/styles/app_theme.dart';
@@ -486,7 +487,7 @@ void main() {
     }
 
     testWidgets(
-      'logo halkası düz beyaz, gölgesiz; avatar boyuta göre küçük çözülür',
+      'logo halkası düz beyaz, gölgesiz; avatar Güde yaprak işaretini (vektör) taşır',
       (t) async {
         await _pumpMenu(t, _cfgs.first, width: 360, height: 640, scale: 1.0);
         final ring = find
@@ -505,7 +506,13 @@ void main() {
         final avatar = t.widget<CircleAvatar>(find.byType(CircleAvatar));
         expect(avatar.radius, 26);
         expect(avatar.backgroundColor, Colors.white);
-        expect(avatar.backgroundImage, isA<ResizeImage>());
+        expect(avatar.backgroundImage, isNull, reason: 'bitmap logo yok');
+        expect(avatar.child, isA<AnimatedGudeLeafMark>());
+        final mark = avatar.child! as AnimatedGudeLeafMark;
+        expect(mark.size, 52);
+        expect(mark.semanticLabel, isNull, reason: 'başlıkta dekoratif');
+        expect(mark.darkBackground, isFalse, reason: 'beyaz plaka: açık zemin şiddeti');
+        expect(find.byType(Image), findsNothing);
       },
     );
 

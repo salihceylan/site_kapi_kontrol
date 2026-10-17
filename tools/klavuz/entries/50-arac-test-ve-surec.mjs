@@ -329,7 +329,7 @@ export default {
       checks: [
         'Durum çubuğu/ilerleme çıktısında son esptool satırlarına bakın ("Hash of data verified." görülmeli)',
         'Cihaz Dene ile bağlanıp "Firmware surumu" ve "OTA durum" alanlarını okuyun (cihaz resetlenir)',
-        'Şüphede aynı sürümü bir kez daha yükleyin ya da "Calisma arkadasina guncelleme zip dosyasi" ile flash_ahbu_usb.bat çalıştırın',
+        'Şüphede aynı sürümü bir kez daha yükleyin ya da "Calisma arkadasina guncelleme zip dosyasi" ile flash_smartkeypass_usb.bat çalıştırın',
       ],
       related: ['arac-usb-yukleme-hata', 'arac-cihaz-dene-durum-bos'],
     },
@@ -399,17 +399,17 @@ export default {
     {
       id: 'arac-zip-hatasi',
       symptom: 'Şirket aracında "Calisma arkadasina guncelleme zip dosyasi olustur" hata veriyor ("ZIP icin gerekli arac klasoru yok" / "str object has no attribute parent")',
-      keywords: ['ZIP', 'çalışma arkadaşı', 'flash_ahbu_usb.bat', 'tool-esptoolpy', 'python3', 'ZIP hatasi', 'target', 'parent'],
+      keywords: ['ZIP', 'çalışma arkadaşı', 'flash_smartkeypass_usb.bat', 'tool-esptoolpy', 'python3', 'ZIP hatasi', 'target', 'parent'],
       refs: [
         { file: 'company_qr_tool/app.py', find: 'def _coworker_zip_worker',
-          note: 'ZIP işçisi: firmware, manifest, flash_ahbu_usb.bat ve PlatformIO araçlarını paketler' },
+          note: 'ZIP işçisi: firmware, manifest, flash_smartkeypass_usb.bat ve PlatformIO araçlarını paketler' },
         { file: 'company_qr_tool/app.py', find: 'required_tool_dirs = [',
           note: '~/.platformio altında python3, tool-esptoolpy ve penv/site-packages/serial klasörleri bulunmalı' },
         { file: 'company_qr_tool/app.py', find: { regex: '^\\s{12}target = target_for_env\\(env\\)$' }, nth: 2,
           note: 'KODDA: kayıt yolu parametresi `target` (Path) burada donanım adıyla (str) ezilir' },
         { file: 'company_qr_tool/app.py', find: 'target.parent.mkdir(parents=True, exist_ok=True)',
           note: 'Ezilen `target` str olduğundan burada AttributeError beklenir (ZIP hatası); düzeltme: donanım adı için ayrı değişken adı' },
-        { file: 'company_qr_tool/app.py', find: 'zf.writestr("flash_ahbu_usb.bat", bat)',
+        { file: 'company_qr_tool/app.py', find: 'zf.writestr("flash_smartkeypass_usb.bat", bat)',
           note: 'Pakete konan bat dosyası: otomatik COM port bulur, esptool ile yazar' },
       ],
       causes: [
@@ -428,11 +428,11 @@ export default {
       keywords: ['QR', 'etiket', 'logo', 'Logo bulunamadi', 'Unique ID', 'ERROR_CORRECT_H', 'PNG', 'çıktı', 'output', 'karekod'],
       refs: [
         { file: 'company_qr_tool/app.py', find: 'def generate_qr',
-          note: 'QR içeriği yalnızca büyük harfe çevrilmiş UID; hata düzeltme H, ortada AHBU logo rozeti; altına "Unique ID: <UID>" yazılır' },
+          note: 'QR içeriği yalnızca büyük harfe çevrilmiş UID; hata düzeltme H, ortada logo rozeti (assets/smartkeypass_logo.png); altına "Unique ID: <UID>" yazılır' },
         { file: 'company_qr_tool/app.py', find: 'def ensure_logo',
-          note: 'Logo önce assets/ahbu_logo.png, yoksa ..\\..\\ahbu\\assets\\images\\app_logo.png dosyasından alınır; ikisi de yoksa "Logo bulunamadi"' },
-        { file: 'company_qr_tool/app.py', find: 'EXTERNAL_LOGO_PATH = (BASE_DIR',
-          note: 'Harici logo yolu (depo dışındaki ahbu projesi)' },
+          note: 'Logo assets/smartkeypass_logo.png dosyasından alınır; dosya yoksa FileNotFoundError ("Logo bulunamadi: <yol>") fırlatılır' },
+        { file: 'company_qr_tool/app.py', find: 'LOGO_PATH = ASSETS_DIR / "smartkeypass_logo.png"',
+          note: 'Karekod ve rapor logosu: company_qr_tool/assets/smartkeypass_logo.png' },
         { file: 'company_qr_tool/app.py', find: 'def mac_to_firmware_uid',
           note: 'esptool yolunda UID = MAC baytlarının tersi (firmware UID biçimiyle aynı)' },
         { file: 'company_qr_tool/app.py', find: 'def save_qr',
@@ -442,7 +442,7 @@ export default {
       ],
       causes: [
         'Etiket yanlış cihazdan okunan UID ile üretilmiş (listeden başka port seçili)',
-        'Logo dosyası yok (assets/ahbu_logo.png kopyalanamadı)',
+        'Logo dosyası yok (assets/smartkeypass_logo.png bulunamadı)',
         'QR çok küçük basıldı (QR 1200 px; etiket yazıcısı ölçeklemesi)',
       ],
       checks: [

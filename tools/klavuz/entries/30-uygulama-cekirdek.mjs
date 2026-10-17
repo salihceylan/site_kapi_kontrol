@@ -2137,7 +2137,7 @@ export default {
     {
       id: 'cekirdek-ble-izin-ve-tarama',
       symptom: 'Bluetooth ile cihaz kurulumunda cihaz listede görünmüyor ya da "Bluetooth kapali", "Konum servislerini acip tekrar deneyin", "Bluetooth izni verilmedi", "yalnizca Android ve iPhone" uyarısı çıkıyor',
-      keywords: ['bluetooth', 'ble', 'tarama', 'cihaz bulunamadı', 'ahbu', 'izin', 'bluetooth kapali', 'konum servisleri', 'wifi kurulum'],
+      keywords: ['bluetooth', 'ble', 'tarama', 'cihaz bulunamadı', 'smartkeypass', 'ahbu', 'izin', 'bluetooth kapali', 'konum servisleri', 'wifi kurulum'],
       refs: [
         {
           file: 'lib/services/ble_wifi_provision_service.dart',
@@ -2152,12 +2152,12 @@ export default {
         {
           file: 'lib/services/ble_wifi_provision_service.dart',
           find: 'Future<List<BleProvisionDevice>> scanDevices({',
-          note: 'Yalnız kurulum servisi UUID\'sini yayınlayan ve adı "AHBU" ile başlayan cihazları listeler; 6 sn tarar, sinyal gücüne göre sıralar',
+          note: 'Yalnız kurulum servisi UUID\'sini yayınlayan ve adı "SmartKey" (SmartKeyPass) ya da "AHBU" (eski kartlar) ile başlayan cihazları listeler; 6 sn tarar, sinyal gücüne göre sıralar',
         },
         {
           file: 'lib/services/ble_wifi_provision_service.dart',
-          find: "if (!name.toUpperCase().startsWith('AHBU')) {",
-          note: 'Adı AHBU ile başlamayan cihaz sessizce atlanır',
+          find: "if (!isBleProvisionDeviceName(name)) {",
+          note: 'Adı SmartKey ya da AHBU (eski kartlar) ile başlamayan cihaz sessizce atlanır',
         },
         {
           file: 'lib/services/ble_wifi_provision_service.dart',
@@ -2167,12 +2167,12 @@ export default {
         {
           file: 'cihaz_kontrol/include/wifi_baglanti.h',
           find: 'inline constexpr char BLE_WIFI_SERVICE_UUID[] = "6f64be30-0d46-4f6d-9cd4-4f9d08b5f001";',
-          note: 'Cihaz tarafı UUID; ESP32-C3 sahada çalışıyor: bu değeri/ad önekini (AHBU+UID) değiştirmeyin',
+          note: 'Cihaz tarafı UUID; ESP32-C3 sahada çalışıyor: bu değeri/ad önekini (SmartKeyPass+UID; eski kartlarda AHBU+UID) değiştirmeyin',
         },
         {
           file: 'cihaz_kontrol/include/wifi_baglanti.h',
           find: 'BLEDevice::init(bleName.c_str());',
-          note: 'Cihazın yayınladığı BLE adı (AHBU + cihaz kimliği); uygulama bu önekle filtreler',
+          note: 'Cihazın yayınladığı BLE adı (SmartKeyPass + cihaz kimliği; eski firmware AHBU + cihaz kimliği); uygulama SmartKey ve AHBU önekleriyle filtreler',
         },
         {
           file: 'android/app/src/main/AndroidManifest.xml',
@@ -2183,7 +2183,7 @@ export default {
       causes: [
         'Telefonda Bluetooth kapalı ya da (eski Android) konum servisi kapalı',
         'Bluetooth/konum izni verilmedi ya da kalıcı reddedildi: ayarlardan açılmalı',
-        'Cihaz kurulum (BLE) modunda değil ya da çok uzak: yayın görünmez; ad AHBU ile başlamıyorsa atlanır',
+        'Cihaz kurulum (BLE) modunda değil ya da çok uzak: yayın görünmez; ad SmartKey ya da AHBU (eski kartlar) ile başlamıyorsa atlanır',
         'Masaüstü/web derlemesi: Bluetooth kurulumu yalnız Android ve iOS\'ta desteklenir',
         'Telefon BLE desteklemiyor (BleStatus.unsupported)',
         'Tarama hatası: platform hatası ham metinle gösterilir',
@@ -2191,7 +2191,7 @@ export default {
       checks: [
         'Telefonda Bluetooth ve (gerekirse) konumu açın; uygulama izinlerini kontrol edin',
         'Cihazı yeniden başlatıp kurulum moduna alın; telefona yaklaşın ve listeyi yenileyin',
-        'Cihazın BLE adı AHBU ile başlıyor mu (başka bir BLE tarayıcı uygulamasıyla bakın)',
+        'Cihazın BLE adı SmartKeyPass (eski kartlarda AHBU) ile başlıyor mu (başka bir BLE tarayıcı uygulamasıyla bakın)',
         'Cihaz yazılımı alanındaki BLE kurulum girişlerine bakın',
       ],
       commands: [`${FLUTTER} test test/ble_wifi_provision_service_test.dart`],

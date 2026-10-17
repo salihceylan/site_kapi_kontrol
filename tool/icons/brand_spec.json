@@ -1,0 +1,11 @@
+{
+  "_aciklama": "Uygulama ikonlari ve acilis ekranlarinin renk/oran sozlesmesi. Hem render_icons_test.dart (Dart) hem apply_icons.py (Python) okur; tek dogruluk kaynagidir.",
+  "flatDark": "#06080B",
+  "bgCenter": "#0F2050",
+  "bgMid": "#070E20",
+  "bgEdge": "#03060B",
+  "glow": "#FFA826",
+  "bloom": "#FFC65A",
+  "bloomHot": "#FFE3A0",
+  "notificationAccentNote": "android notification_color (values/colors.xml) bu dosyanin disindadir; push ajaninin dosyasi."
+}

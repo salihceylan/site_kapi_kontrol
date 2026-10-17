@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/config/app_config.dart';
 import 'package:site_kapi_kontrol/models/user_role.dart';
 import 'package:site_kapi_kontrol/ui/design/motion_widgets.dart';
@@ -340,13 +341,16 @@ class _DrawerHeader extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: Colors.white,
                 ),
-                child: CircleAvatar(
+                child: const CircleAvatar(
                   radius: 26,
                   backgroundColor: Colors.white,
-                  // 1024x1024 kaynak 52 dp gösterilir: görüntü boyutuna göre küçük çözülür.
-                  backgroundImage: ResizeImage(
-                    const AssetImage('assets/images/app_logo.png'),
-                    width: (52 * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                  // Güde Teknoloji yaprak işareti (vektör, bitmap çözümü yok). Zemin hep beyaz plaka olduğundan
+                  // parıltı koyu temada bile açık zemin şiddetinde; başlıkta dekoratif (anlamsal etiket yok).
+                  child: AnimatedGudeLeafMark(
+                    size: 52,
+                    padding: 0.1,
+                    semanticLabel: null,
+                    darkBackground: false,
                   ),
                 ),
               ),

@@ -1,4 +1,4 @@
-# 📋 AHBU Kapı Kontrol Sistemi — Üyelik Yönetim Sistemi Adım Adım Doğrulama ve Test Kılavuzu
+# 📋 SmartKeyPass Kapı Kontrol Sistemi — Üyelik Yönetim Sistemi Adım Adım Doğrulama ve Test Kılavuzu
 
 Bu belge, **Üyelik Yönetim Sistemi (Aşama 0'dan Aşama 14'e kadar)** kapsamında geliştirilen tüm özelliklerin sahada, mobil uygulamada ve sunucu tarafında adım adım nasıl test edileceğini, beklenen sonuçlarını ve doğrulama kriterlerini içerir.
 
@@ -261,5 +261,5 @@ Bu belge, **Üyelik Yönetim Sistemi (Aşama 0'dan Aşama 14'e kadar)** kapsamı
 
 ---
 
-> 🎯 **Sonuç:** Bu kontrol listesindeki tüm adımlar başarıyla test edildiğinde, AHBU Üyelik Yönetim Sistemi sahada sıfır risk ve tam güvenilirlikle hizmet vermeye hazırdır.
+> 🎯 **Sonuç:** Bu kontrol listesindeki tüm adımlar başarıyla test edildiğinde, SmartKeyPass Üyelik Yönetim Sistemi sahada sıfır risk ve tam güvenilirlikle hizmet vermeye hazırdır.
 

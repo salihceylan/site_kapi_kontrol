@@ -266,7 +266,7 @@ Responsive kurallar:
 - Akicilik: ag yoklamalari `lib/services/adaptive_poller.dart` ile yapilir (arka planda/ortulu iken durur, hatada ustel geri cekilme, ust uste binmez; HomePage 3 sn, bireysel kapi listesi 15 sn, QR modali 0,8 sn); agir isler (PDF uretimi, >= 64 KB JSON) `lib/services/background_work.dart` ile arka plan izolesinde calisir; GET zaman asimi 20 sn, yazma 45 sn, kapi acma 10 sn.
 - Kare suresi olcumu: `integration_test/perf_frames_test.dart` + `test_driver/perf_driver.dart` (komut `SAHA_KONTROL_LISTESI.md` bolum 52); calistirmak proje sahibine aittir.
 
-## 8. Ahbu Uygulamasi
+## 8. SmartKeyPass Uygulamasi
 
 `ahbu` ayri repodadir.
 
@@ -302,13 +302,13 @@ Login kisitlari:
 - abonelik `rejected` ise giris engellenir
 - hesap pasif ise giris engellenir
 
-Ahbu drawer:
+SmartKeyPass drawer:
 
 - `Ana Sayfa`
 - `Cihaz Ekle` (yalnizca `site_manager`)
 - `Cikis Yap`
 
-Ahbu cihaz ekleme akisi:
+SmartKeyPass cihaz ekleme akisi:
 
 1. QR okut
 2. `device_uid` al
@@ -417,6 +417,7 @@ Firmware ana makine testleri (donanimsiz, Windows + MSVC): `cihaz_kontrol/host_t
 - Firmware WROOM 5.2.2 / C3 4.3.3 / ekran 1.1.3 ve sonrasi: BLE adi `SmartKeyPass<UID>`, mDNS adi `smartkeypass-<uid>`, MQTT istemci kimligi `SmartKeyPass-<UID>`, ekran ana sayfa markasi `SmartKeyPass`. Ad calisma aninda uretilir (NVS'te tutulmaz); eski bir kart bu firmware ile (USB ya da OTA) yeniden yuklenince SmartKeyPass olur. OTA yalniz artan surumu kabul ettigi icin yeni adli kart eski adli surume geri donmez. WROOM 5.2.1 / C3 4.3.2 / ekran 1.1.2 ara surumdur, hicbir karta yuklenmedi.
 - BLE adi 24 karakterdir: tarama yanitina sigar, ama 128-bit servis UUID'li reklam paketinde kisaltilir ("SmartKey..."). Bu yuzden uygulama `SmartKey` ve `AHBU` oneklerini tanir (`isBleProvisionDeviceName`); sahadaki eski kartlar `AHBU<UID>` gorunmeye devam eder.
 - company_qr_tool: karekod ve rapor logosu `assets/smartkeypass_logo.png`, USB paketi `flash_smartkeypass_usb.bat`.
+- Logo karari (2026-10-17): Tum uygulama, site ve ikonlarda Gude Teknoloji logosu kullanilir; AHBU logosu kaldirildi. Kapi urununun adi SmartKeyPass olarak kalir. company_qr_tool karekod/rapor rozeti yukaridaki `smartkeypass_logo.png` dosyasini kullanmaya devam eder.
 - DEGISMEYEN protokol kimlikleri (sahadaki cihazlarla uyum): karekod `AHBU:DOOR:<uid>:<token>`, `X-AHBU-Device-UID` basligi, `GET /ahbu/status`, mDNS servis turu `_ahbu._tcp`, ekranin seri kimligi `AHBU_DEVICE:DISPLAY`, NVS ad alani `ahbu_sys`, dahili hesap alani `@ahbu.local`, derleme bayraklari `AHBU_*`, company_qr_tool ortam degiskenleri `AHBU_*`. Bunlari degistirmek sahadaki kartlari ve mevcut `.env` dosyalarini bozar.
 
 ## 12. Uretim Sunucu Kurulumu
@@ -491,7 +492,7 @@ flutter test        # 2357 test
 flutter build apk --release
 ```
 
-Ahbu:
+SmartKeyPass (`ahbu` deposu):
 
 ```bash
 flutter clean

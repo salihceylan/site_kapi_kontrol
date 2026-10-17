@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -31,8 +31,55 @@
 
   <title>Site ve Toplu Yaşam Yönetim Sistemi</title>
   <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#06080B">
+
+  <!-- Flutter açılana kadar beyaz boş sayfa yerine koyu zeminde hafif marka yükleme görseli (satır içi SVG + CSS; kütüphane yok).
+       İlk kare çizilince (flutter-first-frame) kaybolur. prefers-reduced-motion: animasyonsuz. -->
+  <style>
+    html { background: #06080B; }
+    #brand-boot {
+      position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at 50% 46%, #0F2050 0%, #070E20 52%, #03060B 100%), #06080B;
+      pointer-events: none; transition: opacity .45s ease;
+    }
+    #brand-boot .bb-glow {
+      position: absolute; width: min(120vw, 760px); height: min(120vw, 760px); border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 168, 38, .34) 0%, rgba(255, 168, 38, .12) 38%, rgba(255, 168, 38, 0) 70%);
+      animation: bb-pulse 2.6s ease-in-out infinite alternate; will-change: opacity, transform;
+    }
+    #brand-boot svg { position: relative; width: min(52vw, 260px); height: auto; overflow: visible; filter: drop-shadow(0 0 14px rgba(255, 190, 70, .45)); }
+    #brand-boot .bb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    @keyframes bb-pulse { from { opacity: .55; transform: scale(.94); } to { opacity: 1; transform: scale(1.06); } }
+    @media (prefers-reduced-motion: reduce) {
+      #brand-boot { transition: none; }
+      #brand-boot .bb-glow { animation: none; opacity: .85; }
+    }
+  </style>
 </head>
 <body>
+  <div id="brand-boot" role="status" aria-live="polite">
+    <div class="bb-glow" aria-hidden="true"></div>
+    <!-- brand-loader:start -->
+    <svg viewBox="289.6 8.5 1103.3 628.59" aria-hidden="true" focusable="false"><defs><linearGradient id="bb-rim" gradientUnits="userSpaceOnUse" x1="289.6" y1="8.5" x2="1392.9" y2="637.09"><stop offset="0" stop-color="#FFE9A8"/><stop offset="0.5" stop-color="#F2B232"/><stop offset="1" stop-color="#B8690C"/></linearGradient><linearGradient id="bb-face" gradientUnits="userSpaceOnUse" x1="289.6" y1="8.5" x2="1392.9" y2="637.09"><stop offset="0" stop-color="#FFF3C9"/><stop offset="0.5" stop-color="#FFC83F"/><stop offset="1" stop-color="#E08A1A"/></linearGradient></defs><path fill="url(#bb-rim)" d="M 289.6 119.2 C 296.8 122.6 303.4 127.2 310.4 131 C 332.3 142.8 354.4 154.7 376.8 165.5 C 471.9 211.2 569.9 252.5 659.1 309.3 C 741.4 361.7 805.6 418.9 870.3 491.4 C 897.3 521.6 922.5 553.6 947 585.8 C 955.8 597.4 974.6 618.5 980 630.5 C 930.5 607.4 879 589.9 827.6 571.5 C 761.1 547.6 694.7 523 631.2 491.7 C 497.8 425.7 412.2 344.3 337.8 215.6 C 326.6 196.3 316.5 176.5 306.6 156.4 C 300.6 144.1 294.3 132 289.6 119.2 Z M 980.8 614.7 C 930.1 480.9 848.1 371.9 848.3 221.1 C 848.4 167.5 859.7 113.8 876.7 63.2 C 882.9 44.7 890.2 26.7 896.8 8.5 C 898.2 13.5 898.8 18.7 900.2 23.8 C 918.4 86.2 943.5 146.2 963.5 207.9 C 979.7 257.9 991.7 309.1 997.6 361.4 C 1005.4 431.4 997.7 501.9 988 571.3 C 985.9 585.9 982.3 600 980.8 614.7 Z M 1000.8 601.4 C 1003.6 590.2 1008.9 579.5 1013.1 568.8 C 1019.5 552.5 1025.5 535.9 1031.5 519.5 C 1050.3 468.7 1069.1 417.2 1098.8 371.5 C 1143.3 303 1209.1 255.6 1284.4 225.5 C 1274.2 246.1 1262.7 266 1252.6 286.7 C 1217.9 357 1188.9 421.6 1137.4 482.2 C 1112.7 511.2 1084.2 537.2 1054.3 560.6 C 1036.6 574.4 1018.3 587.4 1000.8 601.4 Z M 1024.6 626.3 C 1101.5 596.8 1174.2 549.3 1259.2 547.9 C 1307 547.1 1348.2 561.2 1392.9 576 C 1371.8 581.2 1351.6 588.3 1331 595 C 1302.1 604.5 1273.2 613.9 1244 622 C 1239.4 623.2 1235 625.2 1230.5 626.5 C 1222.5 628.8 1214.1 630.2 1205.9 631.6 C 1144.6 642.5 1085.6 635.3 1024.6 626.3 Z"/><path fill="url(#bb-face)" d="M 949.5 605.6 C 791.6 543.3 619.5 500.2 488.3 386.6 C 411.4 320.2 356.2 234.6 312.1 143.9 C 335.7 156.3 359.3 168.7 383.3 180.3 C 493.1 233.2 604.7 280.1 703.9 352.4 C 769.3 400 828.4 456.8 880.5 518.8 C 904.3 547.2 926.2 576.9 949.5 605.6 Z M 977.1 579.6 C 925.1 459.8 855.9 350.1 857.9 214.6 C 858.7 154.5 874.7 96.2 895.1 40.2 C 928.3 144.7 970.9 235.6 986.1 346.1 C 996.8 424.1 988.2 502.2 977.1 579.6 Z M 1025.8 567.9 C 1054.4 490.8 1079.1 408.3 1133 344.4 C 1168.3 302.6 1211.4 273.8 1259.4 248.8 C 1226.8 310.8 1199.8 376.6 1159.7 434.4 C 1122.7 487.5 1077.5 529.4 1025.8 567.9 Z M 1063.1 621.3 C 1127 593.4 1191.1 558.6 1262.7 558 C 1295.5 557.8 1327.1 566.4 1358.5 575.2 C 1320.9 587.5 1283.5 600.1 1245.5 610.8 C 1233.5 614.2 1222.1 618.4 1209.8 620.6 C 1159.6 629.5 1113.3 627.1 1063.1 621.3 Z"/></svg>
+    <!-- brand-loader:end -->
+    <span class="bb-sr">Yükleniyor</span>
+  </div>
+  <script>
+    (function () {
+      var boot = document.getElementById('brand-boot');
+      if (!boot) return;
+      var done = false;
+      function hide() {
+        if (done) return;
+        done = true;
+        boot.style.opacity = '0';
+        setTimeout(function () { boot.remove(); }, 600);
+      }
+      window.addEventListener('flutter-first-frame', hide);
+      // Güvenlik: olay hiç gelmezse (beklenmeyen yükleme sorunu) görsel sonsuza dek ekranı kaplamasın.
+      setTimeout(hide, 45000);
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

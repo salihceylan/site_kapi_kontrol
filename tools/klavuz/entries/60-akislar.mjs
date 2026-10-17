@@ -919,7 +919,7 @@ export default {
         'Günlüğün eski kayıtları 30 gün sonra bilinçli silinir (adım 12)',
       ],
       checks: [
-        'Cihaz seri günlüğünde "MQTT baglaniyor (id=AHBU-..." ve "baglandi" ya da hata kodunu görün',
+        'Cihaz seri günlüğünde "MQTT baglaniyor (id=SmartKeyPass-..." ve "baglandi" ya da hata kodunu görün',
         'Köprü: GET /health -> mqtt.connected true mu, last_error ne',
         'Durum: SELECT mqtt_connected, last_seen_at, last_event FROM device_runtime_status WHERE device_uid = \'<UID>\'; SELECT is_online, last_online_at, last_offline_at FROM devices WHERE device_uid = \'<UID>\';',
         'Günlük: SELECT event_type, offline_at, duration_seconds, reason FROM device_connectivity_logs WHERE device_uid = \'<UID>\' ORDER BY created_at DESC LIMIT 10;',

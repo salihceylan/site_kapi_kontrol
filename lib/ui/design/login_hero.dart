@@ -1,57 +1,43 @@
 // FAZ 5 / A1b-(iii): marka başlığı (giriş sayfası ve açılış/ara ekranları).
 //
 // Logo + (isteğe bağlı) başlık + alt başlık. Başlık/alt başlık ikisi de null ise yalnız logo çizilir
-// (açılış/ara ekranlarda logo + mevcut ilerleme göstergesi). Logo varlığı DEĞİŞMEZ
-// (`assets/images/app_logo.png`); 1024x1024 kaynak, gösterim boyutunda (mantıksal px x
-// devicePixelRatio) çözülür: tam çözünürlüklü ~4 MB bitmap önbellekte tutulmaz.
+// (açılış/ara ekranlarda logo + mevcut ilerleme göstergesi).
 //
-// "Cilalı Safir" premium halka: birincil ton gradyanı + [Gloss] cilası (kenar ışığı, hacim) +
-// halkanın ARKASINDA yumuşak renkli aura. Hepsi durağandır (ticker yok): aura tek `MaskFilter.blur`
-// dairesidir ve kendi `RepaintBoundary`sinde olduğundan yalnız renk/tema değişince yeniden boyanır.
+// Logo: Güde Teknoloji'nin vektör, şeffaf zeminli yatay logosu ([AnimatedGudeLogo]); kart yüzeyinin üstünde
+// doğrudan çizilir (çerçeve/daire/plaka yok), renkleri etkin temaya göre koyu/açık palete uyar. Işıklı:
+// yaprakların arkasında nefes alan altın parıltı + birkaç saniyede bir logo üstünden geçen yumuşak ışık süpürmesi.
+// Eski PNG logo (`assets/images/app_logo.png`) artık kullanılmaz: bitmap çözümü / önbelleği yoktur.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:site_kapi_kontrol/ui/design/gloss.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo.dart';
+import 'package:site_kapi_kontrol/brand/gude_logo_animated.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
-/// Gradyan halkalı logo + başlık + alt başlık.
+/// Işıklı logo + başlık + alt başlık.
 ///
 /// - Giriş: `LoginHero(title: 'Site ve Toplu Yaşam Yönetim Sistemi', subtitle: 'Yönetici ve sakin girişi')`.
 ///   (Platformun adı budur; SmartKeyPass yalnız kapı modülünün adıdır.)
 /// - Açılış/ara ekran: `LoginHero()` (yalnız logo).
-/// - Taşma: başlık ve alt başlık ortalanır, sabit yükseklik yoktur (uzun başlık ve büyük yazıda
-///   satır sarar; kısıtlı genişlikte kelime ortasından da bölünür).
-/// - Erişilebilirlik: başlık `Semantics(header)`; logo ve süsler dekoratiftir (anlamsal ağaçta yok).
-/// - Hareket: 320 ms solma + 12 dp yukarı kayma, yalnız ilk kurulumda. Hareket azaltma açıkken yok.
-/// - Aura: halkanın [auraReach] dp dışına taşan BOYAMA'dır (düzen boyutu halka kadar kalır); üst
-///   öğenin kırpması (örn. `SingleChildScrollView` görünüm alanı) auranın kenarını keser: logoyu
-///   yalnız içeriği kadar dar bir kaydırıcıya koyuyorsanız etrafına [auraReach] boşluk verin.
-///   Yüksek karşıtlık modunda aura (ve cila) çizilmez.
+/// - Taşma: logo en çok [logoHeight] yüksekliğindedir, kullanılabilir genişliğe sığmıyorsa en/boy oranı korunarak
+///   küçülür. Başlık ve alt başlık ortalanır, sabit yükseklik yoktur (uzun başlık ve büyük yazıda satır sarar;
+///   kısıtlı genişlikte kelime ortasından da bölünür).
+/// - Parıltı logonun kendi alanının İÇİNDE kalır (dışına taşmaz): üst öğenin kırpması onu kesmez, ek boşluk gerekmez.
+/// - Erişilebilirlik: başlık `Semantics(header)`; logo dekoratiftir (anlamsal ağaçta yok).
+/// - Hareket: 320 ms solma + 12 dp yukarı kayma, yalnız ilk kurulumda; logonun ışık animasyonu sürekli ama kibardır.
+///   Hareket azaltma açıkken (ya da testlerde [GudeLogoAnimation.enabledByDefault] kapalıyken) hepsi durağandır.
 class LoginHero extends StatelessWidget {
   const LoginHero({super.key, this.title, this.subtitle});
 
   final String? title;
   final String? subtitle;
 
-  /// Gradyan halkanın çapı (dp).
-  static const double ringDiameter = 96;
-
-  /// Logonun görüntülendiği çap (dp): halka - 2 x 4 (gradyan kalınlığı) - 2 x 4 (iç yüzey halkası).
-  static const double logoDiameter = 80;
-
-  /// Logo varlığı (değişmez).
-  static const String logoAsset = 'assets/images/app_logo.png';
-
-  /// Aura halkanın dışına en çok bu kadar (dp) taşar; düzeni etkilemez.
-  static const double auraReach = 24;
-
-  /// Aura bulanıklığı (`MaskFilter.blur` sigma). `BoxShadow.blurRadius` eşdeğeri 2 x sigma <= 16.
-  static const double auraSigma = 7;
+  /// Logonun en büyük yüksekliği (dp); genişlik = yükseklik x [GudeLogo.aspect] (~182 dp).
+  static const double logoHeight = 120;
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
     final th = Theme.of(context).textTheme;
-    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
     final title = this.title;
     final subtitle = this.subtitle;
 
@@ -71,68 +57,14 @@ class LoginHero extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           ExcludeSemantics(
-            child: Stack(
-              // Aura halkanın dışına taşar: Stack'in boyutu yalnız halkanın boyutudur.
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                // Aura: ton gradyanının ışıması (statik, tek bulanık daire, kendi katmanında).
-                if (!highContrast)
-                  Positioned(
-                    left: -auraReach,
-                    top: -auraReach,
-                    right: -auraReach,
-                    bottom: -auraReach,
-                    child: IgnorePointer(
-                      child: RepaintBoundary(
-                        child: CustomPaint(
-                          painter: LoginHeroAuraPainter(dark: p.isDark),
-                        ),
-                      ),
-                    ),
-                  ),
-                Container(
-                  width: ringDiameter,
-                  height: ringDiameter,
-                  padding: const EdgeInsets.all(AppSpace.xs),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppTone.primary.gradient,
-                  ),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: <Widget>[
-                      // Cila: gradyan halkanın üstünde, iç yüzeyin ve logonun ALTINDA (yalnız halka
-                      // kuşağında görünür: kenar ışığı + hacim). Halkanın tamamına yayılır.
-                      const Positioned(
-                        left: -AppSpace.xs,
-                        top: -AppSpace.xs,
-                        right: -AppSpace.xs,
-                        bottom: -AppSpace.xs,
-                        child: Gloss(shape: GlossShape.circle, strength: 0.9),
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: p.surface,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.xs),
-                          child: ClipOval(
-                            child: Image.asset(
-                              logoAsset,
-                              width: logoDiameter,
-                              height: logoDiameter,
-                              fit: BoxFit.cover,
-                              // Kaynak 1024 px, gösterim 80 dp: görüntü boyutuna göre küçük çözülür.
-                              cacheWidth: (logoDiameter * dpr).ceil(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = constraints.maxWidth;
+                final height = maxWidth.isFinite
+                    ? math.min(logoHeight, maxWidth / GudeLogo.aspect)
+                    : logoHeight;
+                return AnimatedGudeLogo(height: height, semanticLabel: null);
+              },
             ),
           ),
           if (title != null) ...<Widget>[
@@ -154,43 +86,4 @@ class LoginHero extends StatelessWidget {
       ),
     );
   }
-}
-
-/// [LoginHero] halkasının arkasındaki yumuşak renkli ışıma (aura). Dekoratiftir, durağandır.
-///
-/// Tek `MaskFilter.blur` dairesi: çağıran `RepaintBoundary` içinde olduğundan yalnız renk/tema
-/// değişince yeniden boyanır. Tuval halkadan [LoginHero.auraReach] dp büyüktür (her yönde); daire
-/// halkanın tam ortasındadır (hafifçe aşağı kayık: yere düşen ışık hissi) ve halkanın altından başlar,
-/// yani yalnız dış kenarı görünür. Renk/saydamlık kapı düğmesinin aurasıyla aynı kalibrasyondur.
-@visibleForTesting
-class LoginHeroAuraPainter extends CustomPainter {
-  const LoginHeroAuraPainter({required this.dark});
-
-  /// Koyu temada ışıma daha belirgin saydamlıkla çizilir.
-  final bool dark;
-
-  /// Aura rengi: birincil ton (`a` ucu).
-  static const AppTone tone = AppTone.primary;
-
-  /// Açık / koyu zeminde aura saydamlığı.
-  static const double alphaLight = 0.36;
-  static const double alphaDark = 0.50;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset(0, LoginHero.ringDiameter * 0.04));
-    canvas.drawCircle(
-      c,
-      LoginHero.ringDiameter * 0.54,
-      Paint()
-        ..color = tone.a.withValues(alpha: dark ? alphaDark : alphaLight)
-        ..maskFilter = const MaskFilter.blur(
-          BlurStyle.normal,
-          LoginHero.auraSigma,
-        ),
-    );
-  }
-
-  @override
-  bool shouldRepaint(LoginHeroAuraPainter old) => old.dark != dark;
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive simge: koyu gradyan arka plan + altin yapraklar (66dp guvenli daire icinde) + Android 13 tema (monokrom) katmani.
+     Gorseller: tool/icons (render_icons_test.dart + apply_icons.py). -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>

@@ -429,9 +429,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
 /// Açılış / ara ekranı: oturum ya da ağ durumu henüz belli değilken marka logosu + ilerleme göstergesi.
 /// Yalnız kompozisyon (eskiden tek başına bir çark); ekran seçim mantığı `home` içinde AYNIDIR.
-/// Dar/alçak pencerede (ya da büyük yazıda) taşmaz, kaydırılır. Logonun aurası halkanın dışına
-/// taşan boyamadır ve kaydırıcının görünüm alanı içeriği kadar dar olduğundan kırpılırdı: içerik
-/// aura payı ([LoginHero.auraReach]) kadar boşlukla sarılır (logo/çark konumu değişmez).
+/// Dar/alçak pencerede (ya da büyük yazıda) taşmaz, kaydırılır. Işıklı logonun parıltısı logonun kendi
+/// alanının içinde kalır (dışa taşmaz), bu yüzden kaydırıcının dar görünüm alanı onu kırpmaz.
 @visibleForTesting
 class StartupSplash extends StatelessWidget {
   const StartupSplash({super.key});

@@ -1,7 +1,7 @@
-# AHBU – Antigravity Geliştirme Promptu
+# SmartKeyPass – Antigravity Geliştirme Promptu
 ## QR Kod ile Güvenli Kapı Açma ve Dokunmatik Yerel Yönetim Ekranı
 
-Bu dosya, mevcut AHBU projesinin çalışan özelliklerini bozmadan, 2.4" 240x320 ST7789 kapasitif dokunmatik ekran için profesyonel kullanıcı arayüzünün ve yerel yönetim fonksiyonlarının geliştirilmesi amacıyla hazırlanmıştır.
+Bu dosya, mevcut SmartKeyPass projesinin çalışan özelliklerini bozmadan, 2.4" 240x320 ST7789 kapasitif dokunmatik ekran için profesyonel kullanıcı arayüzünün ve yerel yönetim fonksiyonlarının geliştirilmesi amacıyla hazırlanmıştır.
 
 > **KRİTİK KURAL:** Mevcut çalışan sistemleri bozma. Yeni özellikleri mevcut mimariye mümkün olduğunca modüler şekilde ekle. Çalışan kodu gereksiz yere yeniden yazma.
 
@@ -9,7 +9,7 @@ Bu dosya, mevcut AHBU projesinin çalışan özelliklerini bozmadan, 2.4" 240x32
 
 # 1. PROJENİN ANA AMACI
 
-AHBU cihazının temel görevi:
+SmartKeyPass cihazının temel görevi:
 
 **QR kod okutma → QR doğrulama → yetkiliyse kapıyı açma**
 
@@ -142,7 +142,7 @@ Kullanıcı hangi durumda olduğunu tek bakışta anlayabilmelidir.
 
 Normal durumda ekranda:
 
-- AHBU logosu
+- SmartKeyPass logosu
 - "QR Kodunuzu Okutunuz"
 - gerekiyorsa bağlantı durumunun küçük bir göstergesi
 - gerektiğinde ayarlara giriş için uygun bir dokunmatik alan
@@ -1154,6 +1154,6 @@ Her aşamada:
 
 Ana hedef:
 
-> **AHBU = QR ile güvenli kapı açma + dokunmatik yerel yönetim/servis ekranı**
+> **SmartKeyPass = QR ile güvenli kapı açma + dokunmatik yerel yönetim/servis ekranı**
 
 Sistemin güvenilir, profesyonel, sade, hızlı ve 7/24 çalışmaya uygun olması temel önceliktir.
