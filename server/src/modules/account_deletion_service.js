@@ -56,6 +56,8 @@ import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
 import { workItemsKeepNote } from './work_tracking_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
+import { reservationKeepNote, reservationRemoveNote } from './reservation_common.js';
+import { releaseUserReservations } from './reservation_service.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -255,14 +257,15 @@ export async function findLastManagerSites(db, userCode) {
  * @returns {Promise<{ pushDevices: number, uploadedDocuments: number, pendingReminders: number }>}
  */
 async function previewOptionalCounts(db, userCode) {
-  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0 };
+  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0, upcomingReservations: 0, reservationRecords: 0, openRequests: 0, requestRecords: 0 };
   const flags = (
     await db.query(
       `
         SELECT (to_regclass('public.push_devices') IS NOT NULL) AS has_push_devices,
                (to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
                (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders,
-               (to_regclass('public.work_items') IS NOT NULL) AS has_work_items
+               (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
+               (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
       `,
     )
   ).rows?.[0];
@@ -276,6 +279,12 @@ async function previewOptionalCounts(db, userCode) {
   if (flags?.has_work_items === true) {
     out.workItems = await count('SELECT COUNT(*)::INTEGER AS n FROM work_items WHERE created_by = $1');
     out.workItemComments = await count("SELECT COUNT(*)::INTEGER AS n FROM work_item_events WHERE actor_user_code = $1 AND event_type = 'comment'");
+  }
+  if (flags?.has_reservations === true) {
+    out.upcomingReservations = await count("SELECT COUNT(*)::INTEGER AS n FROM reservations WHERE user_code = $1 AND status IN ('beklemede', 'onaylandi') AND ends_at > NOW()");
+    out.reservationRecords = await count('SELECT COUNT(*)::INTEGER AS n FROM reservations WHERE user_code = $1');
+    out.openRequests = await count("SELECT COUNT(*)::INTEGER AS n FROM concierge_requests WHERE user_code = $1 AND status IN ('yeni', 'hazirlaniyor')");
+    out.requestRecords = await count('SELECT COUNT(*)::INTEGER AS n FROM concierge_requests WHERE user_code = $1');
   }
   if (flags?.has_reminders === true) {
     out.pendingReminders = await count(
@@ -356,6 +365,10 @@ export async function previewAccountDeletion(authUser, db = pool) {
     willRemove.push(`Size gönderilmek üzere bekleyen aidat hatırlatma e-postalarının (${optionalCounts.pendingReminders}) kayıtlarındaki e-posta adresiniz silinir; bu hatırlatmalar gönderilmez.`);
   }
 
+  if (optionalCounts.upcomingReservations > 0 || optionalCounts.openRequests > 0) {
+    willRemove.push(reservationRemoveNote({ upcoming: optionalCounts.upcomingReservations, openRequests: optionalCounts.openRequests }));
+  }
+
   const willKeep = [
     CRM_KEEP_NAME
       ? 'Site Yönetiminin tuttuğu kayıtlar yasal saklama gerekçesiyle kalır: adınız, dairedeki ilişki geçmişiniz, pasif hâle getirilmiş araç kaydınız (plaka) ile yönetimin kişi kaydınıza girdiği telefon numarası ve notlar ve araç kaydınıza girdiği not. Bu kayıtlar hesabınızdan ayrılır (e-posta adresiniz ve hesap bağlantınız kaldırılır; hesabınızdaki telefon numarası kopyalanmaz) ve sorumlusu Site Yönetimidir.'
@@ -372,6 +385,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.workItems > 0 || optionalCounts.workItemComments > 0) {
     willKeep.push(workItemsKeepNote({ items: optionalCounts.workItems, comments: optionalCounts.workItemComments }));
+  }
+  if (optionalCounts.reservationRecords > 0 || optionalCounts.requestRecords > 0) {
+    willKeep.push(reservationKeepNote({ reservations: optionalCounts.reservationRecords, requests: optionalCounts.requestRecords }));
   }
   if (num(counts.apartment_links) + num(counts.site_links) > 0) {
     willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');
@@ -668,6 +684,10 @@ async function runAttempt(userCode) {
     // İş takibi (042): kullanıcıya atanmış AÇIK talepler atamasız kalır (+ iç olay); talepler / yorumlar silinmez, kullanıcı satırı tombstone olarak kalır. Tablo yoksa atlanır.
     const releasedWorkItems = await releaseAssignedWorkItems(client, userCode);
     if (releasedWorkItems > 0) summary.work_items_released = releasedWorkItems;
+    // Rezervasyon ve konsiyerj (043): gelecekteki beklemede / onaylandi rezervasyonlar ve acik konsiyerj talepleri AYNI islemde iptal edilir (gecmis kayitlar kalir). Tablo yoksa atlanir.
+    const releasedReservations = await releaseUserReservations(client, userCode);
+    if (releasedReservations.reservations > 0) summary.reservations_cancelled = releasedReservations.reservations;
+    if (releasedReservations.requests > 0) summary.concierge_cancelled = releasedReservations.requests;
     // Aidat hatırlatma kuyruğu (Faz 4b): kişiye bağlı kalemlerdeki düz e-posta adresi + özet silinir, bekleyenler 'resolved' olur (gönderilmez). Kişi satırının hesap bağlantısı
     // (site_people.user_code) bu adımdan SONRA (15) kopar; bu yüzden burada eşleşir.
     summary.reminder_rows = await clearReminderItems(client, userCode);

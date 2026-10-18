@@ -115,6 +115,7 @@ import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
+import 'package:site_kapi_kontrol/models/reservation_models.dart';
 
 import 'package:site_kapi_kontrol/services/module_access.dart';
 
@@ -141,6 +142,8 @@ import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/work_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/work_resident_view.dart';
+import 'package:site_kapi_kontrol/ui/views/reservation_manager_view.dart';
+import 'package:site_kapi_kontrol/ui/views/reservation_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -251,6 +254,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<DocumentsViewState> _documentsKey = GlobalKey<DocumentsViewState>();
   final GlobalKey<WorkManagerViewState> _workManagerKey = GlobalKey<WorkManagerViewState>();
   final GlobalKey<WorkResidentViewState> _workResidentKey = GlobalKey<WorkResidentViewState>();
+  final GlobalKey<ReservationManagerViewState> _reservationManagerKey = GlobalKey<ReservationManagerViewState>();
+  final GlobalKey<ReservationResidentViewState> _reservationResidentKey = GlobalKey<ReservationResidentViewState>();
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -758,6 +763,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessDocuments(role)) SirketMenuItem.belgeler,
         if (_canAccessWorkManage(role)) SirketMenuItem.talepler,
         if (_workResidentSites(role).isNotEmpty) SirketMenuItem.taleplerim,
+        if (_canAccessReservationManage(role)) SirketMenuItem.rezervasyonlar,
+        if (_reservationResidentSites(role).isNotEmpty) SirketMenuItem.rezervasyon,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -854,6 +861,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// "Talepler" menüsü: süper kullanıcı ya da `work_tracking` modülü açık bir sitede yönetici / görevli / kurul üyesi.
   bool _canAccessWorkManage(UserRole role) =>
       role == UserRole.superUser || _workManageSites(role).isNotEmpty;
+
+  // --- Rezervasyon ve Konsiyerj ---
+
+  /// "Rezervasyonlar" (yönetim) ekranındaki siteler: `reservation` modülü AÇIK olan siteler. Yönetici (yönetici
+  /// modunda) alan tanımlar ve karar verir; görevli (STAFF) karar verir; kurul üyesi SALT OKUR. Süper kullanıcıda
+  /// boştur (ekran tüm siteleri çeker). FAIL-OPEN YOK: modül verisi hiç gelmediyse hiçbir site yoktur ve menü
+  /// AÇILMAZ; sitede `reservation` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu yine de her
+  /// çağrıda yetkiyi ve modül durumunu doğrular.
+  List<ReservationSite> _reservationManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <ReservationSite>[];
+    final canManage = _canManagePeople(role);
+    return <ReservationSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.reservation))
+          if (site.role == 'manager' && canManage)
+            ReservationSite(code: site.siteCode, name: site.siteName)
+          else if (site.role == 'staff')
+            ReservationSite(code: site.siteCode, name: site.siteName, access: ReservationSiteAccess.staff)
+          else if (site.isBoardMember)
+            ReservationSite(code: site.siteCode, name: site.siteName, access: ReservationSiteAccess.board),
+    ];
+  }
+
+  /// "Rezervasyon" (sakin) ekranındaki siteler: alıcısı olabilecek ve `reservation` modülü AÇIK siteler. Yalnız daire
+  /// sakini ve sakin modundaki yönetici için; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli bağ için boş.
+  /// Modül verisi yokken (fail-open) boştur.
+  List<PeopleSite> _reservationResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.reservation))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Rezervasyonlar" menüsü: süper kullanıcı ya da `reservation` modülü açık bir sitede yönetici / görevli / kurul üyesi.
+  bool _canAccessReservationManage(UserRole role) =>
+      role == UserRole.superUser || _reservationManageSites(role).isNotEmpty;
 
   // --- Aidat ve Finans (Faz 4a) ---
 
@@ -1259,6 +1313,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _workResidentSites(role).isNotEmpty;
     }
 
+    // Rezervasyon ve Konsiyerj: `reservation` modülü açık siteye bağlı yönetici / görevli / kurul (Rezervasyonlar) ya da
+    // sakin (Rezervasyon); modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.rezervasyonlar) {
+      return _canAccessReservationManage(role);
+    }
+    if (item == SirketMenuItem.rezervasyon) {
+      return _reservationResidentSites(role).isNotEmpty;
+    }
+
     switch (role) {
 
       case UserRole.superUser:
@@ -1393,6 +1456,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.taleplerim:
         return 'Taleplerim';
+
+      case SirketMenuItem.rezervasyonlar:
+        return 'Rezervasyonlar';
+
+      case SirketMenuItem.rezervasyon:
+        return 'Rezervasyon';
 
       case SirketMenuItem.siteBasvurulari:
         return 'Site Başvuruları';
@@ -4718,6 +4787,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.taleplerim:
         await _workResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.rezervasyonlar:
+        await _reservationManagerKey.currentState?.reload();
+        break;
+      case SirketMenuItem.rezervasyon:
+        await _reservationResidentKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -5623,6 +5698,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _workResidentKey,
           authService: widget.authService,
           sites: _workResidentSites(session.role),
+        );
+
+      case SirketMenuItem.rezervasyonlar:
+        return ReservationManagerView(
+          key: _reservationManagerKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _reservationManageSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
+        );
+
+      case SirketMenuItem.rezervasyon:
+        return ReservationResidentView(
+          key: _reservationResidentKey,
+          authService: widget.authService,
+          sites: _reservationResidentSites(session.role),
         );
 
       case SirketMenuItem.katilimVeKurulum:

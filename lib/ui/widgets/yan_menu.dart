@@ -89,6 +89,15 @@ enum SirketMenuItem {
   /// sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Talepler"in altına).
   taleplerim,
 
+  /// Rezervasyon ve Konsiyerj yönetim ekranı "Rezervasyonlar". Rol listesinde YOKTUR; `reservation` modülü AÇIK olan
+  /// sitenin yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems]
+  /// ile eklenir ("Taleplerim"in, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
+  rezervasyonlar,
+
+  /// Rezervasyon ve Konsiyerj sakin ekranı "Rezervasyon". Rol listesinde YOKTUR; alıcısı olabilecek ve `reservation`
+  /// modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Rezervasyonlar"ın altına).
+  rezervasyon,
+
   /// Satışa hazırlık: Platform Ayarları (uygulama sürümü / bakım, destek iletişim, şirket ve yasal bilgiler).
   /// Yalnız süper kullanıcı (rol listesinde).
   platformAyarlari,
@@ -470,6 +479,23 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Rezervasyonlar" / "Rezervasyon" "Taleplerim" / "Talepler" / "Belgeler" / "Borcum" / "Finans" / "Duyurular" /
+    // "Kişiler" sırasıyla ilk bulunanın altına gelir; "Rezervasyon" varsa "Rezervasyonlar"ın altına.
+    if (extra == SirketMenuItem.rezervasyonlar || extra == SirketMenuItem.rezervasyon) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.rezervasyon) SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -604,6 +630,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Talepler';
     case SirketMenuItem.taleplerim:
       return 'Taleplerim';
+    case SirketMenuItem.rezervasyonlar:
+      return 'Rezervasyonlar';
+    case SirketMenuItem.rezervasyon:
+      return 'Rezervasyon';
     case SirketMenuItem.platformAyarlari:
       return 'Platform Ayarları';
     case SirketMenuItem.istemciHatalari:
@@ -663,6 +693,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.assignment_rounded;
     case SirketMenuItem.taleplerim:
       return Icons.build_circle_rounded;
+    case SirketMenuItem.rezervasyonlar:
+      return Icons.event_note_rounded;
+    case SirketMenuItem.rezervasyon:
+      return Icons.event_available_rounded;
     case SirketMenuItem.platformAyarlari:
       return Icons.tune_rounded;
     case SirketMenuItem.istemciHatalari:

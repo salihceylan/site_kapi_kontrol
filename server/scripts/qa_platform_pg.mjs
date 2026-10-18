@@ -73,6 +73,8 @@
 //             (devir, 10 cihaz, eszamanli ayni jeton -> tek sahip, kayit x hesap silme), yayinda outbox (3000 alici, PUSH_ENABLED=0 -> 0 satir, UNIQUE), kilit
 //             turlari (40P01 = 0), isci (iki isci, SKIP LOCKED, bayat talep, olu jeton, sessiz saat, ust sinir, geri cekme), hesap silme kancasi, bakim,
 //             tercihler, disa aktarma, durum, HTTP, gunluk gizliligi. QA_ONLY=push.
+//   reservation  Rezervasyon ve konsiyerj (043; govde scripts/qa_reservation_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, kapasite / cakisma yarisi, iptal penceresi, kisi
+//             limitleri, konsiyerj gecisleri, hesap silme + disa aktarma, ilk kurulum x yazici yuku, 40P01 = 0. QA_ONLY=reservation (zincir esitligi icin chain,live,reservation).
 //   work_tracking  Is takibi (042; govde scripts/qa_work_tracking_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, gecis / atama / sinir kurallari, olay + audit, okunmamis
 //             sayaci, hesap silme + disa aktarma, ilk kurulum x yazici yuku, karisik eszamanli tur (40P01 = 0). QA_ONLY=work_tracking (zincir esitligi icin chain,live,work_tracking).
 //
@@ -102,6 +104,7 @@ import pg from 'pg';
 import { sectionDocuments } from './qa_documents_section.mjs';
 import { sectionPush } from './qa_push_section.mjs';
 import { sectionWorkTracking } from './qa_work_tracking_section.mjs';
+import { sectionReservation } from './qa_reservation_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -337,6 +340,7 @@ async function runParent() {
     documents: `${prefix}_documents`,
     push: `${prefix}_push`,
     work_tracking: `${prefix}_work_tracking`,
+    reservation: `${prefix}_reservation`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -395,7 +399,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -433,7 +437,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -1066,8 +1070,8 @@ async function sectionPlatform() {
   check('super yeniden acar (onay gerekmez); kapilar geri gelir', res.status === 200 && (await call('GET', '/app/my-doors', RESIDENT)).body.doors.length === 2);
   res = await call('PUT', `/manager/sites/${S1}/modules/people`, SUPER, { enabled: false, confirm: true });
   check('cekirdek modul (people) kapatilamaz -> MODULE_NOT_TOGGLEABLE', res.body?.code === 'MODULE_NOT_TOGGLEABLE', res.body);
-  res = await call('PUT', `/manager/sites/${S1}/modules/reservation`, SUPER, { enabled: true });
-  check('yakinda modulu (reservation) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
+  res = await call('PUT', `/manager/sites/${S1}/modules/metering`, SUPER, { enabled: true });
+  check('yakinda modulu (metering) acmak -> MODULE_COMING_SOON', res.body?.code === 'MODULE_COMING_SOON', res.body);
   const auditCodes = (await q(`SELECT action FROM audit_log WHERE site_code = $1 ORDER BY id`, [S1])).rows.map((r) => r.action);
   check('audit: module.disabled sonra module.enabled', same(auditCodes.filter((a) => a.startsWith('module.')), ['module.disabled', 'module.enabled']), auditCodes);
 
@@ -9757,6 +9761,11 @@ async function sectionAccount() {
     'work_items.created_by': 'TOMBSTONE (talep siteye aittir; acan JOIN ile Silinmis Kullanici)',
     'work_items.assigned_to': 'TEMIZLENIR (acik taleplerde atama kaldirilir, olay yazilir; kapali talepte tombstone)',
     'work_item_events.actor_user_code': 'TOMBSTONE (olay gunlugu degismez; yazan JOIN ile Silinmis Kullanici)',
+    'reservation_areas.created_by': 'TOMBSTONE (alan siteye aittir)',
+    'reservations.user_code': 'TOMBSTONE (rezervasyon siteye aittir; gelecektekiler ayni islemde iptal edilir, sakin JOIN ile Silinmis Kullanici)',
+    'reservations.decided_by': 'TOMBSTONE (karari veren JOIN ile Silinmis Kullanici)',
+    'concierge_requests.user_code': 'TOMBSTONE (talep siteye aittir; acik talepler ayni islemde iptal edilir)',
+    'concierge_requests.staff_note_by': 'TOMBSTONE',
     'fee_definitions.created_by': 'TOMBSTONE (degismez defter)',
     'fee_runs.posted_by': 'TOMBSTONE (degismez defter)',
     'finance_period_closures.closed_by': 'TOMBSTONE (degismez defter)',
@@ -11384,6 +11393,8 @@ const SECTIONS = {
   push: () => sectionPush({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Is takibi (042); govde scripts/qa_work_tracking_section.mjs
   work_tracking: () => sectionWorkTracking({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Rezervasyon ve konsiyerj (043); govde scripts/qa_reservation_section.mjs
+  reservation: () => sectionReservation({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

@@ -68,7 +68,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'Rezervasyon ve Konsiyerj',
     description: 'Ortak alan rezervasyonu ve konsiyerj talepleri.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({

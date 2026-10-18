@@ -44,7 +44,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       announcements: [true, 'available'], // Faz 3a: Duyuru ve Bildirim çekirdek + kullanılabilir (hep açık)
       finance: [false, 'available'], // Faz 4a: Aidat ve Finans kullanılabilir (varsayılan KAPALI; süper açar, yönetici modül talep eder)
       documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
-      reservation: [false, 'coming_soon'],
+      reservation: [false, 'available'], // Rezervasyon ve Konsiyerj: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       metering: [false, 'coming_soon'],
       online_payment: [false, 'coming_soon'],
@@ -78,10 +78,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control, finance, documents ve is takibi)', () => {
+  it('toggleable = !core && status === available (door_control, finance, documents, rezervasyon ve is takibi)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance', 'documents', 'work_tracking'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -109,7 +109,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['reservation', 'metering', 'online_payment']) {
+    for (const code of ['metering', 'online_payment']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
@@ -205,8 +205,12 @@ describe('platform katalog: enabled hesabi', () => {
     assert.equal(finance.status, 'available');
     assert.equal(finance.enabled, false, 'varsayılan KAPALI');
     const reservation = list.find((m) => m.code === 'reservation');
-    assert.equal(reservation.toggleable, false);
-    assert.equal(reservation.status, 'coming_soon');
+    assert.equal(reservation.toggleable, true, 'Rezervasyon ve Konsiyerj kullanilabilir ve acilip kapatilabilir');
+    assert.equal(reservation.status, 'available');
+    assert.equal(reservation.enabled, false, 'varsayilan KAPALI');
+    const metering = list.find((m) => m.code === 'metering');
+    assert.equal(metering.toggleable, false);
+    assert.equal(metering.status, 'coming_soon');
   });
 });
 
