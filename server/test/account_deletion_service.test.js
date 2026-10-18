@@ -90,10 +90,14 @@ function handle(sql, params) {
     return ok([{ has_devices: state.optionalTables.push === true, has_outbox: state.optionalTables.push === true }]);
   }
   if (/^SELECT \(to_regclass\('public\.push_devices'\) IS NOT NULL\) AS has_push_devices/.test(sql)) {
-    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true }]);
+    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true, has_work_items: state.optionalTables.work === true }]);
   }
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM push_devices WHERE user_code = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.pushDevices ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.uploadedDocuments ?? 0 }]);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_items WHERE created_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.workItems ?? 0 }]);
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_events WHERE actor_user_code = \$1 AND event_type = 'comment'$/.test(sql)) return ok([{ n: state.optionalCounts.workItemComments ?? 0 }]);
+  if (/^SELECT to_regclass\('public\.work_items'\) IS NOT NULL AS present$/.test(sql)) return ok([{ present: state.optionalTables.work === true }]);
+  if (/^UPDATE work_items SET assigned_to = NULL, updated_at = NOW\(\) WHERE id IN/.test(sql)) return ok((state.releasedItems ?? []).map((id) => ({ id: String(id), site_code: '1000000001' })));
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM finance_reminder_items i /.test(sql)) return ok([{ n: state.optionalCounts.pendingReminders ?? 0 }]);
   if (/^UPDATE finance_reminder_items i SET /.test(sql)) return { rows: (state.reminderRunIds ?? []).map((id) => ({ run_id: String(id) })), rowCount: state.reminderRows };
   if (/^DELETE FROM push_devices WHERE id IN/.test(sql)) return ok([], 2);
@@ -389,6 +393,32 @@ describe('hesap silme: kimliksizleştirme ifadesi', () => {
     const details = JSON.parse(audit.params[7]);
     assert.equal(details.reminder_rows, 4);
     assert.ok(Object.entries(details).every(([key, value]) => key === 'previous_role' || typeof value === 'number'), 'denetim ayrıntısı yalnız sayı');
+  });
+
+  it('İş Takibi (P2): silinen kullanıcıya atanmış AÇIK talepler atamasız kalır + her biri için iç "assigned" olayı (kullanıcı satırından SONRA, id sırasıyla kilitli); tablo yoksa dokunulmaz', async () => {
+    state.optionalTables = { work: true };
+    state.releasedItems = [41, 42];
+    const result = await performAccountDeletion(12345);
+    const update = sqls(/^UPDATE work_items SET assigned_to = NULL/)[0];
+    assert.ok(update, 'atama bırakıldı');
+    assert.deepEqual(update.params, [12345]);
+    assert.ok(update.sql.includes("status NOT IN ('kapandi', 'iptal') ORDER BY id FOR UPDATE"), 'yalnız AÇIK talepler, id sırasıyla kilitli');
+    const events = sqls(/^INSERT INTO work_item_events/);
+    assert.equal(events.length, 2);
+    assert.deepEqual(events[0].params, [41, 1000000001, 12345, '12345']);
+    assert.ok(events[0].sql.includes("'assigned', 'internal'") && events[0].sql.includes("'staff'"), 'iç assigned olayı');
+    assert.equal(result.summary.work_items_released, 2);
+    assert.ok(indexOf(/^UPDATE users SET full_name = \$2/) >= 0 && indexOf(/^UPDATE users SET full_name = \$2/) < indexOf(/^UPDATE work_items SET assigned_to = NULL/), 'kullanıcı satırından SONRA');
+    const audit = log.find((entry) => /^INSERT INTO audit_log/.test(entry.sql) && entry.params[3] === 'account.deleted');
+    assert.equal(JSON.parse(audit.params[7]).work_items_released, 2);
+  });
+
+  it('İş Takibi (P2): work_items tablosu yoksa atama sorgusu gitmez ve özet anahtarı eklenmez', async () => {
+    state.optionalTables = {};
+    state.releasedItems = [43];
+    const result = await performAccountDeletion(12345);
+    assert.equal(sqls(/^UPDATE work_items SET assigned_to = NULL/).length, 0);
+    assert.equal('work_items_released' in result.summary, false);
   });
 
   it('R16: gönderilmeden çözülen hatırlatma kalemlerinin DAİRE ARALIK kayıtları (finance_reminder_apartments) AYNI işlemde serbest bırakılır: yalnız etkilenen çalıştırmalar (tekil, artan), kalem güncellemesinden SONRA, kişi kopmadan ÖNCE; sent / pending kapsayan daire kaydı KORUNUR', async () => {
@@ -899,6 +929,33 @@ describe('hesap silme: önizleme', () => {
     preview = await previewAccountDeletion(USER);
     all = preview.will_keep.concat(preview.will_remove).join('\n');
     assert.equal(/Telefon bildirimi için|bekleyen aidat hatırlatma|Yüklediğiniz belgeler/.test(all), false, 'tablo yoksa sayılmaz (katalog bayrağı)');
+  });
+
+  it('İş Takibi (042): önizleme — açılan talepler SİLİNMEZ, will_keep\'te sayıyla anılır ("Silinmiş Kullanıcı" görünür); sayı 0 ya da tablo yoksa satır çıkmaz; will_remove\'a girmez', async () => {
+    previewHandlers();
+    state.optionalTables = { work: true };
+    state.optionalCounts = { workItems: 4 };
+    let preview = await previewAccountDeletion(USER);
+    assert.match(preview.will_keep.join('\n'), /Açtığınız talepler \(4\) ve bu taleplerdeki durum geçmişi site yönetiminde kalır \(iş takibi siteye aittir\); açan kişi adı "Silinmiş Kullanıcı" olarak görünür/);
+    assert.equal(/Açtığınız talepler/.test(preview.will_remove.join('\n')), false);
+    state.optionalCounts = { workItems: 0 };
+    preview = await previewAccountDeletion(USER);
+    assert.equal(/Açtığınız talepler/.test(preview.will_keep.join('\n')), false);
+    state.optionalTables = {};
+    state.optionalCounts = { workItems: 9 };
+    preview = await previewAccountDeletion(USER);
+    assert.equal(/Açtığınız talepler/.test(preview.will_keep.join('\n')), false, 'tablo yoksa sayılmaz (katalog bayrağı)');
+  });
+
+  it('İş Takibi (P2): önizleme yazılan yorum metinlerinin kaldığını da söyler (talep + yorum / yalnız yorum); silmede atanmış AÇIK talepler atamasız kalır + her biri için iç "assigned" olayı; tablo yoksa dokunulmaz', async () => {
+    previewHandlers();
+    state.optionalTables = { work: true };
+    state.optionalCounts = { workItems: 2, workItemComments: 5 };
+    let preview = await previewAccountDeletion(USER);
+    assert.match(preview.will_keep.join('\n'), /Açtığınız talepler \(2\), bu taleplerdeki durum geçmişi ve yazdığınız yorumların metinleri \(5\) site yönetiminde kalır/);
+    state.optionalCounts = { workItems: 0, workItemComments: 3 };
+    preview = await previewAccountDeletion(USER);
+    assert.match(preview.will_keep.join('\n'), /Taleplere yazdığınız yorumların metinleri \(3\) site yönetiminde kalır/);
   });
 
   it('süper kullanıcı: SUPER_USER engeli; son yönetici: LAST_SITE_MANAGER + site_id', async () => {

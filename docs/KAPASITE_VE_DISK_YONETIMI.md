@@ -158,7 +158,7 @@ Hukuki süreler (vergi usul ve ticaret defteri süreleri, zamanaşımı, KVKK im
 ### 6.5 Yedekleme ölçeği
 
 - **Döküm süresi**: betikte `pg_dump` için 900 sn sınırı var [K]; düşük öncelikli (`nice`/`ionice`) çalıştığı için DB yaklaşık 15-30 GB'a gelince bu sınır aşılabilir [T]. Eşik uyarısı: döküm süresi 450 sn'yi geçerse.
-- **Slot ekonomisi (hemen)**: dış kopya hazırlık dizini ile günlük şifreli kopya aynı içeriği iki kez tutar; birleştirin. Veritabanı büyüdükçe günlük 14 yerine 7, haftalık 4, aylık 12 (dış kopyada soğuk katman) düşünün. Dış kopya maliyeti ∝ saklanan GB × slot sayısı + geri yükleme çıkış trafiği; şifreli dökümler tekilleştirilemez, bu yüzden slot sayısı doğrudan maliyettir.
+- **Slot ekonomisi (hemen)**: dış kopya hazırlık dizini ile günlük şifreli kopya aynı içeriği iki kez tutar; birleştirin (**uygulandı 2026-10-18**: sert bağ ile tek kopya; varsayılan `KEEP_*` günlük 7, haftalık 4, aylık 6, dış kopya hazırlık 7, belge arşivi 5). Veritabanı büyüdükçe günlük 14 yerine 7, haftalık 4, aylık 12 (dış kopyada soğuk katman) düşünün. Dış kopya maliyeti ∝ saklanan GB × slot sayısı + geri yükleme çıkış trafiği; şifreli dökümler tekilleştirilemez, bu yüzden slot sayısı doğrudan maliyettir.
 - **PITR eşiği** (WAL arşivi, pgBackRest benzeri; haftalık tam + günlük fark + sürekli WAL, nesne depolamaya): şu üç koşuldan biri: (a) ilk gerçek tahsilat giren ücretli finans müşterisi (24 saatlik kurtarma noktası artık kabul edilemez), (b) DB > 10 GB, (c) döküm > 5 dk. Hedef: RPO < 5 dk. Mantıksal döküm (aylık) bağımsız emniyet ağı olarak kalır.
 - **Geri yükleme testi**: mantıksal geri yükleme dökümün 3-5 katı sürer (indeksler yeniden kurulur); test için DB boyutunun ≥ 2 katı boş disk gerekir. `restore_test.sh` DB büyüdükçe süresi ölçülüp RTO (hedef < 1 saat) ile karşılaştırılmalı; 20 GB üstünde PITR/fiziksel geri yükleme gerekir.
 - **Belge yedeği**: tam arşiv yerine artımlı (değişen dosya) ya da nesne sürümleme; ara çözüm olarak `DOCUMENTS_BACKUP_MAX_MB` hata vermeden önce uyarı üretsin.
@@ -167,9 +167,9 @@ Hukuki süreler (vergi usul ve ticaret defteri süreleri, zamanaşımı, KVKK im
 
 | Kontrol | Eşik |
 |---|---|
-| Disk kullanımı | %70 uyarı, %85 kritik (`DISK_WARN`/`DISK_CRIT` ortam değişkeniyle ayarlanabilir; bugün 85/95) |
-| Disk büyüme hızı | Günlük `df` örneği; bu hızla doluma < 30 gün kaldıysa uyarı |
-| Tablo boyutu | Haftalık e-posta: ilk 10 tablonun `pg_total_relation_size` ve bir önceki haftaya göre değişim; tek tablo > 5 GB uyarı |
+| Disk kullanımı | %70 uyarı, %85 kritik (`DISK_WARN`/`DISK_CRIT` ortam değişkeniyle ayarlanabilir; **uygulandı 2026-10-18**, varsayılan 70/85) |
+| Disk büyüme hızı | Günlük `df` örneği; bu hızla doluma < 30 gün kaldıysa uyarı (**uygulandı**: `healthcheck.sh` `disk_growth`, durum `~/ops/state/disk_growth.state`) |
+| Tablo boyutu | Haftalık e-posta: ilk 10 tablonun `pg_total_relation_size` ve bir önceki haftaya göre değişim; tek tablo > 5 GB uyarı (**haftalık e-posta uygulandı**: pazartesi, `healthcheck.sh --weekly-report`; > 5 GB uyarısı yok) |
 | Ölü satır / şişme | `n_dead_tup / n_live_tup` > %20 olan tablo (özellikle `door_access_logs`) |
 | Bölüm kaldırma/temizlik işi | Son başarılı çalışma > 36 saat; silinen satır sayısı sıfır (sıkışmış iş) |
 | Belge kota | Site kotası ≥ %90; belge deposu toplamı `DOCUMENTS_BACKUP_MAX_MB`'in %70'i; yetim karantina sayısı |

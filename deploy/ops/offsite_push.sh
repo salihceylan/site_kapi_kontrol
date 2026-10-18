@@ -15,6 +15,9 @@
 # budanmaz (degismedikce tek yedek kopyadir). Belge deposu arsivleri (kapi_documents_*) EN YENISI HARIC ayni yastan (210 gun) sonra silinir:
 # en yeni arsiv yasi ne olursa olsun korunur (belge kumesi degismediyse tek geri yukleme kopyasidir).
 #
+# Not: offsite/ icindeki dosyalar daily/weekly/monthly/config ile SERT BAG paylasir (backup_db.sh; diskte tek kopya). Bu betik yalniz
+# OKUR (rsync/sftp/rclone kaynagi); dosyalari yerinde degistirmez, yerel tutma budamasi backup_db.sh'tadir (KEEP_OFFSITE, gonderilmemisi silmez).
+#
 # Kullanim: bash ~/ops/offsite_push.sh [--all] [--check]
 #   --all    daha once gonderilmis olanlari da yeniden gonder
 #   --check  baglanti/yetki denemesi (dosya gondermez; rsync icin kuru calistirma)

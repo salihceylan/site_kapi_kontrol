@@ -18,10 +18,18 @@
 # Olu adam anahtari: ~/.config/kapi-ops.env icinde HEARTBEAT_URL varsa, her BASARIYLA tamamlanan calismanin sonunda
 # bu adrese GET atilir (healthchecks.io / UptimeRobot heartbeat). Adres gunluge yazilmaz. Tanimsizsa sessiz.
 #
+# Disk: doluluk esikleri varsayilan %70 uyari / %85 kritik (DISK_WARN / DISK_CRIT ile degisir) + inode. Gunluk buyume hizi: gunde en fazla
+#   bir ornek (~/ops/state/disk.hist), hiz (GB/gun) ~/ops/state/disk_growth.state'e yazilir; bu hizla doluma DISK_GROWTH_DAYS (30) gunden az
+#   kaldiysa "disk_growth" WARN olur (mevcut uyari kanali; tek seferlik sicramalara karsi son ornek ile 7 gunluk ortalamanin KUCUGU kullanilir).
+# Haftalik rapor: her PAZARTESI (Istanbul, saat >= WEEKLY_REPORT_HOUR=8) en buyuk 10 tablo (pg_total_relation_size, onceki haftaya gore degisim)
+#   + yedek / belge deposu / PM2 gunluk dizin boyutlari ozeti: ~/ops/logs/weekly_report.log'a yazilir ve ayni e-posta kanaliyla gonderilir.
+#   SIR ICERMEZ (yalniz tablo adi, boyut, satir sayisi tahmini).
+#
 # Kullanim:
 #   healthcheck.sh                  normal (cron)
 #   healthcheck.sh --dry-run -v     kontrolleri yap ve yazdir; e-posta YOK, durum/sayac dosyalari degismez
 #   healthcheck.sh --test-alert     alicilara test e-postasi gonder (durum ve sayac dosyalari degismez)
+#   healthcheck.sh --weekly-report  haftalik raporu gunu beklemeden simdi uret ve gonder (--dry-run ile: yalniz ekrana yazdir)
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG=healthcheck
@@ -29,12 +37,13 @@ LOG_TAG=healthcheck
 . "$HERE/common.sh"
 renice -n 10 $$ >/dev/null 2>&1 || true
 
-DRY=0; VERBOSE=0; TEST=0
+DRY=0; VERBOSE=0; TEST=0; WEEKLY_FORCE=0
 for a in "$@"; do
   case "$a" in
     --dry-run|--status) DRY=1; VERBOSE=1 ;;
     -v|--verbose) VERBOSE=1 ;;
     --test-alert) TEST=1 ;;
+    --weekly-report) WEEKLY_FORCE=1 ;;
     *) echo "bilinmeyen secenek: $a"; exit 64 ;;
   esac
 done
@@ -62,8 +71,10 @@ PM2_APP="${PM2_APP:-kapi-api}"
 PM2_LOOP_RESTARTS="$(num "${PM2_LOOP_RESTARTS:-6}" 6)"
 PM2_EVENT_MIN="$(num "${PM2_EVENT_MIN:-3}" 3)"
 EVENT_MIN_GAP="$(num "${EVENT_MIN_GAP:-1800}" 1800)"
-DISK_WARN="$(num "${DISK_WARN:-85}" 85)"
-DISK_CRIT="$(num "${DISK_CRIT:-95}" 95)"
+DISK_WARN="$(num "${DISK_WARN:-70}" 70)"
+DISK_CRIT="$(num "${DISK_CRIT:-85}" 85)"
+DISK_GROWTH_DAYS="$(num "${DISK_GROWTH_DAYS:-30}" 30)"          # 0 = buyume hizi uyarisi kapali
+WEEKLY_REPORT_HOUR="$(num "${WEEKLY_REPORT_HOUR:-8}" 8)"        # pazartesi bu saatten (Istanbul) sonraki ilk calismada
 BACKUP_MAX_AGE_H="$(num "${BACKUP_MAX_AGE_H:-26}" 26)"
 RESTORE_MAX_AGE_D="$(num "${RESTORE_MAX_AGE_D:-40}" 40)"
 TLS_WARN_DAYS="$(num "${TLS_WARN_DAYS:-14}" 14)"
@@ -250,6 +261,51 @@ check_disk() {
   else result disk OK "disk %$use dolu (bos: $(df -Ph / | awk 'NR==2{print $4}')), inode %$iuse" 1; fi
 }
 
+# Gunluk disk buyume hizi (GB/gun). Ornek dosyasi disk.hist: "epoch kullanilan_KB" (gunde en fazla 1 satir, son 60 gun).
+# Hiz = simdiki kullanim - "onceki olcum" (en yeni >= 20 saat eski ornek); ikinci olarak 7 gunluk ortalama. Uyari icin KUCUK olan
+# kullanilir (tek seferlik sicrama = dagitim yedegi / imaj indirme alarm uretmesin; surekli buyume uretsin).
+check_disk_growth() {
+  local hist="$OPS_STATE/disk.hist" used avail last_ep out r1 r7 eff days msg
+  read -r used avail < <(df -Pk / | awk 'NR==2{print $3, $4}')
+  used="$(num "${used:-}" 0)"; avail="$(num "${avail:-}" 0)"
+  if [ "$used" -le 0 ]; then result disk_growth OK "disk kullanimi okunamadi, buyume hizi hesaplanmadi" 2; return; fi
+  out="$(awk -v now="$NOW" -v used="$used" -v avail="$avail" '
+    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $1 + 0 <= now + 0 { n++; e[n] = $1 + 0; u[n] = $2 + 0 }
+    END {
+      r1 = "NA"; r7 = "NA"; eff = "NA"; days = -1
+      for (i = n; i >= 1; i--) if (now - e[i] >= 72000) { r1 = (used - u[i]) / ((now - e[i]) / 86400); break }
+      for (i = 1; i <= n; i++) if (now - e[i] <= 648000) { if (now - e[i] >= 72000) r7 = (used - u[i]) / ((now - e[i]) / 86400); break }
+      if (r1 != "NA") { eff = r1; if (r7 != "NA" && r7 < r1) eff = r7; if (eff > 0) days = int(avail / eff) }
+      printf "%s %s %s %s\n", (r1 == "NA" ? "NA" : sprintf("%.3f", r1 / 1048576)), (r7 == "NA" ? "NA" : sprintf("%.3f", r7 / 1048576)), (eff == "NA" ? "NA" : sprintf("%.3f", eff / 1048576)), (days < 0 ? "NONE" : days)
+    }' "$hist" 2>/dev/null)"
+  read -r r1 r7 eff days <<<"${out:-NA NA NA NONE}"
+  days="$(num "${days:-}" -1)"        # NONE/gecersiz -> -1 (buyume yok)
+  if [ "${r1:-NA}" = "NA" ]; then
+    msg="gunluk buyume hizi icin henuz en az 1 gunluk olcum yok"
+    result disk_growth OK "$msg" 2
+  else
+    msg="gunluk $(printf '%+.2f' "$r1") GB/gun (7 gun ort.: ${r7} GB/gun)"
+    if [ "$DISK_GROWTH_DAYS" -gt 0 ] && [ "$days" -ge 0 ] && [ "$days" -lt "$DISK_GROWTH_DAYS" ]; then
+      result disk_growth WARN "disk $msg; bu hizla doluma yaklasik $days gun kaldi (esik $DISK_GROWTH_DAYS gun)" 2 24
+    elif [ "$days" -ge 0 ]; then
+      result disk_growth OK "disk $msg; bu hizla doluma yaklasik $days gun" 2
+    else
+      result disk_growth OK "disk $msg; buyume yok/azaliyor" 2
+    fi
+  fi
+  # gunde en fazla bir ornek + durum dosyasi (yalniz normal calisma)
+  if [ "$PERSIST" -eq 1 ]; then
+    last_ep="$(num "$(tail -n1 "$hist" 2>/dev/null | cut -d' ' -f1)" 0)"
+    if [ "$((NOW - last_ep))" -ge 82800 ]; then
+      printf '%s %s\n' "$NOW" "$used" >>"$hist"
+      tail -n 60 "$hist" >"$hist.tmp" && mv "$hist.tmp" "$hist"
+      write_status "$OPS_STATE/disk_growth.state" "epoch=$NOW" "used_gb=$(awk -v k="$used" 'BEGIN{printf "%.2f", k/1048576}')" \
+        "avail_gb=$(awk -v k="$avail" 'BEGIN{printf "%.2f", k/1048576}')" "rate_gb_day=${r1:-NA}" "rate7_gb_day=${r7:-NA}" "days_left=$days"
+      log "disk ornegi: kullanilan $(awk -v k="$used" 'BEGIN{printf "%.2f", k/1048576}') GB, buyume ${r1:-NA} GB/gun (7 gun ort. ${r7:-NA}), doluma ${days} gun (-1 = buyume yok)"
+    fi
+  fi
+}
+
 check_memory() {
   local total avail stot sfree pct swp
   total="$(num "$(awk '/^MemTotal:/{print $2}' /proc/meminfo)" 1)"
@@ -401,6 +457,7 @@ run_checks() {
   check_pm2
   check_postgres
   check_disk
+  check_disk_growth
   check_memory
   check_backups
   check_key
@@ -408,6 +465,93 @@ run_checks() {
   check_offsite
   check_tls
   check_mqtt
+}
+
+# ---- haftalik kapasite raporu (pazartesi) --------------------------------------------------
+# SIR ICERMEZ: yalniz tablo adi, boyut, satir sayisi tahmini ve dizin boyutlari. Tum sorgular salt okunur (dpsql_ro).
+fmt_kb() { # KB -> okunur boyut | "yok"
+  local k; k="$(num "${1:-}" "")"
+  if [ -n "$k" ]; then human_bytes $((k * 1024)); else echo "yok/okunamadi"; fi
+}
+dir_kb() { # dizin -> KB | "" (yok/okunamadi)
+  [ -d "$1" ] || return 0
+  nolock timeout 60 du -sk -- "$1" 2>/dev/null | cut -f1
+}
+
+WR_BODY=""; WR_SUMMARY=""
+weekly_report_build() { # $1 = 1: tablo boyutlarini "onceki hafta" tabani olarak kaydet. -> WR_BODY, WR_SUMMARY
+  local save="${1:-0}" prevf="$OPS_STATE/weekly_tables.prev" curf="$OPS_STATE/weekly_tables.cur"
+  local rows dbsz dbtxt tbl top_line k d sched="" tot_k=0 bk_all docs pm2l pm2dir df_line gstate g1 g7 gd
+  rows="$(DOCKER_TIMEOUT=45 dpsql_ro -d "$DB_NAME" -At -F '|' -c "select c.relname, pg_total_relation_size(c.oid), coalesce(s.n_live_tup, 0) from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_stat_user_tables s on s.relid = c.oid where n.nspname = 'public' and c.relkind = 'r' order by 2 desc, 1 limit 10" 2>/dev/null </dev/null \
+    | awk -F'|' 'NF == 3 && $1 ~ /^[A-Za-z0-9_]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/')"
+  dbsz="$(num "$(DOCKER_TIMEOUT=45 dpsql_ro -d "$DB_NAME" -At -c 'select pg_database_size(current_database())' 2>/dev/null </dev/null | head -n1)" "")"
+  if [ -n "$rows" ]; then
+    tbl="$(printf '%s\n' "$rows" | awk -F'|' -v pf="$prevf" '
+      function hb(b,   i, u) { split("B KB MB GB TB", u, " "); i = 1; while (b >= 1024 && i < 5) { b /= 1024; i++ } return sprintf("%.1f %s", b, u[i]) }
+      BEGIN { while ((getline l < pf) > 0) { split(l, a, "|"); if (a[2] ~ /^[0-9]+$/) pb[a[1]] = a[2] } }
+      {
+        if ($1 in pb) { dl = $2 - pb[$1]; ch = (dl < 0 ? "-" : "+") hb(dl < 0 ? -dl : dl) } else ch = "yeni / ilk olcum"
+        printf "  %2d. %-36s %10s  ~%d satir  (onceki haftaya gore: %s)\n", ++k, $1, hb($2), $3, ch
+      }')"
+    top_line="$(printf '%s\n' "$rows" | head -n1 | awk -F'|' '{printf "%s=%d bayt", $1, $2}')"
+  else
+    tbl="  (tablo boyutlari okunamadi: veritabani yanit vermedi)"
+    top_line="tablo boyutu okunamadi"
+  fi
+  while read -r k d; do
+    [ -n "${d:-}" ] || continue
+    sched="${sched:+$sched, }$d $(fmt_kb "$k")"; tot_k=$((tot_k + $(num "$k" 0)))
+  done < <(cd "$BACKUP_ROOT" 2>/dev/null && nolock timeout 60 du -sk daily weekly monthly config offsite 2>/dev/null)
+  bk_all="$(dir_kb "$(dirname "$BACKUP_ROOT")")"
+  docs="$(dir_kb "$(documents_root)")"
+  pm2dir="${PM2_LOG_DIR:-$HOME/.pm2/logs}"; pm2l="$(dir_kb "$pm2dir")"
+  df_line="$(df -Ph / | awk 'NR==2{printf "%s kullanilan, %s bos, doluluk %s", $3, $4, $5}')"
+  g1="$(status_get "$OPS_STATE/disk_growth.state" rate_gb_day 2>/dev/null)"
+  g7="$(status_get "$OPS_STATE/disk_growth.state" rate7_gb_day 2>/dev/null)"
+  gd="$(status_get "$OPS_STATE/disk_growth.state" days_left 2>/dev/null)"
+  gstate="son gunluk ornek: buyume ${g1:-?} GB/gun (7 gun ort.: ${g7:-?}); doluma kalan gun: ${gd:-?} (-1 = buyume yok)"
+  if [ -n "$dbsz" ]; then dbtxt="$(fmt_kb $((dbsz / 1024)))"; else dbtxt="okunamadi"; fi
+  WR_BODY="Haftalik kapasite raporu (healthcheck.sh)
+Sunucu : $(hostname) ($SERVER_PUBLIC_IP)
+Zaman  : $(stamp_local) (Europe/Istanbul)
+
+DISK (/)
+  $df_line
+  $gstate
+
+VERITABANI toplam boyut: $dbtxt
+EN BUYUK 10 TABLO (yigin + indeks + TOAST; satir sayisi istatistik tahminidir)
+$tbl
+
+DIZIN BOYUTLARI
+  yedekler (~/backups, dagitim yedekleri dahil): $(fmt_kb "$bk_all")
+  zamanlanmis yedek (toplam $(fmt_kb "$tot_k"); sert bagli kopyalar yalniz bir kez sayilir): ${sched:-okunamadi}
+  belge deposu: $(fmt_kb "$docs")
+  PM2 gunlukleri (~/.pm2/logs): $(fmt_kb "$pm2l")
+
+Ayrinti: ~/ops/logs/weekly_report.log   |   bu rapor: bash ~/ops/healthcheck.sh --weekly-report --dry-run"
+  WR_SUMMARY="DB $dbtxt, en buyuk tablo $top_line, yedekler $(fmt_kb "$bk_all") (zamanlanmis $(fmt_kb "$tot_k")), belgeler $(fmt_kb "$docs"), PM2 gunlukleri $(fmt_kb "$pm2l"), disk: $df_line"
+  if [ "$save" = "1" ] && [ -n "$rows" ]; then
+    printf '%s\n' "$rows" | awk -F'|' '{print $1 "|" $2}' >"$curf" && mv -- "$curf" "$prevf"
+  fi
+}
+
+weekly_report_maybe() { # alt kabukta cagrilir
+  local today dow hour last
+  today="$(TZ=$LOCAL_TZ date +%F)"; dow="$(TZ=$LOCAL_TZ date +%u)"; hour="$(TZ=$LOCAL_TZ date +%H)"
+  last="$(cat "$OPS_STATE/weekly_report.last" 2>/dev/null)"
+  if [ "$WEEKLY_FORCE" -ne 1 ]; then
+    [ "$dow" = "1" ] || return 0
+    [ "$((10#$hour))" -ge "$WEEKLY_REPORT_HOUR" ] || return 0
+    [ "$last" != "$today" ] || return 0
+  fi
+  # once isaretle: rapor/posta hata verse bile ayni gun tekrar denenmez (5 dakikada bir posta yagmuru olmasin)
+  printf '%s\n' "$today" >"$OPS_STATE/weekly_report.last"
+  weekly_report_build 1
+  log "haftalik rapor: $WR_SUMMARY"
+  { printf '=== %s ===\n' "$(stamp_local)"; printf '%s\n' "$WR_BODY"; } >>"$OPS_LOGS/weekly_report.log" 2>/dev/null
+  trim_log "$OPS_LOGS/weekly_report.log" 262144 1500
+  send_mail "[KAPI-OPS] Haftalik kapasite raporu" "$WR_BODY" || true
 }
 
 # ---- degerlendirme (durum makinesi) ----------------------------------------------------
@@ -576,6 +720,10 @@ if [ "$DRY" -eq 1 ]; then
   echo
   echo "KURU CALISMA: gonderilecek bildirim ogesi: $total_items (yeni=${#ITEMS_NEW[@]} degisen=${#ITEMS_CHG[@]} hatirlatma=${#ITEMS_REM[@]} duzelen=${#ITEMS_REC[@]} olay=${#ITEMS_EVT[@]}); e-posta gonderilmedi, durum degismedi."
   [ "$total_items" -gt 0 ] && { build_mail; echo "--- e-posta onizleme ---"; echo "Konu: $SUBJECT"; echo "$BODY"; }
+  if [ "$WEEKLY_FORCE" -eq 1 ]; then
+    weekly_report_build 0
+    echo; echo "--- haftalik rapor onizleme (gonderilmedi, taban kaydedilmedi) ---"; echo "$WR_BODY"
+  fi
   exit 0
 fi
 
@@ -614,6 +762,9 @@ else
 fi
 trim_log
 for f in "$OPS_LOGS"/cron_*.out; do [ -e "$f" ] && trim_log "$f" 262144 500; done
+
+# Haftalik rapor (pazartesi veya --weekly-report): alt kabukta; hata durumunda saglik kontrolunun sonucunu etkilemez
+( weekly_report_maybe ) || log "UYARI: haftalik rapor uretilemedi (ayrintilar icin: bash ~/ops/healthcheck.sh --weekly-report --dry-run)"
 
 # Olu adam anahtari: yalniz BASARIYLA tamamlanan calismalarda ping (adres gunluge yazilmaz)
 if [ -n "$HEARTBEAT_URL" ] && [ "$RUN_OK" -eq 1 ]; then

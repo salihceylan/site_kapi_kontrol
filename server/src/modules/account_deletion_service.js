@@ -54,6 +54,8 @@ import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
 import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
+import { workItemsKeepNote } from './work_tracking_common.js';
+import { releaseAssignedWorkItems } from './work_tracking_service.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -253,13 +255,14 @@ export async function findLastManagerSites(db, userCode) {
  * @returns {Promise<{ pushDevices: number, uploadedDocuments: number, pendingReminders: number }>}
  */
 async function previewOptionalCounts(db, userCode) {
-  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0 };
+  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0 };
   const flags = (
     await db.query(
       `
         SELECT (to_regclass('public.push_devices') IS NOT NULL) AS has_push_devices,
                (to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
-               (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders
+               (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders,
+               (to_regclass('public.work_items') IS NOT NULL) AS has_work_items
       `,
     )
   ).rows?.[0];
@@ -269,6 +272,10 @@ async function previewOptionalCounts(db, userCode) {
   }
   if (flags?.has_documents === true) {
     out.uploadedDocuments = await count('SELECT COUNT(*)::INTEGER AS n FROM document_versions WHERE uploaded_by = $1');
+  }
+  if (flags?.has_work_items === true) {
+    out.workItems = await count('SELECT COUNT(*)::INTEGER AS n FROM work_items WHERE created_by = $1');
+    out.workItemComments = await count("SELECT COUNT(*)::INTEGER AS n FROM work_item_events WHERE actor_user_code = $1 AND event_type = 'comment'");
   }
   if (flags?.has_reminders === true) {
     out.pendingReminders = await count(
@@ -362,6 +369,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
   ];
   if (optionalCounts.uploadedDocuments > 0) {
     willKeep.push(`Yüklediğiniz belgeler (${optionalCounts.uploadedDocuments} dosya sürümü) site yönetiminde kalır (belgeler siteye aittir); yükleyen adı "Silinmiş Kullanıcı" olarak görünür.`);
+  }
+  if (optionalCounts.workItems > 0 || optionalCounts.workItemComments > 0) {
+    willKeep.push(workItemsKeepNote({ items: optionalCounts.workItems, comments: optionalCounts.workItemComments }));
   }
   if (num(counts.apartment_links) + num(counts.site_links) > 0) {
     willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');
@@ -655,6 +665,9 @@ async function runAttempt(userCode) {
     const pushSummary = await deletePushDataForUser(client, userCode);
     summary.push_devices = num(pushSummary?.devices ?? 0);
     summary.push_outbox = num(pushSummary?.outbox ?? 0);
+    // İş takibi (042): kullanıcıya atanmış AÇIK talepler atamasız kalır (+ iç olay); talepler / yorumlar silinmez, kullanıcı satırı tombstone olarak kalır. Tablo yoksa atlanır.
+    const releasedWorkItems = await releaseAssignedWorkItems(client, userCode);
+    if (releasedWorkItems > 0) summary.work_items_released = releasedWorkItems;
     // Aidat hatırlatma kuyruğu (Faz 4b): kişiye bağlı kalemlerdeki düz e-posta adresi + özet silinir, bekleyenler 'resolved' olur (gönderilmez). Kişi satırının hesap bağlantısı
     // (site_people.user_code) bu adımdan SONRA (15) kopar; bu yüzden burada eşleşir.
     summary.reminder_rows = await clearReminderItems(client, userCode);

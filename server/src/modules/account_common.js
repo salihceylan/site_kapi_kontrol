@@ -44,6 +44,8 @@ export const EXPORT_ROW_LIMITS = Object.freeze({
   join_requests: 200,
   qr_requests: 200,
   uploaded_documents: 500,
+  work_items_created: 500,
+  work_item_comments: 1000,
   finance_reminders_received: 300,
   receipts: 200,
 });

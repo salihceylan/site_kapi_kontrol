@@ -73,6 +73,8 @@
 //             (devir, 10 cihaz, eszamanli ayni jeton -> tek sahip, kayit x hesap silme), yayinda outbox (3000 alici, PUSH_ENABLED=0 -> 0 satir, UNIQUE), kilit
 //             turlari (40P01 = 0), isci (iki isci, SKIP LOCKED, bayat talep, olu jeton, sessiz saat, ust sinir, geri cekme), hesap silme kancasi, bakim,
 //             tercihler, disa aktarma, durum, HTTP, gunluk gizliligi. QA_ONLY=push.
+//   work_tracking  Is takibi (042; govde scripts/qa_work_tracking_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, gecis / atama / sinir kurallari, olay + audit, okunmamis
+//             sayaci, hesap silme + disa aktarma, ilk kurulum x yazici yuku, karisik eszamanli tur (40P01 = 0). QA_ONLY=work_tracking (zincir esitligi icin chain,live,work_tracking).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -99,6 +101,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { sectionDocuments } from './qa_documents_section.mjs';
 import { sectionPush } from './qa_push_section.mjs';
+import { sectionWorkTracking } from './qa_work_tracking_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -333,6 +336,7 @@ async function runParent() {
     bulk_import: `${prefix}_bulk_import`,
     documents: `${prefix}_documents`,
     push: `${prefix}_push`,
+    work_tracking: `${prefix}_work_tracking`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -391,7 +395,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -429,7 +433,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -9750,6 +9754,9 @@ async function sectionAccount() {
     'documents.created_by': 'TOMBSTONE (belge siteye aittir; yukleyen adi JOIN ile Silinmis Kullanici)',
     'documents.deleted_by': 'TOMBSTONE',
     'document_versions.uploaded_by': 'TOMBSTONE (belge siteye aittir; yukleyen adi JOIN ile Silinmis Kullanici)',
+    'work_items.created_by': 'TOMBSTONE (talep siteye aittir; acan JOIN ile Silinmis Kullanici)',
+    'work_items.assigned_to': 'TEMIZLENIR (acik taleplerde atama kaldirilir, olay yazilir; kapali talepte tombstone)',
+    'work_item_events.actor_user_code': 'TOMBSTONE (olay gunlugu degismez; yazan JOIN ile Silinmis Kullanici)',
     'fee_definitions.created_by': 'TOMBSTONE (degismez defter)',
     'fee_runs.posted_by': 'TOMBSTONE (degismez defter)',
     'finance_period_closures.closed_by': 'TOMBSTONE (degismez defter)',
@@ -11375,6 +11382,8 @@ const SECTIONS = {
   documents: () => sectionDocuments({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, S1 }),
   // Telefon bildirimi (Faz 3b-B); govde scripts/qa_push_section.mjs
   push: () => sectionPush({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Is takibi (042); govde scripts/qa_work_tracking_section.mjs
+  work_tracking: () => sectionWorkTracking({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

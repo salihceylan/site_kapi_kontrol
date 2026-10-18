@@ -52,6 +52,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   'Makbuzlar ve tahsilat belgeleri: yalnız sizin görebildiğiniz dairelerin makbuz özeti (numara, tür, durum, tutar, tarih, daire) "receipts" bölümündedir; makbuzu düzenleyen yönetici adı, ödeyen kişinin adı (başkasına ait olabilir), doğrulama kodu ve belge anlık görüntüsü site yönetiminin resmi kaydı olduğu için dışarıda bırakılmıştır (makbuz belgeniz uygulamadaki makbuz ekranından alınır).',
   'Aidat hatırlatma e-postaları: yalnız size gönderilen hatırlatmaların geçmişi (tarih, ton, durum) "finance_reminders_received" bölümündedir; e-postanın metni, tutarlar, yönetici notu ve gönderim adresinin özeti yönetim / güvenlik kaydı olduğu için dışarıda bırakılmıştır.',
   PUSH_EXPORT_EXCLUDED_NOTE,
+  'İş takibi talepleri: yalnız sizin açtığınız taleplerin başlığı, açıklaması, kategorisi, konumu, durumu ve tarihleri "work_items_created" bölümünde, yalnız SİZİN yazdığınız yorumlar "work_item_comments" bölümündedir; başkalarının yorumları, yönetimin diğer iç notları, öncelik, atanan görevli, hedef tarih ve durum geçmişi satırları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
 ]);
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -238,6 +239,21 @@ const SQL = Object.freeze({
     INNER JOIN sites s ON s.site_code = r.site_code
     ORDER BY r.id DESC
   `,
+  // Açtığınız iş takibi talepleri (042): YALNIZ sizin yazdığınız alanlar + durum / tarihler. Öncelik, atanan, hedef tarih, olaylar / yorumlar (iç notlar dahil) SEÇİLMEZ.
+  workItems: `
+    SELECT w.id, w.site_code, s.name AS site_name, w.category, w.location_type, w.title, w.description, w.status, w.created_at, w.updated_at, w.closed_at
+    FROM work_items w
+    INNER JOIN sites s ON s.site_code = w.site_code
+    WHERE w.created_by = $1
+    ORDER BY w.id DESC
+  `,
+  // Yazdığınız iş takibi yorumları (042): YALNIZ sizin (actor_user_code = çağıran) yazdığınız yorum metni + görünürlük + zaman. Talebin başlığı / başkasının metni SEÇİLMEZ.
+  workItemComments: `
+    SELECT e.id, e.work_item_id, e.site_code, e.created_at, e.body, e.visibility
+    FROM work_item_events e
+    WHERE e.actor_user_code = $1 AND e.event_type = 'comment'
+    ORDER BY e.id DESC
+  `,
   announcements: `
     SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at
     FROM site_people sp
@@ -300,7 +316,8 @@ const OPTIONAL_OBJECTS_SQL = `
          AND column_name IN ('email_finance_reminders', 'push_show_preview', 'push_quiet_enabled', 'push_quiet_start', 'push_quiet_end')) = 5 AS has_preference_extras,
     (to_regclass('public.documents') IS NOT NULL AND to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
     (to_regclass('public.finance_reminder_items') IS NOT NULL AND to_regclass('public.finance_reminder_runs') IS NOT NULL) AS has_reminders,
-    (to_regclass('public.receipts') IS NOT NULL) AS has_receipts
+    (to_regclass('public.receipts') IS NOT NULL) AS has_receipts,
+    (to_regclass('public.work_items') IS NOT NULL) AS has_work_items
 `;
 
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
@@ -395,6 +412,8 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     // Yüklediğiniz belgelerin kayıt bilgisi (Faz 3b-A) ve aidat hatırlatma geçmişiniz (Faz 4b). Dosya içeriği / adres / not HARİÇ (sorgu açıklamaları).
     const uploadedDocuments = optional.has_documents === true ? await bounded('uploaded_documents', SQL.uploadedDocuments, EXPORT_ROW_LIMITS.uploaded_documents) : [];
     const financeReminders = optional.has_reminders === true ? await bounded('finance_reminders_received', SQL.financeReminders, EXPORT_ROW_LIMITS.finance_reminders_received) : [];
+    const workItems = optional.has_work_items === true ? await bounded('work_items_created', SQL.workItems, EXPORT_ROW_LIMITS.work_items_created) : [];
+    const workItemComments = optional.has_work_items === true ? await bounded('work_item_comments', SQL.workItemComments, EXPORT_ROW_LIMITS.work_item_comments) : [];
     // Makbuzlar: sakin ucunun (GET /app/my-finance/receipts) görünürlük kuralları AYNEN yeniden kullanılır (yetki mantığı kopyalanmaz; aynı bağlantı = aynı anlık görüntü).
     // Yanıt özetidir; ödeyen adı (başkasına ait olabilir) dosyaya KONMAZ (mapReceiptForExport).
     let receipts = [];
@@ -462,6 +481,8 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
         version_no: numOrNull(row.version_no),
         size_bytes: numOrNull(row.size_bytes),
       })),
+      work_items_created: withIds(workItems),
+      work_item_comments: withIds(workItemComments, ['id', 'work_item_id', 'site_code']),
       site_applications: withIds(applications),
       guest_passes: withIds(guestPasses),
       door_events: withIds(doorEvents),
@@ -510,6 +531,8 @@ export const SHRINKABLE_SECTIONS = Object.freeze([
   'receipts',
   'finance_reminders_received',
   'uploaded_documents',
+  'work_items_created',
+  'work_item_comments',
   'people_records',
   'vehicles',
   'devices',

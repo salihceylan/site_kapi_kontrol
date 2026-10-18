@@ -79,6 +79,16 @@ enum SirketMenuItem {
   /// ya da modül verisi yokken eklenmez. Görevli (STAFF) için yoktur.
   belgeler,
 
+  /// İş Takibi (arıza, bakım, talep) yönetim ekranı "Talepler". Rol listesinde YOKTUR; `work_tracking` modülü AÇIK
+  /// olan sitenin yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur)
+  /// [YanMenu.additionalItems] ile eklenir ("Belgeler"in, yoksa üstteki öğelerin altına). Modül kapalıyken ya da
+  /// modül verisi yokken eklenmez.
+  talepler,
+
+  /// İş Takibi sakin ekranı "Taleplerim". Rol listesinde YOKTUR; alıcısı olabilecek ve `work_tracking` modülü AÇIK
+  /// sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Talepler"in altına).
+  taleplerim,
+
   /// Satışa hazırlık: Platform Ayarları (uygulama sürümü / bakım, destek iletişim, şirket ve yasal bilgiler).
   /// Yalnız süper kullanıcı (rol listesinde).
   platformAyarlari,
@@ -445,6 +455,21 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Talepler" / "Taleplerim" "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın
+    // altına gelir; "Taleplerim" varsa "Talepler"in altına.
+    if (extra == SirketMenuItem.talepler || extra == SirketMenuItem.taleplerim) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.taleplerim) SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -575,6 +600,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Borcum';
     case SirketMenuItem.belgeler:
       return 'Belgeler';
+    case SirketMenuItem.talepler:
+      return 'Talepler';
+    case SirketMenuItem.taleplerim:
+      return 'Taleplerim';
     case SirketMenuItem.platformAyarlari:
       return 'Platform Ayarları';
     case SirketMenuItem.istemciHatalari:
@@ -630,6 +659,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.receipt_long_rounded;
     case SirketMenuItem.belgeler:
       return Icons.folder_rounded;
+    case SirketMenuItem.talepler:
+      return Icons.assignment_rounded;
+    case SirketMenuItem.taleplerim:
+      return Icons.build_circle_rounded;
     case SirketMenuItem.platformAyarlari:
       return Icons.tune_rounded;
     case SirketMenuItem.istemciHatalari:

@@ -45,7 +45,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       finance: [false, 'available'], // Faz 4a: Aidat ve Finans kullanılabilir (varsayılan KAPALI; süper açar, yönetici modül talep eder)
       documents: [false, 'available'], // Faz 3b-A: Belgeler (Dosya Deposu) kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       reservation: [false, 'coming_soon'],
-      work_tracking: [false, 'coming_soon'],
+      work_tracking: [false, 'available'], // Is Takibi: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       metering: [false, 'coming_soon'],
       online_payment: [false, 'coming_soon'],
     });
@@ -78,10 +78,10 @@ describe('platform katalog: sozlesme tablosu', () => {
     }
   });
 
-  it('toggleable = !core && status === available (door_control, finance ve Faz 3b-A ile documents)', () => {
+  it('toggleable = !core && status === available (door_control, finance, documents ve is takibi)', () => {
     assert.deepEqual(
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
-      ['door_control', 'finance', 'documents'],
+      ['door_control', 'finance', 'documents', 'work_tracking'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -109,7 +109,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'metering', 'online_payment']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }

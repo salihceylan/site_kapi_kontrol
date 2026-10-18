@@ -31,8 +31,8 @@ rollback() {
 prepare() {
   mkdir -p "$BK"
   chmod 700 "$BK"
-  echo "[1/5] kod yedegi (.env ve data dahil; firmware/public/node_modules haric)"
-  tar -czf "$BK/server_code.tgz" --exclude='server/node_modules' --exclude='server/firmware' --exclude='server/public' -C "$BASE" server
+  echo "[1/5] kod yedegi (.env ve data dahil; firmware/public/node_modules ve node_modules.old_* haric)"
+  tar -czf "$BK/server_code.tgz" --exclude='server/node_modules' --exclude='server/node_modules.old_*' --exclude='server/firmware' --exclude='server/public' -C "$BASE" server
   chmod 600 "$BK/server_code.tgz"
   echo "[2/5] veritabani yedegi (pg_dump)"
   docker exec "$DBC" pg_dump -U postgres -d site_kapi_kontrol | gzip > "$BK/db.sql.gz"
@@ -88,6 +88,7 @@ activate() {
   if health_ok; then
     echo "ACTIVATE_OK"
     curl -fsS -m 10 http://127.0.0.1:8080/health | head -c 400; echo
+    prune_old_node_modules || true      # yalniz BASARILI aktivasyondan sonra; geri alma yolunda hicbir sey silinmez
   else
     echo "SAGLIK KONTROLU BASARISIZ"
     pm2 logs kapi-api --lines 40 --nostream 2>&1 | tail -n 40 | cut -c1-220
@@ -141,6 +142,22 @@ envset() {
     v=$(getv "$k"); printf '   %s: %s\n' "$k" "$([ -z "$v" ] && echo YOK || echo "tanimli (${#v} karakter)")"
   done
   echo ENVSET_OK
+}
+
+# Eski bagimlilik dizinleri: yalniz EN SON 2 `node_modules.old_*` kalir (geri alma icin yeterli; her biri ~300 MB). Guvenlik: yalniz $APP'in
+# DOGRUDAN altindaki, adi ^node_modules.old_[A-Za-z0-9_]+$ desenine uyan, sembolik baglanti OLMAYAN dizinler; TS adlari sabit genislikli
+# (YYYYmmdd_HHMMSS) oldugundan ada gore ters siralama = yeniden eskiye. Bu dagitimin olusturdugu node_modules.old_$TS her zaman korunur.
+prune_old_node_modules() {
+  local keep=2 n=0 name d
+  while IFS= read -r name; do
+    n=$((n + 1))
+    [ "$n" -gt "$keep" ] || continue
+    [ "$name" != "node_modules.old_$TS" ] || continue
+    d="$APP/$name"
+    { [ -d "$d" ] && [ ! -L "$d" ]; } || continue
+    rm -rf -- "$d" && echo "eski bagimlilik dizini silindi: $name"
+  done < <(cd "$APP" && ls -1 | grep -E '^node_modules\.old_[A-Za-z0-9_]+$' | sort -r)
+  return 0
 }
 
 case "$PHASE" in

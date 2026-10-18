@@ -538,7 +538,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['finance', true, true],
         ['documents', true, true],
         ['reservation', false, false],
-        ['work_tracking', false, false],
+        ['work_tracking', true, true],
         ['metering', false, false],
         ['online_payment', false, false],
       ],
@@ -777,7 +777,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
-    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'metering', 'online_payment']) {
       const open = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled: true } });
       assert.equal(open.status, 409, code);
       assert.equal(open.body.code, 'MODULE_COMING_SOON');

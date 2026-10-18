@@ -206,6 +206,21 @@ status_get() { # status_get dosya anahtar
   grep -m1 "^$2=" "$1" | cut -d= -f2-
 }
 
+# Ayni icerigi ikinci kez diskte TUTMAMAK icin: sert bag (hard link) kur, olmazsa (farkli dosya sistemi vb.) kopyala.
+# Hedef once ".part" adiyla olusur, sonra atomik tasinir. Dosyalar hicbir zaman yerinde degistirilmez (yalniz olusturulur/silinir/yeniden
+# adlandirilir), bu yuzden ortak inode guvenlidir: bir adin silinmesi (tutma kurali) digerlerini etkilemez. Baglar yedek kokunun
+# ICINDE kalir (BACKUP_ROOT altindaki dizinler arasi). Kaynak yoksa 1 doner.
+link_or_copy() { # link_or_copy <kaynak> <hedef>
+  local src="$1" dst="$2"
+  [ -f "$src" ] || return 1
+  [ "$src" -ef "$dst" ] && return 0       # zaten ayni dosya (ayni inode)
+  rm -f -- "$dst.part"
+  if ! ln -- "$src" "$dst.part" 2>/dev/null; then
+    cp -p -- "$src" "$dst.part" || { rm -f -- "$dst.part"; return 1; }
+  fi
+  mv -f -- "$dst.part" "$dst" || { rm -f -- "$dst.part"; return 1; }
+}
+
 human_bytes() { # basit insan okur boyut
   awk -v b="$1" 'BEGIN{ s="B KB MB GB"; split(s,u," "); i=1; while (b>=1024 && i<4) { b/=1024; i++ } printf "%.1f %s", b, u[i] }'
 }

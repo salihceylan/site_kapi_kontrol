@@ -17,7 +17,7 @@ Bu belgedeki komut ve sonuçlar şu şekilde işaretlidir:
 |---|---|
 | Günlük veritabanı yedeği | Her gün **03:30 (İstanbul)**; `~/backups/scheduled/daily/kapi_<YYYYmmdd_HHMM>.sql.gz` |
 | Diskte şifreleme | **Yalnızca en son günlük yedek düz** durur; eski günlükler, haftalık ve aylık kopyalar, yapılandırma ve firmware arşivleri **şifreli** (`.enc`) |
-| Tutma | 14 günlük + 8 haftalık + 6 aylık (adet sayısıyla; başarısız çalışma hiçbir şey silmez). Dış kopyalar en çok ~**210 gün** |
+| Tutma | 7 günlük + 4 haftalık + 6 aylık (adet sayısıyla, `KEEP_*` ile ayarlanır; her dizinde en yeni kopya HER ZAMAN korunur; başarısız çalışma hiçbir şey silmez). Aynı şifreli içerik `daily/weekly/monthly/offsite/config` arasında sert bağ ile diskte **tek kopya** tutulur. Dış kopyalar en çok ~**210 gün** |
 | Yapılandırma yedeği (şifreli) | `.env`, nginx sitesi, MQTT broker yapılandırması, `data/`, `public/`, `ecosystem.config.cjs`, veritabanı rolleri, silinmiş hesap listesi |
 | Firmware (OTA ikilileri) | `server/firmware` ayrı şifreli arşiv (yalnızca içerik değişince yenilenir) |
 | Belge deposu (`DOCUMENTS_DIR`) | `sites/` ağacı + `.instance` (depolama kimliği) ayrı şifreli arşiv `kapi_documents_*.tgz.enc`: DB dökümünden **sonra**, `_tmp/` ve `_orphans/` (yetim karantinası) hariç, yalnızca içerik değişince; dizin yoksa/boşsa yedek **hata vermez** (bölüm 4 adım 7, bölüm 5.9) |
@@ -111,9 +111,9 @@ Anahtarı değiştirmek isterseniz yeni anahtar yalnızca **sonraki** yedekleri 
 5. **Yapılandırma yedeği** (`config/kapi_config_<TS>.tgz.enc`): `server/.env`, `server/data/`, `server/public/`, `server/ecosystem.config.cjs`, nginx sitesi, MQTT broker yapılandırması (özel anahtarlar hariç) ve ACL eşitleme sarmalayıcısı `kapi-mqtt-sync`, `globals.sql` (veritabanı rolleri; parola özetleri içerir), **`deleted_accounts.csv`** (yalnızca `user_code,deleted_at_utc`; kişisel veri yok; hesap silme özelliği devredeyken `audit_log` `account.deleted` kayıtlarından üretilir), `crontab.txt`, `INFO.txt`. Oluşturulduktan sonra şifresi çözülüp `tar -t` ile `.env`, `globals.sql` ve `deleted_accounts.csv` varlığı doğrulanır.
 6. **Firmware arşivi** (`config/kapi_firmware_<TS>.tgz.enc`): OTA ikilileri (`server/firmware`, `.gitignore`'da olduğu için depoda yoktur; ≈ 5 MB). Günlük 5 MB tekrarını önlemek için yalnızca **içerik özeti değişince** yeni arşiv alınır (son 5 tutulur, yaşa göre silinmez).
 7. **Belge deposu arşivi** (`config/kapi_documents_<TS>.tgz.enc`; **DB dökümünden SONRA** alınır): belge modülünün dosya deposu `DOCUMENTS_DIR` (`server/.env`'deki `DOCUMENTS_DIR` ya da eski adı `DOCUMENTS_STORAGE_DIR`; ikisi de yoksa `~/kapi-documents`; sunucu kodu dizini dışındadır). `sites/` ağacı ve **`.instance`** (depolama kimliği; yoksa hata verilmez) alınır, **`_tmp/` (yarım yüklemeler) ve `_orphans/` (yetim karantinası) hariçtir**. `.instance` arşivde yoksa geri yüklenen dizin veritabanıyla eşleşmez ve bakım işi yetim temizliğini reddeder (bölüm 5.9, adım 5). Belge dosyaları *yazılır-silinmez* ve adları benzersizdir; döküm önce, dosyalar sonra alındığı için dosya kümesi veritabanının üst kümesidir (DB satırı olup dosyası yedekte olmayan durum doğmaz). Dizin **yoksa ya da boşsa** (modül kapalı / hiç kullanılmadı) yedek **hata vermez**, adım atlanır. Arşiv şifrelidir (`openssl`, anahtar aynı), 600 izinli, `config/` ve `offsite/` altına yazılır; yalnızca dosya listesi/boyut/zaman özeti **değişince** yeni arşiv alınır. Şifresi çözülüp `tar -t` ile doğrulanır (liste boş ya da `..`/mutlak yol içeriyorsa hata). Tutma: son `KEEP_DOCUMENTS` (5) arşiv; ayrıca **en yenisi hariç** `DOCUMENTS_MAX_AGE_DAYS` (210) günden eskiler silinir (silinmiş belgeler gizlilik süresinden uzun yedekte kalmasın; en yeni arşiv yaşı ne olursa olsun korunur). Tam arşiv yaklaşımının sınırı: dizin `DOCUMENTS_BACKUP_MAX_MB` (3000) MB'ı aşarsa ya da boş disk yetmezse yedek **exit 2 ile uyarı verir** (artımlı yedeğe geçilmesi gerektiğinin işaretidir; sessizce atlanmaz).
-8. **Şifreleme ve tutma:** en son günlük dışındaki düz yedekler, şifreli kopyaları **doğrulandıktan sonra** (şifresi çözülen içeriğin SHA-256'sı aynı) şifreliye çevrilir. Tutma: günlük 14, haftalık 8, aylık 6 (yapılandırma yedeği için günlük 22, haftalık 8, aylık 6), firmware 5, belge arşivi 5, `offsite/` 14. Adet esaslıdır: cron bir hafta çalışmasa bile eski yedekler silinmez. **Gelecek tarihli** (saati ileri alınmış) dosyalar saklama yuvası saymaz ve silinmez. Dış kopyaya henüz **gönderilmemiş** yerel `offsite/` dosyaları (dış kopya yapılandırılmışsa) budanmaz.
+8. **Şifreleme ve tutma:** en son günlük dışındaki düz yedekler, şifreli kopyaları **doğrulandıktan sonra** (şifresi çözülen içeriğin SHA-256'sı aynı) şifreliye çevrilir. Tutma (2026-10-18'den beri varsayılan; `KEEP_DAILY/WEEKLY/MONTHLY/OFFSITE/FIRMWARE/DOCUMENTS` ile değişir, en az 1): günlük 7, haftalık 4, aylık 6 (yapılandırma yedeği için günlük 11, haftalık 4, aylık 6), firmware 5, belge arşivi 5, `offsite/` 7. Aynı şifreli dosya `offsite/` ile `daily/`, `weekly/`, `monthly/`, `config/` arasında **sert bağ** (hard link) paylaşır: diskte tek kopya, bir adın silinmesi diğerlerini etkilemez (bağ kurulamazsa kopyalanır). Her dizinde en yeni kopya her zaman korunur. Adet esaslıdır: cron bir hafta çalışmasa bile eski yedekler silinmez. **Gelecek tarihli** (saati ileri alınmış) dosyalar saklama yuvası saymaz ve silinmez. Dış kopyaya henüz **gönderilmemiş** yerel `offsite/` dosyaları (dış kopya yapılandırılmışsa) budanmaz.
 
-Geçiş notu: şifreli düzene **2026-10-16 20:14'te** geçildi. O andan önce alınmış düz test yedekleri (2026-10-16 18:03–18:13 günlük / haftalık / aylık) silinmedi ve düz kaldı; günlükler en geç 14 gün içinde kendiliğinden gider. Haftalık/aylık düz test kopyasını da şifrelemek isterseniz: `echo 1 > ~/ops/state/enc_scheme_since` yazıp bir sonraki yedeği bekleyin (en son günlük dışındaki tüm düz yedekleri doğrulayarak şifreler).
+Geçiş notu: şifreli düzene **2026-10-16 20:14'te** geçildi. O andan önce alınmış düz test yedekleri (2026-10-16 18:03–18:13 günlük / haftalık / aylık) silinmedi ve düz kaldı; günlükler en geç 7 gün içinde kendiliğinden gider. Haftalık/aylık düz test kopyasını da şifrelemek isterseniz: `echo 1 > ~/ops/state/enc_scheme_since` yazıp bir sonraki yedeği bekleyin (en son günlük dışındaki tüm düz yedekleri doğrulayarak şifreler).
 
 Neden: veritabanı dökümleri kişisel veriler ve kimlik doğrulama sırları içerebilir; diskte düz duran yedek sayısı en aza indirilir.
 
@@ -128,7 +128,7 @@ Elle yedek almak: `ssh -p 22667 salihceylan@<sunucu> "bash ~/ops/backup_db.sh"`.
 - **Bütçe:** en son **10** dağıtım yedeği ve en fazla **30 gün**; diskin %85'ini aşmamak (`healthcheck` uyarır).
 - Adayları görmek için (silmez): `ls -1dt ~/backups/kapi_2* | tail -n +11` (10'dan eskiler) ve `find ~/backups -maxdepth 1 -name 'kapi_2*' -mtime +30`.
 - Karar sizindir; elle silerken yalnızca `kapi_<TS>` klasörlerini seçin (`ev_*`, `emqx_*` başka projelerindir, dokunmayın).
-- `node_modules.old_*` dizinleri yalnızca geri alma içindir; son 2–3 dağıtımdan eskilerini silmek güvenlidir.
+- `node_modules.old_*` dizinleri yalnızca geri alma içindir; `remote_deploy.sh activate` başarılı olunca **en son 2** tanesi kalır, eskileri otomatik silinir (yalnızca `server/` altındaki, ad deseni uyan gerçek dizinler). `prepare` kod yedeğine `node_modules.old_*` artık girmez.
 
 ---
 
@@ -355,7 +355,7 @@ Kural: **yedek yalnızca aynı sunucuda durursa sunucuyla birlikte kaybolur.** `
 - **sftp-only hedefte uzak silme yapılamaz**: eski dosyaları hedefte elle silin (ya da rsync/rclone kullanın).
 - Firmware arşivleri (`kapi_firmware_*`) yaşa göre silinmez (değişmedikçe tek yedek kopyadır).
 - Belge deposu arşivlerinde (`kapi_documents_*`) **en yenisi her zaman korunur**, ondan eskiler 210 günü aşınca silinir (yerelde `backup_db.sh`, uzakta rsync/rclone için `offsite_push.sh`, Windows'ta `-PruneDays`). Uzak silme rsync (yerel dizin) ve sahte `rclone` ile [doğrulandı]; ssh üzerinden ve gerçek `rclone` ile [denenmedi]. sftp-only hedefte elle silin.
-- Bu süre, yerel tutma ile de uyumludur (günlük 14 gün, haftalık ≈ 56 gün, aylık ≈ 6 ay).
+- Bu süre, yerel tutma ile de uyumludur (günlük 7 gün, haftalık ≈ 28 gün, aylık ≈ 6 ay).
 
 | Seçenek | Maliyet | Artı | Eksi | Kurulum |
 |---|---|---|---|---|
@@ -433,7 +433,9 @@ Her iki durumda ilk gönderim: `bash ~/ops/offsite_push.sh --all`. Sonra cron (0
 | `pm2_restart` | Yeniden başlama sayacı arttı. **Tek başına posta üretmez** (normal dağıtım); son 60 dk'da ≥ 3 yeniden başlama varsa OLAY postası (olaylar arası ≥ 30 dk) | OLAY |
 | `pm2_loop` | Son 60 dk'da ≥ 6 yeniden başlama (çökme döngüsü); varken ayrıca OLAY üretilmez | CRIT |
 | `postgres` | Kapsayıcı çalışıyor + `select 1` 20 sn içinde yanıt; bağlantı sayısı < %80 (`docker` çağrıları zaman aşımlı) | CRIT/WARN |
-| `disk` | `/` doluluk ≥ %85 WARN, ≥ %95 CRIT; inode ≥ %90 | |
+| `disk` | `/` doluluk ≥ %70 WARN, ≥ %85 CRIT (`DISK_WARN`/`DISK_CRIT`); inode ≥ %90 | |
+| `disk_growth` | Günlük disk büyüme hızı (GB/gün; `~/ops/state/disk.hist` + `disk_growth.state`); bu hızla doluma < 30 gün (`DISK_GROWTH_DAYS`) kalırsa WARN. Tek seferlik sıçramalara karşı son örnek ile 7 günlük ortalamanın küçüğü kullanılır | WARN |
+| (haftalık rapor) | Her pazartesi ≥ 08:00 (İstanbul): en büyük 10 tablo (`pg_total_relation_size`, önceki haftaya göre değişim) + yedek / belge / PM2 günlük dizin boyutları; `~/ops/logs/weekly_report.log` ve e-posta. Elle: `bash ~/ops/healthcheck.sh --weekly-report [--dry-run]`. Sır içermez | bilgi |
 | `memory` | Kullanılabilir bellek < %10 WARN, < %5 CRIT; takas ≥ %80 | |
 | `backup_age` | Son günlük yedek < 26 saat (gelecek tarihli dosyalar sayılmaz) | CRIT |
 | `backup_run` | Son yedek çalışması başarılı mı (DB, yapılandırma, firmware ve belge arşivi dahil) | CRIT/WARN |

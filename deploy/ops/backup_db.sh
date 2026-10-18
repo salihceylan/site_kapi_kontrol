@@ -2,14 +2,19 @@
 # Zamanlanmis veritabani yedegi + sifreli yapilandirma/firmware yedegi + dis kopya hazirligi.
 #
 #   daily/    kapi_<YYYYmmdd_HHMM>.sql.gz   pg_dump (docker exec) -> gzip. YALNIZ EN SON gunluk yedek duz kalir;
-#             onceki gunlukler sifreli (.sql.gz.enc) hale getirilir                              (14 adet tutulur)
-#   weekly/   ISO haftasinin ilk yedegi, SIFRELI (.sql.gz.enc)                                   (8 adet)
+#             onceki gunlukler sifreli (.sql.gz.enc) hale getirilir                              (7 adet tutulur)
+#   weekly/   ISO haftasinin ilk yedegi, SIFRELI (.sql.gz.enc)                                   (4 adet)
 #   monthly/  ayin ilk yedegi, SIFRELI (.sql.gz.enc)                                             (6 adet)
 #   config/   kapi_config_<TS>.tgz.enc     .env + nginx sitesi + MQTT yapilandirmasi + data/public + roller + silinen hesap listesi
 #             kapi_firmware_<TS>.tgz.enc   server/firmware (OTA ikilileri; YALNIZ icerik degisince yeni arsiv, son 5 tutulur)
 #             kapi_documents_<TS>.tgz.enc  belge deposu (DOCUMENTS_DIR/sites; _tmp HARIC; DB dokumunden SONRA; YALNIZ icerik degisince;
 #                                          son 5 tutulur, en yenisi disinda 210 gunden eskiler silinir)
-#   offsite/  kapi_<TS>.sql.gz.enc + config/firmware arsivleri (YALNIZ sifreli; offsite_push.sh gonderir)
+#   offsite/  kapi_<TS>.sql.gz.enc + config/firmware arsivleri (YALNIZ sifreli; offsite_push.sh gonderir)                   (7 adet)
+#
+# Disk tasarrufu: ayni sifreli icerik (offsite/ <-> daily/ <-> weekly/ <-> monthly/ <-> config/) diskte BIR KEZ tutulur; diger adlar sert bagdir
+# (common.sh link_or_copy; bag kurulamazsa kopya). Dosyalar yerinde degistirilmedigi icin bir adin silinmesi (tutma kurali) digerlerini etkilemez.
+# Tutma adetleri ortam/kapi-ops.env ile degisir: KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY KEEP_OFFSITE KEEP_FIRMWARE KEEP_DOCUMENTS (en az 1).
+# En yeni kopya HER ZAMAN korunur (her tutma kurali en az 1 yuva birakir; yalniz yuva sayisini asan ESKI kopyalar silinir).
 #
 # Sifreleme: openssl enc -aes-256-cbc -pbkdf2 -iter 200000; anahtar ~/.config/kapi-backup.key (600), ASLA yazdirilmaz.
 # Dosya adlari Europe/Istanbul saatiyle. Cron: sunucu UTC; 03:30 Istanbul = 00:30 UTC (Turkiye yaz saati uygulamaz).
@@ -34,10 +39,10 @@ int_or_default() {
   [ -n "$val" ] && warn "$name='$val' gecersiz (sayi >= $min olmali); varsayilan $def kullanildi"
   printf -v "$name" '%s' "$def"
 }
-int_or_default KEEP_DAILY 14 1
-int_or_default KEEP_WEEKLY 8 1
+int_or_default KEEP_DAILY 7 1
+int_or_default KEEP_WEEKLY 4 1
 int_or_default KEEP_MONTHLY 6 1
-int_or_default KEEP_OFFSITE 14 1
+int_or_default KEEP_OFFSITE 7 1
 int_or_default KEEP_FIRMWARE 5 1
 int_or_default KEEP_DOCUMENTS 5 1
 int_or_default DOCUMENTS_MAX_AGE_DAYS 210 1
@@ -101,6 +106,9 @@ keys_of() {
 prune_keep() {
   local dir="$1" prefix="$2" keep="$3" reqp="${4:-0}" n i key f unpushed
   local -a keys
+  # EN YENI KOPYA HER ZAMAN KORUNUR: gecersiz/0 adet bile verilse en az 1 yuva kalir; anahtarlar yeniden eskiye siralidir ve dongu
+  # keep'ten (>= 1) baslar, yani keys[0] (en yeni) asla silinmez. Gelecek tarihli dosyalar keys_of'ta zaten yoktur (silinmez).
+  [[ "$keep" =~ ^[0-9]+$ ]] && [ "$keep" -ge 1 ] || keep=1
   mapfile -t keys < <(keys_of "$dir" "$prefix")
   n=${#keys[@]}
   [ "$n" -le "$keep" ] && return 0
@@ -143,7 +151,7 @@ promote() { # promote <kaynak-dosya>
       fi
     done < <(keys_of "$dir" "$prefix")
     if [ "$existing" -eq 0 ]; then
-      cp -p -- "$src" "$dir/$base" && (cd "$dir" && sha256sum "$base" >"$base.sha256") && log "$kind kopya: $base ($period)"
+      link_or_copy "$src" "$dir/$base" && (cd "$dir" && sha256sum "$base" >"$base.sha256") && log "$kind kopya: $base ($period; sert bag/tek kopya)"
     fi
   done
 }
@@ -153,17 +161,24 @@ SCHEME_FILE="$OPS_STATE/enc_scheme_since"
 [ -s "$SCHEME_FILE" ] || now_epoch >"$SCHEME_FILE"
 SCHEME_SINCE="$(num "$(cat "$SCHEME_FILE" 2>/dev/null)" 0)"
 demote_plain() { # demote_plain <duz-dosya>
-  local f="$1" enc="$1.enc" want got
+  local f="$1" enc="$1.enc" want got off
   [ -f "$f" ] || return 0
   # sifreli duzene gecis ANINDAN ONCE olusmus dosyalara dokunulmaz (mevcut yedekler silinmez)
   [ "$(stat -c %Y "$f")" -ge "$SCHEME_SINCE" ] || return 0
   want="$(sha256sum "$f" | cut -d' ' -f1)"
   if [ ! -e "$enc" ]; then
-    if ! enc_file "$f" "$enc.part"; then rm -f -- "$enc.part"; warn "sifreleme basarisiz, duz kopya korundu: $(basename "$f")"; return 1; fi
-    got="$(dec_cmd -in "$enc.part" 2>/dev/null | sha256sum | cut -d' ' -f1)"
-    if [ "$got" != "$want" ]; then rm -f -- "$enc.part"; warn "sifreli kopya dogrulanamadi, duz kopya korundu: $(basename "$f")"; return 1; fi
-    mv -- "$enc.part" "$enc"
-    chmod 600 "$enc"
+    # Tekillestirme: dis kopya hazirlik dizininde ayni dokumun sifreli kopyasi varsa ve cozulen icerigi duz yedekle AYNIYSA
+    # yeniden sifreleme + ikinci kopya yerine ona sert bag kurulur (ayni icerik diskte bir kez). Aksi halde eski yol: sifrele + dogrula.
+    off="$OFFSITE/$(basename "$enc")"
+    if [ "$(dirname "$enc")" != "$OFFSITE" ] && [ -f "$off" ]        && [ "$(dec_cmd -in "$off" 2>/dev/null | sha256sum | cut -d' ' -f1)" = "$want" ]        && link_or_copy "$off" "$enc"; then
+      log "sifreli kopya dis kopya hazirlik dizinindekiyle birlestirildi (sert bag): $(basename "$enc")"
+    else
+      if ! enc_file "$f" "$enc.part"; then rm -f -- "$enc.part"; warn "sifreleme basarisiz, duz kopya korundu: $(basename "$f")"; return 1; fi
+      got="$(dec_cmd -in "$enc.part" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+      if [ "$got" != "$want" ]; then rm -f -- "$enc.part"; warn "sifreli kopya dogrulanamadi, duz kopya korundu: $(basename "$f")"; return 1; fi
+      mv -- "$enc.part" "$enc"
+      chmod 600 "$enc"
+    fi
   fi
   (cd "$(dirname "$enc")" && sha256sum "$(basename "$enc")" >"$(basename "$enc").sha256")
   rm -f -- "$f" "$f.sha256"
@@ -361,7 +376,7 @@ elif ! config_backup; then
   CFG_RESULT="FAIL"
   log "HATA: $REASON"
 else
-  cp -p -- "$CFG_OUT" "$OFFSITE/kapi_config_${TS}.tgz.enc"
+  link_or_copy "$CFG_OUT" "$OFFSITE/kapi_config_${TS}.tgz.enc" || warn "yapilandirma arsivi dis kopya dizinine baglanamadi/kopyalanamadi"
   promote "$CFG_OUT"
 fi
 
@@ -387,7 +402,7 @@ firmware_backup() {
   printf '%s\n' "$listing" | grep -q '/firmware/' || { REASON="firmware arsivi dogrulamasi basarisiz"; return 1; }
   chmod 600 "$FW_TMP"
   mv -- "$FW_TMP" "$FW_OUT"
-  cp -p -- "$FW_OUT" "$OFFSITE/kapi_firmware_${TS}.tgz.enc"
+  link_or_copy "$FW_OUT" "$OFFSITE/kapi_firmware_${TS}.tgz.enc" || warn "firmware arsivi dis kopya dizinine baglanamadi/kopyalanamadi"
   printf '%s\n' "$hash" >"$OPS_STATE/firmware.sha256"
   log "   tamam: kapi_firmware_${TS}.tgz.enc $(human_bytes "$(stat -c %s "$FW_OUT")") (dosya: $(printf '%s\n' "$listing" | grep -vc '/$'))"
   return 0
@@ -461,7 +476,7 @@ documents_backup() {
   fi
   chmod 600 "$DOC_TMP"
   mv -- "$DOC_TMP" "$DOC_OUT"
-  cp -p -- "$DOC_OUT" "$OFFSITE/kapi_documents_${TS}.tgz.enc"
+  link_or_copy "$DOC_OUT" "$OFFSITE/kapi_documents_${TS}.tgz.enc" || warn "belge arsivi dis kopya dizinine baglanamadi/kopyalanamadi"
   printf '%s\n' "$hash" >"$OPS_STATE/documents.sha256"
   log "   tamam: kapi_documents_${TS}.tgz.enc $(human_bytes "$(stat -c %s "$DOC_OUT")") (dosya: $(printf '%s\n' "$listing" | grep -vc '/$'), kaynak ${sz_mb} MB; _tmp ve _orphans haric; ${#scope[@]} kok oge: ${scope[*]})"
   return 0
@@ -476,7 +491,7 @@ elif ! documents_backup; then
 fi
 
 # ---- 8. eski duz yedekleri sifrele + tutma kurallari --------------------------------------
-log "[8/8] tutma ve sifreleme: gunluk=$KEEP_DAILY haftalik=$KEEP_WEEKLY aylik=$KEEP_MONTHLY"
+log "[8/8] tutma ve sifreleme: gunluk=$KEEP_DAILY haftalik=$KEEP_WEEKLY aylik=$KEEP_MONTHLY dis_kopya=$KEEP_OFFSITE firmware=$KEEP_FIRMWARE belge=$KEEP_DOCUMENTS"
 if [ "$ENC_RESULT" = "OK" ]; then
   # en son (gelecek tarihli OLMAYAN) gunluk yedek duz kalir
   newest_plain="kapi_$(keys_of "$DAILY" kapi | head -n1).sql.gz"

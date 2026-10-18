@@ -63,8 +63,10 @@ describe('dışa aktarma sorguları: sızdırma koruması (kaynak düzeyi)', () 
       /\bresident_email\b/i,
     ];
     for (const [name, sql] of entries) {
+      // İş Takibi (042): sahiplik süzgeci `WHERE w.created_by = $1` çağıranın KENDİ kaydını seçer; sütun SEÇİLMEZ (başka kullanıcının kimliği çıkmaz). Başka her created_by kullanımı yine yasaktır.
+      const checked = name === 'workItems' ? sql.replace('WHERE w.created_by = $1', 'WHERE w.OWNER_FILTER = $1') : sql;
       for (const pattern of forbidden) {
-        assert.equal(pattern.test(sql), false, `${name}: yasak ifade ${pattern}`);
+        assert.equal(pattern.test(checked), false, `${name}: yasak ifade ${pattern}`);
       }
     }
   });
@@ -615,6 +617,40 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
     for (const name of ['receipts', 'finance_reminders_received', 'uploaded_documents']) {
       assert.ok(SHRINKABLE_SECTIONS.includes(name), `${name} boyut sınırında kısaltılabilir`);
     }
+  });
+
+  it('İş Takibi (042): "work_items_created" yalnız kullanıcının KENDİ talebi (başlık / açıklama / kategori / durum / tarih); tablo yoksa boş ve sorgu gitmez; bölüm kısaltılabilir; hariç tutulanlar anılır', async () => {
+    const withTable = fakeSnapshot({
+      optional: { has_work_items: true },
+      workItems: [{ id: '8', site_code: '1000000001', site_name: 'Gül Sitesi', category: 'ariza', location_type: 'daire', title: 'Musluk', description: 'Damlıyor', status: 'islemde', created_at: new Date('2026-09-01T00:00:00Z'), updated_at: new Date('2026-09-02T00:00:00Z'), closed_at: null }],
+    });
+    const { data } = await collectPersonalData(12345, { db: withTable.db });
+    assert.deepEqual(data.work_items_created, [{ id: 8, site_code: 1000000001, site_name: 'Gül Sitesi', category: 'ariza', location_type: 'daire', title: 'Musluk', description: 'Damlıyor', status: 'islemde', created_at: new Date('2026-09-01T00:00:00Z'), updated_at: new Date('2026-09-02T00:00:00Z'), closed_at: null }]);
+    const sent = withTable.log.find((entry) => /FROM work_items w/.test(entry.sql));
+    assert.equal(sent.params[0], 12345);
+    const absent = fakeSnapshot();
+    const empty = await collectPersonalData(12345, { db: absent.db });
+    assert.deepEqual(empty.data.work_items_created, []);
+    assert.equal(absent.log.some((entry) => /FROM work_items/.test(entry.sql)), false);
+    assert.ok(SHRINKABLE_SECTIONS.includes('work_items_created'));
+    assert.ok(EXPORT_EXCLUDED.some((line) => /^İş takibi talepleri:/.test(line) && /iç notları/.test(line)));
+  });
+
+  it('İş Takibi (P2): "work_item_comments" yalnız kullanıcının KENDİ yazdığı yorumlar (talep kimliği, zaman, metin, görünürlük); başlık / başkasının metni yok; tablo yoksa boş; kısaltılabilir; hariç tutulanlar "work_item_comments" bölümünü anar', async () => {
+    const snapshot = fakeSnapshot({
+      optional: { has_work_items: true },
+      workItemComments: [{ id: '31', work_item_id: '8', site_code: '1000000001', created_at: new Date('2026-09-03T00:00:00Z'), body: 'Su kesildi, bakıyorum', visibility: 'public' }],
+    });
+    const { data } = await collectPersonalData(12345, { db: snapshot.db });
+    assert.deepEqual(data.work_item_comments, [{ id: 31, work_item_id: 8, site_code: 1000000001, created_at: new Date('2026-09-03T00:00:00Z'), body: 'Su kesildi, bakıyorum', visibility: 'public' }]);
+    const sent = snapshot.log.find((entry) => /FROM work_item_events e/.test(entry.sql));
+    assert.equal(sent.params[0], 12345);
+    assert.equal(/title|JOIN/.test(sent.sql), false);
+    const absent = fakeSnapshot();
+    assert.deepEqual((await collectPersonalData(12345, { db: absent.db })).data.work_item_comments, []);
+    assert.equal(absent.log.some((entry) => /FROM work_item_events/.test(entry.sql)), false);
+    assert.ok(SHRINKABLE_SECTIONS.includes('work_item_comments'));
+    assert.ok(EXPORT_EXCLUDED.some((line) => /^İş takibi talepleri:/.test(line) && /"work_item_comments"/.test(line) && /SİZİN yazdığınız yorumlar/.test(line)));
   });
 
   it('kullanıcı satırı yoksa 401 ACCOUNT_DELETED ve işlem kapatılır', async () => {

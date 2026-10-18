@@ -525,7 +525,7 @@ describe('POST module-requests', () => {
       assert.equal(core.status, 400, code);
       assert.equal(core.body.code, 'MODULE_NOT_TOGGLEABLE');
     }
-    for (const code of ['reservation', 'work_tracking', 'metering', 'online_payment']) {
+    for (const code of ['reservation', 'metering', 'online_payment']) {
       const soon = await post({ module_code: code });
       assert.equal(soon.status, 409, code);
       assert.equal(soon.body.code, 'MODULE_COMING_SOON');

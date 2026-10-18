@@ -76,7 +76,7 @@ export const MODULE_CATALOG = Object.freeze([
     name: 'İş Takibi',
     description: 'Arıza, bakım ve görev kayıtlarının takibi.',
     core: false,
-    status: MODULE_STATUS_COMING_SOON,
+    status: MODULE_STATUS_AVAILABLE,
     defaultEnabled: false,
   }),
   defineModule({

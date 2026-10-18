@@ -35,6 +35,7 @@ import { platformServicesRouter } from './modules/platform_config_routes.js';
 import { clientErrorBodyParser } from './modules/client_error_routes.js';
 import { startClientErrorPurge, stopClientErrorPurge } from './modules/client_error_purge.js';
 import { documentRouter } from './modules/document_routes.js';
+import { workTrackingRouter } from './modules/work_tracking_routes.js';
 import { startDocumentsMaintenance, stopDocumentsMaintenance } from './modules/document_maintenance.js';
 import { pushRouter } from './modules/push_routes.js';
 import { startPushWorker, stopPushWorker } from './modules/push_worker.js';
@@ -112,6 +113,8 @@ app.use(financeRouter);
 app.use(finance4bRouter);
 // Belgeler (dosya deposu): yonetici uclari + sakin uclari + ham govde akisi (PUT .../content, application/octet-stream; JSON govde sinirina dokunmaz).
 app.use(documentRouter);
+// Is takibi (ariza, bakim, talep): /manager/sites/:siteCode/work-items[...] + /app/work-items[...] (modul work_tracking, varsayilan KAPALI).
+app.use(workTrackingRouter);
 // Telefon bildirimi (Faz 3b-B): /app/push/devices[/:installId], /app/push/test, /admin/push/status (tercihler /app/notification-preferences'ta).
 app.use(pushRouter);
 // Hesap silme (kimliksizlestirme) ve kisisel veri disa aktarma: /me/account-deletion[/preview], /me/data-export (yalniz kendi hesabi).

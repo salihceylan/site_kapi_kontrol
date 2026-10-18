@@ -25,7 +25,7 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `finance` | Aidat ve Finans | hayır | `available` (Faz 4a) | KAPALI |
 | `documents` | Belgeler (Dosya Deposu) | hayır | `available` (Faz 3b-A) | KAPALI |
 | `reservation` | Rezervasyon ve Konsiyerj | hayır | `coming_soon` | KAPALI |
-| `work_tracking` | İş Takibi | hayır | `coming_soon` | KAPALI |
+| `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |
 | `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |
 | `online_payment` | Online Tahsilat ve Banka Bağlantısı | hayır | `coming_soon` | KAPALI |
 

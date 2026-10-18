@@ -114,6 +114,7 @@ import 'package:site_kapi_kontrol/ui/widgets/site_security_policy_dialog.dart';
 import 'package:site_kapi_kontrol/ui/widgets/yan_menu.dart';
 
 import 'package:site_kapi_kontrol/models/platform_module.dart';
+import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 
 import 'package:site_kapi_kontrol/services/module_access.dart';
 
@@ -138,6 +139,8 @@ import 'package:site_kapi_kontrol/ui/views/announcements_view.dart';
 import 'package:site_kapi_kontrol/ui/views/document_view.dart';
 import 'package:site_kapi_kontrol/ui/views/finance_view.dart';
 import 'package:site_kapi_kontrol/ui/views/my_finance_view.dart';
+import 'package:site_kapi_kontrol/ui/views/work_manager_view.dart';
+import 'package:site_kapi_kontrol/ui/views/work_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -246,6 +249,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<FinanceViewState> _financeViewKey = GlobalKey<FinanceViewState>();
   final GlobalKey<MyFinanceViewState> _myFinanceViewKey = GlobalKey<MyFinanceViewState>();
   final GlobalKey<DocumentsViewState> _documentsKey = GlobalKey<DocumentsViewState>();
+  final GlobalKey<WorkManagerViewState> _workManagerKey = GlobalKey<WorkManagerViewState>();
+  final GlobalKey<WorkResidentViewState> _workResidentKey = GlobalKey<WorkResidentViewState>();
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -751,6 +756,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_canAccessFinance(role)) SirketMenuItem.finans,
         if (_hasFinanceInbox(role)) SirketMenuItem.borcum,
         if (_canAccessDocuments(role)) SirketMenuItem.belgeler,
+        if (_canAccessWorkManage(role)) SirketMenuItem.talepler,
+        if (_workResidentSites(role).isNotEmpty) SirketMenuItem.taleplerim,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -800,6 +807,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       role == UserRole.superUser ||
       _documentManageSites(role).isNotEmpty ||
       _documentResidentSites(role).isNotEmpty;
+
+  // --- İş Takibi (arıza, bakım, talep) ---
+
+  /// "Talepler" (yönetim) ekranındaki siteler: `work_tracking` modülü AÇIK olan siteler. Yönetici (yönetici modunda)
+  /// yazar; görevli (STAFF) kendine atanmış / atanmamış talepleri yazar; kurul üyesi SALT OKUR. Süper kullanıcıda
+  /// boştur (ekran tüm siteleri çeker). FAIL-OPEN YOK: modül verisi hiç gelmediyse hiçbir site yoktur ve menü
+  /// AÇILMAZ; sitede `work_tracking` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu yine de her
+  /// çağrıda yetkiyi ve modül durumunu doğrular.
+  List<WorkTrackingSite> _workManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <WorkTrackingSite>[];
+    final canManage = _canManagePeople(role);
+    return <WorkTrackingSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.workTracking))
+          if (site.role == 'manager' && canManage)
+            WorkTrackingSite(code: site.siteCode, name: site.siteName)
+          else if (site.role == 'staff')
+            WorkTrackingSite(code: site.siteCode, name: site.siteName, access: WorkSiteAccess.staff)
+          else if (site.isBoardMember)
+            WorkTrackingSite(code: site.siteCode, name: site.siteName, access: WorkSiteAccess.board),
+    ];
+  }
+
+  /// "Taleplerim" (sakin) ekranındaki siteler: alıcısı olabilecek ve `work_tracking` modülü AÇIK siteler. Yalnız
+  /// daire sakini ve sakin modundaki yönetici için; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli bağ için
+  /// boş. Modül verisi yokken (fail-open) boştur.
+  List<PeopleSite> _workResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.workTracking))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Talepler" menüsü: süper kullanıcı ya da `work_tracking` modülü açık bir sitede yönetici / görevli / kurul üyesi.
+  bool _canAccessWorkManage(UserRole role) =>
+      role == UserRole.superUser || _workManageSites(role).isNotEmpty;
 
   // --- Aidat ve Finans (Faz 4a) ---
 
@@ -1196,6 +1250,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _canAccessDocuments(role);
     }
 
+    // İş Takibi: `work_tracking` modülü açık siteye bağlı yönetici / görevli / kurul (Talepler) ya da sakin
+    // (Taleplerim); modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.talepler) {
+      return _canAccessWorkManage(role);
+    }
+    if (item == SirketMenuItem.taleplerim) {
+      return _workResidentSites(role).isNotEmpty;
+    }
+
     switch (role) {
 
       case UserRole.superUser:
@@ -1324,6 +1387,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.belgeler:
         return 'Belgeler';
+
+      case SirketMenuItem.talepler:
+        return 'Talepler';
+
+      case SirketMenuItem.taleplerim:
+        return 'Taleplerim';
 
       case SirketMenuItem.siteBasvurulari:
         return 'Site Başvuruları';
@@ -4643,6 +4712,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.belgeler:
         await _documentsKey.currentState?.reload();
         break;
+      case SirketMenuItem.talepler:
+        await _workManagerKey.currentState?.reload();
+        break;
+      case SirketMenuItem.taleplerim:
+        await _workResidentKey.currentState?.reload();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -5529,6 +5604,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOpenModules: _canManagePeople(session.role)
               ? () => _goToMenu(SirketMenuItem.moduller)
               : null,
+        );
+
+      case SirketMenuItem.talepler:
+        return WorkManagerView(
+          key: _workManagerKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _workManageSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
+        );
+
+      case SirketMenuItem.taleplerim:
+        return WorkResidentView(
+          key: _workResidentKey,
+          authService: widget.authService,
+          sites: _workResidentSites(session.role),
         );
 
       case SirketMenuItem.katilimVeKurulum:
