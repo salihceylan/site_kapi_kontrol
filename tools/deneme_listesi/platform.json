@@ -85,7 +85,7 @@
           "beklenen": "Menü bugünküyle aynıdır; tek fark site yöneticisinde (ve süper kullanıcıda) yeni “Modüller” öğesidir. Orada Geçiş Kontrol açık, diğer modüller “Yakında…” ve kapalı görünür; siz bir şeyi açana kadar hiçbir özellik değişmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -144,7 +144,7 @@
           "beklenen": "Seçilebilir modül olarak şimdilik yalnızca Geçiş Kontrol (SmartKeyPass) açılıp kapanır. Aidat ve Finans dahil sonraki modüller “Yakında…” etiketiyle görünür ve henüz açılamaz. Kişi ve Daire Kayıtları ile Duyuru ve Bildirim her sitede hep açıktır (ekranları Faz 2 ve 3’te gelir).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -157,7 +157,7 @@
           "beklenen": "Kapatınca o sitenin kapı menüleri ve kapı kartları kaybolur, açınca geri gelir (ekranı aşağı çekince ya da kısa süre içinde kendiliğinden).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -171,7 +171,7 @@
           "beklenen": "Yöneticide anahtar yoktur: açık modül “Tanımlı”, kapalı modül “Tanımlı değil” görünür. Talepten sonra çip “Talep gönderildi” olur; aynı modül için ikinci talep gönderilemez. Süper kullanıcıya e-posta gider. “Yakında…” etiketli modüller talep edilemez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -185,7 +185,7 @@
           "beklenen": "Kapı menüleri ve kapı kartları görünmez. Panel’de “Geçiş Kontrol modülü kapalı” bilgisi çıkar. Kapı listesi ve telefon widget’ı o siteyi göstermez. Misafir bağlantısı kibar bir “modül kapalı” bilgisi verir, hata ekranı çıkmaz.",
           "rol_notu": "Daire sakini",
           "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -197,7 +197,7 @@
           "beklenen": "Geçiş Kontrol (SmartKeyPass) Açık görünür. Kapı menüsü ve kapı açma eskisi gibi çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -212,7 +212,7 @@
           "beklenen": "Kapatmadan önce “Telefondan kapı açma, QR ve misafir geçişi durur” uyarısı çıkar. Onaylanınca kapı menüleri gizlenir; telefondan açma, QR ve misafir geçişi (kapıdaki QR okuyucu dahil) “Geçiş Kontrol modülü kapalı” mesajıyla reddedilir. Cihazlar bağlı kalır. Yeniden açınca her şey eskisi gibi çalışır.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Bir test sitesi (kapılar etkilenir)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -225,7 +225,7 @@
           "beklenen": "Kim, ne zaman, hangi siteye hangi modülü açtı ya da kapattı (ve ek rol verme/kaldırma) satırı görünür. Site ve eylem süzgeci vardır, “Daha fazla yükle” ile eski kayıtlara inilir. Kayıt silinemez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -263,7 +263,7 @@
           "beklenen": "Site değiştirme eskisi gibidir. Modül durumu site bazlıdır: birinde açık olan modül diğerinde kapalı olabilir (yönetici durumu görür, değiştiremez; süper kullanıcı değiştirir).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "İki sitesi olan bir yönetici hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -277,7 +277,7 @@
           "beklenen": "Kişi listede görünür, kaldırınca kaybolur; hesabı ve dairesindeki yetkiler bozulmaz. Kurul üyesinin duyuru, kişi listesi ve finans raporlarını görmesi ilgili modüller geldikçe (Faz 2–4) eklenecek. Rol açılmamışsa işi site yöneticisinde kalır.",
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "Hesabı olan bir kişi (e-posta)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -291,7 +291,7 @@
           "beklenen": "Kişi listede görünür, kaldırınca kaybolur; hesabı ve dairesindeki yetkiler bozulmaz. Görevlinin menüleri ilgili modüller geldikçe eklenecek. Rol açılmamışsa işi site yöneticisinde kalır.",
           "rol_notu": "Görevli",
           "on_kosul": "Hesabı olan bir kişi (e-posta)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -303,7 +303,7 @@
           "beklenen": "“Kayıtlı Dairelerim”, “Katılım Başvurularım” ve hızlı işlemler (Cihaz Ekle, Site Kur, Siteye Katıl) görünmeye devam eder; üstte tek satır “Geçiş Kontrol modülü kapalı…” notu vardır. Sesle dinleme açıksa “Tanımlı bir kapı bulunamadı.” duyulmaz.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "Geçiş Kontrol’ü kapalı bir test sitesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -316,7 +316,7 @@
           "beklenen": "Kapatınca eski anahtarla yerel açma çalışmaz; yeniden açıp yenileyince uygulama yeni anahtarı alır ve yerel açma yine çalışır. Cihaz çevrimiçi kalır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Çevrimiçi bir kapı cihazı ve aynı Wi-Fi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -328,7 +328,7 @@
           "beklenen": "Menüler ve Panel değişmez; kapı menüleri gizlenmez ve “Geçiş Kontrol kapalı” sayılmaz.",
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "F1.11 ile eklenmiş bir hesap",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -341,7 +341,7 @@
           "beklenen": "Hata kartı ve “Tekrar Dene” görünür (“site yok” ya da “kayıt yok” yazmaz); menüler kaybolmaz. Hiçbir ekranda taşma olmaz.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -356,7 +356,7 @@
           "beklenen": "Çekmece öğesinde bekleyen sayısı rozeti görünür ve onaydan sonra düşer. Onayda modül siteye tanımlanır; yönetici yenileyince “Tanımlı” görür ve modülün menüleri gelir. Süper kullanıcı modülü Modüller anahtarıyla doğrudan açarsa o modülün bekleyen talebi otomatik “onaylandı” olur. Denetim Kaydı’nda talep ve modül satırları görünür.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "F1.03 ile gönderilmiş bir talep",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -370,7 +370,7 @@
           "beklenen": "Talep “Reddedilen”e geçer, modül kapalı kalır, yönetici gerekçeyi “Modül Taleplerim”de görür. Zaten karara bağlanmış talebi ikinci kez onaylamak “Bu talep artık bekleyen durumda değil.” der ve liste yenilenir.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Bekleyen bir talep",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -384,7 +384,7 @@
           "beklenen": "Platform adı her yerde “Site ve Toplu Yaşam Yönetim Sistemi”dir (giriş alt başlığı “Yönetici ve sakin girişi”, Panel başlığı “Panel”); uzun başlık dar ekranda taşmadan sarar. Kapı modülünün adı SmartKeyPass’tir: kapı kartı etiketleri, katalogdaki “Geçiş Kontrol (SmartKeyPass)”, cihaz/BLE adları ve kapı raporları. (Android’de uygulama adı ana ekranda kısalabilir.)",
           "rol_notu": "Hepsi",
           "on_kosul": "Yeni APK / web / e-posta",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -396,7 +396,7 @@
           "beklenen": "Site yöneticisi 'Modüller' ekranında bir modülü kendisi açıp kapatamaz; 'Modül Talep Et' ile talep gönderir. Talebi yalnızca süper kullanıcı onaylar ya da reddeder. Yönetici doğrudan açmaya çalışırsa \"Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz.\" iletisi çıkar. Süper kullanıcı modülü doğrudan açıp kapatabilir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "API aracı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -409,7 +409,7 @@
           "beklenen": "“Başvurunuz alındı. Süper kullanıcı onayladığında site yöneticisi olacaksınız.” iletisi çıkar. Cihaz istenmez (cihaz isteğe bağlıdır). Başvurudan sonra hesabınız hâlâ bireyseldir, yönetici ekranları açılmaz.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "Cihazı olmayan bir bireysel hesap",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -423,7 +423,7 @@
           "beklenen": "“Site başvurunuz inceleniyor” kartı (site adı, tarih) görünür; bekleyen başvuru varken yeni başvuru düğmesi pasiftir ve nedeni yazılır. İptal edince kart “iptal ettiniz” olur ve “Yeniden başvur” çıkar. Kayıt durumu okunamazsa “durum alınamadı • Tekrar Dene” denir, “başvuru yok” denmez.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -436,7 +436,7 @@
           "beklenen": "Liste başvuran adı, site adı, blok/daire/kapı sayısı ve tarihle gelir; rozet bekleyen sayısını gösterir (hesabı silinmiş başvuranlar rozete sayılmaz). Ayrıntıda başvuranın iletişimi, bloklar, kapılar, not ve cihaz durumu görünür. Sıradan kullanıcıya bu ekran görünmez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "En az bir bekleyen başvuru",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -450,7 +450,7 @@
           "beklenen": "Site, bloklar, daireler ve kapılarla kurulur; başvuran sayfa yenilemeden “Site başvurunuz onaylandı. Artık site yöneticisisiniz.” iletisini alır ve yönetici görünümüne geçer. İkinci onay denemesi “zaten sonuçlandı” der. Başvuranda cihaz seçilmişse ve hâlâ ona aitse 1. kapıya bağlanır, değilse cihazsız kurulur (iletişimde belirtilir).",
           "rol_notu": "Süper kullanıcı / başvuran",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -463,7 +463,7 @@
           "beklenen": "Başvuranda “Site başvurunuz reddedildi” kartı ve gerekçe görünür (gerekçe başvurana açıktır); form önceki değerlerle açılır ve yeniden başvurulabilir.",
           "rol_notu": "Süper kullanıcı / başvuran",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -476,7 +476,7 @@
           "beklenen": "Rol bireysel kalır, yönetici görünümüne geçilmez. Pencere “Site yöneticisi olmak için Site Kur ile başvuru yapabilirsiniz” der; “Site Kur” başvuru formunu sahiplenilen cihaz seçili açar. Hiçbir yerde “cihaz ekleyince yönetici olursunuz” denmez.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "Sahiplenilebilir bir SmartKeyPass cihazı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -489,7 +489,7 @@
           "beklenen": "Davetle yönetici olan (kendi sitesi olmayan) kişide düğme “Site Başvurusu” olur, başvuru akışı çalışır; onay sonrası “Yeni Site” (anlık) açılır. Kendi sitesi olan yöneticide düğme “Yeni Site”, kurulum anlıktır ve eskisi gibi çalışır. Süper kullanıcı etkilenmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Davetle eklenmiş bir yönetici",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -501,7 +501,7 @@
           "beklenen": "“Abonelikle hemen site aç — Yakında…” pasif satırı görünür. Ödeme alınmaz, fiyat gösterilmez; ileride ödeme başarılı olunca onay otomatikleşecek (altyapı hazır).",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -514,7 +514,7 @@
           "beklenen": "Son 24 saatte en fazla 5 başvuru yapılabilir (aşılırsa açık Türkçe mesaj). Tehlikeli/görünmez karakterler temizlenir, uzun adlar sınırda kesilir; uygulama hata vermez ve süper kullanıcıya temiz ad ulaşır.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -527,7 +527,7 @@
           "beklenen": "Süper kullanıcıya “yeni site başvurusu” e-postası gelir (başvuranın e-posta/telefonu e-postada yoktur); karar verilince başvurana sonuç e-postası gider. Denetimde “Site başvurusu yapıldı / onaylandı / reddedildi / iptal edildi” kayıtları Türkçe etiketlidir.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -705,7 +705,7 @@
           "beklenen": "İşlem hata vermez. Kişiler listesinde “Silinmiş hesap” adlı aktif kayıt kalmaz; kişi eski sakin olarak adıyla geçmişte durur.",
           "rol_notu": "Site yöneticisi / süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -719,7 +719,7 @@
           "beklenen": "Taşınan kişi o daire için kapıyı açamaz. Daire yöneticisi taşınırsa yönetim dairedeki başka bir sakine devredilir; dairede kalan diğer sakinin kapı erişimi ve PIN'i bozulmaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Özel kapı izni olan bir sakin",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -732,7 +732,7 @@
           "beklenen": "Hiçbir ekleme, düzenleme, taşındı ya da silme düğmesi yoktur; “yalnızca görüntüleyebilirsiniz” notu görünür. Kişi ve araç notları kurul üyesine gösterilmez. Görevli hesabında “Kişiler” menüsü yoktur.",
           "rol_notu": "Yönetim kurulu üyesi / görevli",
           "on_kosul": "Yönetim kurulu üyesi tanımlı bir site",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -745,7 +745,7 @@
           "beklenen": "Kişi hesapsız olarak kaydedilir; başka sitedeki ad, telefon ya da hesap bilgisi görünmez ve ona bu sitede kapı yetkisi açılmaz. Kişi siteye katılım akışıyla üye olursa eşleşme sonra kurulur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "İki ayrı site ve ikisinde de kayıtlı bir kullanıcı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -759,7 +759,7 @@
           "beklenen": "Telefon her seferinde tek ve doğru numara olur (+90 532 123 45 67). Tarih 05.03.2024 biçimine döner. Plaka büyük harfe çevrilir ve boşluksuz kaydolur. Geçersiz değerde açık Türkçe uyarı çıkar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -942,7 +942,7 @@
           "beklenen": "Yeni duyuru, düzenle, geri çek, sil düğmeleri yoktur; alıcı isimleri ve oluşturan kişi görünmez, yalnız içerik ve sayılar vardır. Görevli (STAFF) hesabında “Duyurular” menüsü yoktur.",
           "rol_notu": "Yönetim kurulu üyesi / görevli",
           "on_kosul": "Yönetim kurulu üyesi tanımlı bir site",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -955,7 +955,7 @@
           "beklenen": "Sakin yalnız kendi sitesinin (ve kendisine hedeflenmiş) duyurularını görür. Başka sitenin duyurusu hiçbir ekranda ya da listede çıkmaz.",
           "rol_notu": "Hepsi",
           "on_kosul": "İki ayrı site",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -968,7 +968,7 @@
           "beklenen": "Ekranın üstünde kırmızı “Acil duyuru” şeridi okunana kadar sabit kalır (kaydırınca kaybolmaz, başka menülerde de görünür). Dokununca duyuru açılır; okununca şerit kalkar.",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -982,7 +982,7 @@
           "beklenen": "Eksik alan olduğunda form ilk hatalı alana kaydırır ve “işaretli alanları düzeltin” uyarısı çıkar. Saat 09:30 olur; 31.02 için “Geçersiz tarih” denir; fazla uzun başlık sessizce kesilmez, sayaç kırmızı olur ve gönderilmez. Acil çipine yeniden dokunmak kapattığınız e-posta tercihini değiştirmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -995,7 +995,7 @@
           "beklenen": "İkinci aynı duyuru “zaten yayınlandı” uyarısıyla engellenir ve liste güncellenir. Günlük/saatlik sınır aşılırsa açık bir Türkçe mesaj çıkar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1009,7 +1009,7 @@
           "beklenen": "Onay sayfası açılır, onaylayınca bir daha duyuru e-postası gelmez; yönetici istatistiğinde “tercihi nedeniyle atlandı” görünür. Kişinin kaydı ve uygulama içi duyuruları (hesabı varsa) etkilenmez.",
           "rol_notu": "Alıcı / site yöneticisi",
           "on_kosul": "E-postası olan hesapsız bir kişi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -1228,7 +1228,7 @@
           "beklenen": "Kapalıyken “Finans” ve “Borcum” menüleri yoktur. Açılınca yöneticide “Finans”, alıcısı olan sakinde “Borcum” görünür; kapatınca yeniden kalkar, veriler silinmez.",
           "rol_notu": "Site yöneticisi / süper kullanıcı",
           "on_kosul": "Bir test sitesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1241,7 +1241,7 @@
           "beklenen": "Önizlemede “N dairenin bilgisi eksik” ve nedeni (ör. arsa payı tanımlı değil) görünür; işaretlemeden onay açılmaz. Atlanan dairelerin payı kalan dairelere yeniden paylaştırılır ve bu önizlemede yazılıdır; toplam tam tutarı tutturur.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Arsa payı dolu ve boş daireler karışık",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1254,7 +1254,7 @@
           "beklenen": "“Veriler değişti, önizleme yenilendi” uyarısı çıkar, yeni toplam görünür ve eski onayla yazılmaz; yeni toplamı gördükten sonra tekrar onaylarsınız.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1267,7 +1267,7 @@
           "beklenen": "Aynı tahsilat veya aynı ek borç iki kez yazılmaz. “Kayıt oluşmuş olabilir; aynı bilgilerle tekrar denerseniz çift kayıt oluşmaz” denir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1280,7 +1280,7 @@
           "beklenen": "1.234,56 ve 1234.5 kabul edilir; 1,250 (belirsiz), 12₺50 ve 1,5E3 görünür hata verir, alan sessizce değiştirilmez. Tutarlar “bin iki yüz otuz dört lira elli altı kuruş” gibi tek kez okunur.",
           "rol_notu": "Site yöneticisi / sakin",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1292,7 +1292,7 @@
           "beklenen": "Mali kaydı olan daire silinmez, “Mali kaydı olan daire silinemez” uyarısı çıkar ve hiçbir daire silinmez; mali kaydı olmayan dairelerde daire azaltma eskisi gibi çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Borçlandırılmış bir site",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -1313,7 +1313,7 @@
           "beklenen": "Her rolde \"Gizlilik ve Veri\" kartı vardır; altında \"Kişisel verilerinizin bir kopyasını alabilir veya hesabınızı kalıcı olarak silebilirsiniz.\" yazar ve iki blok görünür: \"Verilerimi İndir\" ve \"Hesabımı Sil\" (her birinin açıklaması ve tam genişlikte düğmesiyle).",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1327,7 +1327,7 @@
           "beklenen": "\"Verilerimi İndir\" başlıklı pencere açılır: \"Hesabınıza ait kişisel verilerin bir kopyasını JSON dosyası olarak hazırlarız. Devam etmek için şifrenizi girin. Bu işlem 24 saat içinde en fazla 3 kez yapılabilir.\" Boş şifrede alan altında \"Devam etmek için şifrenizi girin.\" ve \"Lütfen işaretli alanları düzeltin.\" görünür. Yanlış şifrede pencere AÇIK kalır, hata kutusunda \"Mevcut şifreniz hatalı. Lütfen kontrol edip tekrar deneyin.\" yazar ve şifre alanı temizlenir; dosya hazırlanmaz, oturum kapanmaz. \"Vazgeç\" pencereyi kapatır.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1340,7 +1340,7 @@
           "beklenen": "Düğmede \"Hazırlanıyor...\" görünür, ardından paylaşım menüsü açılır. Ekranda yeşil bildirim çıkar: \"Veri dosyanız hazır: kisisel-veri-<kullanıcı kodu>-<YYYYAAGG>.json (<boyut>). Dosya kişisel verilerinizi içerir; güvenli bir yerde saklayın ve başkalarıyla paylaşmayın.\" Dosya adındaki tarih İstanbul gününe göredir.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1354,7 +1354,7 @@
           "beklenen": "Menü kapansa da dosya kartı ekranda kalır; \"Paylaş / Kaydet\" menüyü yeniden açar (şifre yeniden sorulmaz, yeni indirme hakkı harcanmaz). \"Kapat (dosyayı bellekten at)\" kartı kaldırır; dosyayı yeniden almak için \"Verilerimi İndir\" ve şifre gerekir. Menü açılamazsa \"Paylaşım menüsü açılamadı. Dosya hazır; \"Paylaş / Kaydet\" ile yeniden deneyebilirsiniz.\" uyarısı çıkar.",
           "rol_notu": "Hepsi",
           "on_kosul": "Bir önceki maddedeki hazır dosya kartı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1367,7 +1367,7 @@
           "beklenen": "Dosyada \"format_version\", \"generated_at\", \"notice\", \"user\", \"memberships\", \"consents\", \"finance_statements\", \"door_events\" ve \"excluded\" gibi alanlar vardır; kendi ad ve e-postanız \"user\" içindedir. \"excluded\" listesi dışarıda bırakılanları Türkçe açıklar (parola özeti ve belirteçler, aynı dairedeki başkalarının kişisel bilgileri, yönetici iç notları, cihaz sırları). \"password_hash\" bulunmaz; başka bir kişinin adı, telefonu ya da e-postası görünmez. Çok büyük veride bölümler kısaltılır ve \"truncated\": true ile \"truncated_sections\" yazılır (sessiz kayıp yok).",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1380,7 +1380,7 @@
           "beklenen": "5. denemede \"Mevcut şifre için çok fazla hatalı deneme yapıldı. 15 dakika sonra tekrar deneyin.\" çıkar ve gönder düğmesi kısa süre pasif olur; kilit sürerken doğru şifre de reddedilir. Yaklaşık 15 dakika sonra (ya da \"Şifremi Unuttum?\" ile şifre sıfırlanınca) yeniden çalışır.",
           "rol_notu": "Hepsi",
           "on_kosul": "Test hesabı (kilit, Profilim'deki şifre değişikliği ve hesap silme ile ORTAK bütçedir)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1392,7 +1392,7 @@
           "beklenen": "\"Kişisel veri dışa aktarma sınırına ulaştınız (24 saatte en fazla 3). Daha sonra tekrar deneyin.\" çıkar; dosya hazırlanmaz. Sınır kullanıcı başınadır; başka hesap etkilenmez.",
           "rol_notu": "Hepsi",
           "on_kosul": "Aynı hesapla 24 saat içinde 3 başarılı dışa aktarma yapılmış olmalı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1405,7 +1405,7 @@
           "beklenen": "\"Hesabımı Sil\" başlıklı sayfada sarı uyarı çıkar: \"Hesabınızı silmek geri alınamaz. Devam etmeden önce aşağıda nelerin silineceğini ve nelerin saklanacağını okuyun.\" Altında \"Silinecekler\" kartı (hesabınız \"Silinmiş Kullanıcı\" olur, e-posta/telefon/parola kaldırılır, üyelikler ve kapı yetkileri kalkar, misafir geçişleri ve karekodlar iptal edilir...) ve \"Saklanacaklar\" kartı (site yönetiminin yasal saklama kayıtları, aidat/borç/ekstre kayıtları, denetim kayıtları...) bulunur. Altta \"Silmeye Devam Et\" ve \"Vazgeç\" düğmeleri vardır. İnternet yokken kart yerine hata ve \"Tekrar Dene\" çıkar; bilgi yüklenmeden silme AÇILMAZ.",
           "rol_notu": "Hepsi",
           "on_kosul": "Silinmesinde sakınca olmayan TEST hesabı (feda edilebilir)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1418,7 +1418,7 @@
           "beklenen": "Kırmızı \"Hesabınız şu anda silinemez\" kartı çıkar. Süper kullanıcıda: \"Süper kullanıcı hesabı bu ekrandan silinemez. Hesabın kaldırılması için başka bir süper kullanıcıyla iletişime geçin.\" Site yöneticisinde: \"\\\"<site adı>\\\" sitesinde aktif üyeler varken tek yöneticisiniz. Önce siteye başka bir yönetici atayın veya siteyi kaldırın.\" ve \"Site kodu: N\". \"Yukarıdaki engeller kalkmadan hesabınız silinemez.\" yazar ve \"Silmeye Devam Et\" PASİF kalır.",
           "rol_notu": "Süper kullanıcı / Site yöneticisi",
           "on_kosul": "Süper kullanıcı hesabı ve aktif üyesi olan bir sitenin TEK yöneticisi olan site yöneticisi hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1432,7 +1432,7 @@
           "beklenen": "\"Hesabı kalıcı olarak sil\" penceresi açılır: \"Bu işlem geri alınamaz. Hesabınız silinecek ve oturumunuz kapanacak. Onaylamak için şifrenizi girin ve SİL yazın.\" SİL yazılmadan \"Hesabımı Sil\" düğmesi pasiftir ve alanın altında \"SİL yazdığınızda düğme açılır.\" görünür (büyük/küçük harf ve SIL/SİL ayrımı gözetilmez). Yanlış şifrede \"Mevcut şifreniz hatalı. Lütfen kontrol edip tekrar deneyin.\" çıkar ve hesap SİLİNMEZ.",
           "rol_notu": "Hepsi",
           "on_kosul": "Silinmesinde sakınca olmayan, engeli olmayan TEST hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1448,7 +1448,7 @@
           "beklenen": "\"Siliniyor...\" sonrası giriş ekranına dönülür ve yaklaşık 8 saniye \"Hesabınız silindi ve bu cihazdaki verileriniz temizlendi. İsterseniz aynı e-posta adresiyle yeniden kayıt olabilirsiniz.\" bildirimi görünür; giriş alanında eski e-posta kalmaz. Eski bilgilerle giriş reddedilir. E-posta kutusuna \"Site ve Toplu Yaşam Yönetim Sistemi - Hesabınız Silindi\" konulu bilgilendirme gelir (SMTP'ye bağlı, gecikebilir). Aynı e-postayla kayıt \"zaten kayıtlı\" denmeden kabul edilir ve 6 haneli doğrulama kodu gelir; eski hesabın üyelikleri yeni hesaba geçmez.",
           "rol_notu": "Hepsi",
           "on_kosul": "Silinmesinde sakınca olmayan TEST hesabı; e-posta kodu alınabilen adres",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1462,7 +1462,7 @@
           "beklenen": "Formda \"Kullanım Koşulları, Gizlilik Politikası ve KVKK Aydınlatma Metni'ni okudum.\" etiketli kutu ve altında üç bağlantı düğmesi vardır: \"Kullanım Koşulları metnini oku\", \"Gizlilik Politikası metnini oku\", \"KVKK Aydınlatma Metni metnini oku\". Kutu işaretlenmeden \"Kayıt Ol\" pasiftir ve üstünde \"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\" yazar; işaretleyince düğme açılır. Belgeler yüklenirken \"Belgeler yükleniyor...\" görünür.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1475,7 +1475,7 @@
           "beklenen": "Ekran başlığı \"Gizlilik Politikası\" olur; \"Sürüm: 2026-10-16\" ve \"Yürürlük: 16.10.2026\" çipleri görünür (değerler belge sürümüne göre değişir); metin başlık, liste ve kalın yazıyla okunur biçimdedir (tablo yok). Belge tamamlanmamışsa sarı kutuda \"Bu belgedeki köşeli parantezli [……] alanlar henüz doldurulmamıştır. Belge taslak niteliğindedir.\" yazar (hukuk onayı bitene dek BEKLENEN durum). Geri dönünce form alanları ve kutu durumu korunur.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1488,7 +1488,7 @@
           "beklenen": "Oturum açmadan sırasıyla \"Kullanım Koşulları\", \"Gizlilik Politikası\" ve \"KVKK Aydınlatma Metni\" belgeleri açılır (başlık, sürüm ve yürürlük çipleri görünür). En büyük yazıda bağlantılar alt alta dizilir, taşma olmaz.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1501,7 +1501,7 @@
           "beklenen": "Beş belge listelenir: Kullanım Koşulları, Gizlilik Politikası, KVKK Aydınlatma Metni, Veri İşleme Sözleşmesi, Hesap ve Veri Silme. Her satırda \"Sürüm: … · Yürürlük: …\" yazar ve dokununca belge açılır. Liste yüklenemezse \"Şu an yayımlanmış bir belge yok.\" DENMEZ; hata ve \"Yeniden dene\" görünür.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1515,7 +1515,7 @@
           "beklenen": "Notun altında \"Veri İşleme Sözleşmesi'ni okudum ve kabul ediyorum.\" kutusu ve \"Veri İşleme Sözleşmesi metnini oku\" bağlantısı vardır. Kutu işaretlenmeden \"Başvuruyu Gönder\" pasiftir ve nedeni (\"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\") yazar; belge açılır ve kapatılınca form korunur.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "Cihazı olmayan bireysel hesap",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1529,7 +1529,7 @@
           "beklenen": "Ana sayfanın üstüne tam ekran \"Güncellenen Koşullar\" biner: \"Hizmet koşullarımız güncellendi. Uygulamayı kullanmaya devam etmek için aşağıdaki belgeleri okuyup onaylamanız gerekir.\" Belge satırlarında ad, \"Sürüm: …\" ve \"… metnini oku\" bulunur; \"Yukarıdaki belgeyi okudum ve kabul ediyorum.\" kutusu işaretlenmeden \"Kabul Et ve Devam Et\" pasiftir (\"Devam etmek için belgeleri okuyup onay kutusunu işaretleyin.\"). Kabulden sonra kapı kalkar ve ana sayfa (ilk kullanımda ilk kullanım turu) açılır. \"Kabul etmiyorum, oturumu kapat\" \"Oturum kapatılsın mı?\" penceresini açar (\"Güncel koşulları kabul etmezseniz uygulamayı kullanamazsınız...\"): \"Oturumu Kapat\" çıkış yapar, \"Vazgeç\" geri döner. Ağ/sunucu hatasında kullanıcı KİLİTLENMEZ. Belgeler tamamlanmadan bu ekran hiç çıkmaz (sunucu yalnız tamamlanmış belgeyi bekleyen sayar).",
           "rol_notu": "Hepsi",
           "on_kosul": "En az bir belge TAMAMLANMIŞ olmalı (hukuk incelemesi bitip belge dosyasındaki `complete: false` satırı kalkmış ve şirket bilgileri doldurulmuş); hesap o belgenin güncel sürümünü daha önce onaylamamış olmalı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -1542,7 +1542,7 @@
           "beklenen": "Her adres oturumsuz, sade ve telefona uygun bir sayfa açar: üstte belge adı (örn. \"Gizlilik Politikası\"), altında \"Sürüm: 2026-10-16 · Yürürlük tarihi: 2026-10-16\". Belge tamamlanmamışsa sarı kutuda \"Bu belgede henüz doldurulmamış veya doğrulanmamış bölümler bulunuyor; belge taslak niteliğindedir.\" görünür (hukuk onayı bitene dek BEKLENEN durum). Olmayan adres \"Belge bulunamadı\" / \"İstediğiniz belge bulunamadı.\" sayfasını (404) verir. Bu adresler mağaza formlarına yazılacağı için tamamlanmış hâlleri, \"Yasal Sayfalar Mağaza İçin Hazır mı (Son Kapı)\" maddesindeki son kapıdır.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1555,7 +1555,7 @@
           "beklenen": "Belgede şirket adının geçtiği yerlerde girdiğiniz unvan görünür; doldurulmayan alanlar (adres, MERSİS, KEP, e-posta, telefon) \"[……]\" olarak kalır. Sayfa en çok ~60 sn önbellekte tutulabilir. Tüm alanlar dolsa bile belgeler, içlerindeki `[KARAR/BİLGİ GEREKLİ ...]` ve `[AVUKAT DOĞRULASIN ...]` işaretleri çözülüp `complete: false` satırı kalkana dek taslak sayılır.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Şirket unvanı, adres, MERSİS, KEP ve iletişim bilgilerinin gerçek değerleri elinizde",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1568,7 +1568,7 @@
           "beklenen": "\"Şifre\" alanında \"En az 8 karakter\" ipucu vardır. 7 karakterde alan altında \"Şifre çok kısa: en az 8 karakter olmalı. Birkaç sözcüğü art arda yazabilirsiniz.\" görünür ve kayıt gönderilmez (e-posta kodu istenmez).",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1581,7 +1581,7 @@
           "beklenen": "İlk dört şifrenin her biri \"Bu şifre çok yaygın ve kolay tahmin edilir. Daha özgün bir şifre seçin.\" hatasını verir. Özgün ifade şifre alanında hata vermez ve kayıt ilerler (e-posta doğrulama kodu ekranı).",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1594,7 +1594,7 @@
           "beklenen": "İlk ikisinde \"Şifre e-posta adresinizle aynı olamaz. Farklı bir şifre seçin.\" görünür (büyük/küçük harf, Türkçe harf ve nokta/boşluk farkı yok sayılır). Üçüncüde \"Şifre adınızla ya da kullanıcı adınızla aynı olamaz. Farklı bir şifre seçin.\" görünür.",
           "rol_notu": "Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1608,7 +1608,7 @@
           "beklenen": "Mevcut şifre yokken \"Şifre değiştirmek için mevcut şifrenizi girin.\" çıkar. Yeni şifre alanında ipucu \"En az 8 karakter\"dir; \"1234567\" için \"Şifre çok kısa...\", \"12345678\" için \"Bu şifre çok yaygın...\" hatası görünür. Geçerli şifrede \"Profil bilgileri güncellendi.\" görünür, oturum açık kalır; çıkış yapıp yeni şifreyle girilebilir, eski şifre girmez.",
           "rol_notu": "Site yöneticisi / Bireysel kullanıcı / Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1621,7 +1621,7 @@
           "beklenen": "Uygulamada \"Bu e-posta adresiyle kayıtlı bir hesap varsa şifre sıfırlama bağlantısı gönderildi...\" bildirimi çıkar (kayıtlı olmayan adreste de AYNI mesaj). \"Yeni Şifre Belirleyin\" sayfası 7 karakterde \"Şifreniz en az 8 karakter olmalıdır.\", eşleşmeyen tekrar için \"Girdiğiniz şifreler birbiriyle eşleşmiyor.\", yaygın şifre için \"Bu şifre çok yaygın ve kolay tahmin edilir. Daha özgün bir şifre seçin.\" der. Geçerli şifrede \"Şifreniz Güncellendi!\" görünür; bağlantı ikinci kez kullanılamaz.",
           "rol_notu": "Hepsi",
           "on_kosul": "E-posta kutusuna erişilebilen hesap",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1633,7 +1633,7 @@
           "beklenen": "Giriş SORUNSUZ olur: parola ilkesi yalnız YENİ belirlenen şifrelerde uygulanır, girişte uygulanmaz.",
           "rol_notu": "Daire sakini / Hepsi",
           "on_kosul": "Güncellemeden önce kurulmuş, 8 karakterden kısa şifreli bir hesap (örn. 4 haneli şifreli daire sakini hesabı)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1647,7 +1647,7 @@
           "beklenen": "İlk 4 denemede giriş reddedilir. 5. denemede \"Çok fazla hatalı deneme yapıldı. 15 dakika sonra tekrar deneyin.\" çıkar (Retry-After ≈ 900 sn). Kilitliyken doğru şifre de aynı iletiyi alır. Başka hesap normal girer (kilit hesap × cihaz/IP çiftine uygulanır).",
           "rol_notu": "Hepsi",
           "on_kosul": "TEST hesabı (gerçek kullanıcıyı kilitlemeyin); sunucu yeniden başlatılmışsa sayaçlar sıfırdır",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1660,7 +1660,7 @@
           "beklenen": "İkinci kilitte ileti \"30 dakika\" der (sonraki kilitler 60 dakika, en çok 2 saat; 24 saat hatasız geçince seviye sıfırlanır). Şifre sıfırlama tamamlanınca hesap kilidi açılır ve yeni şifreyle hemen giriş yapılır (kilit süresi beklenmez).",
           "rol_notu": "Hepsi",
           "on_kosul": "Bir önceki maddedeki kilit bitmiş (≈15 dk) TEST hesabı; e-posta kutusuna erişim",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1674,7 +1674,7 @@
           "beklenen": "A'da oturum sürer. B giriş ekranına döner ve \"Şifreniz değiştirildiği için oturumunuz sonlandırıldı. Lütfen yeniden giriş yapın.\" gösterir. B'de eski şifre girmez, yeni şifre girer. Parola sürümü (pv) artık zorunludur: bu değişiklikten önce açılmış eski belirteçler de bir kez yeniden giriş ister.",
           "rol_notu": "Site yöneticisi / Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1687,7 +1687,7 @@
           "beklenen": "`JWT_EXPIRES_IN` 90 günden uzunsa (canlıda 365d idi) \"JWT_EXPIRES_IN ust siniri asiyor; tokenlar 90 gune kirpilarak uretiliyor. Oneri: JWT_EXPIRES_IN=30d.\" uyarısı çıkar; öneri 30d. `JWT_SECRET` 32 karakterden kısaysa \"JWT_SECRET N karakter; en az 32 karakter onerilir...\" uyarısı çıkar (sunucu yine açılır); döndürmek için yeni ≥64 karakterlik sır `JWT_SECRET`'a, eskisi `JWT_SECRET_PREVIOUS` + `JWT_SECRET_PREVIOUS_UNTIL`'e yazılır (tüm oturumlar düşebilir; kullanıcılara duyurun). Kararlar `BEKLEYEN_ISLER.md` içinde sizde bekliyor.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1700,7 +1700,7 @@
           "beklenen": "\"Yardım ve Destek\", \"Çıkış Yap\"ın hemen üstündedir (her rolde). Dokununca çekmece kapanır ve tam ekran \"Yardım ve Destek\" açılır: \"Size nasıl yardımcı olabiliriz?\" kartı, \"Tanıtım turunu göster\", \"Nasıl yapılır\", \"Sık sorulan sorular\", \"Destek\", \"Hesabım ve verilerim\", \"Yasal belgeler\" bölümleri ve en altta \"Uygulama sürümü: 1.0.0 (1)\" (derleme numarası parantez içinde) yazar.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1714,7 +1714,7 @@
           "beklenen": "Konular role göre değişir (örn. bireysel: \"Cihazımı hesabıma nasıl eklerim?\", \"Site yöneticisi olmak için nasıl başvururum?\", \"Daireme nasıl katılırım?\", \"Profilimi ve şifremi nasıl değiştiririm?\"; sakin: \"Kapıyı nasıl açarım?\"; site yöneticisi: \"Duyuru nasıl yayınlarım?\"; süper kullanıcı: \"Uygulama ayarlarını ve hata raporlarını nerede görürüm?\"). Adımlar 1., 2., ... diye numaralıdır ve adımlarda geçen her menü/düğme adı (örn. “Daireye Katıl & Cihaz Ekle”, “QR / Kod ile Daireye Katıl”, “Platform Ayarları”) gerçekten vardır; bulamadığınız ad bir yardım metni hatasıdır, bildirin.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1726,7 +1726,7 @@
           "beklenen": "Sorular: \"Şifremi unuttum, ne yapmalıyım?\", \"Doğrulama kodu e-postama gelmedi.\", \"Kapı açılmıyor.\", \"Oturumum neden kapandı?\" ve \"Kişisel verilerim nasıl korunuyor?\". Cevaplar uygulamadaki gerçek adlarla uyumludur (“Şifremi Unuttum?”, “Kodu Tekrar Gönder”; kod 30 dakika geçerli; oturum şifre değişince/süre dolunca kapanır); son soru “Yasal belgeler” bölümüne yönlendirir.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1740,7 +1740,7 @@
           "beklenen": "Boşken \"Destek bilgisi yakında\" yazar. Doluyken satırlar görünür: \"E-posta\" (+ \"E-posta gönder\", \"Kopyala\"), \"Telefon\" (+ \"Ara\", \"Kopyala\"), \"Çalışma saatleri\", \"Web sitesi\" (+ \"Web sitesini aç\"). \"Kopyala\" \"Panoya kopyalandı.\" der; dış uygulama açılamazsa \"Uygulama açılamadı; bilgi panoya kopyalandı.\" çıkar. Bilgi önbellekte 15 dakika tutulur: yenilemek için aşağı çekin ya da uygulamayı yeniden açın. Bilgi alınamazsa \"Destek bilgisi alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.\" ve \"Yeniden dene\" çıkar.",
           "rol_notu": "Hepsi",
           "on_kosul": "Önce Platform Ayarları'nda destek alanları boş, sonra dolu olmalı (bkz. Platform Ayarları bölümü)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1752,7 +1752,7 @@
           "beklenen": "Kartta \"Kişisel verilerinizin bir kopyasını almak ve hesabınızı silmek için “Profilim” ekranındaki hesap ve veri bölümünü kullanın. Hesap silme geri alınamaz; silmeden önce ekrandaki uyarıları okuyun.\" yazar. Düğme Yardım'ı kapatır ve çekmecede \"Profilim\" seçili açılır; orada \"Gizlilik ve Veri\" kartı vardır.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1766,7 +1766,7 @@
           "beklenen": "Tur otomatik açılır; her adımda ikon, başlık ve metin vardır. Son adımın başlığı hep \"Yardım her zaman yanınızda\"dır; öncekiler rolü anlatır (bireysel: \"Hoş geldiniz\", \"Daireye katılın\", \"Cihaz ekleyin ya da site kurun\"; sakin: \"Kapınız cebinizde\", \"QR, sesli komut ve misafir geçişi\", \"Duyurular ve borcunuz\"; site yöneticisi: \"Sitenizi yönetin\", \"Kayıtlar ve duyurular\", \"Modüller\"; süper kullanıcı: \"Platform yönetimi\", \"Başvurular ve talepler\", \"Cihazlar ve denetim\"). \"Başla\" turu kapatır; aynı hesapta tur bir daha kendiliğinden açılmaz (bu cihazda \"görüldü\" tutulur).",
           "rol_notu": "Hepsi",
           "on_kosul": "Turu daha önce görmemiş hesap/cihaz (yeni hesap ya da uygulama verisi temizlenmiş telefon)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1779,7 +1779,7 @@
           "beklenen": "\"Atla\" ve geri tuşu turu kapatır ve \"görüldü\" sayılır (yeniden girişte tekrar açılmaz). \"Tanıtım turunu göster\" turu her durumda yeniden açar.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1792,7 +1792,7 @@
           "beklenen": "Taşma ve kırpılma yoktur; tur düğmeleri satıra sığmazsa alta iner, dokunma hedefleri ≥ 48 dp'dir. Adım değişince \"Adım 2 / 4: <başlık>\" duyurulur; ilerleme noktaları ekran okuyucuya okunmaz (süstür).",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1805,7 +1805,7 @@
           "beklenen": "\"Nasıl yapılır\" ve \"Sık sorulan sorular\" internetsiz de görünür (uygulama içinde yazılıdır). \"Yasal belgeler\" bölümü \"Şu an yayımlanmış bir belge yok.\" DEMEZ; \"Belgeler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.\" ve \"Yeniden dene\" gösterir. Destek bilgisi önceden yüklenmişse önbellekten görünür, yoksa hata + \"Yeniden dene\" çıkar. Bağlantı gelince \"Yeniden dene\" listeyi yükler.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1818,7 +1818,7 @@
           "beklenen": "İki giriş yalnız süper kullanıcıdadır; diğer rollerde yoktur.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1830,7 +1830,7 @@
           "beklenen": "Başlık \"Platform Ayarları\"; açıklama \"Uygulama sürümü, bakım modu, destek iletişimi ve şirket / yasal bilgiler. Boş bıraktığınız alan \"ayarsız\" sayılır.\" Üç kart: \"Uygulama Sürümü ve Bakım\" (\"En düşük desteklenen sürüm\", \"Son sürüm\", \"Android güncelleme bağlantısı\", \"iOS güncelleme bağlantısı\", \"Bakım modu\" anahtarı, \"Bakım iletisi\"), \"Destek İletişim\" (\"Destek e-postası\", \"Destek telefonu\", \"Çalışma saatleri\", \"Destek web adresi\") ve \"Şirket ve Yasal Bilgiler\" (\"Şirket unvanı\", \"Şirket adresi\", \"MERSİS numarası\", \"KEP adresi\", \"İletişim e-postası\", \"İletişim telefonu\", \"Onayları zorunlu kıl\" anahtarı). Değişiklik yokken \"Değişiklikleri Kaydet\" pasiftir ve \"Kaydedilecek değişiklik yok.\" yazar.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1844,7 +1844,7 @@
           "beklenen": "Alan altlarında sırayla: \"En düşük desteklenen sürüm 1.2.3 biçiminde olmalı (üç sayı, noktalarla).\", \"Android güncelleme bağlantısı https:// ile başlayan geçerli bir adres olmalı (boşluk ve özel işaret içeremez).\", \"Destek e-postası geçerli bir e-posta adresi olmalı.\", \"MERSİS numarası 16 haneli olmalı.\", \"Şirket unvanı köşeli parantez, < >, ters eğik çizgi, ters tırnak veya ** içeremez; #, -, +, *, > ile başlayamaz.\" Üstte \"Lütfen işaretli alanları düzeltin.\" çıkar ve hiçbir şey kaydedilmez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1857,7 +1857,7 @@
           "beklenen": "İlkinde \"En düşük desteklenen sürüm (9.0.0), bu uygulamanın sürümünden (1.0.0) yüksek olamaz: kaydederseniz kendi uygulamanız da güncelleme ekranına düşer.\" çıkar. İkincisinde \"En düşük desteklenen sürüm, son sürümden büyük olamaz.\" çıkar. İkisinde de kayıt gönderilmez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1871,7 +1871,7 @@
           "beklenen": "Sarı \"Kaydedilmemiş değişiklikleriniz var.\" kutusu çıkar ve \"Değişiklikleri Kaydet\" açılır. Menü değişiminde \"Kaydedilmemiş değişiklikler\" penceresi çıkar: \"Platform ayarlarında kaydedilmemiş değişiklikleriniz var. Devam ederseniz bu değişiklikler kaybolur.\" \"Düzenlemeye Dön\" ekranda bırakır; \"Değişiklikleri Sil\" menüyü değiştirir ve yazılanlar kaybolur. \"Değişiklikleri Geri Al\" alanları kayıtlı değerlere döndürür ve \"Kaydedilecek değişiklik yok.\" yazar.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1884,7 +1884,7 @@
           "beklenen": "Yeşil \"Ayarlar kaydedildi.\" bildirimi çıkar. Alanlar yeniden açılışta aynı değerlerle gelir ve \"Kaydedilecek değişiklik yok.\" yazar. Aşırı sık kayıtta (60/saat) 429 iletisi çıkar ve kaydet düğmesi kısa süre kilitlenir. Destek bilgisi Yardım ekranında görünür (bkz. Yardım bölümü).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1897,7 +1897,7 @@
           "beklenen": "\"Bu değişiklikleri kaydet?\" penceresi riski madde madde söyler: \"Bakım modu AÇILACAK: kullanıcılar bakım iletisini görür ve uygulamayı kullanamayabilir.\" ve \"Onaylar ZORUNLU kılınacak: tamamlanmış yasal belgeleri onaylamayan kullanıcılar kayıt olamaz ve site başvurusu yapamaz.\" \"Vazgeç\" kaydı iptal eder (sunucuya hiçbir şey gitmez); \"Kaydet\" uygular. Yasal belgeler tamamlanmadan zorunluluk fiilen etkisizdir. Sürüm eşiği yükseltirken de \"En düşük desteklenen sürüm X olacak: bu sürümün altındaki uygulamalar güncellenmeden kullanılamaz (şu an kullandığınız sürüm: …, etkilenmez).\" notu çıkar.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1909,7 +1909,7 @@
           "beklenen": "Yeni bir kayıt eklenir (başlığı \"Platform ayarları güncellendi\" görünür). Kayıtta adres, telefon, e-posta gibi DEĞERLER görünmez; sunucu yalnız değişen alan adlarını saklar.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1923,7 +1923,7 @@
           "beklenen": "Başlık \"İstemci Hataları\"; açıklama \"Uygulamalardan gelen hata raporları. Aynı hata tek kayıtta toplanır; kişisel veriler sunucuda maskelenir ve kayıtlar 90 gün sonra silinir.\" Kayıt yoksa \"Kayıtlı istemci hatası yok.\" ve \"Uygulamalardan gelen hata raporları (90 gün) burada listelenir.\" yazar. Kayıt varsa kartta \"Çökme\" ya da \"Hata\", \"N kez\", platform ve \"v<sürüm>\" çipleri, hata türü ve iletisi, \"İlk görülme:\" / \"Son görülme:\" (İstanbul saati) bulunur; \"Ayrıntıyı kopyala\" \"Hata ayrıntısı panoya kopyalandı.\" der. İnternet yokken \"kayıt yok\" DEĞİL, hata ve \"Tekrar Dene\" görünür. Hata iletilerinde gerçek e-posta, telefon veya belirteç görünmez.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1937,7 +1937,7 @@
           "beklenen": "Diğer telefonda tam ekran \"Bakım çalışması\" çıkar; altında yazdığınız ileti (boş bırakılsaydı \"Sistemimiz kısa süreli bakımda. Lütfen birkaç dakika sonra tekrar deneyin.\"), \"Yeniden dene\" ve \"Yönetici girişi\" düğmeleri bulunur; destek bilgisi tanımlıysa en altta \"Destek: …\" satırı da görünür. Geri tuşu uygulamadan çıkar (altındaki ekrana dönmez).",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "İki telefon: biri süper kullanıcı, diğeri site yöneticisi ya da sakin oturumuyla",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1949,7 +1949,7 @@
           "beklenen": "Uygulama normal açılır; altta \"Bakım modu açık (yönetici görünümü). Diğer kullanıcılar bakım ekranını görür.\" şeridi görünür ve Platform Ayarları'na girilebilir (bakımı kapatabilirsiniz).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1962,7 +1962,7 @@
           "beklenen": "Bakım sürerken \"Sistem hâlâ bakımda. Lütfen biraz sonra tekrar deneyin.\" çıkar (sunucuya ulaşılamazsa \"Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.\"). Bakım kapanınca ekran kalkar ve uygulama oturum ve ekran kaybı olmadan kaldığı yerden devam eder.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1975,7 +1975,7 @@
           "beklenen": "Oturum yokken giriş ekranı geçici açılır ve altta \"Yönetici girişi: yalnızca süper kullanıcı hesabıyla devam edilebilir.\" şeridi (\"Vazgeç\") görünür. Site yöneticisiyle girilirse bakım ekranı geri gelir ve \"Bu hesap süper kullanıcı değil; bakım/güncelleme sırasında yalnızca yönetici hesabı kullanılabilir.\" yazar. Süper kullanıcıyla girilirse engel kalkar (yönetici görünümü). Sıradan oturum açıkken düğme \"Yönetici girişi yalnızca süper kullanıcı hesabıyla yapılabilir. Bu cihazda başka bir hesabın oturumu açık.\" yazar.",
           "rol_notu": "Hepsi",
           "on_kosul": "Bakım modu açık; bir telefonda oturum KAPALI, diğerinde sıradan kullanıcı oturumu AÇIK",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -1989,7 +1989,7 @@
           "beklenen": "Altta kapatılabilir \"Yeni sürüm hazır (9.9.9)\" kartı çıkar; uygulama ENGELLENMEZ. Bağlantı yokken \"Uygulamayı mağazadan güncelleyebilirsiniz.\" ve \"Tamam\", bağlantı varken \"Yeni özellikler ve düzeltmeler için güncelleyin.\" ile \"Sonra\" ve \"Güncelle\" düğmeleri görünür. Kapatılan sürüm için kart yeniden açılışta çıkmaz. \"Güncelle\" bağlantıyı açar. Testten sonra \"Son sürüm\"ü gerçek değerine (ya da boşa) çevirin.",
           "rol_notu": "Hepsi",
           "on_kosul": "Bakım modu KAPALI; \"En düşük desteklenen sürüm\" boş ya da kurulu sürümden düşük",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2002,7 +2002,7 @@
           "beklenen": "Tam ekran \"Güncelleme gerekli\" çıkar: \"Uygulamanın bu sürümü (1.0.0) artık desteklenmiyor. Devam etmek için lütfen 1.0.1 veya daha yeni bir sürüme güncelleyin.\" \"Güncelle\" mağaza bağlantısını açar; bağlantı tanımsızsa \"Uygulamayı mağazadan (Google Play veya App Store) güncelleyebilirsiniz.\" yazar ve düğme çıkmaz; açılamazsa \"Mağaza bağlantısı açılamadı. Lütfen uygulamayı mağazadan elle güncelleyin.\" uyarısı gelir. Güncel sürümlü telefonlar ve süper kullanıcı etkilenmez. Eşiği yalnız yeni sürüm iki mağazada da yayındayken yükseltin.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Kurulu sürümü, ayarlayacağınız \"En düşük desteklenen sürüm\"den DÜŞÜK ikinci bir telefon (yeni sürüm iki mağazada da yayınlandıktan sonra eski sürümlü telefon); süper kullanıcı kendi uygulamasından yüksek eşik kaydedemez",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -2014,7 +2014,7 @@
           "beklenen": "\"Bakım çalışması\" ya da \"Güncelleme gerekli\" ekranı AÇILMAZ (yapılandırma 4 sn içinde okunamazsa engel konmaz); uygulama kendi çevrimdışı akışıyla (\"internet yok\" ekranı ya da oturumlu ana sayfa) açılır. İnternet gelince bakım açıksa bir sonraki denetimde bakım ekranı çıkar.",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2027,7 +2027,7 @@
           "beklenen": "Anahtar yedeklerin klasörünün DIŞINA iner ve içeriği ekrana yazdırılmaz. Anahtar OneDrive/Dropbox/Google Drive gibi eşitlenen bir klasörde ve yedeklerle aynı yerde DURMAZ. Anahtar yalnız sunucuda kalırsa sunucu giderse şifreli yedeklerin (dış kopyalar dahil) hiçbiri açılamaz: bu madde en önemlisidir.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "Windows'ta OpenSSH istemcisi ve sunucuya parolasız ssh erişimi (`ssh -p 22667 -o BatchMode=yes salihceylan@<sunucu> echo tamam` çalışmalı)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2040,7 +2040,7 @@
           "beklenen": "İlk 12 hane aynıdır. Farklıysa yanlış dosya kopyalanmıştır. (Anahtar sunucuda kaybolur ya da değişirse `healthcheck.sh` CRIT uyarısı verir; yeni anahtar bilerek `install_ops.sh --new-key` ile üretilir.)",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2053,7 +2053,7 @@
           "beklenen": "İlk çalıştırmada `%USERPROFILE%\\kapi-yedek` içine yalnız şifreli dosyalar iner (`kapi_<tarih>.sql.gz.enc`, `kapi_config_<tarih>.tgz.enc`, `kapi_firmware_<tarih>.tgz.enc`); her dosyanın SHA-256'sı sunucudakiyle eşleşir; `pull.log` ve `LAST_OK.txt` oluşur. İkinci çalıştırmada yeni dosya inmez. Sunucuda hiçbir şey yazılmaz/silinmez. Yerel dosyalar 210 günden sonra silinir (`-PruneDays 210`; 0 = silme).",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2066,7 +2066,7 @@
           "beklenen": "Sonuç `0x0`; `pull.log`'a yeni satır eklenir ve `LAST_OK.txt` güncellenir (1 ise `pull.log`'a bakın). Bilgisayar o saatte kapalıysa açılışta çalışır.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2079,7 +2079,7 @@
           "beklenen": "\"yedek saglam\" yazar. `bad decrypt` büyük olasılıkla yanlış anahtardır; ancak AES-CBC kimlik doğrulamasızdır ve yanlış anahtarda bazen hata vermeden çöp üretir: asıl doğrulayıcı `gzip -t`'dir (yapılandırma yedeği için `tar -tzf`).",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2091,7 +2091,7 @@
           "beklenen": "Kontrol tablosu (api, mqtt_bridge, api_public, pm2, postgres, disk, memory, backup_age, backup_run, backup_key, restore_test, offsite, tls_origin, tls_edge, tls_mqtt, mqtt_local, mqtt_public) hepsi OK görünür; yalnız bilinen uyarılar olabilir (örn. dış kopya yapılandırılmadı). E-posta gitmez, durum/sayaç dosyaları değişmez. `mqtt_public` uyarısında \"DNS proxy açık olabilir (MQTT için 'DNS only' gerekir)\" yazarsa `mqtt` kaydı turuncu buluttadır (bkz. 59.16).",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2104,7 +2104,7 @@
           "beklenen": "Komut `TEST_ALERT_SENT` yazar ve kutuya \"[KAPI-OPS] TEST uyarisi\" konulu e-posta gelir. `TEST_ALERT_FAILED` ise SMTP ayarına ve `~/ops/logs/healthcheck.log` ile `~/ops/state/ALERT_UNSENT` dosyalarına bakın. Alıcı varsayılan olarak aktif süper kullanıcı hesaplarıdır; değiştirmek için `~/.config/kapi-ops.env` içine `ALERT_EMAIL=...` yazılır.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2117,7 +2117,7 @@
           "beklenen": "`backup.status` içinde `result=OK` (tablolar ≥ 30, users > 0) görünür. `restore_test.status` içinde `result=PASS`, `errors=0` ve tablo/satır sayıları yazar (`files_tested`: düz + şifreli dış kopya varsa 2); geçici `kapi_restoretest_*` veritabanı silinir. Aylık otomatik prova ayın 2'sinde 04:15 (İstanbul) çalışır; yeni sürümün canlıdaki ilk tam çalışması 2026-11-02'dedir [denenmedi]. Yedek dosyası `\\connect`/`DROP DATABASE` gibi satırlar içeriyorsa betik yüklemeyi REDDEDER.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2130,7 +2130,7 @@
           "beklenen": "`--check` hedefe bağlanabildiğini söyler. `--all` yalnız şifreli (`Salted__` başlıklı) dosyaları gönderir; `offsite.status` içinde `result=OK` yazar. Yapılandırma yokken durum `UNCONFIGURED` olur ve izleme 24 saatte bir \"dış kopya yapılandırılmadı\" hatırlatır. Dış kopyalar en çok ~210 gün tutulur (gizlilik metniyle uyumlu). Yedek yalnız aynı sunucuda durursa sunucuyla birlikte kaybolur.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "Bir dış kopya hedefi seçilmiş olmalı (A: kendi bilgisayarınıza çekme [yukarıdaki adımlar]; B: ikinci sunucuya rsync; C: Cloudflare R2/Backblaze B2 + rclone; D: Drive/OneDrive + rclone). Önerilen: hemen A, kısa sürede C.",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2143,7 +2143,7 @@
           "beklenen": "Panelde ilk ping görünür. Adres günlüklere yazılmaz ve GİZLİDİR (sohbete/depoya yazmayın). Sunucu ya da cron ölürse içeriden e-posta gelemeyeceği hâlde bu yöntem sizi uyarır [gerçek hizmetle denenmedi].",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2156,7 +2156,7 @@
           "beklenen": "Monitör \"Up\" olur ve kesintide e-posta gelir. MQTT portu Cloudflare'dan geçmediği için IP ile izlenir. Plan limitleri ve ticari kullanım koşulları kayıt sırasında kontrol edilmelidir.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2169,7 +2169,7 @@
           "beklenen": "\"API saglik ucu\" işi yeşil biter (sağlık ucu 3 denemeyle `ok:true` ve `database:connected` döner). Çıktıda `HTTP 403` varsa Cloudflare GitHub IP'lerini engelliyordur: `/health` yolu için WAF \"skip\" kuralı ekleyin. İş akışı 30 dakikada bir çalışır (≈1440 dk/ay); özel depoda ücretsiz plan 2000 dk/ay'dır ve `ci.yml` aynı kotayı kullanır. Bu çalışma GitHub üzerinde henüz denenmedi.",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2181,7 +2181,7 @@
           "beklenen": "10'dan eski ve 30 günden eski dağıtım yedekleri aday olarak listelenir. Bu klasörler şifrelenmez ve süresiz kalır (gizlilik metnindeki saklama süresiyle çelişir); öneri en son 10 dağıtım yedeği ve en çok 30 gündür, karar sizindir. Elle silerken yalnız `kapi_<tarih>` klasörlerini seçin (`ev_*`, `emqx_*` başka projelerindir).",
           "rol_notu": "Operasyon (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2193,7 +2193,7 @@
           "beklenen": "Her iki dosya da en az iki konumda vardır; `key.properties` git'e girmez (`android/.gitignore`), dosyalar sohbete/e-postaya konmaz. Parolalar yalnız `android\\key.properties` içindedir. Anahtar kaybolursa Play App Signing açıksa Play Console'dan \"Yükleme anahtarı sıfırlama\" istenir (günler sürebilir); Play App Signing kullanılmazsa uygulama güncellenemez hâle gelir.",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2205,7 +2205,7 @@
           "beklenen": "`build\\app\\outputs\\bundle\\release\\app-release.aab` (APK: `build\\app\\outputs\\flutter-apk\\app-release.apk`) üretilir ve çıktıda \"android/key.properties bulunamadı\" UYARISI görünmez (görünürse paket debug anahtarıyla imzalanmıştır, yayına uygun değildir). `key.properties` var ama eksik/bozuksa derleme HATA verir. Derleme sırasında `flutter test` veya `flutter pub get` çalıştırmayın (eklenti kaydını bozup derlemeyi düşürebilir). Not: `build\\app\\outputs\\flutter-apk\\app-release.apk` dosyası anahtar oluşturulmadan önce (16.10 15:23) üretildi ve `CN=Android Debug` ile imzalıdır: yayın için yeniden derleyin.",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2219,7 +2219,7 @@
           "beklenen": "Sertifika sahibi `CN=Android Debug` DEĞİLDİR ve SHA-256 `4E:9C:66:FD:…` ile başlayan yükleme sertifikasıyla (bölüm 3'teki tam değer) aynıdır. Not: APK yalnız v2/v3 imzalıysa `keytool -printcert -jarfile <apk>` \"Not a signed jar file\" der (16.10'daki APK'da böyle görüldü); APK için `apksigner` kullanın. AAB için `keytool -printcert -jarfile` komutu `docs/YAYIN_HAZIRLIGI.md` §4'te önerilir; bu çalışmada AAB üretilmediği için denenmedi (olmazsa `jarsigner -verify -verbose -certs <aab>` deneyin).",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2232,7 +2232,7 @@
           "beklenen": "Uygulama çökmeden açılır; giriş ve kapı açma çalışır. R8 küçültme açıktır (`android/app/proguard-rules.pro`) ve R8'li paket cihazda DENENMEDİ: kural eksikliği ancak cihazda görülür.",
           "rol_notu": "Hepsi",
           "on_kosul": "Anahtarla imzalı `app-release.apk`",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2246,7 +2246,7 @@
           "beklenen": "Her akışta sistem izin penceresi gelir, izin verilince özellik çalışır, reddedilince uygulama çökmez ve açıklayıcı ileti verir. Uygulama arka plan konumu, SMS, arama kaydı gibi gereksiz izin istemez (izin gerekçeleri `docs/YAYIN_HAZIRLIGI.md` bölüm 5).",
           "rol_notu": "Hepsi",
           "on_kosul": "Anahtarla imzalı `app-release.apk` telefonda kurulu",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2259,7 +2259,7 @@
           "beklenen": "Widget ve kısayollar uygulamayı çökmeden açar; kapı açma onay penceresi gelir. Bakım ya da zorunlu güncelleme ekranı açıkken kısayol/derin bağlantı YOK SAYILIR.",
           "rol_notu": "Hepsi",
           "on_kosul": "Anahtarla imzalı `app-release.apk` telefonda kurulu",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2272,7 +2272,7 @@
           "beklenen": "Çekmecede \"v1.0.0 (Build 1)\", Yardım'da \"Uygulama sürümü: 1.0.0 (1)\" yazar. `pubspec.yaml` `version: 1.0.0+1`'dir (+ öncesi kullanıcıya görünen sürüm, sonrası Android `versionCode` / iOS `CFBundleVersion`). Çekmece sürümü `lib/config/app_config.dart` sabitlerinden, Yardım ve sürüm kapısı paket bilgisinden (`pubspec.yaml`) okur: ikisini birlikte güncelleyin. Her mağaza yüklemesinde derleme numarası ARTMALIDIR (örn. 1.0.1+2). Sunucudaki `min_supported_version`/`latest_version` ile `major.minor.patch` olarak karşılaştırılır (derleme numarası yok sayılır).",
           "rol_notu": "Hepsi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2285,7 +2285,7 @@
           "beklenen": "İkisi HTTP 200 verir ve sayfada \"[……]\" yer tutucusu ile \"Bu belgede henüz doldurulmamış veya doğrulanmamış bölümler bulunuyor; belge taslak niteliğindedir.\" kutusu YOKTUR. Belgeler şu an taslak olduğundan bu madde hukuk incelemesi (`docs/yasal/AVUKAT_KONTROL_LISTESI.md`) ve şirket bilgileri girilene kadar BAŞARISIZ olması beklenir; mağaza incelemesi taslak sayfayı reddedebilir.",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "Hukuk incelemesi bitmiş, belgelerdeki `complete: false` satırları kalkmış ve Platform Ayarları'nda şirket bilgileri doldurulmuş olmalı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -2299,7 +2299,7 @@
           "beklenen": "Form yanıtları belgeyle uyumludur (izinler ve gerekçeleri, \"finansal özellik yok\" beyanı, veri satılmaz/reklam yok). Hesap silme yolu uygulamada \"Profilim → Gizlilik ve Veri → Hesabımı Sil\" olarak ve web URL'siyle vardır. Play'in güncel hedef-API şartı, alan uzunlukları ve ekran görüntüsü boyutları belgede doğrulanmadı: konsolda kontrol edin (şu an `compileSdk 36`, `targetSdk 36`, `minSdk 24`).",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "Google Play geliştirici hesabı (kurumsal hesapta D-U-N-S istenebilir; yeni kişisel hesaplarda yayın öncesi kapalı test şartı olabilir: konsolda doğrulayın)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -2312,7 +2312,7 @@
           "beklenen": "iOS projesi Windows'ta DERLENMEDİ (yalnız biçim/çapraz referans denetimi yapıldı); `ios/Runner/PrivacyInfo.xcprivacy` Apple doğrulamasını yükleme sırasında geçmelidir. Yerel kapı kontrolü UDP yayını için iOS 14+ `com.apple.developer.networking.multicast` yetkisi (Apple'a başvuru) gerekebilir: yetkisiz iPhone'da yerel keşif çalışmayabilir, bulut/MQTT yolu etkilenmez; yayından önce gerçek iPhone'da yerel kapı açmayı deneyin. iPad desteklendiği için iPad ekran görüntüsü seti de gerekir (kaçınmak için `TARGETED_DEVICE_FAMILY` = 1).",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "Apple Developer üyeliği ve Team ID (depoya yazılmadı, `DEVELOPMENT_TEAM` boş); macOS + Xcode",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -2325,7 +2325,7 @@
           "beklenen": "Ekran görüntülerinde gerçek kişi verisi (ad, telefon, plaka, adres) yoktur; demo hesap bilgileri (e-posta/parola/rol) yalnız inceleme formuna yazılır. Boyutlar ve karakter sınırları belgede doğrulanmadı: konsolda kontrol edin.",
           "rol_notu": "Yayın (siz)",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -2338,7 +2338,7 @@
           "beklenen": "Eski sürüm kullanıcıları \"Yeni sürüm hazır\" kartında \"Güncelle\" ile mağazaya gider. \"En düşük desteklenen sürüm\"ü YALNIZ yeni sürüm iki mağazada da kullanıcıya ulaştıktan sonra yükseltin; aksi hâlde kullanıcılar güncelleyemeyecekleri bir ekranda kilitlenir.",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "Uygulama mağazada yayında",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         }
       ]
@@ -2346,8 +2346,8 @@
     {
       "id": "F13",
       "baslik": "Toplu yükleme ve dışa aktarma",
-      "durum": "planli",
-      "ozet": "Site yöneticisi Kişiler ekranından Excel (.xlsx) ya da CSV ile daire bilgilerini, kişileri (daire ilişkisi ve plakalarıyla) ve araçları toplu yükler; aynı listeleri dosyaya da aktarır. Dosya cihazda okunur, sunucuya yalnız satırlar gider; her yükleme önce ÖNİZLEME (hiçbir kayıt değişmez), sonra onayla yapılır. Hiçbir kayıt silinmez, hesap açılmaz, e-posta gönderilmez; TOPLU GERİ ALMA YOKTUR (yanlış yüklenen kayıtlar tek tek düzeltilir): denemeleri bir TEST sitesinde yapın. Aynı konular SAHA_KONTROL_LISTESI.md 72. bölümündedir. Sürüm yayınlanınca denenir.",
+      "durum": "hazir",
+      "ozet": "Site yöneticisi Kişiler ekranından Excel (.xlsx) ya da CSV ile daire bilgilerini, kişileri (daire ilişkisi ve plakalarıyla) ve araçları toplu yükler; aynı listeleri dosyaya da aktarır. Dosya cihazda okunur, sunucuya yalnız satırlar gider; her yükleme önce ÖNİZLEME (hiçbir kayıt değişmez), sonra onayla yapılır. Hiçbir kayıt silinmez, hesap açılmaz, e-posta gönderilmez; TOPLU GERİ ALMA YOKTUR (yanlış yüklenen kayıtlar tek tek düzeltilir): denemeleri bir TEST sitesinde yapın. Aynı konular SAHA_KONTROL_LISTESI.md 72. bölümündedir. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F13.01",
@@ -2359,7 +2359,7 @@
           "beklenen": "Yöneticide \"Toplu Yükle\" ve \"Dışa Aktar\" düğmeleri vardır (dar ekranda alt alta sarar). Yönetim kurulu üyesi listeleri okur ama bu iki düğmeyi GÖRMEZ (toplu veri çıkışı yapamaz). Görevli ve sıradan sakinde \"Kişiler\" menüsü hiç yoktur.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2372,7 +2372,7 @@
           "beklenen": "Boş listede \"Daire ve kişi bilgilerini şimdi toplu yükleyin.\" yazısı ve \"Excel'den yükle\" düğmesi çıkar; dokununca \"Toplu Yükle\" sihirbazı açılır ve \"Kişiler\" türü seçili gelir. Arama ya da süzgeç uygulanmışken boş sonuçta bu düğme çıkmaz. \"Daireler\" ve \"Araçlar\" sekmelerinin boş durumunda ve site kurulum penceresinin bitiş ekranında bu kısayol YOKTUR (henüz eklenmedi).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Hiç kişi kaydı olmayan yeni TEST sitesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2386,7 +2386,7 @@
           "beklenen": "Adım göstergesi \"Adım 1 / 5 · Tür\" der (adımlar: Tür, Dosya, Sütunlar, Önizleme, Sonuç); üstte site adı ve daire/blok özet çipi vardır. Metin: \"Excel (.xlsx) veya CSV dosyasıyla toplu yükleme yapın. Önerilen sıra: Daireler, Kişiler, Araçlar; hepsi isteğe bağlıdır.\" Her kartta açıklama ve \"Önerilen sıra\" çipi vardır (Daireler: \"Var olan dairelerin kat, tip, m², arsa payı ve borç sorumlusu bilgilerini doldurur. Yeni daire eklemez.\"; Kişiler: \"Kişileri, daire ilişkilerini ve araç plakalarını ekler. Hesap açmaz, e-posta göndermez.\"). Excel şablonu (toplu_yukleme_sablonu.xlsx) üç veri sayfası ve bir \"Açıklama\" sayfası içerir; seçtiğiniz türün sayfası ilk sıradadır. \"Daireler\" sayfası sitenizin MEVCUT blok ve daire numaralarıyla (ve kayıtlı kat/tip/m² değerleriyle) önceden doludur (liste alınamazsa \"Mevcut daire numaraları alınamadığı için daire sayfası boş hazırlandı.\" notu çıkar); \"Kişiler\" ve \"Araçlar\" sayfaları yalnız başlık satırıdır (veri sayfalarında örnek kayıt YOKTUR); \"Açıklama\" sayfasında sütun, zorunluluk, kural ve örnek değerler yazar. CSV şablonu yalnız seçili türün dosyasıdır (başlık satırı; Daireler için mevcut dairelerle dolu), adı toplu_yukleme_sablonu_daireler.csv / _kisiler.csv / _araclar.csv biçimindedir (noktalı virgül ayraçlı, UTF-8). Mobilde paylaşım sayfası, masaüstü/web'de kaydet penceresi açılır ve \"Şablon hazır: <dosya adı>\" yazar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2401,7 +2401,7 @@
           "beklenen": "Dosya adı ve boyutu ile \"N satır okundu.\" yazar. Önizleme hiçbir kaydı değiştirmez (\"Önizleme hiçbir kaydı değiştirmez. Aşağıdaki özeti ve sorunlu satırları inceleyip aktarın.\"); çipler \"Güncellenecek\", \"Değişmeyecek\", \"Hatalı\", \"Uyarılı\"dır. Arsa payı doluysa \"Arsa payı toplamı: 1000/1000 ✓\" ya da \"987/1000: eksik olabilir\" (fazlaysa \"fazla olabilir\") görünür; bu kontrol sitedeki TÜM dairelerin güncel payını toplar ve engellemez. Onay penceresi \"Yüklemeyi onaylayın\": \"N satır aktarılacak. Bu işlem toplu geri alınamaz; yanlış yüklenen kayıtlar tek tek düzeltilir.\" Sonuç: \"Daireler yüklemesi tamamlandı.\" ve \"Uygulanan: N\", \"Değişmeyen: N\", \"Atlanan: N\" çipleri; \"Dairelere git\" \"Daireler\" sekmesini açar ve yüklediğiniz kat/tip/m²/arsa payı değerleri dairelerde görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Şablonun \"Daireler\" sayfasında 2-3 dairenin Kat, Tip, Brüt m², Net m², Arsa Payı (Pay), Arsa Payı (Payda) ve Borç Sorumlusu hücreleri doldurulup dosya kaydedilmiş",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2414,7 +2414,7 @@
           "beklenen": "Anahtar kapalıyken farklı hücreler korunur; uyarılarda \"<Alan> korundu: dolu alanın üzerine yazılmadı.\" yazar ve açıklama \"Kapalıyken yalnız boş alanlar doldurulur; farklı olan değerler korunur.\" Anahtar açılınca \"N alanın üzerine yazılacak.\" görünür ve onay penceresi \"N alanın mevcut değerinin üzerine yazılacak.\" der. Mali kaydı (borç/tahsilat) olan bir dairenin m², arsa payı, tip ya da sorumlu bilgisi değişiyorsa uyarı çıkar: \"Bu dairenin mali kaydı var; yeni değerler yalnız sonraki borçlandırmayı etkiler.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir önceki madde yapılmış; dosyada aynı dairelerin bazı hücreleri FARKLI değerlerle değiştirilmiş",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2429,7 +2429,7 @@
           "beklenen": "Çipler \"Eklenecek\", \"Bağlanacak\", \"Değişmeyecek\", \"Hatalı\", \"Uyarılı\" olur; örnek satırlar \"Satır 2 · Yeni: <Ad Soyad> → <daire> (Malik) + 1 plaka\" biçiminde okunur (eylem etiketi Yeni, Bağlanır, Güncellenir ya da Değişmez olur). Onay penceresinde \"Kişi verilerini işlemek için gerekli yasal dayanağa sahip olduğumu onaylıyorum.\" kutusu vardır; işaretlenmeden \"Onayla ve Aktar\" PASİFTİR. Sonuçta \"Kişiler yüklemesi tamamlandı.\" yazar. Kişiler listesinde yeni kişiler hesapsız görünür (hesap açılmaz, e-posta gitmez); dairelerde ilişki ve plakalar eklenmiştir. Aynı dairede ikinci malik ya da kiracı yazılmışsa o satır hata alır (aile üyeleri için \"Aile\" yazın).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "\"Kişiler\" sayfası şablonda 3-4 kişiyle doldurulmuş (Ad Soyad; Telefon; E-posta; Blok ve Daire No birlikte; İlişki: Malik/Kiracı/Aile; Giriş Tarihi 15.03.2021 gibi; Plaka; Not)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2444,7 +2444,7 @@
           "beklenen": "\"Sorunlu satırlar (N)\" listesinde her sorun \"Satır 7 · <alan>\" başlığıyla ve Türkçe nedenle görünür; satır numarası Excel'de gördüğünüz numaradır (başlık 1. satır). Örnek nedenler: \"Ad Soyad zorunludur.\", \"E-posta biçimi geçersiz: «abc».\", \"Blok bulunamadı: «Z». Sitedeki bloklar: ...\", \"İlişki anlaşılamadı: «Komşu». Malik, Kiracı, Aile ya da Sakin yazın.\", \"Ad Soyad formül gibi görünüyor (= ile başlıyor). İşareti kaldırın.\", \"Telefon geçersiz: «123». 10 haneli numara girin.\" Hata raporu `hata_raporu_people_<YYYYAAGG>.csv` adlı noktalı virgüllü dosyadır; sütunları \"Satır\", \"Alan\", \"Kod\", \"İleti\"dir. Anahtar açıkken ve hatalı satır varken \"Aktar\" PASİFTİR; altında \"Aktarmak için: Hatalı satırlar var ve «hiçbirini aktarma» seçili. Seçeneği kapatın ya da dosyayı düzeltin.\" yazar (hatasız dosyada anahtar açıkken onay penceresi \"Katı mod açık: hatalı satır çıkarsa hiçbir satır aktarılmaz.\" der). Anahtar kapalıyken geçerli satırlar aktarılır, hatalılar atlanır; onay penceresi \"N hatalı satır aktarılmayacak.\" der. Hata raporu önizlemede de, sonuç ekranında da \"Hata raporunu indir\" düğmesiyle indirilir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Kişiler dosyasına bilerek hatalı satırlar eklenmiş: boş Ad Soyad, E-posta \"abc\", var olmayan Blok \"Z\", İlişki \"Komşu\", Ad Soyad hücresine =1+1, Telefon \"123\"",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2456,7 +2456,7 @@
           "beklenen": "Önizlemede (satırlarda uyarı yoksa) aktarılacak değişiklik yoktur: \"Dosyadaki kayıtlar zaten sistemde var; aktarılacak bir değişiklik yok.\" yazar ve \"Aktar\" düğmesi pasiftir (\"Aktarmak için: Aktarılacak geçerli satır yok.\"). Kişiler çift kayıt OLMAZ. Düzeltilmiş bir dosyayı yeniden yüklemek, yalnız eksik satırları ekler. Hızlı çift dokunma ya da bağlantı kopması sonrası aynı yükleme tekrar denenirse \"Bu yükleme daha önce tamamlanmıştı; aynı dosya yeniden uygulanmadı.\" çıkabilir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Bir dosya daha önce başarıyla yüklenmiş",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2469,7 +2469,7 @@
           "beklenen": "Kişi önce e-postayla, yoksa Blok+Daire No ile (dairede tek sakin varsa o; birden çok sakin varsa Ad Soyad ile) bulunur. Bulunamayan satırda \"Kişi bulunamadı. Kayıtlı bir e-posta ya da dairede kayıtlı bir sakin gerekir.\" (hata); birden çok aday varsa \"Birden çok kişi eşleşti. E-posta ya da telefon ekleyerek ayırın.\" Geçersiz plaka \"Plaka atlandı (biçim geçersiz): «XYZ».\" ve başkasında kayıtlı plaka \"Plaka atlandı: «...» sitede başka bir kişide kayıtlı.\" diye bildirilir; satırdaki TÜM plakalar atlanmışsa ve eklenecek/mevcut plaka kalmamışsa bu uyarılar HATA olur (satırdan hiçbir şey yüklenmez). Geçerli plakalar \"Araçlar\" sekmesinde ilgili kişiyle görünür. (Kişiler dosyasındaki plaka sorunları ise yalnız UYARIdır: kişi ve ilişki yazılır, sorunlu plaka atlanır.)",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Sitede kayıtlı kişiler var; \"Araçlar\" sayfası doldurulmuş: bir satırda kayıtlı kişinin E-postası + geçerli Plaka, bir satırda Blok + Daire No + Plaka, bir satırda kayıtlı olmayan E-posta, bir satırda geçersiz Plaka (\"XYZ\"), bir satırda sitede başka kişide kayıtlı plaka",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2482,7 +2482,7 @@
           "beklenen": "Türkçe karakterler (ğ ü ş ı İ ö ç) doğru okunur; Windows-1254 yedeğine düşülürse \"Windows-1254 olarak okundu\" notu çıkar. Dosya seçildikten sonra düğme \"Başka Dosya Seç\" olur ve önceki dosyanın verisi yenisine karışmaz. .xls için \"Eski .xls biçimi (ya da parola korumalı Excel dosyası) desteklenmez. Dosyayı Excel'de parolasız olarak .xlsx veya CSV biçiminde kaydedip yükleyin.\" çıkar. 10 MB'tan büyük .xlsx için \"Dosya çok büyük (en çok 10 MB). Satırları parçalara bölüp ayrı ayrı yükleyin.\"; CSV için sınır 5 MB'tır. 5.000 satırdan fazlası için \"Dosyada 5000 satırdan fazla veri var. Bir seferde en çok 5000 satır yüklenebilir...\" çıkar. Çok sayfalı dosyada seçtiğiniz türün sayfası bulunamazsa \"Hangi sayfa yüklensin?\" listesi ve \"Dosyada birden çok sayfa var ve Kişiler sayfası bulunamadı. Verilerin olduğu sayfayı seçin.\" yazısı gelir. Makrolu (.xlsm), ikili (.xlsb) ve OpenDocument (.ods) dosyaları reddedilir. Hiçbirinde uygulama çökmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2496,7 +2496,7 @@
           "beklenen": "Başlıklar otomatik eşlenir (\"Sayfa: ...\", \"Başlık: N. satır\", \"N satır okundu\" çipleri); her alan için \"<Alan> için dosyadaki sütun\" listesi vardır, zorunlu alanlar \"Zorunlu\" çipi taşır. Zorunlu alan eşlenmezse \"Devam etmek için: «Ad Soyad» alanı için bir sütun seçin.\" yazar ve \"Önizlemeyi Hazırla\" kapalı kalır; iki sütun aynı alana uyuyorsa \"Birden çok sütun bu alana uyuyor (...). Birini seçin.\" çıkar. İlgisiz sütun için \"Yok sayılacak sütunlar: «Yorum». Bu sütunlardaki veriler yüklenmez.\" yazar. Dosya başka türe benziyorsa (örn. Daireler dosyasını Kişiler diye yüklemek) \"Bu dosyanın başlıkları «Daireler» türüne daha çok benziyor...\" uyarısı çıkar. Formül sonucu dosyada kayıtlı olmayan hücreler BOŞ okunur ve bu açıkça yazılır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Başlıkları şablondan farklı yazılmış bir dosya (örn. \"Ad-Soyad\", \"Cep\", \"Kapı No\") ve zorunlu sütunu eksik bir dosya",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2511,7 +2511,7 @@
           "beklenen": "Sayfada \"Kayıtlar sunucudan alınır, dosya cihazınızda hazırlanır. Tüm sayfalardaki kayıtlar dahil edilir.\" yazar; süzgeç açık sekmeninkiyle aynıdır ve TÜM sayfalardaki kayıtlar dosyaya girer. \"Bu dosya kişisel veri içerir; güvenli saklayın ve yetkisiz kişilerle paylaşmayın.\" uyarısı vardır; \"Yönetici notlarını da ekle\" (Araçlarda \"Araç notlarını da ekle\") VARSAYILAN KAPALIDIR (\"Varsayılan olarak kapalıdır.\"). Başarıda \"Dosya kaydedildi/hazır: kisiler_<site>_<YYYYAAGG>.xlsx (N satır, boyut).\" yazar. Excel'de Türkçe karakterler doğrudur; telefon \"0 (555) 123 45 67\" biçimindedir (baştaki sıfır kaybolmaz); birden çok plaka tek hücrede virgülle yazılır; \"Hesap\" (Var/Yok) ve \"Durum\" (Aktif/Pasif) salt okunur sütunlardır. CSV noktalı virgül ayraçlı, UTF-8'dir ve \"=\" gibi işaretle başlayan metin hücrelerinin başına kesme işareti konur. Süzgeçle eşleşen kayıt yoksa \"Bu süzgeçle dışa aktarılacak kayıt yok.\" çıkar; 20.000 satırı aşan veride \"Çok fazla kayıt var. Süzgeçle daraltın.\" Geri yüklemede \"Malik\", \"Kiracı\", \"Sakin Sayısı\" gibi salt okunur sütunlar \"Yok sayılacak sütunlar\" olarak listelenir ve yükleme çalışır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -2519,8 +2519,8 @@
     {
       "id": "F14",
       "baslik": "Belgeler (dosya deposu)",
-      "durum": "planli",
-      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Belgeler\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Modül varsayılan KAPALIDIR: önce Modüller ekranından açın. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Sürüm yayınlanınca denenir.",
+      "durum": "hazir",
+      "ozet": "Yönetim, yönetmelik, toplantı tutanağı, sözleşme gibi belgeleri yükler; kimlerin göreceğini seçer (tüm sakinler, yönetim kurulu, yalnız yöneticiler; sakinler için tüm site, seçili bloklar ya da daireler). Sakinler belgeyi \"Belgeler\" ekranından açar/kaydeder. Belgeler duyuruya eklenebilir. Modül varsayılan KAPALIDIR: önce Modüller ekranından açın. Aynı konular SAHA_KONTROL_LISTESI.md 73. bölümündedir. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F14.01",
@@ -2534,7 +2534,7 @@
           "beklenen": "Kapalıyken yönetici ve sakinde \"Belgeler\" yoktur (modül açıkken, çekmecede \"Finans\"/\"Borcum\"un, yoksa \"Duyurular\"ın altında görünür). Açılınca yöneticide \"Belgeler\" belirir; sakinde de belirir (kitlesinde belge olsun olmasın). \"Belgeler\" sayfasında başlık \"Belgeler\" ve açıklama vardır; yöneticide \"Belge Yükle\" düğmesi, \"Belge ara\" kutusu, \"Kategori\" ve \"Durum\" (\"Yayında\" / \"Silinenler\") süzgeçleri görünür. Modül kapatılırsa ekran \"Belgeler bu site için kapalı.\" der ve \"Modüller\" düğmesi sunar. Görevli ve bireysel kullanıcıda \"Belgeler\" yoktur.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı / Daire sakini",
           "on_kosul": "Belgeler modülü KAPALI bir TEST sitesi (yönetici, bir sakin ve süper kullanıcı hesabı)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2548,7 +2548,7 @@
           "beklenen": "Formda \"Belgede kişisel veri (T.C. kimlik no, IBAN, telefon, adres) varsa yalnız ilgili kitleye açın; gereksiz veriyi karartın.\" uyarısı vardır; dosya alanının ipucunda \"PDF, JPG, PNG, DOCX veya XLSX\" yazar (sunucudan öğrenilmişse \"· en çok 10 MB\" ve \"· kalan alan ...\" da eklenir; bilinmeyen sayı gösterilmez). Kategoriler: Yönetmelik, Toplantı Tutanağı / Karar, Sözleşme, Bilgilendirme, Diğer. Kitle seçilmeden \"Belgeyi kimlerin görebileceğini seçin.\" hatası çıkar. Yükleme sırasında \"Yükleniyor\" ilerlemesi (%, boyut), \"Dosya gönderildi, sunucu kaydediyor...\" aşaması görünür; bitince \"Belge yüklendi.\" bildirimi çıkar ve belge listede başlık, kategori, \"Kitle: Tüm sakinler\", dosya adı/boyutu, \"v1\" ve \"0 indirme\" ile görünür. Yükleme sırasında \"Vazgeç\" \"Yükleme iptal edilsin mi?\" sorar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Belgeler modülü AÇIK TEST sitesi; gerçek veri içermeyen küçük bir PDF",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2560,7 +2560,7 @@
           "beklenen": "Desteklenmeyen tür için seçimde \"Bu dosya türü desteklenmiyor. PDF, JPG, PNG, DOCX veya XLSX yükleyin.\" çıkar; boş dosya için \"Seçilen dosya boş. Başka bir dosya seçin.\"; büyük dosya için \"Dosya çok büyük (...). En fazla ... yükleyebilirsiniz.\" Uzantısı değiştirilmiş sahte PDF yükleme sırasında sunucuda \"Dosya içeriği uzantısıyla uyuşmuyor ya da bozuk.\" diye reddedilir; makrolu Office dosyaları \"Makro içeren belge yüklenemez. Makrosuz kaydedip yeniden yükleyin.\" ile reddedilir. Reddedilen dosya listede belge olarak görünmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2575,7 +2575,7 @@
           "beklenen": "Blok/daire hedefinde hiçbir öğe seçilmezse \"En az bir blok seçin.\" / \"En az bir daire seçin.\" hatası çıkar; en çok 500 öğe seçilebilir. Kitle çipleri \"Tüm sakinler\", \"A Blok\" (blok adı), daire adı, \"Yönetim kurulu\", \"Yalnız yöneticiler\" olarak yazar. A sakini yalnız hedefinde A bloğu/dairesi olan veya \"Tüm sakinler\" belgeleri görür, B sakini A'ya özel belgeyi GÖRMEZ; \"Yönetim kurulu\" ve \"Yalnız yöneticiler\" belgeleri sakinde görünmez. Kurul üyesi \"Sakinler\" ve \"Yönetim kurulu\" belgelerini salt okur, \"Yalnız yöneticiler\" belgesini görmez. Belgeyi yükleyen yönetici hepsini görür. Kitle değişikliği anında geçerlidir.",
           "rol_notu": "Site yöneticisi / Daire sakini / Yönetim kurulu",
           "on_kosul": "İki bloklu TEST sitesi: A bloğunda bir sakin, B bloğunda bir sakin, bir yönetim kurulu üyesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2589,7 +2589,7 @@
           "beklenen": "Sayfada \"Yönetimin sizinle paylaştığı belgeleri buradan açabilir ya da kaydedebilirsiniz.\" yazar; boşsa \"Henüz belge yok.\" / arama sonucu yoksa \"Bu arama ve süzgeç için belge bulunamadı.\"; birden çok sitede \"Site\" seçimi ve \"Tüm siteler\" vardır. \"Aç / Kaydet\" \"Belge indiriliyor\" penceresini (yüzde ve boyut) açar, bitince paylaşım menüsü gelir; kartta başlık, kategori, dosya türü/boyutu ve (yeni sürümde) \"Güncellendi\" rozeti görünür. İndirme sırasında \"Vazgeç\" işlemi durdurur; hatada \"Belge indirilemedi\" ve \"Tekrar Dene\" çıkar. Hem yönetim hem sakin yetkisi olan hesapta \"Yönetim görünümü\" ve \"Belgelerim\" çipleri görünüm değiştirir.",
           "rol_notu": "Daire sakini",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2604,7 +2604,7 @@
           "beklenen": "Pencere başlığı \"Yeni Sürüm Yükle\"dür ve \"Yeni sürüm yüklenince sakinler yalnız güncel sürümü indirir; önceki sürümler yöneticilerde kalır.\" yazar; bitince ayrıntıda \"Yeni sürüm yüklendi. Sakinler artık güncel sürümü indirir.\" çıkar. \"Sürümler\" bölümünde \"v2 (güncel)\" ve \"v1\" satırları dosya adı, boyut, tarih, not ve yükleyen bilgisiyle listelenir. Sakin yalnız güncel sürümü indirir ve kartta \"Güncellendi\" görür. \"v1 Sil\" onay penceresi \"v1 sürümü silinsin mi?\" der (\"Bu sürümün dosyası hemen ve kalıcı olarak silinir; geri alınamaz.\"); belgenin tek sürümü kaldıysa sürüm silme düğmesi çıkmaz.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Yüklenmiş ve sakinin gördüğü bir belge",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2617,7 +2617,7 @@
           "beklenen": "\"Belgeyi Düzenle\" penceresi açılır; değişiklik \"Belge güncellendi.\" ile bildirilir. Pencerede \"Kitle değişikliği anında geçerlidir. Dosyayı değiştirmek için \"Yeni Sürüm Yükle\"yi kullanın.\" yazar. Boş başlık \"Başlık boş olamaz.\", uzun başlık \"Başlık en çok 120 karakter olabilir.\" der (açıklama en çok 1000, sürüm notu en çok 200 karakter). Kaydetmeden kapatırken \"Değişiklikler silinsin mi?\" sorulur (\"Düzenlemeye Dön\" / \"Vazgeç ve Kapat\").",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2632,7 +2632,7 @@
           "beklenen": "Pencere \"Belge Silinenler listesine taşınır ve sakinlere/kurula gösterilmez. Bir süre saklanır; bu sürede geri yükleyebilirsiniz, sonra kalıcı olarak silinir.\" der; sonra \"Belge silindi. Silinenler listesinden geri yükleyebilirsiniz.\" çıkar. \"Silinen belgeler\" listesinde her belge \"Silindi · N gün sonra kalıcı silinir\" rozeti taşır (liste altında \"Silinen belgeler bir süre sonra kalıcı olarak silinir. Süre dolmadan geri yükleyebilirsiniz.\"). \"Geri Yükle\" \"Belge geri yüklendi.\" der ve belge sakinde yeniden görünür. \"Kalıcı Sil\" \"Kalıcı olarak silinsin mi?\" sorar (\"Belge ve tüm sürümleri hemen ve kalıcı olarak silinir; geri alınamaz. Duyurulardaki ekleri de kalkar.\") ve \"Belge kalıcı olarak silindi.\" ile bitirir.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2644,7 +2644,7 @@
           "beklenen": "\"Belge alanı\" satırında kullanılan miktar (örn. \"12 MB / 200 MB\") ve bir ilerleme çubuğu görünür; yükleme sonrası artar, kalıcı silmeyle azalır. %90'ı geçince çubuk uyarı tonuna döner (ekran okuyucu \"Alan dolmak üzere\" der). Yükleme penceresinde dosya ipucunda \"kalan alan ...\" yazar. (Kota aşımında sunucu \"Site belge alanı doldu (... MB / ... MB). Eski belgeleri kalıcı olarak silin.\" der; bunu denemek için kotası düşürülmüş test ortamı gerekir.)",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2659,7 +2659,7 @@
           "beklenen": "Seçici \"Belge Ekle\" başlığıyla açılır ve \"Bu belge duyurunun tüm alıcılarına açılır. Yalnız sakinlere açık, yayındaki belgeler eklenebilir.\" der; liste yalnız \"Sakinler\" kitleli yayındaki belgeleri gösterir; en çok 5 belge seçilebilir (\"En çok 5 belge seçilebilir.\"), eklenecek belge yoksa \"Eklenebilecek belge yok.\" çıkar. Formda \"Belge eki\" bölümü eklenen belgeleri başlıklarıyla listeler ve her birinin yanında çıkarma düğmesi (ekran okuyucuda \"<başlık> ekini kaldır\") vardır. Duyurunun tüm alıcıları (belgenin kendi hedefi daha dar olsa bile) eki \"Ekler (N)\" altında \"Aç / Kaydet\" ile indirebilir. E-postaya dosya EKLENMEZ (alıcılar belgeyi uygulamadan açar).",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "\"Sakinler\" kitlesine açık yayında en az bir belge; hedef dar (yalnız A bloğu) ikinci bir belge",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2673,7 +2673,7 @@
           "beklenen": "Silmede \"Belge duyurularda kullanılıyor\" penceresi çıkar (\"Bu belge N yayındaki duyuruya ekli. Silerseniz duyurularda \"kullanılamıyor\" görünür ve alıcılar dosyayı indiremez. Yine de silinsin mi?\"); \"Yine de Sil\"den sonra \"Belge silindi. Ekli olduğu duyurularda artık kullanılamıyor.\" çıkar. Kitle sakinlerden çıkarılırken aynı başlıkla \"Bu belge N yayındaki duyuruya ekli. Kitleyi sakinlerden çıkarırsanız duyuru alıcıları ekine erişemez; taslak ve zamanlanmış duyurulardan ek çıkarılır. Yine de değiştirilsin mi?\" sorulur (\"Vazgeç\" / \"Yine de Değiştir\"). Sakinin duyurusunda silinen belgenin eki \"Artık kullanılamıyor.\" rozetiyle görünür ve açılmaz. Düzenleme penceresinde de \"Bu belge duyurulara ekli...\" bilgi notu vardır.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Yayındaki bir duyuruya ekli belge",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2685,7 +2685,7 @@
           "beklenen": "Sayfada \"Yönetim kurulu üyesi olarak belgeleri yalnızca görüntüleyebilirsiniz. Yalnız yöneticilere açık belgeler görünmez.\" yazar; \"Belge Yükle\" yoktur; belge ayrıntısında \"Aç / Kaydet\" vardır, \"Yeni Sürüm Yükle\", \"Düzenle\", \"Sil\" yoktur ve \"Yönetim kurulu üyesi olarak belgeyi yalnızca görüntüleyebilirsiniz.\" notu çıkar.",
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2697,7 +2697,7 @@
           "beklenen": "Önceki maddelerde yaptığınız her belge işlemi Türkçe etiketiyle (örn. \"Belge yüklendi\", \"Belge silindi\") ve hedef \"Belge #N\" olarak listelenir. Satırlarda belge başlığı, açıklaması ya da dosya adı GÖRÜNMEZ (yalnız numara ve sayılar).",
           "rol_notu": "Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -2705,8 +2705,8 @@
     {
       "id": "F15",
       "baslik": "Finans devamı: makbuz, kasa, gider, rapor, tazminat, hatırlatma",
-      "durum": "planli",
-      "ozet": "Aidat ve Finans modülünün devamı (Faz 4b). Tahsilatta numaralı makbuz; kasa/banka hesapları, aktarım ve mutabakat; gider kaydı ve belgesi; raporlar (yaşlandırma, gelir-gider, kasa durumu, daire ekstresi, kurul özeti) ve PDF/CSV/XLSX çıktı; gecikme tazminatı ve borç hatırlatma. Gecikme tazminatı ile borç hatırlatma, sistem düzeyindeki hukuk onayı bayrağı (finance.legal_ok) AÇILANA kadar kullanılamaz; açma kararı avukatındır, bu yüzden o maddeler planlıdır. Modül varsayılan KAPALIDIR; denemeleri bir TEST sitesinde yapın. Aynı konular SAHA_KONTROL_LISTESI.md 74-79. bölümlerindedir. Sürüm yayınlanınca denenir.",
+      "durum": "hazir",
+      "ozet": "Aidat ve Finans modülünün devamı (Faz 4b). Tahsilatta numaralı makbuz; kasa/banka hesapları, aktarım ve mutabakat; gider kaydı ve belgesi; raporlar (yaşlandırma, gelir-gider, kasa durumu, daire ekstresi, kurul özeti) ve PDF/CSV/XLSX çıktı; gecikme tazminatı ve borç hatırlatma. Gecikme tazminatı ile borç hatırlatma, sistem düzeyindeki hukuk onayı bayrağı (finance.legal_ok) AÇILANA kadar kullanılamaz; açma kararı avukatındır, bu yüzden o maddeler planlıdır. Modül varsayılan KAPALIDIR; denemeleri bir TEST sitesinde yapın. Aynı konular SAHA_KONTROL_LISTESI.md 74-79. bölümlerindedir. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F15.01",
@@ -2719,7 +2719,7 @@
           "beklenen": "Anahtar varsayılan olarak AÇIKTIR (\"Kapalıyken makbuz, ekstreden elle düzenlenir.\"); kayıtta \"Finans ayarları kaydedildi.\" çıkar. Tahsilattan sonra \"Makbuz\" penceresi açılır: \"Makbuz MK-2026-000001 düzenlendi. Yazdırabilir ya da paylaşabilirsiniz.\" (numara MK-<yıl>-<altı haneli sıra>, boşluksuz artar); \"Tahsilat makbuzu\" başlığı, \"Geçerli\" rozeti, \"Makbuz No\", \"Tahsil edilen tutar\" ve \"Yazıyla: ...\" tutarı, \"Düzenleme tarihi\", \"Tahsilat tarihi\", \"Daire\", \"Ödeyen\", \"Yöntem\", \"Düzenleyen\", \"Doğrulama kodu\" satırları görünür. Geçmiş tarihli tahsilat bile BUGÜNÜN makbuz numarasını alır. Ekstrede tahsilat satırında \"Makbuz MK-...\" düğmesi çıkar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Aidat ve Finans AÇIK TEST sitesi; borçlandırılmış bir daire",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2733,7 +2733,7 @@
           "beklenen": "İlk yönetici basımı \"ASIL\", sonraki basımlar \"KOPYA (2)\", \"KOPYA (3)\" damgalıdır; \"Basım sayısı\" her basımda artar (basım sunucuya kaydedilir; PDF hazırlanamazsa \"Basım kaydedildi ancak PDF hazırlanamadı. Tekrar deneyin; yeni bir kopya sayılmaz.\" çıkar). PDF'te Türkçe karakterler (ş ğ ı İ ö ü ç ₺) doğru görünür; makbuz numarası, tutar, daire, tarih ve doğrulama kodu vardır; dosya adı `Makbuz_MK-<yıl>-<sıra>.pdf` biçimindedir (ASCII). İptal edilmiş makbuz basılırsa \"İPTAL EDİLMİŞTİR\" damgası ve iptal makbuzu numarası görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2746,7 +2746,7 @@
           "beklenen": "Anahtar kapalıyken tahsilattan sonra makbuz penceresi çıkmaz ve satırda \"Makbuz Düzenle\" düğmesi vardır. Düğme makbuzu düzenler ve makbuz penceresini açar (aynı tahsilat için tek AKTİF makbuz: ikinci istek yeni makbuz üretmez, mevcudu gösterir). Ters kaydı olan (iptal edilmiş) ödeme için \"Bu ödeme iptal edilmiş; iptal edilmiş ödeme için makbuz düzenlenemez.\" çıkar. Testten sonra anahtarı yeniden açın.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2760,7 +2760,7 @@
           "beklenen": "Açıklama: \"Ödeme değişmez; yalnızca bu makbuz geçersiz sayılır ve yeni numaralı bir iptal makbuzu düzenlenir. Daha sonra, hesap ekstresindeki \"Makbuz Düzenle\" ile aynı ödeme için yeni bir makbuz düzenleyebilirsiniz.\" Onaydan sonra \"Makbuz iptal edildi. İptal makbuzu düzenlendi.\" çıkar; asıl makbuz \"İptal edildi\" rozeti ve \"Bu makbuz iptal edilmiştir. İptal makbuzu No MK-... \" yazısı taşır, yeni iptal makbuzu (\"İptal makbuzu\" başlığı) kendi numarasını alır ve hangi makbuzu iptal ettiğini (\"MK-... numaralı makbuzu iptal eder. Neden: Makbuz hatalı düzenlendi.\") yazar. İptal makbuzunda ve iptal edilmiş makbuzda \"Makbuzu İptal Et\" düğmesi YOKTUR (iptal makbuzu iptal edilemez). Ödeme (tahsilat) değişmez; yeni \"Makbuz Düzenle\" yeni numara üretir. Not yalnız yönetim kayıtlarında görünür (sakin göremez).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2773,7 +2773,7 @@
           "beklenen": "Düzeltmede eski makbuz otomatik iptal edilir (iptal makbuzunun nedeni \"Ödeme düzeltildi\") ve yeni tahsilat için yeni numaralı makbuz düzenlenir (açıksa makbuz penceresi çıkar); iptalde makbuz \"Ödeme iptal edildi\" nedeniyle iptal edilir ve iptal makbuzu düzenlenir. Numaralar atlanmadan artar; iptal edilen makbuzlar listeden silinmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2787,7 +2787,7 @@
           "beklenen": "Başlık \"Makbuzlar\"dır; liste \"Makbuz listesi\" altında satırlar halinde gelir; arama kutusu \"Makbuz no, daire veya ödeyen adı\" ipucuyla çalışır; boşken \"Henüz makbuz düzenlenmemiş.\", süzgeçte sonuç yoksa \"Bu arama ve süzgeç için makbuz bulunamadı.\" Yöneticide \"Makbuz Doğrula\" ve \"Dışa Aktar\" düğmeleri vardır; dışa aktarma `finance_receipts` listesini (süzgece göre) dosyaya alır. Yönetim kurulu üyesi listeyi ve makbuzu okur ama \"Dışa Aktar\", \"Makbuzu İptal Et\" ve \"Makbuz Düzenle\" düğmelerini görmez.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2801,7 +2801,7 @@
           "beklenen": "Pencere \"Makbuz üzerindeki numarayı ve doğrulama kodunu girin. Bilgiler sunucudaki kayıtla karşılaştırılır; hiçbir şey değişmez.\" der. Doğru çiftte \"Bu makbuz kayıtlarla eşleşiyor ve geçerli.\" (yeşil), makbuz no/tutar/daire/tarih satırlarıyla; yanlış kodda \"Girilen numara ve kod kayıtlarla eşleşmiyor. Bilgileri kontrol edin.\"; biçim hatasında \"Numara MK-2026-000123 biçiminde olmalı.\" ve \"Kod 12 harf ya da rakamdan oluşur.\"; iptal edilmiş makbuzda \"Bu makbuz kayıtlarla eşleşiyor ancak İPTAL EDİLMİŞ.\"; iptal makbuzunda \"Bu belge kayıtlarla eşleşiyor: bir makbuzu iptal eden İPTAL MAKBUZUDUR.\" Doğrulama hiçbir kaydı değiştirmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2815,7 +2815,7 @@
           "beklenen": "Pencere \"Makbuzlarım\" başlığıyla açılır ve \"Dairenize düzenlenen makbuzlar. Kendi cihazınızdan alacağınız çıktı \"KOPYA\" damgalı olur.\" yazar; yalnız kendi dairesinin makbuzları listelenir (borcu kendisine görünür olan daireler). Sakin çıktısı her zaman \"KOPYA\" damgalıdır ve basım sayısını artırmaz; makbuzda yönetici notu görünmez, iptal makbuzunda neden görünür (not görünmez). \"Makbuzu İptal Et\" ve \"Makbuz Düzenle\" yoktur. Aile üyesi hesabı borç/makbuz görmez. Başka dairenin makbuzu açılmaz.",
           "rol_notu": "Daire sakini",
           "on_kosul": "Sakinin dairesine makbuz düzenlenmiş (ve borç/ödeme kendisine görünür); iptal edilmiş bir makbuz da varsa daha iyi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2828,7 +2828,7 @@
           "beklenen": "Hesap yokken \"Henüz kasa ya da banka hesabı yok.\" ve \"Tahsilat ve giderler bir hesaba işlenir. İlk hesabı \"Hesap Ekle\" ile oluşturun.\" yazar. Kayıtta \"Hesap eklendi: <ad>.\" çıkar; üstte \"Toplam bakiye\" ve \"N hesap\" görünür; kartta bakiye, tür çipi ve \"Hareketler\", \"Düzeltme\", \"Mutabakat\", \"Düzenle\" düğmeleri vardır. Açılış bakiyesi için \"Açılış bilgisi sonradan değiştirilemez.\" uyarısı vardır; açılış tarihi bugünden ileri olamaz. Aynı adla ikinci hesap \"Bu adla başka bir hesap var. Farklı bir ad seçin.\" ile reddedilir; en çok 20 hesap tanımlanabilir. Düzenlemede \"Hesap aktif\" kapatılırsa bakiye ≠ 0 ise \"Pasifleştirince bakiye silinmez; önce aktarım ya da düzeltmeyle sıfırlamanız önerilir.\" uyarısı çıkar; pasif hesaplar \"Pasif hesaplar\" başlığı altına iner ve pasif hesaba yeni hareket yazılamaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2842,7 +2842,7 @@
           "beklenen": "Sitede aktif hesap varken \"Hesap\" bölümü vardır (\"Tahsilat seçtiğiniz kasa ya da banka hesabına işlenir.\") ve seçilmezse \"Tahsilatın gireceği hesabı seçin.\" hatası çıkar. Kayıttan sonra hesap bakiyesi tutar kadar artar; \"Hesap Hareketleri\" penceresinde \"Tahsilat\" hareketi (daire etiketiyle) ve \"Güncel bakiye\" görünür. Açılış tarihinden önceki tarihte \"Seçilen tarih kasa / banka hesaplarının açılış tarihinden önce; bu tahsilat bir hesaba işlenmeyecek.\" uyarısı/hatası çıkar (\"Tarih, hesabın açılış tarihinden önce olamaz.\"). Tahsilat düzeltilir/iptal edilirse hesapta ters hareket yazılır (\"Ters kayıt\").",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2855,7 +2855,7 @@
           "beklenen": "Tek hesapla \"Aktarım için en az iki aktif hesap gerekir.\" (düğme pasif) ; pencere \"Hesaplar Arası Aktarım\" başlığıyla açılır. Aynı hesap seçilirse \"Çıkış ve giriş hesabı aynı olamaz.\"; bakiyeyi aşan tutarda \"Bu tutar çıkış hesabının bakiyesini (...) aşıyor; hesap eksiye düşer. Kayıtları kontrol edin.\" uyarısı çıkar ama engellenmez. Başarıda \"Aktarım yapıldı: <tutar> (<çıkış> → <giriş>).\" yazar; çıkış hesabında \"Aktarım (çıkış)\", giriş hesabında \"Aktarım (giriş)\" hareketi ve toplam bakiye DEĞİŞMEZ. İptalde \"Aktarım iptal edildi.\" çıkar, iki hesapta da ters hareket yazılır, aktarım kaydı silinmez (\"İptal edildi\" rozeti kalır).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "En az iki aktif hesap (biri bakiyeli)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2868,7 +2868,7 @@
           "beklenen": "Pencere \"Düzeltme Hareketi\" başlığıyla açılır ve \"Banka masrafı, banka faizi ya da kasa sayım farkı gibi hesap bakiyesini düzelten bir hareket yazar. Hareket raporlarda ayrı satır olarak görünür.\" der. Yön seçilmeden \"Düzeltmenin yönünü seçin (giriş ya da çıkış).\", neden seçilmeden \"Düzeltme nedenini seçin.\" hatası çıkar; nedenler: Banka masrafı, Banka faizi, Sayım farkı, Diğer (\"Diğer\" için not zorunludur: \"\"Diğer\" nedeninde açıklama notu zorunludur.\"). Tutara eksi işareti girilmez (\"Eksi işareti girmeyin; yön yukarıda seçilir.\"); formda \"Bakiye: X → Y\" önizlemesi görünür. Kayıttan sonra \"Düzeltme yazıldı: ...\" çıkar ve hesabın hareketlerinde \"Düzeltme\" satırı ayrı görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2883,7 +2883,7 @@
           "beklenen": "Pencere \"Mutabakat\": \"Banka ekstresindeki ya da kasada saydığınız bakiyeyi girin; sistemdeki bakiyeyle karşılaştırılır.\" Fark yoksa \"Fark yok: bakiye ekstreyle tutuyor.\" ve kayıtta \"Mutabakat kaydedildi: <hesap> bakiyesi ekstreyle tutuyor.\" Fark varsa \"Fark: +X (ekstre sistemden fazla)\" / \"(ekstre sistemden az)\" görünür; düzeltme açıkken ve neden seçilmişse \"Mutabakat kaydedildi: fark ... düzeltme hareketiyle giderildi.\" ve hesaba bir \"Düzeltme\" hareketi yazılır; kapalıyken \"Mutabakat kaydedildi: fark ... düzeltilmedi; raporlarda uyarı olarak görünür.\" çıkar ve bakiye DEĞİŞMEZ. Sonradan ekstrede \"Son mutabakat farkı\" uyarısı raporlarda kalır. Mutabakat tarihi her zaman bugündür; hesap siz bakarken değişirse \"Hesap bakiyesi siz bakarken değişti...\" uyarısı çıkar ve yeniden onay istenir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2897,7 +2897,7 @@
           "beklenen": "Uyarı \"Hesaba eşlenmemiş N tahsilat var. Toplam ... Kasa rakamları eksik olabilir ve ilgili ay kapatılamaz.\" der. Ay kapatma \"Bu ay kapatılamaz: hesaba eşlenmemiş tahsilatlar var. Kasa bölümündeki \"Toplu Eşle\" ile eşleyin.\" ile reddedilir. Pencere \"Tahsilatları Hesaplara Eşle\" başlığıyla açılır ve \"Hesap tanımlanmadan önce kaydedilmiş tahsilatlar, ödeme yöntemine göre seçtiğiniz hesaba işlenir. Önce önizleme gösterilir; onaylamadan hiçbir şey kaydedilmez.\" der; önizleme tahsilat sayısı ve yöntem bazlı toplamı gösterir, kapalı ayda ya da hesap açılışından önce olanları \"bu işlemle eşlenmeyecek\" diye ayrı listeler. Onaydan sonra \"N tahsilat hesaplara eşlendi (toplam ...)\" çıkar, uyarı kalkar ve ay kapatılabilir. Önizleme ile onay arasında veri değişirse \"Veriler değişti, önizleme yenilendi...\" uyarısıyla yeniden onay istenir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Hesap tanımlanmadan ÖNCE kaydedilmiş tahsilatlar olan (tarihi hesabın açılış tarihinden sonra) TEST sitesi; kapatılmamış ay",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2909,7 +2909,7 @@
           "beklenen": "Hesaplar ve hareketler görünür; \"Hesap Ekle\", \"Aktarım Yap\", \"Toplu Eşle\", \"Düzeltme\", \"Mutabakat\", \"Düzenle\" düğmeleri YOKTUR ve sayfada \"Yönetim kurulu üyesi olarak mali kayıtları yalnızca görüntüleyebilirsiniz.\" yazar.",
           "rol_notu": "Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2923,7 +2923,7 @@
           "beklenen": "Hesap yokken \"Gider kaydı için bir kasa ya da banka hesabı gerekir. Önce Kasa sekmesinden bir hesap ekleyin.\" çıkar. Eksik alanlarda \"Gider kategorisini seçin.\", \"Gider açıklamasını girin.\", \"Giderin çıkacağı hesabı seçin.\" görünür; KDV tutardan büyükse \"KDV tutarı gider tutarından büyük olamaz.\" (KDV tutara DAHİLDİR, yalnız bilgidir). Kayıtta \"Gider kaydedildi: <tutar> (<kategori>).\" çıkar; listede \"Geçerli\" gider ve üstte \"Geçerli gider\" toplamı görünür; hesabın bakiyesi tutar kadar azalır ve hareketlerde \"Gider\" satırı vardır. Kategori adı ve tedarikçi adı kayıt anında saklanır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2937,7 +2937,7 @@
           "beklenen": "İlk açılışta hazır kategoriler gelir (Personel, Elektrik, Su, Doğalgaz/Yakıt, Asansör bakım, Bakım-onarım, Temizlik malzemesi, Sigorta, Yönetici aylığı, Vergi/harç, Banka/noter masrafı, Diğer) ve \"Hazır kategori\" çipi taşır. Altta \"Silinmez: kullanılmayan kategori pasifleştirilir. Geçmiş giderler kayıt anındaki adı korur.\" yazar; pasif kategoriye yeni gider yazılamaz (\"Bu gider kategorisi pasif. Başka bir kategori seçin.\"). Vergi/T.C. no 10-11 hane olmalıdır (\"Numara 10 ya da 11 rakam olmalı.\"). Kurul üyesi tedarikçi adını görür ama vergi/T.C. no, telefon ve notu görmez (\"Kimlik numarası ve telefon kurul üyelerine gösterilmez.\").",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2950,7 +2950,7 @@
           "beklenen": "Bölümde \"En çok 5 dosya (PDF, JPG, PNG). Kimlik numarası ve IBAN gibi bilgileri karartın; telefon fotoğrafları konum bilgisi içerebilir.\" yazar; .docx için \"Yalnızca PDF, JPG ve PNG eklenebilir. Eklenmeyen: ...\" çıkar. Kayıtta \"N belge eklendi.\" bildirilir (yüklenemeyen olursa hangisi olduğu yazılır; gider belgesiz de kaydedilir). Ayrıntıda \"N belge bağlı.\" ve dosya adı + türü (\"Fatura\", \"Fiş / makbuz\", \"Fotoğraf\", \"Diğer\") listelenir. Altıncı belge için \"Bir gidere en çok 5 belge eklenebilir.\" çıkar. Gider belgeleri kalıcı silinmez (yasal saklama).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2963,7 +2963,7 @@
           "beklenen": "Aynı tedarikçi ve fatura numarası: \"Bu tedarikçiden aynı belge numarasıyla iptal edilmemiş bir gider zaten var.\" (kayıt reddedilir; \"Aynı tedarikçiden aynı numara ikinci kez girilemez.\" ipucu forma yazılıdır). Aynı tutar/tarih/kategori: \"Aynı gider daha önce kaydedilmiş\" penceresi (\"Aynı tutar, tarih ve kategoriyle bir gider son 24 saatte kaydedilmiş görünüyor. Önce gider listesini kontrol edin. Gerçekten ikinci bir gider ise devam edebilirsiniz.\") çıkar; \"Yine de kaydet\" bilinçli tekrarı kaydeder. Çift dokunma tek kayıt üretir. İptal edilmiş giderin belge numarası yeniden kullanılabilir (düzeltme akışı çalışsın diye).",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2977,7 +2977,7 @@
           "beklenen": "İptal penceresi \"<tutar> tutarındaki gider iptal edilir: hesapta ters hareket yazılır, gider silinmez ve \"İptal edildi\" olarak kalır.\" der; sonra \"Gider iptal edildi.\" çıkar, ayrıntıda \"İptal edildi\" rozeti ve \"Bu gider iptal edilmiştir (...). Neden: ...\" yazar, hesap bakiyesi geri döner. Aynı gider ikinci kez iptal edilemez (\"Bu gider zaten iptal edilmiş...\"). \"Gideri Düzelt\" \"Düzeltilen gider\" bilgisini ve \"Bu gider silinmez: iptal edilir ve aşağıdaki bilgilerle yeni bir gider yazılır. İkisi tek işlemde yapılır.\" notunu gösterir; sonuçta \"Gider düzeltildi: ...\" çıkar, yeni gider \"Bu gider, daha önce iptal edilen bir giderin düzeltmesidir.\" notu taşır. \"İptal edilen\" çipinde iptal edilmişler ve \"İptal edilen\" toplamı görünür.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -2990,7 +2990,7 @@
           "beklenen": "Kapalı aya gider yazılamaz (\"Bu dönem kapatılmış; kapalı döneme kayıt eklenemez. Kapalı ayı yalnızca süper kullanıcı yeniden açabilir.\"); gelecek tarih ve 5 yıldan eski tarih reddedilir (\"Tarih bugünden en fazla 5 yıl öncesi olabilir.\"); hesap açılışından önceki tarih \"Tarih, hesabın açılış tarihinden önce olamaz.\" der. Kapalı ayın giderine belge eklemek/kaldırmak ise serbesttir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Kapatılmış bir ay (Dönemler sekmesi)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3003,7 +3003,7 @@
           "beklenen": "Liste \"Giderler\" başlığı altında süzgece göre değişir; boşken \"Bu dönemde gider kaydı yok.\" / süzgeçte \"Bu süzgeç için gider bulunamadı.\"; üstte \"Geçerli gider\" (ve iptal edilenler görünürken \"İptal edilen\") toplamları vardır. \"Dışa Aktar\" (yönetici) süzgeci dosyaya taşır (`finance_expenses`); kurul üyesinde \"Gider Ekle\", \"Kategori ve Tedarikçiler\" yazma işlemleri ve \"Dışa Aktar\" YOKTUR; tedarikçi vergi/T.C. no ve telefonu görünmez.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3016,7 +3016,7 @@
           "beklenen": "Çipler: \"Yaşlandırma\", \"Gelir-Gider\", \"Kasa Durumu\", \"Daire Ekstresi\", \"Kurul Özeti\"; açıklama \"Rapor türünü seçin; rakamlar sunucudan alınır, PDF cihazınızda hazırlanır.\" Rapor gelince \"Hazırlanma: <tarih saat>\" , kapalı dönem bilgisi (\"Kapalı dönem: <ay> ve öncesi. Sonraki aylar kesinleşmemiştir.\" ya da \"Kapatılmış dönem yok: rakamlar kesinleşmemiştir.\") ve \"Bu rapor noter onaylı karar defteri/yasal defterlerin yerine geçmez.\" yazar. Süzgeç değişince \"Süzgeçler değişti. Güncel rapor için \"Raporu Getir\"e basın; PDF ve dosya ekrandaki rapora aittir.\" uyarısı çıkar ve PDF/dosya düğmeleri yeniden getirilene dek pasif kalır. Hata durumunda \"0/boş\" gösterilmez: \"Rapor alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.\" çıkar. Çok sık istekte düğme kısa süre kilitlenir (sunucu meşgulse \"REPORT_BUSY\" beklemesi).",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3030,7 +3030,7 @@
           "beklenen": "Kovalar: \"Vadesi gelmemiş\", \"0-30 gün\", \"31-60 gün\", \"61-90 gün\", \"91-180 gün\", \"181-365 gün\", \"366 gün ve üzeri\"; \"Toplam\" kartında \"Vadesi geçmiş toplam\", \"Kullanılmamış alacak\" (ve varsa \"Ödenmemiş gecikme tazminatı (bilgi)\") görünür; daire satırlarında Malik/Kiracı adları ve kova çipleri vardır (en yüksek vadesi geçmiş tutar üstte). Borç yoksa \"Bu tarihte vadesi geçmiş borç yok.\" Rapor tarihi bugün iken \"Vadesi geçmiş toplam\" Finans \"Daireler\" sekmesindeki toplam vadesi geçmiş borçla BİREBİR aynıdır. Gelecek tarih (\"Rapor tarihi bugünden ileri olamaz.\") ve 5 yıldan eski tarih reddedilir. Geçmiş tarihte rakamlar o günün durumunu gösterir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Vadesi geçmiş borcu olan en az iki daire (biri 30 günden eski)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3043,7 +3043,7 @@
           "beklenen": "\"Dönem toplamı\" kartında \"Tahakkuk\", \"Tahsilat\", \"Gider\", \"Net nakit\" (= tahsilat − gider) görünür; her ay kartında \"Kesinleşmiş\" / \"Kesinleşmemiş\" rozeti, \"Tahakkuk\", varsa \"Gecikme tazminatı\", \"Tahsilat\", \"Tahsilat oranı\", \"Gider\", \"Net nakit\" yazar; altta \"Gider kategorileri\" toplamları vardır. Verisi olmayan aylar da sıfırlı satır olarak gelir (hata ile karışmaz). Başlangıç bitişten sonraysa \"Başlangıç ayı bitiş ayından sonra olamaz.\", 36 ayı aşarsa \"Rapor en çok 36 ay olabilir. Dönemi daraltın.\" çıkar. Giderler sekmesindeki geçerli gider toplamları ve Tahsilat kayıtlarıyla tutarlıdır.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3056,7 +3056,7 @@
           "beklenen": "Her hesap için \"Açılış\", \"Tahsilat\", \"Gider\", \"Aktarım (giriş)\", \"Aktarım (çıkış)\", \"Düzeltme\", \"Ters kayıt\" ve \"Bakiye\" satırları görünür; \"Toplam bakiye\" Kasa sekmesindeki \"Toplam bakiye\" ile aynıdır. Eşlenmemiş tahsilat varsa \"Hesaba eşlenmemiş N tahsilat var (toplam ...). Kasa rakamları eksik olabilir.\" uyarısı çıkar. Hesap yoksa \"Bu tarihte hesap bulunmuyor.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3069,7 +3069,7 @@
           "beklenen": "Özette \"Önceki bakiye\", \"Borçlandırılan\", varsa \"Gecikme tazminatı\", \"Ödenen\", \"İptal edilen\", \"Dönem sonu bakiye\" ve \"Vadesi geçmiş\" satırları; altında hareketler \"Bakiye: ...\" yürüyen bakiyesiyle listelenir (\"Daha fazla göster (N)\"). Daire seçilmezse \"Önce bir daire seçin.\", bitiş gelecekteyse \"Bitiş tarihi bugünden ileri olamaz.\" çıkar; ekstre 5.000 satırı aşarsa \"Ekstre çok uzun (5.000 satırdan fazla). Tarih aralığını daraltın.\" Hareket yoksa \"Bu aralıkta hareket yok.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3083,7 +3083,7 @@
           "beklenen": "Bölümler: \"Tahakkuk ve tahsilat\", \"Alacak durumu\", \"Gider\" (\"En büyük gider kalemleri\": kategori + tarih + tutar, tedarikçi adı ve açıklama YOK), \"Kasa ve banka\", \"Gecikme tazminatı\", \"Borç hatırlatma\" (gönderilen SAYISI) ve varsa \"Uyarılar\" (kapatılmamış geçmiş dönem, mutabakat farkı, eşlenmemiş tahsilat, eksi bakiye). Rapor KİŞİ ADI içermez. \"En yüksek 10 borçlu daireyi ekle\" varsayılan KAPALIDIR (\"Yalnız etiket ve tutar; kişi adı yok. Kullanımı denetim kaydına işlenir.\"), yalnız yöneticide çıkar ve kullanımı Denetim Kaydı'nda \"Borçlu listesi görüntülendi\" olarak görünür. Kurul üyesi raporu okur ve \"Yönetim Kuruluna Sun (PDF)\" ile PDF basar; borçlu listesi seçeneğini ve \"Dışa Aktar\"ı görmez (bu rapor için dosya dışa aktarması hiç yoktur).",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3096,7 +3096,7 @@
           "beklenen": "PDF Türkçe karakterlerle (ş ğ ı İ ö ü ç ₺) bozulmadan çıkar (yazı tipi uygulamaya gömülüdür, internet gerekmez); ekrandaki rakamlarla aynıdır; her sayfada/altbilgide \"Bu rapor noter onaylı karar defteri/yasal defterlerin yerine geçmez.\" yazar; dosya adı ASCII'dir. Uzun çıktıda ekran donmaz. PDF hazırlanamazsa \"PDF hazırlanamadı. Tekrar deneyin.\" çıkar.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3109,7 +3109,7 @@
           "beklenen": "Dosya adları `<rapor>_<site>_<YYYYAAGG>` biçimindedir; tutar sütunları sayı olarak (Excel'de toplanabilir), tarihler tarih olarak, oranlar yüzde olarak gelir; toplamlar ekrandakiyle aynıdır (ekran ve dosya aynı süzgeci kullanır). CSV noktalı virgül ayraçlı, UTF-8'dir; ondalık ayırıcı virgüldür. 20.000 satırı aşan veri \"Dışa aktarılacak veri çok büyük (en çok 20.000 satır). Süzgeçlerle daraltın.\" ile reddedilir. Kurul Özeti'nde ve kurul üyesinde \"Dışa Aktar\" düğmesi YOKTUR.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3122,7 +3122,7 @@
           "beklenen": "Bölümde \"Hukuk onayı bekleniyor\" başlığı ve \"Gecikme tazminatı, hukuki doğrulama tamamlanınca kullanıma açılır. Şimdilik bu özellik kullanılamıyor.\" yazar; \"Hesapla\" düğmesi yoktur. Finans Ayarları'nda uyarı \"Hukuk onayı bekleniyor. Gecikme tazminatı onay tamamlanana dek açılamaz.\" çıkar ve \"Gecikme tazminatı kullanılsın\" anahtarı PASİFTİR (açılamaz). Bayrak kapalıyken (API ile elle denerseniz) ayar açma isteği \"Bu özellik hukuki onay bekliyor; onaylanınca kullanılabilir.\" ile reddedilir. Hiçbir daireye tazminat yazılmaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "`finance.legal_ok` KAPALI (varsayılan)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3135,7 +3135,7 @@
           "beklenen": "\"Otomatik değildir: her ay önizlenir ve onaylanır.\" yazar. Başlangıç ayı seçilmeden \"Tazminat için ilk hesaplanacak ayı (başlangıç ayı) seçin.\" çıkar (\"Geçmişe yönelik sürpriz tahakkuk olmaması için zorunludur; bu aydan önceki aylar hesaplanmaz.\"). Oran sistem sınırını (aylık %5) aşarsa \"Oran %5,00 sistem sınırını aşamaz.\" çıkar; \"Vadeye ek gün\" 0-90 dışı reddedilir. Kayıtta \"Finans ayarları kaydedildi.\" çıkar ve Dönemler sekmesinde \"Açık\", \"Önizleme ve onayla çalışır\" rozetleri, \"Oran %4,50 aylık • ... • vadeye ek N gün\" ve \"İlk hesaplanacak ay\" görünür. Oran/yöntem/ek gün yalnız SONRAKİ hesaplamaları etkiler; ilk çalıştırma yapıldıktan sonra başlangıç ayı değiştirilemez. Uyarı: \"Oran ve yöntemin hukuka uygunluğunu hukuki danışmanlıkla doğrulayın; bu ekran hukuki görüş değildir.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "`finance.legal_ok` AÇIK (avukat onayı sonrası; süper kullanıcı `PUT /admin/finance-legal-gate` ile açar) ve yalnız bir TEST sitesi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3149,7 +3149,7 @@
           "beklenen": "Önizleme hiçbir şey kaydetmez (\"Önizle düğmesi hiçbir şey kaydetmez.\"). Önizlemede dönem, \"Hesap aralığı: ... (N gün)\", oran ve toplam, daire satırları (daire, sorumlu, tutar) görünür. Pencere \"Gecikme tazminatını yaz\": \"<Ay> için N daireye toplam ... gecikme tazminatı borç olarak yazılacak. Yazıldıktan sonra yalnızca SON çalıştırma iptal edilebilir.\" der; sonra \"Gecikme tazminatı yazıldı: <ay>, N daire, toplam ...\". Daire ekstresinde \"Gecikme tazminatı\" kalemi (borç) görünür; tazminat kalemleri sonraki ayların tazminat tabanına girmez (faiz üstüne faiz yok). Kapatılmamış ay için \"Önce ilgili dönemi kapatın. Tazminat yalnızca kapatılmış ay için hesaplanır.\", bitmemiş ay için \"Bu ay henüz bitmedi. Tazminat yalnızca bitmiş ay için hesaplanır.\", sırası gelmemiş ay için \"Tazminat aylar sırayla hesaplanır. Sıradaki ayı seçin.\" çıkar. Önizleme ile onay arasında ödeme/ayar değişirse \"Veriler değişti, önizleme yenilendi...\" uyarısıyla yeniden onay istenir.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Ayarlar açık; başlangıç ayı geçmiş bir ay; o ay KAPATILMIŞ ve BİTMİŞ; vadesi geçmiş borcu olan daireler",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3162,7 +3162,7 @@
           "beklenen": "Yönetici dökümünde oran, yöntem, ek gün, \"Ay içinde gecikmiş tutarların gün toplamı\" ve gecikme dilimleri (tarih aralığı + gecikmiş tutar) yazar. Sakin penceresi \"Gecikme Tazminatı\" başlığıyla \"Bu ay için gecikme tazminatı: ...\", \"Oran: ... aylık.\", \"Gün esası: ...\", dilimleri ve \"Tazminat bu değerlerden site yönetimi sisteminde hesaplanır. Bir yanlışlık olduğunu düşünüyorsanız site yönetimiyle iletişime geçin.\" notunu gösterir. Sakin yalnız kendi dairesinin kalemi için açıklama görür.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Yazılmış bir tazminat çalıştırması; tazminat kalemi olan daire",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3175,7 +3175,7 @@
           "beklenen": "Önizleme yenilenince muaf daire hesap dışı kalır; \"N daire muaf tutuldu\" başlıklı kutu (\"Bu ayın tazminatı bu dairelere KALICI olarak yazılmaz.\") daireyi \"(yazılmayacak)\" tutarıyla listeler. Muaf listesi değişince onay için önizlemenin yenilenmesi gerekir. Yazılan çalıştırma kartında \"N muaf\" çipi görünür; o ayın tazminatı muaf dairelere KALICI olarak yazılmaz.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3188,7 +3188,7 @@
           "beklenen": "Önizlemede \"Bu ay için tazminat doğuran daire yok. \"Ayı Kaydet\" ile ay \"tazminat yok\" olarak kaydedilir ve sıra bir sonraki aya geçer; kaydetmezseniz sonraki aylar hesaplanamaz.\" yazar; pencere \"Tazminat yok - ayı kaydet\" başlığıyla açılır (\"hiçbir daireye borç yazılmaz\"); sonra \"<Ay> için \"tazminat yok\" olarak kaydedildi. Hiçbir daireye borç yazılmadı.\" çıkar. Geçmişte kayıt \"Tazminat yok (işaret)\" çipiyle ve \"Bu ay için tazminat doğmadı; borç yazılmadı.\" yazısıyla görünür; \"Sıradaki ay\" bir sonraki aya geçer. Bu işaret de \"Son çalıştırmayı iptal et\" ile geri alınabilir (\"Ters çevrilecek borç yoktur.\").",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Hiçbir dairede tazminat doğurmayan bir ay (örn. tüm borçlar ödenmiş)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3202,7 +3202,7 @@
           "beklenen": "\"Son Çalıştırmayı İptal Et\" penceresi \"... tazminat çalıştırması (N daire, ...) iptal edilir: henüz iptal edilmemiş tüm kalemlere ters kayıt yazılır. Sonra aynı ay yeniden hesaplanabilir.\" der; sonra \"<Ay> gecikme tazminatı çalıştırması iptal edildi.\" çıkar, kalemler ters kayıtla düzeltilir (silinmez; satırlarda \"İptal edildi\"). Yalnız SON çalıştırma iptal edilebilir (diğerleri için \"Bu çalıştırma iptal edilemiyor: yalnızca son (aktif) tazminat çalıştırması iptal edilir...\"). Aylar sırayla hesaplanır, boşluk/tekrar olmaz; tazminat çalıştırması varken ayı yeniden açmak \"Bu ay yeniden açılamaz: sonraki aylar için tazminat çalıştırması var. Önce çalıştırmayı iptal edin.\" ile reddedilir. Denetim Kaydı'nda \"Gecikme tazminatı yazıldı\" ve \"Gecikme tazminatı iptal edildi\" satırları görünür.",
           "rol_notu": "Site yöneticisi / Süper kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3215,7 +3215,7 @@
           "beklenen": "Kartta \"Hukuk onayı bekleniyor\" başlığı ve \"Borç hatırlatma, hukuki doğrulama tamamlanınca kullanıma açılır. Şimdilik bu özellik kullanılamıyor.\" yazar; \"Borç Hatırlat\" düğmesi yoktur. Ayarlarda \"Hukuk onayı bekleniyor. Borç hatırlatma onay tamamlanana dek açılamaz.\" uyarısı çıkar ve \"Borç hatırlatma kullanılsın\" anahtarı pasiftir. Hiçbir e-posta gönderilmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "`finance.legal_ok` KAPALI (varsayılan)",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3228,7 +3228,7 @@
           "beklenen": "Bölüm \"Bildirim Tercihleri\" başlığıyla \"Duyuruları ve borç hatırlatmalarını nasıl almak istediğinizi seçin.\" yazar. \"Borç hatırlatma e-postaları\" anahtarının açıklaması: \"Aidat borcunuz için site yönetiminin gönderdiği hatırlatma e-postaları. Kapalıyken bu hatırlatmalar e-postayla gelmez; duyurular ve borç bilgileriniz uygulamada görünmeye devam eder.\" İki anahtar birbirinden BAĞIMSIZDIR (biri değişince diğeri değişmez) ve kalıcıdır. E-postadan abonelikten çıkılmışsa \"E-posta bildirimleri e-postadaki bağlantıyla durduruldu.\" notu görünür. \"Telefon bildirimi\" satırı ayrıdır.",
           "rol_notu": "Daire sakini / Site yöneticisi / Bireysel kullanıcı",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3240,7 +3240,7 @@
           "beklenen": "Anahtar açıklaması \"E-posta ile bilgilendirme; her gönderim önizlenir ve onaylanır.\" Sınır dışı değerde \"Değer 1 ile 120 arasında olmalı.\" (ve benzerleri); en az tutar 1,00 ₺'den küçükse \"En az vadesi geçmiş tutar en az 1,00 ₺ olmalıdır.\" çıkar. Sunucuda e-posta yapılandırılmamışsa \"E-posta gönderimi bu sunucuda yapılandırılmamış; hatırlatma gönderilemez.\" uyarısı görünür. Kayıttan sonra Daireler sekmesindeki kartta \"En az ... ve N gün gecikmiş borç • N günde bir • en çok N ardışık hatırlatma\" özeti yazar.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "`finance.legal_ok` AÇIK (avukat onayı sonrası) ve yalnız bir TEST sitesi; sunucuda e-posta (SMTP) yapılandırılmış",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3253,7 +3253,7 @@
           "beklenen": "Pencere \"Borç Hatırlat\": \"Vadesi geçmiş borcu olan dairelerin sorumlularına bilgilendirme e-postası gönderilir. İleti tanıtım içermez; konu satırında tutar, ad ya da daire yazmaz. Önce önizleme gösterilir.\" Tonlar \"Nazik hatırlatma\" (\"Merhaba,\") ve \"Resmî hatırlatma\" (\"Sayın site sakini\"); not bağlantı/alan adı/e-posta içeremez (\"Not bağlantı, alan adı ya da e-posta adresi içeremez.\") ve en çok 300 karakterdir. Önizleme hiçbir şey göndermez: \"N daire, M kişi\", \"K kişiye tutarlı, L kişiye tutarsız ileti gider.\", \"Toplam vadesi geçmiş: ...\" ve adres/ad GÖSTERİLMEZ. \"Gönderilmeyenler\" sayıları: adresi olmayan kişi; e-posta tercihi kapalı / abonelikten çıkmış kişi; aynı adrese zaten gidecek (tekrar); yedi günlük adres sınırına takılan; tutarı eşiğin altında kalan daire; gecikme günü eşiğin altında kalan daire; son hatırlatmadan beri yeterli süre geçmemiş daire; ardışık hatırlatma sınırına ulaşan daire; muaf listesindeki daire; alıcısı bulunamayan daire. Sınıra ulaşan daireler için \"Elden takip: N daire ardışık hatırlatma sınırına ulaştı; e-posta gitmez, yönetimce elden takip edilmelidir.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Hatırlatma ayarı açık; vadesi eşiği aşmış borcu olan daireler (sorumluları e-postalı kişiler); biri doğrulanmış hesap e-postalı, biri hesapsız (yönetimin girdiği e-posta) kişi",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3267,7 +3267,7 @@
           "beklenen": "Onay penceresi \"N kişiye (M daire için) borç hatırlatma e-postası gönderilecek. Gönderim başlayınca geri alınamaz; yalnız henüz gönderilmemiş iletiler iptal edilebilir.\" der; sonra \"Hatırlatma gönderimi başlatıldı: N kişi, M daire. İlerlemeyi Hatırlatma Geçmişi'nden izleyebilirsiniz.\" çıkar. E-posta konusu \"[<Site adı>] Ödeme hatırlatması\"dır (tutar, ad, daire YOK). Gövde \"Merhaba,\" (ya da \"Sayın site sakini,\") ile başlar, \"<Site> için <daire> dairesine ait vadesi geçmiş ödeme görünüyor.\" der; tutar satırı (\"Vadesi geçmiş tutar: 1.250,00 ₺ (en eski vade: GG.AA.YYYY).\") YALNIZ doğrulanmış hesap e-postasına gider, diğer adreslere \"Güncel tutar için uygulamadaki \"Borcum\" bölümüne bakabilir veya site yönetimine başvurabilirsiniz.\" yazar. \"Ödemeyi yaptıysanız bu iletiyi dikkate almayın; ...\" kapanışı, varsa \"Yönetim notu: ...\", ve altbilgide \"Bu ileti bir tanıtım iletisi değildir; site yönetiminin aidat/avans kayıtlarına ilişkin bilgilendirmesidir.\" ile abonelikten çıkma bağlantısı bulunur. Aynı gün ikinci çalıştırma \"Bugün zaten bir hatırlatma gönderildi. Günde en çok bir çalıştırma yapılabilir.\" ile reddedilir; aile üyesi ve aynı adrese ikinci ileti gönderilmez.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Bir önceki madde; alıcı olarak kendi test e-posta adresiniz olan bir dairenin sorumlusu",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3281,7 +3281,7 @@
           "beklenen": "Geçmiş \"Çalıştırmalar\" altında her çalıştırma için durum (\"Gönderiliyor\" / \"Tamamlandı\" / \"İptal edildi\"), \"N daire • M kişi\", ton ve sayılar (\"Gönderilen\", \"Bekleyen\", \"Başarısız\", \"Adresi olmayan\", \"Tercih nedeniyle atlanan\", \"Tekrar adres\", \"Sınıra takılan\", \"Güncel olmadığı için gönderilmeyen\", \"İptal edilen\") gösterilir; alıcı adı/adresi GÖRÜNMEZ. İptal penceresi \"Henüz gönderilmemiş (bekleyen) iletiler iptal edilir. Yolda olan iletiler sonuçlanır; zaten gönderilenler geri alınamaz.\" der; sonra \"Bekleyen hatırlatmalar iptal edildi.\" çıkar. Kurul üyesi geçmişi okur ama \"Borç Hatırlat\", \"Muaf Daireler\" ve iptal düğmelerini görmez.",
           "rol_notu": "Site yöneticisi / Yönetim kurulu",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3295,7 +3295,7 @@
           "beklenen": "Ekstreden \"<Daire> borç hatırlatmalarından muaf tutuldu.\" çıkar; pencere \"Muaf tutulan daireye borç hatırlatma e-postası gönderilmez. İstediğiniz zaman muafiyeti kaldırabilirsiniz.\" der ve muafsa \"Bu daire borç hatırlatmalarından muaf.\" ile \"Muafiyeti Kaldır\" sunar (\"<Daire> yeniden borç hatırlatmalarına dahil edildi.\"). Önizlemede \"Muaf listesindeki daire\" sayısı artar ve o daire alıcı olmaz. \"Hatırlatmadan Muaf Daireler\" penceresi \"Anlaşmazlık ya da dava altındaki daireleri buraya ekleyin; muaf dairelere borç hatırlatması gönderilmez.\" der; boşken \"Muaf daire yok.\"",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         },
         {
@@ -3308,7 +3308,7 @@
           "beklenen": "Tercih kapalıyken o kişi alıcı sayılmaz: \"E-posta tercihi kapalı / abonelikten çıkmış kişi\" sayısına girer ve ileti gitmez; tercih açılınca bir sonraki önizlemede alıcı olur. Abonelikten çıkış (e-posta bağlantısıyla) ORTAK bastırma listesine yazar: o adrese duyuru e-postaları da durur (sayfa \"site duyuru ve borç hatırlatma e-postaları\" der). Sakinin uygulamadaki duyuru ve \"Borcum\" bilgisi bundan etkilenmez.",
           "rol_notu": "Daire sakini",
           "on_kosul": "Hatırlatma gönderilebilir durumda; sakin hesabının profilinde \"Borç hatırlatma e-postaları\" KAPALI",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         }
       ]
@@ -3317,7 +3317,7 @@
       "id": "F16",
       "baslik": "Hesap silme ve veri indirme: yeni modüllerin etkisi",
       "durum": "planli",
-      "ozet": "Belgeler, makbuz, aidat hatırlatma ve telefon bildirimi eklendikten sonra \"Hesabımı Sil\" önizlemesi ve \"Verilerimi İndir\" dosyası bunları da kapsar. Aynı konular SAHA_KONTROL_LISTESI.md 80. bölümündedir (F12'deki hesap silme/veri indirme denemelerinin devamıdır). Silinmesinde sakınca olmayan TEST hesaplarıyla deneyin. Sürüm yayınlanınca denenir.",
+      "ozet": "Belgeler, makbuz, aidat hatırlatma ve telefon bildirimi eklendikten sonra \"Hesabımı Sil\" önizlemesi ve \"Verilerimi İndir\" dosyası bunları da kapsar. Aynı konular SAHA_KONTROL_LISTESI.md 80. bölümündedir (F12'deki hesap silme/veri indirme denemelerinin devamıdır). Silinmesinde sakınca olmayan TEST hesaplarıyla deneyin. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F16.01",
@@ -3329,7 +3329,7 @@
           "beklenen": "\"Saklanacaklar\" kartında hesapta belge yüklemişse \"Yüklediğiniz belgeler (N dosya sürümü) site yönetiminde kalır (belgeler siteye aittir); yükleyen adı \"Silinmiş Kullanıcı\" olarak görünür.\" maddesi; bir siteye/daireye bağlıysa \"Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.\" maddesi yazar. \"Silinecekler\" kartında bekleyen aidat hatırlatma e-postası varsa \"Size gönderilmek üzere bekleyen aidat hatırlatma e-postalarının (N) kayıtlarındaki e-posta adresiniz silinir; bu hatırlatmalar gönderilmez.\" maddesi yazar. Belge yüklememiş hesapta belge maddesi hiç çıkmaz (sıfır sayılı madde yazılmaz).",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Silinmesinde sakınca olmayan TEST hesabı: en az bir belge yüklemiş (yönetici) ya da bir daireye bağlı (sakin); varsa bekleyen aidat hatırlatması olan",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3342,7 +3342,7 @@
           "beklenen": "Belge SİLİNMEZ ve sakinlerce açılmaya devam eder; ayrıntıda yükleyen adı \"Silinmiş Kullanıcı\" görünür. Makbuz ve tahsilat kayıtları ekstrede aynen durur (makbuzdaki ad anonimleştirilmez). Hesapla ilgili bekleyen aidat hatırlatması gönderilmez.",
           "rol_notu": "Site yöneticisi",
           "on_kosul": "Silinmesinde sakınca olmayan, başka yöneticisi olan sitede ikinci bir yönetici TEST hesabı; bu hesabın yüklediği bir belge ve düzenlediği/ödediği bir makbuz var",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3355,7 +3355,7 @@
           "beklenen": "\"uploaded_documents\" her satırda yalnız `document_id`, `version_no`, `site_code`, `site_name`, `category`, `file_name`, `mime_type`, `size_bytes`, `version_status`, `recorded_at`, `completed_at` alanlarını taşır: dosya adı, tür, boyut, tarih, kategori ve sürüm numarası VAR; belgenin BAŞLIĞI, dosya içeriği, durumu/silinme zamanı, kitle ve sürüm notu YOKTUR. \"receipts\" yalnız numara, tür, durum, tutar, tarihler ve daire bilgisidir (ödeyen adı, düzenleyen yönetici, doğrulama kodu YOK). \"finance_reminders_received\" yalnız çalıştırma tarihi, ton, durum ve daire sayısını taşır (e-posta metni, tutar, not, adres özeti YOK). \"notification_preferences\" içinde `email_announcements`, `email_finance_reminders` ve `push_*` alanları bulunur. \"excluded\" listesi bunların neden dışarıda kaldığını Türkçe açıklar (örn. \"Yüklediğiniz belgelerin dosya içerikleri, depolama anahtarları, içerik özetleri (hash), kitle / hedef bilgisi ve sürüm notları: ...\"; \"Makbuzlar ve tahsilat belgeleri: ...\"; \"Aidat hatırlatma e-postaları: ...\").",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Belge yüklemiş ve/veya makbuzu olan, aidat hatırlatması almış (varsa) TEST hesabı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3368,7 +3368,7 @@
           "beklenen": "\"push_devices\" her cihaz için yalnız platform, uygulama sürümü, bildirimin açık olup olmadığı ve tarihleri taşır; bildirim jetonu ve kurulum kimliği dosyada YOKTUR (\"excluded\" listesinde bu açıklanır). Silme önizlemesinde \"Telefon bildirimi için kayıtlı cihazlarınız (N) ve bunların bildirim jetonları ile bekleyen telefon bildirimleriniz silinir.\" maddesi çıkar.",
           "rol_notu": "Site yöneticisi / Daire sakini",
           "on_kosul": "Telefon bildirimi (Firebase) kurulu bir sürüm ve bu hesapta kayıtlı en az bir bildirim cihazı",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "planli"
         }
       ]
@@ -3686,6 +3686,229 @@
           "on_kosul": "",
           "yeni": false,
           "gelistirme": "yakinda"
+        }
+      ]
+    },
+    {
+      "id": "F17",
+      "baslik": "İş Takibi (talepler: arıza, bakım, şikayet/öneri)",
+      "durum": "hazir",
+      "ozet": "Sakin arıza/bakım/şikayet talebi açar; yönetici ve görevli atar, durumu ilerletir, iç not ve sakine görünen yorum yazar; yönetim kurulu salt okur. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar. Dosya/fotoğraf eki, e-posta ve telefon bildirimi bu sürümde YOKTUR. Ayrıntı: docs/PLATFORM_IS_TAKIBI.md. Canlıdadır; denenebilir.",
+      "maddeler": [
+        {
+          "id": "F17.01",
+          "baslik": "Modülü siteye açma ve menüler",
+          "adimlar": [
+            "Site yöneticisi \"Modüller\" ekranından İş Takibi için talep gönderir; süper kullanıcı talebi onaylar (ya da doğrudan açar).",
+            "Yönetici ve bir sakin hesabıyla menüye bakın."
+          ],
+          "beklenen": "Modül açılınca yöneticide/görevlide/kurulda \"Talepler\", sakinde \"Taleplerim\" menüsü görünür. Modül kapalıyken bu menüler yoktur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.02",
+          "baslik": "Sakin talep açar",
+          "adimlar": [
+            "Sakin hesabıyla \"Taleplerim\" → \"Yeni Talep\".",
+            "Kategori (arıza/bakım/şikayet-öneri/diğer), konum, başlık ve açıklama yazın; kaydedin."
+          ],
+          "beklenen": "Talep listede \"Yeni\" durumuyla görünür. Başlık ve açıklama boşsa kayıt reddedilir ve nedeni yazılır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.03",
+          "baslik": "Yönetici talepleri görür ve süzer",
+          "adimlar": [
+            "Yönetici hesabıyla \"Talepler\"i açın.",
+            "Durum, kategori, öncelik, \"Bana/Atanmamış\" ve arama kutusunu deneyin."
+          ],
+          "beklenen": "Sitedeki tüm talepler listelenir; süzgeçler listeyi daraltır. Başka sitenin talebi hiç görünmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.04",
+          "baslik": "Atama ve durum değişikliği",
+          "adimlar": [
+            "Bir talebi açın; kendinize ya da bir görevliye atayın; önceliği ve hedef tarihi belirleyin.",
+            "Durumu sırayla İşlemde → Beklemede → Çözüldü → Kapandı yapın; \"Değişiklikleri Kaydet\" deyin.",
+            "Sakin hesabıyla \"Taleplerim\"e dönün."
+          ],
+          "beklenen": "Sunucunun izin vermediği geçiş seçeneklerde yoktur. Kapandı/iptal sonrası yorum yazılamaz. Sakinin listesinde güncelleme göstergesi çıkar; açınca kaybolur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.05",
+          "baslik": "İç not ve sakine görünen yorum",
+          "adimlar": [
+            "Yönetici olarak bir talebe önce \"iç not\" (varsayılan), sonra \"Sakine görünür\" seçerek yorum yazın.",
+            "Sakin hesabıyla aynı talebi açın."
+          ],
+          "beklenen": "Sakin yalnız \"Sakine görünür\" yorumları görür; iç not hiç görünmez. Sakin de herkese açık yorum yazabilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.06",
+          "baslik": "Sakin kendi talebini iptal eder; başkasınınkini göremez",
+          "adimlar": [
+            "Sakin hesabıyla \"Yeni\" durumundaki talebi iptal edin.",
+            "İkinci bir sakin hesabıyla ilk sakinin talebine ulaşmayı deneyin."
+          ],
+          "beklenen": "Kendi \"Yeni\" talebi iptal edilir (işlemde olan iptal edilemez). Başka sakinin talebi listede ve doğrudan açılışta bulunamaz (404).",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.07",
+          "baslik": "Yönetim kurulu salt okur; görevli kapsamı",
+          "adimlar": [
+            "Kurul hesabıyla \"Talepler\"i açın.",
+            "Görevli hesabıyla açın (kendisine atanmış ve atanmamış talepleri görür)."
+          ],
+          "beklenen": "Kurulda ekleme/atama/yorum düğmesi yoktur, \"yalnızca görüntüleyebilirsiniz\" notu çıkar; iç notlar ve sakin telefonu görünmez. Görevli yalnız kendine atanmış ya da atanmamış talepleri işler.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.08",
+          "baslik": "Sınırlar ve hesap silme (bilgi)",
+          "adimlar": [
+            "Bir sakin kısa sürede çok sayıda talep açmayı deneyin (geliştirici testi).",
+            "Hesabı silinen bir görevlinin açık talepleri."
+          ],
+          "beklenen": "Kişi başı sitede en çok 30 açık talep, saatte 20 yeni talep. Silinen görevlinin açık talepleri atamasız kalır. Hesabı silinen sakinin talepleri sitede kalır (açan \"Silinmiş Kullanıcı\"), dışa aktarma dosyasında kendi talepleri ve yorumları bulunur.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F18",
+      "baslik": "Rezervasyon ve Konsiyerj",
+      "durum": "hazir",
+      "ozet": "Yönetici ortak alan tanımlar (kapasite, açık saatler, slot, onay modu, iptal süresi, kişi limitleri); sakin boş slotlara rezervasyon yapar ve konsiyerj hizmet talebi açar. Ücret/ödeme YOKTUR. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar. Ayrıntı: docs/PLATFORM_REZERVASYON.md. Canlıdadır; denenebilir.",
+      "maddeler": [
+        {
+          "id": "F18.01",
+          "baslik": "Modülü siteye açma ve menüler",
+          "adimlar": [
+            "Süper kullanıcı \"Rezervasyon ve Konsiyerj\" modülünü siteye açar (yönetici talep eder).",
+            "Yönetici ve sakin menülerine bakın."
+          ],
+          "beklenen": "Yönetici/görevli/kurulda \"Rezervasyonlar\", sakinde \"Rezervasyon\" menüsü görünür. Modül kapalıyken menü yoktur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.02",
+          "baslik": "Ortak alan tanımlama (yalnız yönetici)",
+          "adimlar": [
+            "Yönetici olarak \"Rezervasyonlar\" → Alanlar → ekle: ad, kapasite, haftalık açık gün ve saatler, slot süresi, en az/en çok slot, kaç gün önceden, onay modu, iptal süresi, kişi limitleri."
+          ],
+          "beklenen": "Alan kaydedilir ve sakinin alan listesinde görünür. Görevli hesabında alan ekleme/düzenleme düğmesi YOKTUR. Pasif alan sakine görünmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.03",
+          "baslik": "Sakin boş slotları görür ve rezervasyon yapar",
+          "adimlar": [
+            "Sakin hesabıyla Rezervasyon → alan → tarih seçin.",
+            "Boş bir slotu seçip rezervasyon yapın (onay modu \"otomatik\")."
+          ],
+          "beklenen": "Boş/dolu slotlar görünür; rezervasyon hemen \"Onaylandı\" olur ve \"Rezervasyonlarım\"da listelenir. Kapalı saate, geçmişe veya izin verilenden uzak tarihe rezervasyon yapılamaz.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.04",
+          "baslik": "Onaylı mod: bekle, onayla, reddet",
+          "adimlar": [
+            "Alanın onay modunu \"yönetici onaylı\" yapın.",
+            "Sakin rezervasyon yapar; yönetici \"Rezervasyonlar\"da \"Bekleyen\" süzgeciyle onaylar, bir başkasını gerekçeyle reddeder."
+          ],
+          "beklenen": "Sakinde \"Onay bekliyor\" görünür; onay sonrası \"Onaylandı\", ret sonrası gerekçeli \"Reddedildi\". Ret ve yönetici iptalinde gerekçe zorunludur. Bekleyen rezervasyon da kapasiteyi tutar.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.05",
+          "baslik": "Kapasite ve çakışma",
+          "adimlar": [
+            "Kapasitesi 1 olan bir alanda aynı saati iki farklı sakin hesabıyla (art arda ya da aynı anda) rezerve etmeyi deneyin."
+          ],
+          "beklenen": "İkincisi \"dolu\" hatasıyla reddedilir; kapasite aşılmaz.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.06",
+          "baslik": "Sakin iptali ve iptal süresi",
+          "adimlar": [
+            "Sakin olarak kendi rezervasyonunu iptal edin.",
+            "Alanın iptal süresi içindeki (başlangıca çok yakın) bir rezervasyonu iptal etmeyi deneyin."
+          ],
+          "beklenen": "Süre içinde iptal olur ve kapasite geri açılır. Süre dolduysa iptal düğmesi pasiftir ve nedeni yazar. Başkasının rezervasyonu görünmez.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.07",
+          "baslik": "Konsiyerj talebi",
+          "adimlar": [
+            "Sakin: Konsiyerj → yeni talep (paket teslim, misafir hazırlığı, temizlik, taşıma, diğer), not ve isteğe bağlı zaman.",
+            "Yönetici/görevli: durumu Hazırlanıyor → Tamamlandı yapar, sakine görünen kısa not yazar."
+          ],
+          "beklenen": "Sakin talebini ve durum/notu görür; açıkken iptal edebilir. Kurul salt okur, düğme yoktur.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.08",
+          "baslik": "Rol sınırları ve hesap silme (bilgi)",
+          "adimlar": [
+            "Görevli ve kurul hesaplarıyla ekranı kontrol edin.",
+            "Gelecekte onaylı rezervasyonu olan bir sakinin hesabını (test hesabı) silin."
+          ],
+          "beklenen": "Görevli rezervasyonu onaylar/reddeder ama alan tanımlayamaz; kurul yalnız okur ve sakin telefonunu görmez. Silinen hesabın gelecekteki bekleyen/onaylı rezervasyonları ve açık konsiyerj talepleri otomatik iptal olur; kayıtlar sitede kalır (\"Silinmiş Kullanıcı\"), dışa aktarma dosyasında kendi rezervasyonları bulunur.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     }
