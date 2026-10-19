@@ -2198,3 +2198,22 @@ Masaüstü etiketleme aracı tek pencereli, sol menülü yeni arayüze geçti: E
 - [ ] **81.11. Animasyon Efektleri Kapalıyken:**
   - **Nasıl Test Edilir:** Windows Ayarlar → Erişilebilirlik → Görsel efektler → "Animasyon efektleri"ni kapatıp uygulamayı yeniden açın; sayfalar arasında geçin, bir kimlik okuyun.
   - **Beklenen Sonuç:** Sayfa geçişleri, bildirimler ve karekod animasyonsuz, anında görünür; işlevler aynı çalışır.
+
+---
+
+## 82. 🌐 Cihaz Testi "Genel IP (WAN)" Alanı Dolmuyor — Açık Hata (2026-10-19)
+
+Cihaz Etiketleyici → "Cihaz testi" sayfasındaki "Genel IP (WAN)" alanı şu an hiç dolmuyor. Neden: araç kartın genel IP'sini tanımsız bir adresten (`API_BASE_URL/api/devices`) istiyor, bu yüzden istek hiç gönderilmiyor. Sunucu kartın genel IP'sini aslında tutuyor (`device_runtime_status.public_ip`, MQTT köprüsü yazar), ama bunu şirket anahtarıyla (`X-Company-Key`) okunabilir şekilde veren bir uç yok; bu bilgi yalnızca yönetici oturumu isteyen uçlardan dönüyor. Bu hata henüz düzeltilmedi; sayfadaki diğer alanlar etkilenmez.
+
+- [ ] **82.1. Mevcut Durumu Doğrula (Bilinen Hata):**
+  - **Nasıl Test Edilir:** Rol: Şirket (üretim) bilgisayarı. Wi-Fi'ye ve MQTT'ye bağlı (internete çıkan) bir kapı kartını USB ile bağlayın. Cihaz Etiketleyici → "Cihaz testi" → portu seçip "Bağlan"a basın; kart durum bloğunu yazana kadar bekleyin (gerekirse kartı yeniden başlatın).
+  - **Beklenen Sonuç (şu an):** Cihaz kimliği, Yerel IP, MQTT gibi alanlar dolar; "Genel IP (WAN)" alanı "-" olarak kalır. Uygulama donmaz, hata penceresi çıkmaz.
+- [ ] **82.2. Genel IP'nin Sunucuda Var Olduğunu Doğrula:**
+  - **Nasıl Test Edilir:** Rol: Süper kullanıcı / Site yöneticisi. 82.1'deki kartın genel IP (WAN) bilgisine mobil uygulamada (yönetici hesabıyla) kartın durum bilgisinden bakın.
+  - **Beklenen Sonuç:** Mobil uygulamada genel IP görünüyorsa veri sunucuda var demektir; sorun yalnızca masaüstü aracının bu bilgiye erişememesidir. Görünmüyorsa sorun daha geniştir (sunucu kartın genel IP'sini hiç almıyor) ve düzeltmeye bu da eklenmelidir.
+- [ ] **82.3. Düzeltmeden Sonra Kabul Ölçütü (Düzeltme Yapılınca İşaretlenir):**
+  - **Nasıl Test Edilir:** Düzeltilmiş sürümle 82.1 adımlarını tekrarlayın. Sonra `company_qr_tool/.env` içindeki `COMPANY_API_KEY` satırını geçici olarak kaldırıp uygulamayı yeniden açın ve tekrar deneyin. Son olarak bilgisayarın internetini kesip deneyin. Bitince anahtarı geri koyun.
+  - **Beklenen Sonuç:** Durum bloğu geldikten birkaç saniye içinde "Genel IP (WAN)" alanı kartın genel IP'siyle dolar (değer kısa süre vurgulanır) ve 82.2'de görülen değerle aynıdır; yalnızca bağlı kartın IP'si gösterilir, başka kartınki gösterilmez. Anahtar yokken ya da sunucuya ulaşılamazken alan "-" kalır, uygulama donmaz ve hata penceresi çıkmaz.
+- [ ] **82.4. (Geliştirici) Düzeltme Kapsamı ve Doğrulaması:**
+  - **Nasıl Test Edilir:** Sunucuya şirket anahtarıyla (`requireCompanyAccess`) korunan, tek bir cihaz kimliği için yalnızca genel IP'yi (ve son görülme zamanını) döndüren salt okunur bir uç ekleyin (ör. `GET /api/company/devices/:deviceUid/runtime`). `company_qr_tool/app.py` içindeki `DeviceTesterPage._fetch_public_ip` bu uca `company_request_headers` ile istek atsın; tanımsız `API_BASE_URL` kaldırılsın. server klasöründe `npm test && npm run lint`; `company_qr_tool` için `python -m py_compile app.py ui_kit.py` çalıştırın.
+  - **Beklenen Sonuç:** Uç anahtarsız istekte 401, geçersiz kimlikte 400, bilinmeyen cihazda 404 döner; yanıt yalnızca istenen cihazın genel IP'sini içerir (cihaz listesi, kullanıcı ya da site bilgisi dönmez). Testler ve lint yeşil, derleme hatasız.
