@@ -113,6 +113,15 @@ enum SirketMenuItem {
   /// Anket ve Oylama sakin ekranı "Anketler". Rol listesinde YOKTUR; alıcısı olabilecek ve `survey` modülü AÇIK
   /// sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Anket ve Oylama"nın altına).
   anket,
+  /// Ziyaretçi ve Kargo yönetim / görevli ekranı. Rol listesinde YOKTUR; `visitor_log` modülü AÇIK olan sitenin
+  /// yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems] ile
+  /// eklenir ("Rezervasyon"un, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
+  ziyaretciKayitlari,
+
+  /// Ziyaretçi ve Kargo sakin ekranı (kendi dairesinin kayıtları; okunmamış sayısı rozetle). Rol listesinde YOKTUR;
+  /// alıcısı olabilecek ve `visitor_log` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir
+  /// (yönetim öğesinin altına).
+  ziyaretcilerim,
 }
 
 class YanMenu extends StatelessWidget {
@@ -510,6 +519,12 @@ List<SirketMenuItem> _withExtras(
     if (extra == SirketMenuItem.anketler || extra == SirketMenuItem.anket) {
       for (final above in <SirketMenuItem>[
         if (extra == SirketMenuItem.anket) SirketMenuItem.anketler,
+    // "Ziyaretçi ve Kargo" (yönetim / görevli ve sakin) "Rezervasyon" / "Rezervasyonlar" / "Taleplerim" / "Talepler" /
+    // "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
+    // varsa yönetim öğesinin altına.
+    if (extra == SirketMenuItem.ziyaretciKayitlari || extra == SirketMenuItem.ziyaretcilerim) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.ziyaretcilerim) SirketMenuItem.ziyaretciKayitlari,
         SirketMenuItem.rezervasyon,
         SirketMenuItem.rezervasyonlar,
         SirketMenuItem.taleplerim,
@@ -670,6 +685,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Anket ve Oylama';
     case SirketMenuItem.anket:
       return 'Anketler';
+    case SirketMenuItem.ziyaretciKayitlari:
+      return 'Ziyaretçi ve Kargo';
+    case SirketMenuItem.ziyaretcilerim:
+      return 'Ziyaretçi ve Kargo';
   }
 }
 
@@ -737,6 +756,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.poll_rounded;
     case SirketMenuItem.anket:
       return Icons.how_to_vote_rounded;
+    case SirketMenuItem.ziyaretciKayitlari:
+      return Icons.door_front_door_rounded;
+    case SirketMenuItem.ziyaretcilerim:
+      return Icons.local_shipping_rounded;
   }
 }
 

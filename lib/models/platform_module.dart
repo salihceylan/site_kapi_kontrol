@@ -17,6 +17,8 @@ abstract final class PlatformModuleCodes {
 
   /// Anket ve Oylama (F11.01). Varsayılan KAPALI.
   static const String survey = 'survey';
+  /// Ziyaretçi ve Kargo (kapı kaydı; F11.03). Varsayılan KAPALI.
+  static const String visitorLog = 'visitor_log';
 }
 
 DateTime? _parseDate(Object? raw) {

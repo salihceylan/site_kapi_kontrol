@@ -156,6 +156,10 @@ import 'package:site_kapi_kontrol/services/site_application_tracker.dart';
 import 'package:site_kapi_kontrol/ui/helpers/site_application_flow.dart';
 import 'package:site_kapi_kontrol/ui/views/site_applications_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/site_application_status_card.dart';
+import 'package:site_kapi_kontrol/models/visitor_log_models.dart';
+import 'package:site_kapi_kontrol/services/visitor_log_api.dart';
+import 'package:site_kapi_kontrol/ui/views/visitor_manager_view.dart';
+import 'package:site_kapi_kontrol/ui/views/visitor_resident_view.dart';
 
 
 
@@ -261,6 +265,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<ReservationResidentViewState> _reservationResidentKey = GlobalKey<ReservationResidentViewState>();
   final GlobalKey<SurveyManagerViewState> _surveyManagerKey = GlobalKey<SurveyManagerViewState>();
   final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
+  final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
+  final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
+
+  // Ziyaretçi ve Kargo: sakin çekmece rozeti (`GET /app/visitor-entries/summary`), duyuru kalıbındaki gibi
+  // AdaptivePoller ile (ön planda ~60 sn; `visitor_log` modülü açık sitesi olmayan kullanıcıda ağ isteği yok).
+  int _visitorUnread = 0;
+  bool _visitorBadgeWasEligible = false;
+  late final VisitorLogService _visitorBadgeService =
+      VisitorLogService(authService: widget.authService);
+  late final AdaptivePoller _visitorBadgePoller = AdaptivePoller(
+    interval: const Duration(seconds: 60),
+    isActive: _isModulePollingActive,
+    poll: _pollVisitorUnread,
+  );
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -533,6 +551,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // Arka plandayken yeni duyuru gelmiş olabilir: ön plana dönüşte hemen çek.
       _announcements.resetBackoff();
       unawaited(_announcements.refresh());
+      // Arka plandayken yeni kargo / ziyaretçi kaydı gelmiş olabilir: sakin rozeti hemen tazelenir.
+      _refreshVisitorBadge();
       // Arka plandayken başvuru karara bağlanmış olabilir: bekleyen başvuru biliniyorsa hemen oku.
       if (_siteApplications.pending != null) {
         _siteApplications.resetBackoff();
@@ -772,6 +792,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_reservationResidentSites(role).isNotEmpty) SirketMenuItem.rezervasyon,
         if (_canAccessSurveyManage(role)) SirketMenuItem.anketler,
         if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
+        if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
+        if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -936,6 +958,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// "Anketler" (sakin) ekranındaki siteler: alıcısı olabilecek ve `survey` modülü AÇIK siteler (Rezervasyon kuralı).
   List<PeopleSite> _surveyResidentSites(UserRole role) {
+  // --- Ziyaretçi ve Kargo (F11.03) ---
+
+  /// "Ziyaretçi ve Kargo" (yönetim / görevli) ekranındaki siteler: `visitor_log` modülü AÇIK olan siteler. Yönetici
+  /// (yönetici modunda) ve görevli (STAFF: kapıcı / güvenlik) kayıt girer ve kapatır; kurul üyesi SALT OKUR. Süper
+  /// kullanıcıda boştur (ekran tüm siteleri çeker). FAIL-OPEN YOK: modül verisi hiç gelmediyse hiçbir site yoktur ve
+  /// menü AÇILMAZ; sitede `visitor_log` kodu yoksa modül KAPALI sayılır (katalog varsayılanı). Sunucu yine de her
+  /// çağrıda yetkiyi ve modül durumunu doğrular.
+  List<VisitorSite> _visitorManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <VisitorSite>[];
+    final canManage = _canManagePeople(role);
+    return <VisitorSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.visitorLog))
+          if (site.role == 'manager' && canManage)
+            VisitorSite(code: site.siteCode, name: site.siteName)
+          else if (site.role == 'staff')
+            VisitorSite(code: site.siteCode, name: site.siteName, access: VisitorSiteAccess.staff)
+          else if (site.isBoardMember)
+            VisitorSite(code: site.siteCode, name: site.siteName, access: VisitorSiteAccess.board),
+    ];
+  }
+
+  /// "Ziyaretçi ve Kargo" (sakin) ekranındaki siteler: alıcısı olabilecek ve `visitor_log` modülü AÇIK siteler.
+  /// Yalnız daire sakini ve sakin modundaki yönetici için; süper kullanıcı, bireysel kullanıcı ve yalnız-görevli bağ
+  /// için boş. Modül verisi yokken (fail-open) boştur.
+  List<PeopleSite> _visitorResidentSites(UserRole role) {
     if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
     switch (role) {
       case UserRole.superUser:
@@ -949,6 +997,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
         if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.survey))
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.visitorLog))
           PeopleSite(code: site.siteCode, name: site.siteName),
     ];
   }
@@ -956,6 +1005,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// "Anket ve Oylama" menüsü: süper kullanıcı ya da `survey` modülü açık bir sitede yönetici / kurul üyesi.
   bool _canAccessSurveyManage(UserRole role) =>
       role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
+  /// Yönetim menüsü: süper kullanıcı ya da `visitor_log` modülü açık bir sitede yönetici / görevli / kurul üyesi.
+  bool _canAccessVisitorManage(UserRole role) =>
+      role == UserRole.superUser || _visitorManageSites(role).isNotEmpty;
+
+  /// Sakin rozeti bir turu: modül açık sitesi olmayan kullanıcıda ağ isteği yok (rozet sıfırlanır); hata geri
+  /// çekilir. Sayı değişmedikçe sayfa yeniden kurulmaz.
+  Future<bool?> _pollVisitorUnread() async {
+    final role = widget.authService.session?.role;
+    if (role == null || _visitorResidentSites(role).isEmpty) {
+      if (_visitorUnread != 0 && mounted) setState(() => _visitorUnread = 0);
+      return null;
+    }
+    try {
+      final unread = await _visitorBadgeService.unreadCount();
+      if (!mounted) return null;
+      if (unread != _visitorUnread) setState(() => _visitorUnread = unread);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _initVisitorBadge() {
+    _visitorBadgePoller.start(immediately: true);
+    _visitorBadgeWasEligible = false;
+  }
+
+  void _disposeVisitorBadge() => _visitorBadgePoller.dispose();
+
+  /// Rozeti hemen tazeler (kayıt görüldü işaretlendi, ön plana dönüldü, çekip yenilendi).
+  void _refreshVisitorBadge() {
+    _visitorBadgePoller.resetBackoff();
+    _visitorBadgePoller.pollNow();
+  }
+
+  /// Alıcılık değişince (modül açıldı / rol çözümlendi) yoklama aralığını beklemeden bir kez tazeler.
+  void _kickVisitorBadge() {
+    final role = widget.authService.session?.role;
+    final eligible = role != null && _visitorResidentSites(role).isNotEmpty;
+    if (eligible != _visitorBadgeWasEligible) _refreshVisitorBadge();
+    _visitorBadgeWasEligible = eligible;
+  }
 
   // --- Aidat ve Finans (Faz 4a) ---
 
@@ -1085,6 +1176,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       unawaited(_announcements.refresh());
     }
     _announcementsWereEligible = eligible;
+    _kickVisitorBadge();
   }
 
   void _initAnnouncements() {
@@ -1093,6 +1185,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _announcements.start(immediately: true);
     _announcementsWereEligible = _isAnnouncementPollingEligible();
     _initPush();
+    _initVisitorBadge();
   }
 
   void _disposeAnnouncements() {
@@ -1104,6 +1197,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _announcements.stop();
     }
     _disposePush();
+    _disposeVisitorBadge();
   }
 
   // --- Telefon bildirimi (Faz 3b-B) ---
@@ -1377,6 +1471,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _surveyResidentSites(role).isNotEmpty;
     }
 
+    // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
+    // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.ziyaretciKayitlari) {
+      return _canAccessVisitorManage(role);
+    }
+    if (item == SirketMenuItem.ziyaretcilerim) {
+      return _visitorResidentSites(role).isNotEmpty;
+    }
+
     switch (role) {
 
       case UserRole.superUser:
@@ -1532,6 +1635,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.anket:
         return 'Anketler';
+      case SirketMenuItem.ziyaretciKayitlari:
+        return 'Ziyaretçi ve Kargo';
+
+      case SirketMenuItem.ziyaretcilerim:
+        return 'Ziyaretçi ve Kargo';
 
     }
 
@@ -4860,6 +4968,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.rezervasyon:
         await _reservationResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.ziyaretciKayitlari:
+        await _visitorManagerKey.currentState?.reload();
+        break;
+      case SirketMenuItem.ziyaretcilerim:
+        await _visitorResidentKey.currentState?.reload();
+        _refreshVisitorBadge();
+        break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
       case SirketMenuItem.bluetoothWifiKur:
@@ -5122,6 +5237,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             SirketMenuItem.siteBasvurulari: _moduleAccess.pendingApplicationCount ?? 0,
           if (_hasAnnouncementInbox(session.role))
             SirketMenuItem.duyurular: _announcements.unreadCount,
+          if (_visitorResidentSites(session.role).isNotEmpty)
+            SirketMenuItem.ziyaretcilerim: _visitorUnread,
         },
         badgeNouns: const <SirketMenuItem, String>{SirketMenuItem.duyurular: 'okunmamış'},
         fullName: session.fullName,
@@ -5800,6 +5917,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: _reservationResidentKey,
           authService: widget.authService,
           sites: _reservationResidentSites(session.role),
+        );
+
+      case SirketMenuItem.ziyaretciKayitlari:
+        return VisitorManagerView(
+          key: _visitorManagerKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _visitorManageSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
+        );
+
+      case SirketMenuItem.ziyaretcilerim:
+        return VisitorResidentView(
+          key: _visitorResidentKey,
+          authService: widget.authService,
+          sites: _visitorResidentSites(session.role),
+          // Kayıt görüldü işaretlenince çekmece rozeti sunucudan hemen tazelenir.
+          onUnreadChanged: _refreshVisitorBadge,
         );
 
       case SirketMenuItem.katilimVeKurulum:

@@ -48,6 +48,7 @@ class AuditLogEntry {
     'metering': 'Sayaç Okuma ve Faturalandırma',
     'online_payment': 'Online Tahsilat ve Banka Bağlantısı',
     'survey': 'Anket ve Oylama',
+    'visitor_log': 'Ziyaretçi ve Kargo',
   };
 
   static const Map<String, String> _staffRoleNames = <String, String>{
@@ -89,6 +90,7 @@ class AuditLogEntry {
             documentActionLabel(action) ??
             siteApplicationActionLabel(action) ??
             financeActionLabel(action) ??
+            visitorLogActionLabel(action) ??
             'Diğer işlem';
     }
   }
@@ -139,6 +141,9 @@ class AuditLogEntry {
         // Hedef ayar anahtarıdır (örn. `site_onboarding`); ham anahtar gösterilmez. Sunucu hedef türünü
         // tekil (`platform_setting`) yazar; çoğul yazım da kabul edilir.
         return targetId == 'site_onboarding' ? 'Site açılış modu' : 'Platform ayarı';
+      case 'visitor_entry':
+        // Ziyaretçi adı / firma / not denetim kaydına yazılmaz; yalnız numara gösterilir.
+        return _numbered('Ziyaretçi kaydı');
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;
@@ -244,4 +249,16 @@ class AuditLogPage {
           : (next == null ? null : int.tryParse(next.toString())),
     );
   }
+}
+
+/// Ziyaretçi ve Kargo (`visitor_log`) denetim eylemlerinin Türkçe başlığı; bilinmeyen eylemde null (zincirdeki
+/// sonraki üretici dener). Durum geçişi `details.status` içindedir; ad / firma / not denetim kaydına yazılmaz.
+String? visitorLogActionLabel(String action) {
+  switch (action) {
+    case 'visitor_entry.created':
+      return 'Ziyaretçi / kargo kaydı açıldı';
+    case 'visitor_entry.updated':
+      return 'Ziyaretçi / kargo kaydı güncellendi';
+  }
+  return null;
 }
