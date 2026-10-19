@@ -39,6 +39,10 @@ describe('platform katalog: sozlesme tablosu', () => {
       'online_payment',
       'survey',
       'visitor_log',
+      'card_access',
+      'plate_recognition',
+      'hgs_access',
+      'cctv_link',
     ]);
     const table = Object.fromEntries(MODULE_CATALOG.map((m) => [m.code, [m.core, m.status]]));
     assert.deepEqual(table, {
@@ -53,6 +57,10 @@ describe('platform katalog: sozlesme tablosu', () => {
       online_payment: [false, 'coming_soon'],
       survey: [false, 'available'], // Anket ve Oylama: kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
       visitor_log: [false, 'available'], // Ziyaretci ve Kargo (F11.03): kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
+      card_access: [false, 'available'], // F10: Kartli Gecis kullanilabilir (varsayilan KAPALI; super acar, yonetici modul talep eder)
+      plate_recognition: [false, 'coming_soon'],
+      hgs_access: [false, 'coming_soon'],
+      cctv_link: [false, 'coming_soon'],
     });
     assert.equal(def('door_control').name, 'Geçiş Kontrol (SmartKeyPass)');
     assert.equal(def('people').name, 'Kişi ve Daire Kayıtları');
@@ -70,6 +78,7 @@ describe('platform katalog: sozlesme tablosu', () => {
   it('publicCatalog yalnizca { code, name, description, core, status } alanlarini dondurur', () => {
     const catalog = publicCatalog();
     assert.equal(catalog.length, 10);
+    assert.equal(catalog.length, 13);
     for (const entry of catalog) {
       assert.deepEqual(Object.keys(entry), ['code', 'name', 'description', 'core', 'status']);
     }
@@ -88,6 +97,7 @@ describe('platform katalog: sozlesme tablosu', () => {
       MODULE_CATALOG.filter(isToggleable).map((m) => m.code),
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'survey'],
       ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'visitor_log'],
+      ['door_control', 'finance', 'documents', 'reservation', 'work_tracking', 'card_access'],
     );
     assert.equal(isToggleable(null), false);
   });
@@ -115,7 +125,7 @@ describe('platform katalog: enabled hesabi', () => {
   });
 
   it('status !== available ise HER ZAMAN false (satir ne derse desin)', () => {
-    for (const code of ['metering', 'online_payment']) {
+    for (const code of ['metering', 'online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
       assert.equal(computeModuleEnabled(def(code), undefined), false, code);
       assert.equal(computeModuleEnabled(def(code), { enabled: true }), false, code);
     }
@@ -188,6 +198,7 @@ describe('platform katalog: enabled hesabi', () => {
       { module_code: 'door_control', enabled: false, updated_at: when, updated_by_name: 'Ali Veli' },
     ]);
     assert.equal(list.length, 10);
+    assert.equal(list.length, 13);
     const door = list.find((m) => m.code === 'door_control');
     assert.deepEqual(door, {
       code: 'door_control',
