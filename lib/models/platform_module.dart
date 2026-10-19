@@ -14,6 +14,9 @@ abstract final class PlatformModuleCodes {
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';
   static const String onlinePayment = 'online_payment';
+
+  /// Ziyaretçi ve Kargo (kapı kaydı; F11.03). Varsayılan KAPALI.
+  static const String visitorLog = 'visitor_log';
 }
 
 DateTime? _parseDate(Object? raw) {

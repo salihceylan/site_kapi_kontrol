@@ -104,6 +104,16 @@ enum SirketMenuItem {
 
   /// Satışa hazırlık: İstemci Hataları (uygulamalardan gelen hata raporları). Yalnız süper kullanıcı.
   istemciHatalari,
+
+  /// Ziyaretçi ve Kargo yönetim / görevli ekranı. Rol listesinde YOKTUR; `visitor_log` modülü AÇIK olan sitenin
+  /// yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems] ile
+  /// eklenir ("Rezervasyon"un, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
+  ziyaretciKayitlari,
+
+  /// Ziyaretçi ve Kargo sakin ekranı (kendi dairesinin kayıtları; okunmamış sayısı rozetle). Rol listesinde YOKTUR;
+  /// alıcısı olabilecek ve `visitor_log` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir
+  /// (yönetim öğesinin altına).
+  ziyaretcilerim,
 }
 
 class YanMenu extends StatelessWidget {
@@ -496,6 +506,26 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Ziyaretçi ve Kargo" (yönetim / görevli ve sakin) "Rezervasyon" / "Rezervasyonlar" / "Taleplerim" / "Talepler" /
+    // "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
+    // varsa yönetim öğesinin altına.
+    if (extra == SirketMenuItem.ziyaretciKayitlari || extra == SirketMenuItem.ziyaretcilerim) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.ziyaretcilerim) SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.rezervasyon,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -638,6 +668,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Platform Ayarları';
     case SirketMenuItem.istemciHatalari:
       return 'İstemci Hataları';
+    case SirketMenuItem.ziyaretciKayitlari:
+      return 'Ziyaretçi ve Kargo';
+    case SirketMenuItem.ziyaretcilerim:
+      return 'Ziyaretçi ve Kargo';
   }
 }
 
@@ -701,6 +735,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.tune_rounded;
     case SirketMenuItem.istemciHatalari:
       return Icons.bug_report_rounded;
+    case SirketMenuItem.ziyaretciKayitlari:
+      return Icons.door_front_door_rounded;
+    case SirketMenuItem.ziyaretcilerim:
+      return Icons.local_shipping_rounded;
   }
 }
 
