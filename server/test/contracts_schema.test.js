@@ -162,6 +162,7 @@ describe('şema ayrıntıları', () => {
       'site_code BIGINT NOT NULL',
       'kind TEXT NOT NULL',
       'due_date DATE NOT NULL',
+      'claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()',
       'sent_at TIMESTAMPTZ,',
       'recipients INTEGER NOT NULL DEFAULT 0',
       "kind IN ('bitis', 'fesih_bildirim')",

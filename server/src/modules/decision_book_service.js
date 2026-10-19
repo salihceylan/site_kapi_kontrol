@@ -19,6 +19,7 @@ import {
   ORDER_SQL,
   accountDeleted,
   afterKeySql,
+  assertMeetingHeld,
   decisionFinal,
   decisionLimitReached,
   decisionNotFound,
@@ -382,7 +383,8 @@ export async function deleteDecision({ siteCode, rawId, actor }) {
 
 /**
  * POST .../decisions/:id/finalize -> { decision }. Taslak kesinleşir ve (site, yıl) içindeki sıradaki numarayı alır (danışma kilidi altında MAX + 1).
- * İdempotent: zaten kesin karar AYNEN döner (200; numara / zaman değişmez, audit yazılmaz).
+ * İdempotent: zaten kesin karar AYNEN döner (200; numara / zaman değişmez, audit yazılmaz). Toplantı tarihi bugünden (İstanbul) sonraki taslak kesinleştirilemez
+ * (409 DECISION_MEETING_IN_FUTURE; numara kilidi alınmaz, satır değişmez): yanlış kesinleştirme değişmez bir numara üretip resmî defterin sırasını bozardı.
  */
 export async function finalizeDecision({ siteCode, rawId, actor }) {
   const id = parsePositiveId(rawId);
@@ -395,6 +397,7 @@ export async function finalizeDecision({ siteCode, rawId, actor }) {
     if (row.status === 'kesin') {
       return;
     }
+    assertMeetingHeld(row.meeting_date);
     const year = Number(row.year);
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [numberLockKey(siteCode, year)]);
     const next = await client.query(

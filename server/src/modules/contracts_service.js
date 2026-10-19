@@ -133,7 +133,11 @@ const VENDOR_COLUMNS = `
   (SELECT COUNT(*)::INTEGER FROM site_contracts c WHERE c.site_code = v.site_code AND c.vendor_id = v.id) AS contract_count
 `;
 
-/** GET .../contract-vendors -> { items: [Vendor] }. Sıra ad (Türkçe katlamalı), id. Site başına en çok 500 firma olduğundan sayfalama yok. */
+/**
+ * GET .../contract-vendors -> { items: [Vendor] }. Sıra ad (Türkçe katlamalı), id. Site başına en çok 500 firma olduğundan sayfalama yok.
+ * q: ad, yetkili kişi VE telefon (Türkçe / büyük-küçük harf duyarsız); aramada en az 3 rakam varsa telefon ayrıca YALNIZ rakamlarıyla karşılaştırılır
+ * ("4445566" -> "0212 444 55 66" bulunur).
+ */
 export async function listVendors(siteCode, query, db = pool) {
   const filters = parseVendorListQuery(query);
   const params = [siteCode];
@@ -145,7 +149,17 @@ export async function listVendors(siteCode, query, db = pool) {
   if (filters.q) {
     params.push(`%${escapeLike(foldText(filters.q))}%`);
     const term = `$${params.length}`;
-    clauses.push(`(${foldSql('v.name')} LIKE ${term} ESCAPE '\\' OR ${foldSql('v.contact_name')} LIKE ${term} ESCAPE '\\')`);
+    const fields = [
+      `${foldSql('v.name')} LIKE ${term} ESCAPE '\\'`,
+      `${foldSql('v.contact_name')} LIKE ${term} ESCAPE '\\'`,
+      `${foldSql('v.phone')} LIKE ${term} ESCAPE '\\'`,
+    ];
+    const digits = filters.q.replace(/\D/g, '');
+    if (digits.length >= 3) {
+      params.push(`%${digits}%`);
+      fields.push(`regexp_replace(COALESCE(v.phone, ''), '[^0-9]', '', 'g') LIKE $${params.length}`);
+    }
+    clauses.push(`(${fields.join(' OR ')})`);
   }
   const result = await db.query(
     `SELECT ${VENDOR_COLUMNS} FROM contract_vendors v WHERE ${clauses.join(' AND ')} ORDER BY ${foldSql('v.name')}, v.id LIMIT ${VENDOR_LIMIT_PER_SITE}`,

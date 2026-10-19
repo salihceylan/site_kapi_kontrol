@@ -59,6 +59,7 @@ import {
   APARTMENT_PIN_ERROR_MESSAGES,
   APARTMENT_PIN_NOT_STORED_MESSAGE,
   provisionApartmentResident,
+  apartmentPinResetBody,
   resetApartmentPin,
   resetApartmentResident,
   sendApartmentCredentials,
@@ -518,7 +519,11 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
     await client.query('UPDATE devices SET owner_user_id = NULL WHERE owner_user_id = (SELECT id FROM users WHERE user_code = $1)', [targetCode]);
 
     // 2. Daire resident temizligi
-    await client.query('UPDATE apartments SET resident_user_code = NULL WHERE resident_user_code = $1', [targetCode]);
+    // Göstergeyle birlikte silinen kullanıcının iletişim e-postası ve "PIN verildi" işareti de gider (sonra açılan hesabın PIN'i eski sakine gitmesin).
+    await client.query(
+      'UPDATE apartments SET resident_user_code = NULL, resident_email = NULL, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1',
+      [targetCode],
+    );
 
     // 3. Site yoneticisi iliskileri
     await client.query('DELETE FROM site_manager_sites WHERE manager_user_code = $1', [targetCode]);
@@ -1218,11 +1223,12 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
       'apartment_resident_changed',
     );
     // Yeni daire hesabı açıldıysa PIN bu yanıtta BİR KEZ döner (apartment.resident_pin_code) ve e-posta varsa bir kez gönderilir; saklanmaz.
-    const credentialsSent = await sendIssuedApartmentPin(apartmentId, apartment.issued_pin_code);
+    // credentials_sent null + credentials_email dolu = gönderim süre sınırında bitmedi, arka planda sürüyor (SMTP PIN'i bekletmez).
+    const mail = await sendIssuedApartmentPin(apartmentId, apartment.issued_pin_code);
     if (apartment.issued_pin_code) {
       res.setHeader('Cache-Control', 'no-store');
     }
-    return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: credentialsSent });
+    return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: mail.sent, credentials_email: mail.to });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });
@@ -1240,14 +1246,14 @@ adminRouter.post('/admin/apartments/:id/reset-pin', authRequired, requireSuperUs
   const sendEmail = req.body?.send_email !== false;
 
   try {
-    const { apartment, pinCode } = await resetApartmentPin(apartmentId, { actor: req.authUser });
+    // Süper kullanıcı: PIN her durumda bir kez gösterilir (delivery 'shown').
+    const reset = await resetApartmentPin(apartmentId, { actor: req.authUser, actorIsSuper: true });
     // PIN değişti ve commit edildi: yerel kontrol belirteci yenilemesi düşerse de PIN BİR KEZ gösterilsin (aksi halde kaybolurdu).
-    await rotateLocalControlTokensForSite(Number(apartment.site_code), 'apartment_pin_reset').catch((rotateError) => {
+    await rotateLocalControlTokensForSite(Number(reset.apartment.site_code), 'apartment_pin_reset').catch((rotateError) => {
       console.error('[admin] reset_pin yerel kontrol belirteci yenilenemedi', rotateError?.code || rotateError?.message);
     });
-    const credentialsSent = sendEmail ? await sendIssuedApartmentPin(apartmentId, pinCode) : null;
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ ok: true, apartment: mapApartmentRow(apartment), pin_code: pinCode, credentials_sent: credentialsSent });
+    return res.status(200).json({ ...(await apartmentPinResetBody(apartmentId, reset, { sendEmail })), apartment: mapApartmentRow(reset.apartment) });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });

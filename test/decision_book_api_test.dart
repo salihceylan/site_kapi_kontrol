@@ -233,6 +233,10 @@ void main() {
       expect(finalErr.code, 'DECISION_FINAL');
       expect((await of(403, 'FORBIDDEN_ROLE')).message, 'Bu işlem için yetkiniz yok.');
       expect((await of(403, 'MODULE_DISABLED')).message, 'Karar Defteri bu site için kapalı.');
+      final future = await of(409, 'DECISION_MEETING_IN_FUTURE');
+      expect(future.message, 'Toplantı tarihi gelmemiş karar kesinleştirilemez.');
+      expect(future.code, 'DECISION_MEETING_IN_FUTURE');
+      expect((await of(409, 'DECISION_LIMIT_REACHED')).message, 'x', reason: 'sunucu metni (sınır sayısıyla) gösterilir');
     });
 
     test('401 oturum sonu; JSON olmayan 403 aracı katman (oturum düşmez)', () async {

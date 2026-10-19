@@ -68,6 +68,7 @@ import {
   APARTMENT_PIN_ERROR_MESSAGES,
   APARTMENT_PIN_NOT_STORED_MESSAGE,
   provisionApartmentResident,
+  apartmentPinResetBody,
   resetApartmentPin,
   resetApartmentResident,
   sendApartmentCredentials,
@@ -727,11 +728,12 @@ managerRouter.patch('/manager/apartments/:id/resident', authRequired, requireSit
       'apartment_resident_changed_by_manager',
     );
     // Yeni daire hesabı açıldıysa PIN bu yanıtta BİR KEZ döner (apartment.resident_pin_code) ve e-posta varsa bir kez gönderilir; saklanmaz.
-    const credentialsSent = await sendIssuedApartmentPin(apartmentId, apartment.issued_pin_code);
+    // credentials_sent null + credentials_email dolu = gönderim süre sınırında bitmedi, arka planda sürüyor (SMTP PIN'i bekletmez).
+    const mail = await sendIssuedApartmentPin(apartmentId, apartment.issued_pin_code);
     if (apartment.issued_pin_code) {
       res.setHeader('Cache-Control', 'no-store');
     }
-    return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: credentialsSent });
+    return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: mail.sent, credentials_email: mail.to });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });
@@ -823,14 +825,14 @@ managerRouter.post('/manager/apartments/:id/reset-pin', authRequired, requireSit
       return res.status(403).json({ error: 'Bu daireyi yonetme yetkiniz yok.' });
     }
 
-    const { apartment, pinCode } = await resetApartmentPin(apartmentId, { actor: req.authUser });
+    // Sakin parolasını kendisi belirlemişse (resident_pin_issued FALSE) yönetici PIN'i göremez: yalnız sakinin e-postasına gider.
+    const reset = await resetApartmentPin(apartmentId, { actor: req.authUser, actorIsSuper: req.authUser?.role === 'super_user' });
     // PIN değişti ve commit edildi: yerel kontrol belirteci yenilemesi düşerse de PIN BİR KEZ gösterilsin (aksi halde kaybolurdu).
-    await rotateLocalControlTokensForSite(Number(apartment.site_code), 'apartment_pin_reset_by_manager').catch((rotateError) => {
+    await rotateLocalControlTokensForSite(Number(reset.apartment.site_code), 'apartment_pin_reset_by_manager').catch((rotateError) => {
       console.error('[manager] reset_pin yerel kontrol belirteci yenilenemedi', rotateError?.code || rotateError?.message);
     });
-    const credentialsSent = sendEmail ? await sendIssuedApartmentPin(apartmentId, pinCode) : null;
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ ok: true, apartment: mapApartmentRow(apartment), pin_code: pinCode, credentials_sent: credentialsSent });
+    return res.status(200).json({ ...(await apartmentPinResetBody(apartmentId, reset, { sendEmail })), apartment: mapApartmentRow(reset.apartment) });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });

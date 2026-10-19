@@ -8,9 +8,13 @@
 //    notice_deadline − 7 <= bugün <= notice_deadline (notice_deadline = end_date − notice_days). Yalnız `aktif` (feshedilmemiş) sözleşmeler.
 //    İdempotans: contract_reminders UNIQUE (contract_id, kind, due_date); due_date = bitiş tarihi ya da fesih bildirimi son günü. Aynı hatırlatma iki kez gitmez;
 //    tarih değişirse yeni hatırlatma doğar.
-//  - Akış: kalemler satır olarak "talep edilir" (sent_at NULL) -> COMMIT -> e-postalar alıcı başına AYRI gönderilir (yöneticiler birbirinin adresini görmez) ->
-//    en az biri giderse sent_at + recipients yazılır; hiçbiri gitmezse talep satırları silinir (sonraki tikte yeniden denenir). Çökmeden kalan talepler
-//    (sent_at NULL) bir sonraki tikin başında silinir (tek çalışan kilidi altında güvenli).
+//  - Akış: kalemler satır olarak "talep edilir" (claimed_at = şimdi, sent_at NULL) -> COMMIT -> e-postalar alıcı başına AYRI gönderilir (yöneticiler birbirinin
+//    adresini görmez); İLK başarılı gönderimden HEMEN sonra sent_at yazılır (süreç o anda ölse bile sonraki tik yeniden göndermez), tur sonunda recipients
+//    yazılır. Hiçbiri gitmezse talep satırları silinir (sonraki tikte yeniden denenir).
+//  - Yarıda kalan tur (süreç ölümü: gönderim ile sent_at yazımı arası): o günün gönderilmemiş talebi (claimed_at bugün) "gönderilmiş olabilir" sayılır, site o
+//    gün yeniden e-posta ALMAZ; önceki günlerden kalan gönderilmemiş talepler tur başında silinir ve kalem ertesi gün yeniden denenir (en çok günde bir e-posta).
+//  - KİLİT SIRASI: contract_reminders'a her yazma (talep, sent_at, recipients, silme) site başına kısa bir işlemdir ve İLK ifadesi
+//    `SELECT 1 FROM sites ... FOR KEY SHARE`dir (diğer tüm yazıcılarla aynı sıra; site silme ile 40P01 olmaz). Site o arada silinmişse atlanır.
 //  - Alıcılar: sitenin yöneticileri (site_manager_sites + etkin SITE_OWNER / SITE_ADMIN üyeliği); hesap etkin, silinmemiş, e-postası DOĞRULANMIŞ ve
 //    dahili (uygulama içi) adres değil. Alıcı yoksa site atlanır (talep yazılmaz).
 //  - İçerik: site adı, firma adı, sözleşme başlığı, bitiş tarihi / fesih bildirimi son günü. TUTAR YOK. Günlüğe yalnız sayılar yazılır (ad / adres yok).
@@ -158,7 +162,44 @@ async function acquireRunnerLock(db) {
 // Tur
 // ---------------------------------------------------------------------------
 
-/** Modülü açık, bugün (İstanbul) henüz hatırlatma gönderilmemiş siteler. */
+/**
+ * Site başına kısa yazma işlemi. İLK ifade `sites FOR KEY SHARE`: diğer tüm yazıcılarla aynı kilit sırası (site silme önce site satırını kilitler, sonra
+ * hatırlatmaları CASCADE siler; biz de önce siteyi alırız -> döngü yok, 40P01 yok). Site yoksa (silinmiş) `work` çalışmaz ve null döner.
+ */
+async function withSiteTransaction(client, siteCode, work) {
+  await client.query('BEGIN');
+  try {
+    const site = await client.query(`SELECT 1 FROM sites WHERE site_code = $1 FOR KEY SHARE`, [siteCode]);
+    if (!site.rows?.[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const result = await work();
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  }
+}
+
+/**
+ * Önceki GÜNLERDEN kalan gönderilmemiş talepler (yarıda kalan tur): site başına kendi işleminde silinir, kalem bu turda yeniden denenir.
+ * Bugünün gönderilmemiş talepleri SİLİNMEZ: gönderim ile sent_at yazımı arasında süreç ölmüş olabilir; site o gün yeniden e-posta almaz.
+ */
+async function releaseStaleClaims(client, dayStart) {
+  const stale = await client.query(
+    `SELECT DISTINCT site_code FROM contract_reminders WHERE sent_at IS NULL AND claimed_at < $1::TIMESTAMPTZ ORDER BY site_code`,
+    [dayStart.toISOString()],
+  );
+  for (const row of stale.rows ?? []) {
+    await withSiteTransaction(client, Number(row.site_code), () =>
+      client.query(`DELETE FROM contract_reminders WHERE site_code = $1 AND sent_at IS NULL AND claimed_at < $2::TIMESTAMPTZ`, [Number(row.site_code), dayStart.toISOString()]),
+    );
+  }
+}
+
+/** Modülü açık, bugün (İstanbul) hatırlatma e-postası almamış ve bugün yarıda kalmış talebi olmayan siteler. */
 async function candidateSites(db, dayStart) {
   const result = await db.query(
     `
@@ -167,7 +208,7 @@ async function candidateSites(db, dayStart) {
       INNER JOIN sites s ON s.site_code = sm.site_code
       WHERE sm.module_code = $1 AND sm.enabled = TRUE
         AND NOT EXISTS (
-          SELECT 1 FROM contract_reminders r WHERE r.site_code = s.site_code AND r.sent_at >= $2::TIMESTAMPTZ
+          SELECT 1 FROM contract_reminders r WHERE r.site_code = s.site_code AND COALESCE(r.sent_at, r.claimed_at) >= $2::TIMESTAMPTZ
         )
       ORDER BY s.site_code
     `,
@@ -220,17 +261,20 @@ async function managerRecipients(db, siteCode) {
   return (result.rows ?? []).map((row) => row.email).filter((email) => RECIPIENT_PATTERN.test(email) && email.length <= 254);
 }
 
-/** Kalemleri talep eder (sent_at NULL); yalnız gerçekten eklenen (daha önce gönderilmemiş) satırları döndürür. */
-async function claimItems(db, siteCode, items) {
+/**
+ * Kalemleri talep eder (claimed_at = tur saati, sent_at NULL); yalnız gerçekten eklenen (daha önce gönderilmemiş) satırları döndürür. withSiteTransaction İÇİNDE
+ * çağrılır. Zaman damgaları DB NOW() yerine turun saatinden (`now`) yazılır: "bugün" kuralları (günde tek e-posta, eski talep) aynı saate göre işler.
+ */
+async function claimItems(db, siteCode, items, now) {
   const result = await db.query(
     `
-      INSERT INTO contract_reminders (contract_id, site_code, kind, due_date)
-      SELECT x.contract_id, $1, x.kind, x.due_date
+      INSERT INTO contract_reminders (contract_id, site_code, kind, due_date, claimed_at)
+      SELECT x.contract_id, $1, x.kind, x.due_date, $5::TIMESTAMPTZ
       FROM unnest($2::BIGINT[], $3::TEXT[], $4::DATE[]) AS x(contract_id, kind, due_date)
       ON CONFLICT (contract_id, kind, due_date) DO NOTHING
       RETURNING id, contract_id, kind, to_char(due_date, 'YYYY-MM-DD') AS due_date
     `,
-    [siteCode, items.map((item) => item.contract_id), items.map((item) => item.kind), items.map((item) => item.due_date)],
+    [siteCode, items.map((item) => item.contract_id), items.map((item) => item.kind), items.map((item) => item.due_date), now.toISOString()],
   );
   return result.rows ?? [];
 }
@@ -272,18 +316,21 @@ export async function runContractReminders({ now = contractReminderHooks.now(), 
     return summary;
   }
   try {
-    // Önceki (çöken / yarıda kalan) turun gönderilmemiş talepleri: tek çalışan kilidi altında güvenle silinir, bu turda yeniden denenir.
-    await lock.client.query(`DELETE FROM contract_reminders WHERE sent_at IS NULL`);
-    const sites = await candidateSites(lock.client, istanbulToUtc(day, 0));
+    const client = lock.client;
+    const dayStart = istanbulToUtc(day, 0);
+    // Önceki günlerin yarıda kalan talepleri bu turda yeniden denenir; bugünküler o gün için "gönderilmiş olabilir" sayılır (candidateSites).
+    await releaseStaleClaims(client, dayStart);
+    const sites = await candidateSites(client, dayStart);
     for (const site of sites) {
       const siteCode = Number(site.site_code);
       try {
-        const items = await dueItems(lock.client, siteCode, day);
+        const items = await dueItems(client, siteCode, day);
         if (items.length === 0) continue;
-        const recipients = await managerRecipients(lock.client, siteCode);
+        const recipients = await managerRecipients(client, siteCode);
         if (recipients.length === 0) continue;
-        const claimed = await claimItems(lock.client, siteCode, items);
-        if (claimed.length === 0) continue;
+        const claimed = await withSiteTransaction(client, siteCode, () => claimItems(client, siteCode, items, now));
+        // null: site o arada silindi; boş: kalemler başka yoldan işaretlenmiş
+        if (!claimed || claimed.length === 0) continue;
         const claimedKeys = new Set(claimed.map((row) => `${row.contract_id}:${row.kind}:${row.due_date}`));
         const listed = items.filter((item) => claimedKeys.has(`${item.contract_id}:${item.kind}:${item.due_date}`));
         const shown = listed.slice(0, MAX_ITEMS_PER_EMAIL).map((item) => ({
@@ -293,23 +340,43 @@ export async function runContractReminders({ now = contractReminderHooks.now(), 
           endDate: item.end_date,
           dueDate: item.due_date,
         }));
+        const ids = claimed.map((row) => Number(row.id));
         let sent = 0;
+        let marked = false;
+        let siteGone = false;
         for (const to of recipients) {
           try {
             await contractReminderHooks.send(buildContractReminderEmail({ to, siteName: site.name, today: day, items: shown, extraCount: listed.length - shown.length }));
             sent += 1;
           } catch (_error) {
             summary.failed_emails += 1;
+            continue;
+          }
+          if (!marked) {
+            // İLK başarılı gönderimden HEMEN sonra sent_at: süreç bundan sonra ölse bile sonraki tik bu kalemleri yeniden göndermez.
+            const done = await withSiteTransaction(client, siteCode, () =>
+              client.query(`UPDATE contract_reminders SET sent_at = $2::TIMESTAMPTZ WHERE id = ANY($1::BIGINT[]) AND sent_at IS NULL`, [ids, now.toISOString()]),
+            );
+            if (done === null) {
+              siteGone = true; // site silindi (hatırlatmalar CASCADE gitti): kalan yöneticilere gönderilmez
+              break;
+            }
+            marked = true;
           }
         }
-        const ids = claimed.map((row) => Number(row.id));
+        summary.emails += sent;
+        if (siteGone) continue;
         if (sent > 0) {
-          await lock.client.query(`UPDATE contract_reminders SET sent_at = NOW(), recipients = $2 WHERE id = ANY($1::BIGINT[])`, [ids, sent]);
+          await withSiteTransaction(client, siteCode, () =>
+            client.query(`UPDATE contract_reminders SET recipients = $2 WHERE id = ANY($1::BIGINT[])`, [ids, sent]),
+          );
           summary.sites += 1;
-          summary.emails += sent;
           summary.reminders += ids.length;
         } else {
-          await lock.client.query(`DELETE FROM contract_reminders WHERE id = ANY($1::BIGINT[]) AND sent_at IS NULL`, [ids]);
+          // Hiçbir alıcıya gitmedi: talep geri alınır, sonraki tikte yeniden denenir.
+          await withSiteTransaction(client, siteCode, () =>
+            client.query(`DELETE FROM contract_reminders WHERE id = ANY($1::BIGINT[]) AND sent_at IS NULL`, [ids]),
+          );
         }
       } catch (error) {
         summary.errors += 1;

@@ -9,7 +9,7 @@
 import http from 'node:http';
 
 export async function sectionContracts(ctx) {
-  const { check, same, childEnv, finishChild, installPoolHooks, serverErrors, mails } = ctx;
+  const { check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, mails } = ctx;
   await childEnv();
   const logLines = [];
   const realLog = console.log;
@@ -278,6 +278,12 @@ export async function sectionContracts(ctx) {
   const v1After = vendorsAfter.body.items.find((i) => i.id === vendorId);
   check('V4: firma listesinde contract_count (1) ve Turkce katlamali q aramasi (yetkili kisi dahil)', v1After?.contract_count === 1
     && (await call('GET', V(`?q=${encodeURIComponent('temiz iş')}`), MGR)).body.items.length === 1 && (await call('GET', V('?q=SORUMLU'), MGR)).body.items.length === 1, vendorsAfter.body);
+  const byPhone = await call('GET', V(`?q=${encodeURIComponent('777 31')}`), STAFF);
+  const byDigits = await call('GET', V('?q=02127773131'), STAFF);
+  const byOtherDigits = await call('GET', V('?q=5550000'), STAFF);
+  check('V5: q telefonda da arar (bicimli "777 31" ve yalniz rakam "02127773131" ayni firmayi bulur; eslesmeyen rakam bos)',
+    same(byPhone.body.items.map((i) => i.id), [vendorId]) && same(byDigits.body.items.map((i) => i.id), [vendorId]) && byOtherDigits.body.items.length === 0,
+    { byPhone: byPhone.body, byDigits: byDigits.body, byOtherDigits: byOtherDigits.body });
 
   // ============================================================================================================
   // I: IDOR
@@ -565,6 +571,92 @@ export async function sectionContracts(ctx) {
   check('D1: site silinince firmalar, sozlesmeler ve hatirlatmalar CASCADE silinir (sozlesmeli firma RESTRICT engel olmaz; 2000 sozlesmeli site dahil)',
     dDelete === null && lDelete === null && dBefore.vendors > 0 && dBefore.contracts > 0 && dBefore.reminders > 0 && same(dAfter, { vendors: 0, contracts: 0, reminders: 0 })
       && (await countOf(`SELECT COUNT(*)::int AS n FROM site_contracts WHERE site_code = $1`, [lSite])) === 0, { dBefore, dAfter, dDelete, lDelete });
+
+  // ============================================================================================================
+  // K: surec olumu benzetimi (gonderim ile kayit arasi) ve tur sirasinda site silme (40P01 = 0). Diger sitelerin modulu kapatilir (yalniz K siteleri turda).
+  await q(`UPDATE site_modules SET enabled = FALSE WHERE module_code = 'contracts'`);
+  const kSetup = async (label, managers = 2) => {
+    const code = await mkSite(`CT ${label}`);
+    const mgrs = [];
+    for (let i = 0; i < managers; i += 1) {
+      const user = await mkUser(`CT ${label} Yonetici ${i}`, 'site_manager');
+      await linkManager(code, user);
+      mgrs.push(user);
+    }
+    await enableModule(code);
+    const vendor = (await call('POST', V('', code), mgrs[0], { name: `${label} Firma`, category: 'diger' })).body.vendor.id;
+    const contract = (await call('POST', C('', code), mgrs[0], { vendor_id: vendor, title: `${label} sozlesme`, start_date: '2025-01-01', end_date: '2026-11-05' })).body.contract.id;
+    return { code, mgrs, contract };
+  };
+  const kMails = (label) => mails.filter((m) => m.subject.includes(`CT ${label}]`));
+  const kRows = (code) => q(`SELECT sent_at IS NOT NULL AS sent, recipients, claimed_at IS NOT NULL AS claimed FROM contract_reminders WHERE site_code = $1`, [code]).then((r) => r.rows);
+  const at = (day, hhmm = '06:30') => new Date(`${day}T${hhmm}:00Z`); // 06:30Z = Istanbul 09:30
+
+  // K1: ilk gonderimden sonra sent_at yazilamadan surec "olur" (sent_at UPDATE'i bir kez hata verir)
+  const k1 = await kSetup('Olum Bir');
+  hooks.failOnce = { match: /UPDATE contract_reminders SET sent_at/, code: '57P01' };
+  const k1Run = await runContractReminders({ now: at('2026-10-23') });
+  const k1AfterKill = { mails: kMails('Olum Bir').length, rows: await kRows(k1.code) };
+  const k1Same = await runContractReminders({ now: at('2026-10-23', '14:00') });
+  const k1SameMails = kMails('Olum Bir').length;
+  const k1Next = await runContractReminders({ now: at('2026-10-24') });
+  const k1NextRows = await kRows(k1.code);
+  const k1Again = await runContractReminders({ now: at('2026-10-24', '15:00') });
+  check('K1: gonderim ile sent_at arasinda olum: yalniz 1. yoneticiye gitti, talep KALDI (sent_at NULL, claimed_at dolu); ayni gun sonraki tik YENIDEN GONDERMEZ; ertesi gun eski talep birakilip bir kez tekrar gonderilir, sonra bir daha gitmez',
+    k1Run.errors === 1 && k1AfterKill.mails === 1 && same(k1AfterKill.rows, [{ sent: false, recipients: 0, claimed: true }])
+      && k1Same.errors === 0 && k1SameMails === 1 && k1Next.errors === 0 && kMails('Olum Bir').length === 3 && same(k1NextRows, [{ sent: true, recipients: 2, claimed: true }])
+      && k1Again.emails === 0 && kMails('Olum Bir').length === 3,
+    { k1Run, k1AfterKill, k1Same, k1SameMails, k1Next, k1NextRows });
+
+  // K2: tum gonderimler bitti, recipients yazilamadan surec "olur": sent_at ilk gonderimde yazilmisti -> hicbir zaman yeniden gonderilmez
+  const k2 = await kSetup('Olum Iki');
+  hooks.failOnce = { match: /UPDATE contract_reminders SET recipients/, code: '57P01' };
+  const k2Run = await runContractReminders({ now: at('2026-10-25') });
+  const k2Rows = await kRows(k2.code);
+  await runContractReminders({ now: at('2026-10-25', '15:00') });
+  await runContractReminders({ now: at('2026-10-26') });
+  check('K2: recipients yazilamadan olum: iki yoneticiye de gitti, sent_at YAZILI (recipients 0 kalir); ayni gun ve ertesi gun yeniden gonderilmez',
+    k2Run.errors === 1 && same(k2Rows, [{ sent: true, recipients: 0, claimed: true }]) && kMails('Olum Iki').length === 2, { k2Run, k2Rows, n: kMails('Olum Iki').length });
+
+  // K3: belirleyici yaris: hatirlatma talep INSERT'i (site FOR KEY SHARE alinmis) bekletilirken site silinir -> silme bekler, tur biter, silme CASCADE eder; 40P01 yok
+  hooks.deadlocks = 0;
+  const k3 = await kSetup('Silme Yarisi');
+  let openGate;
+  hooks.pause = { match: /INSERT INTO contract_reminders/, gate: new Promise((resolve) => { openGate = resolve; }), hit: false };
+  const k3RunP = runContractReminders({ now: at('2026-10-27') });
+  for (let i = 0; i < 100 && !hooks.pause.hit; i += 1) await sleep(20);
+  const k3Hit = hooks.pause.hit;
+  const k3DeleteP = failCode(`DELETE FROM sites WHERE site_code = $1`, [k3.code]);
+  let k3Waiting = false;
+  for (let i = 0; i < 50 && !k3Waiting; i += 1) {
+    await sleep(20);
+    k3Waiting = (await q(`SELECT COUNT(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'DELETE FROM sites%'`)).rows[0].n > 0;
+  }
+  openGate();
+  hooks.pause = null;
+  const [k3Run, k3Delete] = await Promise.all([k3RunP, k3DeleteP]);
+  check(`K3: talep sirasinda site silme: silme site kilidini BEKLER (sira sites -> contract_reminders), tur hatasiz biter, site ve hatirlatmalari silinir; 40P01 = ${hooks.deadlocks}`,
+    k3Hit && k3Waiting && k3Delete === null && k3Run.errors === 0 && hooks.deadlocks === 0
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM contract_reminders WHERE site_code = $1`, [k3.code])) === 0
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM sites WHERE site_code = $1`, [k3.code])) === 0,
+    { k3Hit, k3Waiting, k3Delete, k3Run, deadlocks: hooks.deadlocks });
+
+  // K4: rastgele yaris: 6 sitede yavas gonderim (her e-posta 40 ms) suruyor, bu sirada siteler silinir; tekrar 3 tur
+  const realSendK = contractReminderHooks.send;
+  contractReminderHooks.send = async (message) => { await sleep(40); return realSendK(message); };
+  hooks.deadlocks = 0;
+  const k4Results = [];
+  for (let round = 0; round < 3; round += 1) {
+    const kSites = [];
+    for (let i = 0; i < 6; i += 1) kSites.push(await kSetup(`Yaris ${round}-${i}`, 3));
+    const runP = runContractReminders({ now: at(`2026-10-${28 + round}`) });
+    const deletes = kSites.map((s, i) => sleep(15 * i + 10).then(() => failCode(`DELETE FROM sites WHERE site_code = $1`, [s.code])));
+    const [run, ...deleted] = await Promise.all([runP, ...deletes]);
+    k4Results.push({ errors: run.errors, deleteErrors: deleted.filter((d) => d !== null), left: await countOf(`SELECT COUNT(*)::int AS n FROM contract_reminders WHERE site_code = ANY($1::BIGINT[])`, [kSites.map((s) => s.code)]) });
+  }
+  contractReminderHooks.send = realSendK;
+  check(`K4: 3 tur x 6 site: yavas gonderim surerken siteler silinir; tur hatasi 0, silme hatasi 0, kalan hatirlatma satiri 0; 40P01 = ${hooks.deadlocks}`,
+    hooks.deadlocks === 0 && k4Results.every((r) => r.errors === 0 && r.deleteErrors.length === 0 && r.left === 0), { k4Results, deadlocks: hooks.deadlocks });
 
   check(`H1: tum bolumde 5xx yok, 40P01 = ${hooks.deadlocks}`, hooks.deadlocks === 0 && serverErrors.filter((line) => !/hatirlatma|smtp/i.test(line)).length === 0, serverErrors.slice(-5));
 

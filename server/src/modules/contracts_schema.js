@@ -100,6 +100,7 @@ export const CONTRACTS_DDL = Object.freeze({
       site_code BIGINT NOT NULL,
       kind TEXT NOT NULL,
       due_date DATE NOT NULL,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       sent_at TIMESTAMPTZ,
       recipients INTEGER NOT NULL DEFAULT 0,
       CONSTRAINT chk_contract_reminders_kind CHECK (kind IN ('bitis', 'fesih_bildirim')),

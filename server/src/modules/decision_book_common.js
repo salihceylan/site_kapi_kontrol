@@ -54,6 +54,8 @@ export const decisionNotFound = () => new PlatformError(404, 'DECISION_NOT_FOUND
 export const decisionFinal = () => new PlatformError(409, 'DECISION_FINAL', 'Kesinleşmiş karar değiştirilemez ve silinemez.');
 export const decisionLimitReached = () =>
   new PlatformError(409, 'DECISION_LIMIT_REACHED', `Bir sitede en fazla ${MAX_DECISIONS_PER_SITE} karar kaydı tutulabilir.`, { limit: MAX_DECISIONS_PER_SITE });
+export const decisionMeetingInFuture = () =>
+  new PlatformError(409, 'DECISION_MEETING_IN_FUTURE', 'Toplantı tarihi gelmemiş karar kesinleştirilemez.');
 export const siteNotFound = () => new PlatformError(404, 'SITE_NOT_FOUND', 'Site bulunamadı.');
 export const moduleDisabled = () => new PlatformError(403, 'MODULE_DISABLED', 'Karar Defteri modülü kapalı.', { module: DECISION_BOOK_MODULE });
 export const forbiddenRole = () => new PlatformError(403, 'FORBIDDEN_ROLE', 'Bu işlem için yetkiniz yok.');
@@ -161,6 +163,16 @@ export function normalizeSupersedesId(value) {
 }
 
 export const yearOf = (meetingDate) => Number(String(meetingDate).slice(0, 4));
+
+/**
+ * Kesinleştirme ön koşulu: toplantı tarihi bugünden (İstanbul) SONRA olamaz. Taslak yaklaşan toplantı için (bugün + 366 güne kadar) yazılabilir; ama yanlışlıkla
+ * kesinleştirilirse değişmez bir numara alır ve resmî defterin sırasını bozar. Aksi 409 DECISION_MEETING_IN_FUTURE. `meetingDate`: 'YYYY-MM-DD'.
+ */
+export function assertMeetingHeld(meetingDate, now = new Date()) {
+  if (String(meetingDate).slice(0, 10) > todayIso(now)) {
+    throw decisionMeetingInFuture();
+  }
+}
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 

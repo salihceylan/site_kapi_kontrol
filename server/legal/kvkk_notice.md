@@ -53,7 +53,7 @@ Kullandığınız özelliğe göre aşağıdaki veri kategorileri işlenir:
 - **İşlem güvenliği:** yönetim işlemlerinin denetim kaydı (kim, ne zaman, hangi işlemi yaptı). Denetim kaydının ayrıntı alanında kişi/daire/araç işlemlerine ilişkin veriler bulunabilir: hesabı olmayan bir kişinin adında yapılan değişikliğin eski ve yeni adı, araç plakası, silinen bir dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri. Ayrıca sunucu günlükleri ve uygulama hata raporları (aşağıda açıklanır).
 - **Cihaz ve ağ:** kapı cihazlarının yerel ve genel IP adresi, bağlantı durumu ve yazılım sürümü.
 
-Daire hesaplarının PIN'i yalnızca geri döndürülemez özet olarak saklanır; oluşturulurken veya sıfırlanırken bir kez gösterilir ve e-posta adresi varsa bir kez e-postayla iletilir.
+Daire hesaplarının PIN'i yalnızca geri döndürülemez özet olarak saklanır; oluşturulurken veya sıfırlanırken bir kez gösterilir ve e-posta adresi varsa bir kez e-postayla iletilir. Sakin şifresini kendisi belirlemişse, yönetimin yaptığı sıfırlamada yeni PIN yönetime gösterilmez, yalnızca sakinin kayıtlı e-posta adresine gönderilir.
 
 Platform; sağlık, biyometrik veri gibi özel nitelikli kişisel verileri işlemeyi amaçlamaz. Kamera ile görüntü kaydı, yüz tanıma veya otomatik plaka tanıma yapılmaz. Not, açıklama ve duyuru gibi serbest metin alanlarına özel nitelikli kişisel veri veya gereksiz kişisel veri yazılmaması rica olunur.
 

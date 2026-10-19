@@ -366,7 +366,7 @@ describe('toggleApartmentMemberStatus: aile reisi pasife alinca tum daire pasifl
     assert.equal(result.is_active, false);
     assert.match(result.message, /pasife alındı/);
     assert.equal(has(clientLog, /^UPDATE apartments SET is_active/), false, 'tum daire pasiflesmemeli');
-    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = \$2$/);
+    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = \$2$/);
     assert.deepEqual(handOver.params, [20001, 3]);
     assert.ok(has(clientLog, /^COMMIT/));
   });

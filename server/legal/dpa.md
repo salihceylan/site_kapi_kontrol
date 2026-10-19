@@ -128,7 +128,7 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 ## Ek-2: Teknik ve idari tedbirler
 
 - Uygulama ile sunucu arasında HTTPS; kapı cihazları ile sunucu arasında TLS ve sertifika doğrulaması.
-- Parolalar geri döndürülemez özet (bcrypt) olarak saklanır; e-posta doğrulama kodları ve parola sıfırlama belirteçleri özet olarak saklanır. Daire hesabı PIN'leri de yalnızca özet olarak saklanır; Site Yönetimi PIN'i yalnızca oluşturma veya sıfırlama anında bir kez görür; sıfırlama denetim kaydına PIN olmadan yazılır.
+- Parolalar geri döndürülemez özet (bcrypt) olarak saklanır; e-posta doğrulama kodları ve parola sıfırlama belirteçleri özet olarak saklanır. Daire hesabı PIN'leri de yalnızca özet olarak saklanır; Site Yönetimi PIN'i yalnızca oluşturma veya sıfırlama anında bir kez görür; sakin şifresini kendisi belirlemişse yönetimin sıfırladığı PIN'i göremez, PIN yalnızca sakinin e-postasına gider. Sıfırlama denetim kaydına PIN olmadan yazılır ve hesabın misafir geçişlerini, kapı karekodlarını ve telefon bildirimi kayıtlarını kapatır.
 - İmzalı ve süreli oturum belirteçleri (belirteç kullanıcı kodu, parola sürümü ve süre taşır); parola değişince eski oturumların geçersiz olması; hatalı giriş denemelerinin sınırlandırılması ve geçici kilit; imzalı giriş cihazı belirteci; istek hız sınırlaması.
 - Rol ve site bazlı erişim denetimi: yönetici yalnızca kendi sitesini yönetir, kurul üyesi salt okur, görevli kişi listesi ve finans kayıtlarını göremez, sakin yalnızca kendi kayıtlarını ve aynı dairedeki üyelerin iletişim bilgisini görür.
 - Yönetim değiştirme işlemleri için denetim kaydı; salt görüntüleme erişimi ayrıca kaydedilmez.

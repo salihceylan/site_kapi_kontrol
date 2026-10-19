@@ -4,7 +4,7 @@
 // Kapsam: sema (CHECK / FK silme politikasi / bilesik ayni-site FK / indeks / tetikleyici + isaretli islev), ensure idempotansi (tablo varken DDL 0), modul kapisi,
 // yetki matrisi (super + yonetici yazar ve kesinlestirir, kurul taslaklar dahil salt okur, gorevli STAFF / sakin / ilgisiz 403, baska site 403), IDOR (baska sitenin
 // karari 404, satir degismez), dogrulama (400 INVALID_FIELD { field }), taslak duzenleme / silme, kesinlestirme ve numaralama ((site, yil) basina 1..N, bosluksuz;
-// idempotent), kesin karar PATCH / DELETE 409, supersedes kurallari (ayni sitenin KESIN karari), DEGISMEZLIK TETIKLEYICISI (dogrudan SQL UPDATE / DELETE / TRUNCATE
+// idempotent; toplantisi gelmemis taslak 409 DECISION_MEETING_IN_FUTURE), kesin karar PATCH / DELETE 409, supersedes kurallari (ayni sitenin KESIN karari), DEGISMEZLIK TETIKLEYICISI (dogrudan SQL UPDATE / DELETE / TRUNCATE
 // reddi; kullanici silmede FK SET NULL ve site silmede CASCADE istisnalari), sakin gorunurlugu (yalniz kesin + sakinler; status / visibility / created_by_name YOK;
 // superseded_by yalniz sakine gorunenler), liste sirasi + imlec / before_id sayfalama + suzgecler + yillar, site basina 5000 siniri, numara yarisi (eszamanli
 // kesinlestirme; ayni karara eszamanli cift kesinlestirme), hesap silme (tombstone), audit gizliligi, eszamanli karisik yuk (40P01 = 0, 5xx yok).
@@ -33,6 +33,7 @@ export async function sectionDecisionBook(ctx) {
   const { moduleRouter } = await import('../src/modules/module_routes.js');
   const { performAccountDeletion, accountHooks } = await import('../src/modules/account_deletion_service.js');
   const siteSvc = await import('../src/services/site_service.js');
+  const { todayIso } = await import('../src/modules/people_common.js');
   accountHooks.background = () => {};
   accountHooks.rotateTokensForSite = async () => {};
   accountHooks.rotateTokensForDevices = async () => {};
@@ -284,6 +285,29 @@ export async function sectionDecisionBook(ctx) {
   const del7Again = await call('DELETE', M(`/${d7.body.decision.id}`), SUPER);
   check('F5: taslak DELETE { deleted: true }; ikinci kez 404 DECISION_NOT_FOUND; satir yok', del7.status === 200 && same(del7.body, { deleted: true }) && del7Again.status === 404
     && del7Again.body?.code === 'DECISION_NOT_FOUND' && (await countOf(`SELECT COUNT(*)::int AS n FROM board_decisions WHERE id = $1`, [d7.body.decision.id])) === 0, { del7: del7.body, del7Again: del7Again.body });
+  // Toplantisi gelmemis taslak kesinlestirilemez (AYRI sitede: ana sitenin numaralari etkilenmez)
+  {
+    const fut = await mkSite('DBK Gelecek Toplanti Sitesi', 1);
+    await linkManager(fut.code, MGR);
+    await enableModule(fut.code);
+    const today = todayIso();
+    const shift = (days) => { const [y, m, d] = today.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10); };
+    const soon = (await create(MGR, { ...GOOD, meeting_date: shift(1), title: 'Yarinki toplanti' }, fut.code)).body.decision;
+    const far = (await create(MGR, { ...GOOD, meeting_date: shift(300), title: 'Uzak toplanti' }, fut.code)).body.decision;
+    const auditsBefore = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'board_decision.finalized' AND site_code = $1`, [fut.code]);
+    const snapSoon = await snapshot(soon.id);
+    const tries = await Promise.all([finalize(soon.id, MGR, fut.code), finalize(far.id, SUPER, fut.code)]);
+    const auditsAfter = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'board_decision.finalized' AND site_code = $1`, [fut.code]);
+    check('F6: toplanti tarihi bugunden (Istanbul) sonraki taslak kesinlestirilemez: 409 DECISION_MEETING_IN_FUTURE (Turkce ileti; yarin ve +300 gun, super dahil); satir taslak ve numarasiz kalir, audit yok',
+      tries.every((r) => r.status === 409 && r.body?.code === 'DECISION_MEETING_IN_FUTURE' && r.body?.error === 'Toplantı tarihi gelmemiş karar kesinleştirilemez.')
+        && (await snapshot(soon.id)) === snapSoon && (await countOf(`SELECT COUNT(*)::int AS n FROM board_decisions WHERE site_code = $1 AND (status <> 'taslak' OR decision_no IS NOT NULL)`, [fut.code])) === 0
+        && auditsAfter === auditsBefore, { tries: tries.map((r) => [r.status, r.body]), auditsBefore, auditsAfter });
+    const moved = await patch(soon.id, MGR, { meeting_date: today }, fut.code);
+    const done = await finalize(soon.id, MGR, fut.code);
+    check('F7: toplanti tarihi bugune cekilen taslak kesinlesir (200; o yilin ilk numarasi); bugun tarihli toplanti kesinlestirilebilir',
+      moved.status === 200 && done.status === 200 && done.body.decision.status === 'kesin' && done.body.decision.number_label === `${today.slice(0, 4)}/1`, { moved: moved.body, done: done.body });
+    await q(`DELETE FROM sites WHERE site_code = $1`, [fut.code]);
+  }
 
   // ============================================================================================================
   // P: supersedes kurallari + IDOR

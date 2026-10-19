@@ -320,6 +320,16 @@ describe('yazma işlemleri (sahte işlem istemcisi)', () => {
     assert.ok(!tx.some((sql) => /^UPDATE |pg_advisory_xact_lock|^INSERT INTO audit_log /.test(sql)));
   });
 
+  it('finalize: toplantı tarihi gelmemiş taslak 409 DECISION_MEETING_IN_FUTURE (Türkçe ileti); numara kilidi / MAX / UPDATE / audit YOK, ROLLBACK', async () => {
+    const nextYear = new Date().getUTCFullYear() + 1;
+    Object.assign(row, { meeting_date: `${nextYear}-01-15`, year: nextYear });
+    const res = await call('POST', url('/5/finalize'), { user: users.manager, body: {} });
+    assert.deepEqual([res.status, res.body.code, res.body.error], [409, 'DECISION_MEETING_IN_FUTURE', 'Toplantı tarihi gelmemiş karar kesinleştirilemez.']);
+    assert.ok(!tx.some((sql) => /pg_advisory_xact_lock|COALESCE\(MAX|^UPDATE |^INSERT INTO audit_log /.test(sql)));
+    assert.ok(tx.includes('ROLLBACK') && !tx.includes('COMMIT') && tx.at(-1) === 'RELEASE');
+    assert.equal(row.status, 'taslak');
+  });
+
   it('kesin karar PATCH / DELETE 409 DECISION_FINAL: UPDATE / DELETE / audit gitmez, ROLLBACK', async () => {
     Object.assign(row, { status: 'kesin', decision_no: 2, finalized_by: 20001, finalized_at: at });
     for (const [method, body] of [['PATCH', { title: 'Yeni' }], ['DELETE', undefined]]) {

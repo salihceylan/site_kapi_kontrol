@@ -406,6 +406,26 @@ describe('doğrulama (işlem açılmadan)', () => {
 });
 
 describe('firmalar', () => {
+  it('arama (q): ad, yetkili kişi VE telefon (Türkçe katlamalı); en az 3 rakamlı aramada telefon ayrıca YALNIZ rakamlarıyla karşılaştırılır', async () => {
+    seedVendor();
+    const seen = [];
+    pool.query = async (text, params) => {
+      seen.push([norm(text), params]);
+      return fakeQuery(text, params);
+    };
+    const res = await call('GET', V(`?q=${encodeURIComponent('444 1-2')}`), { user: users.staff });
+    assert.equal(res.status, 200);
+    const [sql, params] = seen.find(([text]) => /FROM contract_vendors v WHERE v\.site_code = \$1 AND/.test(text));
+    for (const column of ['v.name', 'v.contact_name', 'v.phone']) assert.ok(sql.includes(`lower(translate(COALESCE(${column}, '')`), column);
+    assert.match(sql, /regexp_replace\(COALESCE\(v\.phone, ''\), '\[\^0-9\]', '', 'g'\) LIKE \$3/);
+    assert.deepEqual(params.slice(1), ['%444 1-2%', '%44412%']);
+    seen.length = 0;
+    await call('GET', V('?q=ab1'), { user: users.staff });
+    const [plain, plainParams] = seen.find(([text]) => /FROM contract_vendors v WHERE v\.site_code = \$1 AND/.test(text));
+    assert.ok(!plain.includes('regexp_replace'), 'üç rakamdan az: yalnız metin araması');
+    assert.equal(plainParams.length, 2);
+  });
+
   it('POST 201 { vendor }: kilit sırası site -> kullanıcı -> site advisory; sayım + ad tekilliği; audit details yalnız kategori', async () => {
     allowTx();
     const res = await call('POST', V(), { user: users.manager, body: { name: SECRET, category: 'asansor', phone: '0212 555 11 22', email: 'A@B.COM', tax_no: '1234567890', note: 'gizli not' } });

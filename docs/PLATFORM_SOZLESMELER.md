@@ -5,7 +5,7 @@ Modül kodu `contracts` (katalogda `available`, `core:false`, varsayılan KAPALI
 ## Veri modeli (migration 049)
 - `contract_vendors`: id, site_code, name (1-120; sitede büyük/küçük harf duyarsız TEKİL), category, contact_name? (≤120), phone? (≤32), email? (≤254), tax_no? (≤20), note? (≤1000), is_active (varsayılan TRUE), created_by?, created_at, updated_at. Tekil indeks `(site_code, lower(name))`.
 - `site_contracts`: id, site_code, vendor_id (firma; RESTRICT), title (1-160), category, start_date, end_date? (>= start_date), notice_days (0-365, varsayılan 30), remind_before_days (0-180, varsayılan 30), amount? (NUMERIC(14,2), >= 0), currency (`TRY`), period? (`aylik|yillik|tek_sefer|diger`), auto_renew (varsayılan FALSE), status (`aktif|feshedildi`), terminated_at? (DB kısıtı: `feshedildi` ⇔ dolu), note? (≤2000), created_by?, updated_by?, created_at, updated_at. İndeksler `(site_code, end_date)`, `(site_code, vendor_id)`.
-- `contract_reminders`: id, contract_id (sözleşme silinirse CASCADE), site_code, kind (`bitis|fesih_bildirim`), due_date, sent_at?, recipients. TEKİL `(contract_id, kind, due_date)` = hatırlatma idempotansı. İndeks `(site_code, sent_at)` (günde tek e-posta denetimi).
+- `contract_reminders`: id, contract_id (sözleşme silinirse CASCADE), site_code, kind (`bitis|fesih_bildirim`), due_date, claimed_at (talep anı, turun saati), sent_at? (ilk başarılı gönderim), recipients. TEKİL `(contract_id, kind, due_date)` = hatırlatma idempotansı. İndeks `(site_code, sent_at)` (günde tek e-posta denetimi).
 - Kategoriler: `asansor, guvenlik, temizlik, bahce, havuz, teknik_bakim, yazilim, sigorta, diger`.
 - Sınırlar: site başına en çok **500 firma**, **2000 sözleşme** (aşılınca `409 LIMIT_REACHED { limit }`; eşzamanlı eklemelerde de aşılmaz: site başına işlem kilidi).
 - Silme politikası: site silinince firmalar, sözleşmeler ve hatırlatma kayıtları CASCADE. Kullanıcı silinince kayıt KALIR; `created_by` / `updated_by` tombstone'u gösterir ya da FK ile NULL olur, ad "Silinmiş Kullanıcı" görünür. Sözleşmesi olan firma veritabanında silinemez (RESTRICT); API'de silme YOK (firma pasife alınır, sözleşme feshedilir).
@@ -22,7 +22,7 @@ Taban: `/manager/sites/:siteCode`. DELETE YOK. Gövde JSON (≤16 KB; üstü `41
 
 | Uç | Gövde / sorgu | Yanıt |
 |---|---|---|
-| GET `.../contract-vendors` | `active?` (`all` varsayılan, `1`, `0`), `q?` (ad / yetkili kişi; Türkçe ve büyük-küçük harf duyarsız) | `{ items:[Vendor] }` (ada göre; sayfalama yok, en çok 500) |
+| GET `.../contract-vendors` | `active?` (`all` varsayılan, `1`, `0`), `q?` (ad / yetkili kişi / telefon; Türkçe ve büyük-küçük harf duyarsız; aramada en az 3 rakam varsa telefon yalnız rakamlarıyla da karşılaştırılır: "02124445566" -> "0212 444 55 66") | `{ items:[Vendor] }` (ada göre; sayfalama yok, en çok 500) |
 | POST `.../contract-vendors` (201) | `name, category, contact_name?, phone?, email?, tax_no?, note?` | `{ vendor }` |
 | PATCH `.../contract-vendors/:id` | en az biri: aynı alanlar + `is_active` (boş / null isteğe bağlı alan siler) | `{ vendor }` |
 | GET `.../contracts` | `state?` (`all` varsayılan, `aktif`, `yaklasiyor`, `sona_erdi`, `feshedildi`), `vendor_id?`, `category?`, `q?` (başlık / firma adı), `cursor?`, `limit?` (50, en çok 200) | `{ items:[Contract], next_cursor }` |
@@ -67,7 +67,9 @@ Denetim sırası: biçim (400 `INVALID_SITE_CODE`) -> yetki (403) -> site varlı
 - Her kalem bir kez gider (`contract_reminders` tekilliği); bitiş tarihi değişirse (uzatma) yeni tarih için yeniden hatırlatılır. Site başına günde EN ÇOK BİR e-posta: o gün e-posta almış sitenin yeni kalemleri ertesi güne kalır.
 - Alıcılar: sitenin yöneticileri (site_manager_sites + etkin SITE_OWNER / SITE_ADMIN); hesap etkin, silinmemiş, e-postası DOĞRULANMIŞ, dahili adres değil. Her yöneticiye AYRI e-posta (birbirinin adresini görmez). Alıcı yoksa site atlanır (kalem işaretlenmez, sonra alıcı eklenirse pencere içindeyse gider). Kurul / görevli / sakin almaz.
 - İçerik (Türkçe, düz metin + HTML): konu `[Site Adı] Sözleşme hatırlatması`; site adı, firma adı, sözleşme başlığı, bitiş tarihi / fesih bildirimi son günü ve kaç gün kaldığı. TUTAR, telefon, not YOKTUR. En çok 50 kalem listelenir, fazlası sayıyla belirtilir.
-- Gönderim: kalemler önce işaretlenir, sonra e-postalar gider; en az bir yöneticiye gittiyse `sent_at` + `recipients` yazılır, hiçbirine gitmediyse işaret geri alınır (sonraki tikte yeniden denenir). Yarıda kalan tur bir sonraki tikte temizlenir.
+- Gönderim: kalemler önce işaretlenir (`claimed_at`), sonra e-postalar gider; İLK başarılı gönderimden HEMEN sonra `sent_at` yazılır (süreç bundan sonra ölse bile yeniden gönderilmez), tur sonunda `recipients` (başarılı alıcı sayısı) yazılır. Hiçbir yöneticiye gitmediyse işaret geri alınır (sonraki tikte yeniden denenir).
+- Yarıda kalan tur (süreç ölümü / DB hatası, gönderim ile `sent_at` arası): o günün gönderilmemiş talebi "gönderilmiş olabilir" sayılır ve site o gün yeniden e-posta ALMAZ; önceki günlerden kalan gönderilmemiş talepler tur başında bırakılır ve kalem ertesi gün bir kez daha denenir (en kötü durumda bir yönetici aynı hatırlatmayı ertesi gün ikinci kez alır; hiçbir gün iki e-posta gitmez).
+- Kilit sırası: `contract_reminders`'a her yazma (talep, `sent_at`, `recipients`, geri alma, eski talep silme) site başına kısa bir işlemdir ve ilk ifadesi `SELECT 1 FROM sites ... FOR KEY SHARE`dir (diğer yazıcılarla aynı sıra; site silme ile 40P01 olmaz). Site tur sırasında silinirse kalan yöneticilere gönderilmez. Zaman damgaları DB saati yerine turun saatinden yazılır.
 - SMTP yapılandırılmamışsa iş hiç başlamaz; `CONTRACT_REMINDERS_DISABLED=1` (ya da `ANNOUNCEMENT_SCHEDULER_DISABLED=1`) ile kapatılır. Günlüğe yalnız sayılar yazılır.
 
 ## Audit ve gizlilik

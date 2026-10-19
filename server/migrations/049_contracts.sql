@@ -7,7 +7,8 @@
 -- Yabanci anahtarlar (R11 F1): tablolar FK'SIZ olusturulur, her FK ayri ve katalog korumali bir ALTER TABLE'dir (ifade basina tek ust tablo).
 -- Silme politikasi: site silinince firmalar, sozlesmeler ve hatirlatma kayitlari CASCADE; kullanici silinince created_by / updated_by SET NULL
 -- (kayit kalir, ad "Silinmis Kullanici" gorunur); sozlesmesi olan firma silinemez (RESTRICT; API'de firma silme yok, pasife alinir).
--- Hatirlatma (gunluk is, tek calisan): contract_reminders UNIQUE (contract_id, kind, due_date) ayni hatirlatmanin iki kez gonderilmesini engeller.
+-- Hatirlatma (gunluk is, tek calisan): contract_reminders UNIQUE (contract_id, kind, due_date) ayni hatirlatmanin iki kez gonderilmesini engeller;
+-- claimed_at: talep ani (yarida kalan turun gonderilmemis talebi o gun site basina tek e-posta kuralina sayilir, ertesi gun yeniden denenir).
 
 CREATE TABLE IF NOT EXISTS contract_vendors (
   id BIGSERIAL PRIMARY KEY,
@@ -132,6 +133,7 @@ CREATE TABLE IF NOT EXISTS contract_reminders (
   site_code BIGINT NOT NULL,
   kind TEXT NOT NULL,
   due_date DATE NOT NULL,
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   sent_at TIMESTAMPTZ,
   recipients INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT chk_contract_reminders_kind CHECK (kind IN ('bitis', 'fesih_bildirim')),

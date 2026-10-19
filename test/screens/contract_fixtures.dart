@@ -315,12 +315,14 @@ class FakeContractService extends ContractService {
         }
         return (a['id'] as int).compareTo(b['id'] as int);
       });
-    final start = cursor == null ? 0 : int.parse(cursor.substring(1));
+    // Opak imleç "c<başlangıç>|<state>|<arama>": hangi süzgeçle üretildiği testte görünür (yanlış süzgecin imleci
+    // gönderilirse sunucuda satırlar sessizce kaybolurdu).
+    final start = cursor == null ? 0 : int.parse(cursor.substring(1).split('|').first);
     final page = rows.skip(start).take(limit).toList();
     final more = rows.length > start + limit;
     return ContractPage.fromJson(<String, dynamic>{
       'items': page,
-      'next_cursor': more ? 'c${start + limit}' : null,
+      'next_cursor': more ? 'c${start + limit}|$state|$q' : null,
     });
   }
 

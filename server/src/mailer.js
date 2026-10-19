@@ -21,8 +21,11 @@ function createTransporter() {
     requireTLS: port !== 465,
     // Sınırlı zaman aşımları: nodemailer varsayılanları dakikalarca sürebilir; askıda kalan bir SMTP
     // bağlantısı kayıt isteğini (ve istemciyi) o kadar bekletmesin, hata hızlıca ve dürüstçe dönsün.
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
+    // dnsTimeout: ad çözümleme varsayılanı 30 sn'dir; DNS takılırsa bağlantı zaman aşımı hiç başlamaz (daire PIN'i e-postası
+    // yanıtı ayrıca ~8 sn ile sınırlar, bkz. apartment_service.sendIssuedApartmentPin).
+    dnsTimeout: 5_000,
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
     socketTimeout: 20_000,
     auth: {
       user,

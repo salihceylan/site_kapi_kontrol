@@ -337,6 +337,8 @@ class DecisionBookApi {
         return 'Karar bulunamadı ya da erişiminiz yok. Listeyi yenileyin.';
       case 'DECISION_FINAL':
         return 'Bu karar kesinleşmiş; değiştirilemez ya da silinemez. Düzeltme gerekirse yeni bir karar yazın.';
+      case 'DECISION_MEETING_IN_FUTURE':
+        return 'Toplantı tarihi gelmemiş karar kesinleştirilemez.';
       case 'DECISION_LIMIT_REACHED':
         return serverText ?? 'Bu sitede tutulabilecek en çok karar sayısına ulaşıldı.';
       case 'INVALID_FIELD':

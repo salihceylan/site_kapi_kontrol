@@ -5,7 +5,9 @@
 // ikinci calistirma no-op (yalniz 2 okuma), migration dosyasi yolu (migrate.js gibi tek islem; ikinci calistirma 0 satir; sutun tanimi ensure ile ayni),
 // ilk kurulum x apartments yazici yuku (SKIP LOCKED partileri, uzun satir kilitleri, apartments -> users sirasi; 40P01 = 0), HTTP: liste PIN tasimaz,
 // olusturma PIN'i bir kez doner + bir kez e-postalanir, PIN sifirlama (yetki matrisi, eski PIN / oturum gecersiz, audit PIN'siz, no-store), eski
-// "Bilgileri Gonder" 409, sakin kendi parolasini degistirince isaret kalkar, gunluklerde PIN yok.
+// "Bilgileri Gonder" 409, sakin kendi parolasini degistirince isaret kalkar, gunluklerde PIN yok. Inceleme duzeltmeleri: sifirlama JWT disi erisimi
+// (misafir gecisi, karekod, bildirim kaydi) kapatir (P3); sakinin kendi parolasinda yonetici PIN'i goremez / e-postasizsa yalniz super (P3); gosterge
+// temizlenince eski sakinin e-postasi silinir, yeni hesabin PIN'i eski adrese gitmez (P2); SMTP takilirsa yanit beklemez (P4).
 import http from 'node:http';
 
 export async function sectionApartmentPin(ctx) {
@@ -301,23 +303,36 @@ export async function sectionApartmentPin(ctx) {
     && (await call('GET', `/manager/sites/${SITE}/structure`, manager)).body.apartments.find((a) => Number(a.id) === aptNo(8)).resident_pin_code === null);
 
   mails.length = 0;
+  // Eski PIN'le edinilmis JWT DISI erisim (inceleme P3): misafir gecisi, kapi karekodu, telefon bildirimi kaydi -> sifirlamada kapanmali.
+  const doorId = Number((await q(`INSERT INTO site_doors (site_code, door_name, door_index) VALUES ($1, 'PIN Kapisi', 1) RETURNING id`, [SITE])).rows[0].id);
+  await q(`INSERT INTO guest_passes (site_code, door_id, created_by_user_code, title, token, expires_at) VALUES ($1, $2, $3, 'Misafir', 'gp-pin-qa-1', NOW() + interval '1 day')`, [SITE, doorId, legacy[0].userCode]);
+  await q(`INSERT INTO qr_access_tokens (token, site_code, door_id, user_code, user_role, user_name, expires_at) VALUES ('qr-pin-qa-1', $1, $2, $3, 'apartment_owner', 'A Blok Daire 1', NOW() + interval '1 hour')`, [SITE, doorId, legacy[0].userCode]);
+  await q(`INSERT INTO push_devices (user_code, install_id, platform, fcm_token) VALUES ($1, 'install-pin-qa-000001', 'android', 'fcm-token-pin-qa-0000000001')`, [legacy[0].userCode]);
   const oldToken = await tokenFor(legacy[0].userCode);
   const meBefore = await call('GET', '/me', oldToken);
   const reset = await call('POST', `/manager/apartments/${aptNo(1)}/reset-pin`, manager, {});
   const newPin = reset.body?.pin_code;
   const resetRow = (await q(`SELECT resident_pin_code, resident_pin_issued FROM apartments WHERE id = $1`, [aptNo(1)])).rows[0];
-  check('E4: PIN sifirlama 200: yeni 4 haneli PIN yanitta bir kez (pin_code = apartment.resident_pin_code), e-posta 1, no-store; DB duz kopya YOK',
-    reset.status === 200 && /^\d{4}$/.test(String(newPin)) && reset.body.apartment.resident_pin_code === newPin && reset.body.credentials_sent === true && mails.length === 1
+  check('E4: PIN sifirlama 200 (yonetimin verdigi PIN): yeni 4 haneli PIN yanitta bir kez (pin_code = apartment.resident_pin_code, pin_delivery shown), e-posta 1 + hedef adres, no-store; DB duz kopya YOK',
+    reset.status === 200 && /^\d{4}$/.test(String(newPin)) && reset.body.apartment.resident_pin_code === newPin && reset.body.pin_delivery === 'shown' && reset.body.credentials_sent === true
+      && reset.body.credentials_email === 'iletisim1@qa.example' && mails.length === 1 && mails[0].to === 'iletisim1@qa.example'
       && String(mails[0].html).includes(newPin) && reset.headers.get('cache-control') === 'no-store' && resetRow.resident_pin_code === null && resetRow.resident_pin_issued === true,
     { status: reset.status, body: reset.body });
+  const gp = (await q(`SELECT is_active FROM guest_passes WHERE token = 'gp-pin-qa-1'`)).rows[0];
+  const qr = (await q(`SELECT is_active, revoked_at FROM qr_access_tokens WHERE token = 'qr-pin-qa-1'`)).rows[0];
+  const pushLeft = await countOf(`SELECT COUNT(*)::int AS n FROM push_devices WHERE user_code = $1`, [legacy[0].userCode]);
+  check('E4b: sifirlama AYNI islemde JWT disi erisimi kapatir: misafir gecisi pasif, karekod iptal, bildirim cihaz kaydi silindi',
+    gp.is_active === false && qr.is_active === false && qr.revoked_at !== null && pushLeft === 0, { gp, qr, pushLeft });
   const oldPinLogin = await login(legacy[0].loginName, legacy[0].pin);
   const newPinLogin = await login(legacy[0].loginName, newPin);
   const meAfter = await call('GET', '/me', oldToken);
   check('E5: sifirlamadan sonra ESKI PIN 401, YENI PIN 200; eski oturum belirteci gecersiz (pv) 401',
     meBefore.status === 200 && oldPinLogin.status === 401 && newPinLogin.status === 200 && meAfter.status === 401, { meBefore: meBefore.status, old: oldPinLogin.status, new: newPinLogin.status, meAfter: meAfter.status });
   const auditRows = (await q(`SELECT action, actor_user_code, site_code, target_type, target_id, details FROM audit_log WHERE action = 'apartment.pin_reset'`)).rows;
-  check('E6: audit apartment.pin_reset (kim, hangi daire); details / hicbir alan PIN TASIMAZ',
-    auditRows.length === 1 && Number(auditRows[0].actor_user_code) === manager && Number(auditRows[0].site_code) === SITE && auditRows[0].target_id === String(aptNo(1)) && !JSON.stringify(auditRows).includes(newPin), auditRows);
+  const pinIn = (text, pin) => new RegExp(`(^|[^0-9])${pin}([^0-9]|$)`).test(text);
+  check('E6: audit apartment.pin_reset (kim, hangi daire, teslim bicimi, kapanan erisim sayilari); hicbir alan PIN TASIMAZ',
+    auditRows.length === 1 && Number(auditRows[0].actor_user_code) === manager && Number(auditRows[0].site_code) === SITE && auditRows[0].target_id === String(aptNo(1))
+      && same(Object.entries(auditRows[0].details).sort(), Object.entries({ delivery: 'shown', guest_passes: 1, qr_tokens: 1, push_devices: 1, push_outbox: 0 }).sort()) && !pinIn(JSON.stringify(auditRows), newPin), auditRows);
 
   const hashRegistered = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [registered])).rows[0].password_hash;
   const notResettable = await call('POST', `/manager/apartments/${aptNo(4)}/reset-pin`, manager, {});
@@ -338,9 +353,77 @@ export async function sectionApartmentPin(ctx) {
   const selfRow = (await q(`SELECT resident_pin_issued, resident_pin_code FROM apartments WHERE id = $1`, [aptNo(3)])).rows[0];
   check('E9: daire hesabi kendi parolasini belirleyince (PATCH /me) "PIN verildi" isareti kalkar', patchMe.status === 200 && selfRow.resident_pin_issued === false && selfRow.resident_pin_code === null, { status: patchMe.status, body: patchMe.body, selfRow });
 
-  const issuedPins = ['6047', newPin, '4821', '1357', '2468'];
-  const logText = `${logLines.join('\n')}\n${serverErrors.join('\n')}`;
-  check('E10: sunucu gunlugu (console / hata satirlari) verilen / eski PIN\'leri TASIMAZ', !issuedPins.some((pin) => new RegExp(`\\b${pin}\\b`).test(logText)), issuedPins.filter((pin) => logText.includes(pin)));
+  // --- inceleme P3: sakinin KENDI belirledigi parola yoneticice sessizce degistirilip hesap kullanilamaz
+  mails.length = 0;
+  const silent = await call('POST', `/manager/apartments/${aptNo(3)}/reset-pin`, manager, { send_email: false });
+  const mailedPin = /<strong>PIN:<\/strong> (\d{4})/.exec(String(mails[0]?.html ?? ''))?.[1];
+  check('E12: sakinin kendi parolasi: yonetici sifirlamasi PIN\'i YANITTA VERMEZ (pin_code null, satirda null, pin_delivery email_only); send_email:false yok sayilir, PIN yalniz sakinin adresine 1 e-posta',
+    silent.status === 200 && silent.body.pin_code === null && silent.body.apartment.resident_pin_code === null && silent.body.pin_delivery === 'email_only'
+      && silent.body.credentials_sent === true && silent.body.credentials_email === 'iletisim3@qa.example' && mails.length === 1 && mails[0].to === 'iletisim3@qa.example' && /^\d{4}$/.test(String(mailedPin)),
+    { status: silent.status, body: silent.body, mails: mails.length });
+  check('E12b: e-postadaki PIN ile giris CALISIR, sakinin eski (kendi) parolasi 401',
+    (await login(legacy[2].loginName, mailedPin)).status === 200 && (await login(legacy[2].loginName, 'Kendi-Parolam-2026!')).status === 401);
+
+  const superUser = await mkUser({ name: 'PIN Super', role: 'super_user' });
+  await q(`UPDATE apartments SET resident_pin_issued = FALSE, resident_email = NULL WHERE id = $1`, [aptNo(2)]);
+  const hashBeforeNoMail = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [legacy[1].userCode])).rows[0].password_hash;
+  const noMailManager = await call('POST', `/manager/apartments/${aptNo(2)}/reset-pin`, manager, {});
+  const hashAfterNoMail = (await q(`SELECT password_hash FROM users WHERE user_code = $1`, [legacy[1].userCode])).rows[0].password_hash;
+  const noMailSuper = await call('POST', `/manager/apartments/${aptNo(2)}/reset-pin`, superUser, {});
+  check('E13: sakinin kendi parolasi + e-posta YOK: yonetici 409 APARTMENT_PIN_RESET_NEEDS_SUPER (parola DEGISMEZ); super kullanici sifirlar ve PIN\'i bir kez gorur',
+    noMailManager.status === 409 && noMailManager.body.code === 'APARTMENT_PIN_RESET_NEEDS_SUPER' && /süper kullanıcı/.test(noMailManager.body.error) && hashBeforeNoMail === hashAfterNoMail
+      && noMailSuper.status === 200 && noMailSuper.body.pin_delivery === 'shown' && /^\d{4}$/.test(String(noMailSuper.body.pin_code)) && noMailSuper.body.credentials_email === null
+      && (await login(legacy[1].loginName, noMailSuper.body.pin_code)).status === 200,
+    { manager: noMailManager.body, super: noMailSuper.body });
+
+  // --- inceleme P2: gosterge temizlenen/devredilen dairede eski sakinin e-postasi kalmaz; yeni hesabin PIN'i eski sakine GITMEZ
+  const { handOverApartmentResident } = await import('../src/services/membership_service.js');
+  const formerUser = await mkUser({ name: 'Eski Sakin', email: `eski.${SITE}@ahbu.local`, loginName: 'eski.sakin.11' });
+  const tempUser = await mkUser({ name: 'Gecici Pasif', email: `gecici.${SITE}@ahbu.local`, loginName: 'gecici.12' });
+  await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'eski.sakin@qa.example', resident_pin_issued = TRUE WHERE id = $1`, [aptNo(11), formerUser]);
+  await q(`UPDATE apartments SET resident_user_code = $2, resident_email = 'gecici@qa.example', resident_pin_issued = TRUE WHERE id = $1`, [aptNo(12), tempUser]);
+  const hoClient = await pool.connect();
+  try {
+    await hoClient.query('BEGIN');
+    await handOverApartmentResident(hoClient, aptNo(11), formerUser);
+    await handOverApartmentResident(hoClient, aptNo(12), tempUser, { keepPin: true });
+    await hoClient.query('COMMIT');
+  } finally {
+    hoClient.release();
+  }
+  const cleared = (await q(`SELECT resident_user_code, resident_email, resident_pin_issued FROM apartments WHERE id = $1`, [aptNo(11)])).rows[0];
+  const kept = (await q(`SELECT resident_user_code, resident_email, resident_pin_issued FROM apartments WHERE id = $1`, [aptNo(12)])).rows[0];
+  check('E14: gosterge temizlenince eski sakinin iletisim e-postasi ve isaret silinir; keepPin (geri alinabilir pasife alma) e-postayi korur',
+    cleared.resident_user_code === null && cleared.resident_email === null && cleared.resident_pin_issued === false
+      && kept.resident_user_code === null && kept.resident_email === 'gecici@qa.example' && kept.resident_pin_issued === true, { cleared, kept });
+  mails.length = 0;
+  const reprovision = await call('PATCH', `/manager/apartments/${aptNo(12)}/resident`, manager, { full_name: 'Sonraki Sakin', login_name: 'sonraki.sakin12', password: '7310', is_active: true });
+  check('E15: e-postasiz yeni hesap (dairede eski adres kalsa bile): PIN eski adrese GITMEZ (credentials_email null, e-posta 0, satirdaki adres null)',
+    reprovision.status === 200 && reprovision.body.apartment.resident_pin_code === '7310' && reprovision.body.credentials_sent === null && reprovision.body.credentials_email === null
+      && mails.length === 0 && reprovision.body.apartment.resident_email === null, { body: reprovision.body, mails: mails.length });
+
+  // --- inceleme P4: SMTP yavasken PIN'in tek kopyasi yaniti bekletmez (~8 sn yerine burada 300 ms)
+  const nodemailer = (await import('nodemailer')).default;
+  const { apartmentPinMailTuning } = await import('../src/services/apartment_service.js');
+  const fastTransport = nodemailer.createTransport;
+  const savedTimeout = apartmentPinMailTuning.timeoutMs;
+  let releaseSlow;
+  nodemailer.createTransport = () => ({ sendMail: () => new Promise((resolve) => { releaseSlow = resolve; }) });
+  apartmentPinMailTuning.timeoutMs = 300;
+  const slowStart = Date.now();
+  const slow = await call('POST', `/manager/apartments/${aptNo(1)}/reset-pin`, manager, {});
+  const slowMs = Date.now() - slowStart;
+  releaseSlow?.();
+  nodemailer.createTransport = fastTransport;
+  apartmentPinMailTuning.timeoutMs = savedTimeout;
+  check(`E16: SMTP takilirsa yanit BEKLEMEZ (${slowMs} ms): credentials_sent null ("gonderim suruyor") + hedef adres; PIN yanitta bir kez ve gecerli`,
+    slow.status === 200 && slowMs < 3000 && slow.body.credentials_sent === null && slow.body.credentials_email === 'iletisim1@qa.example' && /^\d{4}$/.test(String(slow.body.pin_code))
+      && (await login(legacy[0].loginName, slow.body.pin_code)).status === 200, { slowMs, body: slow.body });
+
+  const issuedPins = ['6047', newPin, '4821', '1357', '2468', mailedPin, noMailSuper.body?.pin_code, '7310', slow.body?.pin_code].filter(Boolean);
+  // Aktarim sayac satiri ([DB] 051 ... N duz kopya) yalniz sayi tasir; PIN ile yanlis eslesmesin diye disarida.
+  const logText = `${logLines.filter((line) => !line.startsWith('[DB] 051')).join('\n')}\n${serverErrors.join('\n')}`;
+  check('E10: sunucu gunlugu (console / hata satirlari) verilen / eski PIN\'leri TASIMAZ', !issuedPins.some((pin) => pinIn(logText, pin)), issuedPins.filter((pin) => pinIn(logText, pin)));
   check('E11: migration dosyasi APARTMENT_PIN_DDL ile ayni ifadeleri tasir (zincir esitligi chain bolumunde)', migrationSql.includes(APARTMENT_PIN_DDL.issuedColumn) && migrationSql.includes(APARTMENT_PIN_DDL.backfill));
 
   server.close();

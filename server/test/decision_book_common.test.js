@@ -19,6 +19,7 @@ import {
   VISIBILITIES,
   VOTE_RESULTS,
   afterKeySql,
+  assertMeetingHeld,
   decisionFinal,
   decisionLimitReached,
   decisionNotFound,
@@ -59,6 +60,17 @@ describe('sabitler ve hatalar', () => {
     assert.deepEqual([decisionFinal().statusCode, decisionFinal().code], [409, 'DECISION_FINAL']);
     assert.deepEqual([decisionLimitReached().statusCode, decisionLimitReached().code, decisionLimitReached().extra], [409, 'DECISION_LIMIT_REACHED', { limit: 5000 }]);
     assert.deepEqual([moduleDisabled().statusCode, moduleDisabled().code, moduleDisabled().extra], [403, 'MODULE_DISABLED', { module: 'decision_book' }]);
+  });
+
+  it('kesinleştirme ön koşulu: toplantı tarihi bugünden (İstanbul) sonraysa 409 DECISION_MEETING_IN_FUTURE; bugün ve geçmiş geçer; gün sınırı İstanbul saatiyle', () => {
+    const future = (fn) => assert.throws(fn, (error) => error.statusCode === 409 && error.code === 'DECISION_MEETING_IN_FUTURE' && error.message === 'Toplantı tarihi gelmemiş karar kesinleştirilemez.');
+    assert.doesNotThrow(() => assertMeetingHeld('2026-10-19', NOW));
+    assert.doesNotThrow(() => assertMeetingHeld('2020-01-01', NOW));
+    future(() => assertMeetingHeld('2026-10-20', NOW));
+    future(() => assertMeetingHeld('2027-10-20', NOW));
+    // 2026-10-19T21:30Z = İstanbul 20 Ekim 00:30 -> 20 Ekim artık "bugün"
+    assert.doesNotThrow(() => assertMeetingHeld('2026-10-20', new Date('2026-10-19T21:30:00Z')));
+    future(() => assertMeetingHeld('2026-10-20', new Date('2026-10-19T20:30:00Z')));
   });
 });
 

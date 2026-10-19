@@ -4,6 +4,7 @@
 // (yazı tipi eşlemesinden, ToUnicode, okunur; Helvetica yedeğinde bu eşleme olmaz). İçerik: üstbilgi (site, yıl), yalnız
 // o yılın KESİN kararları numara sırasıyla, metin, oylama, katılanlar, kesinleştirme bilgisi ve altbilgi notu.
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/decision_models.dart';
@@ -122,6 +123,66 @@ void main() {
     expect(text, contains('Karar No: 2026/21'));
     expect(RegExp(r'/Type\s*/Page\b').allMatches(String.fromCharCodes(bytes)).length, greaterThan(2));
   });
+
+  int pageCount(Uint8List bytes) => RegExp(r'/Type\s*/Page\b').allMatches(String.fromCharCodes(bytes)).length;
+
+  test('sayfadan uzun TEK satır (10.000 karakter, satır sonu yok) sonraki sayfalara akar', () async {
+    final fonts = await PdfFontSet.loadBundled();
+    final words = StringBuffer();
+    var n = 0;
+    while (words.length < DecisionInput.bodyMax - 20) {
+      words.write('kelime${n++} ');
+    }
+    final oneLine = '${words.toString().trim()} SON-İŞARET';
+    expect(oneLine.length, lessThanOrEqualTo(DecisionInput.bodyMax));
+    expect(oneLine.contains('\n'), isFalse);
+    final bytes = await PdfDecisionService.generateYearPdf(
+      siteName: 'Gül Sitesi',
+      year: 2026,
+      decisions: <Decision>[Decision.fromJson(dcJson(1, no: 1, status: 'kesin', body: oneLine))],
+      printedAt: _printed,
+      fonts: fonts,
+    ).timeout(const Duration(seconds: 60));
+    expect(pageCount(bytes), greaterThan(1));
+    final text = extractPdfText(bytes);
+    expect(text, contains('kelime0 kelime1'));
+    expect(text, contains('SON-İŞARET'), reason: 'son sayfadaki son sözcük kaybolmaz');
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('boşluksuz 10.000 karakterlik sözcük satır sonlarında bölünür, sayfalara akar ve tamamı yazılır', () async {
+    final token = 'x' * DecisionInput.bodyMax;
+    final bytes = await PdfDecisionService.generateYearPdf(
+      siteName: 'Gül Sitesi',
+      year: 2026,
+      decisions: <Decision>[Decision.fromJson(dcJson(1, no: 1, status: 'kesin', body: token))],
+      printedAt: _printed,
+      fonts: await PdfFontSet.loadBundled(),
+    ).timeout(const Duration(seconds: 60));
+    expect(pageCount(bytes), greaterThan(1));
+    final text = extractPdfText(bytes);
+    expect('x'.allMatches(text).length, DecisionInput.bodyMax);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('150 satırlık katılanlar listesi sayfalara akar (iki kararda da)', () async {
+    final attendees = List<String>.generate(150, (i) => 'Üye ${(i + 1).toString().padLeft(3, '0')}').join('\n');
+    expect(attendees.length, lessThanOrEqualTo(DecisionInput.attendeesMax));
+    final bytes = await PdfDecisionService.generateYearPdf(
+      siteName: 'Gül Sitesi',
+      year: 2026,
+      decisions: <Decision>[
+        Decision.fromJson(dcJson(1, no: 1, status: 'kesin', attendees: attendees, body: 'Kısa metin')),
+        Decision.fromJson(dcJson(2, no: 2, status: 'kesin', attendees: attendees, body: 'İkinci karar')),
+      ],
+      printedAt: _printed,
+      fonts: await PdfFontSet.loadBundled(),
+    ).timeout(const Duration(seconds: 60));
+    expect(pageCount(bytes), greaterThan(2));
+    final text = extractPdfText(bytes);
+    expect(text, contains('Katılanlar:'));
+    expect(text, contains('Üye 001'));
+    expect('Üye 150'.allMatches(text).length, 2, reason: 'iki kararın da son katılanı yazılır');
+    expect(text, contains('Karar No: 2026/2'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('kesin karar yoksa belge yine üretilir ve bunu söyler', () async {
     final bytes = await PdfDecisionService.generateYearPdf(

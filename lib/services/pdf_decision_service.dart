@@ -19,7 +19,8 @@ import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 /// Kurallar (finans PDF'leriyle aynı):
 /// - Yazı tipi uygulamaya GÖMÜLÜ Roboto'dur ([PdfFontSet.loadBundled]); ağdan indirilmez, çevrimdışıyken de Türkçe
 ///   harfler kaybolmaz.
-/// - Uzun karar metni sayfalara bölünür (her paragraf ayrı, sayfaya sığmayan paragraf da bölünür).
+/// - Sayfadan uzun olabilecek her metin (karar metni, katılanlar) sayfalara bölünür: satır başına en üst düzey,
+///   `TextOverflow.span` ile bölünebilen bir öğe (bkz. [_spanText]); tek satırlık 10.000 karakterlik metin de akar.
 /// - [isolateDecisionThreshold]'dan çok karar arka plan izolesinde üretilir ([BackgroundWork]).
 /// - Dosya adı ASCII'dir (`Karar_Defteri_Gul_Sitesi_2026.pdf`).
 class PdfDecisionService {
@@ -89,15 +90,24 @@ const PdfColor _soft = PdfColor.fromInt(0xFFF1F5F9);
 
 String _day(DateTime? d) => d == null ? '-' : formatDateField(d);
 
-/// Karar metni paragraflara bölünür: her biri sayfa sınırında bölünebilen ayrı bir öğedir (tek dev blok sayfaya
-/// sığmazsa PDF üretimi hata verirdi).
-List<pw.Widget> _paragraphs(String text, pw.TextStyle style) {
+/// Sayfa sınırında bölünebilen metin. `MultiPage` YALNIZ en üst düzeydeki ve `canSpan` true olan öğeleri sayfalara
+/// böler; `pw.Text` bunu ancak `overflow: TextOverflow.span` ile yapar ve `Padding` / `Container` içine sarılınca bölme
+/// devre dışı kalır. Bu yüzden sayfadan uzun olabilecek her metin (karar metni, katılanlar) gövde listesine DOĞRUDAN
+/// bu öğeyle eklenir; aralık ayrı `SizedBox` ile verilir. Sayfa genişliğinden uzun boşluksuz sözcük `pdf` paketinde
+/// satır sonunda kendiliğinden bölünür.
+pw.Widget _spanText(String text, pw.TextStyle style) => pw.Text(text, style: style, overflow: pw.TextOverflow.span);
+
+/// Çok satırlı metin: her satır ayrı, sayfalara bölünebilen bir öğe ([_spanText]); boş satır küçük aralık olur. Tek
+/// satır (10.000 karakterlik boşluksuz metin dahil) sayfadan uzunsa da sonraki sayfalara akar.
+List<pw.Widget> _paragraphs(String text, pw.TextStyle style, {double gap = 2}) {
   final out = <pw.Widget>[];
-  for (final line in text.replaceAll('\r\n', '\n').split('\n')) {
+  for (final line in text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n')) {
     if (line.trim().isEmpty) {
       out.add(pw.SizedBox(height: 6));
     } else {
-      out.add(pw.Padding(padding: const pw.EdgeInsets.only(bottom: 2), child: pw.Text(line, style: style)));
+      out
+        ..add(_spanText(line, style))
+        ..add(pw.SizedBox(height: gap));
     }
   }
   return out;
@@ -114,17 +124,22 @@ Future<Uint8List> _buildDecisionBook(_DecisionJob job) async {
     compress: job.compress,
   );
 
-  pw.Widget meta(String label, String value) => pw.Padding(
-    padding: const pw.EdgeInsets.only(bottom: 2),
-    child: pw.RichText(
+  const metaStyle = pw.TextStyle(fontSize: 9.5);
+  const labelStyle = pw.TextStyle(fontSize: 9.5, color: _muted);
+
+  /// "Etiket: değer" satırı (en üst düzey, sayfalara bölünebilir) + alt aralık.
+  List<pw.Widget> meta(String label, String value) => <pw.Widget>[
+    pw.RichText(
+      overflow: pw.TextOverflow.span,
       text: pw.TextSpan(
         children: <pw.InlineSpan>[
-          pw.TextSpan(text: '$label: ', style: const pw.TextStyle(fontSize: 9.5, color: _muted)),
-          pw.TextSpan(text: value, style: const pw.TextStyle(fontSize: 9.5)),
+          pw.TextSpan(text: '$label: ', style: labelStyle),
+          pw.TextSpan(text: value, style: metaStyle),
         ],
       ),
     ),
-  );
+    pw.SizedBox(height: 2),
+  ];
 
   final body = <pw.Widget>[];
   if (job.decisions.isEmpty) {
@@ -161,23 +176,30 @@ Future<Uint8List> _buildDecisionBook(_DecisionJob job) async {
       ),
     );
     body.add(pw.SizedBox(height: 6));
-    body.add(pw.Text(d.title, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)));
+    body.add(_spanText(d.title, pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)));
     body.add(pw.SizedBox(height: 4));
     body.addAll(_paragraphs(d.body, const pw.TextStyle(fontSize: 10.5, lineSpacing: 1.5)));
     body.add(pw.SizedBox(height: 6));
     final counts = d.voteCountsText;
-    body.add(meta('Oylama', counts == null ? d.voteResult.label : '${d.voteResult.label} (${counts.replaceAll(' · ', ', ')})'));
-    if (d.attendees != null) body.add(meta('Katılanlar', d.attendees!));
+    body.addAll(meta('Oylama', counts == null ? d.voteResult.label : '${d.voteResult.label} (${counts.replaceAll(' · ', ', ')})'));
+    final attendees = d.attendees;
+    if (attendees != null) {
+      // Katılanlar 2000 karaktere ve yüzlerce satıra varabilir: başlık ayrı, her satır sayfalara bölünebilir.
+      body
+        ..add(_spanText('Katılanlar:', labelStyle))
+        ..add(pw.SizedBox(height: 2))
+        ..addAll(_paragraphs(attendees, metaStyle, gap: 1));
+    }
     final supersedes = d.supersedes;
     if (supersedes != null) {
-      body.add(meta('Değiştirdiği karar', supersedes.numberLabel ?? 'Önceki karar'));
+      body.addAll(meta('Değiştirdiği karar', supersedes.numberLabel ?? 'Önceki karar'));
     }
     final superseded = d.supersededText;
-    if (superseded != null) body.add(meta('Durum', superseded));
+    if (superseded != null) body.addAll(meta('Durum', superseded));
     final finalizedBy = d.finalizedByName;
     final finalizedAt = d.finalizedAt;
     if (finalizedBy != null || finalizedAt != null) {
-      body.add(
+      body.addAll(
         meta(
           'Kesinleştiren',
           <String>[?finalizedBy, if (finalizedAt != null) formatIstanbulDateTime(finalizedAt)].join('  •  '),

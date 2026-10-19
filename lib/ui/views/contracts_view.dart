@@ -345,13 +345,29 @@ class ContractListTabState extends State<ContractListTab> implements ContractRel
   bool _moduleOff = false;
 
   // Sunucu imleci opaktır (`next_cursor` metni); [CursorLoader] sayısal imleç taşıdığı için sıra numarası -> imleç
-  // tablosu tutulur.
+  // tablosu tutulur. Yarış koruması (hızlı süzgeç / arama değişimi): her ilk sayfa isteği yeni bir KUŞAK açar ve
+  // tabloyu İSTEKTEN ÖNCE boşaltır; tablo yalnız yanıtı hâlâ güncel kuşağa ait olan istek tarafından yazılır (eski
+  // yanıtı [CursorLoader] zaten yok sayar, tabloyu da bozamaz). Sıra numaraları hiç sıfırlanmaz: eski kuşağın numarası
+  // yeni kuşağın imlecine denk gelemez.
   final Map<int, String> _cursors = <int, String>{};
   int _cursorSeq = 0;
+  int _pageGeneration = 0;
 
   late final CursorLoader<Contract> _loader = CursorLoader<Contract>(
     fetch: (before) async {
-      final after = before == null ? null : _cursors[before];
+      final String? after;
+      final int generation;
+      if (before == null) {
+        generation = ++_pageGeneration;
+        _cursors.clear();
+        after = null;
+      } else {
+        generation = _pageGeneration;
+        after = _cursors[before];
+        // Numara bu kuşağın tablosunda yok (ör. süzgeç değişip yeni ilk sayfa alınamadı): eski süzgecin imleci yeni
+        // süzgeçle gönderilmez; liste burada biter.
+        if (after == null) return (items: const <Contract>[], next: null);
+      }
       final page = await widget.service.listContracts(
         widget.site.code,
         state: _state?.apiValue ?? 'all',
@@ -361,11 +377,9 @@ class ContractListTabState extends State<ContractListTab> implements ContractRel
         cursor: after,
         limit: pageSize,
       );
-      if (before == null) {
-        _moduleOff = false;
-        _cursors.clear();
-        _cursorSeq = 0;
-      }
+      // Bu arada daha yeni bir ilk sayfa istendi: yanıt eskidir, tabloya dokunulmaz (yükleyici de yok sayar).
+      if (generation != _pageGeneration) return (items: page.items, next: null);
+      if (before == null) _moduleOff = false;
       int? next;
       final nextCursor = page.nextCursor;
       // Aynı imleç tekrar gelirse (sunucu tutarsızlığı) durulur: sonsuz döngü olmaz.

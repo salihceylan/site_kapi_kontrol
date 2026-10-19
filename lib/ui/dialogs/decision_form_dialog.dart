@@ -4,9 +4,11 @@
 // Düzeltme kararında (`supersedes`) değiştirilen kararın numarası gösterilir ve `supersedes_id` gönderilir.
 //
 // Çift gönderim: düğmeler gönderim sürerken kapalıdır. Hata pencerenin içinde kalır, metinler korunur; sunucunun
-// `INVALID_FIELD {field}` yanıtı ilgili alanın altında gösterilir.
+// `INVALID_FIELD {field}` yanıtı ilgili alanın altında gösterilir. Kaydedilmemiş değişiklikle Vazgeç / geri "Değişiklikler
+// silinsin mi?" diye sorar. Uzunluklar kırpılmış metnin kod noktası sayısıdır (sunucuyla aynı birim; sessiz kırpma yok).
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter, MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/decision_models.dart';
@@ -16,8 +18,10 @@ import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/dialog_parts.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart';
+import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart' show istanbulNow;
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart' show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/helpers/text_length.dart';
 import 'package:site_kapi_kontrol/ui/helpers/ui_helpers.dart' show dialogWidthForScreen;
 
 class DecisionFormDialog extends StatefulWidget {
@@ -82,7 +86,9 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
   late DecisionVoteResult _voteResult;
   late bool _residents;
   bool _busy = false;
+  bool _closing = false;
   bool _dateOverflow = false;
+  late final List<Object?> _initialSnapshot;
   String? _error;
   String? _voteError;
 
@@ -111,7 +117,60 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
     _votesFor = TextEditingController(text: initial?.votesFor?.toString() ?? '');
     _votesAgainst = TextEditingController(text: initial?.votesAgainst?.toString() ?? '');
     _votesAbstain = TextEditingController(text: initial?.votesAbstain?.toString() ?? '');
+    _initialSnapshot = _snapshot();
   }
+
+  /// Formun karşılaştırılabilir değeri (açılıştaki hâliyle kıyaslanır: kaydedilmemiş değişiklik var mı?).
+  List<Object?> _snapshot() => <Object?>[
+    _meetingType,
+    _voteResult,
+    _residents,
+    _date.text.trim(),
+    _title.text.trim(),
+    _body.text.trim(),
+    _attendees.text.trim(),
+    _votesFor.text.trim(),
+    _votesAgainst.text.trim(),
+    _votesAbstain.text.trim(),
+  ];
+
+  bool get _dirty => !listEquals(_snapshot(), _initialSnapshot);
+
+  /// Vazgeç / geri: kaydedilmemiş değişiklik varsa onay sorulur (yazılanlar sessizce kaybolmaz).
+  Future<void> _requestClose() async {
+    if (_closing || _busy) return;
+    if (_dirty) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AppDialog(
+          title: 'Değişiklikler silinsin mi?',
+          icon: Icons.help_outline_rounded,
+          tone: AppTone.warning,
+          actions: [
+            TextButton(
+              key: const ValueKey<String>('decision_form_keep'),
+              onPressed: () => popIfCurrent(dialogContext, false),
+              child: const Text('Yazmaya Dön'),
+            ),
+            ElevatedButton(
+              key: const ValueKey<String>('decision_form_discard'),
+              onPressed: () => popIfCurrent(dialogContext, true),
+              child: const Text('Vazgeç ve Kapat'),
+            ),
+          ],
+          child: Text('Yazdıklarınız kaydedilmedi.', style: Theme.of(dialogContext).textTheme.bodyMedium),
+        ),
+      );
+      if (discard != true || !mounted) return;
+    }
+    _closing = true;
+    popIfCurrent<Decision>(context);
+  }
+
+  /// Sayaç: kırpılmış metnin KOD NOKTASI sayısı (sunucuyla aynı birim; emoji iki sayılmaz). Sınır aşılınca kırmızı.
+  InputCounterWidgetBuilder _counter(TextEditingController controller, int max) =>
+      (context, {required currentLength, required isFocused, maxLength}) =>
+          characterCounter(context, trimmedCodePoints(controller.text), max);
 
   @override
   void dispose() {
@@ -123,12 +182,18 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
 
   // --- Doğrulama ------------------------------------------------------------------------------
 
+  /// Uzunluk kırpılmış metnin kod noktası sayısıdır (sunucu `Array.from(text).length` sayar; UTF-16 birimi emojili
+  /// metni yanlış reddederdi). Sunucu ayrıca NFC'ye çevirip boşlukları sadeleştirir: bu yalnız kısaltır, bu yüzden
+  /// buradaki sayı sunucununkinden küçük olamaz (istemci geçirdiğini sunucu uzunluk yüzünden reddetmez).
   String? _required(String? value, String label, int max) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return '$label boş olamaz.';
-    if (text.length > max) return '$label en çok $max karakter olabilir.';
+    final length = trimmedCodePoints(value ?? '');
+    if (length < 1) return '$label boş olamaz.';
+    if (length > max) return '$label en çok $max karakter olabilir.';
     return null;
   }
+
+  String? _optional(String? value, String label, int max) =>
+      trimmedCodePoints(value ?? '') > max ? '$label en çok $max karakter olabilir.' : null;
 
   String? _validateDate(String? value) {
     final text = (value ?? '').trim();
@@ -192,7 +257,8 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
     if (initial != null) {
       changes = input.diff(initial);
       if (changes.isEmpty) {
-        Navigator.of(context).pop();
+        _closing = true;
+        popIfCurrent<Decision>(context);
         return;
       }
     }
@@ -205,7 +271,8 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
           ? await widget.service.create(widget.site.code, input)
           : await widget.service.update(widget.site.code, initial.id, changes!);
       if (!mounted) return;
-      Navigator.of(context).pop(saved);
+      _closing = true;
+      popIfCurrent<Decision>(context, saved);
     } catch (e) {
       if (!mounted) return;
       final message = crmMessageOf(e, 'Karar kaydedilemedi. Lütfen tekrar deneyin.');
@@ -273,7 +340,10 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
     final supersedesId = _isEdit ? widget.initial!.supersedesId : supersedes?.id;
     final supersedesLabel = _isEdit ? widget.initial!.supersedesLabel : supersedes?.numberLabel;
     return PopScope(
-      canPop: !_busy,
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_requestClose());
+      },
       child: AppDialog(
         key: const ValueKey<String>('decision_form'),
         title: _isEdit ? 'Taslağı Düzenle' : (supersedes != null ? 'Düzeltme Kararı' : 'Yeni Karar'),
@@ -282,7 +352,7 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
         actions: [
           TextButton(
             key: const ValueKey<String>('decision_form_cancel'),
-            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            onPressed: _busy ? null : () => unawaited(_requestClose()),
             child: const Text('Vazgeç'),
           ),
           FilledButton.icon(
@@ -375,10 +445,14 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
                 controller: _title,
                 enabled: !_busy,
                 maxLength: DecisionInput.titleMax,
-                maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                maxLengthEnforcement: MaxLengthEnforcement.none,
+                buildCounter: _counter(_title, DecisionInput.titleMax),
                 textInputAction: TextInputAction.next,
                 forceErrorText: _fieldErrors['title'],
-                onChanged: (_) => _clearFieldError('title'),
+                onChanged: (_) {
+                  _clearFieldError('title');
+                  setState(() {});
+                },
                 decoration: const InputDecoration(labelText: 'Başlık', prefixIcon: Icon(Icons.title_rounded)),
                 validator: (v) => _required(v, 'Başlık', DecisionInput.titleMax),
               ),
@@ -388,12 +462,16 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
                 controller: _body,
                 enabled: !_busy,
                 maxLength: DecisionInput.bodyMax,
-                maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                maxLengthEnforcement: MaxLengthEnforcement.none,
+                buildCounter: _counter(_body, DecisionInput.bodyMax),
                 minLines: 4,
                 maxLines: 12,
                 keyboardType: TextInputType.multiline,
                 forceErrorText: _fieldErrors['body'],
-                onChanged: (_) => _clearFieldError('body'),
+                onChanged: (_) {
+                  _clearFieldError('body');
+                  setState(() {});
+                },
                 decoration: const InputDecoration(labelText: 'Karar metni', alignLabelWithHint: true),
                 validator: (v) => _required(v, 'Karar metni', DecisionInput.bodyMax),
               ),
@@ -403,12 +481,16 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
                 controller: _attendees,
                 enabled: !_busy,
                 maxLength: DecisionInput.attendeesMax,
-                maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                maxLengthEnforcement: MaxLengthEnforcement.none,
+                buildCounter: _counter(_attendees, DecisionInput.attendeesMax),
                 minLines: 1,
                 maxLines: 4,
                 keyboardType: TextInputType.multiline,
                 forceErrorText: _fieldErrors['attendees'],
-                onChanged: (_) => _clearFieldError('attendees'),
+                onChanged: (_) {
+                  _clearFieldError('attendees');
+                  setState(() {});
+                },
                 decoration: const InputDecoration(
                   labelText: 'Katılanlar',
                   helperText: 'İsteğe bağlı. Toplantıya katılanların adları.',
@@ -416,6 +498,7 @@ class _DecisionFormDialogState extends State<DecisionFormDialog> {
                   alignLabelWithHint: true,
                   prefixIcon: Icon(Icons.groups_rounded),
                 ),
+                validator: (v) => _optional(v, 'Katılanlar', DecisionInput.attendeesMax),
               ),
               const SizedBox(height: AppSpace.lg),
               Text('Oylama sonucu', style: th.titleSmall),

@@ -82,7 +82,7 @@ describe('Mailer: doğrulama e-postası (gecikmeye dayanıklı, istek saati ve s
   it('SMTP taşıyıcısı sınırlı zaman aşımlarıyla kurulur (askıda kalan bağlantı isteği bekletmez)', withSmtpEnv(async ({ options }) => {
     await sendIndividualVerificationEmail({ to: 'a@example.com', fullName: 'Ali', code: '123456', ttlMinutes: 30 });
     assert.equal(options.length, 1);
-    for (const key of ['connectionTimeout', 'greetingTimeout', 'socketTimeout']) {
+    for (const key of ['dnsTimeout', 'connectionTimeout', 'greetingTimeout', 'socketTimeout']) {
       assert.equal(typeof options[0][key], 'number', `${key} tanımlı değil`);
       assert.ok(options[0][key] > 0 && options[0][key] <= 30000, `${key} makul aralıkta değil`);
     }

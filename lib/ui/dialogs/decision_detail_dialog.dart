@@ -247,9 +247,26 @@ class _DecisionDetailDialogState extends State<DecisionDetailDialog> {
     }
   }
 
+  /// Toplantı günü bugünden (İstanbul) sonra mı? Sunucu böyle bir taslağı kesinleştirmez (409
+  /// `DECISION_MEETING_IN_FUTURE`): onay penceresi açılmadan söylenir.
+  bool _meetingInFuture(Decision decision) {
+    final day = decision.meetingDate;
+    if (day == null) return false;
+    final now = istanbulNow(widget.clock?.call());
+    return day.isAfter(DateTime(now.year, now.month, now.day));
+  }
+
   Future<void> _finalize(Decision decision) async {
     final site = widget.site;
     if (site == null || _busy) return;
+    if (_meetingInFuture(decision)) {
+      AppSnack.show(
+        context,
+        '${DecisionBookApi.decisionErrorMessage('DECISION_MEETING_IN_FUTURE')} Toplantıdan sonra kesinleştirin ya da tarihi düzeltin.',
+        kind: AppSnackKind.error,
+      );
+      return;
+    }
     final ok = await confirmDecisionFinalize(context, decision);
     if (!ok || !mounted) return;
     setState(() => _busy = true);

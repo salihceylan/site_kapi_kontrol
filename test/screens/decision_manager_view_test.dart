@@ -484,4 +484,97 @@ void main() {
       expect(find.text('Dosya kaydedilemedi.'), findsOneWidget);
     });
   });
+
+  group('form kapanışı ve uzunluk', () {
+    testWidgets('kaydedilmemiş değişiklik: Vazgeç onay sorar; "Yazmaya Dön" açık tutar, "Vazgeç ve Kapat" kapatır', (t) async {
+      final rig = _rig();
+      await rig.pump(t);
+      await tapFinder(t, dcKey('decision_new'));
+      await _settle(t);
+      // Değişiklik yokken soru sorulmaz.
+      await _tapIn(t, dcKey('decision_form_cancel'));
+      expect(dcKey('decision_form'), findsNothing);
+      expect(find.text('Değişiklikler silinsin mi?'), findsNothing);
+
+      await tapFinder(t, dcKey('decision_new'));
+      await _settle(t);
+      await t.enterText(dcKey('decision_form_title'), 'Yarım kalan karar');
+      await _tapIn(t, dcKey('decision_form_cancel'));
+      expect(find.text('Değişiklikler silinsin mi?'), findsOneWidget);
+      await tapFinder(t, dcKey('decision_form_keep'));
+      await _settle(t);
+      expect(dcKey('decision_form'), findsOneWidget);
+      expect(find.text('Yarım kalan karar'), findsOneWidget, reason: 'yazılan korunur');
+
+      // Geri tuşu (sistem geri) da aynı soruyu sorar.
+      await t.binding.handlePopRoute();
+      await _settle(t);
+      expect(find.text('Değişiklikler silinsin mi?'), findsOneWidget);
+      await tapFinder(t, dcKey('decision_form_discard'));
+      await _settle(t);
+      expect(dcKey('decision_form'), findsNothing);
+      expect(rig.service.createCalls, isEmpty);
+    });
+
+    testWidgets('düzenlemede yalnız seçim değişse de sorar; değişiklik geri alınınca sormaz', (t) async {
+      final rig = _rig();
+      await rig.pump(t);
+      await _openDetail(t, 2);
+      await _tapIn(t, dcKey('decision_action_edit'));
+      await _tapIn(t, dcKey('decision_form_vote_kabul'));
+      await _tapIn(t, dcKey('decision_form_cancel'));
+      expect(find.text('Değişiklikler silinsin mi?'), findsOneWidget);
+      await tapFinder(t, dcKey('decision_form_keep'));
+      await _settle(t);
+      await _tapIn(t, dcKey('decision_form_vote_ertelendi'));
+      await _tapIn(t, dcKey('decision_form_cancel'));
+      expect(find.text('Değişiklikler silinsin mi?'), findsNothing);
+      expect(dcKey('decision_form'), findsNothing);
+      expect(rig.service.updateCalls, isEmpty);
+    });
+
+    testWidgets('uzunluk kod noktasıyla sayılır: 160 emoji başlık geçer, 161 reddedilir; sessiz kırpma yok', (t) async {
+      final rig = _rig();
+      await rig.pump(t);
+      await tapFinder(t, dcKey('decision_new'));
+      await _settle(t);
+      final emoji = String.fromCharCode(0x1F3E0);
+      await t.enterText(dcKey('decision_form_title'), emoji * 161);
+      await t.enterText(dcKey('decision_form_body'), 'Metin');
+      await t.pump();
+      expect(find.text('161/160'), findsOneWidget, reason: 'UTF-16 birimiyle 322 sayılırdı');
+      await _tapIn(t, dcKey('decision_form_save'));
+      expect(find.text('Başlık en çok 160 karakter olabilir.'), findsOneWidget);
+      expect(rig.service.createCalls, isEmpty);
+      await t.enterText(dcKey('decision_form_title'), emoji * 160);
+      await _tapIn(t, dcKey('decision_form_save'));
+      expect(rig.service.createCalls.single.input.title.runes.length, 160);
+    });
+  });
+
+  group('toplantı tarihi gelmemiş taslak', () {
+    testWidgets('istemci: onay açılmadan uyarır, istek gitmez', (t) async {
+      final rig = _rig();
+      rig.service.rows.add(dcJson(20, date: '2026-12-01', title: 'Yılbaşı toplantısı kararı'));
+      await rig.pump(t);
+      await _openDetail(t, 20);
+      await _tapIn(t, dcKey('decision_action_finalize'));
+      expect(dcKey('decision_finalize_dialog'), findsNothing);
+      expect(find.textContaining('Toplantı tarihi gelmemiş karar kesinleştirilemez.'), findsOneWidget);
+      expect(rig.service.finalizeCalls, isEmpty);
+    });
+
+    testWidgets('sunucu 409 DECISION_MEETING_IN_FUTURE: Türkçe metin; karar taslak kalır', (t) async {
+      final rig = _rig();
+      rig.service.failures['finalize'] = <Object>[FakeDecisionService.error(409, 'DECISION_MEETING_IN_FUTURE')];
+      await rig.pump(t);
+      await _openDetail(t, 2);
+      await _tapIn(t, dcKey('decision_action_finalize'));
+      await tapFinder(t, dcKey('decision_finalize_ack'));
+      await tapFinder(t, dcKey('decision_finalize_confirm'));
+      await _settle(t);
+      expect(find.text('Toplantı tarihi gelmemiş karar kesinleştirilemez.'), findsOneWidget);
+      expect(dcKey('decision_action_finalize'), findsOneWidget, reason: 'taslak eylemleri yerinde');
+    });
+  });
 }

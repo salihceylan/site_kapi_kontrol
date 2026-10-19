@@ -1591,8 +1591,10 @@ export async function handOverApartmentResident(
       // Gösterge yeni yöneticiye geçerken eski PIN SİLİNİR (R1 B5): PIN'i çıkarılan kişi biliyordu; devredilen göstergeyle birlikte geçerli kalsaydı
       // daireden çıkarılan kişi PIN ile girmeye devam ederdi (keepPin yalnız göstergenin kimseye geçmediği geri alınabilir pasife alma içindir).
       // Migration 051'den beri PIN saklanmaz: silinen "PIN verildi" işaretidir (eski bir sürecin yazmış olabileceği düz kopya da NULL'lanır).
+      // İletişim e-postası (resident_email) da ÇIKARILAN göstergeye aitti: silinir; yoksa daireye sonra açılan hesabın PIN'i eski sakine
+      // e-postalanabilirdi (inceleme P2). keepPin (geri alınabilir pasife alma) dalı göstergeyle birlikte e-postayı da korur.
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = $2`,
         [Number(otherAdminRes.rows[0].user_code), apartmentId],
       );
     }
@@ -1615,7 +1617,7 @@ export async function handOverApartmentResident(
     if (indicatorOwnedByRemoved) {
       // Eski PIN yeni yöneticiye geçerken silinir (yukarıdaki açıklama).
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = $2`,
         [newAdminCode, apartmentId],
       );
     }
@@ -1624,7 +1626,7 @@ export async function handOverApartmentResident(
     await client.query(
       keepPin
         ? `UPDATE apartments SET resident_user_code = NULL WHERE id = $1`
-        : `UPDATE apartments SET resident_user_code = NULL, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $1`,
+        : `UPDATE apartments SET resident_user_code = NULL, resident_pin_issued = FALSE, resident_pin_code = NULL, resident_email = NULL WHERE id = $1`,
       [apartmentId],
     );
   }
@@ -2090,9 +2092,15 @@ export async function setApartmentPrimaryAdmin({ apartmentId, targetUserCode, au
       [apt.id, tUserCode],
     );
 
-    // 3. apartments.resident_user_code kolonunu güncelle
+    // 3. apartments.resident_user_code kolonunu güncelle. Gösterge BAŞKA kişiye geçiyorsa önceki göstergenin iletişim e-postası ve
+    // "PIN verildi" işareti ona aitti: temizlenir (inceleme P2; yeni göstergenin parolası yönetimin verdiği PIN değildir).
     await client.query(
-      `UPDATE apartments SET resident_user_code = $1 WHERE id = $2`,
+      `UPDATE apartments
+       SET resident_email = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN NULL ELSE resident_email END,
+           resident_pin_issued = CASE WHEN resident_user_code IS DISTINCT FROM $1 THEN FALSE ELSE resident_pin_issued END,
+           resident_pin_code = NULL,
+           resident_user_code = $1
+       WHERE id = $2`,
       [tUserCode, apt.id],
     );
 

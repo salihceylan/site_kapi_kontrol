@@ -292,11 +292,70 @@ void main() {
       await tapFinder(t, find.text('Daha fazla yükle'));
       await settleFor(t, 100);
       expect(_cardIds(t), hasLength(40));
-      expect(rig.service.listContractsCalls.last.cursor, 'c30');
+      expect(rig.service.listContractsCalls.last.cursor, 'c30|all|');
       expect(find.text('Daha fazla yükle'), findsNothing);
       await _tapKey(t, 'contract_summary_aktif');
       await settleFor(t, 100);
       expect(rig.service.listContractsCalls.last.cursor, isNull, reason: 'süzgeç değişince ilk sayfa');
+    });
+
+    testWidgets('yarış: eski ilk sayfa yanıtı EN SON gelirse imleç tablosu bozulmaz; sonraki sayfa güncel süzgecin imleciyle', (t) async {
+      final rig = _rig();
+      for (var i = 0; i < 35; i++) {
+        rig.service.contracts.add(
+          ctContract(200 + i, title: 'Ek sözleşme $i', end: '2027-0${1 + i % 9}-1${i % 10}'),
+        );
+      }
+      await rig.pump(t);
+      expect(_cardIds(t), hasLength(30));
+
+      // İki hızlı süzgeç değişimi: önce "Yürürlükte" (eski istek), hemen ardından süzgeç kaldırılır (yeni istek).
+      final older = Completer<void>();
+      final newer = Completer<void>();
+      rig.service.gates['listContracts'] = <Completer<void>>[older, newer];
+      await _tapKey(t, 'contract_summary_aktif');
+      await _tapKey(t, 'contract_summary_aktif');
+      final calls = rig.service.listContractsCalls;
+      expect(<String>[calls[calls.length - 2].state, calls.last.state], <String>['aktif', 'all']);
+
+      // Yeni yanıt önce, eski yanıt EN SON gelir.
+      newer.complete();
+      await settleFor(t, 100);
+      older.complete();
+      await settleFor(t, 100);
+      expect(_cardIds(t), hasLength(30));
+      expect(_cardIds(t), contains(13), reason: 'ekrandaki liste güncel (tümü) süzgecin listesidir');
+
+      await tapFinder(t, find.text('Daha fazla yükle'));
+      await settleFor(t, 100);
+      expect(rig.service.listContractsCalls.last.state, 'all');
+      expect(
+        rig.service.listContractsCalls.last.cursor,
+        'c30|all|',
+        reason: 'eski (Yürürlükte) yanıtın imleci tabloya yazılmamalı',
+      );
+      expect(_cardIds(t), hasLength(40), reason: 'satır kaybı yok');
+      expect(find.text('Daha fazla yükle'), findsNothing);
+    });
+
+    testWidgets('yarış: sonraki sayfa sürerken süzgeç değişirse eski sayfa yanıtı yeni listeye karışmaz', (t) async {
+      final rig = _rig();
+      for (var i = 0; i < 35; i++) {
+        rig.service.contracts.add(
+          ctContract(200 + i, title: 'Ek sözleşme $i', end: '2027-0${1 + i % 9}-1${i % 10}'),
+        );
+      }
+      await rig.pump(t);
+      final more = Completer<void>();
+      rig.service.gates['listContracts'] = <Completer<void>>[more];
+      await tapFinder(t, find.text('Daha fazla yükle'));
+      await _tapKey(t, 'contract_summary_yaklasiyor');
+      await settleFor(t, 100);
+      expect(_cardIds(t), <int>[12]);
+      more.complete();
+      await settleFor(t, 100);
+      expect(_cardIds(t), <int>[12], reason: 'eski "tümü" sayfası eklenmez');
+      expect(find.text('Daha fazla yükle'), findsNothing);
     });
 
     testWidgets('ayrıntı: onaylı Feshet -> PATCH {status: feshedildi}; kart ve özet güncellenir; Yeniden etkinleştir', (t) async {

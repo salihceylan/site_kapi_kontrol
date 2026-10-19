@@ -66,8 +66,12 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
     _loginNameController = TextEditingController(
       text: widget.apartment.residentLoginName ?? '',
     );
+    // Yeni sakin (dairede hesap yok): e-posta ÖNCEDEN DOLDURULMAZ. Dairede kalmış adres önceki sakine ait olabilir ve
+    // yeni hesabın PIN'i kayıtta bu adrese e-postalanır (inceleme P2).
     _emailController = TextEditingController(
-      text: widget.apartment.residentEmail ?? '',
+      text: widget.apartment.residentUserCode == null
+          ? ''
+          : (widget.apartment.residentEmail ?? ''),
     );
     // PIN sunucuda saklanmaz (liste PIN taşımaz): alan her zaman boş açılır; PIN kayıttan sonra bir kez gösterilir.
     _passwordController = TextEditingController();
