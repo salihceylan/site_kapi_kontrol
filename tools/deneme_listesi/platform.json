@@ -1,7 +1,7 @@
 {
   "baslik": "Platform Faz Kontrol Listesi",
   "aciklama": "SmartKeyPass (kapı kontrol), site ve toplu yaşam yönetim platformunun seçilebilir bir modülü olacak. Bu sayfa işi fazlara böler. Her faz canlıya alındığında maddeleri “Denemeye hazır” olur; siz denersiniz ve “Çalışıyor / Çalışmıyor” diye işaretlersiniz. Henüz yapılmamış maddelerde “Böyle istiyorum / istemiyorum” ile planı şimdiden şekillendirebilirsiniz. İşaretleriniz ve notlarınız kaydedilir, Claude okuyup yanıtlar.",
-  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Yönetim türleri ile banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin.",
+  "durum_metni": "Durum: Faz 0, Faz 1, Faz 1.1, Faz 2a, Faz 3a, site başvurusu ve Faz 4a (Aidat ve Finans: tanım, borçlandırma, tahsilat, düzeltme, ay kapatma) canlıda ve denemeye hazır; Aidat ve Finans modülü varsayılan olarak KAPALIDIR, bir test sitesinde süper kullanıcıyla açıp deneyin. Faz 2b (Excel’den toplu yükleme ve dışa aktarma; F13), Faz 3b-A (Belgeler; F14) ve Faz 4b (makbuz, kasa/banka, gider, raporlar, gecikme tazminatı, borç hatırlatma; F15) ile hesap silme ve veri dosyası güncellemeleri (F16) kodlandı ve test edildi; sunucu ve uygulama sürümü yayınlanınca denenir (maddeler “Denemeye hazır” görünse de sürüm yayınlanmadan uygulamada yoktur). Gecikme tazminatı ve borç hatırlatma, avukatın vereceği hukuk onayı (finance.legal_ok) gelene kadar kapalı kalır: “Hukuk onayı bekleniyor” iletisi denemeye hazırdır, çalışan hali Planlıdır. Telefon bildirimi (Faz 3b-B, Firebase) F3.07’de planlı kalır. Beş yönetim türü ve türe göre terimler (F9), Anket ve Oylama ile Ziyaretçi ve Kargo (F11) canlıdadır; kartlı geçişin sunucu altyapısı hazırdır, uygulama ekranı ve kart okuyucu planlıdır (F10). Banka ve ödeme işleri “Yakında”. Satışa hazırlık paketi (F12: hesabı silme ve veri indirme, yasal metinler, giriş güvenliği, Yardım ve tanıtım turu, Platform Ayarları, bakım ve sürüm kapısı, yedek ve izleme, mağaza hazırlığı): sunucu tarafı canlıdadır; uygulama ve web sürümü yasal metinler tamamlanınca yayınlanacaktır, bu yüzden F12 maddelerini sürüm yayınlandıktan sonra (ya da geliştirici derlemesiyle) deneyin.",
   "bolumler": [
     {
       "id": "F0",
@@ -3550,48 +3550,87 @@
     },
     {
       "id": "F9",
-      "baslik": "Yönetim türü paketleri",
-      "durum": "yakinda",
-      "ozet": "Yakında… Rezidans, İş Merkezi, Kooperatif ve Alışveriş Merkezi yönetimleri için hazır modül paketleri ve türe uygun kelimeler.",
+      "baslik": "Yönetim türü paketleri ve terimleri",
+      "durum": "hazir",
+      "ozet": "Site kurulurken beş yönetim türünden biri seçilir: Apartman ve Site, Rezidans, İş Merkezi, Kooperatif, Alışveriş Merkezi. Türe göre ekrandaki kelimeler değişir (İş Merkezi: Ofis/Firma, Kooperatif: Hisse/Üye, Alışveriş Merkezi: Mağaza/Kiracı firma) ve \"Modüller\" ekranında o tür için önerilen modüller \"Bu tür için önerilir\" işaretiyle gelir. Kayıtlar, yetkiler ve modüller her türde aynıdır; yalnız kelimeler ve öneriler değişir. Tür site kurulduktan sonra değiştirilemez: denemeleri TEST sitesiyle yapın. Türe özel ileri özellikler (KDV’li fatura, ciro kirası, hisse devri vb.) Yakında… Ayrıntı: docs/PLATFORM_MODUL_SISTEMI.md (Yönetim türü terimleri). Canlıdadır; denenebilir.",
       "maddeler": [
         {
+          "id": "F9.05",
+          "baslik": "Beş yönetim türü seçilebilir",
+          "adimlar": [
+            "Süper kullanıcı \"Yeni Site Ekle\" penceresini (ya da yeni site yöneticisi \"Site Kurulum Sihirbazı\"nı) açın; \"Yönetim Türü\" bölümüne bakın.",
+            "Sırayla Rezidans, İş Merkezi, Kooperatif ve Alışveriş Merkezi satırlarını seçin; birini seçip TEST sitesi olarak kaydedin.",
+            "Kaydedilen siteyi \"Site Düzenle\" ile açın."
+          ],
+          "beklenen": "Beş türün hepsi seçilebilir (artık \"Yakında…\" çipi yoktur); her satırda türün tek cümlelik açıklaması ve varsayılandan farklı kelimelerin kısa özeti yazar (örn. İş Merkezi: \"Daire → Ofis, Sakin → Firma, …\"). Site seçilen türle kaydedilir. \"Site Düzenle\"de tür yalnız çip olarak görünür ve \"Yönetim türü site kurulduktan sonra değiştirilemez.\" notu çıkar.",
+          "rol_notu": "Süper kullanıcı / Site yöneticisi",
+          "on_kosul": "Silinmesinde sakınca olmayan bir TEST sitesi kurun (tür sonradan değiştirilemez).",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F9.06",
+          "baslik": "Türe göre kelimeler (Ofis/Firma, Hisse/Üye, Mağaza/Kiracı firma)",
+          "adimlar": [
+            "İş Merkezi, Kooperatif ve Alışveriş Merkezi türünde birer TEST sitesi kurun (ya da F9.05’teki siteyi kullanın).",
+            "Her sitede \"Kişiler\" ekranını açın; ikinci sekmenin başlığına ve o sekmedeki arama kutusuna bakın."
+          ],
+          "beklenen": "İş Merkezi’nde sekme \"Ofisler\", arama kutusu \"Ofis ara\"; Kooperatif’te \"Hisseler\"; Alışveriş Merkezi’nde \"Mağazalar\" yazar. Apartman ve Site ile Rezidans’ta \"Daireler\" kalır. Yalnız kelimeler değişir: kayıtlar, yetkiler ve diğer ekranlar aynı çalışır.",
+          "rol_notu": "Site yöneticisi",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F9.07",
+          "baslik": "Modüller ekranında \"Bu tür için önerilir\" işareti",
+          "adimlar": [
+            "F9.05/F9.06’daki TEST sitelerinin her birinde \"Modüller\" ekranını açın."
+          ],
+          "beklenen": "Türe önerilen modüllerin kartında \"Bu tür için önerilir\" çipi görünür. Apartman ve Site: Geçiş Kontrol, Aidat ve Finans, Belgeler, Duyuru ve Bildirim. Rezidans: Rezervasyon ve Konsiyerj, Ziyaretçi ve Kargo, İş Takibi, Geçiş Kontrol, Aidat ve Finans. İş Merkezi: İş Takibi, Ziyaretçi ve Kargo, Aidat ve Finans, Belgeler. Kooperatif: Aidat ve Finans, Belgeler, Duyuru ve Bildirim, Anket ve Oylama. Alışveriş Merkezi: Aidat ve Finans, İş Takibi, Ziyaretçi ve Kargo, Belgeler. Çip yalnız öneridir: modüller yine kapalı gelir, açma ve talep akışı değişmez.",
+          "rol_notu": "Site yöneticisi / Süper kullanıcı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
           "id": "F9.01",
-          "baslik": "Rezidans",
+          "baslik": "Rezidans: türe özel ileri özellikler",
           "adimlar": [],
-          "beklenen": "Yakında… Danışma, kargo, ortak alan hizmetleri ve rezidansa özel ayarlar.",
+          "beklenen": "Yakında… Rezidansa özel ayarlar. (Danışma/konsiyerj ve ortak alan rezervasyonu \"Rezervasyon ve Konsiyerj\" (F18), kargo ve ziyaretçi kaydı \"Ziyaretçi ve Kargo\" (F11.03) modülleriyle bugün kullanılabilir; Rezidans türünde \"Bu tür için önerilir\" işaretiyle gelir.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "yakinda"
         },
         {
           "id": "F9.02",
-          "baslik": "İş Merkezi",
+          "baslik": "İş Merkezi: türe özel ileri özellikler",
           "adimlar": [],
-          "beklenen": "Yakında… Firma hesapları, KDV’li fatura, çalışan ve ziyaretçi girişi, mesai saatleri.",
+          "beklenen": "Yakında… KDV’li fatura, firma çalışanlarının girişi, mesai saatleri. (\"Ofis/Firma\" kelimeleri (F9.06) ve ziyaretçi kaydı (F11.03) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "yakinda"
         },
         {
           "id": "F9.03",
-          "baslik": "Kooperatif",
+          "baslik": "Kooperatif: türe özel ileri özellikler",
           "adimlar": [],
-          "beklenen": "Yakında… Üye ve hisse kayıtları, üye aidatı, genel kurul ve denetim, inşaat dönemi ödemeleri.",
+          "beklenen": "Yakında… Hisse devri ve üye/hisse kayıtları, genel kurul ve denetim, inşaat dönemi ödemeleri. (\"Hisse/Üye\" ve \"Üye aidatı\" kelimeleri (F9.06) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "yakinda"
         },
         {
           "id": "F9.04",
-          "baslik": "Alışveriş Merkezi",
+          "baslik": "Alışveriş Merkezi: türe özel ileri özellikler",
           "adimlar": [],
-          "beklenen": "Yakında… Mağaza ve kiracı firma hesapları, kira, ortak gider, ciro kirası, sayaç ve enerji dağıtımı.",
+          "beklenen": "Yakında… Kira, ciro kirası, sayaç ve enerji dağıtımı. (\"Mağaza/Kiracı firma\" ve \"Ortak gider\" kelimeleri (F9.06) hazırdır.)",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
+          "yeni": true,
           "gelistirme": "yakinda"
         }
       ]
@@ -3599,18 +3638,18 @@
     {
       "id": "F10",
       "baslik": "Geçiş kontrol genişlemesi",
-      "durum": "yakinda",
-      "ozet": "Yakında… Geçiş Kontrol (SmartKeyPass) modülüne yeni geçiş yolları. Her biri donanım ve dış sistemlerle bağlantı gerektirir.",
+      "durum": "planli",
+      "ozet": "Geçiş Kontrol (SmartKeyPass) modülüne yeni geçiş yolları. Kartlı Geçiş için sunucudaki kayıt altyapısı hazırdır; uygulama ekranı ve kart okuyucu (cihaz) henüz YOKTUR, bu yüzden uygulamada denenecek adım yoktur (Planlı). Plaka tanıma, HGS ve kamera bağlantısı Yakında…: \"Modüller\" ekranında \"Yakında…\" çipiyle görünür, açılamaz. Her biri donanım ve dış sistemlerle bağlantı gerektirir. Ayrıntı: docs/PLATFORM_GECIS_GENISLEME.md.",
       "maddeler": [
         {
           "id": "F10.01",
           "baslik": "Kartlı geçiş",
           "adimlar": [],
-          "beklenen": "Yakında… Kartla kapı açma, kartın kişiye tanımlanması ve iptali.",
+          "beklenen": "Planlı. Sunucu tarafı hazırdır: kart bir kişi kaydına tanımlanır, iptal edilir (kayıt silinmez, geçmiş kalır), aynı sitede bir kart aynı anda yalnız bir kişide etkin olur; sakin ileride yalnız kendi kartlarını numarasının son 4 hanesi açık olarak görecek. Uygulama ekranı (yönetici kart listesi, tanımlama, iptal; sakin kart listesi) ve kart okuyucu (cihaz yazılımı ve kapı bağlantısı) henüz YOKTUR; gelince denenecek adımlar buraya yazılır. \"Kartlı Geçiş\" \"Modüller\" ekranında görünür, ama açılsa da uygulamada yeni ekran çıkmaz.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "yeni": true,
+          "gelistirme": "planli"
         },
         {
           "id": "F10.02",
@@ -3647,34 +3686,74 @@
     {
       "id": "F11",
       "baslik": "Diğer yaşam modülleri",
-      "durum": "yakinda",
-      "ozet": "Yakında… Yönetimi kolaylaştıran ek modüller ve yönetici paneli.",
+      "durum": "hazir",
+      "ozet": "Yönetimi kolaylaştıran ek modüller. Anket ve Oylama (F11.01, F11.06) ile Ziyaretçi ve Kargo (F11.03, F11.07) canlıdadır; ikisi de varsayılan KAPALIDIR: süper kullanıcı siteye açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister, süper onaylar. Ziyaretçi ve kargoda e-posta ve telefon bildirimi bu sürümde YOKTUR (yalnız uygulama içi liste ve rozet). E-genel kurul ve karar defteri, firma ve sözleşme takibi ile yönetici paneli (web) Yakında… Ayrıntı: docs/PLATFORM_ANKET.md, docs/PLATFORM_ZIYARETCI_KARGO.md. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F11.01",
-          "baslik": "Anket ve oylama",
-          "adimlar": [],
-          "beklenen": "Yakında… Yönetim sakinlere soru sorar, sonuç anında görünür.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "baslik": "Anket ve oylama: aç, yayınla, oy ver, kapat",
+          "adimlar": [
+            "Site yöneticisi: menüden \"Anket ve Oylama\" → \"Yeni Anket\". Başlık, soru ve en az iki seçenek yazın (\"Seçenek ekle\"); \"Hedef kitle\"yi \"Tüm site\" bırakın; isteğe bağlı \"Kapanış günü\" seçin; \"Taslak Kaydet\"e basın.",
+            "Taslağı açıp \"Yayınla\"ya basın ve onaylayın.",
+            "Daire sakini: menüden \"Anketler\" → \"Açık anketler\"de anketi açın, bir seçenek seçip \"Oy ver\"e basın ve \"Oyunuzu onaylayın\" penceresinde onaylayın. Sonra aynı ankete yeniden oy vermeyi deneyin.",
+            "Site yöneticisi: anketi açıp \"Anketi Kapat\"a basın ve onaylayın; sakin \"Kapanan anketler\"e baksın."
+          ],
+          "beklenen": "Taslak yalnız yöneticide görünür, sakinde hiç görünmez. Yayınlanınca \"Anket yayınlandı.\" yazar ve anket sakinin \"Açık anketler\" listesine gelir; yayınlanan anketin sorusu ve seçenekleri değiştirilemez. Oy verince \"Oyunuz alındı.\" yazar ve sonuçlar (seçenek başına oy ve yüzde) görünür; oy değiştirilemez, ikinci oy kabul edilmez. Yönetici sonucu her zaman \"Toplam N oy · M kişiden %X katılım\" biçiminde görür. Kapatınca \"Anket kapatıldı.\" yazar, artık oy verilemez ve kapanan anket yeniden açılamaz; sakin sonucu \"Kapanan anketler\"de görür. Kapanış tarihi geçen anket \"Süresi doldu\" görünür ve oy almaz.",
+          "rol_notu": "Site yöneticisi / Daire sakini",
+          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F11.06",
+          "baslik": "Anket: hedef kitle, daire başına tek oy, açık oy ve kurul",
+          "adimlar": [
+            "Site yöneticisi \"Yeni Anket\"te \"Hedef kitle\"yi \"Bloklar\" seçip bir blok ekleyin, \"Daire başına tek oy\"u açın, \"Anonim oylama\"yı kapatın ve yayınlayın.",
+            "Seçilen bloktaki aynı dairenin iki sakin hesabıyla sırayla oy vermeyi deneyin; seçilmeyen bloktaki bir sakin \"Anketler\"e baksın.",
+            "Yönetici anketi açıp \"Oy verenleri göster\"e bassın.",
+            "Yönetim kurulu üyesi ve görevli hesaplarıyla menüye ve \"Anket ve Oylama\" ekranına bakın."
+          ],
+          "beklenen": "İlk hesabın oyu alınır; aynı dairedeki ikinci hesap oy veremez ve nedeni yazılır. Seçilmeyen bloktaki sakin anketi hiç görmez. Anonim olmayan ankette yönetici \"Oy verenler\" listesinde kişi, daire ve seçimi görür; anonim ankette kimin ne oy verdiği görünmez. Kurul üyesi anketleri ve sonuçları görür ama yeni anket, yayınla ve kapat düğmeleri yoktur ve \"Yönetim kurulu üyesi olarak anketleri ve sonuçları yalnızca görüntüleyebilirsiniz. Oy verenler görünmez.\" notu çıkar. Görevli hesabında \"Anket ve Oylama\" menüsü yoktur.",
+          "rol_notu": "Site yöneticisi / Yönetim kurulu / Daire sakini",
+          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın. Seçilen blokta iki sakin hesabı bağlı bir daire ve başka blokta bir sakin hesabı gerekir.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F11.03",
+          "baslik": "Ziyaretçi ve kargo kaydı (görevli)",
+          "adimlar": [
+            "Görevli (ya da site yöneticisi): menüden \"Ziyaretçi ve Kargo\" → \"Yeni Kayıt\". \"Tür\"ü Kargo seçin, \"Kargo firması / gönderen\" yazın, \"Daire (isteğe bağlı)\" alanından bir daire seçin; \"Kaydet\".",
+            "İkinci kayıt: \"Tür\" Ziyaretçi, \"Ziyaretçi adı\" yazın, aynı daireyi seçin; \"Kaydet\".",
+            "Kargo kaydını \"Teslim edildi olarak işaretle\", ziyaretçi kaydını \"Ayrıldı olarak işaretle\" ile kapatın ve onay penceresinde onaylayın.",
+            "Durum ve tür süzgeçlerini ve \"Kayıt ara\" kutusunu (ad, firma veya daire) deneyin."
+          ],
+          "beklenen": "Kargo \"Bekliyor\", ziyaretçi \"İçeride\" durumuyla açılır (\"Kargo kaydı açıldı (Bekliyor).\" / \"Ziyaretçi kaydı açıldı (İçeride).\"). Kapatınca durum \"Teslim edildi\" / \"Ayrıldı\" olur ve kapanış zamanı görünür; kapanan kayıt yeniden açılamaz, kayıt silinmez (yanlış kayıt \"İptal\" ile kapatılır). Süzgeç ve arama listeyi daraltır.",
+          "rol_notu": "Görevli / Site yöneticisi",
+          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın. Kayıt girecek kapıcı/güvenlik hesabı siteye görevli olarak eklenmiş olmalı.",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F11.07",
+          "baslik": "Ziyaretçi ve kargo: sakin rozeti ve rol sınırları",
+          "adimlar": [
+            "F11.03’teki dairenin sakini: menüde \"Ziyaretçi ve Kargo\"nun yanındaki sayı rozetine bakın; ekranı açın.",
+            "\"Yeni\" rozetli kaydı açın (ayrıntı penceresi), kapatıp listeye ve menü rozetine dönün.",
+            "Başka bir dairenin sakini aynı ekrana baksın.",
+            "Yönetim kurulu üyesi hesabıyla \"Ziyaretçi ve Kargo\"yu açın."
+          ],
+          "beklenen": "Sakin yalnız kendi dairesine gelen kayıtları görür; görülmemiş kayıtlar kalın ve \"Yeni\" rozetiyle listelenir, üstte \"Görülmemiş N kaydınız var.\" yazar ve menüde sayı rozeti çıkar. Kayıt açılınca \"Yeni\" kalkar ve menüdeki sayı azalır. Kaydeden görevlinin adı sakine gösterilmez. Başka dairenin kayıtları ve daire seçilmeden açılan kayıtlar hiçbir sakine görünmez. E-posta ve telefon bildirimi YOKTUR (yakında). Kurul üyesi kayıtları görür ama \"Yeni Kayıt\" ve durum düğmeleri yoktur; \"Yönetim kurulu üyesi olarak kayıtları yalnızca görüntüleyebilirsiniz.\" notu çıkar.",
+          "rol_notu": "Daire sakini / Yönetim kurulu",
+          "on_kosul": "Modül siteye açık olmalı: süper kullanıcı açar ya da site yöneticisi \"Modüller\" ekranından \"Modül Talep Et\" ile ister ve süper kullanıcı onaylar. Denemeleri bir TEST sitesinde yapın.",
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F11.02",
           "baslik": "E-genel kurul ve karar defteri",
           "adimlar": [],
           "beklenen": "Yakında… Toplantı daveti, çevrimiçi oylama ve karar kayıtları.",
-          "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
-        },
-        {
-          "id": "F11.03",
-          "baslik": "Ziyaretçi ve kargo takibi",
-          "adimlar": [],
-          "beklenen": "Yakında… Gelen ziyaretçi ve kargo kaydı, sakine bildirim.",
           "rol_notu": "",
           "on_kosul": "",
           "yeni": false,
