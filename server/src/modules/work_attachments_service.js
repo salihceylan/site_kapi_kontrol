@@ -95,9 +95,9 @@ export const siteAttachmentLockKey = (siteCode) => `work_attachments_site:${Numb
 /**
  * Yükleme kaydı açar (status uploading, storage_key sunucuda üretilir) -> 201 { attachment }. Sınırlar: talep başına 4 (ready + uploading, 409 LIMIT_REACHED),
  * kullanıcı başına saatte 30 kayıt (429), kapalı talep 409 INVALID_STATE, bayt kotaları (ready + süresi dolmamış uploading boyutları, gelen boyut dahil):
- *  - sakin kotası (R2-2; YALNIZ sakin kapsamı, görevli / yönetici / süper muaf): sakinin bu sitede SON 30 GÜNDE açtığı kayıtlar
- *    WORK_ATTACHMENTS_USER_QUOTA_MB (200) -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: 'user', quota_bytes, used_bytes, window_days: 30 }. Kayan pencere sayesinde
- *    kapanan talepteki (silemediği) fotoğraflar sakini kalıcı olarak kilitlemez;
+ *  - sakin kotası (R2-2; YALNIZ sakin kapsamı, görevli / yönetici / süper muaf): sakinin bu sitede SON 30 GÜNDE, KENDİ taleplerine (sakin olarak)
+ *    açtığı kayıtlar WORK_ATTACHMENTS_USER_QUOTA_MB (200) -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: 'user', quota_bytes, used_bytes, window_days: 30 }.
+ *    Kayan pencere sayesinde kapanan talepteki (silemediği) fotoğraflar sakini kalıcı olarak kilitlemez; aynı kişinin görevli olarak yükledikleri sayılmaz;
  *  - site kotası (herkes, pencere yok): sitenin toplamı WORK_ATTACHMENTS_SITE_QUOTA_MB (10240) -> 409 { quota: 'site', quota_bytes, used_bytes }.
  * Sakin toplamı kullanıcı kilidi, site toplamı site fotoğraf kilidi altında sayılır (yarışta aşılmaz). Pencere sorgusu (uploaded_by, created_at) kısmi
  * indeksini kullanır. Dosya içeriği ayrı PUT ile gelir (work_attachments_upload.js).
@@ -137,12 +137,15 @@ export async function createAttachment({ scope, rawId, actor, body }) {
       throw attachmentLimitReached();
     }
     if (scope.kind === 'resident') {
-      // R2-2: yalnız sakin; kayan 30 günlük pencere (idx_work_item_attachments_uploaded_by: uploaded_by, created_at)
+      // R2-2: yalnız sakin; kayan 30 günlük pencere (idx_work_item_attachments_uploaded_by: uploaded_by, created_at). Yalnız SAKİN olarak yüklenenler sayılır:
+      // sakin kapsamı yalnız KENDİ talebine yükleyebildiğinden ölçüt "talebi açan = yükleyen"; aynı kişinin görevli / yönetici olarak başka taleplere
+      // yüklediği fotoğraflar sakin penceresine girmez (çift rol, inceleme 4. tur). Talep satırı birincil anahtarla okunur.
       const mine = await client.query(
         `
           SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used
           FROM work_item_attachments a
           WHERE a.uploaded_by = $2 AND a.created_at > NOW() - make_interval(days => $4::INTEGER) AND a.site_code = $1 AND ${activeAttachmentSql('a', '$3')}
+            AND EXISTS (SELECT 1 FROM work_items w WHERE w.id = a.work_item_id AND w.created_by = a.uploaded_by)
         `,
         [siteCode, userCode, ATTACHMENT_UPLOAD_TTL_MINUTES, ATTACHMENT_USER_QUOTA_WINDOW_DAYS],
       );

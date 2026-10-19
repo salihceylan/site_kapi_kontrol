@@ -2,7 +2,9 @@
 // - seçilen fotoğraflar yüklemeden önce hazırlanırken "Fotoğraf hazırlanıyor..." (ayrıntı penceresi ve talep formu),
 //   bu sırada ekleme / gönderme kapalı; ipucu "küçültülür; konum bilgisi silinir" der;
 // - 409 LIMIT_REACHED yarış kilidi kalıcı değil: 30 sn sonra tek seferlik sessiz yenileme "Fotoğraf Ekle"yi açar
-//   (sakin ve yönetim), yenileme başarısızsa bir kez daha denenir, pencere kapanınca zamanlayıcı iptal edilir.
+//   (sakin ve yönetim), yenileme başarısızsa bir kez daha denenir, pencere kapanınca zamanlayıcı iptal edilir;
+// - (R3-2) talep formu seçim / hazırlık sürerken kapanmaz ("Vazgeç" kapalı, geri hareketi yok sayılır); seçim
+//   sürerken pencere yok olursa seçici kopyaları yine silinir (release), seçim sonradan biterse bir kez daha.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -269,6 +271,71 @@ void main() {
       await _tapKey(t, 'work_manager_detail_close');
       await _settle(t);
       expect(find.byType(WorkAttachmentSection), findsNothing, reason: 'pencere kapandı');
+    });
+  });
+
+  group('seçim sürerken kapatma ve seçici kopyaları (R3-2)', () {
+    Future<_ResidentRig> openFormPicking(WidgetTester t, Completer<void> gate) async {
+      final rig = _resident(<WorkPhotoSelection>[_one('kapi.jpg')]);
+      rig.picker.prepareGate = gate;
+      await rig.pump(t);
+      await _tapKey(t, 'work_new_request');
+      await settleFor(t, 100);
+      await _tapKey(t, 'work_form_photo_add');
+      await settleFor(t, 100);
+      expect(wkKey('work_form_photo_preparing'), findsOneWidget, reason: 'seçim / hazırlık sürüyor');
+      return rig;
+    }
+
+    testWidgets('talep formu: seçim sürerken "Vazgeç" kapalı, geri hareketi yok sayılır; bitince ikisi de çalışır',
+        (t) async {
+      final gate = Completer<void>();
+      await openFormPicking(t, gate);
+      expect(t.widget<TextButton>(wkKey('work_form_close')).onPressed, isNull);
+      await t.binding.handlePopRoute();
+      // Kapanma geçişi bitecek kadar beklenir (kapansaydı form ağaçtan çıkmış olurdu).
+      await settleFor(t, 600);
+      expect(wkKey('work_form_send'), findsOneWidget, reason: 'form açık kaldı');
+      expect(wkKey('work_form_discard'), findsNothing, reason: 'kapatma onayı da açılmadı');
+
+      gate.complete();
+      await settleFor(t, 100);
+      expect(wkKey('work_form_photo_remove_0'), findsOneWidget);
+      expect(t.widget<TextButton>(wkKey('work_form_close')).onPressed, isNotNull);
+      await t.binding.handlePopRoute();
+      await settleFor(t, 100);
+      expect(wkKey('work_form_discard'), findsOneWidget, reason: 'fotoğraf eklendi: kapatma onayı sorulur');
+    });
+
+    testWidgets('talep formu: seçim sürerken pencere yok olursa release çağrılır; seçim sonradan biterse bir kez daha',
+        (t) async {
+      final gate = Completer<void>();
+      final rig = await openFormPicking(t, gate);
+      expect(rig.picker.releaseCalls, 0);
+      await t.pumpWidget(const SizedBox());
+      expect(rig.picker.releaseCalls, 1, reason: 'dispose: seçim sürüyordu');
+      gate.complete();
+      await t.pump();
+      await t.pump();
+      expect(rig.picker.releaseCalls, 2, reason: 'seçim bitti: sonradan oluşan kopyalar da silinir');
+    });
+
+    testWidgets('sakin ayrıntısı: seçim sürerken pencere yok olursa release çağrılır', (t) async {
+      final rig = _resident(<WorkPhotoSelection>[_one('a.jpg')]);
+      final gate = Completer<void>();
+      rig.picker.prepareGate = gate;
+      await rig.pump(t);
+      await rig.openCard(t, 1);
+      await _tapKey(t, 'work_attachment_add');
+      await settleFor(t, 100);
+      expect(wkKey('work_attachment_preparing'), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      expect(rig.picker.releaseCalls, 1);
+      gate.complete();
+      await t.pump();
+      await t.pump();
+      expect(rig.picker.releaseCalls, 2);
+      expect(rig.service.createAttachmentCalls, isEmpty, reason: 'kapanan pencere yüklemez');
     });
   });
 }

@@ -222,20 +222,26 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
     if (_submitting || _picking) return;
     final remaining = kWorkAttachmentMax - _photos.length;
     if (remaining <= 0) return;
+    // Seçici kopyaları (Android önbelleği) seçim sürerken pencere kapansa da silinsin: bayrak beklemeden ÖNCE.
+    _pickedAny = true;
+    final picker = widget.picker;
     setState(() {
       _picking = true;
       _photoError = null;
     });
     WorkPhotoSelection selection;
     try {
-      selection = await widget.picker.pick(
+      selection = await picker.pick(
         maxCount: remaining,
         onPreparing: () {
           if (mounted) setState(() => _preparing = true);
         },
       );
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        unawaited(picker.release());
+        return;
+      }
       setState(() {
         _picking = false;
         _preparing = false;
@@ -243,8 +249,11 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
       });
       return;
     }
-    if (!mounted) return;
-    _pickedAny = true;
+    if (!mounted) {
+      // Pencere seçim sürerken kapandı: sonradan oluşan kopyalar da silinsin.
+      unawaited(picker.release());
+      return;
+    }
     // Geçersiz seçimler yer doldurmaz; her biri nedeniyle ayrı satırda bildirilir.
     final split = workSplitSelection(selection, remaining: remaining);
     setState(() {
@@ -380,7 +389,8 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   }
 
   Future<void> _requestClose() async {
-    if (_closing) return;
+    // Fotoğraf seçimi / hazırlığı sürerken kapanmaz (ayrıntı pencereleri gibi); geri hareketi de yok sayılır.
+    if (_closing || _picking) return;
     final upload = _upload;
     if (upload != null) {
       // Talep zaten açıldı: yükleme sürerken kapanmaz; bitince sonuçla kapanır.
@@ -435,7 +445,7 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
               actions: [
                 TextButton(
                   key: const ValueKey<String>('work_form_close'),
-                  onPressed: _submitting ? null : () => unawaited(_requestClose()),
+                  onPressed: (_submitting || _picking) ? null : () => unawaited(_requestClose()),
                   child: const Text('Vazgeç'),
                 ),
                 ElevatedButton(

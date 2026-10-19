@@ -283,20 +283,26 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     if (_busy || _retry.locked || !_c.canAddAttachment) return;
     final remaining = kWorkAttachmentMax - _c.attachments.length;
     if (remaining <= 0) return;
+    // Seçici kopyaları seçim sürerken pencere kapansa da silinsin: bayrak beklemeden ÖNCE.
+    _pickedAny = true;
+    final picker = widget.picker;
     setState(() {
       _picking = true;
       _photoError = null;
     });
     WorkPhotoSelection selection;
     try {
-      selection = await widget.picker.pick(
+      selection = await picker.pick(
         maxCount: remaining,
         onPreparing: () {
           if (mounted) setState(() => _preparing = true);
         },
       );
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        unawaited(picker.release());
+        return;
+      }
       setState(() {
         _picking = false;
         _preparing = false;
@@ -304,8 +310,11 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
       });
       return;
     }
-    if (!mounted) return;
-    _pickedAny = true;
+    if (!mounted) {
+      // Pencere seçim sürerken kapandı: sonradan oluşan kopyalar da silinsin.
+      unawaited(picker.release());
+      return;
+    }
     final split = workSplitSelection(selection, remaining: remaining);
     final notes = split.notes;
     final valid = split.valid;

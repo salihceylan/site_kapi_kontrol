@@ -509,7 +509,7 @@ describe('servis (sahte işlem): kota, etkin kayıt sayımı, kapalı talepte si
   const actorOf = (userCode) => ({ user_code: userCode, role: 'individual' });
   const sqls = () => log.map((entry) => entry.sql);
 
-  it('sakin kotası (R2-2; YALNIZ sakin, son 30 gün): kullanılan + gelen > 200 MB -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, window_days: 30 }; INSERT yok, ROLLBACK; sorgu pencereli', async () => {
+  it('sakin kotası (R2-2; YALNIZ sakin, son 30 gün, yalnız SAKİN olarak kendi taleplerine yüklenenler): kullanılan + gelen > 200 MB -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, window_days: 30 }; INSERT yok, ROLLBACK; sorgu pencereli', async () => {
     log.length = 0;
     state.userUsed = 200 * MB - 50;
     await assert.rejects(createAttachment({ scope: resident, rawId: '5', actor: actorOf(20004), body: BODY }), (error) =>
@@ -519,6 +519,8 @@ describe('servis (sahte işlem): kota, etkin kayıt sayımı, kapalı talepte si
     assert.ok(sqls().includes('ROLLBACK'));
     const windowQuery = log.find((entry) => /a\.uploaded_by = \$2/.test(entry.sql));
     assert.ok(windowQuery.sql.includes('a.created_at > NOW() - make_interval(days => $4::INTEGER)'), windowQuery.sql);
+    // çift rol (inceleme 4. tur): aynı kişinin görevli / yönetici olarak BAŞKA taleplere yükledikleri sakin penceresine girmez
+    assert.ok(windowQuery.sql.endsWith('AND EXISTS (SELECT 1 FROM work_items w WHERE w.id = a.work_item_id AND w.created_by = a.uploaded_by)'), windowQuery.sql);
     assert.deepEqual(windowQuery.params, [SITE_CODE, 20004, 120, ATTACHMENT_USER_QUOTA_WINDOW_DAYS], '(site, sakin, yükleme ömrü dk, pencere gün)');
     state.userUsed = 200 * MB - 100; // tam sınır kabul
     const okResult = await createAttachment({ scope: resident, rawId: '5', actor: actorOf(20004), body: BODY });

@@ -820,6 +820,11 @@ abstract final class WorkAttachmentRules {
   static const String dimensionsMessage =
       'Fotoğrafın çözünürlüğü çok yüksek; daha küçük bir fotoğraf seçin.';
 
+  /// İstemci: fotoğraf yeniden kodlanamadı ve üstverisi (konum / cihaz) de ayıklanamadı (yapısı bozuk); gizlilik için
+  /// yüklenmez.
+  static const String metadataMessage =
+      'Fotoğraf işlenemedi; konum ve cihaz bilgileri silinemediği için eklenmedi.';
+
   /// Sunucu sınırı (bellek bombası koruması): kenar 12.000 pikseli ya da toplam 40 milyon pikseli aşan görsel reddedilir;
   /// istemci de böyle görseli çözmeden ÖNCE durdurur.
   static const int maxEdgePixels = 12000;

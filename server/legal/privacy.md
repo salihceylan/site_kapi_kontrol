@@ -1,8 +1,8 @@
 ---
 id: privacy
 title: Gizlilik Politikası
-version: 2026-10-16
-effective_date: 2026-10-16
+version: 2026-10-19
+effective_date: 2026-10-19
 required_for: [register]
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -175,7 +175,7 @@ Diğer kayıtlar:
 - **Makbuz, gecikme tazminatı, gider, tedarikçi, kasa ve banka kayıtları ile gider belgeleri:** Site Yönetiminin saklama yükümlülüklerine göre; bu kayıtlar silinemez ve değiştirilemez, hesabınızı silmeniz bu kayıtlardaki adınızı kaldırmaz. [KARAR/BİLGİ GEREKLİ: bu kayıtlar için saklama süresi] [AVUKAT DOĞRULASIN: bu kayıtların saklanma yükümlülüğü, süresi ve süre dolduğunda silinmesi]
 - **Yüklenen belgeler:** Site Yönetimi silene kadar; Site Yönetimi sildikten sonra yukarıdaki süreyle. [KARAR/BİLGİ GEREKLİ: belgeler için saklama süresi]
 - **Diğer:** [KARAR/BİLGİ GEREKLİ: saklama süresi belirlenecek kayıtlar: denetim kaydı, yasal belge onay kayıtları, misafir geçiş bağlantıları, katılım başvuruları ve davetler, abonelikten çıkma listesi, nginx erişim günlüğü, yedekler]
-- **Yedekler:** sunucudaki yerel yedekler günlük 14, haftalık 8 ve aylık 6 adet tutulur; dış kopyalar en çok yaklaşık 210 gün saklanır. Silinen veya kimliksizleştirilen verinin yedeklerdeki kopyası bu döngü dolunca, yani en geç yaklaşık 7 ay içinde yok olur. Yüklenen belge dosyaları (gider belgeleri dâhil) ayrı bir şifreli belge arşivinde yedeklenir; arşivin son 5 sürümü tutulur ve en yenisi dışındakiler en çok yaklaşık 210 gün saklanır. [KARAR/BİLGİ GEREKLİ: yedekleme düzeninin (veritabanı ve belge arşivi) üretimde devrede olduğu, dış kopyanın nerede tutulduğu ve saklama süreleri doğrulanacak]
+- **Yedekler:** sunucudaki yerel yedekler günlük 7, haftalık 4 ve aylık 6 adet tutulur; dış kopyalar en çok yaklaşık 210 gün saklanır. Silinen veya kimliksizleştirilen verinin yedeklerdeki kopyası bu döngü dolunca, yani en geç yaklaşık 7 ay içinde yok olur. Yüklenen belge dosyaları (gider belgeleri dâhil) ayrı bir şifreli belge arşivinde yedeklenir; arşivin son 5 sürümü tutulur ve en yenisi dışındakiler en çok yaklaşık 210 gün saklanır. İş takibi fotoğrafları da aynı kurallarla ayrı bir şifreli fotoğraf arşivinde yedeklenir. [KARAR/BİLGİ GEREKLİ: yedekleme düzeninin (veritabanı ve belge arşivi) üretimde devrede olduğu, dış kopyanın nerede tutulduğu ve saklama süreleri doğrulanacak]
 
 ## 8. Verilerinizi nasıl koruyoruz?
 

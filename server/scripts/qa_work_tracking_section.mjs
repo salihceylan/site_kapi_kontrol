@@ -918,6 +918,14 @@ export async function sectionWorkTracking(ctx) {
   // gorevli (sakin degil) 1 MB'i asar ama kotaya tabi degil; ayri talepte (qItem'in 4 yuvasi site kotasi adimina kalsin)
   const qStaff = [await createAtt(M(`/${qOld}`), STAFF, { size_bytes: 700000 }), await createAtt(M(`/${qOld}`), STAFF, { size_bytes: 700000 })];
   const qMgr = await createAtt(M(`/${qItem}`), MGR, { size_bytes: 700000 });
+  // cift rol (inceleme 4. tur): ayni kisi hem gorevli hem sakin; GOREVLI olarak baska talebe yukledikleri sakin penceresine SAYILMAZ
+  const DUAL = await resident(site, site.apts[4], 'IT Gorevli Sakin');
+  await addMember(site.code, DUAL, 'STAFF');
+  const dualTarget = (await create(QR, { title: 'Cift rol hedefi' })).body.item.id;
+  const dualOwn = (await create(DUAL, { title: 'Cift rol kendi talebi' })).body.item.id;
+  const dualStaff = [await createAtt(M(`/${dualTarget}`), DUAL, { size_bytes: 700000 }), await createAtt(M(`/${dualTarget}`), DUAL, { size_bytes: 700000 })];
+  const dualRes = await createAtt(A(dualOwn), DUAL, { size_bytes: 700000 });
+  const dualRes2 = await createAtt(A(dualOwn), DUAL, { size_bytes: 700000 });
   const siteBytes = await activeSiteBytes(site.code);
   const siteQuotaMb = Math.ceil(siteBytes / MB) + 1;
   process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB = String(siteQuotaMb);
@@ -932,24 +940,33 @@ export async function sectionWorkTracking(ctx) {
       qStaff.every((r) => r.status === 201) && qMgr.status === 201 && room > 0 && room <= 5 * MB && qOver.status === 409 && qOver.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qOver.body.quota === 'site' &&
       qOver.body.quota_bytes === siteQuotaMb * MB && qOver.body.used_bytes === siteBytes && !('window_days' in qOver.body) && qFit.status === 201,
     [qFirst.status, qSecond.body, qStaff.map((r) => r.status), qMgr.status, siteBytes, siteQuotaMb, room, qOver.body, qFit.body]);
-  // K15b: pencere sorgusu indeksle karsilanir (seq scan kapaliyken plan bir indeks kullanir; (uploaded_by, created_at) kismi indeksi tanimiyla durur)
+  check('K15c (cift rol): hem gorevli hem sakin kullanici: GOREVLI olarak baska talebe 2 x 700 KB (1 MB asilir) 201; SAKIN olarak kendi talebine 700 KB 201 (gorevli yuklemeleri sakin penceresine SAYILMAZ), ikinci 700 KB 409 { quota: user, used_bytes: 700000 }',
+    dualStaff.every((r) => r.status === 201) && dualRes.status === 201 && dualRes2.status === 409 && dualRes2.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && dualRes2.body.quota === 'user' &&
+      dualRes2.body.used_bytes === 700000 && dualRes2.body.window_days === 30, [dualStaff.map((r) => [r.status, r.body?.code]), dualRes.status, dualRes2.body]);
+  // K15b: pencere sorgusu (sunucudakiyle ayni: + talebi acan = yukleyen) indeksle karsilanir: seq scan kapaliyken plan hic Seq Scan icermez, ek tablosuna bir
+  // ek indeksiyle erisilir; (uploaded_by, created_at) kismi indeksi tanimiyla durur
   const planClient = await pool.connect();
-  let windowPlan = '';
+  let planRoot = null;
   try {
     await planClient.query('BEGIN');
     await planClient.query('SET LOCAL enable_seqscan = off');
-    windowPlan = JSON.stringify((await planClient.query(`EXPLAIN (FORMAT JSON) SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used FROM work_item_attachments a
+    planRoot = (await planClient.query(`EXPLAIN (FORMAT JSON) SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used FROM work_item_attachments a
       WHERE a.uploaded_by = ${Number(QR)} AND a.created_at > NOW() - make_interval(days => 30) AND a.site_code = ${Number(site.code)}
-        AND (a.status = 'ready' OR (a.status = 'uploading' AND a.created_at >= NOW() - make_interval(mins => 120)))`)).rows[0]);
+        AND (a.status = 'ready' OR (a.status = 'uploading' AND a.created_at >= NOW() - make_interval(mins => 120)))
+        AND EXISTS (SELECT 1 FROM work_items w WHERE w.id = a.work_item_id AND w.created_by = a.uploaded_by)`)).rows[0]['QUERY PLAN'][0].Plan;
   } finally {
     await planClient.query('ROLLBACK').catch(() => {});
     planClient.release();
   }
+  const planNodes = [];
+  const walkPlan = (node) => { if (!node) return; planNodes.push(node); for (const child of node.Plans ?? []) walkPlan(child); };
+  walkPlan(planRoot);
+  const usedIdx = planNodes.map((node) => node['Index Name']).filter(Boolean);
   const uploaderIdx = (await q(`SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_work_item_attachments_uploaded_by'`)).rows[0]?.indexdef ?? '';
-  const usedIdx = (windowPlan.match(/"Index Name":"([a-z_]+)"/g) ?? []).map((m) => m.slice(14, -1));
-  check('K15b (R2-2): sakin kotasi pencere sorgusu indeksle karsilanir (seq scan yok; uploaded_by + created_at kismi indeksi tanimiyla var)',
-    !windowPlan.includes('"Seq Scan"') && usedIdx.some((name) => ['idx_work_item_attachments_uploaded_by', 'idx_work_item_attachments_site_created'].includes(name)) &&
-      /\(uploaded_by, created_at\) WHERE \(uploaded_by IS NOT NULL\)/.test(uploaderIdx), { usedIdx, uploaderIdx });
+  check('K15b (R2-2 + cift rol): sakin kotasi pencere sorgusu (EXISTS dahil) indeksle karsilanir (Seq Scan yok; ek tablosuna ek indeksiyle erisim); uploaded_by + created_at kismi indeksi tanimiyla var',
+    planNodes.length > 0 && !planNodes.some((node) => node['Node Type'] === 'Seq Scan') && usedIdx.some((name) => name.startsWith('idx_work_item_attachments_')) &&
+      /\(uploaded_by, created_at\) WHERE \(uploaded_by IS NOT NULL\)/.test(uploaderIdx), { nodes: planNodes.map((node) => `${node['Node Type']}${node['Index Name'] ? `:${node['Index Name']}` : ''}`), uploaderIdx });
+  console.log(`      K15b plan: ${planNodes.map((node) => `${node['Node Type']}${node['Index Name'] ? `:${node['Index Name']}` : ''}`).join(' > ')}`);
 
   // K16: suresi dolan (2 saati asan) uploading satirlari bakim silmeden de talep sinirina (4) ve kotalara SAYILMAZ, ayrintida listelenmez
   const ER = await resident(site, site.apts[5], 'IT Foto Suresi Dolan');

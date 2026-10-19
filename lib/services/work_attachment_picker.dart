@@ -19,21 +19,30 @@ import 'package:site_kapi_kontrol/services/local_cache_purge.dart';
 import 'package:site_kapi_kontrol/services/work_photo_prepare.dart';
 
 export 'package:site_kapi_kontrol/services/work_photo_prepare.dart'
-    show probeImageSize;
+    show WorkImageSizeProbe, probeImageSize;
 
 /// Okunan fotoğrafı hazırlar ([prepareWorkPhoto]) ve seçim kaydına çevirir: hazırlandıysa `.jpg` adı ve JPEG baytları,
-/// hazırlanamadıysa özgün ad ve baytlar (piksel boyutu ölçülebildiyse taşınır; ön doğrulama karar verir).
+/// hazırlanamadıysa özgün ad ve üstverisi ayıklanmış baytlar (piksel boyutu ölçülebildiyse taşınır; ön doğrulama karar
+/// verir); üstverisi ayıklanamadıysa seçim geçersizdir ([WorkPhotoPick.preparationError]). [web] ve [descriptorProbe]
+/// testler içindir.
 Future<WorkPhotoPick> prepareWorkPhotoPick(
   String name,
   Uint8List bytes, {
   bool? web,
+  WorkImageSizeProbe? descriptorProbe,
 }) async {
-  final prepared = await prepareWorkPhoto(name, bytes, web: web);
+  final prepared = await prepareWorkPhoto(
+    name,
+    bytes,
+    web: web,
+    descriptorProbe: descriptorProbe,
+  );
   return WorkPhotoPick(
     name: prepared.name,
     bytes: prepared.bytes,
     width: prepared.width,
     height: prepared.height,
+    preparationError: prepared.error,
   );
 }
 
@@ -47,6 +56,7 @@ class WorkPhotoPick {
     int? declaredSize,
     this.width,
     this.height,
+    this.preparationError,
   }) : _mimeType = mimeType,
        _declaredSize = declaredSize;
 
@@ -63,6 +73,9 @@ class WorkPhotoPick {
   final int? width;
   final int? height;
 
+  /// Hazırlama engeli (ör. üstveri ayıklanamadı): doluysa seçim geçersizdir, fotoğraf yüklenmez.
+  final String? preparationError;
+
   /// Bayt cinsinden boyut (okunmayan dosyada bildirilen boyut).
   int get size => _declaredSize ?? bytes.length;
 
@@ -77,14 +90,16 @@ class WorkPhotoPick {
       _mimeType ??
       'application/octet-stream';
 
-  /// Ön doğrulama hatası (boyut / boş / tür / çözünürlük); sorun yoksa null.
-  String? get validationError => WorkAttachmentRules.validate(
-    fileName: name,
-    size: size,
-    content: bytes.isEmpty ? null : bytes,
-    width: width,
-    height: height,
-  );
+  /// Ön doğrulama hatası (hazırlama engeli / boyut / boş / tür / çözünürlük); sorun yoksa null.
+  String? get validationError =>
+      preparationError ??
+      WorkAttachmentRules.validate(
+        fileName: name,
+        size: size,
+        content: bytes.isEmpty ? null : bytes,
+        width: width,
+        height: height,
+      );
 
   bool get isValid => validationError == null;
 
