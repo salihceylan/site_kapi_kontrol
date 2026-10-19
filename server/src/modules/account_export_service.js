@@ -362,10 +362,9 @@ const OPTIONAL_OBJECTS_SQL = `
     (to_regclass('public.finance_reminder_items') IS NOT NULL AND to_regclass('public.finance_reminder_runs') IS NOT NULL) AS has_reminders,
     (to_regclass('public.receipts') IS NOT NULL) AS has_receipts,
     (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
+    (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
     (to_regclass('public.reservations') IS NOT NULL) AS has_reservations,
     (to_regclass('public.survey_votes') IS NOT NULL) AS has_surveys
-    (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
-    (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
 `;
 
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
