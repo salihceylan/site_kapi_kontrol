@@ -104,6 +104,15 @@ enum SirketMenuItem {
 
   /// Satışa hazırlık: İstemci Hataları (uygulamalardan gelen hata raporları). Yalnız süper kullanıcı.
   istemciHatalari,
+
+  /// Anket ve Oylama yönetim ekranı "Anket ve Oylama". Rol listesinde YOKTUR; `survey` modülü AÇIK olan sitenin
+  /// yöneticisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir
+  /// ("Rezervasyon"un, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
+  anketler,
+
+  /// Anket ve Oylama sakin ekranı "Anketler". Rol listesinde YOKTUR; alıcısı olabilecek ve `survey` modülü AÇIK
+  /// sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Anket ve Oylama"nın altına).
+  anket,
 }
 
 class YanMenu extends StatelessWidget {
@@ -496,6 +505,25 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Anket ve Oylama" / "Anketler": "Rezervasyon" / "Rezervasyonlar" / ... sırasıyla ilk bulunanın altına; "Anketler"
+    // varsa "Anket ve Oylama"nın altına.
+    if (extra == SirketMenuItem.anketler || extra == SirketMenuItem.anket) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.anket) SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyon,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -638,6 +666,10 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Platform Ayarları';
     case SirketMenuItem.istemciHatalari:
       return 'İstemci Hataları';
+    case SirketMenuItem.anketler:
+      return 'Anket ve Oylama';
+    case SirketMenuItem.anket:
+      return 'Anketler';
   }
 }
 
@@ -701,6 +733,10 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.tune_rounded;
     case SirketMenuItem.istemciHatalari:
       return Icons.bug_report_rounded;
+    case SirketMenuItem.anketler:
+      return Icons.poll_rounded;
+    case SirketMenuItem.anket:
+      return Icons.how_to_vote_rounded;
   }
 }
 

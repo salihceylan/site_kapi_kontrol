@@ -14,6 +14,9 @@ abstract final class PlatformModuleCodes {
   static const String workTracking = 'work_tracking';
   static const String metering = 'metering';
   static const String onlinePayment = 'online_payment';
+
+  /// Anket ve Oylama (F11.01). Varsayılan KAPALI.
+  static const String survey = 'survey';
 }
 
 DateTime? _parseDate(Object? raw) {
