@@ -335,11 +335,19 @@ class FakeWorkPhotoPicker implements WorkPhotoPicker {
   final List<int> calls = <int>[];
   int releaseCalls = 0;
 
+  /// Verilirse seçim "hazırlanıyor" aşamasında (`onPreparing` çağrıldıktan sonra) bu kapı açılana dek bekler.
+  Completer<void>? prepareGate;
+
   @override
-  Future<WorkPhotoSelection> pick({required int maxCount}) async {
+  Future<WorkPhotoSelection> pick({required int maxCount, void Function()? onPreparing}) async {
     calls.add(maxCount);
     final failure = error;
     if (failure != null) throw failure;
+    final gate = prepareGate;
+    if (gate != null) {
+      onPreparing?.call();
+      await gate.future;
+    }
     return queue.isEmpty ? const WorkPhotoSelection() : queue.removeAt(0);
   }
 
@@ -923,11 +931,16 @@ class FakeWorkService extends WorkTrackingService {
     }
     final quota = quotaExceeded;
     if (quota != null) {
+      final site = quota == 'site';
       throw ApiException(
-        WorkAttachmentRules.quotaMessage(site: quota == 'site'),
+        WorkAttachmentRules.quotaMessage(site: site, windowDays: site ? null : 30),
         statusCode: 409,
         code: 'ATTACHMENT_QUOTA_EXCEEDED',
-        payload: <String, dynamic>{'quota': quota},
+        payload: <String, dynamic>{
+          'quota': quota,
+          'quota_bytes': 200 * 1024 * 1024,
+          if (!site) 'window_days': 30,
+        },
       );
     }
     if (!WorkAttachmentRules.allowedMimeTypes.contains(request.mimeType)) {

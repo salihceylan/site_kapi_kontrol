@@ -503,7 +503,8 @@ fi
 
 # ---- 8. is takibi fotograf ekleri (DOCUMENTS_DIR/work_attachments) arsivi: DB dokumunden SONRA, yalniz icerik degisince ----------
 # Belgelerden AYRI arsiv (kendi boyut siniri WORK_ATTACHMENTS_BACKUP_MAX_MB, ozeti, tutma adedi): fotograflar kapanan taleple birlikte kalir; ust sinir
-# uygulamadaki kotalardir (WORK_ATTACHMENTS_USER_QUOTA_MB / WORK_ATTACHMENTS_SITE_QUOTA_MB). <kok>/work_attachments ve <kok>/.instance alinir; _tmp/ HARIC.
+# uygulamadaki site kotasidir (WORK_ATTACHMENTS_SITE_QUOTA_MB; sakin basina son 30 gun WORK_ATTACHMENTS_USER_QUOTA_MB). <kok>/work_attachments ve
+# <kok>/.instance alinir; _tmp/ HARIC. Dis kopyada (offsite_push.sh) ve Windows'ta da en yeni KEEP_WORK_ATTACHMENTS arsiv tutulur.
 # Dosya adlari benzersizdir (uuid) ve bir kez yazilir; dokumden sonra alindigi icin DB'deki hazir satirlarin dosyalari arsivdedir (aradaki dakikalarda
 # kullanicinin sildigi fotograf haric; restore_test.sh bunu canli DB ile ayirt eder). Kok ya da work_attachments/ sembolik baglantiysa REDDEDILIR.
 # Dizin yoksa / bossa (is takibi fotografi hic eklenmediyse) HATA verilmez, atlanir. Arsiv sifrelidir (config/ + offsite/), 600 izinli.
@@ -541,7 +542,7 @@ work_attachments_backup() {
   fi
   sz_mb="$(num "$(du -sm "$dir" 2>/dev/null | cut -f1)" 0)"
   if [ "$sz_mb" -gt "$WORK_ATTACHMENTS_BACKUP_MAX_MB" ]; then
-    REASON="fotograf dizini ${sz_mb} MB > sinir ${WORK_ATTACHMENTS_BACKUP_MAX_MB} MB (WORK_ATTACHMENTS_BACKUP_MAX_MB): tam arsiv stratejisi yetersiz; kotalari / siniri gozden gecirin ya da artimli yedege gecin"
+    REASON="fotograf dizini ${sz_mb} MB > sinir ${WORK_ATTACHMENTS_BACKUP_MAX_MB} MB (WORK_ATTACHMENTS_BACKUP_MAX_MB): tam arsiv stratejisi yetersiz; site fotograf kotasini / siniri gozden gecirin ya da artimli yedege gecin"
     return 1
   fi
   avail="$(df -P -BM "$CONFIGD" | awk 'NR==2{gsub(/M/,"",$4); print $4}')"

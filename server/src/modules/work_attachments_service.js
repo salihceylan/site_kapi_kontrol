@@ -2,7 +2,7 @@
 //
 // Sözleşme: docs/PLATFORM_IS_TAKIBI.md "Fotoğraf ekleri".
 //  - KİLİT SIRASI (work_tracking_service ile aynı): sites FOR KEY SHARE -> users FOR KEY SHARE (silinmiş hesaba yazma yok) -> work_items_user:<kod> advisory
-//    -> work_attachments_site:<site> advisory (ikisi de yalnız kayıt AÇARKEN: saatlik sayım + kişi kotası / site kotası) -> work_items (FOR UPDATE) ->
+//    -> work_attachments_site:<site> advisory (ikisi de yalnız kayıt AÇARKEN: saatlik sayım + sakin kotası / site kotası) -> work_items (FOR UPDATE) ->
 //    work_item_attachments (FOR UPDATE) -> work_item_events. Talep satırı FOR UPDATE ile kilitli olduğundan talep başına 4 sınırı eşzamanlı isteklerde de
 //    KESİNDİR. Nadir 40P01'de işlem TEK SEFER baştan denenir.
 //  - Kapsam: sakin yalnız KENDİ talebi (+ modül açık, + HÂLÂ aktif sakin); yönetici / süper sitenin tümü; görevli kendine atanmış / atanmamış / yetim atamalı
@@ -20,6 +20,7 @@ import {
   ATTACHMENTS_PER_USER_PER_HOUR,
   ATTACHMENT_SUBTREE,
   ATTACHMENT_UPLOAD_TTL_MINUTES,
+  ATTACHMENT_USER_QUOTA_WINDOW_DAYS,
   MAX_ATTACHMENTS_PER_ITEM,
   attachmentForbidden,
   attachmentHourlyLimitReached,
@@ -93,10 +94,13 @@ export const siteAttachmentLockKey = (siteCode) => `work_attachments_site:${Numb
 
 /**
  * Yükleme kaydı açar (status uploading, storage_key sunucuda üretilir) -> 201 { attachment }. Sınırlar: talep başına 4 (ready + uploading, 409 LIMIT_REACHED),
- * kullanıcı başına saatte 30 kayıt (429), kapalı talep 409 INVALID_STATE, bayt kotaları (WA-SEC-3; uploading + ready boyutları, gelen boyut dahil):
- * yönetici / süper DIŞINDAKİ kişinin bu sitedeki toplamı WORK_ATTACHMENTS_USER_QUOTA_MB (200), sitenin toplamı WORK_ATTACHMENTS_SITE_QUOTA_MB (10240) ->
- * 409 ATTACHMENT_QUOTA_EXCEEDED { quota: 'user' | 'site' }. Kişi toplamı kullanıcı kilidi, site toplamı site fotoğraf kilidi altında sayılır (yarışta aşılmaz).
- * Dosya içeriği ayrı PUT ile gelir (work_attachments_upload.js).
+ * kullanıcı başına saatte 30 kayıt (429), kapalı talep 409 INVALID_STATE, bayt kotaları (ready + süresi dolmamış uploading boyutları, gelen boyut dahil):
+ *  - sakin kotası (R2-2; YALNIZ sakin kapsamı, görevli / yönetici / süper muaf): sakinin bu sitede SON 30 GÜNDE açtığı kayıtlar
+ *    WORK_ATTACHMENTS_USER_QUOTA_MB (200) -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: 'user', quota_bytes, used_bytes, window_days: 30 }. Kayan pencere sayesinde
+ *    kapanan talepteki (silemediği) fotoğraflar sakini kalıcı olarak kilitlemez;
+ *  - site kotası (herkes, pencere yok): sitenin toplamı WORK_ATTACHMENTS_SITE_QUOTA_MB (10240) -> 409 { quota: 'site', quota_bytes, used_bytes }.
+ * Sakin toplamı kullanıcı kilidi, site toplamı site fotoğraf kilidi altında sayılır (yarışta aşılmaz). Pencere sorgusu (uploaded_by, created_at) kısmi
+ * indeksini kullanır. Dosya içeriği ayrı PUT ile gelir (work_attachments_upload.js).
  */
 export async function createAttachment({ scope, rawId, actor, body }) {
   const input = parseAttachmentInput(body);
@@ -132,10 +136,15 @@ export async function createAttachment({ scope, rawId, actor, body }) {
     if (Number(count.rows[0].n) >= MAX_ATTACHMENTS_PER_ITEM) {
       throw attachmentLimitReached();
     }
-    if (!scope.canManage) {
+    if (scope.kind === 'resident') {
+      // R2-2: yalnız sakin; kayan 30 günlük pencere (idx_work_item_attachments_uploaded_by: uploaded_by, created_at)
       const mine = await client.query(
-        `SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used FROM work_item_attachments a WHERE a.site_code = $1 AND a.uploaded_by = $2 AND ${activeAttachmentSql('a', '$3')}`,
-        [siteCode, userCode, ATTACHMENT_UPLOAD_TTL_MINUTES],
+        `
+          SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used
+          FROM work_item_attachments a
+          WHERE a.uploaded_by = $2 AND a.created_at > NOW() - make_interval(days => $4::INTEGER) AND a.site_code = $1 AND ${activeAttachmentSql('a', '$3')}
+        `,
+        [siteCode, userCode, ATTACHMENT_UPLOAD_TTL_MINUTES, ATTACHMENT_USER_QUOTA_WINDOW_DAYS],
       );
       const used = Number(mine.rows?.[0]?.used ?? 0);
       if (used + input.sizeBytes > limits.userQuotaBytes) {

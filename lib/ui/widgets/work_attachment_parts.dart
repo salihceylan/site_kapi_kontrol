@@ -1006,7 +1006,49 @@ class WorkUploadProgress extends StatelessWidget {
   }
 }
 
-/// Ayrıntı penceresindeki "Fotoğraflar" bölümü: sayaç, şerit, yükleme ilerlemesi, hata ve "Fotoğraf Ekle".
+/// Seçilen fotoğraflar yüklemeden önce hazırlanıyor (küçültme, JPEG, EXIF silme; bkz. `work_photo_prepare.dart`):
+/// belirsiz çubuk ve "Fotoğraf hazırlanıyor...". Ekran okuyucuya bir kez duyurulur.
+class WorkPhotoPreparing extends StatelessWidget {
+  const WorkPhotoPreparing({super.key, this.keyPrefix = 'work_photo'});
+
+  static const String label = 'Fotoğraf hazırlanıyor...';
+
+  final String keyPrefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Column(
+          key: ValueKey<String>('${keyPrefix}_preparing'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(label, style: th.titleSmall),
+            const SizedBox(height: AppSpace.sm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: LinearProgressIndicator(minHeight: 8, backgroundColor: p.surfaceMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fotoğraf seçicinin altındaki kural ipucu (ayrıntı penceresi ve talep formu).
+const String kWorkPhotoPrepareHint = 'Fotoğraflar yüklenmeden önce küçültülür; konum bilgisi silinir.';
+
+/// 409 `LIMIT_REACHED` sınır kilidinden ("başka fotoğraf yükleniyor olabilir") sonra ayrıntının sessizce yeniden
+/// yüklenme süresi (kilit kalıcı olmasın).
+const Duration kWorkLimitRecheckDelay = Duration(seconds: 30);
+
+/// Ayrıntı penceresindeki "Fotoğraflar" bölümü: sayaç, şerit, hazırlama / yükleme ilerlemesi, hata ve "Fotoğraf Ekle".
 /// Düğmeler yalnız [canAdd] iken çizilir (kurul: hiç; sakin: talep açıkken; yönetim: yazma yetkisiyle).
 class WorkAttachmentSection extends StatelessWidget {
   const WorkAttachmentSection({
@@ -1022,6 +1064,7 @@ class WorkAttachmentSection extends StatelessWidget {
     this.onCancelUpload,
     this.error,
     this.showUploader = false,
+    this.preparing = false,
     this.keyPrefix = 'work_attachment',
   });
 
@@ -1046,6 +1089,9 @@ class WorkAttachmentSection extends StatelessWidget {
 
   /// Yönetim görünümü: yükleyenin adı (sakinde "Siz" / "Yönetim").
   final bool showUploader;
+
+  /// Seçilen fotoğraflar hazırlanıyor ([WorkPhotoPreparing]); düğme kapalı.
+  final bool preparing;
   final String keyPrefix;
 
   @override
@@ -1079,6 +1125,10 @@ class WorkAttachmentSection extends StatelessWidget {
             inFlightAttachmentId: uploader?.inFlightAttachmentId,
             keyPrefix: keyPrefix,
           ),
+        if (preparing && !uploading) ...[
+          const SizedBox(height: AppSpace.md),
+          WorkPhotoPreparing(keyPrefix: keyPrefix),
+        ],
         if (uploading && uploader != null) ...[
           const SizedBox(height: AppSpace.md),
           WorkUploadProgress(
@@ -1098,11 +1148,12 @@ class WorkAttachmentSection extends StatelessWidget {
             label: 'Fotoğraf Ekle',
             icon: Icons.add_a_photo_outlined,
             variant: AppButtonVariant.tonal,
-            onPressed: (uploading || addLocked) ? null : onAdd,
+            onPressed: (uploading || preparing || addLocked) ? null : onAdd,
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'En fazla $kWorkAttachmentMax fotoğraf; JPEG, PNG veya WebP; her biri en fazla 5 MB.',
+            'En fazla $kWorkAttachmentMax fotoğraf; JPEG, PNG veya WebP. $kWorkPhotoPrepareHint',
+            key: ValueKey<String>('${keyPrefix}_hint'),
             style: th.bodySmall,
           ),
         ],

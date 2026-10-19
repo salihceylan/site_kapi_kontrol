@@ -13,6 +13,9 @@
   Saklama: yerel dis kopyalar EN FAZLA 210 gun tutulur (varsayilan -PruneDays 210; 0 = hic silme). Firmware arsivleri
   (kapi_firmware_*) yas nedeniyle SILINMEZ (degismedikce tek yedek kopyadir). Belge deposu (kapi_documents_*) ve fotograf
   (kapi_work_attachments_*) arsivlerinde her turun EN YENISI yas nedeniyle SILINMEZ, ondan eskiler 210 gunu asinca silinir.
+  Fotograf arsivleri (her biri 3000 MB'a kadar) ayrica ADETLE sinirlidir: yerelde en yeni -KeepWorkAttachments (varsayilan 5)
+  disindakiler yasina bakilmadan silinir ve sunucudaki daha eski fotograf arsivleri hic indirilmez (her calismada inip silinmesin).
+  Belge arsivlerinin tutmasi DEGISMEZ. -PruneDays 0 iken hicbir sey silinmez (adet kurali da kapanir).
 
   Zamanlanmis gorev OLARAK KURMAK kullanicinin islemidir (docs/OPERASYON_YEDEK_IZLEME.md, "Windows tarafi").
 
@@ -21,6 +24,10 @@
 
 .PARAMETER PruneDays
   Varsayilan 210. N > 0 ise N gunden eski YEREL .enc dosyalari silinir (firmware HARIC). 0 = hic silme.
+
+.PARAMETER KeepWorkAttachments
+  Varsayilan 5 (sunucudaki KEEP_WORK_ATTACHMENTS ile ayni). Yerelde tutulan en yeni is takibi fotograf arsivi sayisi; daha eskiler
+  silinir ve indirilmez. 0 = adet siniri yok (yalniz yas kurali). -PruneDays 0 iken etkisizdir.
 
 .PARAMETER FetchKey
   Tek seferlik: sifre cozme anahtarini -KeyDestination klasorune indirir (varsayilan: %LOCALAPPDATA%\kapi-anahtar-tasi).
@@ -44,6 +51,7 @@ param(
   [string]$KeyDestination = (Join-Path $env:LOCALAPPDATA 'kapi-anahtar-tasi'),
   [string]$RemoteDir = 'backups/scheduled/offsite',
   [int]$PruneDays = 210,
+  [int]$KeepWorkAttachments = 5,
   [switch]$FetchKey,
   [switch]$ListOnly
 )
@@ -112,9 +120,17 @@ try {
   Write-Log ("sunucuda {0} sifreli dosya var" -f $names.Count)
   if ($ListOnly) { $names | ForEach-Object { Write-Host "  $_" }; exit 0 }
 
+  # fotograf arsivleri adetle sinirli: yalniz sunucudaki en yeni $KeepWorkAttachments indirilir (eskisi inip yerelde hemen silinmesin)
+  $waCapOn = ($PruneDays -gt 0 -and $KeepWorkAttachments -gt 0)
+  $waWanted = @()
+  if ($waCapOn) {
+    $waWanted = @($names | Where-Object { $_.StartsWith('kapi_work_attachments_') } | Sort-Object -Descending | Select-Object -First $KeepWorkAttachments)
+  }
+
   foreach ($name in $names) {
     $final = Join-Path $Destination $name
     if (Test-Path -LiteralPath $final) { continue }
+    if ($waCapOn -and $name.StartsWith('kapi_work_attachments_') -and -not ($waWanted -contains $name)) { continue }
     $part = "$final.part"
     Remove-Item -LiteralPath $part -Force -ErrorAction SilentlyContinue
     & $scp.Source @scpArgs "${remote}:$RemoteDir/$name" $part 2>&1 | Out-Null
@@ -151,6 +167,13 @@ try {
       -not ($newestKept -contains $_.Name)
     } | ForEach-Object {
       Write-Log "yerel temizlik ($PruneDays gunden eski): $($_.Name)"; Remove-Item -LiteralPath $_.FullName -Force
+    }
+    # fotograf arsivleri ayrica ADETLE: en yeni $KeepWorkAttachments disindakiler yasina bakilmadan silinir (belge arsivleri haric)
+    if ($waCapOn) {
+      Get-ChildItem -LiteralPath $Destination -File | Where-Object { $_.Name.StartsWith('kapi_work_attachments_') -and $_.Name -match $namePattern } |
+        Sort-Object Name -Descending | Select-Object -Skip $KeepWorkAttachments | ForEach-Object {
+          Write-Log "yerel temizlik (fotograf arsivi, en yeni $KeepWorkAttachments disinda): $($_.Name)"; Remove-Item -LiteralPath $_.FullName -Force
+        }
     }
   }
 }

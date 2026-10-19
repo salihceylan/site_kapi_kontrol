@@ -830,14 +830,22 @@ abstract final class WorkAttachmentRules {
       height > maxEdgePixels ||
       width * height > maxPixels;
 
-  /// 409 `ATTACHMENT_QUOTA_EXCEEDED` (`quota: user | site`). [quotaBytes] sunucunun bildirdiği kişi kotası (yoksa 200 MB).
-  static String quotaMessage({required bool site, int? quotaBytes}) {
+  /// 409 `ATTACHMENT_QUOTA_EXCEEDED`. `quota: site`: sitenin toplam fotoğraf alanı doldu. `quota: user`: YALNIZ sakinler
+  /// için KAYAN pencere: bu sitede son [windowDays] günde (gövdede `window_days`, yoksa 30) yüklenebilecek toplam
+  /// [quotaBytes] (gövdede `quota_bytes`, yoksa 200 MB) doldu; süre geçince kendiliğinden açılır (eski fotoğrafı silmek
+  /// gerekmez, sakin kapanmış talepteki fotoğrafını zaten silemez).
+  static String quotaMessage({required bool site, int? quotaBytes, int? windowDays}) {
     if (site) return 'Sitenin fotoğraf depolama alanı doldu; yönetime başvurun.';
-    final mb = quotaBytes != null && quotaBytes > 0
-        ? (quotaBytes / (1024 * 1024)).round()
-        : 200;
-    return 'Bu sitedeki fotoğraf kotanız doldu (en çok $mb MB). Eski fotoğraflarınızdan silebilir ya da '
-        'yönetime başvurabilirsiniz.';
+    final mb = quotaBytes != null && quotaBytes > 0 ? _formatMb(quotaBytes) : '200';
+    final days = windowDays != null && windowDays > 0 ? windowDays : 30;
+    return 'Son $days günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok $mb MB); '
+        'daha sonra yeniden deneyin ya da yönetime başvurun.';
+  }
+
+  /// Sunucuyla aynı biçim: tam MB ise tam sayı, değilse tek ondalık (virgülle).
+  static String _formatMb(int bytes) {
+    final mb = bytes / (1024 * 1024);
+    return mb == mb.truncateToDouble() ? mb.toInt().toString() : mb.toStringAsFixed(1).replaceAll('.', ',');
   }
 
   /// `foto.JPG` -> `jpg`; uzantı yoksa null.

@@ -30,6 +30,11 @@ export const ATTACHMENT_UPLOAD_CONCURRENCY = 8;
 export const ATTACHMENT_DOWNLOAD_CONCURRENCY = 32;
 /** Sakin görünümünde yönetim tarafının (yönetici / görevli / süper) eklediği fotoğrafın yükleyen adı: kişi adı sakine SIZDIRILMAZ (WA-SEC-1). */
 export const MANAGEMENT_UPLOADER_LABEL = 'Yönetim';
+/**
+ * Sakin kotasının KAYAN penceresi (gün; R2-2): yalnız son 30 günde açılmış kayıtlar sayılır. Kapanan talepteki fotoğrafını silemeyen sakin bu yüzden kalıcı
+ * olarak kilitlenmez; toplam disk üst sınırı site kotasıdır.
+ */
+export const ATTACHMENT_USER_QUOTA_WINDOW_DAYS = 30;
 
 const MB = 1048576;
 const warnedEnv = new Set();
@@ -53,8 +58,9 @@ function intEnv(env, name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } 
 
 /**
  * Ortam değişkenleriyle ayarlanabilir fotoğraf sınırları (her çağrıda okunur; geçersiz değer varsayılana döner, uyarı yalnız ad ile).
- *  WORK_ATTACHMENTS_USER_QUOTA_MB (200): yönetici / süper DIŞINDAKİ (sakin, görevli) bir kişinin TEK sitedeki fotoğraflarının toplam boyutu (uploading + ready).
- *  WORK_ATTACHMENTS_SITE_QUOTA_MB (10240): bir sitenin tüm fotoğraflarının toplam boyutu (herkes için).
+ *  WORK_ATTACHMENTS_USER_QUOTA_MB (200): YALNIZ SAKİN; bir sakinin TEK sitede SON 30 GÜNDE (ATTACHMENT_USER_QUOTA_WINDOW_DAYS) açtığı fotoğrafların toplam
+ *    boyutu (ready + süresi dolmamış uploading). Görevli / yönetici / süper bu kotaya tabi DEĞİL (R2-2).
+ *  WORK_ATTACHMENTS_SITE_QUOTA_MB (10240): bir sitenin tüm fotoğraflarının toplam boyutu (herkes için; pencere yok).
  *  WORK_ATTACHMENTS_ORPHAN_MIN_AGE_DAYS (30): DB'de satırı olmayan fotoğraf dosyası bakım işince bu yaştan SONRA silinir (karantina yok; yaş güvenlik payıdır).
  */
 export function attachmentLimits(env = process.env) {
@@ -79,17 +85,22 @@ export const attachmentLimitReached = () =>
 export const attachmentInvalidState = () =>
   new PlatformError(409, 'INVALID_STATE', 'Kapatılmış ya da iptal edilmiş talebe fotoğraf eklenemez; bu talepteki fotoğrafları yalnız yönetici silebilir.');
 /**
- * Fotoğraf alanı kotası doldu (WA-SEC-3). `quota`: 'user' (kişinin bu sitedeki toplamı) | 'site' (sitenin toplamı); gövdede `quota`, `quota_bytes`, `used_bytes`.
+ * Fotoğraf alanı kotası doldu (WA-SEC-3, R2-2). `quota`: 'user' (sakinin bu sitede son 30 günde açtıkları; gövdede ayrıca `window_days`) | 'site' (sitenin
+ * toplamı); gövdede `quota`, `quota_bytes`, `used_bytes`.
  */
 export const attachmentQuotaExceeded = (quota, usedBytes, quotaBytes) =>
-  new PlatformError(
-    409,
-    'ATTACHMENT_QUOTA_EXCEEDED',
-    quota === 'user'
-      ? `Bu sitede ekleyebileceğiniz fotoğraf alanı doldu (${formatMb(usedBytes)} MB / ${formatMb(quotaBytes)} MB). Eski fotoğraflarınızı silin ya da yönetimle iletişime geçin.`
-      : 'Sitenin fotoğraf alanı doldu. Yönetimle iletişime geçin.',
-    { quota, quota_bytes: Number(quotaBytes), used_bytes: Number(usedBytes) },
-  );
+  quota === 'user'
+    ? new PlatformError(
+        409,
+        'ATTACHMENT_QUOTA_EXCEEDED',
+        `Son ${ATTACHMENT_USER_QUOTA_WINDOW_DAYS} günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok ${formatMb(quotaBytes)} MB); daha sonra yeniden deneyin ya da yönetime başvurun.`,
+        { quota, quota_bytes: Number(quotaBytes), used_bytes: Number(usedBytes), window_days: ATTACHMENT_USER_QUOTA_WINDOW_DAYS },
+      )
+    : new PlatformError(409, 'ATTACHMENT_QUOTA_EXCEEDED', 'Sitenin fotoğraf alanı doldu. Yönetimle iletişime geçin.', {
+        quota,
+        quota_bytes: Number(quotaBytes),
+        used_bytes: Number(usedBytes),
+      });
 export const attachmentHourlyLimitReached = () =>
   new PlatformError(429, 'WORK_ATTACHMENT_RATE_LIMITED', 'Bir saat içinde çok fazla fotoğraf eklediniz. Biraz sonra tekrar deneyin.', {
     hourly_limit: ATTACHMENTS_PER_USER_PER_HOUR,

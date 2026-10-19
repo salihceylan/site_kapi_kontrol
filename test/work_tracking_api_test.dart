@@ -499,7 +499,7 @@ void main() {
       );
     });
 
-    test('kota: 409 ATTACHMENT_QUOTA_EXCEEDED kişi (bildirilen kotayla) ve site iletileri', () async {
+    test('kota: 409 ATTACHMENT_QUOTA_EXCEEDED kişi (kayan pencere, bildirilen kota / gün) ve site iletileri', () async {
       Future<ApiException> fail(Map<String, dynamic> body) {
         final api = _api((request) async => _json(409, body));
         return _failureOf(() => api.createAttachment(token: 't', id: 3, request: request));
@@ -511,15 +511,28 @@ void main() {
         'quota': 'user',
         'quota_bytes': 209715200,
         'used_bytes': 209000000,
+        'window_days': 30,
       });
       expect(
         user.message,
-        'Bu sitedeki fotoğraf kotanız doldu (en çok 200 MB). Eski fotoğraflarınızdan silebilir ya da yönetime başvurabilirsiniz.',
+        'Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok 200 MB); daha sonra yeniden '
+        'deneyin ya da yönetime başvurun.',
       );
       expect(user.code, 'ATTACHMENT_QUOTA_EXCEEDED');
+      expect(user.message.toLowerCase(), isNot(contains('sil')), reason: 'eski fotoğraf silme önerilmez');
+      final custom = await fail(<String, dynamic>{
+        'error': 'x',
+        'code': 'ATTACHMENT_QUOTA_EXCEEDED',
+        'quota': 'user',
+        'quota_bytes': 52428800,
+        'window_days': 14,
+      });
+      expect(custom.message, startsWith('Son 14 günde bu sitede'));
+      expect(custom.message, contains('(en çok 50 MB)'));
       expect(
-        (await fail(<String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_QUOTA_EXCEEDED', 'quota': 'user', 'quota_bytes': 52428800})).message,
-        contains('en çok 50 MB'),
+        (await fail(<String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_QUOTA_EXCEEDED', 'quota': 'user'})).message,
+        startsWith('Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok 200 MB)'),
+        reason: 'pencere / kota gelmezse varsayılan 30 gün / 200 MB',
       );
       expect(
         (await fail(<String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_QUOTA_EXCEEDED', 'quota': 'site'})).message,

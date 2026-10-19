@@ -19,6 +19,7 @@ import { EVENT_TYPES_WITH_ATTACHMENTS, WORK_ATTACHMENTS_DDL, WORK_ATTACHMENTS_DD
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_SUBTREE,
+  ATTACHMENT_USER_QUOTA_WINDOW_DAYS,
   MANAGEMENT_UPLOADER_LABEL,
   MAX_ATTACHMENTS_PER_ITEM,
   MAX_IMAGE_PIXELS,
@@ -322,7 +323,7 @@ describe('girdi doğrulama, içerik imzası, eşleyiciler', () => {
     assert.deepEqual([managerView.uploaded_by_name, managerView.uploaded_by_kind], ['Mehmet Yönetici', 'management']);
   });
 
-  it('kota ayarları: varsayılan kişi 200 MB / site 10240 MB / yetim yaşı 30 gün; env ile değişir, geçersiz değer varsayılana döner; hata gövdesi { quota, quota_bytes, used_bytes }', () => {
+  it('kota ayarları: varsayılan sakin 200 MB (30 günlük pencere) / site 10240 MB / yetim yaşı 30 gün; env ile değişir, geçersiz değer varsayılana döner; hata gövdesi { quota, quota_bytes, used_bytes (+ window_days: sakin) }', () => {
     const MB = 1048576;
     assert.deepEqual(attachmentLimits({}), { userQuotaBytes: 200 * MB, siteQuotaBytes: 10240 * MB, orphanMinAgeDays: 30 });
     assert.deepEqual(attachmentLimits({ WORK_ATTACHMENTS_USER_QUOTA_MB: '5', WORK_ATTACHMENTS_SITE_QUOTA_MB: '50', WORK_ATTACHMENTS_ORPHAN_MIN_AGE_DAYS: '7' }), { userQuotaBytes: 5 * MB, siteQuotaBytes: 50 * MB, orphanMinAgeDays: 7 });
@@ -333,10 +334,13 @@ describe('girdi doğrulama, içerik imzası, eşleyiciler', () => {
     } finally {
       console.warn = realWarn;
     }
+    assert.equal(ATTACHMENT_USER_QUOTA_WINDOW_DAYS, 30);
     const user = attachmentQuotaExceeded('user', 150 * MB, 200 * MB);
-    assert.deepEqual([user.statusCode, user.code, user.extra], [409, 'ATTACHMENT_QUOTA_EXCEEDED', { quota: 'user', quota_bytes: 200 * MB, used_bytes: 150 * MB }]);
-    assert.match(user.message, /150 MB \/ 200 MB/);
-    assert.equal(attachmentQuotaExceeded('site', 1, 2).extra.quota, 'site');
+    assert.deepEqual([user.statusCode, user.code, user.extra], [409, 'ATTACHMENT_QUOTA_EXCEEDED', { quota: 'user', quota_bytes: 200 * MB, used_bytes: 150 * MB, window_days: 30 }]);
+    assert.equal(user.message, 'Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok 200 MB); daha sonra yeniden deneyin ya da yönetime başvurun.');
+    assert.match(attachmentQuotaExceeded('user', 1, 5 * MB).message, /\(en çok 5 MB\)/, 'sınır ayarlanan değeri söyler');
+    const site = attachmentQuotaExceeded('site', 1, 2);
+    assert.deepEqual([site.statusCode, site.code, site.extra, site.message], [409, 'ATTACHMENT_QUOTA_EXCEEDED', { quota: 'site', quota_bytes: 2, used_bytes: 1 }, 'Sitenin fotoğraf alanı doldu. Yönetimle iletişime geçin.']);
   });
 });
 
@@ -484,7 +488,7 @@ describe('servis (sahte işlem): kota, etkin kayıt sayımı, kapalı talepte si
       if (/^WITH my_apts AS/.test(sql) || /my_apts/.test(sql)) return ok([{ x: 1 }]);
       if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments WHERE uploaded_by = \$1 AND created_at > NOW\(\) - INTERVAL '1 hour'$/.test(sql)) return ok([{ n: state.hourly }]);
       if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments a WHERE a\.work_item_id = \$1 AND/.test(sql)) return ok([{ n: state.itemCount }]);
-      if (/^SELECT COALESCE\(SUM\(a\.size_bytes\), 0\)::BIGINT AS used FROM work_item_attachments a WHERE a\.site_code = \$1 AND a\.uploaded_by = \$2/.test(sql)) return ok([{ used: String(state.userUsed) }]);
+      if (/^SELECT COALESCE\(SUM\(a\.size_bytes\), 0\)::BIGINT AS used FROM work_item_attachments a WHERE a\.uploaded_by = \$2 AND a\.created_at > NOW\(\) - make_interval\(days => \$4::INTEGER\) AND a\.site_code = \$1 AND \(/.test(sql)) return ok([{ used: String(state.userUsed) }]);
       if (/^SELECT COALESCE\(SUM\(a\.size_bytes\), 0\)::BIGINT AS used FROM work_item_attachments a WHERE a\.site_code = \$1 AND \(/.test(sql)) return ok([{ used: String(state.siteUsed) }]);
       if (/^INSERT INTO work_item_attachments/.test(sql)) return ok([{ id: '77' }]);
       if (/^SELECT id, uploaded_by, status, storage_key, mime_type, size_bytes FROM work_item_attachments WHERE id = \$1 AND work_item_id = \$2 FOR UPDATE$/.test(sql)) return ok(state.attachment ? [state.attachment] : []);
@@ -505,25 +509,31 @@ describe('servis (sahte işlem): kota, etkin kayıt sayımı, kapalı talepte si
   const actorOf = (userCode) => ({ user_code: userCode, role: 'individual' });
   const sqls = () => log.map((entry) => entry.sql);
 
-  it('kişi kotası (sakin / görevli): kullanılan + gelen > 200 MB -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user }; INSERT yok, ROLLBACK', async () => {
-    for (const [scope, userCode] of [[resident, 20004], [staff, 20005]]) {
-      log.length = 0;
-      state.userUsed = 200 * MB - 50;
-      await assert.rejects(createAttachment({ scope, rawId: '5', actor: actorOf(userCode), body: BODY }), (error) =>
-        error.statusCode === 409 && error.code === 'ATTACHMENT_QUOTA_EXCEEDED' && error.extra.quota === 'user' && error.extra.quota_bytes === 200 * MB && error.extra.used_bytes === 200 * MB - 50);
-      assert.ok(!sqls().some((sql) => /^INSERT INTO work_item_attachments/.test(sql)));
-      assert.ok(sqls().includes('ROLLBACK'));
-    }
+  it('sakin kotası (R2-2; YALNIZ sakin, son 30 gün): kullanılan + gelen > 200 MB -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, window_days: 30 }; INSERT yok, ROLLBACK; sorgu pencereli', async () => {
+    log.length = 0;
+    state.userUsed = 200 * MB - 50;
+    await assert.rejects(createAttachment({ scope: resident, rawId: '5', actor: actorOf(20004), body: BODY }), (error) =>
+      error.statusCode === 409 && error.code === 'ATTACHMENT_QUOTA_EXCEEDED' && error.extra.quota === 'user' && error.extra.quota_bytes === 200 * MB && error.extra.used_bytes === 200 * MB - 50 &&
+      error.extra.window_days === 30);
+    assert.ok(!sqls().some((sql) => /^INSERT INTO work_item_attachments/.test(sql)));
+    assert.ok(sqls().includes('ROLLBACK'));
+    const windowQuery = log.find((entry) => /a\.uploaded_by = \$2/.test(entry.sql));
+    assert.ok(windowQuery.sql.includes('a.created_at > NOW() - make_interval(days => $4::INTEGER)'), windowQuery.sql);
+    assert.deepEqual(windowQuery.params, [SITE_CODE, 20004, 120, ATTACHMENT_USER_QUOTA_WINDOW_DAYS], '(site, sakin, yükleme ömrü dk, pencere gün)');
     state.userUsed = 200 * MB - 100; // tam sınır kabul
     const okResult = await createAttachment({ scope: resident, rawId: '5', actor: actorOf(20004), body: BODY });
     assert.equal(okResult.attachment.id, 77);
   });
 
-  it('yönetici / süper kişi kotasına TABİ DEĞİL (sorgusu bile gitmez); site kotası herkese: kullanılan + gelen > 10240 MB -> { quota: site }', async () => {
+  it('görevli / yönetici / süper sakin kotasına TABİ DEĞİL (sorgusu bile gitmez; kapanan talepteki silemedikleri fotoğraflar onları kilitlemez); site kotası herkese: kullanılan + gelen > 10240 MB -> { quota: site }', async () => {
     state.userUsed = 10 ** 12;
-    await createAttachment({ scope: manager, rawId: '5', actor: actorOf(20001), body: BODY });
-    assert.ok(!sqls().some((sql) => /a\.uploaded_by = \$2/.test(sql)), 'kişi toplamı sorgusu gitmedi');
-    for (const [scope, userCode] of [[manager, 20001], [resident, 20004]]) {
+    for (const [scope, userCode] of [[manager, 20001], [staff, 20005]]) {
+      log.length = 0;
+      const created = await createAttachment({ scope, rawId: '5', actor: actorOf(userCode), body: BODY });
+      assert.equal(created.attachment.id, 77);
+      assert.ok(!sqls().some((sql) => /a\.uploaded_by = \$2/.test(sql)), `${scope.kind}: kişi toplamı sorgusu gitmedi`);
+    }
+    for (const [scope, userCode] of [[manager, 20001], [staff, 20005], [resident, 20004]]) {
       state.userUsed = 0;
       state.siteUsed = 10240 * MB;
       await assert.rejects(createAttachment({ scope, rawId: '5', actor: actorOf(userCode), body: BODY }), (error) => error.code === 'ATTACHMENT_QUOTA_EXCEEDED' && error.extra.quota === 'site');
@@ -544,11 +554,15 @@ describe('servis (sahte işlem): kota, etkin kayıt sayımı, kapalı talepte si
     assert.ok(at(/work_attachments_site|pg_advisory_xact_lock/) < at(/FOR UPDATE OF w$/));
     assert.ok(log.findIndex((entry) => entry.params[0] === siteAttachmentLockKey(SITE_CODE)) < at(/FOR UPDATE OF w$/));
     const active = "(a.status = 'ready' OR (a.status = 'uploading' AND a.created_at >= NOW() - make_interval(mins =>";
-    for (const pattern of [/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments a WHERE a\.work_item_id/, /a\.uploaded_by = \$2/, /^SELECT COALESCE\(SUM\(a\.size_bytes\), 0\)::BIGINT AS used FROM work_item_attachments a WHERE a\.site_code = \$1 AND \(/]) {
+    for (const [pattern, ttlIndex] of [
+      [/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments a WHERE a\.work_item_id/, 1],
+      [/a\.uploaded_by = \$2/, 2],
+      [/^SELECT COALESCE\(SUM\(a\.size_bytes\), 0\)::BIGINT AS used FROM work_item_attachments a WHERE a\.site_code = \$1 AND \(/, 1],
+    ]) {
       const entry = log.find((candidate) => pattern.test(candidate.sql));
       assert.ok(entry, String(pattern));
       assert.ok(entry.sql.includes(active), entry.sql);
-      assert.equal(entry.params[entry.params.length - 1], 120, 'süre parametresi (dk)');
+      assert.equal(entry.params[ttlIndex], 120, 'süre parametresi (dk)');
     }
     state.itemCount = MAX_ATTACHMENTS_PER_ITEM;
     await assert.rejects(createAttachment({ scope: resident, rawId: '5', actor: actorOf(20004), body: BODY }), { code: 'LIMIT_REACHED' });

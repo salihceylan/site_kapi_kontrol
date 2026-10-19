@@ -1,37 +1,40 @@
 // Talep fotoğrafı seçimi (docs/PLATFORM_IS_TAKIBI.md "Fotoğraf ekleri").
 //
-// Fotoğraf BELLEĞE okunur (en çok 5 MB x 4): küçük görseli ve yüklemeyi aynı baytlar besler. Boyut sınırını aşan dosya
-// okunmaz (yalnız adı ve boyutu taşınır; ön doğrulama reddeder). Tür içerik imzasından anlaşılır (uzantıdan önce);
-// okunan fotoğrafın piksel boyutu çözülmeden ölçülür ([probeImageSize]) ve sunucu sınırını aşan fotoğraf daha
-// seçimde reddedilir. Geçersiz seçimler sınırdaki yerleri DOLDURMAZ, ayrıca bildirilir ([WorkPhotoSelection.rejected]).
+// Seçilen HER fotoğraf belleğe okunur (en çok 50 MB; üstü okunmaz, "çok büyük" diye reddedilir) ve doğrulamadan ÖNCE
+// hazırlanır ([prepareWorkPhoto]): uzun kenar en çok 2560 piksele küçültülür, JPEG (kalite 85) olarak yeniden
+// kodlanır; EXIF (GPS konumu dahil) silinir, yön uygulanır. Böylece 24 / 48 MP telefon fotoğrafları 5 MB sınırına
+// takılmaz. Hazırlanamayan fotoğraf (tanınmayan biçim, bellek bombası koruması, çözme hatası) özgün baytlarıyla kalır
+// ve olağan ön doğrulama karar verir. Küçük görseli ve yüklemeyi aynı (hazırlanmış) baytlar besler. Tür içerik
+// imzasından anlaşılır (uzantıdan önce); sunucu sınırını aşan fotoğraf daha seçimde reddedilir. Geçersiz seçimler
+// sınırdaki yerleri DOLDURMAZ, ayrıca bildirilir ([WorkPhotoSelection.rejected]).
 //
 // iOS: fotoğraf arşivi seçicisi (PHPicker, `FileType.image`) "uyumlu" gösterimle açılır: HEIC fotoğraf JPEG'e
 // dönüştürülerek gelir. Diğer platformlar uzantı süzgeçli dosya seçicisini kullanır. Testlerde sahte [WorkPhotoPicker]
 // kullanılır. Dosya adı günlüğe yazılmaz.
-import 'dart:ui' as ui;
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/document_picker.dart';
 import 'package:site_kapi_kontrol/services/local_cache_purge.dart';
+import 'package:site_kapi_kontrol/services/work_photo_prepare.dart';
 
-/// Görselin piksel boyutu ÇÖZMEDEN (yalnız başlıktan): `ui.ImmutableBuffer` + `ui.ImageDescriptor.encoded`. Okunamazsa
-/// (tanınmayan biçim, desteklenmeyen platform) null. Hata fırlatmaz.
-Future<({int width, int height})?> probeImageSize(Uint8List bytes) async {
-  if (bytes.isEmpty) return null;
-  ui.ImmutableBuffer? buffer;
-  ui.ImageDescriptor? descriptor;
-  try {
-    buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    descriptor = await ui.ImageDescriptor.encoded(buffer);
-    return (width: descriptor.width, height: descriptor.height);
-  } catch (_) {
-    return null;
-  } finally {
-    descriptor?.dispose();
-    buffer?.dispose();
-  }
+export 'package:site_kapi_kontrol/services/work_photo_prepare.dart'
+    show probeImageSize;
+
+/// Okunan fotoğrafı hazırlar ([prepareWorkPhoto]) ve seçim kaydına çevirir: hazırlandıysa `.jpg` adı ve JPEG baytları,
+/// hazırlanamadıysa özgün ad ve baytlar (piksel boyutu ölçülebildiyse taşınır; ön doğrulama karar verir).
+Future<WorkPhotoPick> prepareWorkPhotoPick(
+  String name,
+  Uint8List bytes, {
+  bool? web,
+}) async {
+  final prepared = await prepareWorkPhoto(name, bytes, web: web);
+  return WorkPhotoPick(
+    name: prepared.name,
+    bytes: prepared.bytes,
+    width: prepared.width,
+    height: prepared.height,
+  );
 }
 
 /// Seçilen bir fotoğraf: ad + baytlar (+ ölçüldüyse piksel boyutu).
@@ -47,7 +50,7 @@ class WorkPhotoPick {
   }) : _mimeType = mimeType,
        _declaredSize = declaredSize;
 
-  /// Boyut sınırını aşan dosya: baytlar OKUNMAZ, yalnız ad ve boyut taşınır (ön doğrulama "çok büyük" der).
+  /// Okunamayacak kadar büyük dosya: baytlar OKUNMAZ, yalnız ad ve boyut taşınır (ön doğrulama "çok büyük" der).
   factory WorkPhotoPick.oversized({required String name, required int size}) =>
       WorkPhotoPick(name: name, bytes: Uint8List(0), declaredSize: size);
 
@@ -112,16 +115,21 @@ class WorkPhotoSelection {
 
 /// Fotoğraf seçici (sahte uygulaması testlerde kullanılır).
 abstract class WorkPhotoPicker {
-  /// En çok [maxCount] GEÇERLİ fotoğraf okur; kullanıcı vazgeçerse boş seçim; seçilemezse hata fırlatır (arayüz Türkçe
-  /// ileti gösterir).
-  Future<WorkPhotoSelection> pick({required int maxCount});
+  /// En çok [maxCount] GEÇERLİ fotoğraf okur ve hazırlar; kullanıcı vazgeçerse boş seçim; seçilemezse hata fırlatır
+  /// (arayüz Türkçe ileti gösterir). [onPreparing]: kullanıcı dosyaları seçti, okuma / küçültme başlıyor (bir kez;
+  /// arayüz "Fotoğraf hazırlanıyor..." gösterir). Vazgeçilirse çağrılmaz.
+  Future<WorkPhotoSelection> pick({
+    required int maxCount,
+    void Function()? onPreparing,
+  });
 
   /// Eklentinin uygulama önbelleğine bıraktığı KOPYALARI siler (Android `file_picker` kopyalar ve silmez). Yalnız
   /// seçilen fotoğraflarla iş BİTİNCE çağrılır. Hata fırlatmaz.
   Future<void> release() async {}
 }
 
-/// Gerçek seçici: `file_picker`; dosyalar belleğe okunur, türü içerikten anlaşılır, piksel boyutu ölçülür.
+/// Gerçek seçici: `file_picker`; dosyalar belleğe okunur ve hazırlanır (küçültme, JPEG, EXIF silme), türü içerikten
+/// anlaşılır, piksel boyutu ölçülür.
 class FilePickerWorkPhotoPicker implements WorkPhotoPicker {
   const FilePickerWorkPhotoPicker({this.clearCache});
 
@@ -133,7 +141,10 @@ class FilePickerWorkPhotoPicker implements WorkPhotoPicker {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   @override
-  Future<WorkPhotoSelection> pick({required int maxCount}) async {
+  Future<WorkPhotoSelection> pick({
+    required int maxCount,
+    void Function()? onPreparing,
+  }) async {
     if (maxCount <= 0) return const WorkPhotoSelection();
     // file_picker 13: `pickFiles` her zaman çoklu seçimdir (`allowMultiple` parametresi yok).
     final files = _iosPhotoLibrary
@@ -153,6 +164,7 @@ class FilePickerWorkPhotoPicker implements WorkPhotoPicker {
     final picks = <WorkPhotoPick>[];
     final rejected = <WorkPhotoPick>[];
     var dropped = 0;
+    if (files.isNotEmpty) onPreparing?.call();
     for (final file in files) {
       if (picks.length >= maxCount) {
         // Yer kalmadı: dosya okunmaz (bellek), yalnız sayılır.
@@ -161,18 +173,12 @@ class FilePickerWorkPhotoPicker implements WorkPhotoPicker {
       }
       final size = file.lengthSync() ?? await file.length() ?? 0;
       final WorkPhotoPick pick;
-      if (size > kWorkAttachmentMaxBytes) {
-        // Sınırı aşan dosya belleğe alınmaz.
+      if (size > kWorkPhotoReadMaxBytes) {
+        // Hazırlanamayacak kadar büyük dosya belleğe alınmaz.
         pick = WorkPhotoPick.oversized(name: file.name, size: size);
       } else {
-        final bytes = await file.readAsBytes();
-        final dimensions = await probeImageSize(bytes);
-        pick = WorkPhotoPick(
-          name: file.name,
-          bytes: bytes,
-          width: dimensions?.width,
-          height: dimensions?.height,
-        );
+        // Sırayla (aynı anda tek fotoğraf bellekte çözülür); özgün baytlar hazırlandıktan sonra bırakılır.
+        pick = await prepareWorkPhotoPick(file.name, await file.readAsBytes());
       }
       // Geçersiz seçim sınırdaki yeri DOLDURMAZ; ayrıca bildirilir.
       if (pick.isValid) {

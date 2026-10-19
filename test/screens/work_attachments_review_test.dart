@@ -315,7 +315,10 @@ void main() {
       await _tapKey(t, 'work_attachment_add');
       await settleFor(t, 100);
       await settleFor(t, 100);
-      expect(find.textContaining('Bu sitedeki fotoğraf kotanız doldu (en çok 200 MB).'), findsOneWidget);
+      expect(
+        find.textContaining('Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok 200 MB)'),
+        findsOneWidget,
+      );
       rig.service.quotaExceeded = 'site';
       await _tapKey(t, 'work_attachment_add');
       await settleFor(t, 100);

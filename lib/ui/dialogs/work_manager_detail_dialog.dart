@@ -112,11 +112,16 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
   String? _photoError;
   List<String> _pickNotes = const <String>[];
   bool _picking = false;
+
+  /// Seçilen fotoğraflar hazırlanıyor (küçültme / JPEG / EXIF silme): "Fotoğraf hazırlanıyor...".
+  bool _preparing = false;
   bool _pickedAny = false;
 
   /// 409 `LIMIT_REACHED` geldi ama ekranda 4'ten az fotoğraf var (başkası yüklüyor olabilir): "Fotoğraf Ekle" bu
-  /// yükleme kuşağı boyunca kapalı; sonraki başarılı ayrıntı yüklemesinde açılır.
+  /// yükleme kuşağı boyunca kapalı; sonraki başarılı ayrıntı yüklemesinde açılır. Pencerede başka yükleme olmasa da
+  /// kilit kalıcı olmasın diye [kWorkLimitRecheckDelay] sonra sessizce yeniden yüklenir ([_limitRecheck]).
   int? _limitBlockedAt;
+  Timer? _limitRecheck;
 
   bool get _limitBlocked =>
       _limitBlockedAt != null && _limitBlockedAt == _c.loadGeneration;
@@ -135,6 +140,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
 
   @override
   void dispose() {
+    _limitRecheck?.cancel();
     _c.removeListener(_onController);
     _upload.removeListener(_onUpload);
     // Çözülmüş fotoğraflar ImageCache'te kalmasın.
@@ -283,11 +289,17 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     });
     WorkPhotoSelection selection;
     try {
-      selection = await widget.picker.pick(maxCount: remaining);
+      selection = await widget.picker.pick(
+        maxCount: remaining,
+        onPreparing: () {
+          if (mounted) setState(() => _preparing = true);
+        },
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _picking = false;
+        _preparing = false;
         _photoError = 'Fotoğraf seçilemedi. Tekrar deneyin.';
       });
       return;
@@ -299,6 +311,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
     final valid = split.valid;
     setState(() {
       _picking = false;
+      _preparing = false;
       _pickNotes = notes;
       _photoError = notes.isEmpty ? null : notes.join('\n');
     });
@@ -329,7 +342,31 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           WorkAttachmentRules.limitBusyMessage,
         ].join('\n');
       });
+      _armLimitRecheck();
     }
+  }
+
+  /// Sınır kilidi için tek seferlik zamanlayıcı: [kWorkLimitRecheckDelay] sonra ayrıntı sessizce yeniden yüklenir
+  /// (başarılı yükleme kilidi açar). Yükleme başarısız olursa (ağ yok) kilit sürer ve aynı süreyle yeniden kurulur
+  /// (kilit açılana ya da pencere kapanana dek); pencere kapanınca iptal edilir.
+  void _armLimitRecheck() {
+    _limitRecheck?.cancel();
+    _limitRecheck = Timer(kWorkLimitRecheckDelay, () async {
+      _limitRecheck = null;
+      if (!mounted || !_limitBlocked) return;
+      await _c.load(silent: true);
+      if (!mounted) return;
+      if (_limitBlocked) {
+        _armLimitRecheck();
+        return;
+      }
+      // Kilit açıldı: "başka fotoğraf yükleniyor olabilir" iletisi artık geçerli değil.
+      if (_photoError?.contains(WorkAttachmentRules.limitBusyMessage) ?? false) {
+        setState(() {
+          _photoError = _pickNotes.isEmpty ? null : _pickNotes.join('\n');
+        });
+      }
+    });
   }
 
   void _afterUpload(List<String> notes) {
@@ -500,6 +537,7 @@ class _WorkManagerDetailDialogState extends State<WorkManagerDetailDialog> {
           onAdd: () => unawaited(_addPhotos()),
           uploader: _upload,
           onCancelUpload: _upload.cancel,
+          preparing: _preparing,
           error: _photoError ?? _c.attachmentError,
           showUploader: true,
         ),

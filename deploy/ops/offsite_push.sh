@@ -14,6 +14,9 @@
 # --min-age`). sftp-only hedeflerde uzak budama YAPILAMAZ: eski dosyalari elle silmeniz gerekir. Firmware arsivleri (kapi_firmware_*)
 # budanmaz (degismedikce tek yedek kopyadir). Belge deposu (kapi_documents_*) ve is takibi fotograf (kapi_work_attachments_*) arsivleri her turun
 # EN YENISI HARIC ayni yastan (210 gun) sonra silinir: en yeni arsiv yasi ne olursa olsun korunur (kume degismediyse tek geri yukleme kopyasidir).
+# Fotograf arsivleri (her biri 3000 MB'a kadar) ayrica ADETLE sinirlidir: uzak tarafta en yeni KEEP_WORK_ATTACHMENTS (kapi-ops.env, varsayilan 5,
+# en az 1) disindakiler YASINA BAKILMADAN silinir (rsync yerel / ssh ve rclone dallarinda; sftp-only hedefte elle). Belge arsivi tutmasi DEGISMEDI.
+# OFFSITE_PRUNE_DAYS=0 ise uzak tarafta HIC silme yapilmaz (yas ve adet kurali birlikte kapanir).
 #
 # Not: offsite/ icindeki dosyalar daily/weekly/monthly/config ile SERT BAG paylasir (backup_db.sh; diskte tek kopya). Bu betik yalniz
 # OKUR (rsync/sftp/rclone kaynagi); dosyalari yerinde degistirmez, yerel tutma budamasi backup_db.sh'tadir (KEEP_OFFSITE, gonderilmemisi silmez).
@@ -54,6 +57,9 @@ TARGET="${OFFSITE_TARGET:-}"
 PORT="${OFFSITE_SSH_PORT:-22}"
 SSHKEY="${OFFSITE_SSH_KEY:-}"
 PRUNE_DAYS="$(num "${OFFSITE_PRUNE_DAYS:-210}" 210)"
+# fotograf arsivleri uzak tarafta en yeni N (backup_db.sh ile ayni ayar ve varsayilan; gecersiz / < 1 ise 5)
+WA_KEEP="$(num "${KEEP_WORK_ATTACHMENTS:-5}" 5)"
+[ "$WA_KEEP" -ge 1 ] || WA_KEEP=5
 WORKF=""
 trap '[ -n "$WORKF" ] && rm -f -- "$WORKF"' EXIT
 
@@ -135,14 +141,21 @@ prune_remote() {
   esac
 }
 
-# Belge / fotograf arsivleri (<onek>_*.tgz.enc): EN YENISI HARIC, PRUNE_DAYS'ten eskiler silinir. En yeni arsiv asla silinmez.
-# prune_newest_kept_remote <onek> <etiket>; onek yalniz bu betikteki sabitlerdir (kapi_documents | kapi_work_attachments), disaridan gelmez.
+# Belge / fotograf arsivleri (<onek>_*.tgz.enc): EN YENISI HARIC, PRUNE_DAYS'ten eskiler silinir. En yeni arsiv asla silinmez. <adet> > 0 ise ayrica
+# en yeni <adet> disindakiler YASINA BAKILMADAN silinir (fotograf arsivleri; belge arsivlerinde adet 0 = yalniz yas kurali, eski davranis).
+# prune_newest_kept_remote <onek> <etiket> [adet]; onek / adet yalniz bu betikteki sabitlerdir (kapi_documents | kapi_work_attachments), disaridan gelmez.
 prune_newest_kept_remote() {
   [ "$PRUNE_DAYS" -gt 0 ] || return 0
-  local prefix="$1" label="$2" hostpart rpath out script cutoff
+  local prefix="$1" label="$2" keep="${3:-0}" hostpart rpath out script cutoff
   [[ "$prefix" =~ ^kapi_[a-z_]+$ ]] || return 0
+  [[ "$keep" =~ ^[0-9]+$ ]] || keep=0
+  # siralama: degisim zamani (yeniden eskiye); 1. dosya (en yeni) hep korunur
   script="cd \"\$1\" 2>/dev/null || exit 0
-ls -1t ${prefix}_*.tgz.enc 2>/dev/null | tail -n +2 | while IFS= read -r f; do
+i=0
+ls -1t ${prefix}_*.tgz.enc 2>/dev/null | while IFS= read -r f; do
+  i=\$((i + 1))
+  [ \"\$i\" -gt 1 ] || continue
+  if [ $keep -gt 0 ] && [ \"\$i\" -gt $keep ]; then rm -f -- \"\$f\" && echo \"\$f\"; continue; fi
   if [ -n \"\$(find \"\$f\" -maxdepth 0 -mtime +$PRUNE_DAYS 2>/dev/null)\" ]; then rm -f -- \"\$f\" && echo \"\$f\"; fi
 done"
   case "$METHOD" in
@@ -159,9 +172,16 @@ done"
     rclone)
       cutoff="$(date -d "-${PRUNE_DAYS} days" '+%Y-%m-%d %H:%M:%S')"
       out="$(nolock timeout 120 rclone lsf "$TARGET" --files-only --include "${prefix}_*.tgz.enc" --format tp --separator '|' 2>/dev/null \
-        | LC_ALL=C sort -r | tail -n +2 | while IFS='|' read -r t n; do
-            if [[ -n "$n" && "$t" < "$cutoff" ]]; then nolock timeout 60 rclone deletefile "$TARGET/$n" >/dev/null 2>&1 && echo "$n"; fi
-          done)"
+        | LC_ALL=C sort -r | {
+            i=0
+            while IFS='|' read -r t n; do
+              i=$((i + 1))
+              { [ "$i" -gt 1 ] && [ -n "$n" ]; } || continue
+              if { [ "$keep" -gt 0 ] && [ "$i" -gt "$keep" ]; } || [[ "$t" < "$cutoff" ]]; then
+                nolock timeout 60 rclone deletefile "$TARGET/$n" >/dev/null 2>&1 && echo "$n"
+              fi
+            done
+          })"
       ;;
     *) return 0 ;;
   esac
@@ -238,6 +258,6 @@ write_status "$STATUS_FILE" "result=OK" "epoch=$(now_epoch)" "method=$METHOD" "p
 log "=== dis kopya BASARILI: $SENT dosya gonderildi ve dogrulandi ($METHOD) ==="
 prune_remote
 prune_newest_kept_remote kapi_documents "belge arsivi"
-prune_newest_kept_remote kapi_work_attachments "fotograf arsivi"
+prune_newest_kept_remote kapi_work_attachments "fotograf arsivi" "$WA_KEEP"
 trim_log
 exit 0

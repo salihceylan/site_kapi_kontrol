@@ -96,6 +96,9 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   final List<WorkPhotoPick> _photos = <WorkPhotoPick>[];
   String? _photoError;
   bool _picking = false;
+
+  /// Seçilen fotoğraflar hazırlanıyor (küçültme / JPEG / EXIF silme): "Fotoğraf hazırlanıyor...".
+  bool _preparing = false;
   bool _pickedAny = false;
 
   /// Seçilen fotoğrafların önizlemeleri: form kapanınca / fotoğraf kaldırılınca ImageCache'ten çıkarılır.
@@ -225,11 +228,17 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
     });
     WorkPhotoSelection selection;
     try {
-      selection = await widget.picker.pick(maxCount: remaining);
+      selection = await widget.picker.pick(
+        maxCount: remaining,
+        onPreparing: () {
+          if (mounted) setState(() => _preparing = true);
+        },
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _picking = false;
+        _preparing = false;
         _photoError = 'Fotoğraf seçilemedi. Tekrar deneyin.';
       });
       return;
@@ -240,6 +249,7 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
     final split = workSplitSelection(selection, remaining: remaining);
     setState(() {
       _picking = false;
+      _preparing = false;
       _photos.addAll(split.valid);
       _photoError = split.notes.isEmpty ? null : split.notes.join('\n');
     });
@@ -707,8 +717,9 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Sorunu gösteren en fazla $kWorkAttachmentMax fotoğraf ekleyebilirsiniz; JPEG, PNG veya WebP, her biri en fazla 5 MB. '
-            'Fotoğraflar talep gönderildikten sonra yüklenir.',
+            'Sorunu gösteren en fazla $kWorkAttachmentMax fotoğraf ekleyebilirsiniz (JPEG, PNG veya WebP). '
+            '$kWorkPhotoPrepareHint Fotoğraflar talep gönderildikten sonra yüklenir.',
+            key: const ValueKey<String>('work_form_photo_hint'),
             style: th.bodySmall,
           ),
           if (_photos.isNotEmpty) ...[
@@ -719,6 +730,10 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
               images: _previewImages,
               enabled: !_submitting,
             ),
+          ],
+          if (_preparing) ...[
+            const SizedBox(height: AppSpace.sm),
+            const WorkPhotoPreparing(keyPrefix: 'work_form_photo'),
           ],
           if (_photoError != null) ...[
             const SizedBox(height: AppSpace.sm),

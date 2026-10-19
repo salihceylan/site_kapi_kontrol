@@ -876,9 +876,11 @@ class WorkTrackingApi {
       case 'ATTACHMENT_QUOTA_EXCEEDED':
         final quota = payload?['quota'];
         final quotaBytes = payload?['quota_bytes'];
+        final windowDays = payload?['window_days'];
         return WorkAttachmentRules.quotaMessage(
           site: quota is String && quota.trim().toLowerCase() == 'site',
           quotaBytes: quotaBytes is num ? quotaBytes.toInt() : null,
+          windowDays: windowDays is num ? windowDays.toInt() : null,
         );
       case 'ATTACHMENT_DIMENSIONS_TOO_LARGE':
         return WorkAttachmentRules.dimensionsMessage;

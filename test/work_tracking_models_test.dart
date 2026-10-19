@@ -336,11 +336,17 @@ void main() {
         WorkAttachmentRules.validate(fileName: 'a.jpg', size: 100, content: wkImageBytes('a.jpg', size: 100), width: 10000, height: 5000),
         'Fotoğrafın çözünürlüğü çok yüksek; daha küçük bir fotoğraf seçin.',
       );
+      // Kişi kotası: YALNIZ sakin, kayan 30 günlük pencere (sunucu iletisiyle aynı metin); eski fotoğraf silme önerilmez.
       expect(
         WorkAttachmentRules.quotaMessage(site: false),
-        'Bu sitedeki fotoğraf kotanız doldu (en çok 200 MB). Eski fotoğraflarınızdan silebilir ya da yönetime başvurabilirsiniz.',
+        'Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız (en çok 200 MB); daha sonra yeniden '
+        'deneyin ya da yönetime başvurun.',
       );
-      expect(WorkAttachmentRules.quotaMessage(site: false, quotaBytes: 100 * 1024 * 1024), contains('en çok 100 MB'));
+      expect(WorkAttachmentRules.quotaMessage(site: false, quotaBytes: 100 * 1024 * 1024), contains('(en çok 100 MB)'));
+      expect(WorkAttachmentRules.quotaMessage(site: false, quotaBytes: 1572864), contains('(en çok 1,5 MB)'));
+      expect(WorkAttachmentRules.quotaMessage(site: false, windowDays: 7), startsWith('Son 7 günde bu sitede'));
+      expect(WorkAttachmentRules.quotaMessage(site: false, windowDays: 0), startsWith('Son 30 günde'));
+      expect(WorkAttachmentRules.quotaMessage(site: false).toLowerCase(), isNot(contains('sil')));
       expect(WorkAttachmentRules.quotaMessage(site: true), 'Sitenin fotoğraf depolama alanı doldu; yönetime başvurun.');
       expect(
         WorkAttachmentRules.limitBusyMessage,

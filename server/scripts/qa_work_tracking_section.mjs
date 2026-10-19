@@ -900,14 +900,23 @@ export async function sectionWorkTracking(ctx) {
       attOf(k14S, k8Staff.id)?.uploaded_by_name === 'IT Gorevli' && attOf(k14S, k8Staff.id)?.uploaded_by_me === true && attOf(k14S, k8Res.id)?.uploaded_by_kind === 'resident',
     [k14R.body?.attachments, k14R2.body?.attachments, k14M.body?.attachments, k14S.body?.attachments]);
 
-  // K15 (WA-SEC-3): bayt kotalari (uploading + ready, gelen boyut dahil): kisi kotasi (yonetici / super DISI, site basina) ve site kotasi -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota }
+  // K15 (WA-SEC-3 + R2-2): bayt kotalari (ready + suresi dolmamis uploading, gelen boyut dahil): sakin kotasi YALNIZ sakine ve son 30 gune (kayan pencere),
+  // gorevli / yonetici / super muaf; site kotasi herkese -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota }
   const MB = 1048576;
   const activeSiteBytes = async (siteCode) => Number((await q(`SELECT COALESCE(SUM(size_bytes), 0)::BIGINT AS n FROM work_item_attachments WHERE site_code = $1 AND (status = 'ready' OR (status = 'uploading' AND created_at >= NOW() - INTERVAL '120 minutes'))`, [siteCode])).rows[0].n);
   const QR = await resident(site, site.apts[4], 'IT Foto Kota');
   const qItem = (await create(QR, { title: 'Kota talebi' })).body.item.id;
+  const qOld = (await create(QR, { title: 'Kota gecmisi' })).body.item.id;
+  // gecmis: 31 gunluk 5 MB (pencere DISI, sayilmaz) + 29 gunluk 300 KB (pencere ICI, sayilir); ikisi de hazir (site kotasina ikisi de sayilir)
+  const qHistory = async (days, size) => q(`INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key, sha256, created_at, ready_at)
+    VALUES ($1, $2, $3, 'gecmis.jpg', 'image/jpeg', $4, 'ready', $5, $6, NOW() - make_interval(days => $7), NOW() - make_interval(days => $7))`, [qOld, site.code, QR, size, `${site.code}/${crypto.randomUUID()}`, 'cd'.repeat(32), days]);
+  await qHistory(31, 5000000);
+  await qHistory(29, 300000);
   process.env.WORK_ATTACHMENTS_USER_QUOTA_MB = '1';
   const qFirst = await createAtt(A(qItem), QR, { size_bytes: 700000 });
   const qSecond = await createAtt(A(qItem), QR, { size_bytes: 700000 });
+  // gorevli (sakin degil) 1 MB'i asar ama kotaya tabi degil; ayri talepte (qItem'in 4 yuvasi site kotasi adimina kalsin)
+  const qStaff = [await createAtt(M(`/${qOld}`), STAFF, { size_bytes: 700000 }), await createAtt(M(`/${qOld}`), STAFF, { size_bytes: 700000 })];
   const qMgr = await createAtt(M(`/${qItem}`), MGR, { size_bytes: 700000 });
   const siteBytes = await activeSiteBytes(site.code);
   const siteQuotaMb = Math.ceil(siteBytes / MB) + 1;
@@ -917,11 +926,30 @@ export async function sectionWorkTracking(ctx) {
   const qFit = await createAtt(M(`/${qItem}`), MGR, { size_bytes: room });
   delete process.env.WORK_ATTACHMENTS_USER_QUOTA_MB;
   delete process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB;
-  check('K15 (WA-SEC-3): kisi kotasi 1 MB: sakinin 700 KB kaydi 201, ikinci 700 KB 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, quota_bytes, used_bytes }; yonetici kisi kotasina tabi DEGIL (201); site kotasi: bir bayt fazlasi 409 { quota: site }, tam sigan 201',
-    qFirst.status === 201 && qSecond.status === 409 && qSecond.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qSecond.body.quota === 'user' && qSecond.body.quota_bytes === MB && qSecond.body.used_bytes === 700000 &&
-      qMgr.status === 201 && room > 0 && room <= 5 * MB && qOver.status === 409 && qOver.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qOver.body.quota === 'site' && qOver.body.quota_bytes === siteQuotaMb * MB &&
-      qOver.body.used_bytes === siteBytes && qFit.status === 201,
-    [qFirst.status, qSecond.body, qMgr.status, siteBytes, siteQuotaMb, room, qOver.body, qFit.body]);
+  check('K15 (WA-SEC-3 + R2-2): sakin kotasi 1 MB / son 30 gun: 31 gunluk 5 MB SAYILMAZ, 29 gunluk 300 KB sayilir (700 KB kayit 201; ikinci 700 KB 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, quota_bytes, used_bytes 1000000, window_days 30 } + yeni ileti); gorevli 2 x 700 KB (1 MB asilir) 201, yonetici 201 (muaf); site kotasi: bir bayt fazlasi 409 { quota: site, window_days YOK }, tam sigan 201',
+    qFirst.status === 201 && qSecond.status === 409 && qSecond.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qSecond.body.quota === 'user' && qSecond.body.quota_bytes === MB && qSecond.body.used_bytes === 1000000 &&
+      qSecond.body.window_days === 30 && /^Son 30 günde bu sitede yükleyebileceğiniz fotoğraf sınırına ulaştınız \(en çok 1 MB\)/.test(qSecond.body.error ?? '') &&
+      qStaff.every((r) => r.status === 201) && qMgr.status === 201 && room > 0 && room <= 5 * MB && qOver.status === 409 && qOver.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qOver.body.quota === 'site' &&
+      qOver.body.quota_bytes === siteQuotaMb * MB && qOver.body.used_bytes === siteBytes && !('window_days' in qOver.body) && qFit.status === 201,
+    [qFirst.status, qSecond.body, qStaff.map((r) => r.status), qMgr.status, siteBytes, siteQuotaMb, room, qOver.body, qFit.body]);
+  // K15b: pencere sorgusu indeksle karsilanir (seq scan kapaliyken plan bir indeks kullanir; (uploaded_by, created_at) kismi indeksi tanimiyla durur)
+  const planClient = await pool.connect();
+  let windowPlan = '';
+  try {
+    await planClient.query('BEGIN');
+    await planClient.query('SET LOCAL enable_seqscan = off');
+    windowPlan = JSON.stringify((await planClient.query(`EXPLAIN (FORMAT JSON) SELECT COALESCE(SUM(a.size_bytes), 0)::BIGINT AS used FROM work_item_attachments a
+      WHERE a.uploaded_by = ${Number(QR)} AND a.created_at > NOW() - make_interval(days => 30) AND a.site_code = ${Number(site.code)}
+        AND (a.status = 'ready' OR (a.status = 'uploading' AND a.created_at >= NOW() - make_interval(mins => 120)))`)).rows[0]);
+  } finally {
+    await planClient.query('ROLLBACK').catch(() => {});
+    planClient.release();
+  }
+  const uploaderIdx = (await q(`SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_work_item_attachments_uploaded_by'`)).rows[0]?.indexdef ?? '';
+  const usedIdx = (windowPlan.match(/"Index Name":"([a-z_]+)"/g) ?? []).map((m) => m.slice(14, -1));
+  check('K15b (R2-2): sakin kotasi pencere sorgusu indeksle karsilanir (seq scan yok; uploaded_by + created_at kismi indeksi tanimiyla var)',
+    !windowPlan.includes('"Seq Scan"') && usedIdx.some((name) => ['idx_work_item_attachments_uploaded_by', 'idx_work_item_attachments_site_created'].includes(name)) &&
+      /\(uploaded_by, created_at\) WHERE \(uploaded_by IS NOT NULL\)/.test(uploaderIdx), { usedIdx, uploaderIdx });
 
   // K16: suresi dolan (2 saati asan) uploading satirlari bakim silmeden de talep sinirina (4) ve kotalara SAYILMAZ, ayrintida listelenmez
   const ER = await resident(site, site.apts[5], 'IT Foto Suresi Dolan');

@@ -3465,19 +3465,19 @@
       "id": "F6",
       "baslik": "İş takibi",
       "durum": "hazir",
-      "ozet": "Canlıdadır. Ayrıntılı deneme maddeleri F17'dedir; F6.02 F17'ye göndermedir. Yeni: taleplere fotoğraf eki (en çok 4, her biri en çok 5 MB, JPEG/PNG/WebP) ve yönetici/kurul için personel performans raporu. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar.",
+      "ozet": "Canlıdadır. Ayrıntılı deneme maddeleri F17'dedir; F6.02 F17'ye göndermedir. Yeni: taleplere fotoğraf eki (en çok 4, JPEG/PNG/WebP; yüklemeden önce küçültülür ve konum bilgisi silinir) ve yönetici/kurul için personel performans raporu. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar.",
       "maddeler": [
         {
           "id": "F6.01",
           "baslik": "Arıza ve talep açma (fotoğraflı)",
           "adimlar": [
-            "Sakin hesabıyla 'Taleplerim' → 'Yeni Talep'; kategori, konum, başlık, açıklama yazın; 'Fotoğraf Ekle' ile 1–4 fotoğraf seçin (JPEG/PNG/WebP, en çok 5 MB); kaydedin.",
+            "Sakin hesabıyla 'Taleplerim' → 'Yeni Talep'; kategori, konum, başlık, açıklama yazın; 'Fotoğraf Ekle' ile 1–4 fotoğraf seçin (JPEG/PNG/WebP); kaydedin.",
             "Talebi açıp fotoğraf şeridine dokunun; tam ekranda büyütün.",
-            "Beşinci fotoğrafı, 5 MB'tan büyük bir resmi ve PDF gibi resim olmayan bir dosyayı eklemeyi deneyin.",
+            "Beşinci fotoğrafı, çok büyük bir fotoğrafı (ör. 10 MB, 48 MP) ve PDF gibi resim olmayan bir dosyayı eklemeyi deneyin.",
             "Yönetici hesabıyla aynı talebi açın; bir fotoğraf ekleyin ve sakin hesabıyla yeniden bakın.",
             "Kurul hesabıyla talebi açın."
           ],
-          "beklenen": "Talep 'Yeni' durumuyla ve fotoğraflarıyla kaydedilir; listede fotoğraf sayısı rozeti görünür. Bir fotoğraf yüklenemezse talep yine açılır ve 'Talep oluşturuldu, N fotoğraf yüklenemedi.' yazar; eksik fotoğraf talep ayrıntısından yeniden eklenebilir. Beşinci fotoğraf 'En fazla 4 fotoğraf eklenebilir', büyük ya da resim olmayan dosya tür/boyut hatasıyla reddedilir. Yöneticinin eklediği fotoğraf sakinde görünür ve yükleyen adı yazar; sakin yalnız kendi eklediğini silebilir, yönetici hepsini silebilir. Kurul fotoğrafları görür ama ekleyemez/silemez. Kapanmış ya da iptal edilmiş talebe fotoğraf eklenemez.",
+          "beklenen": "Talep 'Yeni' durumuyla ve fotoğraflarıyla kaydedilir; listede fotoğraf sayısı rozeti görünür. Bir fotoğraf yüklenemezse talep yine açılır ve 'Talep oluşturuldu, N fotoğraf yüklenemedi.' yazar; eksik fotoğraf talep ayrıntısından yeniden eklenebilir. Beşinci fotoğraf 'En fazla 4 fotoğraf eklenebilir' ile reddedilir; büyük fotoğraf 'Fotoğraf hazırlanıyor...' sonrası küçültülüp yüklenir (konum bilgisi silinir); resim olmayan dosya tür hatasıyla reddedilir. Yöneticinin eklediği fotoğraf sakinde görünür ve yükleyen adı yazar; sakin yalnız kendi eklediğini silebilir, yönetici hepsini silebilir. Kurul fotoğrafları görür ama ekleyemez/silemez. Kapanmış ya da iptal edilmiş talebe fotoğraf eklenemez.",
           "rol_notu": "",
           "on_kosul": "İş Takibi modülü sitede açık",
           "yeni": true,
