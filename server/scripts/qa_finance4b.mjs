@@ -83,8 +83,10 @@ export async function runFinance4bSection(ctx) {
   };
   const addPerson = async (site, { user = null, name = null, email = null }) =>
     Number((await q(`INSERT INTO site_people (site_code, user_code, full_name, email) VALUES ($1, $2, $3, $4) RETURNING id`, [site, user, user === null ? name : null, email])).rows[0].id);
-  const addResidency = (site, apartment, person, relation, { current = true } = {}) =>
-    q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin) VALUES ($1, $2, $3, $4, $5, 'manual')`, [site, apartment, person, relation, current]);
+  // Varsayilan: uzun suredir oturan kisi (tasinma 2020-01-01). Sakin "Borcum" kapsami tasinma ayindan baslar (residentScopeSql);
+  // tarih verilmezse kayit gunu esas alinir, bu yuzden eski aylari sinayan bolumler tarihli kisi kullanir. moveIn: null = tarihsiz kayit.
+  const addResidency = (site, apartment, person, relation, { current = true, moveIn = '2020-01-01' } = {}) =>
+    q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, origin) VALUES ($1, $2, $3, $4, $5, $6, 'manual')`, [site, apartment, person, relation, current, moveIn]);
 
   const P = (site) => `/manager/sites/${site}/finance`;
   let keyCounter = 0;
@@ -286,7 +288,7 @@ export async function runFinance4bSection(ctx) {
 }
 
 // Bolum dosyalari: scripts/qa_finance4b_<ad>.mjs (varsayilan export async (t) => ...). QA_PART=receipts,accounts ile secilir.
-const PART_NAMES = ['receipts', 'accounts', 'expenses', 'reports', 'late_fee', 'reminders', 'locks', 'review', 'r15'];
+const PART_NAMES = ['receipts', 'accounts', 'expenses', 'reports', 'late_fee', 'reminders', 'locks', 'review', 'r15', 'resident_scope'];
 
 /** Gercek authRequired + gercek JWT; hiz sinirlayicilar devre disi, requireSiteManager/requireSuperUser KALIR. */
 async function startHttp(pool) {

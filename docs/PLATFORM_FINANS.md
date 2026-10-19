@@ -62,9 +62,41 @@ Hata gövdesi `{ error, code }` (Türkçe). Tutarlar kuruş tamsayı. Yazmalar 1
 
 ## Sakin ucu
 
-- `GET /app/my-finance` (`authRequired`) → `{ items: [{ site_code, site_name, apartment_id, label, block_name, currency, balance_minor, overdue_minor, next_due_date, next_due_minor, payer_party, recent: [Entry (son 30; yönetici kimliği/notu YOK)] }] }`: yalnız çağıranın **güncel** (aktif) kişisinin ilişkili olduğu daireler, **modülü açık ve onaylı** siteler.
+- `GET /app/my-finance` (`authRequired`) → `{ items: [{ site_code, site_name, apartment_id, label, block_name, currency, balance_minor, overdue_minor, next_due_date, next_due_minor, payer_party, visible_from, offset_note, recent: [Entry (son 30; yönetici kimliği/notu YOK)] }] }`: yalnız çağıranın **güncel** (aktif) kişisinin ilişkili olduğu daireler, **modülü açık ve onaylı** siteler.
 - **Kim görür (F2.05 `responsible_party` kuralı):** `owner` ise dairenin güncel `owner` ilişkisi olanlar; `tenant` ise `tenant`; `both` ise `owner` + `tenant` + `resident` (belirsiz ilişki). `family_member` HİÇBİR durumda borç görmez. Eşleşen güncel kişi yoksa güvenli yedek: dairenin güncel `resident`/`owner`/`tenant` ilişkili kişileri görür (borç sahipsiz kalmasın); bu yedek davranış sözleşme notu olarak raporlanır. Başkasının dairesi asla.
 - Sakin ucu yönetici notlarını/oluşturan adını/diğer dairelerin verisini içermez; `recent` yalnız kendi dairesi.
+- **Sakin kapsamı (2026-10-19, KVKK ölçülülük + doğru bakiye; `finance_resident_view.residentView`):**
+  - **Başlangıç:** sakinin bu dairedeki güncel ilişkisinin taşınma ayı (`move_in_date`; boşsa ilişki kaydının günü, İstanbul).
+    Aynı kişinin aynı dairedeki kesintisiz önceki ilişkisi (ör. kiracıyken satın aldı) zincirin başını öne çeker; yalnız borcu
+    görebileceği bir ilişkiyse (malik sorumluyken kiracılık dönemi sayılmaz). Değer okunamazsa sınır kalkmaz, bu ay esas alınır.
+  - **Dayanak ayı:** gecikme tazminatı kalemi ve ters kaydı için HESAPLANAN ay (`late_fee_runs.period`), ters kayıt için asıl
+    kaydın ayı, diğerlerinde `period` (`residentAnchorSql`). Önceki döneme ait bir kaydın sonradan yazılan iptali ya da
+    tazminatı yeni sakine görünmez.
+  - **Bakiye (mahsup kuralı, makbuzdaki "vadesi en eski borçtan"):** ters kaydı olmayan borçlar (tazminat dahil) (vade, kimlik)
+    sırasıyla, tahsilatlar ve asıl kaydı henüz deftere girmemiş ileri tarihli borçların ters kayıtları (tarih, kimlik) sırasıyla
+    dökülür. Sakinin bakiyesi = kapsam içi borçların ödenmemiş kalanı − görünen alacakların artan kısmı. Vadesi boş borçta vade
+    yerine kayıt tarihi (M1 ile aynı). Vadesi geçmiş ve sıradaki vade de kapsam içi kalanlardan. Böylece önceki sakinin geç ödemesi
+    yeni sakinin borcunu kapatmaz, geçmiş aya yazılan borç ödendiğinde sahte alacak doğmaz. Kapsam yoksa (malik 2020'den beri
+    vb.) sonuç dairenin defter toplamıyla aynıdır.
+  - **Görünen satırlar:** kapsam içi borç ve ters kayıtlar; tahsilat kapsam içiyse ya da hiçbir kısmı kapsam dışı bir borca mahsup
+    edilmediyse (ör. taşınmadan önce peşin ödeme; artanı alacak sayılır). Makbuz, bağlı tahsilatı görünüyorsa görünür; sakinin bu
+    dairedeki ilişki kaydından ÖNCE düzenlenmiş makbuzda ödeyen adı sakine gösterilmez (`relation_since_at`). Gecikme açıklaması
+    kalemin dayanak ayına göre.
+  - **Yanıt alanları:** `visible_from: "YYYY-MM"` yalnız kapsam dışında kayıt VARSA dolar ("Kayıtlar … ayından itibaren"
+    notu). `offset_note: true`: görünen satırların toplamı bakiyeye eşit değil (bir tahsilat ya da alacak önceki dönem
+    kayıtlarıyla mahsup edildi); istemci mahsup notunu yazar. Sakin ekstresi (`computeResidentStatement`): açılış, kapanış ve
+    satır başına kayan bakiye aynı kuralla, satırın tarihindeki duruma göre; `offset_note` aynı anlamda. Sakin ekstresi dairenin
+    tüm defterinden hesaplandığı için en çok 2000 defter satırı (aşarsa `STATEMENT_TOO_LARGE`).
+  - **Kapsam dışı uçlar:** yönetici ve kurul uçları (`computeStatement`, bakiye listesi, dışa aktarma) dairenin tüm defterini
+    görür.
+  - **Gerçek PG:** `QA_ONLY=finance4b QA_PART=resident_scope` (S0-S13). Birim: `test/finance_resident_view.test.js`.
+  - **Bilinen sınırlar:** (1) kimin ödediği defterde tutulmadığından önceki sakinin taşınmadan SONRA yaptığı ödeme yeni sakine
+    satır olarak görünür (bakiyesini etkilemez; makbuzu, yeni sakinin kaydından önce düzenlendiyse adsız). Mahsup daire bazındadır:
+    yeni sakinin ödemesi önceki dönemin açık borcuna da gidebilir (TBK 100-102 aynı borçlu içindir; kişi bazlı tahsilat yol haritasında).
+    Aynı kişinin önceki ilişki zinciri tek adımdır (güvenli taraf). (2) Taşınma tarihi girilmezse kayıt günü esas alınır; uzun süredir oturan
+    biri sonradan kaydedildiyse eski borcu Borcum'da görünmez. Kişi eklerken uyarı ve yönetici ekranında gösterge yol
+    haritasında. (3) Gecikme tazminatı ve borç hatırlatma hâlâ daire bazında hesaplanır; açılmadan önce aynı kapsam uygulanacak
+    (`docs/PLATFORM_YOL_HARITASI.md`, P0).
 - Hız sınırı: 600/saat/kullanıcı.
 
 ## Audit
@@ -95,4 +127,4 @@ Yeni bağımlılık YOK. Para girişi/gösterimi: ortak yardımcı (`lib/ui/help
 4. **Dağıtım.** Arsa payı 0 (payda > 0) olan daire eksik veri DEĞİL (ağırlık 0, satır yok, `zero_amount_count`); yalnız pay/payda NULL eksiktir. `skip_missing` ile hariç tutulanların payı `equal`/`land_share`/`area` yöntemlerinde kalan dairelere yeniden dağıtılır (`redistributed: true`; toplam birebir korunur); `fixed`/`category`'de dağıtılmaz.
 5. **Defter koruması (DB).** `trg_ledger_entries_append_only` (`created_by → NULL` yalnız ilgili kullanıcı ARTIK yoksa), `BEFORE TRUNCATE` (ledger_entries, fee_runs), ters kayıt aynası kontrolü (`BEFORE INSERT`: aynı site/daire, `amount_minor = -asıl`, asıl ters kayıt olamaz, hata P0001), `fee_runs` append-only (site silme ve `posted_by` SET NULL istisnası), `finance_period_closures` UPDATE yasağı (DELETE serbest: yeniden açma satırı siler). `ledger_entries.definition_name` borçlandırma anındaki ANLIK GÖRÜNTÜDÜR (tanım yeniden adlandırılınca geçmiş değişmez; ters kayıt asıldan kopyalar).
 6. **Kilit sırası:** `sites KEY SHARE → finance_post advisory → apartments(id) → users(işlemi yapan) FOR KEY SHARE → finans satırları`. Tanım listesi `GET …/definitions?limit=&offset=` → `{ items, total }` (≤ 500; aylık tanımlar önce).
-7. **Kabul edilen riskler (Faz 4b'de gözden geçirilecek):** bakiye listesi ve özet her istekte sitenin tüm defterini toplar (≈1M satırda ~350 ms); çok satırlı (≈200k+) kullanıcı/site silme 30 sn `statement_timeout`'a yaklaşır (rollback güvenli); bir sitenin toplam bakiyesi 2^53'ü aşarsa özet 500 verir (gerçekçi değil); `definition_name` anlık görüntüsü sonradan düzeltilemez; sakin dairenin tüm geçmişini (önceki kiracı dönemi dahil) görür. **Dağıtım notu:** 034 DDL'i sert yazma yükü altında `ensureDbSchema` içinde 40P01 alabilir (açılış DDL'inin doğası); `pm2 restart` ile idempotent yeniden denenir, trafiksiz uygulamak güvenlidir. Canlıya almadan önce `site_modules`'ta `finance` için `enabled = TRUE` satırı OLMADIĞI doğrulanır (aksi halde dağıtımda modül sessizce açılır). `finance` varsayılan KAPALIDIR.
+7. **Kabul edilen riskler (Faz 4b'de gözden geçirilecek):** bakiye listesi ve özet her istekte sitenin tüm defterini toplar (≈1M satırda ~350 ms); çok satırlı (≈200k+) kullanıcı/site silme 30 sn `statement_timeout`'a yaklaşır (rollback güvenli); bir sitenin toplam bakiyesi 2^53'ü aşarsa özet 500 verir (gerçekçi değil); `definition_name` anlık görüntüsü sonradan düzeltilemez; ~~sakin dairenin tüm geçmişini (önceki kiracı dönemi dahil) görür~~ (2026-10-19 giderildi: "Sakin kapsamı"). **Dağıtım notu:** 034 DDL'i sert yazma yükü altında `ensureDbSchema` içinde 40P01 alabilir (açılış DDL'inin doğası); `pm2 restart` ile idempotent yeniden denenir, trafiksiz uygulamak güvenlidir. Canlıya almadan önce `site_modules`'ta `finance` için `enabled = TRUE` satırı OLMADIĞI doğrulanır (aksi halde dağıtımda modül sessizce açılır). `finance` varsayılan KAPALIDIR.

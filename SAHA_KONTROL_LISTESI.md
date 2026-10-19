@@ -2283,3 +2283,20 @@ Cihaz Etiketleyici → "Cihaz testi" sayfasındaki "Genel IP (WAN)" alanı şu a
 - [ ] **84.9. (Geliştirici) Test, QA ve Yedek Doğrulaması:**
   - **Nasıl Test Edilir:** server klasöründe `node --test test/work_attachments.test.js test/work_report.test.js test/reservation_unread.test.js` çalıştırın. Tek kullanımlık yerel PostgreSQL ile `QA_ONLY=chain,live,work_tracking,reservation,account QA_CONFIRM_DISPOSABLE_DB=yes DB_HOST=127.0.0.1 DB_PORT=55432 DB_USER=postgres DB_PASSWORD= node scripts/qa_platform_pg.mjs` çalıştırın (üretimde ÇALIŞTIRMAYIN). Sunucuda yedek sonrası `~/ops` günlüğüne ve `kapi_work_attachments_*.tgz.enc` arşivine bakın; `restore_test.sh` çıktısında fotoğraf tutarlılığı satırını okuyun.
   - **Beklenen Sonuç:** Testler ve seçilen QA bölümleri yeşil. Fotoğraflar belge arşivinden AYRI, şifreli `kapi_work_attachments_*` arşivinde yedeklenir; geri yükleme denemesi hazır fotoğrafların arşivde olduğunu doğrular.
+
+## 85. 🔒 Borcum: Sakin Yalnız Kendi Döneminin Kayıtlarını Görür (KVKK) — F4.22/F4.23 (2026-10-19)
+
+Sakin "Borcum" ekranında, ekstresinde ve makbuzlarında dairenin defterini yalnız kendi taşınma ayından itibaren görür; önceki malikin / kiracının borçları, ödemeleri ve makbuzları gösterilmez. Bakiye makbuzdaki mahsup kuralıyla ("vadesi en eski borçtan başlayarak") hesaplanır: önceki sakinin geç ödemesi yeni sakinin borcunu kapatmaz, geçmiş aya yazılan borç ödendiğinde sahte alacak doğmaz. Taşınma tarihi girilmemişse kişinin kayıt günü esas alınır. Yönetici ve yönetim kurulu dairenin tüm defterini görmeye devam eder. Ayrıntı: `docs/PLATFORM_FINANS.md` "Sakin kapsamı".
+
+- [ ] **85.1. Yeni Kiracı Önceki Dönemi Görmez:**
+  - **Nasıl Test Edilir:** Rol: Site yöneticisi + sakin. Önkoşul: Aidat ve Finans açık, en az iki ay borçlandırılmış bir daire. Eski kiracıyı "Taşındı" ile çıkarın, yeni kiracıyı bu ayın bir günü taşınma tarihiyle ekleyin. Yeni kiracının hesabıyla Borcum, "Ekstreyi Yazdır" ve "Makbuzlarım"ı açın.
+  - **Beklenen Sonuç:** Yalnız taşınma ayından itibaren olan kayıtlar görünür; önceki kiracının borcu, ödemesi ve makbuzu yoktur. Kartta ve ekstrede "Kayıtlar … ayından itibaren gösterilir" notu çıkar. Yöneticinin aynı daire ekstresi değişmez (tüm kayıtlar).
+- [ ] **85.2. Mahsup ve Not:**
+  - **Nasıl Test Edilir:** 85.1 dairesinde eski kiracının ödenmemiş borcu varken yeni kiracının ödemesini Tahsilat Ekle ile kaydedin; yeni kiracının Borcum ekranına ve ekstresine bakın.
+  - **Beklenen Sonuç:** Ödeme en eski borçtan mahsup edildiği için yeni kiracının kendi borcu açık kalabilir; ekran bunu doğru gösterir ve "Ödemeler vadesi en eski borçtan başlayarak mahsup edilir…" notunu yazar. "Borcunuz yok" yanlışlıkla çıkmaz.
+- [ ] **85.3. Uzun Süredir Oturan Malik:**
+  - **Nasıl Test Edilir:** Taşınma tarihi eski (örneğin 2020) olan malikin hesabıyla Borcum'u açın.
+  - **Beklenen Sonuç:** Dairenin tüm kayıtları görünür, kapsam notu çıkmaz; bakiye yöneticinin ekranındaki daire bakiyesiyle aynıdır.
+- [ ] **85.4. (Geliştirici) Test ve QA:**
+  - **Nasıl Test Edilir:** server klasöründe `node --test test/finance_resident_view.test.js test/platform_finance_*.test.js test/finance4b_*.test.js test/account_export_service.test.js`; tek kullanımlık yerel PostgreSQL ile `QA_ONLY=finance,finance4b,account` ve ayrıca `QA_ONLY=finance4b QA_PART=resident_scope` (üretimde ÇALIŞTIRMAYIN).
+  - **Beklenen Sonuç:** Testler ve QA bölümleri yeşil; resident_scope S0-S13 geçer.

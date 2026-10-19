@@ -1199,6 +1199,8 @@ class MyFinanceApartment {
     this.nextDueDate,
     this.nextDueMinor,
     this.payerParty,
+    this.visibleFrom,
+    this.offsetNote = false,
     this.recent = const <LedgerEntry>[],
   });
 
@@ -1214,6 +1216,13 @@ class MyFinanceApartment {
   final DateTime? nextDueDate;
   final int? nextDueMinor;
   final ResponsibleParty? payerParty;
+
+  /// Sakinin bu dairedeki kayıtları gördüğü ilk ay (taşınma ayı; `visible_from`). Bakiye ve hareketler yalnız bu aydan
+  /// itibarendir: önceki malikin / kiracının kayıtları gösterilmez. Null: sınır yok (eski sunucu).
+  final FinancePeriod? visibleFrom;
+
+  /// Görünen hareketlerin toplamı bakiyeye eşit değil (önceki dönem kayıtlarıyla mahsup): [myFinanceOffsetNote] gösterilir.
+  final bool offsetNote;
   final List<LedgerEntry> recent;
 
   factory MyFinanceApartment.fromJson(Map<String, dynamic> json) => MyFinanceApartment(
@@ -1229,9 +1238,20 @@ class MyFinanceApartment {
     payerParty: json['payer_party'] == null
         ? null
         : ResponsibleParty.fromApi(json['payer_party']),
+    visibleFrom: FinancePeriod.tryParse(json['visible_from']),
+    offsetNote: json['offset_note'] == true,
     recent: _listOf(json['recent'], LedgerEntry.fromJson),
   );
 }
+
+/// Sakin kapsamı notu (Borcum kartı ve sakin ekstresi PDF'i aynı metni kullanır).
+String myFinanceScopeNote(FinancePeriod from) =>
+    'Kayıtlar ${from.label} ayından itibaren gösterilir; daha önceki dönem için site yönetiminize başvurun.';
+
+/// Görünen hareketlerin toplamı bakiyeye eşit olmadığında (önceki dönem kayıtlarıyla mahsup) gösterilen not; [statement] ekstre PDF'i için.
+String myFinanceOffsetNote({bool statement = false}) =>
+    'Ödemeler vadesi en eski borçtan başlayarak mahsup edilir. Bakiye, bu ${statement ? 'ekstrede' : 'listede'} gösterilmeyen önceki '
+    'dönem kayıtlarıyla yapılan mahsupları da içerir.';
 
 /// `GET /app/my-finance`.
 @immutable

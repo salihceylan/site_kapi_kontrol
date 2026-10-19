@@ -291,6 +291,8 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
     }
     // Kim öder bilgisi görsel çipte var; birleşik etikette de okunmalı (çip okunuştan dışlanıyor).
     if (item.payerParty != null) semantic.write(' ${payerPartyLabel(item.payerParty!)}.');
+    if (item.visibleFrom != null) semantic.write(' ${myFinanceScopeNote(item.visibleFrom!)}');
+    if (item.offsetNote) semantic.write(' ${myFinanceOffsetNote()}');
 
     return AppCard(
       padding: listCardPadding(context),
@@ -350,6 +352,23 @@ class _MyFinanceCardState extends State<MyFinanceCard> {
                   if (item.payerParty != null) ...[
                     const SizedBox(height: AppSpace.sm),
                     Wrap(children: [PayerPartyChip(item.payerParty!)]),
+                  ],
+                  // Sakin kapsamı: önceki malikin / kiracının kayıtları gösterilmez; başlangıç ayı açıkça yazılır.
+                  if (item.visibleFrom != null) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    Text(
+                      myFinanceScopeNote(item.visibleFrom!),
+                      key: const ValueKey<String>('my_finance_scope_note'),
+                      style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    ),
+                  ],
+                  if (item.offsetNote) ...[
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      myFinanceOffsetNote(),
+                      key: const ValueKey<String>('my_finance_offset_note'),
+                      style: th.bodySmall?.copyWith(color: p.textSecondary),
+                    ),
                   ],
                 ],
               ),

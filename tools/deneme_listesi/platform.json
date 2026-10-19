@@ -1307,6 +1307,33 @@
           "on_kosul": "Borçlandırılmış bir site",
           "yeni": false,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.22",
+          "baslik": "Borcum: yeni kiracı yalnız kendi döneminden itibaren görür",
+          "adimlar": [
+            "Borçlandırılmış bir dairede eski kiracıyı \"Taşındı\" ile çıkarın; yeni kiracıyı bu ayın bir günü taşınma tarihiyle ekleyin (hesabı olan bir kullanıcı).",
+            "Yeni kiracının hesabıyla Borcum ekranını, \"Ekstreyi Yazdır\" ve \"Makbuzlarım\"ı açın.",
+            "Aynı daireyi site yöneticisi olarak Finans > Daireler > ekstre ile açın."
+          ],
+          "beklenen": "Yeni kiracı yalnız taşınma ayından itibaren olan borçları, ödemeleri ve makbuzları görür; önceki kiracının borcu, ödemesi ve makbuzu görünmez. Kartta \"Kayıtlar … ayından itibaren gösterilir\" notu çıkar. Yönetici ekstresi değişmez: dairenin tüm kayıtları görünür.",
+          "rol_notu": "Sakin (yeni kiracı) + site yöneticisi",
+          "on_kosul": "Aidat ve Finans modülü açık, en az iki ay borçlandırılmış bir daire",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F4.23",
+          "baslik": "Borcum: ödeme eski borca mahsup edilince bakiye ve not doğru",
+          "adimlar": [
+            "F4.22 dairesinde eski kiracının ödenmemiş bir borcu varken yeni kiracının ödemesini (örneğin bir aylık aidat) Tahsilat Ekle ile kaydedin.",
+            "Yeni kiracının Borcum ekranına bakın."
+          ],
+          "beklenen": "Ödeme vadesi en eski borçtan mahsup edildiği için yeni kiracının kendi borcu açık kalabilir; Borcum bunu doğru gösterir ve \"Ödemeler vadesi en eski borçtan başlayarak mahsup edilir…\" notunu yazar. \"Borcunuz yok\" yanlışlıkla çıkmaz; sahte alacak görünmez.",
+          "rol_notu": "Sakin (yeni kiracı) + site yöneticisi",
+          "on_kosul": "F4.22",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },

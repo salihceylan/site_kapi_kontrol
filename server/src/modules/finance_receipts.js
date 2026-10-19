@@ -31,9 +31,11 @@ import {
   invalidBody,
   normalizeFreeText,
   parseIdempotencyKey,
+  today,
 } from './finance_common.js';
 import { minorToNumber } from './finance_money.js';
-import { enabledFinanceSites, loadVisibleApartments } from './finance_read_service.js';
+import { enabledFinanceSites, loadResidentLedger, loadVisibleApartments, residentSinceOf } from './finance_read_service.js';
+import { residentEntryOf, residentView } from './finance_resident_view.js';
 import { lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId, toIso } from './people_common.js';
 
@@ -719,18 +721,46 @@ export async function getReceipt(siteCode, rawId, db = pool) {
 
 const INT32_MAX = 2147483647;
 
-async function visibleApartmentIds(db, authUser) {
+/**
+ * Sakinin görebildiği daireler ve makbuzu gösterilebilecek tahsilat kayıtları. Makbuz, bağlı olduğu tahsilat sakinin "Borcum" görünümünde
+ * görünüyorsa görünür (aynı kural: finance_resident_view.residentView; önceki malikin / kiracının tahsilatı ve makbuzu yeni sakine görünmez).
+ */
+async function visibleApartmentIds(db, authUser, now = new Date()) {
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (userCode === null) {
-    return { siteCodes: [], apartmentIds: [] };
+    return { siteCodes: [], apartmentIds: [], paymentIds: [], sinceAt: new Map() };
   }
   const visible = await loadVisibleApartments(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
   const rows = visible.filter((row) => enabled.has(Number(row.site_code)));
-  return {
-    siteCodes: [...new Set(rows.map((row) => Number(row.site_code)))],
-    apartmentIds: rows.map((row) => Number(row.apartment_id)),
-  };
+  const siteCodes = [...new Set(rows.map((row) => Number(row.site_code)))];
+  const apartmentIds = rows.map((row) => Number(row.apartment_id));
+  const ledger = await loadResidentLedger(db, siteCodes, apartmentIds);
+  const todayIso = today(now);
+  const paymentIds = [];
+  for (const row of rows) {
+    const id = Number(row.apartment_id);
+    const own = ledger.filter((entry) => Number(entry.apartment_id) === id);
+    const view = residentView(own.map(residentEntryOf), { since: residentSinceOf(row, todayIso), today: todayIso });
+    for (const entry of own) {
+      if (entry.kind === 'payment' && view.visibleIds.has(Number(entry.id))) paymentIds.push(Number(entry.id));
+    }
+  }
+  const sinceAt = new Map(rows.map((row) => [Number(row.apartment_id), row.relation_since_at ?? null]));
+  return { siteCodes, apartmentIds, paymentIds, sinceAt };
+}
+
+/**
+ * Sakinin bu dairedeki ilişki kaydından ÖNCE düzenlenmiş makbuzda ödeyen adı sakine gösterilmez (o an daireye bağlı değildi; ad başka
+ * birine ait olabilir: ör. önceki kiracının taşınmadan sonra yaptığı ödeme). Yalnız yanıt kopyası değişir; kayıt ve doğrulama kodu aynı kalır.
+ */
+function hidePayerBeforeRelation(row, sinceAt) {
+  const since = sinceAt.get(Number(row.apartment_id));
+  if (!since || !row.issued_at || new Date(row.issued_at).getTime() >= new Date(since).getTime()) {
+    return row;
+  }
+  const snapshot = row.snapshot && typeof row.snapshot === 'object' ? { ...row.snapshot, payer: { ...(row.snapshot.payer ?? {}), name: null } } : row.snapshot;
+  return { ...row, snapshot };
 }
 
 /** GET /app/my-finance/receipts -> { items, next_before_id } (yalnız çağıranın F2.05 kuralıyla borcu görebildiği daireler). */
@@ -740,16 +770,16 @@ export async function listMyReceipts(authUser, query = {}, db = pool) {
   if (scope.apartmentIds.length === 0 || (filters.apartmentId !== null && !scope.apartmentIds.includes(filters.apartmentId))) {
     return { items: [], next_before_id: null };
   }
-  const { params, clauses } = receiptFilters({ ...filters, q: null }, [scope.siteCodes, scope.apartmentIds]);
+  const { params, clauses } = receiptFilters({ ...filters, q: null }, [scope.siteCodes, scope.apartmentIds, scope.paymentIds]);
   params.push(filters.limit + 1);
   const result = await db.query(
-    `${RECEIPT_SELECT} WHERE r.site_code = ANY($1::BIGINT[]) AND r.apartment_id = ANY($2::BIGINT[])${clauses.map((c) => ` AND ${c}`).join('')} ORDER BY r.id DESC LIMIT $${params.length}`,
+    `${RECEIPT_SELECT} WHERE r.site_code = ANY($1::BIGINT[]) AND r.apartment_id = ANY($2::BIGINT[]) AND r.ledger_entry_id = ANY($3::BIGINT[])${clauses.map((c) => ` AND ${c}`).join('')} ORDER BY r.id DESC LIMIT $${params.length}`,
     params,
   );
   const rows = result.rows ?? [];
   const page = rows.slice(0, filters.limit);
   return {
-    items: page.map(mapReceiptSummary),
+    items: page.map((row) => mapReceiptSummary(hidePayerBeforeRelation(row, scope.sinceAt))),
     next_before_id: rows.length > filters.limit && page.length > 0 ? Number(page[page.length - 1].id) : null,
   };
 }
@@ -765,11 +795,11 @@ export async function getMyReceipt(authUser, rawId, db = pool) {
     throw receiptNotFound();
   }
   const result = await db.query(
-    `${RECEIPT_SELECT} WHERE r.id = $1 AND r.site_code = ANY($2::BIGINT[]) AND r.apartment_id = ANY($3::BIGINT[]) LIMIT 1`,
-    [id, scope.siteCodes, scope.apartmentIds],
+    `${RECEIPT_SELECT} WHERE r.id = $4 AND r.site_code = ANY($1::BIGINT[]) AND r.apartment_id = ANY($2::BIGINT[]) AND r.ledger_entry_id = ANY($3::BIGINT[]) LIMIT 1`,
+    [scope.siteCodes, scope.apartmentIds, scope.paymentIds, id],
   );
   if (!result.rows?.[0]) {
     throw receiptNotFound();
   }
-  return mapReceiptForResident(result.rows[0]);
+  return mapReceiptForResident(hidePayerBeforeRelation(result.rows[0], scope.sinceAt));
 }

@@ -381,6 +381,8 @@ class ApartmentStatement {
     this.items = const <StatementItem>[],
     required this.totals,
     this.overdueMinor,
+    this.visibleFrom,
+    this.offsetNote = false,
   });
 
   final ReportMeta meta;
@@ -392,6 +394,13 @@ class ApartmentStatement {
   final List<StatementItem> items;
   final StatementTotals totals;
   final int? overdueMinor;
+
+  /// Yalnız sakin ekstresinde ve kapsam dışında kayıt varsa: kayıtların başladığı ay (sakinin taşınma ayı). Bakiyeler bu kapsam içindir.
+  final FinancePeriod? visibleFrom;
+
+  /// Yalnız sakin ekstresinde: satır toplamı kapanışa eşit değil (bir tahsilat ya da alacak, ekstrede gösterilmeyen önceki dönem
+  /// kayıtlarıyla mahsup edildi). İstemci bunu açıklayan notu yazar.
+  final bool offsetNote;
 
   factory ApartmentStatement.fromJson(Map<String, dynamic> json) {
     final apartment = json['apartment'];
@@ -407,6 +416,8 @@ class ApartmentStatement {
       items: f4List(json['items'], StatementItem.fromJson),
       totals: StatementTotals.fromJson(f4Map(json['totals'])),
       overdueMinor: f4MinorOrNull(json, 'overdue_minor'),
+      visibleFrom: FinancePeriod.tryParse(json['visible_from']),
+      offsetNote: json['offset_note'] == true,
     );
   }
 }

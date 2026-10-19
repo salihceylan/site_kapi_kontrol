@@ -28,6 +28,7 @@ import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import { syncUserPeopleSafe } from './people_sync.js';
+import { residentEntryOf, residentView } from './finance_resident_view.js';
 
 const INT32_MAX = 2147483647;
 
@@ -299,16 +300,94 @@ export const ALLOWED_RELATIONS_SQL = `(
 )`;
 
 /**
+ * Sakin kapsamı (KVKK ölçülülük): sakin dairenin defterini yalnız kendi taşınma ayından (`visible_from`, ayın 1'i) itibaren görür; önceki
+ * malikin / kiracının kayıtları yeni sakine görünmez. Bir satırın DAYANAK AYI: gecikme tazminatı kalemi (ve ters kaydı) için HESAPLANAN ay
+ * (late_fee_runs.period), ters kayıt için asıl kaydın ayı, diğerlerinde kaydın ayı (period); böylece önceki döneme ait bir kayıt sonradan
+ * ters çevrilse ya da tazminatı sonradan yazılsa da yeni sakine görünmez. Bakiye ve tahsilat görünürlüğü mahsup kuralıyla
+ * finance_resident_view.js'te hesaplanır. Yönetici ve kurul uçları kapsamsızdır (dairenin tüm defteri).
+ */
+export function residentAnchorSql(alias) {
+  return `COALESCE(
+    (SELECT lfr.period FROM late_fee_runs lfr WHERE lfr.id = ${alias}.late_fee_run_id),
+    (SELECT orig.period FROM ledger_entries orig WHERE orig.id = ${alias}.reverses_entry_id),
+    ${alias}.period
+  )`;
+}
+
+/** Satır (takma ad `alias`) kapsam içinde mi: dayanak ayı >= `since` ($n ya da sütun; NULL = sınırsız, yalnız yönetici yolları). */
+export function residentScopeSql(alias, since) {
+  return `(${since}::DATE IS NULL OR ${residentAnchorSql(alias)} >= ${since}::DATE)`;
+}
+
+/** loadVisibleApartments satırının kapsam başlangıcı ('YYYY-MM-01') ya da null. */
+export function visibleFromOf(row) {
+  const value = row?.visible_from;
+  return typeof value === 'string' && /^\d{4}-\d{2}-01$/.test(value) ? value : null;
+}
+
+/**
+ * Sakin yolunda kapsam başlangıcı. Güvenli taraf: değer okunamazsa (beklenmez) sınır KALKMAZ, bu ay esas alınır.
+ * `todayIso`: 'YYYY-MM-DD' (İstanbul).
+ */
+export function residentSinceOf(row, todayIso) {
+  return visibleFromOf(row) ?? `${todayIso.slice(0, 7)}-01`;
+}
+
+/**
+ * Sakin görünümü için dairelerin TÜM defter satırları (ENTRY_SELECT alanları + `anchor` = dayanak ayı 'YYYY-MM-DD'), daire ve
+ * (tarih, kimlik) sırasıyla. Hesap ve süzme finance_resident_view.residentView ile yapılır.
+ */
+export async function loadResidentLedger(db, siteCodes, apartmentIds, { limit = null } = {}) {
+  if (apartmentIds.length === 0) {
+    return [];
+  }
+  const result = await db.query(
+    `
+      SELECT e.*, to_char(${residentAnchorSql('a')}, 'YYYY-MM-DD') AS anchor
+      FROM (${ENTRY_SELECT} WHERE l.site_code = ANY($1::BIGINT[]) AND l.apartment_id = ANY($2::BIGINT[])) e
+      INNER JOIN ledger_entries a ON a.id = e.id
+      ORDER BY e.apartment_id, e.entry_date, e.id
+      LIMIT $3
+    `,
+    [siteCodes, apartmentIds, limit],
+  );
+  return result.rows ?? [];
+}
+
+/**
  * Çağıranın borcu görebileceği daireler. Kural (F2.05 responsible_party): owner -> güncel malik, tenant -> güncel kiracı, both -> malik + kiracı +
  * belirsiz ilişki (resident); family_member HİÇBİR durumda görmez. Eşleşen güncel (aktif) kişi hiç yoksa güvenli yedek: dairenin güncel
- * resident/owner/tenant ilişkili kişileri görür (borç sahipsiz kalmasın). Yalnız onaylı siteler.
+ * resident/owner/tenant ilişkili kişileri görür (borç sahipsiz kalmasın). Yalnız onaylı siteler. `visible_from`: çağıranın bu dairedeki güncel
+ * ilişkisinin taşınma ayı (taşınma tarihi boşsa ilişkinin kayıt günü, İstanbul takvimi; birden çok kişi kaydı varsa en erkeni). Ziyaretçi
+ * kayıtlarındaki "önceki sakinin kayıtları yeni sakine görünmez" kuralıyla aynı ilke (visitor_log_resident.js).
  */
 export async function loadVisibleApartments(db, userCode) {
   const result = await db.query(
     `
-      SELECT DISTINCT
+      SELECT
         a.id AS apartment_id, a.site_code, s.name AS site_name, a.unit_label, b.block_name, b.sort_order AS block_sort,
-        a.sort_order AS apt_sort, a.responsible_party
+        a.sort_order AS apt_sort, a.responsible_party,
+        to_char(date_trunc('month', MIN(LEAST(
+          COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE),
+          -- Aynı kişinin aynı dairedeki kesintisiz önceki ilişkisi (ör. kiracıyken daireyi satın aldı): kendi eski kayıtlarını görmeye devam eder.
+          COALESCE((
+            SELECT MIN(COALESCE(p.move_in_date, (p.created_at AT TIME ZONE 'Europe/Istanbul')::DATE))
+            FROM apartment_residencies p
+            WHERE p.person_id = r.person_id AND p.apartment_id = r.apartment_id AND p.is_current = FALSE
+              -- Yalnız borcu görebileceği bir ilişki sayılır (ör. malik sorumluyken kiracılık dönemi sayılmaz: önceki malikin kayıtları sızmaz).
+              AND p.relation <> 'family_member' AND p.relation = ANY(${ALLOWED_RELATIONS_SQL}) AND p.move_out_date IS NOT NULL
+              AND p.move_out_date >= COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE) - 1
+          ), COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE))
+        ))), 'YYYY-MM-DD') AS visible_from,
+        -- Sakinin bu dairedeki ilişki kaydının (kesintisiz önceki ilişki dahil) açıldığı an: bundan önce düzenlenmiş makbuzlarda ödeyen
+        -- adı sakine gösterilmez (o an daireye bağlı değildi; ad başka birine ait olabilir).
+        MIN(LEAST(r.created_at, COALESCE((
+          SELECT MIN(p.created_at)
+          FROM apartment_residencies p
+          WHERE p.person_id = r.person_id AND p.apartment_id = r.apartment_id AND p.is_current = FALSE
+            AND p.relation <> 'family_member' AND p.relation = ANY(${ALLOWED_RELATIONS_SQL}) AND p.move_out_date IS NOT NULL
+            AND p.move_out_date >= COALESCE(r.move_in_date, (r.created_at AT TIME ZONE 'Europe/Istanbul')::DATE) - 1
+        ), r.created_at))) AS relation_since_at
       FROM site_people sp
       INNER JOIN apartment_residencies r ON r.person_id = sp.id AND r.is_current = TRUE
       INNER JOIN apartments a ON a.id = r.apartment_id AND a.site_code = sp.site_code
@@ -325,6 +404,7 @@ export async function loadVisibleApartments(db, userCode) {
             WHERE r2.apartment_id = a.id AND r2.is_current = TRUE AND r2.relation = ANY(${ALLOWED_RELATIONS_SQL})
           )
         )
+      GROUP BY a.id, a.site_code, s.name, a.unit_label, b.block_name, b.sort_order, a.sort_order, a.responsible_party
       ORDER BY s.name, b.sort_order, a.sort_order, a.id
     `,
     [userCode],
@@ -366,7 +446,11 @@ export function nextDueOf(balance, groups) {
   return null;
 }
 
-/** GET /app/my-finance -> { items: [...] } (bkz. dosya başı). */
+/**
+ * GET /app/my-finance -> { items: [...] } (bkz. dosya başı). Bakiye, vadesi geçmiş tutar ve sıradaki vade sakin kapsamıyla ve mahsup kuralıyla
+ * (finance_resident_view.residentView) hesaplanır; `recent` yalnız görünen satırlardır. `visible_from` ('YYYY-MM') yalnız kapsam
+ * dışında kalan kayıt VARSA dolar (sakine "Kayıtlar … ayından itibaren" notu gösterilir).
+ */
 export async function getMyFinance(authUser, now = new Date(), db = pool) {
   const userCode = parsePositiveId(authUser?.user_code ?? authUser?.userCode ?? authUser?.id, INT32_MAX);
   if (userCode === null) {
@@ -382,61 +466,26 @@ export async function getMyFinance(authUser, now = new Date(), db = pool) {
   const siteCodes = [...new Set(apartments.map((row) => Number(row.site_code)))];
   const apartmentIds = apartments.map((row) => Number(row.apartment_id));
   const todayIsoDate = today(now);
-  const sums = await db.query(
-    `
-      SELECT
-        l.apartment_id,
-        COALESCE(SUM(l.amount_minor), 0)::TEXT AS balance,
-        COALESCE(SUM(l.amount_minor) FILTER (WHERE l.due_date > $3::DATE), 0)::TEXT AS not_due
-      FROM ledger_entries l
-      WHERE l.site_code = ANY($1::BIGINT[]) AND l.apartment_id = ANY($2::BIGINT[])
-      GROUP BY l.apartment_id
-    `,
-    [siteCodes, apartmentIds, todayIsoDate],
-  );
-  const sumsByApartment = new Map((sums.rows ?? []).map((row) => [Number(row.apartment_id), row]));
-  const upcoming = await db.query(
-    `
-      SELECT l.apartment_id, to_char(l.due_date, 'YYYY-MM-DD') AS due_date, SUM(l.amount_minor)::TEXT AS amount
-      FROM ledger_entries l
-      WHERE l.site_code = ANY($1::BIGINT[]) AND l.apartment_id = ANY($2::BIGINT[]) AND l.due_date > $3::DATE
-      GROUP BY l.apartment_id, l.due_date
-      ORDER BY l.apartment_id, l.due_date
-    `,
-    [siteCodes, apartmentIds, todayIsoDate],
-  );
-  const groupsByApartment = new Map();
-  for (const row of upcoming.rows ?? []) {
+  const ledger = await loadResidentLedger(db, siteCodes, apartmentIds);
+  const rowsByApartment = new Map();
+  for (const row of ledger) {
     const key = Number(row.apartment_id);
-    if (!groupsByApartment.has(key)) groupsByApartment.set(key, []);
-    groupsByApartment.get(key).push({ dueDate: row.due_date, amount: toBigInt(row.amount) });
-  }
-  const recent = await db.query(
-    `
-      SELECT e.*
-      FROM unnest($2::BIGINT[]) AS ap(id)
-      CROSS JOIN LATERAL (
-        ${ENTRY_SELECT}
-        WHERE l.site_code = ANY($1::BIGINT[]) AND l.apartment_id = ap.id
-        ORDER BY l.entry_date DESC, l.id DESC
-        LIMIT ${RECENT_ENTRIES_LIMIT}
-      ) e
-      ORDER BY e.apartment_id, e.entry_date DESC, e.id DESC
-    `,
-    [siteCodes, apartmentIds],
-  );
-  const recentByApartment = new Map();
-  for (const row of recent.rows ?? []) {
-    const key = Number(row.apartment_id);
-    if (!recentByApartment.has(key)) recentByApartment.set(key, []);
-    recentByApartment.get(key).push(redactEntryForResident(mapEntryRow(row)));
+    if (!rowsByApartment.has(key)) rowsByApartment.set(key, []);
+    rowsByApartment.get(key).push(row);
   }
   return {
     items: apartments.map((row) => {
       const id = Number(row.apartment_id);
-      const sum = sumsByApartment.get(id);
-      const balance = toBigInt(sum?.balance ?? '0');
-      const next = nextDueOf(balance, groupsByApartment.get(id) ?? []);
+      const rows = rowsByApartment.get(id) ?? [];
+      const since = residentSinceOf(row, todayIsoDate);
+      const view = residentView(rows.map(residentEntryOf), { since, today: todayIsoDate });
+      const shown = rows.filter((entry) => view.visibleIds.has(Number(entry.id)));
+      // Görünen satırların toplamı bakiyeye eşit değilse bir tahsilat ya da alacak önceki dönem kayıtlarıyla mahsup edilmiştir: istemci açıklar.
+      const shownSum = shown.reduce((sum, entry) => sum + BigInt(entry.amount_minor), 0n);
+      const recent = shown
+        .sort((a, b) => (a.entry_date === b.entry_date ? Number(b.id) - Number(a.id) : a.entry_date < b.entry_date ? 1 : -1))
+        .slice(0, RECENT_ENTRIES_LIMIT)
+        .map((entry) => redactEntryForResident(mapEntryRow(entry)));
       return {
         site_code: Number(row.site_code),
         site_name: row.site_name ?? null,
@@ -444,12 +493,15 @@ export async function getMyFinance(authUser, now = new Date(), db = pool) {
         label: apartmentLabel(row.block_name, row.unit_label),
         block_name: row.block_name ?? null,
         currency: 'TRY',
-        balance_minor: minorToNumber(balance),
-        overdue_minor: minorToNumber(overdueOf(balance, sum?.not_due ?? '0')),
-        next_due_date: next ? next.dueDate : null,
-        next_due_minor: next ? minorToNumber(next.amount) : null,
+        balance_minor: minorToNumber(view.balance),
+        overdue_minor: minorToNumber(view.overdue),
+        next_due_date: view.nextDue ? view.nextDue.dueDate : null,
+        next_due_minor: view.nextDue ? minorToNumber(view.nextDue.amount) : null,
         payer_party: row.responsible_party,
-        recent: recentByApartment.get(id) ?? [],
+        // Kapsam dışında kalan kayıt varsa başlangıç ayı ('YYYY-MM'); istemci bunu sakine açıkça yazar.
+        visible_from: view.hiddenCount > 0 ? periodLabel(since) : null,
+        offset_note: shownSum !== view.balance,
+        recent,
       };
     }),
   };

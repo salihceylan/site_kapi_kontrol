@@ -371,6 +371,37 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('sakin kapsamı: visible_from varsa başlangıç ayı notu görünür ve birleşik etikette okunur; yoksa not yok', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..myFinanceItems = <Map<String, dynamic>>[
+          <String, dynamic>{...finMyItem(), 'visible_from': '2026-09'},
+        ];
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      const note = 'Kayıtlar Eylül 2026 ayından itibaren gösterilir; daha önceki dönem için site yönetiminize başvurun.';
+      expect(find.byKey(const ValueKey<String>('my_finance_scope_note')), findsOneWidget);
+      expect(find.text(note), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(RegExp.escape(note))), findsOneWidget);
+      handle.dispose();
+
+      final plain = FinanceFakeAuth.seeded()..myFinanceItems = <Map<String, dynamic>>[finMyItem()];
+      await _pump(t, plain);
+      expect(find.byKey(const ValueKey<String>('my_finance_scope_note')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('my_finance_offset_note')), findsNothing);
+    });
+
+    testWidgets('mahsup notu: offset_note true ise açıklama görünür ve birleşik etikette okunur', (t) async {
+      final auth = FinanceFakeAuth.seeded()
+        ..myFinanceItems = <Map<String, dynamic>>[
+          <String, dynamic>{...finMyItem(), 'visible_from': '2026-09', 'offset_note': true},
+        ];
+      final handle = t.ensureSemantics();
+      await _pump(t, auth);
+      expect(find.byKey(const ValueKey<String>('my_finance_offset_note')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(RegExp.escape('vadesi en eski borçtan başlayarak mahsup edilir'))), findsOneWidget);
+      handle.dispose();
+    });
+
     testWidgets('daire kartının birleşik etiketi "kim öder" bilgisini de söyler', (t) async {
       final auth = FinanceFakeAuth.seeded()..myFinanceItems = <Map<String, dynamic>>[finMyItem()];
       final handle = t.ensureSemantics();

@@ -938,6 +938,15 @@ void main() {
       expect(s.items[1].runningBalanceMinor, 40000);
       expect(s.closingBalanceMinor, 40000);
       expect(s.totals.paidMinor, 50000);
+      expect(s.visibleFrom, isNull, reason: 'yönetici ekstresinde kapsam alanı yok');
+      final resident = ApartmentStatement.fromJson(<String, dynamic>{
+        'apartment': <String, dynamic>{'id': 301},
+        'opening_balance_minor': 0,
+        'closing_balance_minor': 0,
+        'totals': <String, dynamic>{'charged_minor': 0, 'late_fee_minor': 0, 'paid_minor': 0, 'reversed_minor': 0},
+        'visible_from': '2026-09',
+      });
+      expect(resident.visibleFrom?.label, 'Eylül 2026');
       expect(
         () => StatementItem.fromJson(<String, dynamic>{..._entry()}),
         throwsFormatException,

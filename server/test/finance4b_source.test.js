@@ -69,6 +69,7 @@ describe('4b: SQL yalnız sabit / yer tutucu ile kurulur (enjeksiyon yüzeyi)', 
     /^[A-Z][A-Z0-9_]*$/, // SQL sabitleri (SELECT parçaları)
     /^params\.length( [-+] \d+)?$/, /^columns\.length \+ 3$/, // yer tutucu sırası
     /^(bucketSumSql|m1Ctes|deliverableEmailSql|suppressedSql|foldSql)\(.*\)$/, // SQL kurucuları (argümanlar sabit)
+    /^residentScopeSql\('[a-z]+', '(\$\d+|[a-z]+\.since)'\)$/, // sakin kapsamı: takma ad + yer tutucu / sütun (yalnız sabit metin argüman)
     /^(apartmentClause|dateParam|siteParam|filter|where|setSql|like)$/, // yer tutucu / sabit parçalardan kurulmuş yerel değişkenler
     /^forUpdate \? 'FOR UPDATE' : 'FOR KEY SHARE'$/, /^lock \? 'FOR KEY SHARE OF a' : ''$/,
   ];

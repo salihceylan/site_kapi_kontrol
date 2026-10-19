@@ -26,7 +26,8 @@ import {
 } from './finance_common.js';
 import { ENTRY_SELECT } from './finance_ledger_service.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
-import { enabledFinanceSites, loadVisibleApartments, overdueOf } from './finance_read_service.js';
+import { enabledFinanceSites, loadResidentLedger, loadVisibleApartments, overdueOf, residentSinceOf } from './finance_read_service.js';
+import { prepareResidentLedger, residentEntryOf, residentView } from './finance_resident_view.js';
 import { apartmentLabel, parsePositiveId } from './people_common.js';
 
 export const REPORT_FOOTER = 'Bu rapor noter onaylı karar defteri/yasal defterlerin yerine geçmez.';
@@ -529,6 +530,66 @@ export function parseStatementQuery(query = {}, now = new Date()) {
   return { from, to };
 }
 
+/** Sakin ekstresinin hesaplandığı defter satırı sınırı (yönetici ekstresi STATEMENT_ROW_LIMIT). */
+const RESIDENT_STATEMENT_ROW_LIMIT = 2000;
+
+/**
+ * Sakin ekstresi çekirdeği. Yönetici ekstresiyle AYNI gövde biçimi; fark: satırlar sakin kapsamındaki görünen satırlardır, açılış /
+ * kapanış / kayan bakiye / vadesi geçmiş tutar sakin kapsamı ve mahsup kuralıyla hesaplanır (finance_resident_view.residentView).
+ * Bir tahsilat bu ekstrede gösterilmeyen daha eski bir borca mahsup edildiyse satır toplamı kapanışa eşit olmaz; o zaman
+ * `offset_note` true döner ve istemci bunu açıklar. `visible_from` ('YYYY-MM') yalnız kapsam dışında kayıt varsa dolar.
+ */
+export async function computeResidentStatement(db, siteCode, apartmentId, range, since, now = new Date()) {
+  const apartment = await db.query(
+    `SELECT a.id, a.unit_label, b.block_name, a.responsible_party FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id WHERE a.id = $1 AND a.site_code = $2`,
+    [apartmentId, siteCode],
+  );
+  if (!apartment.rows?.[0]) {
+    throw apartmentNotFound();
+  }
+  // Sakin ekstresi dairenin TÜM defterinden hesaplanır (kayan bakiye her satırda yeniden dökülür): sınır yönetici ekstresinden düşüktür ve
+  // sorgu sınırın bir fazlasıyla kesilir (büyük defter olay döngüsünü uzun süre meşgul etmesin).
+  const rows = await loadResidentLedger(db, [siteCode], [apartmentId], { limit: RESIDENT_STATEMENT_ROW_LIMIT + 1 });
+  if (rows.length > RESIDENT_STATEMENT_ROW_LIMIT) {
+    throw statementTooLarge();
+  }
+  const todayIso = today(now);
+  const entries = prepareResidentLedger(rows.map(residentEntryOf));
+  const current = residentView(entries, { since, today: todayIso });
+  const inRange = rows.filter((row) => row.entry_date >= range.from && row.entry_date <= range.to && current.visibleIds.has(Number(row.id)));
+  const openingBalance = residentView(entries, { since, today: todayIso, before: range.from }).balance;
+  const closingBalance = residentView(entries, { since, today: todayIso, upTo: { date: range.to, id: Number.MAX_SAFE_INTEGER } }).balance;
+  const totals = { charged: 0n, lateFee: 0n, paid: 0n, reversed: 0n };
+  let rowSum = 0n;
+  const items = inRange.map((row) => {
+    const amount = asBig(row.amount_minor);
+    rowSum += amount;
+    if (row.kind === 'charge') {
+      if (row.late_fee_run_id === null || row.late_fee_run_id === undefined) totals.charged += amount;
+      else totals.lateFee += amount;
+    } else if (row.kind === 'payment') {
+      totals.paid += -amount;
+    } else {
+      totals.reversed += amount;
+    }
+    const running = residentView(entries, { since, today: todayIso, upTo: { date: row.entry_date, id: Number(row.id) } }).balance;
+    return { ...mapEntryRow(row), running_balance_minor: minorToNumber(running) };
+  });
+  const record = apartment.rows[0];
+  return {
+    apartment: { id: Number(record.id), label: apartmentLabel(record.block_name, record.unit_label), block_name: record.block_name ?? null, responsible_party: record.responsible_party },
+    from: range.from,
+    to: range.to,
+    opening_balance_minor: minorToNumber(openingBalance),
+    closing_balance_minor: minorToNumber(closingBalance),
+    items,
+    totals: { charged_minor: minorToNumber(totals.charged), late_fee_minor: minorToNumber(totals.lateFee), paid_minor: minorToNumber(totals.paid), reversed_minor: minorToNumber(totals.reversed) },
+    overdue_minor: minorToNumber(current.overdue),
+    visible_from: current.hiddenCount > 0 ? since.slice(0, 7) : null,
+    offset_note: openingBalance + rowSum !== closingBalance,
+  };
+}
+
 /** Ekstre çekirdeği (yönetici ve sakin aynı gövdeyi kullanır). */
 export async function computeStatement(db, siteCode, apartmentId, range, now = new Date()) {
   const apartment = await db.query(
@@ -622,7 +683,8 @@ export async function myStatement(authUser, rawApartmentId, query = {}, now = ne
     siteCode,
     async (client) => {
       const header = await reportHeader(client, siteCode, now);
-      const body = await computeStatement(client, siteCode, apartmentId, range, now);
+      // Sakin kapsamı + mahsup kuralı (computeResidentStatement); yönetici ekstresi (computeStatement) değişmez.
+      const body = await computeResidentStatement(client, siteCode, apartmentId, range, residentSinceOf(target, today(now)), now);
       return { ...header, ...body, items: body.items.map((entry) => ({ ...redactEntryForResident(entry), running_balance_minor: entry.running_balance_minor })) };
     },
     pool,

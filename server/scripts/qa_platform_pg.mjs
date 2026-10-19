@@ -6646,8 +6646,10 @@ async function sectionFinance() {
   };
   const addPerson = async (site, { user = null, name = null }) =>
     Number((await q(`INSERT INTO site_people (site_code, user_code, full_name) VALUES ($1, $2, $3) RETURNING id`, [site, user, user === null ? name : null])).rows[0].id);
-  const addResidency = (site, apartment, person, relation, { current = true } = {}) =>
-    q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin) VALUES ($1, $2, $3, $4, $5, 'manual')`, [site, apartment, person, relation, current]);
+  // Varsayilan: uzun suredir oturan kisi (tasinma 2020-01-01). Sakin "Borcum" kapsami tasinma ayindan baslar
+  // (finance_read_service.residentScopeSql; ayrintili kapsam sinamasi scripts/qa_finance4b_resident_scope.mjs).
+  const addResidency = (site, apartment, person, relation, { current = true, moveIn = '2020-01-01' } = {}) =>
+    q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, move_in_date, origin) VALUES ($1, $2, $3, $4, $5, $6, 'manual')`, [site, apartment, person, relation, current, moveIn]);
 
   // --- tekrar kullanilan ISTEK yardimcilari
   const P = (site) => `/manager/sites/${site}/finance`;

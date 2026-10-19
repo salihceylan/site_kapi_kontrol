@@ -554,6 +554,10 @@ Future<Uint8List> _buildStatement(_StatementJob job) async {
       ),
       footer: (pw.Context context) => _reportFooter(context, job.printedAt, extra: _closedNote(s.meta), footer: s.meta.footer),
       build: (pw.Context context) => <pw.Widget>[
+        if (s.visibleFrom != null) ...[
+          pw.Text(myFinanceScopeNote(s.visibleFrom!), style: const pw.TextStyle(fontSize: 9)),
+          pw.SizedBox(height: 6),
+        ],
         _table(
           headers: <String>['Tarih', 'Açıklama', 'Borç', 'Alacak', 'Bakiye'],
           rows: rows,
@@ -582,6 +586,7 @@ Future<Uint8List> _buildStatement(_StatementJob job) async {
         ),
         if (s.overdueMinor != null)
           pw.Text('Vadesi geçmiş tutar: ${formatMinor(s.overdueMinor!)}', style: const pw.TextStyle(fontSize: 9)),
+        if (s.offsetNote) pw.Text(myFinanceOffsetNote(statement: true), style: const pw.TextStyle(fontSize: 9)),
       ],
     ),
   );

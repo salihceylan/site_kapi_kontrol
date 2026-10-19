@@ -50,7 +50,7 @@ import {
 import { lateFeeForApartment } from './finance_late_fee_calc.js';
 import { minorToNumber, toBigInt } from './finance_money.js';
 import { withReportSnapshot } from './finance_reports.js';
-import { enabledFinanceSites, loadVisibleApartments } from './finance_read_service.js';
+import { enabledFinanceSites, loadVisibleApartments, residentScopeSql, residentSinceOf } from './finance_read_service.js';
 import { loadEffectiveSettings, loadLateFeeChainState, readLegalOk } from './finance_settings.js';
 import { isPeriodClosed, lockActorRow, recordFinanceAudit, withFinanceTransaction } from './finance_tx.js';
 import { apartmentLabel, parsePositiveId, toIso } from './people_common.js';
@@ -700,19 +700,21 @@ export async function getMyLateFeeExplanation(authUser, rawEntryId, db = pool) {
   }
   const visible = await loadVisibleApartments(db, userCode);
   const enabled = await enabledFinanceSites(db, [...new Set(visible.map((row) => Number(row.site_code)))]);
-  const apartmentIds = visible.filter((row) => enabled.has(Number(row.site_code))).map((row) => Number(row.apartment_id));
-  if (apartmentIds.length === 0) {
+  const rows = visible.filter((row) => enabled.has(Number(row.site_code)));
+  if (rows.length === 0) {
     throw entryNotFound();
   }
+  // Sakin kapsamı: kalemin hesaplandığı ay sakinin taşınma ayından önceyse kalem yoktur (404; residentScopeSql).
   const result = await db.query(
     `
       SELECT to_char(r.period, 'YYYY-MM-DD') AS period, r.params, ln.amount_minor::TEXT AS amount, ln.base_day_minor::TEXT AS base_day, ln.breakdown
-      FROM ledger_entries l
+      FROM unnest($2::BIGINT[], $3::DATE[]) AS vis(apartment_id, since)
+      INNER JOIN ledger_entries l ON l.apartment_id = vis.apartment_id
       INNER JOIN late_fee_run_lines ln ON ln.ledger_entry_id = l.id
       INNER JOIN late_fee_runs r ON r.id = ln.run_id
-      WHERE l.id = $1 AND l.kind = 'charge' AND l.late_fee_run_id IS NOT NULL AND l.apartment_id = ANY($2::BIGINT[])
+      WHERE l.id = $1 AND l.kind = 'charge' AND l.late_fee_run_id IS NOT NULL AND ${residentScopeSql('l', 'vis.since')}
     `,
-    [entryId, apartmentIds],
+    [entryId, rows.map((row) => Number(row.apartment_id)), rows.map((row) => residentSinceOf(row, today()))],
   );
   const row = result.rows?.[0];
   if (!row) {
