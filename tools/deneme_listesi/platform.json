@@ -3329,8 +3329,8 @@
     {
       "id": "F16",
       "baslik": "Hesap silme ve veri indirme: yeni modüllerin etkisi",
-      "durum": "planli",
-      "ozet": "Belgeler, makbuz, aidat hatırlatma ve telefon bildirimi eklendikten sonra \"Hesabımı Sil\" önizlemesi ve \"Verilerimi İndir\" dosyası bunları da kapsar. Aynı konular SAHA_KONTROL_LISTESI.md 80. bölümündedir (F12'deki hesap silme/veri indirme denemelerinin devamıdır). Silinmesinde sakınca olmayan TEST hesaplarıyla deneyin. Canlıdadır; denenebilir.",
+      "durum": "hazir",
+      "ozet": "Belgeler, makbuz, aidat hatırlatma, telefon bildirimi, iş takibi (fotoğraf ekleri dahil) ve rezervasyon/konsiyerj eklendikten sonra \"Hesabımı Sil\" önizlemesi ve \"Verilerimi İndir\" dosyası bunları da kapsar. Aynı konular SAHA_KONTROL_LISTESI.md 80. ve 81. bölümlerindedir. Silinmesinde sakınca olmayan TEST hesaplarıyla deneyin. F16.04 telefon bildirimi kurulana kadar denenemez. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F16.01",
@@ -3383,82 +3383,131 @@
           "on_kosul": "Telefon bildirimi (Firebase) kurulu bir sürüm ve bu hesapta kayıtlı en az bir bildirim cihazı",
           "yeni": false,
           "gelistirme": "planli"
+        },
+        {
+          "id": "F16.05",
+          "baslik": "İş Takibi Talepleri ve Fotoğrafları Silmede ve Dışa Aktarmada",
+          "adimlar": [
+            "Test hesabıyla fotoğraflı bir talep açıp bir yorum yazın; Profilim → \"Gizlilik ve Veri\" → \"Hesabımı Sil\" önizlemesine bakın (SÜRDÜRMEYİN).",
+            "\"Verilerimi İndir\" dosyasında \"work_items_created\", \"work_item_comments\" ve \"work_item_attachments_uploaded\" bölümlerine ve \"excluded\" listesine bakın.",
+            "(Feda edilebilir hesapla) silmeyi tamamlayıp yönetici hesabıyla talebi açın."
+          ],
+          "beklenen": "Önizlemenin \"Saklanacaklar\" kartında talepler/yorumlar ve \"İş takibi taleplerine eklediğiniz fotoğraflar (N) taleple birlikte site yönetiminde kalır\" maddesi çıkar. Dosyada yalnız kendi talepleriniz, kendi yorumlarınız ve fotoğrafların meta verisi (dosya adı, tür, boyut, tarih) bulunur; fotoğraf içeriği, başkalarının yorumları, iç notlar ve durum geçmişi yoktur (\"excluded\" açıklar). Silme sonrası talep ve fotoğraflar sitede kalır; açan/yükleyen \"Silinmiş Kullanıcı\" görünür.",
+          "rol_notu": "",
+          "on_kosul": "İş Takibi açık sitede, fotoğraflı talep açmış TEST hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F16.06",
+          "baslik": "Rezervasyon ve Konsiyerj Silmede ve Dışa Aktarmada",
+          "adimlar": [
+            "Test hesabıyla gelecekte onaylı bir rezervasyon ve açık bir konsiyerj talebi oluşturun; silme önizlemesine bakın (SÜRDÜRMEYİN).",
+            "\"Verilerimi İndir\" dosyasında \"reservations_made\" ve \"concierge_requests_made\" bölümlerine bakın.",
+            "(Feda edilebilir hesapla) silmeyi tamamlayıp yönetici hesabıyla alanın takvimine ve konsiyerj listesine bakın."
+          ],
+          "beklenen": "\"Silinecekler\" kartında gelecekteki bekleyen/onaylı rezervasyonlar ve açık konsiyerj talepleri sayıyla yazar; \"Saklanacaklar\"da geçmiş rezervasyon/talep kayıtlarının sitede kalacağı yazar. Dosyada yalnız sizin rezervasyonlarınız (alan, zaman, durum, notunuz) ve talepleriniz vardır; yönetimin gerekçe ve notları yoktur. Silme sonrası gelecekteki rezervasyonlar ve açık talepler iptal olur, kapasite boşalır; kayıtlar \"Silinmiş Kullanıcı\" adıyla kalır.",
+          "rol_notu": "",
+          "on_kosul": "Rezervasyon modülü açık sitede TEST hesabı",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
     {
       "id": "F5",
       "baslik": "Rezervasyon ve konsiyerj",
-      "durum": "yakinda",
-      "ozet": "Yakında… Ortak alanların takibi ve rezervasyonu, danışma (konsiyerj) talepleri.",
+      "durum": "hazir",
+      "ozet": "Canlıdadır. Ayrıntılı deneme maddeleri F18'dedir; buradaki üç madde F18'e göndermedir. Yeni: yönetim karar verince sakinde okunmamış işareti çıkar (uygulama içi; e-posta/telefon bildirimi yoktur).",
       "maddeler": [
         {
           "id": "F5.01",
           "baslik": "Ortak alan tanımı ve rezervasyon takvimi",
-          "adimlar": [],
-          "beklenen": "Yakında… Yönetim havuz, spor salonu, toplantı odası gibi alanları tanımlar; sakinler takvimden saat seçer.",
+          "adimlar": [
+            "F18.02 ve F18.03 maddelerini uygulayın."
+          ],
+          "beklenen": "Yönetici havuz, spor salonu, toplantı odası gibi alanları tanımlar; sakin takvimden gün ve boş saat seçer (F18.02–F18.03 ile aynı).",
           "rol_notu": "",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yakinda"
+          "gelistirme": "hazir"
         },
         {
           "id": "F5.02",
-          "baslik": "Rezervasyon onay akışı",
-          "adimlar": [],
-          "beklenen": "Yakında… Rezervasyon anında onaylanır ya da yöneticiye onaya düşer; sonuç sakine bildirilir.",
+          "baslik": "Rezervasyon onay akışı ve sonucun sakine bildirilmesi",
+          "adimlar": [
+            "F18.04'ü uygulayın (onaylı mod: bekle, onayla, reddet).",
+            "Yönetici onayladıktan ya da reddettikten sonra sakin hesabıyla Rezervasyon ekranını açın; önce listeye, sonra ayrıntıya bakın.",
+            "Sakin hesabıyla yeni bir rezervasyon yapıp kendiniz iptal edin; listeye bakın."
+          ],
+          "beklenen": "Onay modu 'otomatik' ise anında onaylanır; 'yönetici onaylı' ise bekler. Yönetici karar verince sakinin listesinde o rezervasyonda okunmamış işareti ve 'Rezervasyonlarım' sekmesinde sayı görünür; ayrıntı açılınca kaybolur. Sakinin kendi yaptığı işlemler (oluşturma, kendi iptali) işaret çıkarmaz. E-posta ya da telefon bildirimi gönderilmez (bu sürümde yalnız uygulama içi).",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F5.03",
           "baslik": "Konsiyerj (danışma) talepleri",
-          "adimlar": [],
-          "beklenen": "Yakında… Sakin danışmadan hizmet ister (kargo teslimi, temizlik, araç vb.), görevli talebi takip eder.",
+          "adimlar": [
+            "F18.07'yi uygulayın.",
+            "Görevli durumu 'Hazırlanıyor' yapıp sakine görünen not yazdıktan sonra sakin hesabıyla Konsiyerj sekmesine bakın."
+          ],
+          "beklenen": "Sakin kargo teslimi, temizlik, taşıma gibi hizmet ister; görevli talebi takip eder. Yönetim durum ya da not değiştirince sakinde okunmamış işareti ve sekme sayısı çıkar; açınca kaybolur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
     {
       "id": "F6",
       "baslik": "İş takibi",
-      "durum": "yakinda",
-      "ozet": "Yakında… Arıza ve talep yönetimi, görev atama, performans.",
+      "durum": "hazir",
+      "ozet": "Canlıdadır. Ayrıntılı deneme maddeleri F17'dedir; F6.02 F17'ye göndermedir. Yeni: taleplere fotoğraf eki (en çok 4, her biri en çok 5 MB, JPEG/PNG/WebP) ve yönetici/kurul için personel performans raporu. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar.",
       "maddeler": [
         {
           "id": "F6.01",
-          "baslik": "Arıza ve talep açma",
-          "adimlar": [],
-          "beklenen": "Yakında… Sakin fotoğraflı talep açar, durumunu takip eder.",
+          "baslik": "Arıza ve talep açma (fotoğraflı)",
+          "adimlar": [
+            "Sakin hesabıyla 'Taleplerim' → 'Yeni Talep'; kategori, konum, başlık, açıklama yazın; 'Fotoğraf Ekle' ile 1–4 fotoğraf seçin (JPEG/PNG/WebP, en çok 5 MB); kaydedin.",
+            "Talebi açıp fotoğraf şeridine dokunun; tam ekranda büyütün.",
+            "Beşinci fotoğrafı, 5 MB'tan büyük bir resmi ve PDF gibi resim olmayan bir dosyayı eklemeyi deneyin.",
+            "Yönetici hesabıyla aynı talebi açın; bir fotoğraf ekleyin ve sakin hesabıyla yeniden bakın.",
+            "Kurul hesabıyla talebi açın."
+          ],
+          "beklenen": "Talep 'Yeni' durumuyla ve fotoğraflarıyla kaydedilir; listede fotoğraf sayısı rozeti görünür. Bir fotoğraf yüklenemezse talep yine açılır ve 'Talep oluşturuldu, N fotoğraf yüklenemedi.' yazar; eksik fotoğraf talep ayrıntısından yeniden eklenebilir. Beşinci fotoğraf 'En fazla 4 fotoğraf eklenebilir', büyük ya da resim olmayan dosya tür/boyut hatasıyla reddedilir. Yöneticinin eklediği fotoğraf sakinde görünür ve yükleyen adı yazar; sakin yalnız kendi eklediğini silebilir, yönetici hepsini silebilir. Kurul fotoğrafları görür ama ekleyemez/silemez. Kapanmış ya da iptal edilmiş talebe fotoğraf eklenemez.",
           "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "on_kosul": "İş Takibi modülü sitede açık",
+          "yeni": true,
+          "gelistirme": "hazir"
         },
         {
           "id": "F6.02",
           "baslik": "Görev atama ve süre takibi",
-          "adimlar": [],
-          "beklenen": "Yakında… Yönetici talebi görevliye atar; süre ve durum izlenir.",
+          "adimlar": [
+            "F17.04'ü uygulayın (atama, öncelik, hedef tarih, durum geçişleri)."
+          ],
+          "beklenen": "Yönetici talebi görevliye atar; hedef tarih ve durum izlenir; sakin güncellemeyi okunmamış işaretiyle görür (F17.04 ile aynı).",
           "rol_notu": "",
           "on_kosul": "",
           "yeni": false,
-          "gelistirme": "yakinda"
+          "gelistirme": "hazir"
         },
         {
           "id": "F6.03",
           "baslik": "Personel performans raporu",
-          "adimlar": [],
-          "beklenen": "Yakında… Görevlilerin tamamladığı işler ve süreleri raporlanır.",
+          "adimlar": [
+            "Yönetici hesabıyla 'Talepler' → 'Rapor' sekmesi; 'Son 30 gün' ve 'Bu ay' seçin; özel aralık deneyin (366 günden uzun bir aralık da deneyin).",
+            "Kurul hesabıyla aynı sekmeye bakın; görevli hesabıyla sekmenin olup olmadığına bakın.",
+            "Bir talebi 'Çözüldü' yapıp raporu yenileyin."
+          ],
+          "beklenen": "Özet kartları (açılan, çözülen, kapanan, iptal, şu an açık, gecikmiş, ortalama/medyan çözüm süresi), görevli bazında tablo (açık, gecikmiş, çözülen, ortalama süre, zamanında %) ve kategori satırları gelir. Kurul salt okur; görevlide 'Rapor' sekmesi yoktur. 366 günden uzun aralık reddedilir. Çözüm süresi, talebin açılışından ilk 'Çözüldü' durumuna kadar geçen süredir; atanmamış talepler 'Atanmamış' satırında ayrı gösterilir.",
           "rol_notu": "",
-          "on_kosul": "",
-          "yeni": false,
-          "gelistirme": "yakinda"
+          "on_kosul": "İş Takibi modülü sitede açık; birkaç çözülmüş talep",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
@@ -3785,7 +3834,7 @@
       "id": "F17",
       "baslik": "İş Takibi (talepler: arıza, bakım, şikayet/öneri)",
       "durum": "hazir",
-      "ozet": "Sakin arıza/bakım/şikayet talebi açar; yönetici ve görevli atar, durumu ilerletir, iç not ve sakine görünen yorum yazar; yönetim kurulu salt okur. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar. Dosya/fotoğraf eki, e-posta ve telefon bildirimi bu sürümde YOKTUR. Ayrıntı: docs/PLATFORM_IS_TAKIBI.md. Canlıdadır; denenebilir.",
+      "ozet": "Sakin arıza/bakım/şikayet talebi açar; yönetici ve görevli atar, durumu ilerletir, iç not ve sakine görünen yorum yazar; yönetim kurulu salt okur. Modül varsayılan KAPALIDIR: önce süper kullanıcı siteye açar. Fotoğraf eki (en çok 4, 5 MB, JPEG/PNG/WebP) ve personel performans raporu VARDIR (F6.01, F6.03); e-posta ve telefon bildirimi bu sürümde YOKTUR. Ayrıntı: docs/PLATFORM_IS_TAKIBI.md. Canlıdadır; denenebilir.",
       "maddeler": [
         {
           "id": "F17.01",
@@ -3890,6 +3939,18 @@
           "rol_notu": "Geliştirici",
           "on_kosul": "",
           "yeni": false,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F17.09",
+          "baslik": "Fotoğraf eki ve performans raporu",
+          "adimlar": [
+            "F6.01 (fotoğraflı talep) ve F6.03 (Rapor sekmesi) maddelerini uygulayın."
+          ],
+          "beklenen": "Fotoğraflar talep ayrıntısında şerit olarak görünür; Rapor sekmesi yalnız yönetici ve kurulda vardır.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
           "gelistirme": "hazir"
         }
       ]
@@ -4000,6 +4061,18 @@
           "rol_notu": "Geliştirici",
           "on_kosul": "",
           "yeni": false,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F18.09",
+          "baslik": "Sonuç bildirimi: okunmamış işareti",
+          "adimlar": [
+            "F5.02 ve F5.03 maddelerini uygulayın."
+          ],
+          "beklenen": "Yönetim karar verince ya da not yazınca sakinin listesinde okunmamış işareti ve sekme sayısı çıkar; ayrıntı açılınca kaybolur; sakinin kendi işlemleri işaret çıkarmaz.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
           "gelistirme": "hazir"
         }
       ]
