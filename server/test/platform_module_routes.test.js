@@ -480,7 +480,7 @@ describe('GET /app/modules/catalog', () => {
   it('kimligi dogrulanmis herkese 9 modullu katalog doner', async () => {
     const res = await call('GET', '/app/modules/catalog', { user: users.resident });
     assert.equal(res.status, 200);
-    assert.equal(res.body.modules.length, 9);
+    assert.equal(res.body.modules.length, 13);
     assert.deepEqual(Object.keys(res.body.modules[0]), ['code', 'name', 'description', 'core', 'status']);
     assert.equal(res.body.modules[0].code, 'door_control');
     assert.equal(res.body.modules[1].core, true);
@@ -499,7 +499,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.site_name, 'Gül Sitesi');
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 9);
+    assert.equal(res.body.modules.length, 13);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
       name: 'Geçiş Kontrol (SmartKeyPass)',
@@ -546,6 +546,10 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['work_tracking', true, true],
         ['metering', false, false],
         ['online_payment', false, false],
+        ['card_access', true, true],
+        ['plate_recognition', false, false],
+        ['hgs_access', false, false],
+        ['cctv_link', false, false],
       ],
     );
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
@@ -782,7 +786,7 @@ describe('PUT modul: onay zorunlulugu ve denetim kaydi', () => {
   });
 
   it('yakinda modul ACILAMAZ 409 MODULE_COMING_SOON; kapatmak 200 (degisiklik yok, audit yok)', async () => {
-    for (const code of ['metering', 'online_payment']) {
+    for (const code of ['metering', 'online_payment', 'plate_recognition', 'hgs_access', 'cctv_link']) {
       const open = await call('PUT', moduleUrl(SITE_1, code), { user: users.superUser, body: { enabled: true } });
       assert.equal(open.status, 409, code);
       assert.equal(open.body.code, 'MODULE_COMING_SOON');
@@ -1570,6 +1574,10 @@ describe('GET /app/my-modules', () => {
         'work_tracking',
         'metering',
         'online_payment',
+        'card_access',
+        'plate_recognition',
+        'hgs_access',
+        'cctv_link',
       ]);
     }
     assert.equal(res.body.sites[0].modules.door_control, true);

@@ -25,6 +25,7 @@ import {
   plainObject,
   userCodeOf,
 } from './account_common.js';
+import { maskCardUid } from './card_access_common.js';
 import { verifyCurrentPassword } from './account_password_guard.js';
 import { recordAudit } from './audit_service.js';
 import { getMyFinance } from './finance_read_service.js';
@@ -54,6 +55,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   PUSH_EXPORT_EXCLUDED_NOTE,
   'Rezervasyon ve konsiyerj: yalnız SİZİN yaptığınız rezervasyonların (alan adı, zaman, durum, notunuz) "reservations_made" bölümünde ve açtığınız konsiyerj taleplerinin (kategori, notunuz, istenen zaman, durum) "concierge_requests_made" bölümünde yer alır; yönetimin gerekçe ve kısa notları ile başkalarının rezervasyonları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'İş takibi talepleri: yalnız sizin açtığınız taleplerin başlığı, açıklaması, kategorisi, konumu, durumu ve tarihleri "work_items_created" bölümünde, yalnız SİZİN yazdığınız yorumlar "work_item_comments" bölümündedir; başkalarının yorumları, yönetimin diğer iç notları, öncelik, atanan görevli, hedef tarih ve durum geçmişi satırları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
+  'Kartlı geçiş kartları: size tanımlı kartların etiketi, durumu ve numarasının yalnız son 4 karakteri "access_cards" bölümündedir; kart numarasının tamamı, kartı tanımlayan yönetici ve geçiş kayıtları site yönetiminin / güvenliğin kaydı olduğu için dışarıda bırakılmıştır.',
 ]);
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -255,6 +257,13 @@ const SQL = Object.freeze({
     WHERE e.actor_user_code = $1 AND e.event_type = 'comment'
     ORDER BY e.id DESC
   `,
+  // Kartlı geçiş kartlarınız (046): kendi kişi kaydınız (site_people.user_code = çağıran) üzerinden; etiket, durum ve UID (çıktıda maskelenir). Tanımlayan yönetici SEÇİLMEZ.
+  accessCards: `
+    SELECT c.id, c.label, c.card_uid, c.is_active
+    FROM access_cards c
+    INNER JOIN site_people sp ON sp.id = c.person_id AND sp.user_code = $1
+    ORDER BY c.id DESC
+  `,
   // Rezervasyonlarım (043): YALNIZ sizin yaptığınız kayıtlar; alan adı, zaman, durum ve kendi notunuz. Yönetim gerekçesi / kararı veren / daire SEÇİLMEZ.
   reservationsMade: `
     SELECT r.id, r.site_code, s.name AS site_name, a.name AS area_name, r.starts_at, r.ends_at, r.slot_count, r.status, r.note, r.cancelled_by_kind AS cancelled_by, r.cancelled_at, r.created_at
@@ -435,6 +444,9 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const workItemComments = optional.has_work_items === true ? await bounded('work_item_comments', SQL.workItemComments, EXPORT_ROW_LIMITS.work_item_comments) : [];
     const reservationsMade = optional.has_reservations === true ? await bounded('reservations_made', SQL.reservationsMade, EXPORT_ROW_LIMITS.reservations_made) : [];
     const conciergeRequestsMade = optional.has_reservations === true ? await bounded('concierge_requests_made', SQL.conciergeRequestsMade, EXPORT_ROW_LIMITS.concierge_requests_made) : [];
+    // Kartlı geçiş kartlarınız (046): kendi kişi kaydınız üzerinden; UID maskeli (maskCardUid). Tablo yoksa boş.
+    const hasAccessCards = (await client.query(`SELECT (to_regclass('public.access_cards') IS NOT NULL) AS has_access_cards`)).rows?.[0]?.has_access_cards === true;
+    const accessCards = hasAccessCards ? await bounded('access_cards', SQL.accessCards, 200) : [];
     // Makbuzlar: sakin ucunun (GET /app/my-finance/receipts) görünürlük kuralları AYNEN yeniden kullanılır (yetki mantığı kopyalanmaz; aynı bağlantı = aynı anlık görüntü).
     // Yanıt özetidir; ödeyen adı (başkasına ait olabilir) dosyaya KONMAZ (mapReceiptForExport).
     let receipts = [];
@@ -519,6 +531,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
       })),
       devices: withIds(devices),
       push_devices: pushDevices,
+      access_cards: accessCards.map((row) => ({ label: row.label ?? null, masked_uid: maskCardUid(row.card_uid), is_active: row.is_active === true })),
       excluded: [...EXPORT_EXCLUDED],
     };
     return { data, truncated };

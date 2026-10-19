@@ -9,6 +9,7 @@ import { ensureFinance4bSchema } from './modules/finance_4b_schema.js';
 import { ensureDocumentsSchema } from './modules/document_schema.js';
 import { ensureWorkTrackingSchema } from './modules/work_tracking_schema.js';
 import { ensureReservationSchema } from './modules/reservation_schema.js';
+import { ensureCardAccessSchema } from './modules/card_access_schema.js';
 import { ensurePushSchema } from './modules/push_schema.js';
 
 dotenv.config();
@@ -1864,6 +1865,8 @@ export async function ensureDbSchema() {
     await ensureWorkTrackingSchema(client);
     // 043 (rezervasyon ve konsiyerj): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (reservation_schema.js = migrations/043).
     await ensureReservationSchema(client);
+    // 046 (kartli gecis, F10): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (card_access_schema.js = migrations/046).
+    await ensureCardAccessSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

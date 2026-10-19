@@ -105,6 +105,7 @@ import { sectionDocuments } from './qa_documents_section.mjs';
 import { sectionPush } from './qa_push_section.mjs';
 import { sectionWorkTracking } from './qa_work_tracking_section.mjs';
 import { sectionReservation } from './qa_reservation_section.mjs';
+import { sectionCardAccess } from './qa_card_access_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -11390,6 +11391,8 @@ const SECTIONS = {
   work_tracking: () => sectionWorkTracking({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Rezervasyon ve konsiyerj (043); govde scripts/qa_reservation_section.mjs
   reservation: () => sectionReservation({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Kartli gecis (046); govde scripts/qa_card_access_section.mjs
+  card_access: () => sectionCardAccess({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

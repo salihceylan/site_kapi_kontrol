@@ -95,6 +95,38 @@ export const MODULE_CATALOG = Object.freeze([
     status: MODULE_STATUS_COMING_SOON,
     defaultEnabled: false,
   }),
+  defineModule({
+    code: 'card_access',
+    name: 'Kartlı Geçiş',
+    description: 'Sakinlere kart tanımlama ve kartla kapı geçişi; kart iptali ve kayıt listesi.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
+    code: 'plate_recognition',
+    name: 'Plaka Tanıma',
+    description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',
+    core: false,
+    status: MODULE_STATUS_COMING_SOON,
+    defaultEnabled: false,
+  }),
+  defineModule({
+    code: 'hgs_access',
+    name: 'HGS Geçişi',
+    description: 'HGS etiketiyle araç geçişi; dış sistem bağlantısı.',
+    core: false,
+    status: MODULE_STATUS_COMING_SOON,
+    defaultEnabled: false,
+  }),
+  defineModule({
+    code: 'cctv_link',
+    name: 'Kamera (CCTV) Bağlantısı',
+    description: 'Kapı olaylarını kamera kayıtlarıyla eşleştirme; kayıt sistemi bağlantısı.',
+    core: false,
+    status: MODULE_STATUS_COMING_SOON,
+    defaultEnabled: false,
+  }),
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));
