@@ -95,6 +95,14 @@ export const MODULE_CATALOG = Object.freeze([
     status: MODULE_STATUS_COMING_SOON,
     defaultEnabled: false,
   }),
+  defineModule({
+    code: 'visitor_log',
+    name: 'Ziyaretçi ve Kargo',
+    description: 'Ziyaretçi ve kargo kayıtları; sakine uygulama içi bildirim.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));

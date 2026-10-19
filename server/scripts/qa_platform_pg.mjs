@@ -77,6 +77,9 @@
 //             limitleri, konsiyerj gecisleri, hesap silme + disa aktarma, ilk kurulum x yazici yuku, 40P01 = 0. QA_ONLY=reservation (zincir esitligi icin chain,live,reservation).
 //   work_tracking  Is takibi (042; govde scripts/qa_work_tracking_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, gecis / atama / sinir kurallari, olay + audit, okunmamis
 //             sayaci, hesap silme + disa aktarma, ilk kurulum x yazici yuku, karisik eszamanli tur (40P01 = 0). QA_ONLY=work_tracking (zincir esitligi icin chain,live,work_tracking).
+//   visitor_log  Ziyaretci ve kargo (045; govde scripts/qa_visitor_log_section.mjs): sema (CHECK / FK silme politikasi / indeks), ensure idempotans, modul kapisi, yetki matrisi
+//             (STAFF yazar, kurul okur, sakin 403, baska site 403), daire sahipligi, gecisler (409), seen idempotans, summary unread, sakin gizliligi, audit, hesap silme (tombstone),
+//             disa aktarmada bolum YOK. QA_ONLY=visitor_log (zincir esitligi icin chain,live,visitor_log).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -105,6 +108,7 @@ import { sectionDocuments } from './qa_documents_section.mjs';
 import { sectionPush } from './qa_push_section.mjs';
 import { sectionWorkTracking } from './qa_work_tracking_section.mjs';
 import { sectionReservation } from './qa_reservation_section.mjs';
+import { sectionVisitorLog } from './qa_visitor_log_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -341,6 +345,7 @@ async function runParent() {
     push: `${prefix}_push`,
     work_tracking: `${prefix}_work_tracking`,
     reservation: `${prefix}_reservation`,
+    visitor_log: `${prefix}_visitor_log`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -399,7 +404,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('visitor_log')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -437,7 +442,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'visitor_log']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -9786,6 +9791,9 @@ async function sectionAccount() {
     'bulk_import_runs.created_by': 'TOMBSTONE (toplu yukleme kaydi: yalniz sayilar, kisisel veri yok; kayit kalir)',
     // Telefon bildirimi (Faz 3b-B, 041): cihaz jetonu kisisel tanimlayici -> hesap silme isleminde SILINIR (push_outbox.user_code FK'siz; o da ayni islemde silinir)
     'push_devices.user_code': 'SIL (cihaz jetonlari; push_outbox satirlari da ayni islemde)',
+    // Ziyaretci ve kargo (045): kayit siteye aittir; kaydeden / sonlandiran UPDATE edilmez (FK SET NULL yalniz satir silinirse), ad JOIN ile Silinmis Kullanici
+    'visitor_entries.recorded_by': 'TOMBSTONE (kayit siteye aittir; kaydeden JOIN ile Silinmis Kullanici)',
+    'visitor_entries.completed_by': 'TOMBSTONE (sonlandiran JOIN ile Silinmis Kullanici)',
   };
   const fkRows = (
     await q(`
@@ -11390,6 +11398,8 @@ const SECTIONS = {
   work_tracking: () => sectionWorkTracking({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Rezervasyon ve konsiyerj (043); govde scripts/qa_reservation_section.mjs
   reservation: () => sectionReservation({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Ziyaretci ve kargo (045); govde scripts/qa_visitor_log_section.mjs
+  visitor_log: () => sectionVisitorLog({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

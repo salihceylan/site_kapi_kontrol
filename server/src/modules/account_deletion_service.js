@@ -58,6 +58,8 @@ import { workItemsKeepNote } from './work_tracking_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
 import { reservationKeepNote, reservationRemoveNote } from './reservation_common.js';
 import { releaseUserReservations } from './reservation_service.js';
+import { visitorEntriesKeepNote } from './visitor_log_common.js';
+import { countVisitorEntriesByUser } from './visitor_log_service.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -291,6 +293,8 @@ async function previewOptionalCounts(db, userCode) {
       `SELECT COUNT(*)::INTEGER AS n FROM finance_reminder_items i INNER JOIN site_people sp ON sp.id = i.person_id AND sp.user_code = $1 WHERE i.email_status = 'pending' AND i.email IS NOT NULL`,
     );
   }
+  // Ziyaretci ve kargo (045): gorevli / yonetici olarak girdigi ya da sonlandirdigi kayitlar (tablo yoksa 0; katalog kontrolu fonksiyonun icinde).
+  out.visitorEntries = await countVisitorEntriesByUser(db, userCode);
   return out;
 }
 
@@ -388,6 +392,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.reservationRecords > 0 || optionalCounts.requestRecords > 0) {
     willKeep.push(reservationKeepNote({ reservations: optionalCounts.reservationRecords, requests: optionalCounts.requestRecords }));
+  }
+  if (optionalCounts.visitorEntries > 0) {
+    willKeep.push(visitorEntriesKeepNote(optionalCounts.visitorEntries));
   }
   if (num(counts.apartment_links) + num(counts.site_links) > 0) {
     willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');
