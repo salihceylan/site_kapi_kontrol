@@ -54,6 +54,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   PUSH_EXPORT_EXCLUDED_NOTE,
   'Rezervasyon ve konsiyerj: yalnız SİZİN yaptığınız rezervasyonların (alan adı, zaman, durum, notunuz) "reservations_made" bölümünde ve açtığınız konsiyerj taleplerinin (kategori, notunuz, istenen zaman, durum) "concierge_requests_made" bölümünde yer alır; yönetimin gerekçe ve kısa notları ile başkalarının rezervasyonları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'İş takibi talepleri: yalnız sizin açtığınız taleplerin başlığı, açıklaması, kategorisi, konumu, durumu ve tarihleri "work_items_created" bölümünde, yalnız SİZİN yazdığınız yorumlar "work_item_comments" bölümündedir; başkalarının yorumları, yönetimin diğer iç notları, öncelik, atanan görevli, hedef tarih ve durum geçmişi satırları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
+  'Anket ve oylama: yalnız SİZİN kullandığınız oylar (anket başlığı, seçtiğiniz seçenek metni, oy zamanı) "survey_votes_cast" bölümündedir; başkalarının oyları, sonuç sayımları ve anketin hedef kitlesi site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
 ]);
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -272,6 +273,14 @@ const SQL = Object.freeze({
     WHERE c.user_code = $1
     ORDER BY c.id DESC
   `,
+  // Kullandığınız anket oyları (044): YALNIZ sizin oylarınız; anket başlığı, seçtiğiniz seçenek metni, zaman. Başkalarının oyu / sayım / hedef kitle SEÇİLMEZ.
+  surveyVotesCast: `
+    SELECT s.title AS survey_title, (s.options ->> v.option_index::INTEGER) AS option_text, v.voted_at
+    FROM survey_votes v
+    INNER JOIN surveys s ON s.id = v.survey_id
+    WHERE v.user_code = $1
+    ORDER BY v.id DESC
+  `,
   announcements: `
     SELECT a.id, a.site_code, s.name AS site_name, a.title, a.body, a.importance, a.published_at, r.read_at
     FROM site_people sp
@@ -336,7 +345,8 @@ const OPTIONAL_OBJECTS_SQL = `
     (to_regclass('public.finance_reminder_items') IS NOT NULL AND to_regclass('public.finance_reminder_runs') IS NOT NULL) AS has_reminders,
     (to_regclass('public.receipts') IS NOT NULL) AS has_receipts,
     (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
-    (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
+    (to_regclass('public.reservations') IS NOT NULL) AS has_reservations,
+    (to_regclass('public.survey_votes') IS NOT NULL) AS has_surveys
 `;
 
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
@@ -435,6 +445,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const workItemComments = optional.has_work_items === true ? await bounded('work_item_comments', SQL.workItemComments, EXPORT_ROW_LIMITS.work_item_comments) : [];
     const reservationsMade = optional.has_reservations === true ? await bounded('reservations_made', SQL.reservationsMade, EXPORT_ROW_LIMITS.reservations_made) : [];
     const conciergeRequestsMade = optional.has_reservations === true ? await bounded('concierge_requests_made', SQL.conciergeRequestsMade, EXPORT_ROW_LIMITS.concierge_requests_made) : [];
+    const surveyVotesCast = optional.has_surveys === true ? await bounded('survey_votes_cast', SQL.surveyVotesCast, EXPORT_ROW_LIMITS.survey_votes_cast) : [];
     // Makbuzlar: sakin ucunun (GET /app/my-finance/receipts) görünürlük kuralları AYNEN yeniden kullanılır (yetki mantığı kopyalanmaz; aynı bağlantı = aynı anlık görüntü).
     // Yanıt özetidir; ödeyen adı (başkasına ait olabilir) dosyaya KONMAZ (mapReceiptForExport).
     let receipts = [];
@@ -506,6 +517,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
       work_item_comments: withIds(workItemComments, ['id', 'work_item_id', 'site_code']),
       reservations_made: withIds(reservationsMade),
       concierge_requests_made: withIds(conciergeRequestsMade),
+      survey_votes_cast: surveyVotesCast.map((row) => ({ survey_title: row.survey_title, option_text: row.option_text ?? null, voted_at: row.voted_at })),
       site_applications: withIds(applications),
       guest_passes: withIds(guestPasses),
       door_events: withIds(doorEvents),
@@ -561,6 +573,7 @@ export const SHRINKABLE_SECTIONS = Object.freeze([
   'people_records',
   'vehicles',
   'devices',
+  'survey_votes_cast',
 ]);
 
 /**

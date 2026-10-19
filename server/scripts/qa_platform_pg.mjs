@@ -77,6 +77,9 @@
 //             limitleri, konsiyerj gecisleri, hesap silme + disa aktarma, ilk kurulum x yazici yuku, 40P01 = 0. QA_ONLY=reservation (zincir esitligi icin chain,live,reservation).
 //   work_tracking  Is takibi (042; govde scripts/qa_work_tracking_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, gecis / atama / sinir kurallari, olay + audit, okunmamis
 //             sayaci, hesap silme + disa aktarma, ilk kurulum x yazici yuku, karisik eszamanli tur (40P01 = 0). QA_ONLY=work_tracking (zincir esitligi icin chain,live,work_tracking).
+//   survey    Anket ve oylama (044; govde scripts/qa_survey_section.mjs): sema, modul kapisi, yetki matrisi, IDOR, hedef dogrulama, durum gecisleri, oy kurallari
+//             (ALREADY_VOTED, APARTMENT_ALREADY_VOTED, NOT_ELIGIBLE, SURVEY_CLOSED, eszamanli oy yarisi), sakin sonuc gorunurlugu, anonim / voters, hesap silme + disa aktarma,
+//             audit gizliligi, ilk kurulum x yazici yuku (40P01 = 0). QA_ONLY=survey (zincir esitligi icin chain,live,survey).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -105,6 +108,7 @@ import { sectionDocuments } from './qa_documents_section.mjs';
 import { sectionPush } from './qa_push_section.mjs';
 import { sectionWorkTracking } from './qa_work_tracking_section.mjs';
 import { sectionReservation } from './qa_reservation_section.mjs';
+import { sectionSurvey } from './qa_survey_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -341,6 +345,7 @@ async function runParent() {
     push: `${prefix}_push`,
     work_tracking: `${prefix}_work_tracking`,
     reservation: `${prefix}_reservation`,
+    survey: `${prefix}_survey`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -399,7 +404,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -437,7 +442,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -11390,6 +11395,8 @@ const SECTIONS = {
   work_tracking: () => sectionWorkTracking({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Rezervasyon ve konsiyerj (043); govde scripts/qa_reservation_section.mjs
   reservation: () => sectionReservation({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Anket ve oylama (044); govde scripts/qa_survey_section.mjs
+  survey: () => sectionSurvey({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
 };
 
 if (SECTION === '') {

@@ -477,10 +477,10 @@ describe('platform rotalari: kimlik zinciri', () => {
 });
 
 describe('GET /app/modules/catalog', () => {
-  it('kimligi dogrulanmis herkese 9 modullu katalog doner', async () => {
+  it('kimligi dogrulanmis herkese 10 modullu katalog doner', async () => {
     const res = await call('GET', '/app/modules/catalog', { user: users.resident });
     assert.equal(res.status, 200);
-    assert.equal(res.body.modules.length, 9);
+    assert.equal(res.body.modules.length, 10);
     assert.deepEqual(Object.keys(res.body.modules[0]), ['code', 'name', 'description', 'core', 'status']);
     assert.equal(res.body.modules[0].code, 'door_control');
     assert.equal(res.body.modules[1].core, true);
@@ -499,7 +499,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
     assert.equal(res.body.site_name, 'Gül Sitesi');
     assert.equal(res.body.management_type, 'apartment_site');
     assert.equal(res.body.management_type_label, 'Apartman ve Site');
-    assert.equal(res.body.modules.length, 9);
+    assert.equal(res.body.modules.length, 10);
     assert.deepEqual(doorOf(res.body), {
       code: 'door_control',
       name: 'Geçiş Kontrol (SmartKeyPass)',
@@ -546,6 +546,7 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
         ['work_tracking', true, true],
         ['metering', false, false],
         ['online_payment', false, false],
+        ['survey', true, true],
       ],
     );
     // bekleyen talep: yalnizca o sitenin o modulu 'pending' olur; baska site / sonuclanmis talep etkilemez
@@ -1570,6 +1571,7 @@ describe('GET /app/my-modules', () => {
         'work_tracking',
         'metering',
         'online_payment',
+        'survey',
       ]);
     }
     assert.equal(res.body.sites[0].modules.door_control, true);

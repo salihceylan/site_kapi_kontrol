@@ -58,6 +58,8 @@ import { workItemsKeepNote } from './work_tracking_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
 import { reservationKeepNote, reservationRemoveNote } from './reservation_common.js';
 import { releaseUserReservations } from './reservation_service.js';
+import { surveyVotesKeepNote } from './survey_common.js';
+import { anonymizeUserSurveyData, countUserSurveyVotes } from './survey_service.js';
 
 const GLOBAL_LOCK_KEY = 'account_deletion';
 const MAX_SCOPE_ATTEMPTS = 3;
@@ -291,6 +293,8 @@ async function previewOptionalCounts(db, userCode) {
       `SELECT COUNT(*)::INTEGER AS n FROM finance_reminder_items i INNER JOIN site_people sp ON sp.id = i.person_id AND sp.user_code = $1 WHERE i.email_status = 'pending' AND i.email IS NOT NULL`,
     );
   }
+  // Anket ve oylama (044): oylar KALIR ve anonimleşir; yalnız sayı (tablo yoksa 0).
+  out.surveyVotes = await countUserSurveyVotes(db, userCode);
   return out;
 }
 
@@ -388,6 +392,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.reservationRecords > 0 || optionalCounts.requestRecords > 0) {
     willKeep.push(reservationKeepNote({ reservations: optionalCounts.reservationRecords, requests: optionalCounts.requestRecords }));
+  }
+  if (optionalCounts.surveyVotes > 0) {
+    willKeep.push(surveyVotesKeepNote(optionalCounts.surveyVotes));
   }
   if (num(counts.apartment_links) + num(counts.site_links) > 0) {
     willKeep.push('Makbuz ve tahsilat kayıtları (düzenleyen yönetici ve ödeyen adını içeren makbuz anlık görüntüsü dahil) yasal mali kayıt saklama yükümlülükleri gereği DEĞİŞTİRİLMEDEN saklanır; makbuz anlık görüntüsündeki ad anonimleştirilmez.');
@@ -688,6 +695,10 @@ async function runAttempt(userCode) {
     const releasedReservations = await releaseUserReservations(client, userCode);
     if (releasedReservations.reservations > 0) summary.reservations_cancelled = releasedReservations.reservations;
     if (releasedReservations.requests > 0) summary.concierge_cancelled = releasedReservations.requests;
+    // Anket ve oylama (044): oylar KALIR, hesap bagi koparilir (anonimlesir); actigi anketlerde created_by NULL. Kullanici satiri tombstone oldugu icin FK SET NULL kendiliginden calismaz. Tablo yoksa atlanir.
+    const surveyData = await anonymizeUserSurveyData(client, userCode);
+    if (surveyData.votes > 0) summary.survey_votes_anonymized = surveyData.votes;
+    if (surveyData.surveys > 0) summary.surveys_unlinked = surveyData.surveys;
     // Aidat hatırlatma kuyruğu (Faz 4b): kişiye bağlı kalemlerdeki düz e-posta adresi + özet silinir, bekleyenler 'resolved' olur (gönderilmez). Kişi satırının hesap bağlantısı
     // (site_people.user_code) bu adımdan SONRA (15) kopar; bu yüzden burada eşleşir.
     summary.reminder_rows = await clearReminderItems(client, userCode);
