@@ -763,6 +763,156 @@ export async function sectionReservation(ctx) {
   const racePeak = Math.max(0, ...raceRows.map((a) => raceRows.filter((b) => b.starts_at <= a.starts_at && b.ends_at > a.starts_at).length));
   check(`J2: tutarlilik: iptal <-> cancelled_at, closed_at <-> durum; aktif cakisma en fazla alan kapasitesi (en yuksek ${racePeak} <= 3)`, inconsistent === 0 && racePeak <= 3, { inconsistent, racePeak });
 
+  // ============================================================================================================
+  console.log('--- K. okunmamis isareti (048) ---');
+  const unreadCols = async () => (await q(`SELECT table_name, column_name, is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name IN ('reservations', 'concierge_requests') AND column_name IN ('resident_updated_at', 'resident_seen_at') ORDER BY table_name, column_name`)).rows;
+  const colsNow = await unreadCols();
+  check('K1: 048 sutunlari (resident_updated_at, resident_seen_at) iki tabloda da var: NOT NULL, varsayilan now()', colsNow.length === 4 && colsNow.every((c) => c.is_nullable === 'NO' && /now\(\)/.test(c.column_default ?? '')), colsNow);
+  const isUnread = async (table, id) => (await q(`SELECT resident_updated_at > resident_seen_at AS u FROM ${table} WHERE id = $1`, [id])).rows[0]?.u;
+  const seenAt = async (table, id) => (await q(`SELECT resident_seen_at FROM ${table} WHERE id = $1`, [id])).rows[0]?.resident_seen_at;
+  const kArea = await mkArea({ name: 'Okunmamis Onayli', capacity: 5, approval_mode: 'yonetici_onayli', per_user_daily_limit: 10, per_user_weekly_limit: 30 });
+  const kAuto = await mkArea({ name: 'Okunmamis Otomatik', capacity: 5, per_user_daily_limit: 10, per_user_weekly_limit: 30 });
+  const kOwner = await resident(site, site.apts[22], 'RZ Okunmamis Sahip');
+  const kOther = await resident(site, site.apts[23], 'RZ Okunmamis Diger');
+  const kRes = (await book(kOwner, kArea.id, ymd(27), '09:00')).body.reservation;
+  const kRej = (await book(kOwner, kArea.id, ymd(27), '11:00')).body.reservation;
+  const kCan = (await book(kOwner, kArea.id, ymd(27), '13:00')).body.reservation;
+  const kList0 = await call('GET', '/app/reservations', kOwner);
+  check('K2: yeni rezervasyon okunmamis DEGIL (unread false; liste unread_count 0; DB iki sutun esit)', kRes.unread === false && kList0.body.unread_count === 0 && kList0.body.items.every((i) => i.unread === false) && (await isUnread('reservations', kRes.id)) === false, [kRes.unread, kList0.body.unread_count]);
+  await decision(MGR, kRes.id, { action: 'approve', note: 'Uygun' });
+  const seenBefore = await seenAt('reservations', kRes.id);
+  const kd1 = await call('GET', `/app/reservations/${kRes.id}`, kOwner);
+  const kd2 = await call('GET', `/app/reservations/${kRes.id}`, kOwner);
+  const kl1 = await call('GET', '/app/reservations', kOwner);
+  const klPast = await call('GET', '/app/reservations?scope=past&limit=1', kOwner);
+  const seenAfter = await seenAt('reservations', kRes.id);
+  check('K3: onaydan sonra sahip unread true (detay + liste), unread_count 1; kapsam / limit suzgeci sayaci ETKILEMEZ (past: 0 kayit, sayac 1); GET YAZMAZ (resident_seen_at ayni)', kd1.body.reservation.unread === true && kd2.body.reservation.unread === true && kd1.body.reservation.decision_note === 'Uygun' &&
+    kl1.body.items.find((i) => i.id === kRes.id)?.unread === true && kl1.body.unread_count === 1 && klPast.body.items.length === 0 && klPast.body.unread_count === 1 && same(seenBefore, seenAfter), [kd1.body.reservation, kl1.body.unread_count, klPast.body]);
+  const kOtherList = await call('GET', '/app/reservations', kOther);
+  const kOtherSeen = await call('POST', `/app/reservations/${kRes.id}/seen`, kOther);
+  const kOutsiderSeen = await call('POST', `/app/reservations/${kRes.id}/seen`, OUTSIDER);
+  const kBadSeen = await call('POST', '/app/reservations/abc/seen', kOwner);
+  check('K4: baska sakin / ilgisiz / gecersiz kimlik POST seen 404 RESERVATION_NOT_FOUND; sahibin isareti durur; baskasinin sayaci 0', kOtherSeen.status === 404 && kOtherSeen.body.code === 'RESERVATION_NOT_FOUND' && kOutsiderSeen.status === 404 && kBadSeen.status === 404 &&
+    kOtherList.body.unread_count === 0 && (await isUnread('reservations', kRes.id)) === true, [kOtherSeen.body, kOutsiderSeen.body]);
+  const ks1 = await call('POST', `/app/reservations/${kRes.id}/seen`, kOwner);
+  const seen1 = await seenAt('reservations', kRes.id);
+  const ks2 = await call('POST', `/app/reservations/${kRes.id}/seen`, kOwner);
+  const seen2 = await seenAt('reservations', kRes.id);
+  const kAfterSeen = await call('GET', `/app/reservations/${kRes.id}`, kOwner);
+  check('K5: sahip POST seen 200 { id, unread:false }; detay unread false, sayac 0; ikinci seen 200 ayni govde ve resident_seen_at DEGISMEZ (idempotent, yazmaz)', ks1.status === 200 && same(ks1.body, { id: kRes.id, unread: false }) && ks2.status === 200 && same(ks2.body, ks1.body) && same(seen1, seen2) && seen1 > seenBefore &&
+    kAfterSeen.body.reservation.unread === false && (await call('GET', '/app/reservations', kOwner)).body.unread_count === 0, [ks1.body, ks2.body]);
+  await decision(MGR, kRej.id, { action: 'reject', note: 'Dolu' });
+  await decision(MGR, kCan.id, { action: 'approve' });
+  await call('POST', `/app/reservations/${kCan.id}/seen`, kOwner);
+  const kCanSeen = await call('GET', `/app/reservations/${kCan.id}`, kOwner);
+  await decision(STAFF, kCan.id, { action: 'cancel', note: 'Bakim' });
+  const kl2 = await call('GET', '/app/reservations', kOwner);
+  const kFlags = Object.fromEntries(kl2.body.items.map((i) => [i.id, i.unread]));
+  check('K6: red ve yonetim iptali (gorevli) isaret birakir: reddedilen unread; onaylanip goruldukten sonra iptal edilen YENIDEN unread; goruldu olan degil; sayac 2', kFlags[kRej.id] === true && kCanSeen.body.reservation.unread === false && kFlags[kCan.id] === true && kFlags[kRes.id] === false && kl2.body.unread_count === 2, { kFlags, unread_count: kl2.body.unread_count });
+  const kSelf = (await book(kOwner, kAuto.id, ymd(28), '09:00')).body.reservation;
+  const kSelfCancel = await call('POST', `/app/reservations/${kSelf.id}/cancel`, kOwner);
+  check('K7: sakin KENDI rezervasyonunu iptal edince okunmamis OLMAZ (unread false; DB iki sutun esit; sayac 2 kalir)', kSelf.unread === false && kSelfCancel.status === 200 && kSelfCancel.body.reservation.unread === false && (await isUnread('reservations', kSelf.id)) === false &&
+    (await call('GET', '/app/reservations', kOwner)).body.unread_count === 2, kSelfCancel.body);
+  check('K7b: site_code suzgeciyle sayac yalniz o siteyi sayar (kendi sitesi 2, bagi olmayan acik modullu site 0)', (await call('GET', `/app/reservations?site_code=${site.code}`, kOwner)).body.unread_count === 2 && (await call('GET', `/app/reservations?site_code=${site2.code}`, kOwner)).body.unread_count === 0);
+  const kArea3 = Number((await q(`INSERT INTO reservation_areas (site_code, name) VALUES ($1, 'K Modulsuz Alan') RETURNING id`, [site3.code])).rows[0].id);
+  const kRes3 = Number((await q(`INSERT INTO reservations (site_code, area_id, user_code, starts_at, ends_at, slot_count, status) VALUES ($1, $2, $3, NOW() + INTERVAL '1 day', NOW() + INTERVAL '25 hours', 1, 'onaylandi') RETURNING id`, [site3.code, kArea3, R4])).rows[0].id);
+  await q(`UPDATE reservations SET resident_updated_at = clock_timestamp() WHERE id = $1`, [kRes3]);
+  const kOffSeen = await call('POST', `/app/reservations/${kRes3}/seen`, R4);
+  const kOffGet = await call('GET', `/app/reservations/${kRes3}`, R4);
+  const kOffList = await call('GET', '/app/reservations', R4);
+  check('K8: modul KAPALI sitede seen / detay 404 RESERVATION_NOT_FOUND; site_code\'suz liste o siteyi ve sayacini atlar (unread_count 0); satir yazilmaz (DB hala okunmamis)', kOffSeen.status === 404 && kOffSeen.body.code === 'RESERVATION_NOT_FOUND' && kOffGet.status === 404 && kOffList.status === 200 && kOffList.body.items.length === 0 && kOffList.body.unread_count === 0 &&
+    (await isUnread('reservations', kRes3)) === true, [kOffSeen.body, kOffList.body]);
+  // konsiyerj
+  const kReq = (await call('POST', '/app/concierge-requests', kOwner, newReq())).body.request;
+  const kReqGet = await call('GET', `/app/concierge-requests/${kReq.id}`, kOwner);
+  const kReqOther = await call('GET', `/app/concierge-requests/${kReq.id}`, kOther);
+  const kReqBad = await call('GET', '/app/concierge-requests/abc', kOwner);
+  check('K9: yeni talep okunmamis degil; GET /app/concierge-requests/:id sahip 200 { request } (unread false), baskasi / gecersiz kimlik 404 CONCIERGE_NOT_FOUND; liste unread_count 0', kReq.unread === false && kReqGet.status === 200 && kReqGet.body.request.id === kReq.id && kReqGet.body.request.unread === false &&
+    kReqOther.status === 404 && kReqOther.body.code === 'CONCIERGE_NOT_FOUND' && kReqBad.status === 404 && (await call('GET', '/app/concierge-requests', kOwner)).body.unread_count === 0, [kReqGet.body, kReqOther.body]);
+  await cp(STAFF, { status: 'hazirlaniyor' }, kReq.id);
+  const cSeenBefore = await seenAt('concierge_requests', kReq.id);
+  const kcd1 = await call('GET', `/app/concierge-requests/${kReq.id}`, kOwner);
+  const kcl1 = await call('GET', '/app/concierge-requests', kOwner);
+  const kclClosed = await call('GET', '/app/concierge-requests?status=closed', kOwner);
+  const cSeenAfter = await seenAt('concierge_requests', kReq.id);
+  check('K10: gorevli durumu ilerletince talep unread true (detay + liste), unread_count 1; durum suzgeci sayaci etkilemez (closed: 0 kayit, sayac 1); GET yazmaz', kcd1.body.request.unread === true && kcd1.body.request.status === 'hazirlaniyor' && kcl1.body.items.find((i) => i.id === kReq.id)?.unread === true && kcl1.body.unread_count === 1 &&
+    kclClosed.body.items.length === 0 && kclClosed.body.unread_count === 1 && same(cSeenBefore, cSeenAfter), [kcd1.body.request, kcl1.body.unread_count]);
+  const kcOther = await call('POST', `/app/concierge-requests/${kReq.id}/seen`, kOther);
+  const kcs1 = await call('POST', `/app/concierge-requests/${kReq.id}/seen`, kOwner);
+  const cSeen1 = await seenAt('concierge_requests', kReq.id);
+  const kcs2 = await call('POST', `/app/concierge-requests/${kReq.id}/seen`, kOwner);
+  const cSeen2 = await seenAt('concierge_requests', kReq.id);
+  check('K11: baskasi seen 404 CONCIERGE_NOT_FOUND; sahip seen 200 { id, unread:false }; ikinci seen idempotent (resident_seen_at ayni); detay unread false, sayac 0', kcOther.status === 404 && kcOther.body.code === 'CONCIERGE_NOT_FOUND' && kcs1.status === 200 && same(kcs1.body, { id: kReq.id, unread: false }) && same(kcs2.body, kcs1.body) && same(cSeen1, cSeen2) &&
+    (await call('GET', `/app/concierge-requests/${kReq.id}`, kOwner)).body.request.unread === false && (await call('GET', '/app/concierge-requests', kOwner)).body.unread_count === 0, [kcOther.body, kcs1.body]);
+  await cp(MGR, { note: 'Paket kapicida' }, kReq.id);
+  const kcd2 = await call('GET', `/app/concierge-requests/${kReq.id}`, kOwner);
+  await call('POST', `/app/concierge-requests/${kReq.id}/seen`, kOwner);
+  const noChange = await cp(MGR, { note: 'Paket kapicida' }, kReq.id);
+  const kcd3 = await call('GET', `/app/concierge-requests/${kReq.id}`, kOwner);
+  check('K12: yalniz yonetim notu degisince yeniden unread (staff_note gorunur); degisiklik olmayan PATCH (changed false) isaret BIRAKMAZ', kcd2.body.request.unread === true && kcd2.body.request.staff_note === 'Paket kapicida' && noChange.body.changed === false && kcd3.body.request.unread === false, [kcd2.body.request, noChange.body]);
+  const kReq2 = (await call('POST', '/app/concierge-requests', kOwner, newReq())).body.request;
+  const kOwnCancel = await call('POST', `/app/concierge-requests/${kReq2.id}/cancel`, kOwner);
+  check('K13: sakin KENDI talebini iptal edince okunmamis OLMAZ (unread false; DB iki sutun esit; sayac 0)', kOwnCancel.status === 200 && kOwnCancel.body.request.status === 'iptal' && kOwnCancel.body.request.unread === false && (await isUnread('concierge_requests', kReq2.id)) === false &&
+    (await call('GET', '/app/concierge-requests', kOwner)).body.unread_count === 0, kOwnCancel.body);
+  const kDoomed = await resident(site, site.apts[24], 'RZ Okunmamis Silinecek');
+  const kdRes = (await book(kDoomed, kAuto.id, ymd(29), '09:00')).body.reservation.id;
+  const kdReq = (await call('POST', '/app/concierge-requests', kDoomed, newReq())).body.request.id;
+  await performAccountDeletion(kDoomed);
+  const kdRows = [(await q(`SELECT status, resident_updated_at > resident_seen_at AS u FROM reservations WHERE id = $1`, [kdRes])).rows[0], (await q(`SELECT status, resident_updated_at > resident_seen_at AS u FROM concierge_requests WHERE id = $1`, [kdReq])).rows[0]];
+  check('K14: hesap silme (sistem iptali) rezervasyonu ve talebi iptal eder ama okunmamis isareti BIRAKMAZ', kdRows.every((r) => r?.status === 'iptal' && r?.u === false), kdRows);
+  // 048 yukseltme yolu: sutunlar yokken (satirlar dolu) ensure -> katalog + lock_timeout + 2 ALTER + RESET; mevcut satirlar okunmamis gorunmez; sonra normal acilis tek sorgu
+  await q(`ALTER TABLE reservations DROP COLUMN resident_updated_at, DROP COLUMN resident_seen_at`);
+  await q(`ALTER TABLE concierge_requests DROP COLUMN resident_updated_at, DROP COLUMN resident_seen_at`);
+  const rowsBefore = (await countOf(`SELECT COUNT(*)::int AS n FROM reservations`)) + (await countOf(`SELECT COUNT(*)::int AS n FROM concierge_requests`));
+  hooks.counting = true; hooks.count = 0;
+  await ensureOnce();
+  const upgradeQueries = hooks.count;
+  hooks.count = 0;
+  await ensureOnce();
+  const quietAgain = hooks.count;
+  hooks.counting = false;
+  const colsAfter = await unreadCols();
+  const unreadAfter = (await countOf(`SELECT COUNT(*)::int AS n FROM reservations WHERE resident_updated_at > resident_seen_at`)) + (await countOf(`SELECT COUNT(*)::int AS n FROM concierge_requests WHERE resident_updated_at > resident_seen_at`));
+  check(`K15 (yukseltme yolu): sutunlar yokken (${rowsBefore} satir) ensure: katalog + lock_timeout + 2 ALTER + RESET = 5 sorgu (${upgradeQueries}); sutunlar geri gelir (${colsAfter.length}/4); mevcut hicbir satir okunmamis degil (${unreadAfter}); sonra normal acilis tek sorgu (${quietAgain})`,
+    upgradeQueries === 5 && quietAgain === 1 && colsAfter.length === 4 && unreadAfter === 0 && rowsBefore > 0, { upgradeQueries, quietAgain, unreadAfter });
+  // RU-1: kaydin sahibi islemi yapan yonetici / gorevliyse (sakin olan yonetici) bu KENDI islemidir: okunmamis URETMEZ; baskasinin islemi yine isaret birakir
+  const kMgrRes = await mkUser('RZ Yonetici Sakin', 'site_manager');
+  await linkManager(site.code, kMgrRes);
+  await joinResident(kMgrRes, site, site.apts[25]);
+  const kMgrA = (await book(kMgrRes, kArea.id, ymd(26), '10:00')).body.reservation;
+  const kMgrB = (await book(kMgrRes, kArea.id, ymd(26), '12:00')).body.reservation;
+  const kMgrApprove = await decision(kMgrRes, kMgrA.id, { action: 'approve', note: 'Kendi onayim' });
+  const kMgrAView = await call('GET', `/app/reservations/${kMgrA.id}`, kMgrRes);
+  const kMgrAUnread = await isUnread('reservations', kMgrA.id);
+  const kMgrList1 = await call('GET', '/app/reservations', kMgrRes);
+  await decision(MGR, kMgrB.id, { action: 'approve' });
+  const kMgrBView = await call('GET', `/app/reservations/${kMgrB.id}`, kMgrRes);
+  const kMgrList2 = await call('GET', '/app/reservations', kMgrRes);
+  const kMgrCancel = await decision(kMgrRes, kMgrB.id, { action: 'cancel', note: 'Kendi iptalim' });
+  const kMgrBAfter = await call('GET', `/app/reservations/${kMgrB.id}`, kMgrRes);
+  const kMgrList3 = await call('GET', '/app/reservations', kMgrRes);
+  check('K16 (RU-1): sakin olan yonetici KENDI beklemedeki rezervasyonunu onaylayinca okunmamis OLMAZ (unread false, DB iki sutun esit, sayac 0); baska yoneticinin onayi isaret birakir (unread true, sayac 1); kendi yonetim iptali bunu da temizler (unread false, sayac 0)',
+    kMgrA.status === 'beklemede' && kMgrApprove.status === 200 && kMgrApprove.body.changed === true && kMgrApprove.body.reservation.status === 'onaylandi' && kMgrAView.body.reservation.unread === false && kMgrAUnread === false && kMgrList1.body.unread_count === 0 &&
+      kMgrBView.body.reservation.unread === true && kMgrList2.body.unread_count === 1 && kMgrCancel.status === 200 && kMgrCancel.body.reservation.status === 'iptal' && kMgrBAfter.body.reservation.unread === false && kMgrBAfter.body.reservation.cancelled_by === 'management' &&
+      kMgrList3.body.unread_count === 0,
+    [kMgrApprove.status, kMgrAView.body?.reservation?.unread, kMgrAUnread, kMgrList1.body?.unread_count, kMgrBView.body?.reservation?.unread, kMgrList2.body?.unread_count, kMgrBAfter.body?.reservation?.unread, kMgrList3.body?.unread_count]);
+  const kStaffRes = await resident(site, site.apts[26], 'RZ Gorevli Sakin');
+  await addMember(site.code, kStaffRes, 'STAFF');
+  const kStaffReq = (await call('POST', '/app/concierge-requests', kStaffRes, newReq())).body.request;
+  const kStaffPatch = await cp(kStaffRes, { status: 'hazirlaniyor', note: 'Kendi notum' }, kStaffReq.id);
+  const kStaffView1 = await call('GET', `/app/concierge-requests/${kStaffReq.id}`, kStaffRes);
+  const kStaffList1 = await call('GET', '/app/concierge-requests', kStaffRes);
+  await cp(MGR, { note: 'Yonetim notu' }, kStaffReq.id);
+  const kStaffView2 = await call('GET', `/app/concierge-requests/${kStaffReq.id}`, kStaffRes);
+  const kStaffDone = await cp(kStaffRes, { status: 'tamamlandi' }, kStaffReq.id);
+  const kStaffView3 = await call('GET', `/app/concierge-requests/${kStaffReq.id}`, kStaffRes);
+  const kStaffList3 = await call('GET', '/app/concierge-requests', kStaffRes);
+  check('K17 (RU-1): sakin olan gorevli KENDI talebinin durumunu + notunu degistirince okunmamis OLMAZ (unread false, sayac 0); yonetici notu isaret birakir (unread true); kendi tamamlamasi temizler (unread false, DB esit, sayac 0)',
+    kStaffPatch.status === 200 && kStaffPatch.body.changed === true && kStaffView1.body.request.unread === false && kStaffView1.body.request.staff_note === 'Kendi notum' && kStaffList1.body.unread_count === 0 &&
+      kStaffView2.body.request.unread === true && kStaffView2.body.request.staff_note === 'Yonetim notu' && kStaffDone.status === 200 && kStaffView3.body.request.unread === false && kStaffView3.body.request.status === 'tamamlandi' &&
+      kStaffList3.body.unread_count === 0 && (await isUnread('concierge_requests', kStaffReq.id)) === false,
+    [kStaffPatch.status, kStaffView1.body?.request?.unread, kStaffList1.body?.unread_count, kStaffView2.body?.request?.unread, kStaffDone.status, kStaffView3.body?.request?.unread, kStaffList3.body?.unread_count]);
+
   server.close();
   await finishChild(pool);
 }

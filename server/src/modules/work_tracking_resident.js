@@ -16,6 +16,8 @@ import { syncSitePeopleSafe } from './people_sync.js';
 import { parsePositiveId } from './people_common.js';
 import { myApartmentsCte } from './document_resident.js';
 import {
+  ATTACHMENT_COUNT_SQL,
+  MODULE_ON_SQL,
   TERMINAL_STATUSES,
   WORK_TRACKING_MODULE,
   accountDeleted,
@@ -39,13 +41,15 @@ import {
   workItemNotFound,
 } from './work_tracking_common.js';
 import { audit, insertEvent, lockActiveUser, siteLockKey, userLockKey, withWorkTransaction } from './work_tracking_service.js';
+import { listAttachmentsForItem } from './work_attachments_read.js';
 
-const MODULE_ON = `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = w.site_code AND smod.module_code = '${WORK_TRACKING_MODULE}' AND smod.enabled = TRUE)`;
+const MODULE_ON = MODULE_ON_SQL;
 
 const RESIDENT_COLUMNS = `
   w.id, w.site_code, s.name AS site_name, w.category, w.location_type, w.title, w.description, w.status, w.resident_urgent, w.assigned_to,
   to_char(w.due_date, 'YYYY-MM-DD') AS due_date, w.created_at, w.updated_at, w.closed_at, w.apartment_id, w.block_id, b.block_name, a.unit_label,
-  (w.resident_updated_at > w.requester_seen_at) AS unread
+  (w.resident_updated_at > w.requester_seen_at) AS unread,
+  ${ATTACHMENT_COUNT_SQL}
 `;
 
 const RESIDENT_FROM = `
@@ -95,7 +99,7 @@ async function loadResidentEvents(db, itemId) {
   return (result.rows ?? []).reverse().map((row) => mapEvent(row, { detailed: false }));
 }
 
-function userCodeOf(authUser) {
+export function userCodeOf(authUser) {
   const userCode = actorFromAuthUser(authUser).userCode;
   if (userCode === null) {
     throw accountDeleted();
@@ -103,8 +107,8 @@ function userCodeOf(authUser) {
   return userCode;
 }
 
-/** Yazma yolları: kişi o sitede HÂLÂ aktif sakin mi (canlı; document_resident.myApartmentsCte ile aynı kural). */
-async function assertStillResident(client, userCode, siteCode) {
+/** Yazma yolları: kişi o sitede HÂLÂ aktif sakin mi (canlı; document_resident.myApartmentsCte ile aynı kural). Fotoğraf ekleri de kullanır. */
+export async function assertStillResident(client, userCode, siteCode) {
   const mine = await client.query(`WITH ${myApartmentsCte('$1')} SELECT 1 FROM my_apts WHERE site_code = $2 LIMIT 1`, [userCode, siteCode]);
   if (!mine.rows?.[0]) {
     throw notResident();
@@ -253,7 +257,10 @@ export async function listMyWorkItems(authUser, query = {}, db = pool) {
   };
 }
 
-/** GET /app/work-items/:id -> { item, events } (yalnız public olaylar). Başkasının / yok / modül kapalı -> 404. */
+/**
+ * GET /app/work-items/:id -> { item, events, attachments } (yalnız public olaylar; hazır fotoğraflar + kendi tamamlanmamış yüklemeleri). Başkasının / yok / modül kapalı -> 404.
+ * Fotoğraflar SAKİN görünümüyle eşlenir: yönetimin eklediği fotoğrafta yükleyen adı 'Yönetim' (yönetici / görevli adı sızmaz; WA-SEC-1).
+ */
 export async function getMyWorkItem(authUser, rawId, db = pool) {
   const id = parsePositiveId(rawId);
   const userCode = userCodeOf(authUser);
@@ -264,7 +271,20 @@ export async function getMyWorkItem(authUser, rawId, db = pool) {
   if (!row) {
     throw workItemNotFound();
   }
-  return { item: mapResidentItem(row), events: await loadResidentEvents(db, id) };
+  return {
+    item: mapResidentItem(row),
+    events: await loadResidentEvents(db, id),
+    attachments: await listAttachmentsForItem(db, id, userCode, { residentView: true }),
+  };
+}
+
+/** Sakinin kendi talebinin sitesi (kilitsiz ön okuma; işlem o site kilidiyle açılır). Başkasının / yok -> 404. Fotoğraf ekleri de kullanır. */
+export async function siteOfOwnItem(userCode, id) {
+  const result = await pool.query(`SELECT site_code FROM work_items WHERE id = $2 AND created_by = $1`, [userCode, id]);
+  if (!result.rows?.[0]) {
+    throw workItemNotFound();
+  }
+  return Number(result.rows[0].site_code);
 }
 
 /** Sakinin kendi talebini kilitleyip okur (FOR UPDATE); başkasının / yok / modül kapalı -> 404. */
@@ -277,14 +297,6 @@ async function lockOwnItem(client, userCode, id) {
     throw workItemNotFound();
   }
   return found.rows[0];
-}
-
-async function siteOfOwnItem(userCode, id) {
-  const result = await pool.query(`SELECT site_code FROM work_items WHERE id = $2 AND created_by = $1`, [userCode, id]);
-  if (!result.rows?.[0]) {
-    throw workItemNotFound();
-  }
-  return Number(result.rows[0].site_code);
 }
 
 /** POST /app/work-items/:id/cancel -> { item }. Yalnız KENDİ "yeni" talebi (aksi 409 INVALID_TRANSITION). */
@@ -302,8 +314,10 @@ export async function cancelMyWorkItem({ actor, rawId }) {
     if (row.status !== 'yeni') {
       throw invalidTransition(row.status, 'iptal');
     }
+    // requester_seen_at ve resident_updated_at TEK kararlı değerle (NOW(), işlem boyunca sabit) yazılır: iki ayrı clock_timestamp() çağrısı PostgreSQL'in hedef sütun
+    // sırasına göre mikrosaniye farkla değerlenir ve sakinin KENDİ iptali "okunmamış" görünürdü.
     await client.query(
-      `UPDATE work_items SET status = 'iptal', closed_at = NOW(), updated_at = NOW(), requester_seen_at = clock_timestamp(), resident_updated_at = clock_timestamp() WHERE id = $1`,
+      `UPDATE work_items SET status = 'iptal', closed_at = NOW(), updated_at = NOW(), requester_seen_at = NOW(), resident_updated_at = NOW() WHERE id = $1`,
       [id],
     );
     await insertEvent(client, { itemId: id, siteCode, type: 'status_changed', visibility: 'public', actorUserCode: userCode, actorKind: 'resident', from: 'yeni', to: 'iptal' });

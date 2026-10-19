@@ -5,6 +5,7 @@
 // hatasıdır; yeniden gönderimde (aynı veri) AYNI idempotency_key kullanılır, veri değişince ya da başarıdan sonra
 // YENİ anahtar üretilir.
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -15,6 +16,10 @@ import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart'
+    show DocumentCancelToken, DocumentTransferCancelled;
+import 'package:site_kapi_kontrol/services/document_picker.dart'
+    show MemoryDocumentSource;
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 
 import 'screens/work_fixtures.dart';
@@ -311,6 +316,289 @@ void main() {
       expect(big.code, 'BODY_TOO_LARGE');
       final server = await fail(502, null, raw: 'bad gateway');
       expect(server.message, contains('502'));
+    });
+  });
+
+  group('fotoğraf ekleri', () {
+    const request = WorkAttachmentCreateRequest(fileName: 'foto.jpg', mimeType: 'image/jpeg', sizeBytes: 5);
+
+    test('create: sakin ve yönetim yolları; gövde; 201 attachment (uploading)', () async {
+      final seen = <http.Request>[];
+      final api = _api((request) async {
+        seen.add(request);
+        return _json(201, <String, dynamic>{'attachment': wkAttachment(31, status: 'uploading', size: 5)});
+      });
+      final mine = await api.createAttachment(token: 't', id: 3, request: request);
+      expect(mine.id, 31);
+      expect(mine.status, WorkAttachmentStatus.uploading);
+      final managed = await api.createAttachment(token: 't', siteCode: 11, id: 3, request: request);
+      expect(managed.id, 31);
+      expect(seen.map((r) => '${r.method} ${r.url.path}'), <String>[
+        'POST /app/work-items/3/attachments',
+        'POST /manager/sites/11/work-items/3/attachments',
+      ]);
+      expect(jsonDecode(seen.first.body), <String, dynamic>{'file_name': 'foto.jpg', 'mime_type': 'image/jpeg', 'size_bytes': 5});
+      expect(seen.first.headers['Authorization'], 'Bearer t');
+    });
+
+    test('upload: PUT octet-stream, gövde = baytlar, Content-Length = boyut; ilerleme; 200 ready', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{'attachment': wkAttachment(31, status: 'ready', size: 5)});
+      });
+      final progress = <(int, int)>[];
+      final bytes = Uint8List.fromList(<int>[1, 2, 3, 4, 5]);
+      final ready = await api.uploadAttachmentContent(
+        token: 't',
+        siteCode: 11,
+        id: 3,
+        attachmentId: 31,
+        source: MemoryDocumentSource('foto.jpg', bytes, chunkSize: 2),
+        onProgress: (sent, total) => progress.add((sent, total)),
+      );
+      expect(ready.isReady, isTrue);
+      expect(seen.method, 'PUT');
+      expect(seen.url.path, '/manager/sites/11/work-items/3/attachments/31/content');
+      expect(seen.headers['Content-Type'], 'application/octet-stream');
+      expect(seen.headers['Authorization'], 'Bearer t');
+      expect(seen.bodyBytes, bytes);
+      expect(seen.contentLength, 5);
+      expect(progress.last, (5, 5));
+      expect(progress.length, 3, reason: '2 baytlık parçalar');
+    });
+
+    test('upload: önceden iptal edilmiş belirteç -> DocumentTransferCancelled; boş kaynak reddedilir', () async {
+      var calls = 0;
+      final api = _api((request) async {
+        calls++;
+        return _json(200, <String, dynamic>{'attachment': wkAttachment(31)});
+      });
+      final cancel = DocumentCancelToken()..cancel();
+      await expectLater(
+        api.uploadAttachmentContent(token: 't', id: 3, attachmentId: 31, source: MemoryDocumentSource('a.jpg', Uint8List(3)), cancel: cancel),
+        throwsA(isA<DocumentTransferCancelled>()),
+      );
+      await expectLater(
+        api.uploadAttachmentContent(token: 't', id: 3, attachmentId: 31, source: MemoryDocumentSource('a.jpg', Uint8List(0))),
+        throwsA(isA<ApiException>()),
+      );
+      expect(calls, 0);
+    });
+
+    test('download: GET resim baytları (sakin yolu); resim olmayan yanıt resim gibi kullanılmaz; 404 eşlenir', () async {
+      final png = Uint8List.fromList(<int>[137, 80, 78, 71, 1, 2, 3]);
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        if (request.url.path.endsWith('/99/content')) {
+          return _json(404, <String, dynamic>{'error': 'x', 'code': 'WORK_ATTACHMENT_NOT_FOUND'});
+        }
+        if (request.url.path.endsWith('/98/content')) {
+          return http.Response('<html>login</html>', 200, headers: <String, String>{'content-type': 'text/html'});
+        }
+        return http.Response.bytes(png, 200, headers: <String, String>{'content-type': 'image/png'});
+      });
+      final bytes = await api.downloadAttachment(token: 't', id: 3, attachmentId: 31);
+      expect(bytes, png);
+      expect(seen.method, 'GET');
+      expect(seen.url.path, '/app/work-items/3/attachments/31/content');
+      expect(seen.headers['Authorization'], 'Bearer t');
+      final html = await _failureOf(() => api.downloadAttachment(token: 't', id: 3, attachmentId: 98));
+      expect(html.fromIntermediary, isTrue);
+      final missing = await _failureOf(() => api.downloadAttachment(token: 't', siteCode: 11, id: 3, attachmentId: 99));
+      expect(missing.statusCode, 404);
+      expect(missing.message, contains('Fotoğraf bulunamadı'));
+    });
+
+    test('delete: DELETE yolu; { deleted: true }', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{'deleted': true});
+      });
+      await api.deleteAttachment(token: 't', siteCode: 11, id: 3, attachmentId: 31);
+      expect(seen.method, 'DELETE');
+      expect(seen.url.path, '/manager/sites/11/work-items/3/attachments/31');
+      await api.deleteAttachment(token: 't', id: 3, attachmentId: 31);
+      expect(seen.url.path, '/app/work-items/3/attachments/31');
+    });
+
+    test('hata eşlemesi (ekleme): sunucu kodları LIMIT_REACHED / INVALID_STATE / ATTACHMENT_TOO_LARGE / '
+        'ATTACHMENT_TYPE_NOT_ALLOWED / WORK_ATTACHMENT_RATE_LIMITED; JSON\'suz 413; INVALID_BODY sunucu metni', () async {
+      Future<ApiException> fail(int status, Map<String, dynamic>? body, {String? raw, Map<String, String>? headers}) {
+        final api = _api((request) async {
+          if (raw != null) return http.Response(raw, status, headers: headers ?? const <String, String>{});
+          return _json(status, body, headers: headers);
+        });
+        return _failureOf(() => api.createAttachment(token: 't', id: 3, request: request));
+      }
+
+      final limit = await fail(409, <String, dynamic>{'error': 'x', 'code': 'LIMIT_REACHED', 'attachment_limit': 4});
+      expect(limit.message, 'En fazla 4 fotoğraf eklenebilir.');
+      expect(limit.code, 'LIMIT_REACHED');
+      expect((await fail(409, <String, dynamic>{'error': 'x', 'code': 'INVALID_STATE'})).message, 'Kapanmış talebe fotoğraf eklenemez.');
+      expect((await fail(413, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_TOO_LARGE', 'max_bytes': 5242880})).message, 'Yalnız JPEG, PNG veya WebP; en fazla 5 MB.');
+      expect((await fail(415, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_TYPE_NOT_ALLOWED'})).message, 'Yalnız JPEG, PNG veya WebP; en fazla 5 MB.');
+      final nginx = await fail(413, null, raw: '<html>413</html>', headers: <String, String>{'content-type': 'text/html'});
+      expect(nginx.message, 'Yalnız JPEG, PNG veya WebP; en fazla 5 MB.', reason: 'Nginx HTML 413');
+      expect(nginx.code, 'BODY_TOO_LARGE');
+      final hourly = await fail(
+        429,
+        <String, dynamic>{'error': 'x', 'code': 'WORK_ATTACHMENT_RATE_LIMITED'},
+        headers: <String, String>{'retry-after': '3600'},
+      );
+      expect(hourly.isRateLimited, isTrue);
+      expect(hourly.retryAfterSeconds, 3600);
+      expect(hourly.message, startsWith('Bir saat içinde çok fazla fotoğraf eklediniz.'));
+      expect(hourly.message, contains('sonra tekrar deneyin'));
+      final generic = await fail(429, <String, dynamic>{'error': 'x'}, headers: <String, String>{'retry-after': '120'});
+      expect(generic.message, contains('2 dakika'));
+      expect(generic.message, contains('fotoğraf'));
+      expect((await fail(403, <String, dynamic>{'error': 'x', 'code': 'NOT_A_RESIDENT'})).message, contains('daire sakini'));
+      expect(
+        (await fail(400, <String, dynamic>{'error': 'Dosya adı 1-160 karakter olmalıdır.', 'code': 'INVALID_BODY'})).message,
+        'Dosya adı 1-160 karakter olmalıdır.',
+        reason: 'alan etiketli sunucu metni korunur',
+      );
+      // İş Takibi genel kodları yine çalışır.
+      expect((await fail(404, <String, dynamic>{'error': 'x', 'code': 'WORK_ITEM_NOT_FOUND'})).message, 'Talep bulunamadı ya da erişiminiz yok.');
+      expect((await fail(403, <String, dynamic>{'error': 'x', 'code': 'MODULE_DISABLED'})).code, 'MODULE_DISABLED');
+    });
+
+    test('hata eşlemesi (içerik PUT): UPLOAD_ALREADY_COMPLETED kodu korunur; süre dolumu, imza / boyut uyuşmazlığı, '
+        'eşzamanlı gönderim, meşgul', () async {
+      Future<ApiException> fail(int status, Map<String, dynamic> body, {Map<String, String>? headers}) {
+        final api = _api((request) async => _json(status, body, headers: headers));
+        return _failureOf(
+          () => api.uploadAttachmentContent(
+            token: 't',
+            id: 3,
+            attachmentId: 31,
+            source: MemoryDocumentSource('a.jpg', Uint8List(4)),
+          ),
+        );
+      }
+
+      final done = await fail(409, <String, dynamic>{'error': 'x', 'code': 'UPLOAD_ALREADY_COMPLETED'});
+      expect(done.code, 'UPLOAD_ALREADY_COMPLETED', reason: 'denetleyici bunu BAŞARI sayar');
+      final expired = await fail(410, <String, dynamic>{'error': 'x', 'code': 'UPLOAD_EXPIRED'});
+      expect(expired.message, 'Yükleme süresi doldu. Tekrar deneyin.');
+      expect(expired.statusCode, 410);
+      expect((await fail(404, <String, dynamic>{'error': 'x', 'code': 'WORK_ATTACHMENT_NOT_FOUND'})).message, 'Yükleme kaydı bulunamadı. Tekrar deneyin.');
+      expect((await fail(415, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_CONTENT_MISMATCH'})).message, contains('bozuk'));
+      expect((await fail(400, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_SIZE_MISMATCH'})).message, contains('boyutu değişti'));
+      expect((await fail(409, <String, dynamic>{'error': 'x', 'code': 'UPLOAD_IN_PROGRESS'})).message, contains('zaten sürüyor'));
+      final busy = await fail(503, <String, dynamic>{'error': 'x', 'code': 'UPLOAD_BUSY'}, headers: <String, String>{'retry-after': '5'});
+      expect(busy.message, startsWith('Sunucu şu anda çok sayıda yükleme alıyor.'));
+      expect(busy.isServerError, isTrue);
+      expect((await fail(409, <String, dynamic>{'error': 'x', 'code': 'INVALID_STATE'})).message, 'Kapanmış talebe fotoğraf eklenemez.');
+      expect(
+        (await fail(415, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_DIMENSIONS_TOO_LARGE'})).message,
+        'Fotoğrafın çözünürlüğü çok yüksek; daha küçük bir fotoğraf seçin.',
+      );
+    });
+
+    test('kota: 409 ATTACHMENT_QUOTA_EXCEEDED kişi (bildirilen kotayla) ve site iletileri', () async {
+      Future<ApiException> fail(Map<String, dynamic> body) {
+        final api = _api((request) async => _json(409, body));
+        return _failureOf(() => api.createAttachment(token: 't', id: 3, request: request));
+      }
+
+      final user = await fail(<String, dynamic>{
+        'error': 'x',
+        'code': 'ATTACHMENT_QUOTA_EXCEEDED',
+        'quota': 'user',
+        'quota_bytes': 209715200,
+        'used_bytes': 209000000,
+      });
+      expect(
+        user.message,
+        'Bu sitedeki fotoğraf kotanız doldu (en çok 200 MB). Eski fotoğraflarınızdan silebilir ya da yönetime başvurabilirsiniz.',
+      );
+      expect(user.code, 'ATTACHMENT_QUOTA_EXCEEDED');
+      expect(
+        (await fail(<String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_QUOTA_EXCEEDED', 'quota': 'user', 'quota_bytes': 52428800})).message,
+        contains('en çok 50 MB'),
+      );
+      expect(
+        (await fail(<String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_QUOTA_EXCEEDED', 'quota': 'site'})).message,
+        'Sitenin fotoğraf depolama alanı doldu; yönetime başvurun.',
+      );
+    });
+
+    test('web: bayt ilerlemesi bildirilmez; boyuta göre üst süre (120 sn + 16 KB başına 1 sn)', () async {
+      late http.Request seen;
+      final api = WorkTrackingApi(
+        baseUrl: _base,
+        web: true,
+        client: MockClient((request) async {
+          seen = request;
+          return _json(200, <String, dynamic>{'attachment': wkAttachment(31, status: 'ready', size: 5)});
+        }),
+      );
+      final progress = <(int, int)>[];
+      final ready = await api.uploadAttachmentContent(
+        token: 't',
+        id: 3,
+        attachmentId: 31,
+        source: MemoryDocumentSource('foto.jpg', Uint8List.fromList(<int>[1, 2, 3, 4, 5]), chunkSize: 2),
+        onProgress: (sent, total) => progress.add((sent, total)),
+      );
+      expect(ready.isReady, isTrue);
+      expect(seen.bodyBytes, <int>[1, 2, 3, 4, 5], reason: 'gövde yine tam gider');
+      expect(progress, isEmpty, reason: 'web: ilerleme bilinmez (belirsiz çubuk)');
+      expect(WorkTrackingApi.uploadDeadlineFor(0), const Duration(seconds: 120));
+      expect(WorkTrackingApi.uploadDeadlineFor(1), const Duration(seconds: 121));
+      expect(WorkTrackingApi.uploadDeadlineFor(16384), const Duration(seconds: 121));
+      expect(WorkTrackingApi.uploadDeadlineFor(5 * 1024 * 1024), const Duration(seconds: 440));
+    });
+
+    test('hata eşlemesi (silme / indirme): yetki ve kapalı talep silmeye özgü; dosya kayıp hata kodu taşır', () async {
+      Future<ApiException> failDelete(int status, Map<String, dynamic> body) {
+        final api = _api((request) async => _json(status, body));
+        return _failureOf(() => api.deleteAttachment(token: 't', siteCode: 11, id: 3, attachmentId: 31));
+      }
+
+      expect(
+        (await failDelete(403, <String, dynamic>{'error': 'x', 'code': 'FORBIDDEN_ROLE'})).message,
+        'Bu fotoğrafı yalnız ekleyen kişi ya da yönetici silebilir.',
+      );
+      expect((await failDelete(409, <String, dynamic>{'error': 'x', 'code': 'INVALID_STATE'})).message, 'Kapanmış talepteki fotoğraf silinemez.');
+      expect((await failDelete(404, <String, dynamic>{'error': 'x', 'code': 'WORK_ATTACHMENT_NOT_FOUND'})).message, contains('Fotoğraf bulunamadı'));
+
+      final missingFile = await _failureOf(
+        () => _api((request) async => _json(500, <String, dynamic>{'error': 'x', 'code': 'ATTACHMENT_FILE_MISSING', 'errorId': 'e-42'}))
+            .downloadAttachment(token: 't', id: 3, attachmentId: 31),
+      );
+      expect(missingFile.message, 'Fotoğraf dosyası sunucuda bulunamadı. (Hata kodu: e-42)');
+      // Ekleme dışındaki uçta FORBIDDEN_ROLE genel metne düşer.
+      expect(
+        WorkTrackingApi.workAttachmentErrorMessage(403, 'FORBIDDEN_ROLE', op: WorkAttachmentOp.create),
+        isNull,
+      );
+    });
+  });
+
+  group('rapor', () {
+    test('GET .../work-items/report?from&to (YYYY-AA-GG); gövde ayrıştırılır; görevli 403', () async {
+      late http.Request seen;
+      var forbid = false;
+      final api = _api((request) async {
+        seen = request;
+        if (forbid) return _json(403, <String, dynamic>{'error': 'x', 'code': 'FORBIDDEN_ROLE'});
+        return _json(200, wkReportJson(from: DateTime(2026, 10, 1), to: DateTime(2026, 10, 19)));
+      });
+      final report = await api.report(token: 't', siteCode: 11, from: DateTime(2026, 10, 1), to: DateTime(2026, 10, 19));
+      expect(seen.method, 'GET');
+      expect(seen.url.path, '/manager/sites/11/work-items/report');
+      expect(seen.url.queryParameters, <String, String>{'from': '2026-10-01', 'to': '2026-10-19'});
+      expect(report.totals.opened, 12);
+      expect(report.byAssignee.length, 3);
+      forbid = true;
+      final e = await _failureOf(() => api.report(token: 't', siteCode: 11, from: DateTime(2026, 10, 1), to: DateTime(2026, 10, 19)));
+      expect(e.message, 'Bu işlem için yetkiniz yok.');
+      expect(e.isForbidden, isTrue);
     });
   });
 

@@ -50,7 +50,8 @@ const CLIENT_ABORTED = 'CLIENT_ABORTED';
 const clientAborted = () => Object.assign(new Error('istemci baglantisi kesildi'), { code: CLIENT_ABORTED });
 export const isClientAborted = (error) => error?.code === CLIENT_ABORTED;
 
-function contentLengthOf(req) {
+/** Zorunlu Content-Length (chunked kabul edilmez): sayı ya da 411 LENGTH_REQUIRED. İş takibi fotoğraf yüklemesi de kullanır. */
+export function contentLengthOf(req) {
   const raw = req.headers['content-length'];
   if (req.headers['transfer-encoding'] !== undefined || raw === undefined || !/^\d{1,15}$/.test(String(raw).trim())) {
     throw lengthRequired();
@@ -60,9 +61,9 @@ function contentLengthOf(req) {
 
 /**
  * İstek gövdesini inspector üzerinden geçici dosyaya yazar. Başarıda 'close' (dosya kapalı) beklenir. Hatada akışlar yok edilir, dosya kapanır,
- * gövdenin kalanı boşaltılır (`req.resume`) ve hata reddedilir.
+ * gövdenin kalanı boşaltılır (`req.resume`) ve hata reddedilir. İş takibi fotoğraf yüklemesi (work_attachments_upload.js) de kullanır.
  */
-function receiveBody(req, inspector, tmp) {
+export function receiveBody(req, inspector, tmp) {
   return new Promise((resolve, reject) => {
     const ws = fs.createWriteStream(tmp, { flags: 'wx', mode: 0o600 });
     let finished = false;

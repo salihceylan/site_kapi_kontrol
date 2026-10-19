@@ -8,11 +8,18 @@
 // (INVALID_TRANSITION / WORK_ITEM_CLOSED / FORBIDDEN_ROLE). Hata ve yarış testleri için her çağrı kuyruktaki bir
 // hataya ya da kapıya takılabilir.
 import 'dart:async';
+import 'dart:convert' show base64Decode;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart'
+    show DocumentCancelToken, DocumentTransferCancelled;
+import 'package:site_kapi_kontrol/services/document_picker.dart'
+    show DocumentUploadSource;
+import 'package:site_kapi_kontrol/services/work_attachment_picker.dart';
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 
 import 'people_fixtures.dart';
@@ -151,6 +158,195 @@ Map<String, dynamic> wkEvent(
   };
 }
 
+/// Geçerli 1x1 PNG (67 bayt): sahte sunucunun içerik yanıtı ve seçilen fotoğraf baytları.
+final Uint8List kWkPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+);
+
+/// Fotoğraf eki satırı (sunucunun YÖNETİM görünümü biçimi: gerçek yükleyen adı; sakin görünümünü sahte servis
+/// üretir). [kind]: `resident` (talebi açan sakin) | `management`.
+Map<String, dynamic> wkAttachment(
+  int id, {
+  int workItemId = 1,
+  String fileName = 'ariza.jpg',
+  String mime = 'image/jpeg',
+  int size = 204800,
+  String status = 'ready',
+  String uploadedBy = 'Ayşe Yılmaz',
+  String kind = 'resident',
+  bool mine = false,
+  String at = '2026-10-15T09:05:00Z',
+}) {
+  return <String, dynamic>{
+    'id': id,
+    'work_item_id': workItemId,
+    'file_name': fileName,
+    'mime_type': mime,
+    'size_bytes': size,
+    'status': status,
+    'uploaded_by_kind': kind,
+    'uploaded_by_name': uploadedBy,
+    'uploaded_by_me': mine,
+    'created_at': at,
+  };
+}
+
+/// Rapor gövdesi (`GET .../work-items/report`); [empty] true: hareketsiz dönem.
+Map<String, dynamic> wkReportJson({
+  required DateTime from,
+  required DateTime to,
+  bool empty = false,
+}) {
+  String day(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  if (empty) {
+    return <String, dynamic>{
+      'from': day(from),
+      'to': day(to),
+      'generated_at': '2026-10-19T11:02:00Z',
+      'totals': <String, dynamic>{
+        'opened': 0,
+        'resolved': 0,
+        'closed': 0,
+        'cancelled': 0,
+        'open_now': 0,
+        'overdue_now': 0,
+        'avg_resolution_hours': null,
+        'median_resolution_hours': null,
+      },
+      'by_assignee': <Object>[],
+      'by_category': <Object>[],
+    };
+  }
+  return <String, dynamic>{
+    'from': day(from),
+    'to': day(to),
+    'generated_at': '2026-10-19T11:02:00Z',
+    'totals': <String, dynamic>{
+      'opened': 12,
+      'resolved': 7,
+      'closed': 5,
+      'cancelled': 1,
+      'open_now': 4,
+      'overdue_now': 2,
+      'avg_resolution_hours': 30.4,
+      'median_resolution_hours': 20,
+    },
+    'by_assignee': <Object>[
+      <String, dynamic>{
+        'user_code': kWorkSelfCode,
+        'name': 'Ben Yönetici',
+        'open_now': 1,
+        'overdue_now': 0,
+        'resolved': 4,
+        'avg_resolution_hours': 12.5,
+        'on_time_rate': 0.75,
+      },
+      <String, dynamic>{
+        'user_code': 9,
+        'name': 'Mehmet Usta',
+        'open_now': 2,
+        'overdue_now': 2,
+        'resolved': 3,
+        'avg_resolution_hours': 52,
+        'on_time_rate': 0.333,
+      },
+      <String, dynamic>{
+        'user_code': null,
+        'name': 'Atanmamış',
+        'open_now': 1,
+        'overdue_now': 0,
+        'resolved': 0,
+        'avg_resolution_hours': null,
+        'on_time_rate': null,
+      },
+    ],
+    'by_category': <Object>[
+      <String, dynamic>{'category': 'ariza', 'opened': 8, 'resolved': 5},
+      <String, dynamic>{'category': 'bakim', 'opened': 3, 'resolved': 2},
+      <String, dynamic>{'category': 'diger', 'opened': 1, 'resolved': 0},
+    ],
+  };
+}
+
+final List<int> _crcTable = List<int>.generate(256, (n) {
+  var c = n;
+  for (var k = 0; k < 8; k++) {
+    c = (c & 1) != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1;
+  }
+  return c;
+});
+
+int _crc32(List<int> bytes) {
+  var crc = 0xFFFFFFFF;
+  for (final b in bytes) {
+    crc = _crcTable[(crc ^ b) & 0xFF] ^ (crc >> 8);
+  }
+  return crc ^ 0xFFFFFFFF;
+}
+
+List<int> _u32(int value) => <int>[(value >> 24) & 0xFF, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF];
+
+List<int> _pngChunk(String type, List<int> data) {
+  final typed = <int>[...type.codeUnits, ...data];
+  return <int>[..._u32(data.length), ...typed, ..._u32(_crc32(typed))];
+}
+
+/// [width] x [height] BİLDİREN geçerli PNG başlığı (IHDR + küçük IDAT + IEND): boyut çözmeden okunur; piksel verisi
+/// gerçek değildir (bellek bombası korumasının testleri için).
+Uint8List wkPngHeader({required int width, required int height}) => Uint8List.fromList(<int>[
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+  ..._pngChunk('IHDR', <int>[..._u32(width), ..._u32(height), 8, 2, 0, 0, 0]),
+  ..._pngChunk('IDAT', <int>[0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]),
+  ..._pngChunk('IEND', const <int>[]),
+]);
+
+/// Uzantıya uyan içerik imzalı [size] baytlık içerik (JPEG `FF D8 FF`, PNG imzası, `RIFF....WEBP`, GIF `GIF89a`;
+/// tanınmayan uzantıda imzasız sıfırlar). Çözülebilir görsel DEĞİLDİR (yalnız tür / boyut denetimleri için).
+Uint8List wkImageBytes(String name, {int size = 2048}) {
+  final dot = name.lastIndexOf('.');
+  final ext = dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
+  final header = switch (ext) {
+    'jpg' || 'jpeg' => <int>[0xFF, 0xD8, 0xFF, 0xE0],
+    'png' => <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+    'webp' => <int>[0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
+    'gif' => <int>[0x47, 0x49, 0x46, 0x38, 0x39, 0x61],
+    _ => const <int>[],
+  };
+  final bytes = Uint8List(size < header.length ? header.length : size);
+  bytes.setRange(0, header.length, header);
+  return bytes;
+}
+
+/// Seçilen fotoğraf: uzantısına uyan içerik imzalı [size] bayt; [png] true ise gerçek 1x1 PNG ([kWkPng]: tür içerikten
+/// anlaşılır, adı ne olursa olsun `image/png`).
+WorkPhotoPick wkPhoto(String name, {int size = 2048, bool png = false}) =>
+    WorkPhotoPick(name: name, bytes: png ? kWkPng : wkImageBytes(name, size: size));
+
+/// Fotoğraf seçici sahtesi: sıradaki seçimi verir (ya da vazgeçer / hata fırlatır).
+class FakeWorkPhotoPicker implements WorkPhotoPicker {
+  FakeWorkPhotoPicker([List<WorkPhotoSelection> queue = const <WorkPhotoSelection>[]])
+    : queue = List<WorkPhotoSelection>.of(queue);
+
+  final List<WorkPhotoSelection> queue;
+  Object? error;
+
+  /// Her çağrının `maxCount` değeri.
+  final List<int> calls = <int>[];
+  int releaseCalls = 0;
+
+  @override
+  Future<WorkPhotoSelection> pick({required int maxCount}) async {
+    calls.add(maxCount);
+    final failure = error;
+    if (failure != null) throw failure;
+    return queue.isEmpty ? const WorkPhotoSelection() : queue.removeAt(0);
+  }
+
+  @override
+  Future<void> release() async => releaseCalls++;
+}
+
 /// Hata ya da yarış için kuyruğa konan sahte servis.
 class FakeWorkService extends WorkTrackingService {
   FakeWorkService({required super.authService, this.kind = WorkSiteAccess.manager})
@@ -199,6 +395,34 @@ class FakeWorkService extends WorkTrackingService {
   commentManagedCalls = [];
   int assigneeCalls = 0;
 
+  // --- Fotoğraf ekleri ve rapor ---
+  /// Talep kimliği -> ek satırları (sunucu biçimi).
+  final Map<int, List<Map<String, dynamic>>> attachments =
+      <int, List<Map<String, dynamic>>>{};
+
+  /// Ek kimliği -> içerik baytları (`GET .../content`).
+  final Map<int, Uint8List> attachmentBytes = <int, Uint8List>{};
+
+  /// Rapor gövdesi; null ise [wkReportJson] ile üretilir.
+  Map<String, dynamic>? reportJson;
+
+  /// Yükleme ilerleme adımı sayısı.
+  int uploadSteps = 4;
+
+  /// true: sakin görünümünde yönetimin fotoğrafına GERÇEK ad yazılır (hatalı sunucu benzetimi; arayüz yine "Yönetim"
+  /// göstermelidir). Varsayılan sunucu gibi "Yönetim".
+  bool leakUploaderNames = false;
+
+  /// `user` | `site`: ekleme 409 `ATTACHMENT_QUOTA_EXCEEDED` ile reddedilir.
+  String? quotaExceeded;
+
+  final List<({int? site, int id, String name, String mime, int size})>
+  createAttachmentCalls = [];
+  final List<({int? site, int id, int attId, int size})> uploadAttachmentCalls = [];
+  final List<({int? site, int id, int attId})> downloadAttachmentCalls = [];
+  final List<({int? site, int id, int attId})> deleteAttachmentCalls = [];
+  final List<({int site, DateTime from, DateTime to})> reportCalls = [];
+
   // --- Sürücüler ---
   /// İşlem adı -> sıradaki hatalar (her çağrı birini fırlatır).
   final Map<String, List<Object>> failures = <String, List<Object>>{};
@@ -225,6 +449,63 @@ class FakeWorkService extends WorkTrackingService {
     statusCode: 403,
     code: 'MODULE_DISABLED',
   );
+
+  static ApiException forbidden() => ApiException(
+    'Bu işlem için yetkiniz yok.',
+    statusCode: 403,
+    code: 'FORBIDDEN_ROLE',
+  );
+
+  static ApiException attachmentNotFound() => ApiException(
+    'Fotoğraf bulunamadı. Silinmiş olabilir; ekranı yenileyin.',
+    statusCode: 404,
+    code: 'WORK_ATTACHMENT_NOT_FOUND',
+  );
+
+  /// Sunucu `attachment_count`: yalnız HAZIR fotoğraflar.
+  int _attachmentCount(int workItemId) => (attachments[workItemId] ?? const <Map<String, dynamic>>[])
+      .where((a) => a['status'] == 'ready')
+      .length;
+
+  /// Ayrıntıdaki ekler (sunucu gibi): hazır ekler + çağıranın KENDİ tamamlanmamış yüklemeleri.
+  Iterable<Map<String, dynamic>> _visibleAttachments(int workItemId) =>
+      (attachments[workItemId] ?? const <Map<String, dynamic>>[]).where(
+        (a) => a['status'] == 'ready' || a['uploaded_by_me'] == true,
+      );
+
+  /// Sakin görünümündeki ek satırı (sunucu WA-SEC-1): kendi eklemediği fotoğrafta yükleyen adı "Yönetim".
+  List<Map<String, dynamic>> _residentAttachments(int workItemId) => [
+    for (final a in _visibleAttachments(workItemId))
+      <String, dynamic>{
+        ...a,
+        if (a['uploaded_by_me'] != true && !leakUploaderNames) 'uploaded_by_name': 'Yönetim',
+      },
+  ];
+
+  List<Map<String, dynamic>> _managerAttachments(int workItemId) => [
+    for (final a in _visibleAttachments(workItemId)) Map<String, dynamic>.of(a),
+  ];
+
+  /// Herkese açık ek olayı (sunucu: `attachment_added` to = ek kimliği, `attachment_removed` from = ek kimliği).
+  void _attachmentEvent(int workItemId, int? siteCode, String type, int attachmentId) {
+    final list = events[workItemId] ??= <Map<String, dynamic>>[];
+    list.add(
+      wkEvent(
+        7000 + list.length,
+        type: type,
+        actorKind: siteCode == null ? 'resident' : 'manager',
+        actorName: siteCode == null ? 'Ayşe Yılmaz' : 'Ben Yönetici',
+        from: type == 'attachment_removed' ? '$attachmentId' : null,
+        to: type == 'attachment_added' ? '$attachmentId' : null,
+        at: '2026-10-19T10:05:00Z',
+      ),
+    );
+  }
+
+  Map<String, dynamic> _residentView(Map<String, dynamic> row) => <String, dynamic>{
+    ...row,
+    'attachment_count': _attachmentCount(row['id'] as int),
+  };
 
   Map<String, dynamic>? _row(List<Map<String, dynamic>> rows, int id) {
     for (final row in rows) {
@@ -265,7 +546,7 @@ class FakeWorkService extends WorkTrackingService {
         : filtered.where((r) => (r['id'] as int) < beforeId).toList();
     final page = from.take(limit).toList();
     return WorkResidentPage.fromJson(<String, dynamic>{
-      'items': [for (final r in page) Map<String, dynamic>.of(r)],
+      'items': [for (final r in page) _residentView(r)],
       'next_before_id': from.length > limit ? page.last['id'] : null,
       'unread_updates': scoped.where((r) => r['unread'] == true).length,
     });
@@ -316,8 +597,9 @@ class FakeWorkService extends WorkTrackingService {
     final row = _row(residentRows, id);
     if (row == null) throw notFound();
     return WorkResidentDetail.fromJson(<String, dynamic>{
-      'item': Map<String, dynamic>.of(row),
+      'item': _residentView(row),
       'events': _publicEvents(id),
+      'attachments': _residentAttachments(id),
     });
   }
 
@@ -391,6 +673,7 @@ class FakeWorkService extends WorkTrackingService {
       final requester = row['requester'] as Map;
       copy['requester'] = <String, dynamic>{'name': requester['name']};
     }
+    copy['attachment_count'] = _attachmentCount(row['id'] as int);
     return copy;
   }
 
@@ -466,6 +749,7 @@ class FakeWorkService extends WorkTrackingService {
       'next_statuses': board
           ? const <String>[]
           : kWorkTransitions[row['status']] ?? const <String>[],
+      'attachments': _managerAttachments(id),
     });
   }
 
@@ -574,6 +858,210 @@ class FakeWorkService extends WorkTrackingService {
         ? <WorkAssignee>[assigneeList.first]
         : assigneeList;
   }
+
+  // --- Fotoğraf ekleri ---
+
+  /// Son verilen ek kimliği: sunucu dizisi gibi ARTAR, silinen kimlik yeniden verilmez.
+  int _lastAttachmentId = 900;
+
+  int _nextAttachmentId() {
+    var max = _lastAttachmentId;
+    for (final list in attachments.values) {
+      for (final a in list) {
+        if ((a['id'] as int) > max) max = a['id'] as int;
+      }
+    }
+    return _lastAttachmentId = max + 1;
+  }
+
+  Map<String, dynamic>? _attachmentRow(int workItemId, int attachmentId) {
+    for (final a in attachments[workItemId] ?? const <Map<String, dynamic>>[]) {
+      if (a['id'] == attachmentId) return a;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _workRowFor(int? siteCode, int id) {
+    final row = siteCode == null ? _row(residentRows, id) : _row(managedRows, id);
+    if (row == null) throw notFound();
+    if (siteCode != null && (row['site_code'] != siteCode || !_visibleToKind(row))) {
+      throw notFound();
+    }
+    return row;
+  }
+
+  @override
+  Future<WorkAttachment> createAttachment({
+    int? siteCode,
+    required int id,
+    required WorkAttachmentCreateRequest request,
+  }) async {
+    createAttachmentCalls.add((
+      site: siteCode,
+      id: id,
+      name: request.fileName,
+      mime: request.mimeType,
+      size: request.sizeBytes,
+    ));
+    await _enter('createAttachment');
+    final row = _workRowFor(siteCode, id);
+    if (siteCode != null && kind == WorkSiteAccess.board) throw forbidden();
+    if (_terminal(row['status'])) {
+      throw ApiException(
+        WorkAttachmentRules.closedMessage,
+        statusCode: 409,
+        code: 'INVALID_STATE',
+      );
+    }
+    final list = attachments[id] ??= <Map<String, dynamic>>[];
+    if (list.length >= kWorkAttachmentMax) {
+      throw ApiException(
+        WorkAttachmentRules.limitMessage,
+        statusCode: 409,
+        code: 'LIMIT_REACHED',
+      );
+    }
+    final quota = quotaExceeded;
+    if (quota != null) {
+      throw ApiException(
+        WorkAttachmentRules.quotaMessage(site: quota == 'site'),
+        statusCode: 409,
+        code: 'ATTACHMENT_QUOTA_EXCEEDED',
+        payload: <String, dynamic>{'quota': quota},
+      );
+    }
+    if (!WorkAttachmentRules.allowedMimeTypes.contains(request.mimeType)) {
+      throw ApiException(
+        WorkAttachmentRules.typeAndSizeMessage,
+        statusCode: 415,
+        code: 'ATTACHMENT_TYPE_NOT_ALLOWED',
+      );
+    }
+    if (request.sizeBytes <= 0 || request.sizeBytes > kWorkAttachmentMaxBytes) {
+      throw ApiException(
+        WorkAttachmentRules.typeAndSizeMessage,
+        statusCode: 413,
+        code: 'ATTACHMENT_TOO_LARGE',
+      );
+    }
+    final attachment = wkAttachment(
+      _nextAttachmentId(),
+      workItemId: id,
+      fileName: request.fileName,
+      mime: request.mimeType,
+      size: request.sizeBytes,
+      status: 'uploading',
+      uploadedBy: siteCode == null ? 'Ayşe Yılmaz' : 'Ben Yönetici',
+      kind: siteCode == null ? 'resident' : 'management',
+      mine: true,
+      at: '2026-10-19T10:00:00Z',
+    );
+    list.add(attachment);
+    return WorkAttachment.fromJson(attachment)!;
+  }
+
+  @override
+  Future<WorkAttachment> uploadAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+    required DocumentUploadSource source,
+    void Function(int sent, int total)? onProgress,
+    DocumentCancelToken? cancel,
+  }) async {
+    uploadAttachmentCalls.add((site: siteCode, id: id, attId: attachmentId, size: source.size));
+    await _enter('uploadAttachment');
+    final row = _attachmentRow(id, attachmentId);
+    if (row == null) throw attachmentNotFound();
+    if (row['status'] == 'ready') {
+      throw ApiException('Fotoğraf zaten yüklenmiş.', statusCode: 409, code: 'UPLOAD_ALREADY_COMPLETED');
+    }
+    if (_terminal(_workRowFor(siteCode, id)['status'])) {
+      throw ApiException(WorkAttachmentRules.closedMessage, statusCode: 409, code: 'INVALID_STATE');
+    }
+    for (var i = 1; i <= uploadSteps; i++) {
+      if (cancel != null && cancel.isCancelled) throw const DocumentTransferCancelled();
+      onProgress?.call(source.size * i ~/ uploadSteps, source.size);
+      await Future<void>.delayed(Duration.zero);
+      // Ortada bir kapı: testler bu sırada iptal eder.
+      if (i == 2) {
+        final gate = gates['uploadMid'];
+        if (gate != null && gate.isNotEmpty) await gate.removeAt(0).future;
+      }
+    }
+    if (cancel != null && cancel.isCancelled) throw const DocumentTransferCancelled();
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in source.open()) {
+      builder.add(chunk);
+    }
+    row['status'] = 'ready';
+    attachmentBytes[attachmentId] = builder.takeBytes();
+    _attachmentEvent(id, siteCode, 'attachment_added', attachmentId);
+    return WorkAttachment.fromJson(row)!;
+  }
+
+  @override
+  Future<Uint8List> downloadAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) async {
+    downloadAttachmentCalls.add((site: siteCode, id: id, attId: attachmentId));
+    await _enter('downloadAttachment');
+    final bytes = attachmentBytes[attachmentId];
+    final row = _attachmentRow(id, attachmentId);
+    // Sunucu yalnız HAZIR eki verir.
+    if (bytes == null || row == null || row['status'] != 'ready') throw attachmentNotFound();
+    return bytes;
+  }
+
+  @override
+  Future<void> deleteAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) async {
+    deleteAttachmentCalls.add((site: siteCode, id: id, attId: attachmentId));
+    await _enter('deleteAttachment');
+    final item = _workRowFor(siteCode, id);
+    final list = attachments[id];
+    final index = list?.indexWhere((a) => a['id'] == attachmentId) ?? -1;
+    if (list == null || index < 0) throw attachmentNotFound();
+    if (siteCode != null && kind == WorkSiteAccess.board) throw forbidden();
+    // Sakin ve görevli yalnız kendi yüklediğini siler; yönetici hepsini.
+    final mine = list[index]['uploaded_by_me'] == true;
+    if (!mine && (siteCode == null || kind == WorkSiteAccess.staff)) {
+      throw ApiException(
+        'Bu fotoğrafı yalnız ekleyen kişi ya da yönetici silebilir.',
+        statusCode: 403,
+        code: 'FORBIDDEN_ROLE',
+      );
+    }
+    // Yönetici / süper kapanmış talepte de siler; görevli ve sakin 409 INVALID_STATE alır.
+    final managerDelete = siteCode != null && kind == WorkSiteAccess.manager;
+    if (_terminal(item['status']) && !managerDelete) {
+      throw ApiException('Kapanmış talepteki fotoğraf silinemez.', statusCode: 409, code: 'INVALID_STATE');
+    }
+    final wasReady = list[index]['status'] == 'ready';
+    list.removeAt(index);
+    attachmentBytes.remove(attachmentId);
+    // Hazır ek silinince herkese açık olay; tamamlanmamış kayıt olaysız kalkar (sunucu gibi).
+    if (wasReady) _attachmentEvent(id, siteCode, 'attachment_removed', attachmentId);
+  }
+
+  // --- Rapor ---
+
+  @override
+  Future<WorkReport> report(
+    int siteCode, {
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    reportCalls.add((site: siteCode, from: from, to: to));
+    await _enter('report');
+    if (kind == WorkSiteAccess.staff) throw forbidden();
+    return WorkReport.fromJson(reportJson ?? wkReportJson(from: from, to: to));
+  }
 }
 
 /// Üç sakin talebi: yeni (güncelleme var), işlemde, kapandı.
@@ -597,7 +1085,20 @@ FakeWorkService residentWork(WorkFakeAuth auth, {int count = 3}) {
         wkEvent(id * 10 + 3, body: 'Teknisyen yarın gelecek.', actorKind: 'manager', actorName: 'Ben Yönetici'),
     ];
   }
+  // İşlemdeki talepte iki fotoğraf: biri sakinin (silebilir), biri yönetimin (silemez).
+  if (count >= 1) seedWorkAttachments(service, residentSelf: true);
   return service;
+}
+
+/// 1 numaralı talebe iki hazır fotoğraf ekler: 901 sakinin, 902 yönetimin. [residentSelf] true ise "ben" sakindir
+/// (901 benim), false ise "ben" yöneticidir (902 benim).
+void seedWorkAttachments(FakeWorkService service, {required bool residentSelf}) {
+  service.attachments[1] = <Map<String, dynamic>>[
+    wkAttachment(901, workItemId: 1, fileName: 'sizinti.jpg', uploadedBy: 'Ayşe Yılmaz', kind: 'resident', mine: residentSelf),
+    wkAttachment(902, workItemId: 1, fileName: 'onarim.png', mime: 'image/png', size: 98304, uploadedBy: 'Ben Yönetici', kind: 'management', mine: !residentSelf, at: '2026-10-16T10:00:00Z'),
+  ];
+  service.attachmentBytes[901] = kWkPng;
+  service.attachmentBytes[902] = kWkPng;
 }
 
 /// Yönetim: yeni (acil), işlemde (atanmış, hedef tarihli), çözüldü, kapandı.
@@ -620,6 +1121,7 @@ FakeWorkService managerWork(
       wkEvent(id * 10 + 2, actorKind: 'manager', actorName: 'Ben Yönetici', body: 'Talebiniz alındı.'),
     ];
   }
+  seedWorkAttachments(service, residentSelf: false);
   return service;
 }
 

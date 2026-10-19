@@ -384,6 +384,7 @@ class ReservationRecord {
     this.requester,
     this.decidedBy,
     this.canDecide = false,
+    this.unread = false,
   });
 
   final int id;
@@ -415,7 +416,36 @@ class ReservationRecord {
   final ReservationPerson? decidedBy;
   final bool canDecide;
 
+  /// Sakin görünümü: yönetim karar verdi (onay / ret / iptal) ve sakin henüz görmedi. Alan yoksa (eski sunucu) false.
+  final bool unread;
+
   String get areaLabel => areaName.isEmpty ? 'İsimsiz alan' : areaName;
+
+  ReservationRecord copyWith({bool? unread}) => ReservationRecord(
+    id: id,
+    siteCode: siteCode,
+    siteName: siteName,
+    areaId: areaId,
+    areaName: areaName,
+    startsAt: startsAt,
+    endsAt: endsAt,
+    date: date,
+    start: start,
+    end: end,
+    slotCount: slotCount,
+    status: status,
+    note: note,
+    decisionNote: decisionNote,
+    cancelledBy: cancelledBy,
+    apartment: apartment,
+    canCancel: canCancel,
+    cancelDeadline: cancelDeadline,
+    createdAt: createdAt,
+    requester: requester,
+    decidedBy: decidedBy,
+    canDecide: canDecide,
+    unread: unread ?? this.unread,
+  );
 
   factory ReservationRecord.fromJson(Map<String, dynamic> raw) {
     final inner = raw['reservation'];
@@ -444,12 +474,14 @@ class ReservationRecord {
       requester: ReservationPerson.fromJson(json['requester']),
       decidedBy: ReservationPerson.fromJson(json['decided_by']),
       canDecide: json['can_decide'] == true,
+      unread: json['unread'] == true,
     );
   }
 }
 
 /// Rezervasyon sayfası. Sakin listesi `before_id` (id azalan), yönetim takvimi opak `cursor` (başlangıç artan)
-/// kullanır; `pendingCount` yalnız yönetim yanıtındadır.
+/// kullanır; `pendingCount` yalnız yönetim, `unreadCount` (görmediğiniz kararı olan rezervasyon sayısı) yalnız sakin
+/// yanıtındadır. Alan yoksa (eski sunucu) 0.
 @immutable
 class ReservationPage {
   const ReservationPage({
@@ -457,12 +489,14 @@ class ReservationPage {
     this.nextBeforeId,
     this.nextCursor,
     this.pendingCount = 0,
+    this.unreadCount = 0,
   });
 
   final List<ReservationRecord> items;
   final int? nextBeforeId;
   final String? nextCursor;
   final int pendingCount;
+  final int unreadCount;
 
   factory ReservationPage.fromJson(Map<String, dynamic> json) {
     final raw = json['items'];
@@ -477,9 +511,13 @@ class ReservationPage {
       nextBeforeId: crmIntOrNull(json['next_before_id']),
       nextCursor: crmText(json['next_cursor']),
       pendingCount: crmInt(json['pending_count']),
+      unreadCount: crmInt(json['unread_count']),
     );
   }
 }
+
+/// Sakin "Rezervasyon" ekranının sekme rozetleri: görülmemiş kararı olan rezervasyon ve konsiyerj talebi sayısı.
+typedef ReservationUnreadCounts = ({int reservations, int concierge});
 
 /// `POST /app/reservations` yanıtı.
 @immutable
@@ -754,6 +792,7 @@ class ConciergeRecord {
     this.updatedAt,
     this.closedAt,
     this.requester,
+    this.unread = false,
   });
 
   final int id;
@@ -773,6 +812,27 @@ class ConciergeRecord {
   final DateTime? closedAt;
   final ReservationPerson? requester;
 
+  /// Sakin görünümü: yönetim talebi güncelledi (durum / not) ve sakin henüz görmedi. Alan yoksa (eski sunucu) false.
+  final bool unread;
+
+  ConciergeRecord copyWith({bool? unread}) => ConciergeRecord(
+    id: id,
+    siteCode: siteCode,
+    siteName: siteName,
+    category: category,
+    note: note,
+    requestedFor: requestedFor,
+    status: status,
+    staffNote: staffNote,
+    apartment: apartment,
+    canCancel: canCancel,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    closedAt: closedAt,
+    requester: requester,
+    unread: unread ?? this.unread,
+  );
+
   factory ConciergeRecord.fromJson(Map<String, dynamic> raw) {
     final inner = raw['request'];
     final json = inner is Map ? Map<String, dynamic>.from(inner) : raw;
@@ -791,22 +851,26 @@ class ConciergeRecord {
       updatedAt: documentInstant(json['updated_at']),
       closedAt: documentInstant(json['closed_at']),
       requester: ReservationPerson.fromJson(json['requester']),
+      unread: json['unread'] == true,
     );
   }
 }
 
-/// Konsiyerj talep sayfası (`before_id` imleci, id azalan). `counts` yalnız yönetim yanıtındadır.
+/// Konsiyerj talep sayfası (`before_id` imleci, id azalan). `counts` yalnız yönetim, `unreadCount` (görmediğiniz
+/// güncellemesi olan talep sayısı) yalnız sakin yanıtındadır. Alan yoksa (eski sunucu) 0.
 @immutable
 class ConciergePage {
   const ConciergePage({
     this.items = const <ConciergeRecord>[],
     this.nextBeforeId,
     this.counts = const <ConciergeStatus, int>{},
+    this.unreadCount = 0,
   });
 
   final List<ConciergeRecord> items;
   final int? nextBeforeId;
   final Map<ConciergeStatus, int> counts;
+  final int unreadCount;
 
   factory ConciergePage.fromJson(Map<String, dynamic> json) {
     final raw = json['items'];
@@ -828,6 +892,7 @@ class ConciergePage {
           : const <ConciergeRecord>[],
       nextBeforeId: crmIntOrNull(json['next_before_id']),
       counts: Map<ConciergeStatus, int>.unmodifiable(counts),
+      unreadCount: crmInt(json['unread_count']),
     );
   }
 }

@@ -42,6 +42,7 @@ const db = {
   async query(text, params = []) {
     const sql = norm(text);
     if (/to_regclass\('public\.expense_documents'\)/.test(sql)) return ok([{ present: state.expenseTable }]);
+    if (/to_regclass\('public\.work_item_attachments'\)/.test(sql)) return ok([{ present: false }]); // iş takibi fotoğrafları (047): fsck kapsamı dışında
     if (/^SELECT v\.id, v\.document_id, v\.version_no, v\.status, v\.storage_key, v\.size_bytes, v\.sha256, v\.created_at FROM document_versions v WHERE v\.id > \$1 ORDER BY v\.id LIMIT \$2$/.test(sql)) {
       return ok(state.versions.filter((row) => row.id > params[0]).sort((a, b) => a.id - b.id).slice(0, params[1]));
     }

@@ -10,16 +10,51 @@
 // - 401 yetkili uçlarda "oturum bitti"dir ([SessionExpiredException]); JSON olmayan 401/403 (proxy / captive
 //   portal) geçici ağ hatasıdır.
 // - Başlık, açıklama, yorum, belirteç ve yanıt gövdeleri günlüğe YAZILMAZ.
+// - Fotoğraf ekleri (docs/PLATFORM_IS_TAKIBI.md "Fotoğraf ekleri"): iki adım (üstveri `POST`, ham gövde `PUT`
+//   `application/octet-stream`, `Content-Length` = bildirilen boyut); içerik `GET` ile belirteçli indirilir
+//   (`Image.memory`), `DELETE` ile silinir. Sakin `/app/work-items/:id/attachments`, yönetim
+//   `/manager/sites/:siteCode/work-items/:id/attachments` yolunu kullanır.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:site_kapi_kontrol/models/vehicle_record.dart' show crmDateParam;
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_api.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/document_api.dart'
+    show DocumentCancelToken, DocumentTransferCancelled;
+import 'package:site_kapi_kontrol/services/document_picker.dart'
+    show DocumentUploadSource;
 import 'package:site_kapi_kontrol/ui/helpers/idempotency.dart';
+
+/// Fotoğraf eki uç türü: hata metni işleme göre seçilir (ör. 409 `INVALID_STATE` eklemede "eklenemez", silmede
+/// "silinemez").
+enum WorkAttachmentOp { create, upload, download, delete }
+
+/// Ham gövdeli `PUT` isteği: gövde [_body] akışından çekilir (backpressure korunur), [abortTrigger] ile kesilir.
+class _RawBodyRequest extends http.BaseRequest with http.Abortable {
+  _RawBodyRequest(
+    super.method,
+    super.url,
+    this._body, {
+    required this.abortTrigger,
+  });
+
+  final Stream<List<int>> Function() _body;
+
+  @override
+  final Future<void>? abortTrigger;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream(_body());
+  }
+}
 
 class WorkTrackingApi {
   WorkTrackingApi({
@@ -27,18 +62,48 @@ class WorkTrackingApi {
     http.Client? client,
     Duration readTimeout = const Duration(seconds: 20),
     Duration writeTimeout = const Duration(seconds: 45),
+    Duration uploadStallTimeout = const Duration(seconds: 60),
+    Duration uploadResponseTimeout = const Duration(seconds: 120),
+    bool? web,
   }) : _baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), ''),
        _client = client ?? http.Client(),
        _readTimeout = readTimeout,
-       _writeTimeout = writeTimeout;
+       _writeTimeout = writeTimeout,
+       _uploadStallTimeout = uploadStallTimeout,
+       _uploadResponseTimeout = uploadResponseTimeout,
+       _web = web ?? kIsWeb;
 
   final String _baseUrl;
   final http.Client _client;
   final Duration _readTimeout;
   final Duration _writeTimeout;
 
+  /// Fotoğraf yüklemede bu süre hiç bayt ilerlemezse bağlantı kopmuş sayılır.
+  final Duration _uploadStallTimeout;
+
+  /// Gövde tamamen gönderildikten sonra sunucu yanıtı için üst süre.
+  final Duration _uploadResponseTimeout;
+
+  /// Web: tarayıcı (XHR) gövdeyi tek parça gönderir; akıştan okunan bayt ağdaki ilerlemeyi göstermez. Bu yüzden bayt
+  /// ilerlemesi bildirilmez ve tek, boyuta göre süre ([uploadDeadlineFor]) uygulanır.
+  final bool _web;
+
+  /// Web'de tüm yükleme (gövde + yanıt) için üst süre: 120 sn + her 16 KB için 1 sn (5 MB ≈ 440 sn). Yavaş bağlantıda
+  /// ilerleyen yükleme sabit 120 sn'de kesilmesin.
+  static Duration uploadDeadlineFor(int bytes) =>
+      Duration(seconds: 120 + (bytes <= 0 ? 0 : (bytes + 16383) ~/ 16384));
+
   static String _managerPath(int siteCode, [String tail = '']) =>
       '/manager/sites/$siteCode/work-items${tail.isEmpty ? '' : '/$tail'}';
+
+  /// Ek yolu: [siteCode] null ise sakin (`/app/work-items/:id/attachments[/tail]`), doluysa yönetim
+  /// (`/manager/sites/:siteCode/work-items/:id/attachments[/tail]`).
+  static String attachmentsPath(int? siteCode, int id, [String tail = '']) {
+    final base = siteCode == null
+        ? '/app/work-items/$id/attachments'
+        : _managerPath(siteCode, '$id/attachments');
+    return tail.isEmpty ? base : '$base/$tail';
+  }
 
   // --- Sakin --------------------------------------------------------------------------------
 
@@ -260,6 +325,292 @@ class WorkTrackingApi {
     return detail;
   }
 
+  // --- Fotoğraf ekleri ----------------------------------------------------------------------
+
+  /// `POST .../attachments` (201): ek kaydı `uploading` durumuyla açılır; içerik [uploadAttachmentContent] ile gider.
+  Future<WorkAttachment> createAttachment({
+    required String token,
+    int? siteCode,
+    required int id,
+    required WorkAttachmentCreateRequest request,
+  }) async {
+    final response = await _send(
+      'POST',
+      attachmentsPath(siteCode, id),
+      token: token,
+      body: request.toJson(),
+      timeout: _writeTimeout,
+      okStatuses: const <int>{200, 201},
+      attachmentOp: WorkAttachmentOp.create,
+    );
+    return _attachmentOf(response);
+  }
+
+  /// `PUT .../attachments/:attId/content`: baytlar `application/octet-stream` olarak, `Content-Length` =
+  /// [source].size ile gönderilir. [onProgress] gönderilen / toplam bayt; [cancel] ile [DocumentTransferCancelled].
+  /// Mutasyon: otomatik yeniden deneme YOK (kayıt sunucuda `uploading` kalır, aynı çağrı yeniden yapılabilir).
+  Future<WorkAttachment> uploadAttachmentContent({
+    required String token,
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+    required DocumentUploadSource source,
+    void Function(int sent, int total)? onProgress,
+    DocumentCancelToken? cancel,
+  }) async {
+    final total = source.size;
+    if (total <= 0) {
+      throw ApiException('Fotoğraf okunamadı. Yeniden seçip tekrar deneyin.');
+    }
+    if (cancel != null && cancel.isCancelled) {
+      throw const DocumentTransferCancelled();
+    }
+
+    final abort = Completer<void>();
+    var userCancelled = false;
+    var timedOut = false;
+    var sourceChanged = false;
+    void triggerAbort() {
+      if (!abort.isCompleted) abort.complete();
+    }
+
+    unawaited(
+      cancel?.whenCancelled.then((_) {
+        userCancelled = true;
+        triggerAbort();
+      }),
+    );
+
+    Timer? watchdog;
+    var finished = false;
+    void arm(Duration duration) {
+      if (finished) return;
+      watchdog?.cancel();
+      watchdog = Timer(duration, () {
+        timedOut = true;
+        triggerAbort();
+      });
+    }
+
+    // Web: tek süre (gövde + yanıt); bayt ilerlemesi bildirilmez (bkz. [_web]).
+    final webDeadline = _web ? uploadDeadlineFor(total) : null;
+
+    Stream<List<int>> body() async* {
+      var sent = 0;
+      try {
+        if (webDeadline == null) arm(_uploadStallTimeout);
+        await for (final chunk in source.open()) {
+          sent += chunk.length;
+          if (sent > total) {
+            sourceChanged = true;
+            triggerAbort();
+            throw StateError('source grew');
+          }
+          if (webDeadline == null) arm(_uploadStallTimeout);
+          yield chunk;
+          if (webDeadline == null) onProgress?.call(sent, total);
+        }
+        if (sent != total) {
+          sourceChanged = true;
+          triggerAbort();
+          throw StateError('source shrank');
+        }
+        if (webDeadline == null) arm(_uploadResponseTimeout);
+      } catch (e) {
+        if (e is! StateError) {
+          sourceChanged = true;
+          triggerAbort();
+        }
+        rethrow;
+      }
+    }
+
+    final request =
+        _RawBodyRequest(
+            'PUT',
+            _uri(attachmentsPath(siteCode, id, '$attachmentId/content')),
+            body,
+            abortTrigger: abort.future,
+          )
+          ..contentLength = total
+          ..followRedirects = false
+          ..headers.addAll(<String, String>{
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/octet-stream',
+            'Accept': 'application/json',
+          });
+
+    final http.Response response;
+    try {
+      arm(webDeadline ?? _uploadStallTimeout);
+      final streamed = await _client.send(request);
+      watchdog?.cancel();
+      response = await http.Response.fromStream(streamed).timeout(_readTimeout);
+    } on http.RequestAbortedException {
+      throw _abortError(
+        userCancelled: userCancelled,
+        timedOut: timedOut,
+        sourceChanged: sourceChanged,
+      );
+    } on ApiException {
+      rethrow;
+    } on TimeoutException {
+      throw ApiException(_uploadTimeoutMessage);
+    } catch (e) {
+      if (userCancelled || timedOut || sourceChanged) {
+        throw _abortError(
+          userCancelled: userCancelled,
+          timedOut: timedOut,
+          sourceChanged: sourceChanged,
+        );
+      }
+      if (e is Error) rethrow;
+      throw ApiException(_uploadTransportMessage);
+    } finally {
+      finished = true;
+      watchdog?.cancel();
+    }
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attachmentOf(response);
+    }
+    // 409 UPLOAD_ALREADY_COMPLETED: önceki deneme sunucuda tamamlanmıştı (yanıtı kaybolmuştu); çağıran BAŞARI sayar.
+    throw _failure(response, attachmentOp: WorkAttachmentOp.upload);
+  }
+
+  /// `GET .../attachments/:attId/content`: resim baytları (belirteç başlıkta gider; `Image.memory` ile çizilir).
+  /// Resim dışı yanıt (JSON / HTML hata sayfası) resim gibi kullanılmaz.
+  Future<Uint8List> downloadAttachment({
+    required String token,
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) async {
+    final request =
+        http.Request(
+            'GET',
+            _uri(attachmentsPath(siteCode, id, '$attachmentId/content')),
+          )
+          ..followRedirects = false
+          ..headers.addAll(<String, String>{
+            'Authorization': 'Bearer $token',
+            'Accept': 'image/*, application/json',
+          });
+    final http.StreamedResponse streamed;
+    try {
+      streamed = await _client.send(request).timeout(_readTimeout);
+    } on TimeoutException {
+      throw ApiException('Fotoğraf alınamadı. Sunucu yanıt vermedi, tekrar deneyin.');
+    } catch (e) {
+      if (e is Error) rethrow;
+      throw ApiException(_transportMessage);
+    }
+    if (streamed.statusCode != 200) {
+      final http.Response response;
+      try {
+        response = await http.Response.fromStream(streamed).timeout(_readTimeout);
+      } catch (e) {
+        if (e is Error) rethrow;
+        throw ApiException(_transportMessage);
+      }
+      throw _failure(response, attachmentOp: WorkAttachmentOp.download);
+    }
+    final type = (streamed.headers['content-type'] ?? '').toLowerCase();
+    if (!type.startsWith('image/')) {
+      unawaited(streamed.stream.listen((_) {}).cancel());
+      throw ApiException(
+        'Sunucu beklenmeyen bir yanıt verdi. Ağ bağlantınızı kontrol edip tekrar deneyin.',
+        statusCode: 200,
+        fromIntermediary: true,
+      );
+    }
+    final builder = BytesBuilder(copy: false);
+    try {
+      await for (final chunk in streamed.stream.timeout(_uploadStallTimeout)) {
+        builder.add(chunk);
+        if (builder.length > kWorkAttachmentMaxBytes + 1024 * 1024) {
+          throw ApiException('Fotoğraf çok büyük olduğu için açılamadı.', statusCode: 413);
+        }
+      }
+    } on TimeoutException {
+      throw ApiException('Fotoğraf alınamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      if (e is Error) rethrow;
+      throw ApiException(_transportMessage);
+    }
+    final declared = streamed.contentLength;
+    if (declared != null && declared != builder.length) {
+      throw ApiException('Fotoğraf eksik indi. Tekrar deneyin.');
+    }
+    if (builder.isEmpty) {
+      throw ApiException('Fotoğraf içeriği boş geldi. Tekrar deneyin.');
+    }
+    return builder.takeBytes();
+  }
+
+  /// `DELETE .../attachments/:attId` -> `{ deleted: true }`.
+  Future<void> deleteAttachment({
+    required String token,
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) async {
+    await _send(
+      'DELETE',
+      attachmentsPath(siteCode, id, '$attachmentId'),
+      token: token,
+      timeout: _writeTimeout,
+      okStatuses: const <int>{200, 204},
+      attachmentOp: WorkAttachmentOp.delete,
+    );
+  }
+
+  // --- Rapor --------------------------------------------------------------------------------
+
+  /// `GET .../work-items/report?from=YYYY-MM-DD&to=YYYY-MM-DD` (yönetici + kurul; görevli 403).
+  Future<WorkReport> report({
+    required String token,
+    required int siteCode,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final response = await _send(
+      'GET',
+      _managerPath(siteCode, 'report'),
+      token: token,
+      query: <String, String>{'from': crmDateParam(from), 'to': crmDateParam(to)},
+      timeout: _readTimeout,
+    );
+    return WorkReport.fromJson(_object(response));
+  }
+
+  WorkAttachment _attachmentOf(http.Response response) {
+    final attachment = WorkAttachment.fromJson(_object(response));
+    if (attachment == null) throw _unexpected(response);
+    return attachment;
+  }
+
+  Object _abortError({
+    required bool userCancelled,
+    required bool timedOut,
+    required bool sourceChanged,
+  }) {
+    if (userCancelled) return const DocumentTransferCancelled();
+    if (sourceChanged) {
+      return ApiException(
+        'Fotoğraf seçildikten sonra değişmiş ya da okunamadı. Yeniden seçip tekrar deneyin.',
+      );
+    }
+    if (timedOut) return ApiException(_uploadTimeoutMessage);
+    return ApiException(_uploadTransportMessage);
+  }
+
+  static const String _uploadTimeoutMessage =
+      'Fotoğraf yüklenirken bağlantı yanıt vermedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+  static const String _uploadTransportMessage =
+      'Fotoğraf yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+
   WorkEvent _eventOf(http.Response response) {
     final payload = _object(response);
     final raw = payload['event'];
@@ -290,6 +641,7 @@ class WorkTrackingApi {
     Map<String, String>? query,
     required Duration timeout,
     Set<int> okStatuses = const <int>{200},
+    WorkAttachmentOp? attachmentOp,
   }) async {
     final request = http.Request(method, _uri(path, query))
       ..headers.addAll(<String, String>{
@@ -325,7 +677,7 @@ class WorkTrackingApi {
         statusCode: response.statusCode,
       );
     }
-    throw _failure(response);
+    throw _failure(response, attachmentOp: attachmentOp);
   }
 
   static const String _transportMessage =
@@ -333,10 +685,24 @@ class WorkTrackingApi {
 
   // --- Hata çevirisi ------------------------------------------------------------------------
 
-  ApiException _failure(http.Response response) {
+  ApiException _failure(
+    http.Response response, {
+    WorkAttachmentOp? attachmentOp,
+  }) {
     final status = response.statusCode;
     final payload = _tryObject(response.bodyBytes);
     final retryAfter = _retryAfterSeconds(response, payload);
+
+    if (attachmentOp != null &&
+        payload == null &&
+        (status == 413 || status == 415)) {
+      // JSON olmayan 413 / 415 (Nginx / ara katman): tür ya da boyut reddi.
+      return ApiException(
+        WorkAttachmentRules.typeAndSizeMessage,
+        statusCode: status,
+        code: status == 413 ? 'BODY_TOO_LARGE' : 'UNSUPPORTED_MEDIA_TYPE',
+      );
+    }
 
     if (payload == null) {
       final empty = response.bodyBytes.isEmpty;
@@ -398,12 +764,22 @@ class WorkTrackingApi {
       );
     }
 
-    final mapped = workTrackingErrorMessage(
-      code,
-      retryAfterSeconds: retryAfter,
-      payload: body,
-      serverText: serverText,
-    );
+    final mapped =
+        (attachmentOp != null
+            ? workAttachmentErrorMessage(
+                status,
+                code,
+                retryAfterSeconds: retryAfter,
+                op: attachmentOp,
+                payload: body,
+              )
+            : null) ??
+        workTrackingErrorMessage(
+          code,
+          retryAfterSeconds: retryAfter,
+          payload: body,
+          serverText: serverText,
+        );
     final generic = AuthApi.genericMessageForStatus(status, code: code);
     final fallback = mapped == null && serverText == null && generic == null;
     var message =
@@ -481,6 +857,83 @@ class WorkTrackingApi {
       retryAfterSeconds: retryAfterSeconds,
       payload: payload,
     );
+  }
+
+  /// Fotoğraf eki uçlarının hata kodları için düz Türkçe metin (docs/PLATFORM_IS_TAKIBI.md "Fotoğraf ekleri" ve
+  /// "Hata kodları"); eşleşme yoksa null (genel İş Takibi eşlemesine ve sunucunun kendi metnine düşer). [op] aynı
+  /// kodun işleme göre anlamını seçer (409 `INVALID_STATE`: eklemede "eklenemez", silmede "silinemez").
+  static String? workAttachmentErrorMessage(
+    int status,
+    String? code, {
+    int? retryAfterSeconds,
+    WorkAttachmentOp op = WorkAttachmentOp.create,
+    Map<String, dynamic>? payload,
+  }) {
+    final c = (code ?? '').trim().toUpperCase();
+    switch (c) {
+      case 'LIMIT_REACHED':
+        return WorkAttachmentRules.limitMessage;
+      case 'ATTACHMENT_QUOTA_EXCEEDED':
+        final quota = payload?['quota'];
+        final quotaBytes = payload?['quota_bytes'];
+        return WorkAttachmentRules.quotaMessage(
+          site: quota is String && quota.trim().toLowerCase() == 'site',
+          quotaBytes: quotaBytes is num ? quotaBytes.toInt() : null,
+        );
+      case 'ATTACHMENT_DIMENSIONS_TOO_LARGE':
+        return WorkAttachmentRules.dimensionsMessage;
+      case 'INVALID_STATE':
+      case 'WORK_ITEM_CLOSED':
+        return op == WorkAttachmentOp.delete
+            ? 'Kapanmış talepteki fotoğraf silinemez.'
+            : WorkAttachmentRules.closedMessage;
+      case 'WORK_ATTACHMENT_NOT_FOUND':
+        return op == WorkAttachmentOp.upload
+            ? 'Yükleme kaydı bulunamadı. Tekrar deneyin.'
+            : 'Fotoğraf bulunamadı. Silinmiş olabilir; ekranı yenileyin.';
+      case 'UPLOAD_EXPIRED':
+        return 'Yükleme süresi doldu. Tekrar deneyin.';
+      case 'UPLOAD_IN_PROGRESS':
+        return 'Bu fotoğrafın yüklemesi zaten sürüyor. Biraz sonra tekrar deneyin.';
+      case 'UPLOAD_ALREADY_COMPLETED':
+        return 'Fotoğraf zaten yüklenmiş.';
+      case 'UPLOAD_BUSY':
+        return _withRetryHint(
+          'Sunucu şu anda çok sayıda yükleme alıyor.',
+          retryAfterSeconds,
+        );
+      case 'DOWNLOAD_BUSY':
+        return 'Sunucu şu anda yoğun. Biraz sonra tekrar deneyin.';
+      case 'ATTACHMENT_STORAGE_UNAVAILABLE':
+        return 'Fotoğraf deposu şu anda kullanılamıyor. Biraz sonra tekrar deneyin.';
+      case 'ATTACHMENT_FILE_MISSING':
+        return 'Fotoğraf dosyası sunucuda bulunamadı.';
+      case 'ATTACHMENT_CONTENT_MISMATCH':
+        return 'Fotoğraf bozuk ya da türü dosya uzantısıyla uyuşmuyor. Başka bir fotoğraf seçin.';
+      case 'ATTACHMENT_SIZE_MISMATCH':
+        return 'Fotoğraf gönderilirken boyutu değişti. Yeniden seçip tekrar deneyin.';
+      case 'ATTACHMENT_TOO_LARGE':
+      case 'ATTACHMENT_TYPE_NOT_ALLOWED':
+      case 'INVALID_CONTENT_TYPE':
+      case 'BODY_TOO_LARGE':
+        return WorkAttachmentRules.typeAndSizeMessage;
+      case 'WORK_ATTACHMENT_RATE_LIMITED':
+        return _withRetryHint(
+          'Bir saat içinde çok fazla fotoğraf eklediniz.',
+          retryAfterSeconds,
+        );
+      case 'FORBIDDEN_ROLE':
+        if (op == WorkAttachmentOp.delete) {
+          return 'Bu fotoğrafı yalnız ekleyen kişi ya da yönetici silebilir.';
+        }
+      case 'NOT_A_RESIDENT':
+        return 'Fotoğraf eklemek ya da silmek için bu sitede daire sakini olmalısınız.';
+    }
+    if (status == 413 || status == 415) return WorkAttachmentRules.typeAndSizeMessage;
+    if (status == 429) {
+      return _withRetryHint('Çok fazla fotoğraf işlemi yapıldı.', retryAfterSeconds);
+    }
+    return null;
   }
 
   static String _withRetryHint(String base, int? retryAfter) {
@@ -714,4 +1167,74 @@ class WorkTrackingService {
 
   Future<List<WorkAssignee>> assignees(int siteCode) =>
       _guard((token) => api.assignees(token: token, siteCode: siteCode));
+
+  // --- Fotoğraf ekleri ([siteCode] null: sakin yolu; dolu: yönetim yolu) ---
+
+  Future<WorkAttachment> createAttachment({
+    int? siteCode,
+    required int id,
+    required WorkAttachmentCreateRequest request,
+  }) => _guard(
+    (token) => api.createAttachment(
+      token: token,
+      siteCode: siteCode,
+      id: id,
+      request: request,
+    ),
+  );
+
+  Future<WorkAttachment> uploadAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+    required DocumentUploadSource source,
+    void Function(int sent, int total)? onProgress,
+    DocumentCancelToken? cancel,
+  }) => _guard(
+    (token) => api.uploadAttachmentContent(
+      token: token,
+      siteCode: siteCode,
+      id: id,
+      attachmentId: attachmentId,
+      source: source,
+      onProgress: onProgress,
+      cancel: cancel,
+    ),
+  );
+
+  Future<Uint8List> downloadAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) => _guard(
+    (token) => api.downloadAttachment(
+      token: token,
+      siteCode: siteCode,
+      id: id,
+      attachmentId: attachmentId,
+    ),
+  );
+
+  Future<void> deleteAttachment({
+    int? siteCode,
+    required int id,
+    required int attachmentId,
+  }) => _guard(
+    (token) => api.deleteAttachment(
+      token: token,
+      siteCode: siteCode,
+      id: id,
+      attachmentId: attachmentId,
+    ),
+  );
+
+  // --- Rapor ---
+
+  Future<WorkReport> report(
+    int siteCode, {
+    required DateTime from,
+    required DateTime to,
+  }) => _guard(
+    (token) => api.report(token: token, siteCode: siteCode, from: from, to: to),
+  );
 }

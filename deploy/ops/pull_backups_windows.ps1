@@ -4,14 +4,15 @@
 
 .DESCRIPTION
   Yalnizca ssh anahtari + scp kullanir. Sunucudaki ~/backups/scheduled/offsite klasorundeki
-  kapi_*.sql.gz.enc, kapi_config_*.tgz.enc, kapi_firmware_*.tgz.enc ve kapi_documents_*.tgz.enc dosyalarini indirir (zaten sifreli, "Salted__"
+  kapi_*.sql.gz.enc, kapi_config_*.tgz.enc, kapi_firmware_*.tgz.enc, kapi_documents_*.tgz.enc ve kapi_work_attachments_*.tgz.enc
+  (is takibi fotograflari) dosyalarini indirir (zaten sifreli, "Salted__"
   basligi dogrulanir), indirilen her dosyanin SHA-256 degerini sunucudakiyle karsilastirir. Var olan dosyalari yeniden
   indirmez. Sunucuya YAZMAZ, sunucuda hicbir seyi silmez. Sifre cozme anahtari (kapi-backup.key) bu betikle INDIRILMEZ
   (yalnizca -FetchKey ile, tek seferlik, bilincli olarak).
 
   Saklama: yerel dis kopyalar EN FAZLA 210 gun tutulur (varsayilan -PruneDays 210; 0 = hic silme). Firmware arsivleri
-  (kapi_firmware_*) yas nedeniyle SILINMEZ (degismedikce tek yedek kopyadir). Belge deposu arsivlerinde (kapi_documents_*) EN YENISI
-  yas nedeniyle SILINMEZ, ondan eskiler 210 gunu asinca silinir.
+  (kapi_firmware_*) yas nedeniyle SILINMEZ (degismedikce tek yedek kopyadir). Belge deposu (kapi_documents_*) ve fotograf
+  (kapi_work_attachments_*) arsivlerinde her turun EN YENISI yas nedeniyle SILINMEZ, ondan eskiler 210 gunu asinca silinir.
 
   Zamanlanmis gorev OLARAK KURMAK kullanicinin islemidir (docs/OPERASYON_YEDEK_IZLEME.md, "Windows tarafi").
 
@@ -73,7 +74,7 @@ if ($KeyPath -ne '') {
   $scpArgs += @('-i', $KeyPath, '-o', 'IdentitiesOnly=yes')
 }
 $remote = "$User@$HostName"
-$namePattern = '^kapi(_config|_firmware|_documents)?_\d{8}_\d{4}\.(sql\.gz|tgz)\.enc$'
+$namePattern = '^kapi(_config|_firmware|_documents|_work_attachments)?_\d{8}_\d{4}\.(sql\.gz|tgz)\.enc$'
 
 # Uzak komut: stderr AYRI dosyaya gider (ozet/ayristirma ciktisina karismaz); yalnizca stdout dondurulur.
 function Invoke-Remote([string]$command) {
@@ -140,11 +141,14 @@ try {
 
   if ($PruneDays -gt 0) {
     $limit = (Get-Date).AddDays(-$PruneDays)
-    $newestDoc = Get-ChildItem -LiteralPath $Destination -File | Where-Object { $_.Name -match '^kapi_documents_' } |
-      Sort-Object Name -Descending | Select-Object -First 1
+    # belge ve fotograf arsivlerinde her turun en yenisi yas nedeniyle silinmez
+    $newestKept = @(foreach ($keptPrefix in @('kapi_documents_', 'kapi_work_attachments_')) {
+      Get-ChildItem -LiteralPath $Destination -File | Where-Object { $_.Name.StartsWith($keptPrefix) -and $_.Name -match $namePattern } |
+        Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty Name
+    })
     Get-ChildItem -LiteralPath $Destination -File | Where-Object {
       $_.Name -match $namePattern -and $_.Name -notmatch '^kapi_firmware_' -and $_.LastWriteTime -lt $limit -and
-      -not ($newestDoc -and $_.Name -eq $newestDoc.Name)
+      -not ($newestKept -contains $_.Name)
     } | ForEach-Object {
       Write-Log "yerel temizlik ($PruneDays gunden eski): $($_.Name)"; Remove-Item -LiteralPath $_.FullName -Force
     }

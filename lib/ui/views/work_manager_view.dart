@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/work_attachment_picker.dart';
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
@@ -13,9 +14,13 @@ import 'package:site_kapi_kontrol/ui/dialogs/work_manager_detail_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart'
     show crmMessageOf;
+import 'package:site_kapi_kontrol/ui/views/work_report_tab.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/work_tracking_parts.dart';
+
+/// Yönetim ekranının sekmeleri: talep listesi ve rapor.
+enum WorkManagerTab { list, report }
 
 /// Yönetim "Talepler" ekranı (İş Takibi, `work_tracking` modülü): yönetici / süper kullanıcı (yazar), görevli
 /// (kendine atanmış ya da atanmamış talepleri yazar) ve yönetim kurulu (SALT OKUR).
@@ -25,10 +30,12 @@ import 'package:site_kapi_kontrol/ui/widgets/work_tracking_parts.dart';
 ///   listesi HomePage'dedir; sunucu yine de her çağrıda yetkiyi ve modül durumunu doğrular.
 /// - Kurul ([WorkSiteAccess.board]): hiçbir yazma düğmesi çizilmez, "yalnızca görüntüleyebilirsiniz" notu gösterilir;
 ///   iç not ve sakin iletişim bilgisi sunucudan zaten gelmez.
+/// - "Rapor" sekmesi YALNIZ yönetici ve kurul için çizilir ([workReportAllowed]; görevli ve diğer her şey için
+///   kapalı — fail-closed); site değişince izin yoksa liste sekmesine dönülür.
 ///
 /// Site değişince liste durumu atılır (eski sitenin yanıtı yeni sitenin ekranına yazılamaz). HATA ASLA "talep yok"
 /// demez; modül kapalıysa (403 `MODULE_DISABLED`) açıklayıcı kart çıkar. [WorkManagerViewState.reload] sayfa
-/// kabuğunun aşağı çekip yenilemesinden çağrılır.
+/// kabuğunun aşağı çekip yenilemesinden çağrılır (rapor sekmesi açıksa rapor da yenilenir).
 class WorkManagerView extends StatefulWidget {
   const WorkManagerView({
     super.key,
@@ -37,6 +44,7 @@ class WorkManagerView extends StatefulWidget {
     this.manageAllSites = false,
     this.sites = const <WorkTrackingSite>[],
     this.onOpenModules,
+    this.photoPicker,
   });
 
   final AuthService authService;
@@ -44,6 +52,9 @@ class WorkManagerView extends StatefulWidget {
   final bool manageAllSites;
   final List<WorkTrackingSite> sites;
   final VoidCallback? onOpenModules;
+
+  /// Fotoğraf seçici (testlerde sahte); null ise gerçek `file_picker`.
+  final WorkPhotoPicker? photoPicker;
 
   @override
   State<WorkManagerView> createState() => WorkManagerViewState();
@@ -56,6 +67,8 @@ class WorkManagerViewState extends State<WorkManagerView> {
   bool _sitesLoadedOnce = false;
   String? _sitesError;
   int _sitesToken = 0;
+  WorkManagerTab _tab = WorkManagerTab.list;
+  final GlobalKey<WorkReportTabState> _reportKey = GlobalKey<WorkReportTabState>();
 
   final TextEditingController _search = TextEditingController();
   Timer? _timer;
@@ -197,11 +210,15 @@ class WorkManagerViewState extends State<WorkManagerView> {
         if (siteChanged) _counts = const <WorkStatus, int>{};
       });
       final current = _site;
+      if (current != null && !workReportAllowed(current.access) && _tab == WorkManagerTab.report) {
+        setState(() => _tab = WorkManagerTab.list);
+      }
       if (siteChanged || (previous != null && current != null && previous.access != current.access)) {
         _resetList();
       } else if (current != null) {
         unawaited(_loader.reload());
       }
+      if (_tab == WorkManagerTab.report) unawaited(_reportKey.currentState?.reload());
     } catch (e) {
       if (!mounted || token != _sitesToken) return;
       setState(() {
@@ -254,8 +271,17 @@ class WorkManagerViewState extends State<WorkManagerView> {
       _siteCode = code;
       _counts = const <WorkStatus, int>{};
       _moduleOff = false;
+      final next = _site;
+      if (next != null && !workReportAllowed(next.access)) _tab = WorkManagerTab.list;
     });
     _resetList();
+  }
+
+  void _selectTab(WorkManagerTab tab, WorkTrackingSite site) {
+    if (tab == _tab) return;
+    // Fail-closed: izin yoksa rapor sekmesine geçilmez.
+    if (tab == WorkManagerTab.report && !workReportAllowed(site.access)) return;
+    setState(() => _tab = tab);
   }
 
   Future<void> _open(WorkManagedItem item, WorkTrackingSite site) async {
@@ -264,6 +290,7 @@ class WorkManagerViewState extends State<WorkManagerView> {
       service: _service,
       site: site,
       item: item,
+      picker: widget.photoPicker ?? const FilePickerWorkPhotoPicker(),
     );
     if (changed && mounted) unawaited(_loader.reload());
   }
@@ -381,32 +408,64 @@ class WorkManagerViewState extends State<WorkManagerView> {
         if (_moduleOff)
           _buildModuleOff(context)
         else ...[
-          _buildFilters(context),
-          const SizedBox(height: AppSpace.md),
-          SectionHeader(
-            title: 'Talepler',
-            trailing: IconButton(
-              onPressed: _loader.loading ? null : reload,
-              tooltip: 'Yenile',
-              icon: const Icon(Icons.refresh_rounded),
+          if (workReportAllowed(site.access)) ...[
+            _buildTabs(context, site),
+            const SizedBox(height: AppSpace.md),
+          ],
+          if (_tab == WorkManagerTab.report && workReportAllowed(site.access))
+            WorkReportTab(key: _reportKey, service: _service, site: site)
+          else ...[
+            _buildFilters(context),
+            const SizedBox(height: AppSpace.md),
+            SectionHeader(
+              title: 'Talepler',
+              trailing: IconButton(
+                onPressed: _loader.loading ? null : reload,
+                tooltip: 'Yenile',
+                icon: const Icon(Icons.refresh_rounded),
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpace.md),
-          CursorListBody<WorkManagedItem>(
-            loader: _loader,
-            emptyIcon: Icons.assignment_turned_in_rounded,
-            emptyTitle: _filtered
-                ? 'Bu süzgeç için talep bulunamadı.'
-                : 'Açık talep yok.',
-            emptyMessage: _filtered
-                ? null
-                : 'Sakinler bir talep açtığında burada görünür.',
-            itemBuilder: (context, item) => WorkManagedCard(
-              item: item,
-              onTap: () => unawaited(_open(item, site)),
+            const SizedBox(height: AppSpace.md),
+            CursorListBody<WorkManagedItem>(
+              loader: _loader,
+              emptyIcon: Icons.assignment_turned_in_rounded,
+              emptyTitle: _filtered
+                  ? 'Bu süzgeç için talep bulunamadı.'
+                  : 'Açık talep yok.',
+              emptyMessage: _filtered
+                  ? null
+                  : 'Sakinler bir talep açtığında burada görünür.',
+              itemBuilder: (context, item) => WorkManagedCard(
+                item: item,
+                onTap: () => unawaited(_open(item, site)),
+              ),
             ),
-          ),
+          ],
         ],
+      ],
+    );
+  }
+
+  /// "Talepler | Rapor" seçimi (yalnız yönetici ve kurul; görevli bu satırı hiç görmez).
+  Widget _buildTabs(BuildContext context, WorkTrackingSite site) {
+    return Wrap(
+      spacing: AppSpace.sm,
+      runSpacing: AppSpace.sm,
+      children: [
+        ChoiceChip(
+          key: const ValueKey<String>('work_tab_list'),
+          avatar: const Icon(Icons.list_alt_rounded, size: 18),
+          label: const Text('Talepler'),
+          selected: _tab == WorkManagerTab.list,
+          onSelected: (_) => _selectTab(WorkManagerTab.list, site),
+        ),
+        ChoiceChip(
+          key: const ValueKey<String>('work_tab_report'),
+          avatar: const Icon(Icons.insights_rounded, size: 18),
+          label: const Text('Rapor'),
+          selected: _tab == WorkManagerTab.report,
+          onSelected: (_) => _selectTab(WorkManagerTab.report, site),
+        ),
       ],
     );
   }

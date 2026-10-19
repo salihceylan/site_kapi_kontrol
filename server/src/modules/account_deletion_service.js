@@ -55,6 +55,7 @@ import { recordAudit } from './audit_service.js';
 import { peopleLockKey } from './people_sync.js';
 import { deletePushDataForUser } from './push_devices.js';
 import { workItemsKeepNote } from './work_tracking_common.js';
+import { attachmentsKeepNote } from './work_attachments_common.js';
 import { releaseAssignedWorkItems } from './work_tracking_service.js';
 import { reservationKeepNote, reservationRemoveNote } from './reservation_common.js';
 import { releaseUserReservations } from './reservation_service.js';
@@ -261,7 +262,7 @@ export async function findLastManagerSites(db, userCode) {
  * @returns {Promise<{ pushDevices: number, uploadedDocuments: number, pendingReminders: number }>}
  */
 async function previewOptionalCounts(db, userCode) {
-  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0, upcomingReservations: 0, reservationRecords: 0, openRequests: 0, requestRecords: 0 };
+  const out = { pushDevices: 0, uploadedDocuments: 0, pendingReminders: 0, workItems: 0, workItemComments: 0, uploadedAttachments: 0, upcomingReservations: 0, reservationRecords: 0, openRequests: 0, requestRecords: 0 };
   const flags = (
     await db.query(
       `
@@ -269,6 +270,7 @@ async function previewOptionalCounts(db, userCode) {
                (to_regclass('public.document_versions') IS NOT NULL) AS has_documents,
                (to_regclass('public.finance_reminder_items') IS NOT NULL) AS has_reminders,
                (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
+               (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
                (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
       `,
     )
@@ -283,6 +285,10 @@ async function previewOptionalCounts(db, userCode) {
   if (flags?.has_work_items === true) {
     out.workItems = await count('SELECT COUNT(*)::INTEGER AS n FROM work_items WHERE created_by = $1');
     out.workItemComments = await count("SELECT COUNT(*)::INTEGER AS n FROM work_item_events WHERE actor_user_code = $1 AND event_type = 'comment'");
+  }
+  if (flags?.has_work_item_attachments === true) {
+    // İş takibi fotoğrafları (047): yükleyen bağı FK ile NULL olur, dosya taleple kalır.
+    out.uploadedAttachments = await count('SELECT COUNT(*)::INTEGER AS n FROM work_item_attachments WHERE uploaded_by = $1');
   }
   if (flags?.has_reservations === true) {
     out.upcomingReservations = await count("SELECT COUNT(*)::INTEGER AS n FROM reservations WHERE user_code = $1 AND status IN ('beklemede', 'onaylandi') AND ends_at > NOW()");
@@ -393,6 +399,9 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.workItems > 0 || optionalCounts.workItemComments > 0) {
     willKeep.push(workItemsKeepNote({ items: optionalCounts.workItems, comments: optionalCounts.workItemComments }));
+  }
+  if (optionalCounts.uploadedAttachments > 0) {
+    willKeep.push(attachmentsKeepNote(optionalCounts.uploadedAttachments));
   }
   if (optionalCounts.reservationRecords > 0 || optionalCounts.requestRecords > 0) {
     willKeep.push(reservationKeepNote({ reservations: optionalCounts.reservationRecords, requests: optionalCounts.requestRecords }));

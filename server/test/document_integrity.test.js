@@ -27,7 +27,7 @@ const norm = (text) => String(text).replace(/\s+/g, ' ').trim();
 const ok = (rows = []) => ({ rows, rowCount: rows.length });
 
 /** Katı sahte DB: bilinmeyen SQL hata verir. */
-function fakeDb({ settings = new Map(), versions = [], expenseTable = true, expenses = [], racer = null, failWith = null } = {}) {
+function fakeDb({ settings = new Map(), versions = [], expenseTable = true, expenses = [], attachmentTable = false, attachments = [], racer = null, failWith = null } = {}) {
   const log = [];
   return {
     log,
@@ -37,6 +37,11 @@ function fakeDb({ settings = new Map(), versions = [], expenseTable = true, expe
       log.push({ sql, params });
       if (failWith) throw failWith;
       if (/to_regclass\('public\.expense_documents'\)/.test(sql)) return ok([{ present: expenseTable }]);
+      // iş takibi fotoğrafları (047): kimlik örneklemesi work_attachments/ alt ağacını da tanır
+      if (/to_regclass\('public\.work_item_attachments'\)/.test(sql)) return ok([{ present: attachmentTable }]);
+      if (/^SELECT storage_key FROM work_item_attachments WHERE status = 'ready' ORDER BY id DESC LIMIT 20$/.test(sql)) {
+        return ok(attachments.filter((row) => row.status === 'ready').map((row) => ({ storage_key: row.storage_key })));
+      }
       if (/^SELECT value FROM platform_settings WHERE key = \$1 LIMIT 1$/.test(sql)) {
         return ok(settings.has(params[0]) ? [{ value: settings.get(params[0]) }] : []);
       }
@@ -177,6 +182,19 @@ describe('depolama kimliği durum makinesi (R9 F4)', () => {
     assert.deepEqual(await ensureStorageIdentity(fakeDb({ expenses: [{ storage_key: key, status: 'ready' }] }), root), { ok: true, state: 'initialized' });
     await fsp.rm(path.join(root, IDENTITY_FILE));
     assert.deepEqual(await ensureStorageIdentity(fakeDb({ versions: [{ storage_key: KEY(9), status: 'ready' }] }), root), { ok: false, state: 'unverified_state' }, 'DB başka bir kuruluma ait');
+  });
+
+  it('iş takibi fotoğrafları (047): YALNIZ work_attachments/ altında dosya varken de dizin "dolu" sayılır (yanlış / boş DB kimliği benimseyemez); DB\'nin bildiği hazır fotoğraf diskteyse kimlik başlatılır', async () => {
+    await fsp.mkdir(path.join(root, 'work_attachments', SITE), { recursive: true });
+    const key = KEY(7);
+    await fsp.writeFile(path.join(root, 'work_attachments', key), 'foto');
+    assert.deepEqual(await ensureStorageIdentity(fakeDb(), root), { ok: false, state: 'unverified_state' }, 'fotoğraf ağacı dolu, DB tanımıyor');
+    assert.deepEqual(await ensureStorageIdentity(fakeDb({ attachmentTable: true, attachments: [{ storage_key: KEY(8), status: 'ready' }] }), root), { ok: false, state: 'unverified_state' });
+    assert.equal(await readIdentity(), null, 'reddedilen durumda dosya yazılmaz');
+    assert.deepEqual(await ensureStorageIdentity(fakeDb({ attachmentTable: true, attachments: [{ storage_key: key, status: 'ready' }] }), root), { ok: true, state: 'initialized' });
+    await fsp.rm(path.join(root, IDENTITY_FILE));
+    await writeIdentity(ID_A);
+    assert.deepEqual(await ensureStorageIdentity(fakeDb(), root), { ok: false, state: 'db_identity_missing' }, 'yalnız dosya kimliği + fotoğraf var: DB benimsenmez');
   });
 
   it('yalnız dosya var: dizinde dosya yoksa DB\'ye yazılır (adopted_db); dosya varsa reddedilir (db_identity_missing: yanlış / boş / eski DB)', async () => {

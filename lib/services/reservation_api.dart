@@ -148,6 +148,17 @@ class ReservationApi {
     return _reservation(response);
   }
 
+  /// `POST /app/reservations/:id/seen` -> `{ id, unread:false }` (idempotent).
+  Future<void> markMineSeen({required String token, required int id}) async {
+    await _send(
+      'POST',
+      '/app/reservations/$id/seen',
+      token: token,
+      body: const <String, dynamic>{},
+      timeout: _writeTimeout,
+    );
+  }
+
   // --- Sakin: konsiyerj ---------------------------------------------------------------------
 
   /// `GET /app/concierge-requests`. [status]: `open|closed|all`.
@@ -205,6 +216,31 @@ class ReservationApi {
       timeout: _writeTimeout,
     );
     return _concierge(response);
+  }
+
+  /// `GET /app/concierge-requests/:id` -> `{ request }` (`unread` dahil; yazmaz).
+  Future<ConciergeRecord> getMyRequest({
+    required String token,
+    required int id,
+  }) async {
+    final response = await _send(
+      'GET',
+      '/app/concierge-requests/$id',
+      token: token,
+      timeout: _readTimeout,
+    );
+    return _concierge(response);
+  }
+
+  /// `POST /app/concierge-requests/:id/seen` -> `{ id, unread:false }` (idempotent).
+  Future<void> markMyRequestSeen({required String token, required int id}) async {
+    await _send(
+      'POST',
+      '/app/concierge-requests/$id/seen',
+      token: token,
+      body: const <String, dynamic>{},
+      timeout: _writeTimeout,
+    );
   }
 
   // --- Yönetim: alanlar ---------------------------------------------------------------------
@@ -842,6 +878,9 @@ class ReservationService {
   Future<ReservationRecord> cancelMine(int id) =>
       _guard((token) => api.cancelMine(token: token, id: id));
 
+  Future<void> markMineSeen(int id) =>
+      _guard((token) => api.markMineSeen(token: token, id: id));
+
   Future<ConciergePage> listMyRequests({
     int? siteCode,
     String status = 'all',
@@ -869,6 +908,25 @@ class ReservationService {
 
   Future<ConciergeRecord> cancelMyRequest(int id) =>
       _guard((token) => api.cancelMyRequest(token: token, id: id));
+
+  Future<ConciergeRecord> getMyRequest(int id) =>
+      _guard((token) => api.getMyRequest(token: token, id: id));
+
+  Future<void> markMyRequestSeen(int id) =>
+      _guard((token) => api.markMyRequestSeen(token: token, id: id));
+
+  /// Sekme rozetleri için okunmamış sayıları: iki hafif liste isteği (`limit=1`, tüm kapsam / durum; [siteCode]
+  /// verilirse o site) paralel atılır ve yalnız `unread_count` okunur. Eski sunucu (alan yok) 0 verir.
+  Future<ReservationUnreadCounts> unreadCounts({int? siteCode}) async {
+    final (reservations, concierge) = await (
+      listMine(siteCode: siteCode, scope: 'all', limit: 1),
+      listMyRequests(siteCode: siteCode, status: 'all', limit: 1),
+    ).wait;
+    return (
+      reservations: reservations.unreadCount,
+      concierge: concierge.unreadCount,
+    );
+  }
 
   // --- Yönetim ---
 

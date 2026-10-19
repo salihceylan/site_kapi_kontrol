@@ -1,18 +1,25 @@
-// Yeni talep formu (docs/PLATFORM_IS_TAKIBI.md `POST /app/work-items`): kategori, konum, başlık, açıklama ve "acil"
-// işareti. Fotoğraf / dosya eki bu sürümde YOK.
+// Yeni talep formu (docs/PLATFORM_IS_TAKIBI.md `POST /app/work-items`): kategori, konum, başlık, açıklama, "acil"
+// işareti ve en çok 4 fotoğraf (JPEG / PNG / WebP, her biri 5 MB).
 //
 // Çift gönderim: düğme gönderim sürerken kapalıdır; gönderim sürerken geri tuşu pencereyi kapatmaz. Aynı veriyle
 // yeniden gönderimde servis AYNI `idempotency_key`i kullanır (yanıtı kaybolan istek çift talep açmaz); veri
 // değişince anahtar yenilenir. Hata pencerenin içinde kalır, metinler korunur (odak "Gönder"e döner); 429'da düğme
 // `Retry-After` süresince kilitlenir. Doldurulmuş form yanlışlıkla kapanırsa onay istenir.
+//
+// Fotoğraflar talep AÇILDIKTAN SONRA sırayla yüklenir (ilerleme + Vazgeç). Talep açıldıysa form bir daha
+// gönderilmez; yüklenemeyen fotoğraf DÜRÜSTÇE bildirilir ("Talep oluşturuldu, 1 fotoğraf yüklenemedi"), yeniden
+// denenebilir ve pencere sonuçla kapanır (liste yine de yenilenir).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
+import 'package:site_kapi_kontrol/services/work_attachment_picker.dart';
+import 'package:site_kapi_kontrol/services/work_attachment_upload.dart';
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_dialog.dart';
+import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
 import 'package:site_kapi_kontrol/ui/helpers/form_validation.dart';
@@ -21,6 +28,7 @@ import 'package:site_kapi_kontrol/ui/helpers/paged_loader.dart'
 import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/helpers/retry_lock.dart';
 import 'package:site_kapi_kontrol/ui/widgets/crm_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/work_attachment_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/work_tracking_parts.dart';
 
 class WorkItemFormDialog extends StatefulWidget {
@@ -29,6 +37,7 @@ class WorkItemFormDialog extends StatefulWidget {
     required this.service,
     required this.sites,
     this.initialSiteCode,
+    this.picker = const FilePickerWorkPhotoPicker(),
   });
 
   final WorkTrackingService service;
@@ -37,12 +46,16 @@ class WorkItemFormDialog extends StatefulWidget {
   final List<PeopleSite> sites;
   final int? initialSiteCode;
 
-  /// Başarıda sunucunun döndürdüğü kayıtla kapanır; vazgeçilirse null.
+  /// Fotoğraf seçici (testlerde sahte).
+  final WorkPhotoPicker picker;
+
+  /// Başarıda sunucunun döndürdüğü kayıtla (ve fotoğraf sonucuyla) kapanır; vazgeçilirse null.
   static Future<WorkCreateResult?> show(
     BuildContext context, {
     required WorkTrackingService service,
     required List<PeopleSite> sites,
     int? initialSiteCode,
+    WorkPhotoPicker picker = const FilePickerWorkPhotoPicker(),
   }) {
     return showDialog<WorkCreateResult>(
       context: context,
@@ -51,6 +64,7 @@ class WorkItemFormDialog extends StatefulWidget {
         service: service,
         sites: sites,
         initialSiteCode: initialSiteCode,
+        picker: picker,
       ),
     );
   }
@@ -79,6 +93,18 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   String? _apartmentFieldError;
   int _apartmentsToken = 0;
 
+  final List<WorkPhotoPick> _photos = <WorkPhotoPick>[];
+  String? _photoError;
+  bool _picking = false;
+  bool _pickedAny = false;
+
+  /// Seçilen fotoğrafların önizlemeleri: form kapanınca / fotoğraf kaldırılınca ImageCache'ten çıkarılır.
+  final WorkImageProviders _previewImages = WorkImageProviders();
+
+  /// Talep AÇILDI: form bir daha gönderilmez; fotoğraflar bu talebe yüklenir.
+  WorkCreateResult? _created;
+  WorkAttachmentUploadController? _upload;
+
   bool _submitting = false;
   bool _closing = false;
   String? _error;
@@ -94,6 +120,10 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   @override
   void dispose() {
     ++_apartmentsToken;
+    _upload?.removeListener(_onUploadChanged);
+    _upload?.dispose();
+    if (_pickedAny) unawaited(widget.picker.release());
+    _previewImages.dispose();
     _retry.dispose();
     _sendFocus.dispose();
     _title.dispose();
@@ -102,7 +132,9 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
   }
 
   bool get _dirty =>
-      _title.text.trim().isNotEmpty || _description.text.trim().isNotEmpty;
+      _title.text.trim().isNotEmpty ||
+      _description.text.trim().isNotEmpty ||
+      _photos.isNotEmpty;
 
   Future<void> _loadApartments() async {
     final token = ++_apartmentsToken;
@@ -181,8 +213,54 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
     return false;
   }
 
+  // --- Fotoğraflar ---
+
+  Future<void> _pickPhotos() async {
+    if (_submitting || _picking) return;
+    final remaining = kWorkAttachmentMax - _photos.length;
+    if (remaining <= 0) return;
+    setState(() {
+      _picking = true;
+      _photoError = null;
+    });
+    WorkPhotoSelection selection;
+    try {
+      selection = await widget.picker.pick(maxCount: remaining);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _picking = false;
+        _photoError = 'Fotoğraf seçilemedi. Tekrar deneyin.';
+      });
+      return;
+    }
+    if (!mounted) return;
+    _pickedAny = true;
+    // Geçersiz seçimler yer doldurmaz; her biri nedeniyle ayrı satırda bildirilir.
+    final split = workSplitSelection(selection, remaining: remaining);
+    setState(() {
+      _picking = false;
+      _photos.addAll(split.valid);
+      _photoError = split.notes.isEmpty ? null : split.notes.join('\n');
+    });
+  }
+
+  void _removePhoto(int index) {
+    if (_submitting || index < 0 || index >= _photos.length) return;
+    final removed = _photos[index];
+    setState(() {
+      _photos.removeAt(index);
+      _photoError = null;
+    });
+    _previewImages.evictBytes(removed.bytes);
+  }
+
+  void _onUploadChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _submit() async {
-    if (_submitting || _retry.locked) return;
+    if (_submitting || _retry.locked || _created != null) return;
     if (!validateForm(
       _formKey,
       validateExtra: _validateExtras,
@@ -205,11 +283,9 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
       apartmentId: _location == WorkLocationType.daire ? _apartmentId : null,
       urgent: _urgent,
     );
+    final WorkCreateResult result;
     try {
-      final result = await widget.service.createItem(request);
-      if (!mounted) return;
-      _closing = true;
-      popIfCurrent<WorkCreateResult>(context, result);
+      result = await widget.service.createItem(request);
     } catch (e) {
       if (!mounted) return;
       // 429: düğme `Retry-After` süresince kilitlenir (metin sunucudan: "30 dakika sonra tekrar deneyin").
@@ -227,11 +303,81 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _sendFocus.requestFocus();
       });
+      return;
     }
+    if (!mounted) return;
+    final photos = List<WorkPhotoPick>.of(_photos);
+    if (photos.isEmpty) {
+      _closing = true;
+      popIfCurrent<WorkCreateResult>(context, result);
+      return;
+    }
+    // Talep açıldı: form artık gönderilmez; fotoğraflar sırayla yüklenir.
+    _created = result;
+    final upload = WorkAttachmentUploadController(
+      service: widget.service,
+      workItemId: result.item.id,
+    )..addListener(_onUploadChanged);
+    setState(() {
+      _upload = upload;
+      _submitting = false;
+    });
+    await upload.run(photos);
+    if (!mounted) return;
+    _afterUpload();
+  }
+
+  void _afterUpload() {
+    final upload = _upload;
+    if (upload == null) return;
+    if (upload.failedCount == 0) {
+      _finish();
+      return;
+    }
+    final error = upload.lastException;
+    if (error != null) {
+      _retry.lockIfRateLimited(error, () {
+        if (mounted) setState(() {});
+      });
+    }
+    setState(() {});
+  }
+
+  Future<void> _retryUpload() async {
+    final upload = _upload;
+    if (upload == null || upload.busy || _retry.locked) return;
+    await upload.retryFailed();
+    if (!mounted) return;
+    _afterUpload();
+  }
+
+  /// Fotoğraf aşaması bitti: içeriği kesin gitmemiş yarım kayıtlar silinir (talep başına 4 sınırını doldurmasın)
+  /// ve pencere talep + fotoğraf sonucuyla kapanır.
+  void _finish() {
+    final created = _created;
+    final upload = _upload;
+    if (created == null || upload == null || upload.busy || _closing) return;
+    _closing = true;
+    unawaited(upload.discardPending());
+    popIfCurrent<WorkCreateResult>(
+      context,
+      created.withPhotoOutcome(
+        uploaded: upload.uploadedCount,
+        failed: upload.failedCount,
+        cancelled: upload.phase == WorkUploadPhase.cancelled,
+      ),
+    );
   }
 
   Future<void> _requestClose() async {
-    if (_closing || _submitting) return;
+    if (_closing) return;
+    final upload = _upload;
+    if (upload != null) {
+      // Talep zaten açıldı: yükleme sürerken kapanmaz; bitince sonuçla kapanır.
+      if (!upload.busy) _finish();
+      return;
+    }
+    if (_submitting) return;
     if (_dirty) {
       final discard = await showDialog<bool>(
         context: context,
@@ -265,211 +411,333 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.palette;
-    final th = Theme.of(context).textTheme;
-    final apartments = _apartments;
+    final upload = _upload;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_requestClose());
       },
-      child: AppDialog(
-        title: 'Yeni Talep',
-        subtitle: 'Arıza, bakım, şikayet veya öneri',
-        icon: Icons.add_task_rounded,
-        actions: [
-          TextButton(
-            key: const ValueKey<String>('work_form_close'),
-            onPressed: _submitting ? null : () => unawaited(_requestClose()),
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            key: const ValueKey<String>('work_form_send'),
-            focusNode: _sendFocus,
-            onPressed: (_submitting || _retry.locked) ? null : _submit,
-            child: Text(_submitting ? 'Gönderiliyor...' : 'Gönder'),
-          ),
-        ],
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_error != null)
-                CrmFormError(message: _error!, announce: true),
-              if (widget.sites.length > 1) ...[
-                DropdownButtonFormField<int>(
-                  key: ValueKey<String>('work_form_site_$_siteCode'),
-                  isExpanded: true,
-                  initialValue: _siteCode,
-                  dropdownColor: p.surface,
-                  style: th.bodyMedium?.copyWith(color: p.text),
-                  decoration: const InputDecoration(
-                    labelText: 'Site',
-                    prefixIcon: Icon(Icons.apartment_rounded),
-                  ),
-                  items: [
-                    for (final site in widget.sites)
-                      DropdownMenuItem<int>(
-                        value: site.code,
-                        child: Text(
-                          site.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+      child: upload == null
+          ? AppDialog(
+              title: 'Yeni Talep',
+              subtitle: 'Arıza, bakım, şikayet veya öneri',
+              icon: Icons.add_task_rounded,
+              actions: [
+                TextButton(
+                  key: const ValueKey<String>('work_form_close'),
+                  onPressed: _submitting ? null : () => unawaited(_requestClose()),
+                  child: const Text('Vazgeç'),
+                ),
+                ElevatedButton(
+                  key: const ValueKey<String>('work_form_send'),
+                  focusNode: _sendFocus,
+                  onPressed: (_submitting || _retry.locked || _picking) ? null : _submit,
+                  child: Text(_submitting ? 'Gönderiliyor...' : 'Gönder'),
+                ),
+              ],
+              child: _buildForm(context),
+            )
+          : AppDialog(
+              title: upload.busy ? 'Fotoğraflar Yükleniyor' : 'Fotoğraf Yükleme Sonucu',
+              subtitle: 'Talebiniz kaydedildi',
+              icon: Icons.photo_library_outlined,
+              actions: upload.busy
+                  ? [
+                      TextButton(
+                        key: const ValueKey<String>('work_form_upload_cancel'),
+                        onPressed: upload.cancel,
+                        child: const Text('Vazgeç'),
+                      ),
+                    ]
+                  : [
+                      TextButton(
+                        key: const ValueKey<String>('work_form_upload_close'),
+                        onPressed: _finish,
+                        child: const Text('Kapat'),
+                      ),
+                      if (upload.canRetry)
+                        ElevatedButton(
+                          key: const ValueKey<String>('work_form_upload_retry'),
+                          onPressed: _retry.locked ? null : () => unawaited(_retryUpload()),
+                          child: const Text('Tekrar Dene'),
                         ),
-                      ),
-                  ],
-                  onChanged: _submitting
-                      ? null
-                      : (value) {
-                          if (value != null) _selectSite(value);
-                        },
-                ),
-                const SizedBox(height: AppSpace.lg),
+                    ],
+              child: _buildUploadStage(context, upload),
+            ),
+    );
+  }
+
+  Widget _buildUploadStage(BuildContext context, WorkAttachmentUploadController upload) {
+    final failed = upload.failedCount;
+    final cancelled = upload.phase == WorkUploadPhase.cancelled;
+    final InlineNotice notice;
+    if (upload.busy) {
+      notice = const InlineNotice(
+        key: ValueKey<String>('work_form_upload_notice'),
+        tone: AppTone.success,
+        icon: Icons.check_circle_outline_rounded,
+        message: 'Talebiniz kaydedildi. Fotoğraflar talebe ekleniyor...',
+      );
+    } else if (failed == 0) {
+      notice = const InlineNotice(
+        key: ValueKey<String>('work_form_upload_notice'),
+        tone: AppTone.success,
+        icon: Icons.check_circle_outline_rounded,
+        message: 'Talebiniz kaydedildi ve fotoğraflar eklendi.',
+      );
+    } else {
+      notice = InlineNotice(
+        key: const ValueKey<String>('work_form_upload_notice'),
+        tone: AppTone.warning,
+        message: cancelled
+            ? 'Talebiniz kaydedildi; fotoğraf yükleme iptal edildi, $failed fotoğraf eklenmedi.'
+            : 'Talebiniz kaydedildi; $failed fotoğraf yüklenemedi. Talep ayrıntısından yeniden ekleyebilirsiniz.',
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        notice,
+        const SizedBox(height: AppSpace.md),
+        if (upload.busy) ...[
+          WorkUploadProgress(controller: upload, keyPrefix: 'work_form_upload'),
+          const SizedBox(height: AppSpace.md),
+        ],
+        _PhotoOutcomeList(photos: _photos, upload: upload),
+      ],
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    final apartments = _apartments;
+    final photoFull = _photos.length >= kWorkAttachmentMax;
+    return Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_error != null)
+            CrmFormError(message: _error!, announce: true),
+          if (widget.sites.length > 1) ...[
+            DropdownButtonFormField<int>(
+              key: ValueKey<String>('work_form_site_$_siteCode'),
+              isExpanded: true,
+              initialValue: _siteCode,
+              dropdownColor: p.surface,
+              style: th.bodyMedium?.copyWith(color: p.text),
+              decoration: const InputDecoration(
+                labelText: 'Site',
+                prefixIcon: Icon(Icons.apartment_rounded),
+              ),
+              items: [
+                for (final site in widget.sites)
+                  DropdownMenuItem<int>(
+                    value: site.code,
+                    child: Text(
+                      site.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
-              DropdownButtonFormField<WorkCategory>(
-                key: const ValueKey<String>('work_form_category'),
-                isExpanded: true,
-                initialValue: _category,
-                dropdownColor: p.surface,
-                style: th.bodyMedium?.copyWith(color: p.text),
-                decoration: const InputDecoration(
-                  labelText: 'Kategori',
-                  prefixIcon: Icon(Icons.category_rounded),
+              onChanged: _submitting
+                  ? null
+                  : (value) {
+                      if (value != null) _selectSite(value);
+                    },
+            ),
+            const SizedBox(height: AppSpace.lg),
+          ],
+          DropdownButtonFormField<WorkCategory>(
+            key: const ValueKey<String>('work_form_category'),
+            isExpanded: true,
+            initialValue: _category,
+            dropdownColor: p.surface,
+            style: th.bodyMedium?.copyWith(color: p.text),
+            decoration: const InputDecoration(
+              labelText: 'Kategori',
+              prefixIcon: Icon(Icons.category_rounded),
+            ),
+            items: [
+              for (final category in WorkCategory.values)
+                DropdownMenuItem<WorkCategory>(
+                  value: category,
+                  child: Text(
+                    category.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                items: [
-                  for (final category in WorkCategory.values)
-                    DropdownMenuItem<WorkCategory>(
-                      value: category,
-                      child: Text(
-                        category.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: _submitting
-                    ? null
-                    : (value) {
-                        if (value != null) setState(() => _category = value);
-                      },
-              ),
-              const SizedBox(height: AppSpace.lg),
-              Text('Konum', style: th.titleSmall),
-              const SizedBox(height: AppSpace.sm),
-              Wrap(
-                spacing: AppSpace.sm,
-                runSpacing: AppSpace.sm,
-                children: [
-                  for (final type in WorkLocationType.values)
-                    ChoiceChip(
-                      key: ValueKey<String>('work_form_location_${type.apiValue}'),
-                      label: Text(
-                        type == WorkLocationType.daire ? 'Dairem' : 'Ortak alan',
-                      ),
-                      selected: _location == type,
-                      onSelected: _submitting ? null : (_) => _selectLocation(type),
-                    ),
-                ],
-              ),
-              if (_location == WorkLocationType.daire) ...[
-                const SizedBox(height: AppSpace.md),
-                KeyedSubtree(
-                  key: _apartmentKey,
-                  child: _apartmentSection(context, apartments),
+            ],
+            onChanged: _submitting
+                ? null
+                : (value) {
+                    if (value != null) setState(() => _category = value);
+                  },
+          ),
+          const SizedBox(height: AppSpace.lg),
+          Text('Konum', style: th.titleSmall),
+          const SizedBox(height: AppSpace.sm),
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.sm,
+            children: [
+              for (final type in WorkLocationType.values)
+                ChoiceChip(
+                  key: ValueKey<String>('work_form_location_${type.apiValue}'),
+                  label: Text(
+                    type == WorkLocationType.daire ? 'Dairem' : 'Ortak alan',
+                  ),
+                  selected: _location == type,
+                  onSelected: _submitting ? null : (_) => _selectLocation(type),
                 ),
-              ],
-              const SizedBox(height: AppSpace.lg),
-              TextFormField(
-                key: const ValueKey<String>('work_form_title'),
-                controller: _title,
-                enabled: !_submitting,
-                textCapitalization: TextCapitalization.sentences,
-                maxLength: kWorkTitleMax,
-                maxLengthEnforcement: MaxLengthEnforcement.none,
-                buildCounter:
-                    (
-                      context, {
-                      required currentLength,
-                      required isFocused,
-                      maxLength,
-                    }) => workCounter(
-                      context,
-                      _title.text.runes.length,
-                      kWorkTitleMax,
-                    ),
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Başlık',
-                  hintText: 'Örn. B blok asansörü çalışmıyor',
-                  prefixIcon: Icon(Icons.title_rounded),
+            ],
+          ),
+          if (_location == WorkLocationType.daire) ...[
+            const SizedBox(height: AppSpace.md),
+            KeyedSubtree(
+              key: _apartmentKey,
+              child: _apartmentSection(context, apartments),
+            ),
+          ],
+          const SizedBox(height: AppSpace.lg),
+          TextFormField(
+            key: const ValueKey<String>('work_form_title'),
+            controller: _title,
+            enabled: !_submitting,
+            textCapitalization: TextCapitalization.sentences,
+            maxLength: kWorkTitleMax,
+            maxLengthEnforcement: MaxLengthEnforcement.none,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => workCounter(
+                  context,
+                  _title.text.runes.length,
+                  kWorkTitleMax,
                 ),
-                validator: (value) {
-                  final length = (value ?? '').trim().runes.length;
-                  if (length < 1) return 'Başlık boş olamaz.';
-                  if (length > kWorkTitleMax) {
-                    return 'Başlık en çok $kWorkTitleMax karakter olabilir.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: AppSpace.lg),
-              TextFormField(
-                key: const ValueKey<String>('work_form_description'),
-                controller: _description,
-                enabled: !_submitting,
-                minLines: 3,
-                maxLines: 8,
-                maxLength: kWorkDescriptionMax,
-                maxLengthEnforcement: MaxLengthEnforcement.none,
-                buildCounter:
-                    (
-                      context, {
-                      required currentLength,
-                      required isFocused,
-                      maxLength,
-                    }) => workCounter(
-                      context,
-                      _description.text.runes.length,
-                      kWorkDescriptionMax,
-                    ),
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                keyboardType: TextInputType.multiline,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Açıklama',
-                  hintText: 'Sorunu ve ne zamandır sürdüğünü yazın',
-                  alignLabelWithHint: true,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Başlık',
+              hintText: 'Örn. B blok asansörü çalışmıyor',
+              prefixIcon: Icon(Icons.title_rounded),
+            ),
+            validator: (value) {
+              final length = (value ?? '').trim().runes.length;
+              if (length < 1) return 'Başlık boş olamaz.';
+              if (length > kWorkTitleMax) {
+                return 'Başlık en çok $kWorkTitleMax karakter olabilir.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: AppSpace.lg),
+          TextFormField(
+            key: const ValueKey<String>('work_form_description'),
+            controller: _description,
+            enabled: !_submitting,
+            minLines: 3,
+            maxLines: 8,
+            maxLength: kWorkDescriptionMax,
+            maxLengthEnforcement: MaxLengthEnforcement.none,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  maxLength,
+                }) => workCounter(
+                  context,
+                  _description.text.runes.length,
+                  kWorkDescriptionMax,
                 ),
-                validator: (value) {
-                  final length = (value ?? '').trim().runes.length;
-                  if (length < 1) return 'Açıklama boş olamaz.';
-                  if (length > kWorkDescriptionMax) {
-                    return 'Açıklama en çok $kWorkDescriptionMax karakter olabilir.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: AppSpace.sm),
-              SwitchListTile(
-                key: const ValueKey<String>('work_form_urgent'),
-                contentPadding: EdgeInsets.zero,
-                value: _urgent,
-                onChanged: _submitting
-                    ? null
-                    : (value) => setState(() => _urgent = value),
-                title: const Text('Acil durum'),
-                subtitle: const Text(
-                  'Güvenlik riski ya da bekleyemeyecek bir arıza varsa işaretleyin.',
-                ),
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            keyboardType: TextInputType.multiline,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Açıklama',
+              hintText: 'Sorunu ve ne zamandır sürdüğünü yazın',
+              alignLabelWithHint: true,
+            ),
+            validator: (value) {
+              final length = (value ?? '').trim().runes.length;
+              if (length < 1) return 'Açıklama boş olamaz.';
+              if (length > kWorkDescriptionMax) {
+                return 'Açıklama en çok $kWorkDescriptionMax karakter olabilir.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: AppSpace.sm),
+          SwitchListTile(
+            key: const ValueKey<String>('work_form_urgent'),
+            contentPadding: EdgeInsets.zero,
+            value: _urgent,
+            onChanged: _submitting
+                ? null
+                : (value) => setState(() => _urgent = value),
+            title: const Text('Acil durum'),
+            subtitle: const Text(
+              'Güvenlik riski ya da bekleyemeyecek bir arıza varsa işaretleyin.',
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: AppSpace.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('Fotoğraf (isteğe bağlı)', style: th.titleSmall),
+              Text(
+                '${_photos.length}/$kWorkAttachmentMax',
+                key: const ValueKey<String>('work_form_photo_count'),
+                style: th.bodySmall,
               ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Sorunu gösteren en fazla $kWorkAttachmentMax fotoğraf ekleyebilirsiniz; JPEG, PNG veya WebP, her biri en fazla 5 MB. '
+            'Fotoğraflar talep gönderildikten sonra yüklenir.',
+            style: th.bodySmall,
+          ),
+          if (_photos.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            WorkPickedPhotoList(
+              photos: _photos,
+              onRemove: _removePhoto,
+              images: _previewImages,
+              enabled: !_submitting,
+            ),
+          ],
+          if (_photoError != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            InlineNotice(
+              key: const ValueKey<String>('work_form_photo_error'),
+              message: _photoError!,
+            ),
+          ],
+          const SizedBox(height: AppSpace.sm),
+          PrimaryActionButton(
+            key: const ValueKey<String>('work_form_photo_add'),
+            label: photoFull ? 'Fotoğraf sınırına ulaşıldı' : 'Fotoğraf Ekle',
+            icon: Icons.add_a_photo_outlined,
+            variant: AppButtonVariant.tonal,
+            onPressed: (_submitting || _picking || photoFull)
+                ? null
+                : () => unawaited(_pickPhotos()),
+          ),
+        ],
       ),
     );
   }
@@ -544,6 +812,89 @@ class _WorkItemFormDialogState extends State<WorkItemFormDialog> {
               _apartmentId = value;
               _apartmentFieldError = null;
             }),
+    );
+  }
+}
+
+/// Yükleme aşamasında fotoğraf başına durum satırı: yüklendi / yüklenemedi (neden) / sırada / yükleniyor.
+class _PhotoOutcomeList extends StatelessWidget {
+  const _PhotoOutcomeList({required this.photos, required this.upload});
+
+  final List<WorkPhotoPick> photos;
+  final WorkAttachmentUploadController upload;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final th = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < photos.length; i++)
+          Builder(
+            builder: (context) {
+              final photo = photos[i];
+              // Fotoğrafın EN SON sonucu (turlar arası; kimlik eşlemesi): yeniden denemede de durum doğru kalır.
+              final result = upload.resultFor(photo);
+              final IconData icon;
+              final AppTone tone;
+              final String status;
+              if (upload.isQueued(photo)) {
+                final inFlight = identical(upload.current, photo);
+                icon = inFlight ? Icons.cloud_upload_outlined : Icons.schedule_rounded;
+                tone = inFlight ? AppTone.primary : AppTone.neutral;
+                status = inFlight ? 'Yükleniyor...' : 'Sırada';
+              } else if (result == null) {
+                icon = Icons.schedule_rounded;
+                tone = AppTone.neutral;
+                status = 'Yüklenmedi';
+              } else if (result.ok) {
+                icon = Icons.check_circle_outline_rounded;
+                tone = AppTone.success;
+                status = 'Yüklendi';
+              } else {
+                icon = result.cancelled
+                    ? Icons.stop_circle_outlined
+                    : Icons.error_outline_rounded;
+                tone = result.cancelled ? AppTone.neutral : AppTone.danger;
+                status = result.error ?? 'Yüklenemedi';
+              }
+              return Padding(
+                padding: EdgeInsets.only(bottom: i == photos.length - 1 ? 0 : AppSpace.sm),
+                child: Semantics(
+                  container: true,
+                  label: '${photo.name}: $status',
+                  child: ExcludeSemantics(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(icon, size: 20, color: tone.ink(p)),
+                        const SizedBox(width: AppSpace.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                photo.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: th.bodyMedium?.copyWith(color: p.text),
+                              ),
+                              Text(
+                                status,
+                                style: th.bodySmall?.copyWith(color: tone.ink(p)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }

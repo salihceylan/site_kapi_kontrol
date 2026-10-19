@@ -147,8 +147,46 @@ async function runDdl(client, sql) {
 }
 
 /**
+ * RU-2 veri onarımı (idempotent; eski sürüm hatası): sakinin KENDİ iptali iki ayrı clock_timestamp() ile yazıldığı için (requester_seen_at, resident_updated_at)
+ * mikrosaniye farkla "okunmamış" kalmış olabilir. Ölçüt: talep iptal + resident_updated_at > requester_seen_at + iptali SAKİN yapmış (status_changed, actor_kind
+ * resident, to iptal). İptal SONDUR (sonradan yönetim güncellemesi olamaz); bu yüzden görüldü damgası güncelleme damgasına eşitlenir.
+ */
+export const RESIDENT_CANCEL_UNREAD_FILTER = `
+  w.status = 'iptal' AND w.resident_updated_at > w.requester_seen_at
+  AND EXISTS (
+    SELECT 1 FROM work_item_events e
+    WHERE e.work_item_id = w.id AND e.event_type = 'status_changed' AND e.actor_kind = 'resident' AND e.to_value = 'iptal'
+  )
+`;
+
+/**
+ * Önce UCUZ bir EXISTS; yalnız gerekirse UPDATE (2 sn kilit beklemesiyle). Normal açılışta tek okuma sorgusu gider, YAZMA yoktur. Hata açılışı DURDURMAZ
+ * (yalnız kod günlüğe yazılır; sonraki açılışta yeniden denenir). @returns onarılan satır sayısı
+ */
+export async function repairResidentCancelUnread(client) {
+  try {
+    const needed = await client.query(`SELECT EXISTS (SELECT 1 FROM work_items w WHERE ${RESIDENT_CANCEL_UNREAD_FILTER}) AS needed`);
+    if (needed.rows?.[0]?.needed !== true) {
+      return 0;
+    }
+    await client.query("SET lock_timeout = '2s'");
+    try {
+      const fixed = await client.query(`UPDATE work_items w SET requester_seen_at = w.resident_updated_at WHERE ${RESIDENT_CANCEL_UNREAD_FILTER}`);
+      return Number(fixed.rowCount ?? 0);
+    } finally {
+      await client.query('RESET lock_timeout').catch(() => {});
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[work_tracking] iptal okunmamis onarimi atlandi (sonraki acilista yeniden denenir):', error?.code || error?.name || 'error');
+    return 0;
+  }
+}
+
+/**
  * 042'yi uygular (db.js ensureDbSchema bloğu BİTTİKTEN sonra çağrılır). Tek katalog sorgusuyla eksik nesneler belirlenir; yalnız eksikler, sırayla ve kendi
- * otomatik onaylı ifadeleriyle çalışır. Her şey varsa (normal açılış) hiçbir ifade gönderilmez. Üst tablo (apartments / site_blocks) henüz yoksa o FK atlanır.
+ * otomatik onaylı ifadeleriyle çalışır. Her şey varsa (normal açılış) DDL gönderilmez; yalnız RU-2 onarımının ucuz EXISTS okuması gider (iki tablo da
+ * varsa; ilk kurulumda onarılacak satır yoktur). Üst tablo (apartments / site_blocks) henüz yoksa o FK atlanır.
  */
 export async function ensureWorkTrackingSchema(client) {
   const tables = ['work_items', 'work_item_events', 'apartments', 'site_blocks'];
@@ -177,7 +215,11 @@ export async function ensureWorkTrackingSchema(client) {
     if (spec.fk) return presentTables.has(spec.on) && hasParent(spec.parent) && !fkPresent(spec);
     return !presentIndexes.has(spec.index);
   });
-  // Eksik nesne yoksa (her normal açılış) hiçbir ifade gönderilmez: kilit alınmaz.
+  // RU-2 onarımı: yalnız iki tablo da ZATEN varsa (mevcut kurulum); DDL'den önce ve ondan bağımsız.
+  if (presentTables.has('work_items') && presentTables.has('work_item_events')) {
+    await repairResidentCancelUnread(client);
+  }
+  // Eksik nesne yoksa (her normal açılış) hiçbir DDL gönderilmez: kilit alınmaz.
   if (pending.length === 0) {
     return;
   }

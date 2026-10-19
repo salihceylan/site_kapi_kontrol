@@ -5,8 +5,15 @@
 // baska site), IDOR (sakin / gorevli / baska site), talep acma (dogrulama, daire sahipligi, idempotans, yaris, saatlik + acik talep + yorum siniri), gecis kurallari,
 // atama kurallari, olay + audit satirlari, okunmamis sayaci, kurul / sakin gorunumu (iç olay, telefon, oncelik, atanan adi YOK), hesap silme x talep, disa aktarma,
 // gunluk / audit gizliligi, ilk kurulum x sert yazici yuku (40P01 = 0), eksik nesne tamamlama, karisik eszamanli tur (40P01 = 0, 5xx yok).
+// K: fotograf ekleri (047): yetki matrisi, IDOR, yukleme akisi (imza / boyut uyusmazligi temizligi), 4 siniri yarisi, saatlik sinir, indirme basliklari, silme,
+// kapali talepte yalniz yonetici silmesi, okunmamis, bakim (bayat / 30 gunluk yetim / silinmis site dizini), hesap silme + disa aktarma, sakine yonetim adi
+// donmemesi ("Yönetim"), bayt kotalari, suresi dolan kayitlarin sayilmamasi, acilma bombasi (piksel boyutu). L: performans raporu (tohumlanmis veriyle
+// sayilar, yetki, aralik, cozum anindaki atanan). H1b: RU-2 iptal okunmamis onarimi.
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { promises as fsp } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export async function sectionWorkTracking(ctx) {
   const { check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors } = ctx;
@@ -438,6 +445,18 @@ export async function sectionWorkTracking(ctx) {
     unread2.body.unread_updates === unread1.body.unread_updates + 1 && unreadItem?.unread === true && seen.status === 200 && seen.body.unread === false && unread3.body.unread_updates === unread1.body.unread_updates && forSite.status === 200 && unread4.body.unread_updates === unread1.body.unread_updates + 1,
     [unread0.body.unread_updates, unread1.body.unread_updates, unread2.body.unread_updates, unread3.body.unread_updates, unread4.body.unread_updates]);
   check('F2: GET yazmaz (listelemek / ayrinti acmak okundu SAYMAZ); baskasinin seen\'i 404', (await call('GET', `/app/work-items/${u}`, R2)).body.item.unread === true && (await call('POST', `/app/work-items/${u}/seen`, R1)).status === 404);
+  // F3: sakinin KENDI iptali okunmamis birakmaz (requester_seen_at = resident_updated_at TEK kararli deger; eskiden iki clock_timestamp() mikrosaniye fark uretiyordu)
+  const cancelUser = await resident(site, site.apts[1], 'IT Iptal Okunmamis');
+  process.env.WORK_ITEMS_MAX_PER_USER_PER_HOUR = '100';
+  const selfCancel = [];
+  for (let i = 0; i < 20; i += 1) {
+    const id = (await create(cancelUser, { title: `Iptal okunmamis ${i}` })).body.item.id;
+    const cancelled = await call('POST', `/app/work-items/${id}/cancel`, cancelUser);
+    selfCancel.push([cancelled.status, cancelled.body?.item?.unread, (await call('GET', `/app/work-items/${id}`, cancelUser)).body.item.unread]);
+  }
+  delete process.env.WORK_ITEMS_MAX_PER_USER_PER_HOUR;
+  const equalStamps = await countOf(`SELECT COUNT(*)::int AS n FROM work_items WHERE created_by = $1 AND status = 'iptal' AND requester_seen_at = resident_updated_at`, [cancelUser]);
+  check('F3: sakin kendi talebini iptal edince (20 deneme) yanit ve ayrinti unread false; iki damga birebir esit', selfCancel.every(([s, a, b]) => s === 200 && a === false && b === false) && equalStamps === 20, [selfCancel.filter(([s, a, b]) => s !== 200 || a !== false || b !== false), equalStamps]);
 
   // ============================================================================================================
   console.log('--- G. hesap silme / disa aktarma / gizlilik ---');
@@ -574,13 +593,512 @@ export async function sectionWorkTracking(ctx) {
   check('J7 (P2-7): saatlik sinir (3) iki sitede ESZAMANLI 6 istekte tam 3 kabul + 3 429; satir sayisi 3 (kullanici advisory kilidi)', accepted === 3 && limited === 3 && (await countOf(`SELECT COUNT(*)::int AS n FROM work_items WHERE created_by = $1`, [dual])) === 3, burst.map((r) => r.status));
 
   // ============================================================================================================
+  console.log('--- K. fotograf ekleri (047) ---');
+  const { resetStorageCheck, pathForKey: storagePath } = await import('../src/modules/document_storage.js');
+  const { runDocumentsMaintenanceOnce } = await import('../src/modules/document_maintenance.js');
+  const storageRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'qa-wa-'));
+  process.env.DOCUMENTS_DIR = storageRoot;
+  process.env.DOCUMENTS_MIN_FREE_BYTES = '0';
+  resetStorageCheck();
+  // Gecerli JPEG isaretci zinciri, tam `length` bayt: SOI + APP0 (JFIF) + SOF0 (genislik x yukseklik; boyut korumasi bunu okur) + SOS + dolgu + EOI
+  const jpegOf = (length, width = 640, height = 480) => {
+    const head = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from('JFIF\0'), Buffer.from([0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]),
+      Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, height >> 8, height & 0xff, width >> 8, width & 0xff, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01]),
+      Buffer.from([0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00]),
+    ]);
+    return Buffer.concat([head, crypto.randomBytes(length - head.length - 2), Buffer.from([0xff, 0xd9])]);
+  };
+  const JPEG = jpegOf(3000);
+  // PNG: imza + IHDR (genislik / yukseklik) + dolgu + IEND
+  const pngOf = (width, height, filler = 500) => {
+    const ihdr = Buffer.alloc(17);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]), Buffer.from('IHDR'), ihdr, crypto.randomBytes(filler), Buffer.from([0, 0, 0, 0]), Buffer.from('IEND'), Buffer.alloc(4)]);
+  };
+  const PNG = pngOf(64, 48);
+  const PDF = Buffer.concat([Buffer.from('%PDF-1.4 '), Buffer.alloc(PNG.length - 15, 0x20), Buffer.from('%%EOF\n')]);
+  const attDir = (siteCode) => path.join(storageRoot, 'work_attachments', String(siteCode));
+  const attFiles = async (siteCode) => (await fsp.readdir(attDir(siteCode)).catch(() => [])).sort();
+  const tmpFiles = async () => (await fsp.readdir(path.join(storageRoot, '_tmp')).catch(() => [])).filter((n) => n.endsWith('.part'));
+  const rawReq = async (method, urlPath, user, headers, body) => {
+    const h = { ...headers };
+    if (user !== null) h.authorization = `Bearer ${await tokenFor(user)}`;
+    return new Promise((resolve, reject) => {
+      const req = http.request(`${base}${urlPath}`, { method, headers: h }, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const bytes = Buffer.concat(chunks);
+          let json = null;
+          try { json = JSON.parse(bytes.toString('utf8')); } catch (_e) { /* ikili govde */ }
+          resolve({ status: res.statusCode, body: json, bytes, headers: res.headers });
+        });
+      });
+      req.on('error', (e) => (['EPIPE', 'ECONNRESET'].includes(e.code) ? undefined : reject(e)));
+      if (body) req.write(body);
+      req.end();
+    });
+  };
+  const putContent = (urlPath, user, bytes, over = {}) => rawReq('PUT', urlPath, user, { 'content-type': 'application/octet-stream', 'content-length': String(bytes.length), ...over }, bytes);
+  const getContent = (urlPath, user) => rawReq('GET', urlPath, user, {});
+  const attMeta = (over = {}) => ({ file_name: 'foto.jpg', mime_type: 'image/jpeg', size_bytes: JPEG.length, ...over });
+  const createAtt = (itemUrl, user, over) => call('POST', `${itemUrl}/attachments`, user, attMeta(over));
+  const uploadAtt = async (itemUrl, user, bytes = JPEG, over = {}) => {
+    const created = await createAtt(itemUrl, user, { size_bytes: bytes.length, ...over });
+    if (created.status !== 201) return { created, put: null, id: null };
+    const id = created.body.attachment.id;
+    const put = await putContent(`${itemUrl}/attachments/${id}/content`, user, bytes);
+    return { created, put, id };
+  };
+  const A = (itemId) => `/app/work-items/${itemId}`;
+  const sha256Of = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+
+  const KR = await resident(site, site.apts[0], 'IT Foto Sakin', '+905559990099');
+  const KR2 = await resident(site, site.apts[1], 'IT Foto Sakin Iki');
+  const kItem = (await create(KR, { title: 'Foto talebi' })).body.item.id;
+  const kItem2 = (await create(KR, { title: 'Foto talebi iki' })).body.item.id;
+  await call('PATCH', M(`/${kItem2}`), MGR, { assigned_to: STAFF2 });
+
+  // K1: ekleme (POST) yetki matrisi + IDOR
+  const kOwn = await createAtt(A(kItem), KR);
+  const kOther = await createAtt(A(kItem), KR2);
+  const kStaff = await createAtt(M(`/${kItem}`), STAFF);
+  const kMgr = await createAtt(M(`/${kItem}`), MGR);
+  const kBoard = await createAtt(M(`/${kItem}`), BOARD);
+  const kOutsider = await createAtt(M(`/${kItem}`), OUTSIDER);
+  const kCross = await createAtt(M(`/${kItem}`, site2.code), MGR2);
+  const kStaffHidden = await createAtt(M(`/${kItem2}`), STAFF);
+  const kStaff2Visible = await createAtt(M(`/${kItem2}`), STAFF2);
+  check('K1: ekleme matrisi: sakin kendi talebine 201 (uploading), baskasinin talebine 404; gorevli kapsamindaki talebe 201, baskasina atanana 404; yonetici 201; kurul / ilgisiz 403; baska sitenin yoneticisi kendi site yolundan 404',
+    kOwn.status === 201 && kOwn.body.attachment.status === 'uploading' && kOwn.body.attachment.uploaded_by_me === true && kOther.status === 404 && kOther.body.code === 'WORK_ITEM_NOT_FOUND' &&
+      kStaff.status === 201 && kMgr.status === 201 && kBoard.status === 403 && kBoard.body.code === 'FORBIDDEN_ROLE' && kOutsider.status === 403 && kCross.status === 404 &&
+      kStaffHidden.status === 404 && kStaff2Visible.status === 201, [kOwn.status, kOther.status, kStaff.status, kMgr.status, kBoard.status, kOutsider.status, kCross.status, kStaffHidden.status, kStaff2Visible.status]);
+  const attR = kOwn.body.attachment.id;
+  const attS = kStaff.body.attachment.id;
+  const attM = kMgr.body.attachment.id;
+
+  // K2: yukleme akisi
+  const putR = await putContent(`${A(kItem)}/attachments/${attR}/content`, KR, JPEG);
+  const rowR = (await q(`SELECT status, sha256, size_bytes, storage_key, ready_at FROM work_item_attachments WHERE id = $1`, [attR])).rows[0];
+  const fileR = rowR?.storage_key ? await fsp.readFile(storagePath(storageRoot, rowR.storage_key, 'work_attachments')).catch(() => null) : null;
+  const evR = (await q(`SELECT event_type, visibility, actor_kind, to_value FROM work_item_events WHERE work_item_id = $1 AND event_type = 'attachment_added'`, [kItem])).rows;
+  const auditR = (await q(`SELECT details FROM audit_log WHERE action = 'work_item.attachment_added' AND target_id = $1`, [String(kItem)])).rows;
+  check('K2: PUT jpeg -> 200 ready (+ ready_at, sha256 = icerik ozeti, storage_key <site>/<uuid>); dosya work_attachments/<site>/<uuid> altinda birebir; attachment_added olayi public (to = ek kimligi); audit dosya adi tasimaz',
+    putR.status === 200 && putR.body.attachment.status === 'ready' && putR.body.attachment.ready_at && rowR.status === 'ready' && rowR.sha256 === sha256Of(JPEG) && Number(rowR.size_bytes) === JPEG.length &&
+      new RegExp(`^${site.code}/[0-9a-f-]{36}$`).test(rowR.storage_key) && fileR && fileR.equals(JPEG) && evR.length === 1 && same(evR[0], { event_type: 'attachment_added', visibility: 'public', actor_kind: 'resident', to_value: String(attR) }) &&
+      auditR.length === 1 && !JSON.stringify(auditR).includes('foto') && auditR[0].details.attachment_id === attR, [putR.status, putR.body, rowR, evR, auditR]);
+  const detR = await call('GET', A(kItem), KR);
+  const detM = await call('GET', M(`/${kItem}`), MGR);
+  const detS = await call('GET', M(`/${kItem}`), STAFF);
+  const detB = await call('GET', M(`/${kItem}`), BOARD);
+  const listR = await call('GET', '/app/work-items', KR);
+  const listM = await call('GET', M('?limit=100'), MGR);
+  const attOf = (detail, id) => (detail.body?.attachments ?? []).find((a) => a.id === id);
+  check('K2b: ayrinti: hazir ekler + YALNIZ cagiranin kendi tamamlanmamis yuklemeleri (sakin 1, yonetici 2, gorevli 2, kurul 1); liste attachment_count yalniz hazir (1); uploaded_by_name / uploaded_by_me / uploaded_by_kind (acan = resident, digerleri management) dogru',
+    detR.body.attachments.length === 1 && detR.body.attachments[0].id === attR && detR.body.attachments[0].uploaded_by_me === true && detR.body.attachments[0].uploaded_by_name === 'IT Foto Sakin' && detR.body.attachments[0].uploaded_by_kind === 'resident' &&
+      detM.body.attachments.length === 2 && detM.body.attachments.some((a) => a.id === attM && a.status === 'uploading' && a.uploaded_by_me) && detS.body.attachments.length === 2 && detS.body.attachments.some((a) => a.id === attS) &&
+      attOf(detM, attM)?.uploaded_by_kind === 'management' && attOf(detM, attM)?.uploaded_by_name === 'IT Yonetici' && attOf(detM, attR)?.uploaded_by_kind === 'resident' && attOf(detM, attR)?.uploaded_by_name === 'IT Foto Sakin' &&
+      attOf(detS, attS)?.uploaded_by_kind === 'management' && attOf(detS, attS)?.uploaded_by_name === 'IT Gorevli' &&
+      detB.body.attachments.length === 1 && detB.body.attachments[0].uploaded_by_me === false && detB.body.attachments[0].uploaded_by_kind === 'resident' && detB.body.attachments[0].uploaded_by_name === 'IT Foto Sakin' &&
+      listR.body.items.find((i) => i.id === kItem).attachment_count === 1 && listM.body.items.find((i) => i.id === kItem).attachment_count === 1 &&
+      detR.body.item.attachment_count === 1, [detR.body.attachments, detM.body.attachments, detS.body.attachments, detB.body.attachments]);
+  const putAgain = await putContent(`${A(kItem)}/attachments/${attR}/content`, KR, JPEG);
+  const putForeign = await putContent(`${M(`/${kItem}`)}/attachments/${attR}/content`, MGR, JPEG);
+  const putBoard = await putContent(`${M(`/${kItem}`)}/attachments/${attM}/content`, BOARD, JPEG);
+  check('K2c: tamamlanmis kayda ikinci PUT 409 UPLOAD_ALREADY_COMPLETED; baskasinin kaydina PUT 404 (yalniz acan yukler); kurul PUT 403', putAgain.status === 409 && putAgain.body.code === 'UPLOAD_ALREADY_COMPLETED' && putForeign.status === 404 && putBoard.status === 403, [putAgain.body, putForeign.body, putBoard.body]);
+
+  // K3: uyusmazlik temizligi (4. kayit: yonetici, PNG boyutunda jpeg beyani)
+  const mm = await createAtt(M(`/${kItem}`), MGR, { size_bytes: PNG.length });
+  const mmUrl = `${M(`/${kItem}`)}/attachments/${mm.body.attachment.id}/content`;
+  const fifth = await createAtt(M(`/${kItem}`), MGR);
+  const mmPng = await putContent(mmUrl, MGR, PNG);
+  const tmpAfterPng = await tmpFiles();
+  const mmRowAfterPng = (await q(`SELECT status, storage_key FROM work_item_attachments WHERE id = $1`, [mm.body.attachment.id])).rows[0];
+  // son yolda dosya OLMADIGI uyusmazliktan HEMEN sonra olculur (sonraki basarili PUT dosyayi olusturur)
+  const finalAfterPng = (await attFiles(site.code)).includes(mmRowAfterPng.storage_key.split('/')[1]);
+  const mmPdf = await putContent(mmUrl, MGR, PDF);
+  const mmShort = await putContent(mmUrl, MGR, JPEG);
+  // application/json gonderilirse genel express.json govdeyi ayristirip rotaya gelmeden 400 doner (belgelerle ayni); burada JSON disi yanlis tur sinanir
+  const mmJson = await putContent(mmUrl, MGR, jpegOf(PNG.length), { 'content-type': 'image/jpeg' });
+  const mmOk = await putContent(mmUrl, MGR, jpegOf(PNG.length));
+  check('K3: 5. kayit 409 LIMIT_REACHED { attachment_limit: 4 }; jpeg beyanina PNG 415 ATTACHMENT_CONTENT_MISMATCH (gecici dosya silinir, kayit uploading kalir, son dosya yok), PDF 415 ATTACHMENT_TYPE_NOT_ALLOWED, boyut farkli 400 ATTACHMENT_SIZE_MISMATCH, octet-stream disi tur (image/jpeg) 415 INVALID_CONTENT_TYPE; sonra dogru jpeg 200 ready',
+    fifth.status === 409 && fifth.body.code === 'LIMIT_REACHED' && fifth.body.attachment_limit === 4 && mmPng.status === 415 && mmPng.body.code === 'ATTACHMENT_CONTENT_MISMATCH' && tmpAfterPng.length === 0 &&
+      mmRowAfterPng.status === 'uploading' && finalAfterPng === false && mmPdf.status === 415 && mmPdf.body.code === 'ATTACHMENT_TYPE_NOT_ALLOWED' &&
+      mmShort.status === 400 && mmShort.body.code === 'ATTACHMENT_SIZE_MISMATCH' && mmJson.status === 415 && mmJson.body.code === 'INVALID_CONTENT_TYPE' && mmOk.status === 200 && mmOk.body.attachment.status === 'ready',
+    [fifth.body, mmPng.body, tmpAfterPng, mmPdf.body, mmShort.body, mmJson.body, mmOk.status]);
+
+  // K4: 4 siniri yarisi
+  const kRace = (await create(KR, { title: 'Yaris talebi' })).body.item.id;
+  const raceAtt = await Promise.all(Array.from({ length: 8 }, () => createAtt(A(kRace), KR)));
+  const raceOk = raceAtt.filter((r) => r.status === 201).length;
+  const raceLimited = raceAtt.filter((r) => r.status === 409 && r.body.code === 'LIMIT_REACHED').length;
+  const raceRows = await countOf(`SELECT COUNT(*)::int AS n FROM work_item_attachments WHERE work_item_id = $1`, [kRace]);
+  const raceDel = await call('DELETE', `${A(kRace)}/attachments/${raceAtt.find((r) => r.status === 201).body.attachment.id}`, KR);
+  const raceAgain = await createAtt(A(kRace), KR);
+  check('K4: 8 eszamanli kayit -> tam 4 x 201 + 4 x 409 LIMIT_REACHED, 4 satir (talep satiri kilidi); tamamlanmamis kendi kaydini silince (200, olaysiz) yeniden 201', raceOk === 4 && raceLimited === 4 && raceRows === 4 && raceDel.status === 200 && raceDel.body.deleted === true && raceAgain.status === 201 &&
+    (await countOf(`SELECT COUNT(*)::int AS n FROM work_item_events WHERE work_item_id = $1 AND event_type LIKE 'attachment_%'`, [kRace])) === 0, raceAtt.map((r) => r.status));
+
+  // K5: kullanici basina saatte 30 kayit
+  const HR = await resident(site, site.apts[2], 'IT Foto Saatlik');
+  const hrItems = [];
+  for (let i = 0; i < 8; i += 1) hrItems.push((await create(HR, { title: `Saatlik ${i}` })).body.item.id);
+  const hrResults = [];
+  for (let i = 0; i < 31; i += 1) hrResults.push(await createAtt(A(hrItems[Math.floor(i / 4)]), HR));
+  check('K5: 30 kayit 201, 31. kayit 429 WORK_ATTACHMENT_RATE_LIMITED + Retry-After 3600 (siteler arasi, kullanici kilidi)', hrResults.slice(0, 30).every((r) => r.status === 201) && hrResults[30].status === 429 && hrResults[30].body.code === 'WORK_ATTACHMENT_RATE_LIMITED' &&
+    hrResults[30].headers.get('retry-after') === '3600', hrResults.map((r) => r.status).join(''));
+
+  // K6: indirme
+  const dlR = await getContent(`${A(kItem)}/attachments/${attR}/content`, KR);
+  const dlM = await getContent(`${M(`/${kItem}`)}/attachments/${attR}/content`, MGR);
+  const dlS = await getContent(`${M(`/${kItem}`)}/attachments/${attR}/content`, STAFF);
+  const dlB = await getContent(`${M(`/${kItem}`)}/attachments/${attR}/content`, BOARD);
+  const dlOther = await getContent(`${A(kItem)}/attachments/${attR}/content`, KR2);
+  const dlCross = await getContent(`${M(`/${kItem}`, site2.code)}/attachments/${attR}/content`, MGR2);
+  const dlUploading = await getContent(`${M(`/${kItem}`)}/attachments/${attS}/content`, MGR);
+  const dlWrongItem = await getContent(`${A(kRace)}/attachments/${attR}/content`, KR);
+  const dlNone = await getContent(`${A(kItem)}/attachments/999999/content`, KR);
+  check('K6: indirme: sakin (kendi) / yonetici / gorevli / kurul 200, Content-Type image/jpeg, Content-Disposition inline + ad, Cache-Control private, no-store, nosniff, bayt bayt ayni; baska sakin / baska site 404; tamamlanmamis 404; baska talebin eki 404; olmayan 404',
+    [dlR, dlM, dlS, dlB].every((r) => r.status === 200 && r.headers['content-type'] === 'image/jpeg' && /^inline; filename="foto\.jpg"/.test(r.headers['content-disposition']) && r.headers['cache-control'] === 'private, no-store' && r.headers['x-content-type-options'] === 'nosniff' && r.bytes.equals(JPEG)) &&
+      dlOther.status === 404 && dlCross.status === 404 && dlUploading.status === 404 && dlWrongItem.status === 404 && dlNone.status === 404, [dlR.status, dlM.status, dlS.status, dlB.status, dlOther.status, dlCross.status, dlUploading.status, dlWrongItem.status, dlNone.status, dlR.headers]);
+
+  // K7: silme yetkisi, dosya, olay; kapali talep
+  const delStaffForeign = await call('DELETE', `${M(`/${kItem}`)}/attachments/${attR}`, STAFF);
+  const delResidentForeign = await call('DELETE', `${A(kItem)}/attachments/${mm.body.attachment.id}`, KR);
+  const delBoard = await call('DELETE', `${M(`/${kItem}`)}/attachments/${attR}`, BOARD);
+  const delCross = await call('DELETE', `${M(`/${kItem}`, site2.code)}/attachments/${attR}`, MGR2);
+  const delMgr = await call('DELETE', `${M(`/${kItem}`)}/attachments/${attR}`, MGR);
+  const fileGone = rowR.storage_key ? !(await attFiles(site.code)).includes(rowR.storage_key.split('/')[1]) : false;
+  const delStaffOwn = await call('DELETE', `${M(`/${kItem}`)}/attachments/${attS}`, STAFF);
+  const removedEvents = (await q(`SELECT visibility, actor_kind, from_value FROM work_item_events WHERE work_item_id = $1 AND event_type = 'attachment_removed'`, [kItem])).rows;
+  const delAudit = await countOf(`SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'work_item.attachment_removed' AND target_id = $1`, [String(kItem)]);
+  check('K7: gorevli / sakin baskasinin ekini silemez (403 FORBIDDEN_ROLE), kurul 403, baska site 404; yonetici sakinin hazir ekini siler (200; dosya COMMIT sonrasi silindi; attachment_removed public, from = ek); gorevli kendi tamamlanmamisini siler (olaysiz); audit 2',
+    delStaffForeign.status === 403 && delStaffForeign.body.code === 'FORBIDDEN_ROLE' && delResidentForeign.status === 403 && delBoard.status === 403 && delCross.status === 404 && delMgr.status === 200 && fileGone && delStaffOwn.status === 200 &&
+      removedEvents.length === 1 && same(removedEvents[0], { visibility: 'public', actor_kind: 'manager', from_value: String(attR) }) && delAudit === 2, [delStaffForeign.body, delResidentForeign.body, delBoard.status, delCross.status, delMgr.body, fileGone, delStaffOwn.body, removedEvents, delAudit]);
+  // K8 (WA-SEC-2): kapali (kapandi / iptal) talepte ekleme herkese kapali; silme YALNIZ yonetici / super (moderasyon / KVKK), gorevli ve sakin 409 INVALID_STATE
+  const k8Res = await uploadAtt(A(kItem), KR);
+  const k8Staff = await uploadAtt(M(`/${kItem}`), STAFF);
+  const closeK = await call('PATCH', M(`/${kItem}`), MGR, { status: 'iptal' });
+  const closedAdd = await createAtt(M(`/${kItem}`), MGR);
+  const closedAddR = await createAtt(A(kItem), KR);
+  const closedDelR = await call('DELETE', `${A(kItem)}/attachments/${k8Res.id}`, KR);
+  const closedDelS = await call('DELETE', `${M(`/${kItem}`)}/attachments/${k8Staff.id}`, STAFF);
+  const closedDelM = await call('DELETE', `${M(`/${kItem}`)}/attachments/${mm.body.attachment.id}`, MGR);
+  const closedRemoved = (await q(`SELECT visibility, actor_kind FROM work_item_events WHERE work_item_id = $1 AND event_type = 'attachment_removed' AND from_value = $2`, [kItem, String(mm.body.attachment.id)])).rows;
+  const closedAudit = (await q(`SELECT details FROM audit_log WHERE action = 'work_item.attachment_removed' AND target_id = $1 AND details->>'attachment_id' = $2`, [String(kItem), String(mm.body.attachment.id)])).rows;
+  const closedGetR = await getContent(`${A(kItem)}/attachments/${k8Res.id}/content`, KR);
+  const closedGetM = await getContent(`${M(`/${kItem}`)}/attachments/${k8Staff.id}/content`, MGR);
+  check('K8 (WA-SEC-2): iptal talepte ekleme (yonetici + sakin) 409 INVALID_STATE; sakin ve gorevli KENDI fotografini silemez (409 INVALID_STATE), yonetici siler (200; attachment_removed public + audit closed_item true); kalan fotograflar indirilmeye devam eder',
+    k8Res.put?.status === 200 && k8Staff.put?.status === 200 && closeK.status === 200 && closedAdd.status === 409 && closedAdd.body.code === 'INVALID_STATE' && closedAddR.status === 409 && closedAddR.body.code === 'INVALID_STATE' &&
+      closedDelR.status === 409 && closedDelR.body.code === 'INVALID_STATE' && closedDelS.status === 409 && closedDelS.body.code === 'INVALID_STATE' && closedDelM.status === 200 && closedDelM.body.deleted === true &&
+      closedRemoved.length === 1 && same(closedRemoved[0], { visibility: 'public', actor_kind: 'manager' }) && closedAudit.length === 1 && closedAudit[0].details.closed_item === true && closedAudit[0].details.by === 'management' &&
+      closedGetR.status === 200 && closedGetR.bytes.equals(JPEG) && closedGetM.status === 200 && closedGetM.bytes.equals(JPEG),
+    [k8Res.put?.status, k8Staff.put?.status, closeK.status, closedAdd.body, closedAddR.body, closedDelR.body, closedDelS.body, closedDelM.body, closedRemoved, closedAudit, closedGetR.status, closedGetM.status]);
+
+  // K9: okunmamis
+  const uItem = (await create(KR2, { title: 'Okunmamis foto' })).body.item.id;
+  const unreadBefore = (await call('GET', A(uItem), KR2)).body.item.unread;
+  const mgrUp = await uploadAtt(M(`/${uItem}`), MGR);
+  const unreadAfterMgr = (await call('GET', A(uItem), KR2)).body.item.unread;
+  await call('POST', `${A(uItem)}/seen`, KR2);
+  const ownUp = await uploadAtt(A(uItem), KR2);
+  const unreadAfterOwn = (await call('GET', A(uItem), KR2)).body.item.unread;
+  check('K9: yonetim fotograf ekleyince sakinde okunmamis (true), seen sifirlar; sakinin KENDI fotografi okunmamis birakmaz', unreadBefore === false && mgrUp.put?.status === 200 && unreadAfterMgr === true && ownUp.put?.status === 200 && unreadAfterOwn === false, [unreadBefore, mgrUp.put?.status, unreadAfterMgr, ownUp.put?.status, unreadAfterOwn]);
+
+  // K10: bakim: bayat yukleme (satir + dosya), yetim dosya, hazir dosya korunur
+  const staleKey = `${site.code}/${crypto.randomUUID()}`;
+  await q(`INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key, created_at) VALUES ($1, $2, $3, 'bayat.jpg', 'image/jpeg', 10, 'uploading', $4, NOW() - INTERVAL '3 hours')`, [uItem, site.code, MGR, staleKey]);
+  await fsp.writeFile(storagePath(storageRoot, staleKey, 'work_attachments'), 'bayat');
+  // yetim dosya alt yasi 30 gun (WORK_ATTACHMENTS_ORPHAN_MIN_AGE_DAYS): 31 gunluk silinir, 25 gunluk ve genc olan kalir
+  const orphanName = crypto.randomUUID();
+  const midOrphan = crypto.randomUUID();
+  const youngOrphan = crypto.randomUUID();
+  const oldStamp = new Date(Date.now() - 31 * 86400_000);
+  const midStamp = new Date(Date.now() - 25 * 86400_000);
+  await fsp.writeFile(path.join(attDir(site.code), orphanName), 'yetim');
+  await fsp.utimes(path.join(attDir(site.code), orphanName), oldStamp, oldStamp);
+  await fsp.writeFile(path.join(attDir(site.code), midOrphan), 'orta');
+  await fsp.utimes(path.join(attDir(site.code), midOrphan), midStamp, midStamp);
+  await fsp.writeFile(path.join(attDir(site.code), youngOrphan), 'genc');
+  const readyKeys = (await q(`SELECT storage_key FROM work_item_attachments WHERE status = 'ready' AND site_code = $1`, [site.code])).rows.map((r) => r.storage_key.split('/')[1]);
+  const maintenance = await runDocumentsMaintenanceOnce();
+  const afterMaint = await attFiles(site.code);
+  check('K10: bakim: 2 saati asan uploading satir silinir (dosyasiyla), DB\'de satirsiz 31 gunluk dosya silinir (alt yas 30 gun); 25 gunluk yetim, genc yetim ve hazir dosyalar kalir; depolama kimligi ilk turda baslatilir',
+    maintenance.skipped === false && maintenance.summary.attachment_stale_uploads === 1 && maintenance.summary.attachment_orphans === 1 && maintenance.summary.identity_blocked === 0 &&
+      (await countOf(`SELECT COUNT(*)::int AS n FROM work_item_attachments WHERE storage_key = $1`, [staleKey])) === 0 && !afterMaint.includes(staleKey.split('/')[1]) && !afterMaint.includes(orphanName) &&
+      afterMaint.includes(midOrphan) && afterMaint.includes(youngOrphan) && readyKeys.every((name) => afterMaint.includes(name)), [maintenance, afterMaint.length, readyKeys.length]);
+
+  // K11: hesap silme + disa aktarma
+  const DR = await resident(site, site.apts[3], 'IT Foto Silinecek');
+  const dItem = (await create(DR, { title: 'Silinecek foto sahibi' })).body.item.id;
+  const dUp = await uploadAtt(A(dItem), DR);
+  const dPreview = await previewAccountDeletion({ user_code: DR, id: DR });
+  const dExport = await collectPersonalData(DR);
+  const dExportRows = dExport.data.work_item_attachments_uploaded ?? [];
+  const dExportText = JSON.stringify(dExport.data);
+  const dKey = (await q(`SELECT storage_key, sha256 FROM work_item_attachments WHERE id = $1`, [dUp.id])).rows[0];
+  await performAccountDeletion(DR);
+  // Hesap silme kullanici SATIRINI silmez (kimliksizlestirir): uploaded_by belgelerdeki document_versions.uploaded_by gibi TOMBSTONE satirina bagli kalir; ad JOIN ile "Silinmis Kullanici"
+  const dRow = (await q(`SELECT a.uploaded_by, a.status, u.deleted_at IS NOT NULL AS tombstone FROM work_item_attachments a LEFT JOIN users u ON u.user_code = a.uploaded_by WHERE a.id = $1`, [dUp.id])).rows[0];
+  const dDetail = await call('GET', M(`/${dItem}`), MGR);
+  const dDownload = await getContent(`${M(`/${dItem}`)}/attachments/${dUp.id}/content`, MGR);
+  check('K11: silme onizlemesi will_keep fotograf notu (1); disa aktarma work_item_attachments_uploaded: kayit bilgisi var, icerik / storage_key / sha256 YOK; silince kayit + dosya kalir, uploaded_by kimliksizlestirilmis (tombstone) hesaba bagli, yonetici indirir, yukleyen "Silinmis Kullanici"',
+    dUp.put?.status === 200 && dPreview.will_keep.includes('İş takibi taleplerine eklediğiniz fotoğraflar (1) taleple birlikte site yönetiminde kalır; yükleyen adı "Silinmiş Kullanıcı" görünür.') &&
+      dExportRows.length === 1 && dExportRows[0].id === dUp.id && dExportRows[0].file_name === 'foto.jpg' && dExportRows[0].size_bytes === JPEG.length && !dExportText.includes(dKey.storage_key) && !dExportText.includes(dKey.sha256) &&
+      Number(dRow.uploaded_by) === DR && dRow.tombstone === true && dRow.status === 'ready' && dDetail.body.attachments.length === 1 && dDetail.body.attachments[0].uploaded_by_name === 'Silinmiş Kullanıcı' && dDownload.status === 200 && dDownload.bytes.equals(JPEG),
+    [dUp.put?.status, dPreview.will_keep, dExportRows, dRow, dDetail.body.attachments, dDownload.status]);
+  // K11b: kullanici satiri FIZIKSEL silinirse FK ON DELETE SET NULL (ek satiri ve dosya kalir)
+  const fkUser = await mkUser('IT Foto FK Kullanicisi');
+  const fkAtt = Number((await q(`INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key, sha256, ready_at) VALUES ($1, $2, $3, 'fk.jpg', 'image/jpeg', 10, 'ready', $4, $5, NOW()) RETURNING id`, [dItem, site.code, fkUser, `${site.code}/${crypto.randomUUID()}`, 'ab'.repeat(32)])).rows[0].id);
+  await q(`DELETE FROM users WHERE user_code = $1`, [fkUser]);
+  const fkRow = (await q(`SELECT uploaded_by, status FROM work_item_attachments WHERE id = $1`, [fkAtt])).rows[0];
+  const fkDetail = await call('GET', M(`/${dItem}`), MGR);
+  check('K11b: kullanici satiri fiziksel silinince uploaded_by NULL (FK SET NULL), ek kalir ve "Silinmis Kullanici" gorunur; ek tablosu CHECK\'leri (mime / boyut / ready <-> ready_at / sha256) gecersiz satirlari 23514 ile reddeder',
+    fkRow && fkRow.uploaded_by === null && fkRow.status === 'ready' && fkDetail.body.attachments.some((a) => a.id === fkAtt && a.uploaded_by_name === 'Silinmiş Kullanıcı') &&
+      (await failCode(`INSERT INTO work_item_attachments (work_item_id, site_code, file_name, mime_type, size_bytes) VALUES ($1, $2, 'x.gif', 'image/gif', 10)`, [dItem, site.code])) === '23514' &&
+      (await failCode(`INSERT INTO work_item_attachments (work_item_id, site_code, file_name, mime_type, size_bytes) VALUES ($1, $2, 'x.jpg', 'image/jpeg', 5242881)`, [dItem, site.code])) === '23514' &&
+      (await failCode(`INSERT INTO work_item_attachments (work_item_id, site_code, file_name, mime_type, size_bytes, status) VALUES ($1, $2, 'x.jpg', 'image/jpeg', 10, 'ready')`, [dItem, site.code])) === '23514' &&
+      (await failCode(`INSERT INTO work_item_attachments (work_item_id, site_code, file_name, mime_type, size_bytes, sha256) VALUES ($1, $2, 'x.jpg', 'image/jpeg', 10, 'XYZ')`, [dItem, site.code])) === '23514' &&
+      (await failCode(`INSERT INTO work_item_events (work_item_id, site_code, event_type, visibility, actor_kind, to_value) VALUES ($1, $2, 'attachment_added', 'public', 'manager', '1')`, [dItem, site.code])) === null,
+    [fkRow, fkDetail.body.attachments]);
+  await q(`DELETE FROM work_item_attachments WHERE id = $1`, [fkAtt]);
+
+  // K12: site silinince CASCADE + dizin temizligi (7 gun)
+  const cSite = await mkSite('IT Foto Silinecek Site', { 'A Blok': 1 });
+  await linkManager(cSite.code, MGR);
+  await enableModule(cSite.code);
+  const cRes = await resident(cSite, cSite.apts[0], 'IT Foto Site Sakini');
+  const cItem = (await create(cRes, { site_code: cSite.code, title: 'Site silinecek' })).body.item.id;
+  const cUp = await uploadAtt(A(cItem), cRes);
+  await q(`DELETE FROM sites WHERE site_code = $1`, [cSite.code]);
+  const cRows = await countOf(`SELECT COUNT(*)::int AS n FROM work_item_attachments WHERE site_code = $1`, [cSite.code]);
+  const cFilesBefore = await attFiles(cSite.code);
+  const eightDays = new Date(Date.now() - 8 * 86400_000);
+  for (const name of cFilesBefore) await fsp.utimes(path.join(attDir(cSite.code), name), eightDays, eightDays);
+  await fsp.utimes(attDir(cSite.code), eightDays, eightDays);
+  const maintenance2 = await runDocumentsMaintenanceOnce();
+  const cDirGone = !(await fsp.stat(attDir(cSite.code)).then(() => true, () => false));
+  check('K12: site silinince ek satirlari CASCADE ile gider, dosya diskte kalir; 7 gunu asan silinmis site dizinini bakim kaldirir', cUp.put?.status === 200 && cRows === 0 && cFilesBefore.length === 1 && maintenance2.summary.attachment_site_dirs === 1 && cDirGone, [cUp.put?.status, cRows, cFilesBefore.length, maintenance2.summary]);
+
+  // K14 (WA-SEC-1): sakin yanitlarinda yonetim tarafinin (yonetici / gorevli) adi ASLA donmez: "Yönetim" + kind management; yonetim gorunumu gercek ad + tur
+  const k14R = await call('GET', A(uItem), KR2);
+  const k14R2 = await call('GET', A(kItem), KR);
+  const k14M = await call('GET', M(`/${uItem}`), MGR);
+  const k14S = await call('GET', M(`/${kItem}`), STAFF);
+  const residentDump = JSON.stringify([k14R.body, k14R2.body, ownUp.created?.body, ownUp.put?.body, k8Res.created?.body, k8Res.put?.body]);
+  check('K14 (WA-SEC-1): sakin ayrintisinda yonetici / gorevli fotografi uploaded_by_name "Yönetim" + kind management + uploaded_by_me false, kendi fotografi gercek ad + kind resident; sakin yanitlarinda yonetici / gorevli adi HIC yok; yonetici / gorevli gorunumunde gercek ad + tur',
+    k14R.status === 200 && k14R2.status === 200 && k14M.status === 200 && k14S.status === 200 &&
+      attOf(k14R, mgrUp.id)?.uploaded_by_name === 'Yönetim' && attOf(k14R, mgrUp.id)?.uploaded_by_kind === 'management' && attOf(k14R, mgrUp.id)?.uploaded_by_me === false &&
+      attOf(k14R, ownUp.id)?.uploaded_by_name === 'IT Foto Sakin Iki' && attOf(k14R, ownUp.id)?.uploaded_by_kind === 'resident' && attOf(k14R, ownUp.id)?.uploaded_by_me === true &&
+      attOf(k14R2, k8Staff.id)?.uploaded_by_name === 'Yönetim' && attOf(k14R2, k8Staff.id)?.uploaded_by_kind === 'management' &&
+      attOf(k14R2, k8Res.id)?.uploaded_by_name === 'IT Foto Sakin' && attOf(k14R2, k8Res.id)?.uploaded_by_kind === 'resident' &&
+      !/IT Yonetici|IT Gorevli/.test(residentDump) &&
+      attOf(k14M, mgrUp.id)?.uploaded_by_name === 'IT Yonetici' && attOf(k14M, mgrUp.id)?.uploaded_by_kind === 'management' && attOf(k14M, ownUp.id)?.uploaded_by_name === 'IT Foto Sakin Iki' && attOf(k14M, ownUp.id)?.uploaded_by_kind === 'resident' &&
+      attOf(k14S, k8Staff.id)?.uploaded_by_name === 'IT Gorevli' && attOf(k14S, k8Staff.id)?.uploaded_by_me === true && attOf(k14S, k8Res.id)?.uploaded_by_kind === 'resident',
+    [k14R.body?.attachments, k14R2.body?.attachments, k14M.body?.attachments, k14S.body?.attachments]);
+
+  // K15 (WA-SEC-3): bayt kotalari (uploading + ready, gelen boyut dahil): kisi kotasi (yonetici / super DISI, site basina) ve site kotasi -> 409 ATTACHMENT_QUOTA_EXCEEDED { quota }
+  const MB = 1048576;
+  const activeSiteBytes = async (siteCode) => Number((await q(`SELECT COALESCE(SUM(size_bytes), 0)::BIGINT AS n FROM work_item_attachments WHERE site_code = $1 AND (status = 'ready' OR (status = 'uploading' AND created_at >= NOW() - INTERVAL '120 minutes'))`, [siteCode])).rows[0].n);
+  const QR = await resident(site, site.apts[4], 'IT Foto Kota');
+  const qItem = (await create(QR, { title: 'Kota talebi' })).body.item.id;
+  process.env.WORK_ATTACHMENTS_USER_QUOTA_MB = '1';
+  const qFirst = await createAtt(A(qItem), QR, { size_bytes: 700000 });
+  const qSecond = await createAtt(A(qItem), QR, { size_bytes: 700000 });
+  const qMgr = await createAtt(M(`/${qItem}`), MGR, { size_bytes: 700000 });
+  const siteBytes = await activeSiteBytes(site.code);
+  const siteQuotaMb = Math.ceil(siteBytes / MB) + 1;
+  process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB = String(siteQuotaMb);
+  const room = siteQuotaMb * MB - siteBytes;
+  const qOver = await createAtt(M(`/${qItem}`), MGR, { size_bytes: room + 1 });
+  const qFit = await createAtt(M(`/${qItem}`), MGR, { size_bytes: room });
+  delete process.env.WORK_ATTACHMENTS_USER_QUOTA_MB;
+  delete process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB;
+  check('K15 (WA-SEC-3): kisi kotasi 1 MB: sakinin 700 KB kaydi 201, ikinci 700 KB 409 ATTACHMENT_QUOTA_EXCEEDED { quota: user, quota_bytes, used_bytes }; yonetici kisi kotasina tabi DEGIL (201); site kotasi: bir bayt fazlasi 409 { quota: site }, tam sigan 201',
+    qFirst.status === 201 && qSecond.status === 409 && qSecond.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qSecond.body.quota === 'user' && qSecond.body.quota_bytes === MB && qSecond.body.used_bytes === 700000 &&
+      qMgr.status === 201 && room > 0 && room <= 5 * MB && qOver.status === 409 && qOver.body.code === 'ATTACHMENT_QUOTA_EXCEEDED' && qOver.body.quota === 'site' && qOver.body.quota_bytes === siteQuotaMb * MB &&
+      qOver.body.used_bytes === siteBytes && qFit.status === 201,
+    [qFirst.status, qSecond.body, qMgr.status, siteBytes, siteQuotaMb, room, qOver.body, qFit.body]);
+
+  // K16: suresi dolan (2 saati asan) uploading satirlari bakim silmeden de talep sinirina (4) ve kotalara SAYILMAZ, ayrintida listelenmez
+  const ER = await resident(site, site.apts[5], 'IT Foto Suresi Dolan');
+  const eItem = (await create(ER, { title: 'Suresi dolan yuklemeler' })).body.item.id;
+  const expiredIds = [];
+  for (let i = 0; i < 4; i += 1) {
+    expiredIds.push(Number((await q(`INSERT INTO work_item_attachments (work_item_id, site_code, uploaded_by, file_name, mime_type, size_bytes, status, storage_key, created_at) VALUES ($1, $2, $3, 'eski.jpg', 'image/jpeg', 5000000, 'uploading', $4, NOW() - INTERVAL '3 hours') RETURNING id`, [eItem, site.code, ER, `${site.code}/${crypto.randomUUID()}`])).rows[0].id));
+  }
+  process.env.WORK_ATTACHMENTS_USER_QUOTA_MB = '1';
+  process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB = String(Math.ceil((await activeSiteBytes(site.code)) / MB) + 1);
+  const eOwn = await createAtt(A(eItem), ER, { size_bytes: 700000 });
+  const eMgr = await createAtt(M(`/${eItem}`), MGR, { size_bytes: 300000 });
+  const eMore = [await createAtt(A(eItem), ER), await createAtt(A(eItem), ER)];
+  const eFifth = await createAtt(A(eItem), ER);
+  delete process.env.WORK_ATTACHMENTS_USER_QUOTA_MB;
+  delete process.env.WORK_ATTACHMENTS_SITE_QUOTA_MB;
+  const eDetail = await call('GET', A(eItem), ER);
+  const eIds = (eDetail.body?.attachments ?? []).map((a) => a.id);
+  check('K16: suresi dolan 4 uploading satiri (4 x 5 MB, 3 saat once) varken talep siniri (4) ve kisi (1 MB) / site kotasi onlari SAYMAZ (yeni kayitlar 201); 4 etkin kayittan sonra 5. kayit 409 LIMIT_REACHED; ayrinti suresi dolanlari listelemez',
+    eOwn.status === 201 && eMgr.status === 201 && eMore.every((r) => r.status === 201) && eFifth.status === 409 && eFifth.body.code === 'LIMIT_REACHED' &&
+      eDetail.status === 200 && eIds.length === 3 && !eIds.some((id) => expiredIds.includes(id)), [eOwn.body, eMgr.body, eMore.map((r) => r.status), eFifth.body, eIds, expiredIds]);
+
+  // K17: acilma bombasi korumasi GERCEK PUT yolunda (yalniz baslik okunur): dev cozunurluk 415, kayit uploading kalir; sinirdaki goruntu ayni kayda yuklenir
+  const bombPng = pngOf(20000, 20000);
+  const kBomb = await createAtt(A(uItem), KR2, { file_name: 'foto.png', mime_type: 'image/png', size_bytes: bombPng.length });
+  const bombUrl = `${A(uItem)}/attachments/${kBomb.body?.attachment?.id}/content`;
+  const putBomb = await putContent(bombUrl, KR2, bombPng);
+  const bombTmp = await tmpFiles();
+  const bombRow = (await q(`SELECT status, storage_key, ready_at FROM work_item_attachments WHERE id = $1`, [kBomb.body?.attachment?.id ?? 0])).rows[0];
+  const bombFinal = bombRow ? (await attFiles(site.code)).includes(bombRow.storage_key.split('/')[1]) : true;
+  const kWide = await createAtt(A(uItem), KR2);
+  const wideUrl = `${A(uItem)}/attachments/${kWide.body?.attachment?.id}/content`;
+  const putWide = await putContent(wideUrl, KR2, jpegOf(JPEG.length, 13000, 100));
+  const putEdge = await putContent(bombUrl, KR2, pngOf(12000, 3333));
+  const putWideOk = await putContent(wideUrl, KR2, JPEG);
+  check('K17: acilma bombasi: 20000x20000 PNG 415 ATTACHMENT_DIMENSIONS_TOO_LARGE { width, height, max_side 12000, max_pixels 40000000 } (gecici dosya silinir, kayit uploading kalir, son dosya yok); kenari 13000 JPEG 415; ayni kayitlara sinirdaki 12000x3333 PNG ve normal JPEG 200 ready',
+    kBomb.status === 201 && putBomb.status === 415 && putBomb.body?.code === 'ATTACHMENT_DIMENSIONS_TOO_LARGE' && putBomb.body.width === 20000 && putBomb.body.height === 20000 && putBomb.body.max_side === 12000 && putBomb.body.max_pixels === 40000000 &&
+      bombTmp.length === 0 && bombRow?.status === 'uploading' && bombRow.ready_at === null && bombFinal === false &&
+      kWide.status === 201 && putWide.status === 415 && putWide.body?.code === 'ATTACHMENT_DIMENSIONS_TOO_LARGE' && putWide.body.width === 13000 && putWide.body.height === 100 &&
+      putEdge.status === 200 && putEdge.body?.attachment?.status === 'ready' && putWideOk.status === 200 && putWideOk.body?.attachment?.status === 'ready',
+    [kBomb.status, putBomb.body, bombTmp, bombRow, bombFinal, kWide.status, putWide.body, putEdge.body, putWideOk.status]);
+
+  const leaksName = (text) => /foto\.(jpg|png)/.test(text);
+  check('K13: sunucu gunlugu ve audit dosya adi / dosya yolu tasimaz; yukleme uclarinda 5xx yok', !leaksName(logLines.join('\n')) && !leaksName(serverErrors.join('\n')) && !leaksName(JSON.stringify((await q(`SELECT details FROM audit_log WHERE action LIKE 'work_item.attachment_%'`)).rows)) &&
+    ![kOwn, kStaff, kMgr, putR, putAgain, mmPng, mmOk, delMgr, dlR, raceDel, closedDelM, closedDelR, qSecond, qOver, eFifth, putBomb, putWide, putEdge].some((r) => r.status >= 500));
+
+  // ============================================================================================================
+  console.log('--- L. performans raporu ---');
+  const rsite = await mkSite('IT Rapor Sitesi', { 'A Blok': 2 });
+  await linkManager(rsite.code, MGR);
+  await addMember(rsite.code, STAFF, 'STAFF');
+  await addMember(rsite.code, STAFF2, 'STAFF');
+  await addMember(rsite.code, BOARD, 'BOARD_MEMBER');
+  await enableModule(rsite.code);
+  const RR = await resident(rsite, rsite.apts[0], 'IT Rapor Sakini');
+  const RM = (suffix) => M(suffix, rsite.code);
+  const today = (await q(`SELECT (NOW() AT TIME ZONE 'Europe/Istanbul')::date::text AS d`)).rows[0].d;
+  const dayShift = (n) => new Date(Date.parse(`${today}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+  const mkR = async (category) => (await create(RR, { site_code: rsite.code, category, title: `Rapor ${category}` })).body.item.id;
+  const backdate = (id, days) => q(`UPDATE work_items SET created_at = NOW() - make_interval(days => $2) WHERE id = $1`, [id, days]);
+  const backdateEvent = (id, to, days) => q(`UPDATE work_item_events SET created_at = NOW() - make_interval(days => $3) WHERE work_item_id = $1 AND event_type = 'status_changed' AND to_value = $2`, [id, to, days]);
+  const I1 = await mkR('ariza');
+  await call('PATCH', RM(`/${I1}`), MGR, { assigned_to: STAFF, due_date: dayShift(-8) });
+  await call('PATCH', RM(`/${I1}`), MGR, { status: 'cozuldu' });
+  await call('PATCH', RM(`/${I1}`), MGR, { status: 'kapandi' });
+  await backdate(I1, 10);
+  await backdateEvent(I1, 'cozuldu', 9);
+  await q(`UPDATE work_items SET closed_at = NOW() - make_interval(days => 8) WHERE id = $1`, [I1]);
+  const I2 = await mkR('bakim');
+  await call('PATCH', RM(`/${I2}`), MGR, { assigned_to: STAFF, due_date: dayShift(-6) });
+  await call('PATCH', RM(`/${I2}`), MGR, { status: 'cozuldu' });
+  await backdate(I2, 5);
+  await backdateEvent(I2, 'cozuldu', 2);
+  const I3 = await mkR('ariza');
+  await call('PATCH', RM(`/${I3}`), MGR, { assigned_to: STAFF2, status: 'islemde' });
+  await backdate(I3, 3);
+  const I4 = await mkR('diger');
+  await call('PATCH', RM(`/${I4}`), MGR, { due_date: dayShift(-1) });
+  await backdate(I4, 2);
+  const I5 = await mkR('ariza');
+  await call('PATCH', RM(`/${I5}`), MGR, { assigned_to: STAFF2 });
+  await call('PATCH', RM(`/${I5}`), MGR, { status: 'cozuldu' });
+  const reassign = await call('PATCH', RM(`/${I5}`), MGR, { assigned_to: STAFF });
+  await backdate(I5, 40);
+  await backdateEvent(I5, 'cozuldu', 1);
+  const I6 = await mkR('sikayet_oneri');
+  await call('POST', `/app/work-items/${I6}/cancel`, RR);
+  await backdate(I6, 1);
+  const I7 = await mkR('bakim');
+  await call('PATCH', RM(`/${I7}`), MGR, { status: 'cozuldu' });
+  await backdate(I7, 35);
+  await backdateEvent(I7, 'cozuldu', 34);
+  const report = await call('GET', RM('/report'), MGR);
+  const tot = report.body?.totals ?? {};
+  const near = (value, expected) => typeof value === 'number' && Math.abs(value - expected) < 0.2;
+  check('L1: varsayilan aralik (30 gun): opened 5, resolved 3 (ilk cozuldu olayi; 40 gunluk talep cozumu aralikta), closed 1, cancelled 1, open_now 2, overdue_now 1, ort 344 sa, medyan 72 sa',
+    report.status === 200 && report.body.from === dayShift(-29) && report.body.to === today && tot.opened === 5 && tot.resolved === 3 && tot.closed === 1 && tot.cancelled === 1 && tot.open_now === 2 && tot.overdue_now === 1 &&
+      near(tot.avg_resolution_hours, 344) && near(tot.median_resolution_hours, 72) && reassign.status === 200, [report.status, report.body]);
+  const byCat = Object.fromEntries((report.body?.by_category ?? []).map((r) => [r.category, [r.opened, r.resolved]]));
+  check('L2: by_category: ariza 2/2, bakim 1/1, sikayet_oneri 1/0, diger 1/0 (4 kategori sabit sirada)', same(byCat, { ariza: [2, 2], bakim: [1, 1], sikayet_oneri: [1, 0], diger: [1, 0] }) && (report.body?.by_category ?? []).map((r) => r.category).join() === 'ariza,bakim,sikayet_oneri,diger', byCat);
+  const byA = report.body?.by_assignee ?? [];
+  const aS1 = byA.find((r) => r.user_code === STAFF);
+  const aS2 = byA.find((r) => r.user_code === STAFF2);
+  const aNone = byA.find((r) => r.user_code === null);
+  check('L3: by_assignee: gorevli A (IT Gorevli) resolved 2, ort 48 sa, zamaninda 0.5 (biri gec), open 0; gorevli B resolved 1 (COZUM ANINDAKI atanan; sonradan devredildi), ort 936, oran null (hedef tarih yok), open_now 1; Atanmamis open 1 / gecikmis 1 en sonda; ad sirasi',
+    byA.length === 3 && aS1 && aS1.name === 'IT Gorevli' && aS1.resolved === 2 && near(aS1.avg_resolution_hours, 48) && aS1.on_time_rate === 0.5 && aS1.open_now === 0 && aS1.overdue_now === 0 &&
+      aS2 && aS2.name === 'IT Gorevli Iki' && aS2.resolved === 1 && near(aS2.avg_resolution_hours, 936) && aS2.on_time_rate === null && aS2.open_now === 1 && aS2.overdue_now === 0 &&
+      aNone && aNone.name === 'Atanmamış' && aNone.open_now === 1 && aNone.overdue_now === 1 && aNone.resolved === 0 && byA[2] === aNone && byA[0] === aS1, byA);
+  const narrow = await call('GET', RM(`/report?from=${dayShift(-2)}&to=${today}`), BOARD);
+  const nt = narrow.body?.totals ?? {};
+  check('L4: kurul okur; dar aralik (son 3 gun): opened 2 (2 ve 1 gun once), resolved 2 (2 ve 1 gun once), cancelled 1, closed 0', narrow.status === 200 && nt.opened === 2 && nt.resolved === 2 && nt.cancelled === 1 && nt.closed === 0 && nt.open_now === 2, [narrow.status, nt]);
+  const staffReport = await call('GET', RM('/report'), STAFF);
+  const residentReport = await call('GET', RM('/report'), RR);
+  const badRange = await call('GET', RM(`/report?from=${today}&to=${dayShift(-1)}`), MGR);
+  const longRange = await call('GET', RM(`/report?from=${dayShift(-400)}&to=${today}`), MGR);
+  const badDay = await call('GET', RM('/report?from=2026-02-30'), MGR);
+  const otherSite = await call('GET', M('/report', site2.code), MGR);
+  check('L5: gorevli 403 FORBIDDEN_ROLE, sakin 403; from > to / 366 gunden uzun / gecersiz gun 400 INVALID_FIELD; baska site 403 FORBIDDEN_SITE', staffReport.status === 403 && staffReport.body.code === 'FORBIDDEN_ROLE' && residentReport.status === 403 &&
+    badRange.status === 400 && badRange.body.code === 'INVALID_FIELD' && longRange.status === 400 && longRange.body.code === 'INVALID_FIELD' && badDay.status === 400 && badDay.body.code === 'INVALID_FIELD' && otherSite.status === 403 && otherSite.body.code === 'FORBIDDEN_SITE',
+    [staffReport.body, residentReport.status, badRange.body, longRange.body, badDay.body, otherSite.body]);
+  // L6 / L7: cozum anindaki atanan (cozumden onceki son atama -> yoksa cozumden sonraki ilk atamanin from degeri -> guncel atanan), ayri sitede
+  const rsite2 = await mkSite('IT Rapor Sitesi Iki', { 'A Blok': 1 });
+  await linkManager(rsite2.code, MGR);
+  await addMember(rsite2.code, STAFF, 'STAFF');
+  await addMember(rsite2.code, STAFF2, 'STAFF');
+  await enableModule(rsite2.code);
+  const RR2 = await resident(rsite2, rsite2.apts[0], 'IT Rapor Sakini Iki');
+  const RM2 = (suffix) => M(suffix, rsite2.code);
+  const J1 = (await create(RR2, { site_code: rsite2.code, title: 'Atanmadan cozulen' })).body.item.id;
+  const j1Resolve = await call('PATCH', RM2(`/${J1}`), MGR, { status: 'cozuldu' });
+  const j1Assign = await call('PATCH', RM2(`/${J1}`), MGR, { assigned_to: STAFF });
+  const J2 = (await create(RR2, { site_code: rsite2.code, title: 'Devir ve cozum' })).body.item.id;
+  const j2First = await call('PATCH', RM2(`/${J2}`), MGR, { assigned_to: STAFF2 });
+  const j2Both = await call('PATCH', RM2(`/${J2}`), MGR, { assigned_to: STAFF, status: 'cozuldu' });
+  const report2 = await call('GET', RM2('/report'), MGR);
+  const byA2 = report2.body?.by_assignee ?? [];
+  const r2Staff = byA2.find((r) => r.user_code === STAFF);
+  const r2Staff2 = byA2.find((r) => r.user_code === STAFF2);
+  const r2None = byA2.find((r) => r.user_code === null);
+  check('L6: atanmamisken cozulup SONRA atanan talep cozumu "Atanmamış" satirina yazilir (sonraki atamanin from degeri; guncel atanan DEGIL)',
+    j1Resolve.status === 200 && j1Assign.status === 200 && report2.status === 200 && report2.body.totals.resolved === 2 && r2None?.name === 'Atanmamış' && r2None.resolved === 1, [j1Resolve.status, j1Assign.status, report2.body?.totals, byA2]);
+  check('L7: tek PATCH ile devir (gorevli B -> A) + cozuldu: cozum YENI atanana (A) yazilir, onceki atanan (B) resolved 0',
+    j2First.status === 200 && j2Both.status === 200 && r2Staff?.resolved === 1 && (r2Staff2?.resolved ?? 0) === 0, [j2First.status, j2Both.status, byA2]);
+  // H bolumu work_items'i DROP ... CASCADE ile dusurur: sarkan ek satirlari FK'nin yeniden kurulmasini engellemesin (dosyalar K10 benzeri yetim olarak kalir)
+  await q(`DELETE FROM work_item_attachments`);
+
+  // ============================================================================================================
   console.log('--- H. ilk kurulum x yazici yuku, eksik nesne tamamlama ---');
   const ensureOnce = async () => { const c = await pool.connect(); try { await ensureWorkTrackingSchema(c); } finally { c.release(); } };
   hooks.counting = true; hooks.count = 0;
   await ensureOnce();
   const quiet = hooks.count;
   hooks.counting = false;
-  check('H1: her sey varken (normal acilis) YALNIZ katalog sorgusu (1 sorgu, kilit yok)', quiet === 1, quiet);
+  check('H1: her sey varken (normal acilis) YALNIZ katalog sorgusu + RU-2 onariminin ucuz EXISTS okumasi (2 sorgu; kilit / yazma yok)', quiet === 2, quiet);
+  // H1b (RU-2): eski surumun sakin iptalinde biraktigi mikrosaniyelik "okunmamis" acilista onarilir (EXISTS + UPDATE); yonetim iptali (gercek okunmamis) dokunulmaz
+  const ruRes = await resident(site, site.apts[2], 'IT RU2 Sakini');
+  const ruItem = (await create(ruRes, { title: 'RU-2 sakin iptali' })).body.item.id;
+  const ruCancel = await call('POST', `/app/work-items/${ruItem}/cancel`, ruRes);
+  const unreadOf = async (id) => (await call('GET', A(id), ruRes)).body?.item?.unread;
+  const ruFresh = await unreadOf(ruItem);
+  await q(`UPDATE work_items SET requester_seen_at = resident_updated_at - INTERVAL '3 microseconds' WHERE id = $1`, [ruItem]);
+  const ruBroken = await unreadOf(ruItem);
+  const ruMgrItem = (await create(ruRes, { title: 'RU-2 yonetim iptali' })).body.item.id;
+  const ruMgrCancel = await call('PATCH', M(`/${ruMgrItem}`), MGR, { status: 'iptal' });
+  const ruMgrBefore = await unreadOf(ruMgrItem);
+  hooks.counting = true; hooks.count = 0;
+  await ensureOnce();
+  const repairQueries = hooks.count;
+  hooks.count = 0;
+  await ensureOnce();
+  const quietAgain = hooks.count;
+  hooks.counting = false;
+  const ruFixed = await unreadOf(ruItem);
+  const ruMgrAfter = await unreadOf(ruMgrItem);
+  check('H1b (RU-2): sakin iptali (duzeltilmis kod) okunmamis birakmaz; eski surum durumu (seen < updated) acilista onarilir (katalog + EXISTS + SET / UPDATE / RESET = 5 sorgu), sonraki acilis yine 2 sorgu; yonetim iptali okunmamis KALIR',
+    ruCancel.status === 200 && ruFresh === false && ruBroken === true && ruMgrCancel.status === 200 && ruMgrBefore === true && repairQueries === 5 && quietAgain === 2 && ruFixed === false && ruMgrAfter === true,
+    { ruCancel: ruCancel.status, ruFresh, ruBroken, ruMgrBefore, repairQueries, quietAgain, ruFixed, ruMgrAfter });
   const fkOf = async () => (await q(`SELECT conrelid::regclass::text || '.' || conname AS k, pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE contype = 'f' AND conrelid IN ('work_items'::regclass, 'work_item_events'::regclass) ORDER BY 1`)).rows;
   const fksBefore = await fkOf();
   await q(`ALTER TABLE work_items DROP CONSTRAINT work_items_assigned_to_fkey`);
@@ -651,13 +1169,16 @@ export async function sectionWorkTracking(ctx) {
       track(call('GET', M('?limit=20'), BOARD)),
       track(call('GET', '/app/work-items', owner)),
       track(call('POST', `/app/work-items/${seed[(round + 1) % seed.length]}/cancel`, racers[(round + 1) % 2])),
+      track(createAtt(A(target), owner)),
+      track(createAtt(M(`/${target}`), MGR)),
     ]);
   }
-  check(`I1: karisik 10 tur x 9 eszamanli islem (acma / durum / atama / yorum / seen / iptal / liste): 40P01 = ${hooks.deadlocks}, 5xx yok`, hooks.deadlocks === 0 && statuses.every((s) => s < 500), { deadlocks: hooks.deadlocks, statuses: [...new Set(statuses)] });
+  check(`I1: karisik 10 tur x 11 eszamanli islem (acma / durum / atama / yorum / seen / iptal / liste / fotograf kaydi x2): 40P01 = ${hooks.deadlocks}, 5xx yok`, hooks.deadlocks === 0 && statuses.every((s) => s < 500), { deadlocks: hooks.deadlocks, statuses: [...new Set(statuses)] });
   const inconsistent = await countOf(`SELECT COUNT(*)::int AS n FROM work_items WHERE (status IN ('kapandi','iptal')) <> (closed_at IS NOT NULL)`);
   const orphanEvents = await countOf(`SELECT COUNT(*)::int AS n FROM work_item_events e WHERE NOT EXISTS (SELECT 1 FROM work_items w WHERE w.id = e.work_item_id)`);
   check('I2: tutarlilik: closed_at <-> durum, yetim olay yok', inconsistent === 0 && orphanEvents === 0);
 
   server.close();
+  await fsp.rm(storageRoot, { recursive: true, force: true }).catch(() => {});
   await finishChild(pool);
 }

@@ -3,7 +3,9 @@
 // Kapsam: taşma matrisi (320x640 x2,0; 360x640 x1,5; yatay 640x360 x2,0; tablet 768x1024; açık / koyu), yükleniyor /
 // hata / boş / dolu ayrımı (HATA ASLA "kayıt yok" demez), modül kapalı durumu, alan -> gün -> dilim -> süre -> gönder
 // akışı, onay modu bilgisi, çakışma / hız sınırı / çift gönderim, rezervasyonlarım (yaklaşan / geçmiş, iptal süresi
-// dolunca PASİF düğme + neden), konsiyerj talebi açma / iptal, site süzgeci ve imleçli sayfalama.
+// dolunca PASİF düğme + neden), konsiyerj talebi açma / iptal, site süzgeci, imleçli sayfalama ve okunmamış karar /
+// güncelleme (kartta "Yeni güncelleme" çipi, sekmede sayı rozeti, ayrıntı penceresinde `seen`, süzgecin gizlediği
+// okunmamış için uyarı + "Tümünü göster", site değişirken rozet yarışı, eski sunucu uyumu).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -84,6 +86,23 @@ Future<void> _openTab(WidgetTester t, String key) async {
 
 Future<void> _openBooking(WidgetTester t, int areaId) async {
   await _tapKey(t, 'rez_book_$areaId');
+  await _settle(t);
+}
+
+/// Listedeki karta (başlık metninden) dokunup ayrıntı penceresini açar.
+Future<void> _openCard(WidgetTester t, String title) async {
+  await tapFinder(t, find.text(title));
+  await _settle(t);
+}
+
+/// Sekme rozetindeki sayı metni.
+Finder _badge(String tab) => find.descendant(of: rzKey('${tab}_unread'), matching: find.byType(Text));
+
+/// Site süzgecinden [label] seçer.
+Future<void> _selectSite(WidgetTester t, String label) async {
+  await t.tap(find.byType(DropdownButtonFormField<int>));
+  await settleFor(t, 100);
+  await t.tap(find.text(label).last);
   await _settle(t);
 }
 
@@ -702,6 +721,325 @@ void main() {
       final sent = service.createRequestCalls.single;
       expect(sent.requestedFor, DateTime.utc(2026, 10, 18, 6, 0), reason: '09:00 İstanbul = 06:00 UTC');
       expect(sent.toJson('rz-12345678')['requested_for'], '2026-10-18T06:00:00.000Z');
+    });
+  });
+
+  group('okunmamış karar / güncelleme (İş Takibi ile aynı gösterim)', () {
+    // Yönetim 1'i onayladı ve 4'ü iptal etti (geçmiş kapsamı); konsiyerj 2'ye not yazdı.
+    _Rig unreadRig() {
+      final rig = _rig();
+      rig.service.reservations[0]['unread'] = true;
+      rig.service.reservations[3]['unread'] = true;
+      rig.service.requests[1]['unread'] = true;
+      return rig;
+    }
+
+    // Okunmamışların HEPSİ varsayılan süzgecin dışında: yönetim 4'ü iptal etti ve 5'i reddetti ("Geçmiş"; varsayılan
+    // "Yaklaşan"da yok); konsiyerjde tamamlanan 3'e not yazdı ("Açık"ta yok).
+    _Rig hiddenRig() {
+      final rig = _rig();
+      rig.service.reservations[3]['unread'] = true;
+      rig.service.reservations.add(
+        rzReservation(5, area: 7, areaName: 'Barbekü Alanı', status: 'reddedildi', date: '2026-10-23', decisionNote: 'Alan o gün bakımda.', canCancel: false, cancelDeadline: null, unread: true),
+      );
+      rig.service.requests[2]['unread'] = true;
+      return rig;
+    }
+
+    reservationMatrix('kartta "Yeni güncelleme" çipi + uyarı tonu, sekmede sayı rozeti', (t, w, h, s, dark) async {
+      final rig = unreadRig();
+      await rig.pump(t, width: w, height: h, scale: s, dark: dark, sites: _twoSites);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '1');
+      expect(rzKey('rez_tab_areas_unread'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsNothing, reason: 'alanlar sekmesinde çip yok');
+      await _openTab(t, 'rez_tab_mine');
+      expect(find.byType(ReservationUpdateChip), findsOneWidget, reason: 'yaklaşan kapsamda yalnız 1 okunmamış');
+      expect(find.text('Yeni güncelleme'), findsOneWidget);
+      expect(rzKey('rez_unread_hidden_notice'), findsOneWidget, reason: 'geçmişteki 4 bu süzgeçte görünmüyor');
+      expect(find.text('2 rezervasyonunuzda yeni güncelleme var.'), findsOneWidget);
+      await _openTab(t, 'rez_tab_concierge');
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
+      expect(find.text('Hazırlanıyor'), findsOneWidget);
+      expect(rzKey('cnc_unread_hidden_notice'), findsNothing, reason: 'okunmamış talep açık listede görünüyor');
+    });
+
+    reservationMatrix('rezervasyon ayrıntısı penceresi: notlar, iptal zamanı, Kapat', (t, w, h, s, dark) async {
+      final rig = unreadRig();
+      await rig.pump(t, width: w, height: h, scale: s, dark: dark);
+      await _openTab(t, 'rez_tab_mine');
+      await _openCard(t, 'Spor Salonu');
+      expect(find.text('Rezervasyon Ayrıntısı'), findsOneWidget);
+      expect(find.text('Notunuz'), findsOneWidget);
+      expect(find.text('Antrenman'), findsOneWidget);
+      expect(find.text('Son iptal zamanı'), findsOneWidget);
+      expect(rzKey('rez_detail_close'), findsOneWidget);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(find.text('Rezervasyon Ayrıntısı'), findsNothing);
+    });
+
+    reservationMatrix('konsiyerj ayrıntısı penceresi: yönetim notu, istenen zaman, Kapat', (t, w, h, s, dark) async {
+      final rig = unreadRig();
+      await rig.pump(t, width: w, height: h, scale: s, dark: dark);
+      await _openTab(t, 'rez_tab_concierge');
+      await _openCard(t, 'Temizlik');
+      expect(find.text('Talep Ayrıntısı'), findsOneWidget);
+      expect(find.text('Yönetim notu'), findsOneWidget);
+      expect(find.text('Ekip öğleden sonra gelecek.'), findsOneWidget);
+      expect(find.text('İstenen zaman'), findsOneWidget);
+      expect(rzKey('cnc_detail_close'), findsOneWidget);
+      await _tapKey(t, 'cnc_detail_close');
+      await _settle(t);
+      expect(find.text('Talep Ayrıntısı'), findsNothing);
+    });
+
+    testWidgets('ayrıntı açılınca GET + seen; pencerede çip söner; kapanınca listede çip ve rozet söner, liste eşitlenir', (t) async {
+      final rig = unreadRig();
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_mine');
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      expect(rig.service.unreadCountsCalls, <int?>[null]);
+      await _openCard(t, 'Spor Salonu');
+      expect(find.text('Rezervasyon Ayrıntısı'), findsOneWidget);
+      expect(rig.service.getMineCalls, <int>[1]);
+      expect(rig.service.seenCalls, <int>[1]);
+      expect(find.byType(ReservationUpdateChip), findsOneWidget, reason: 'yalnız arkadaki liste kartı; pencerede görüldü sonrası çip yok');
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(find.text('Rezervasyon Ayrıntısı'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '1', reason: 'geçmişteki 4 hâlâ okunmamış');
+      expect(rig.service.listMineCalls.length, 2, reason: 'kapanışta liste sunucuyla eşitlendi');
+    });
+
+    testWidgets('seen başarısız: sessiz (hata metni yok), çip ve rozet kalır, liste yenilenmez; sonraki açılışta yeniden denenir', (t) async {
+      final rig = unreadRig();
+      rig.service.failures['markMineSeen'] = <Object>[ApiException('Sunucuya bağlanılamadı.')];
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_mine');
+      await _openCard(t, 'Spor Salonu');
+      expect(rig.service.seenCalls, <int>[1]);
+      expect(find.text('Sunucuya bağlanılamadı.'), findsNothing);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(find.byType(ReservationUpdateChip), findsOneWidget, reason: 'bayrak kaldı');
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      expect(rig.service.listMineCalls.length, 1, reason: 'değişiklik yok: liste yenilenmedi');
+      await _openCard(t, 'Spor Salonu');
+      expect(rig.service.seenCalls, <int>[1, 1]);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '1');
+    });
+
+    testWidgets('konsiyerj: ayrıntı + seen; iptal düğmesi olan kart da açılır; rozet söner', (t) async {
+      final rig = unreadRig();
+      rig.service.requests[0]['unread'] = true;
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_concierge');
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '2');
+      expect(find.byType(ReservationUpdateChip), findsNWidgets(2));
+      await _openCard(t, 'Temizlik');
+      expect(find.text('Talep Ayrıntısı'), findsOneWidget);
+      expect(rig.service.getMyRequestCalls, <int>[2]);
+      expect(rig.service.seenRequestCalls, <int>[2]);
+      await _tapKey(t, 'cnc_detail_close');
+      await _settle(t);
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '1');
+      // "Yeni" talebin kartında iptal düğmesi var; kartın kendisi yine ayrıntıyı açar.
+      await _openCard(t, 'Paket teslim');
+      expect(find.text('Talep Ayrıntısı'), findsOneWidget);
+      expect(rig.service.seenRequestCalls, <int>[2, 1]);
+      await _tapKey(t, 'cnc_detail_close');
+      await _settle(t);
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      expect(rzKey('rez_tab_concierge_unread'), findsNothing);
+      expect(rzKey('cnc_cancel_1'), findsOneWidget, reason: 'iptal düğmesi hâlâ orada');
+    });
+
+    testWidgets('aşağı çekip yenileme rozetleri tazeler; site süzgeci sayaca uygulanır', (t) async {
+      final rig = _rig();
+      await rig.pump(t, sites: _twoSites);
+      expect(rig.service.unreadCountsCalls, <int?>[null]);
+      expect(rzKey('rez_tab_mine_unread'), findsNothing);
+      // Bu arada yönetim 1'e karar verdi (site 11) ve diğer sitedeki bir rezervasyona da (site 12).
+      rig.service.reservations[0]['unread'] = true;
+      rig.service.reservations.add(rzReservation(9, site: 12, siteName: 'Mavi Park', unread: true));
+      await rig.key.currentState!.reload();
+      await _settle(t);
+      expect(rig.service.unreadCountsCalls, <int?>[null, null]);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      await t.tap(find.byType(DropdownButtonFormField<int>));
+      await settleFor(t, 100);
+      await t.tap(find.text('Mavi Park').last);
+      await _settle(t);
+      expect(rig.service.unreadCountsCalls.last, 12);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '1');
+    });
+
+    testWidgets('sayaç isteği düşerse ekran bozulmaz; sekme açılınca liste yanıtıyla eşitlenir', (t) async {
+      final rig = unreadRig();
+      rig.service.failures['unreadCounts'] = <Object>[ApiException('Sayaç alınamadı.')];
+      await rig.pump(t);
+      expect(find.text('Sayaç alınamadı.'), findsNothing);
+      expect(rzKey('rez_tab_mine_unread'), findsNothing);
+      await _openTab(t, 'rez_tab_mine');
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+    });
+
+    testWidgets('eski sunucu (alan yok): çip ve rozet yok, ayrıntıda seen çağrılmaz, çökme yok', (t) async {
+      final rig = unreadRig();
+      rig.service.unreadFields = false;
+      await rig.pump(t);
+      expect(rzKey('rez_tab_mine_unread'), findsNothing);
+      await _openTab(t, 'rez_tab_mine');
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      expect(rzKey('rez_unread_hidden_notice'), findsNothing);
+      await _openCard(t, 'Spor Salonu');
+      expect(find.text('Rezervasyon Ayrıntısı'), findsOneWidget);
+      expect(rig.service.getMineCalls, <int>[1]);
+      expect(rig.service.seenCalls, isEmpty);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(rig.service.listMineCalls.length, 1, reason: 'değişiklik yok');
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('ayrıntı 404: kayıt kalkmış mesajı, seen yok; kapanınca liste yenilenir', (t) async {
+      final rig = unreadRig();
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_mine');
+      rig.service.failures['getMine'] = <Object>[FakeReservationService.error(404, 'RESERVATION_NOT_FOUND')];
+      await _openCard(t, 'Spor Salonu');
+      expect(rzKey('rez_detail_gone'), findsOneWidget);
+      expect(rig.service.seenCalls, isEmpty);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(rig.service.listMineCalls.length, 2);
+    });
+
+    reservationMatrix('süzgecin gizlediği okunmamış (ret / yönetim iptali "Geçmiş"te): uyarı + "Tümünü göster"', (t, w, h, s, dark) async {
+      final rig = hiddenRig();
+      await rig.pump(t, width: w, height: h, scale: s, dark: dark, sites: _twoSites);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      await _openTab(t, 'rez_tab_mine');
+      expect(find.byType(ReservationUpdateChip), findsNothing, reason: 'yaklaşan listede okunmamış yok');
+      expect(rzKey('rez_unread_hidden_notice'), findsOneWidget);
+      expect(find.text('2 rezervasyonunuzda yeni güncelleme var.'), findsOneWidget);
+      await _tapKey(t, 'rez_unread_show_all');
+      await _settle(t);
+      expect(t.widget<ChoiceChip>(rzKey('rez_scope_all')).selected, isTrue);
+      expect(rig.service.listMineCalls.last.scope, 'all');
+      expect(rzKey('rez_unread_hidden_notice'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsNWidgets(2));
+      expect(find.text('Reddedildi'), findsOneWidget);
+    });
+
+    reservationMatrix('konsiyerj: "Açık"ta görünmeyen okunmamış (tamamlanan) için uyarı + "Tümünü göster"', (t, w, h, s, dark) async {
+      final rig = hiddenRig();
+      await rig.pump(t, width: w, height: h, scale: s, dark: dark, sites: _twoSites);
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '1');
+      await _openTab(t, 'rez_tab_concierge');
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      expect(rzKey('cnc_unread_hidden_notice'), findsOneWidget);
+      expect(find.text('1 talebinizde yeni güncelleme var.'), findsOneWidget);
+      await _tapKey(t, 'cnc_unread_show_all');
+      await _settle(t);
+      expect(t.widget<ChoiceChip>(rzKey('cnc_status_all')).selected, isTrue);
+      expect(rig.service.listMyRequestsCalls.last.status, 'all');
+      expect(rzKey('cnc_unread_hidden_notice'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
+    });
+
+    testWidgets('ret kararı: "Tümünü göster" -> kayıt açılır, gerekçe görünür, seen; rozet ve uyarı söner', (t) async {
+      final rig = hiddenRig();
+      rig.service.reservations[3]['unread'] = false; // yalnız ret (5) okunmamış
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_mine');
+      expect(find.text('1 rezervasyonunuzda yeni güncelleme var.'), findsOneWidget);
+      await _tapKey(t, 'rez_unread_show_all');
+      await _settle(t);
+      await _openCard(t, 'Barbekü Alanı');
+      expect(find.text('Rezervasyon Ayrıntısı'), findsOneWidget);
+      expect(find.text('Alan o gün bakımda.'), findsOneWidget);
+      expect(rig.service.seenCalls, <int>[5]);
+      await _tapKey(t, 'rez_detail_close');
+      await _settle(t);
+      expect(rzKey('rez_tab_mine_unread'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      await _tapKey(t, 'rez_scope_upcoming');
+      await _settle(t);
+      expect(rzKey('rez_unread_hidden_notice'), findsNothing, reason: 'okunmamış kalmadı');
+    });
+
+    testWidgets('okunmamış listede görünüyorsa uyarı yok; başka süzgeçte gizlenince çıkar; "Tümü"nde hiç çıkmaz', (t) async {
+      final rig = _rig();
+      rig.service.reservations[0]['unread'] = true; // yaklaşan, onaylı
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_mine');
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
+      expect(rzKey('rez_unread_hidden_notice'), findsNothing);
+      await _tapKey(t, 'rez_scope_past');
+      await _settle(t);
+      expect(rzKey('rez_unread_hidden_notice'), findsOneWidget, reason: 'yaklaşan okunmamış "Geçmiş"te görünmez');
+      await _tapKey(t, 'rez_scope_all');
+      await _settle(t);
+      expect(rzKey('rez_unread_hidden_notice'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
+    });
+
+    testWidgets('konsiyerj: tamamlanan talebe not -> "Tümünü göster" -> ayrıntı + seen; uyarı ve rozet söner', (t) async {
+      final rig = hiddenRig();
+      await rig.pump(t);
+      await _openTab(t, 'rez_tab_concierge');
+      await _tapKey(t, 'cnc_unread_show_all');
+      await _settle(t);
+      await _openCard(t, 'Taşıma');
+      expect(find.text('Talep Ayrıntısı'), findsOneWidget);
+      expect(rig.service.seenRequestCalls, <int>[3]);
+      await _tapKey(t, 'cnc_detail_close');
+      await _settle(t);
+      expect(rzKey('rez_tab_concierge_unread'), findsNothing);
+      expect(find.byType(ReservationUpdateChip), findsNothing);
+      await _tapKey(t, 'cnc_status_open');
+      await _settle(t);
+      expect(rzKey('cnc_unread_hidden_notice'), findsNothing);
+    });
+
+    testWidgets('yarış: site değişirken yoldaki eski sitenin sayacı "Rezervasyonlarım" rozetini ezmez', (t) async {
+      final rig = unreadRig(); // Gül Sitesi (11): 1 ve 4 okunmamış; Mavi Park (12): kayıt yok
+      await rig.pump(t, sites: _twoSites);
+      await _openTab(t, 'rez_tab_mine');
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      final gate = Completer<void>();
+      rig.service.gates['listMine'] = <Completer<void>>[gate];
+      await _selectSite(t, 'Mavi Park'); // bu istek yolda kalır
+      await _selectSite(t, 'Tüm siteler');
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2');
+      gate.complete();
+      await _settle(t);
+      expect([for (final call in rig.service.listMineCalls) call.site], <int?>[null, 12, null]);
+      expect(t.widget<Text>(_badge('rez_tab_mine')).data, '2', reason: 'geç gelen Mavi Park (0) yanıtı uygulanmadı');
+      expect(find.byType(ReservationUpdateChip), findsOneWidget, reason: 'liste de güncel süzgecin');
+    });
+
+    testWidgets('yarış: site değişirken yoldaki eski sitenin sayacı "Konsiyerj" rozetini ezmez', (t) async {
+      final rig = unreadRig(); // Gül Sitesi (11): talep 2 okunmamış; Mavi Park (12): talep yok
+      await rig.pump(t, sites: _twoSites);
+      await _openTab(t, 'rez_tab_concierge');
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '1');
+      final gate = Completer<void>();
+      rig.service.gates['listMyRequests'] = <Completer<void>>[gate];
+      await _selectSite(t, 'Mavi Park');
+      await _selectSite(t, 'Tüm siteler');
+      gate.complete();
+      await _settle(t);
+      expect([for (final call in rig.service.listMyRequestsCalls) call.site], <int?>[null, 12, null]);
+      expect(t.widget<Text>(_badge('rez_tab_concierge')).data, '1', reason: 'geç gelen Mavi Park (0) yanıtı uygulanmadı');
+      expect(find.byType(ReservationUpdateChip), findsOneWidget);
     });
   });
 }

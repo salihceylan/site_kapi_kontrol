@@ -20,6 +20,7 @@ import { documentLimits } from './document_common.js';
 import { SYSTEM_ACTOR, purgeLockedDocument, withDocumentTransaction } from './document_service.js';
 import { SITE_DIR_PATTERN, UUID_PATTERN, checkStorage, isInside, purgeQuarantine, quarantineStoredFile, removeStoredFile } from './document_storage.js';
 import { ensureStorageIdentity, loadKnownKeys, orphanGuardTripped, siteDirGuardTripped, siteHasRecords } from './document_integrity.js';
+import { ATTACHMENT_SUBTREE, ATTACHMENT_UPLOAD_TTL_MINUTES, attachmentLimits } from './work_attachments_common.js';
 
 /** "DOCS" (0x444F4353): süreçler arası tek çalışan için session advisory kilidinin birinci anahtarı; ikincisi 1. */
 export const MAINTENANCE_LOCK = Object.freeze([0x444f4353, 1]);
@@ -42,6 +43,10 @@ const emptySummary = () => ({
   site_dirs: 0,
   guard_trips: 0,
   identity_blocked: 0,
+  // İş takibi fotoğraf ekleri (047; `work_attachments/` alt ağacı): bayat `uploading` satır + dosyası; DB'de satırı olmayan dosya (SİLİNİR, karantina yok); silinmiş site dizini.
+  attachment_stale_uploads: 0,
+  attachment_orphans: 0,
+  attachment_site_dirs: 0,
   errors: 0,
 });
 
@@ -172,11 +177,175 @@ async function purgeExpired(limits, summary, db) {
   }
 }
 
-async function listSiteDirs(root) {
+async function listSiteDirs(root, subtree = 'sites') {
   try {
-    return (await fsp.readdir(path.join(root, 'sites'), { withFileTypes: true })).filter((entry) => entry.isDirectory() && SITE_DIR_PATTERN.test(entry.name));
+    return (await fsp.readdir(path.join(root, subtree), { withFileTypes: true })).filter((entry) => entry.isDirectory() && SITE_DIR_PATTERN.test(entry.name));
   } catch (_error) {
     return [];
+  }
+}
+
+// --- İş takibi fotoğraf ekleri (047): `work_attachments/<site>/<uuid>` alt ağacı --------------------------------------------------------------------
+// Belge turlarının aynası, farklarla: (a) yetim dosya KARANTİNAYA ALINMAZ, silinir; bunun yerine yaş eşiği uzundur: WORK_ATTACHMENTS_ORPHAN_MIN_AGE_DAYS (30 gün;
+// eski bir DB dökümü geri yüklenirse satırı kaybolmuş fotoğraflar bu sürede yerinde kalır ve fark edilebilir); (b) bilinen anahtar kümesi yalnız work_item_attachments'tır;
+// (c) silinmiş site dizini oran koruması seyrek alt ağaca göredir (aşağıda). Tablo yoksa (047 kurulmamış) HİÇBİR adım çalışmaz (aksi hâlde her dosya yetim görünürdü).
+
+/** Fotoğraf site dizini kaldırma koruması: kaldırılacak > 5 VE tüm fotoğraf site dizinlerinin %50'sinden fazlası ise dur; DB'de HİÇ site yoksa her zaman dur. */
+export const ATTACHMENT_SITE_DIR_GUARD_MIN = 5;
+
+/**
+ * Seyrek alt ağaç (WA-SITEDIR-GUARD-SPARSE-SUBTREE): fotoğraf dizini yalnız fotoğraf eklenmiş sitelerde vardır; 3 dizinden 2'sinin silinmiş siteye ait olması
+ * olağandır. Belgelerin ">= 2 ve > %50" kuralı burada gereksiz durdururdu: eşik > 5 dizin. Boş DB (siteCount 0) her zaman durdurur; depolama kimliği kapısı ayrıca geçerlidir.
+ */
+export function attachmentSiteDirGuardTripped({ removable, totalDirs, siteCount }) {
+  if (removable <= 0) return false;
+  if (siteCount === 0) return true;
+  return removable > ATTACHMENT_SITE_DIR_GUARD_MIN && removable / Math.max(1, totalDirs) > 0.5;
+}
+
+async function attachmentsTablePresent(db) {
+  const result = await db.query(`SELECT to_regclass('public.work_item_attachments') IS NOT NULL AS present`);
+  return result.rows?.[0]?.present === true;
+}
+
+/** (1a) 2 saati aşan `uploading` ek kayıtları: ÖNCE SATIR (süre koşulu DELETE'te tekrar sınanır), silindiyse SONRA dosya (geç gelen PUT `ready` yaptıysa dokunulmaz). */
+async function cleanStaleAttachmentUploads(root, summary, db) {
+  if (!(await attachmentsTablePresent(db))) return;
+  const stale = await db.query(
+    `
+      SELECT id, storage_key
+      FROM work_item_attachments
+      WHERE status = 'uploading' AND created_at < NOW() - make_interval(mins => $1::INTEGER)
+      ORDER BY created_at
+      LIMIT $2
+    `,
+    [ATTACHMENT_UPLOAD_TTL_MINUTES, BATCH_LIMIT],
+  );
+  for (const row of stale.rows ?? []) {
+    try {
+      const removed = await db.query(
+        `DELETE FROM work_item_attachments WHERE id = $1 AND status = 'uploading' AND created_at < NOW() - make_interval(mins => $2::INTEGER) RETURNING storage_key`,
+        [row.id, ATTACHMENT_UPLOAD_TTL_MINUTES],
+      );
+      if (Number(removed.rowCount ?? removed.rows?.length ?? 0) === 0) continue;
+      summary.attachment_stale_uploads += 1;
+      const key = removed.rows?.[0]?.storage_key ?? row.storage_key;
+      if (key) await removeStoredFile(root, key, ATTACHMENT_SUBTREE);
+    } catch (error) {
+      summary.errors += 1;
+      // eslint-disable-next-line no-console
+      console.error('[work_tracking] bayat fotograf yuklemesi temizlenemedi:', error?.code || 'error');
+    }
+  }
+}
+
+/** Verilen anahtarlardan work_item_attachments'ta KAYITLI olanlar. Sorgu hatası fırlar: çağıran HİÇBİR dosya silmez. */
+async function loadKnownAttachmentKeys(db, keys) {
+  const known = new Set();
+  if (keys.length === 0) return known;
+  const rows = await db.query(`SELECT storage_key FROM work_item_attachments WHERE storage_key = ANY($1::TEXT[])`, [keys]);
+  for (const row of rows.rows ?? []) known.add(row.storage_key);
+  return known;
+}
+
+/**
+ * (3a) `work_attachments/<site>/` altında DB'de satırı olmayan ve WORK_ATTACHMENTS_ORPHAN_MIN_AGE_DAYS'ten (30 gün) eski dosyalar SİLİNİR (tur başına <= 200; yalnız DB'de
+ * var olan sitelerin dizinleri; silinmiş sitelerin dizinlerini (4a) ele alır). DB sorgusu başarısızsa hiçbiri silinmez. ORAN KORUMASI belgelerle aynı (yetim > 20 ve > %50 -> dur).
+ */
+async function sweepAttachmentOrphans(root, summary, db, now, env) {
+  const minAgeMs = attachmentLimits(env).orphanMinAgeDays * DAY_MS;
+  const siteDirs = await listSiteDirs(root, ATTACHMENT_SUBTREE);
+  if (siteDirs.length === 0) return;
+  if (!(await attachmentsTablePresent(db))) return;
+  const alive = await existingSiteNames(db, siteDirs);
+  const orphans = [];
+  let scanned = 0;
+  let seen = 0;
+  for (const siteDir of siteDirs) {
+    if (!alive.has(siteDir.name)) continue;
+    if (seen >= SCAN_ENTRY_CAP) break;
+    const dir = path.join(root, ATTACHMENT_SUBTREE, siteDir.name);
+    let files;
+    try {
+      files = await fsp.readdir(dir, { withFileTypes: true });
+    } catch (_error) {
+      continue;
+    }
+    const candidates = [];
+    for (const file of files) {
+      seen += 1;
+      if (!file.isFile() || !UUID_PATTERN.test(file.name)) continue;
+      try {
+        const info = await fsp.lstat(path.join(dir, file.name));
+        if (info.isFile() && now - info.mtimeMs > minAgeMs) candidates.push(`${siteDir.name}/${file.name}`);
+      } catch (_error) {
+        // o arada kaldırılmış
+      }
+    }
+    if (candidates.length === 0) continue;
+    scanned += candidates.length;
+    const known = await loadKnownAttachmentKeys(db, candidates);
+    for (const key of candidates) {
+      if (!known.has(key)) orphans.push(key);
+    }
+  }
+  if (orphanGuardTripped({ orphans: orphans.length, scanned })) {
+    summary.guard_trips += 1;
+    // eslint-disable-next-line no-console
+    console.error(`[work_tracking] ORAN KORUMASI: ${orphans.length}/${scanned} eski fotograf dosyasi yetim gorunuyor; yetim silme DURDURULDU (veritabani / DOCUMENTS_DIR eslesmesini kontrol edin)`);
+    return;
+  }
+  let deleted = 0;
+  for (const key of orphans) {
+    if (deleted >= BATCH_LIMIT) break;
+    try {
+      if (await removeStoredFile(root, key, ATTACHMENT_SUBTREE)) {
+        deleted += 1;
+        summary.attachment_orphans += 1;
+      }
+    } catch (_error) {
+      summary.errors += 1;
+    }
+  }
+}
+
+/** (4a) silinmiş siteler için `work_attachments/<kod>` dizinleri (7 gün sonra; kaydı kalmamış olmalı; seyrek alt ağaç oran koruması: attachmentSiteDirGuardTripped). */
+async function removeDeletedAttachmentSiteDirs(root, summary, db, now) {
+  const siteDirs = await listSiteDirs(root, ATTACHMENT_SUBTREE);
+  if (siteDirs.length === 0) return;
+  if (!(await attachmentsTablePresent(db))) return;
+  const alive = await existingSiteNames(db, siteDirs);
+  const base = path.join(root, ATTACHMENT_SUBTREE);
+  const removable = [];
+  for (const entry of siteDirs) {
+    if (alive.has(entry.name)) continue;
+    const full = path.join(base, entry.name);
+    if (!isInside(full, base) || full === base) continue;
+    try {
+      if (!(await siteDirIsStale(full, now))) continue;
+      const records = await db.query(`SELECT 1 FROM work_item_attachments WHERE site_code = $1 LIMIT 1`, [Number(entry.name)]);
+      if (records.rows?.[0]) continue;
+      removable.push(full);
+    } catch (_error) {
+      summary.errors += 1;
+    }
+  }
+  if (removable.length === 0) return;
+  const total = await db.query(`SELECT COUNT(*)::INTEGER AS n FROM sites`);
+  const siteCount = Number(total.rows?.[0]?.n ?? 0);
+  if (attachmentSiteDirGuardTripped({ removable: removable.length, totalDirs: siteDirs.length, siteCount })) {
+    summary.guard_trips += 1;
+    // eslint-disable-next-line no-console
+    console.error(`[work_tracking] ORAN KORUMASI: ${removable.length}/${siteDirs.length} fotograf site dizini silinmis gorunuyor (DB'de ${siteCount} site); dizin silme DURDURULDU`);
+    return;
+  }
+  for (const full of removable) {
+    try {
+      await fsp.rm(full, { recursive: true, force: true });
+      summary.attachment_site_dirs += 1;
+    } catch (_error) {
+      summary.errors += 1;
+    }
   }
 }
 
@@ -336,6 +505,7 @@ export async function runDocumentsMaintenanceOnce({ now = Date.now(), env = proc
       const storage = await checkStorage(env);
       if (storage.ok) {
         await safe(summary, 'stale_uploads', () => cleanStaleUploads(storage.root, limits, summary, client));
+        await safe(summary, 'attachment_stale_uploads', () => cleanStaleAttachmentUploads(storage.root, summary, client));
         await safe(summary, 'temp_files', () => cleanTempFiles(storage.root, summary, now));
         await safe(summary, 'purge_expired', () => purgeExpired(limits, summary, client));
         // karantinada süresi dolanlar (zaman tabanlıdır, DB'ye bağlı değildir): kimlik denetiminden bağımsız çalışır
@@ -358,6 +528,9 @@ export async function runDocumentsMaintenanceOnce({ now = Date.now(), env = proc
         if (identityOk) {
           await safe(summary, 'orphans', () => sweepOrphans(storage.root, summary, client, now));
           await safe(summary, 'site_dirs', () => removeDeletedSiteDirs(storage.root, summary, client, now));
+          // iş takibi fotoğraf ekleri (047): aynı kimlik kapısı, ayrı alt ağaç
+          await safe(summary, 'attachment_orphans', () => sweepAttachmentOrphans(storage.root, summary, client, now, env));
+          await safe(summary, 'attachment_site_dirs', () => removeDeletedAttachmentSiteDirs(storage.root, summary, client, now));
         }
       } else {
         // Dosya sistemi kullanılamıyorsa dosya gerektirmeyen turlar çalışmaz; yalnız sürümsüz pending belgeler DB'den kaldırılır.

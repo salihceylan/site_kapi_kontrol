@@ -35,8 +35,16 @@ function makeState() {
       { site_code: SITE, user_code: 20006, role: 'BOARD_MEMBER', is_active: true },
     ],
     moduleEnabled: true,
+    // okunmamış işareti uçları (048): sahte satırın sahipliği / okunmamışlığı
+    seen: { owned: true, unread: true },
   };
 }
+
+const conciergeRow = (id, over = {}) => ({
+  id: String(id), site_code: String(SITE), user_code: 20004, apartment_id: null, category: 'paket_teslim', note: 'Kapıda', requested_for: null, status: 'hazirlaniyor', staff_note: 'Hazır',
+  created_at: new Date('2026-10-18T09:00:00Z'), updated_at: new Date('2026-10-18T10:00:00Z'), closed_at: null, site_name: 'Gül Sitesi', block_name: null, unit_label: null,
+  requester_name: 'Sakin', requester_phone: null, unread: false, ...over,
+});
 
 function fakeQuery(text, params = []) {
   const sql = norm(text);
@@ -57,6 +65,16 @@ function fakeQuery(text, params = []) {
   if (/^SELECT site_code FROM sites WHERE site_code = \$1 LIMIT 1$/.test(sql)) return ok(state.sites.has(Number(params[0])) ? [{ site_code: String(params[0]) }] : []);
   if (/^SELECT enabled FROM site_modules WHERE site_code = \$1 AND module_code = \$2 LIMIT 1$/.test(sql)) {
     return ok(params[1] === 'reservation' ? [{ enabled: state.moduleEnabled }] : []);
+  }
+  // 048: görüldü (koşullu UPDATE yalnız okunmamışsa satır döndürür) ve sahiplik doğrulaması
+  if (/^UPDATE (reservations r|concierge_requests c) SET resident_seen_at = clock_timestamp\(\) WHERE /.test(sql)) {
+    return ok(state.seen.owned && state.seen.unread ? [{ id: String(params[1]) }] : []);
+  }
+  if (/^SELECT 1 FROM (reservations r|concierge_requests c) WHERE \w\.id = \$2 AND \w\.user_code = \$1 AND EXISTS /.test(sql)) {
+    return ok(state.seen.owned ? [{ x: 1 }] : []);
+  }
+  if (/^SELECT c\.id, c\.site_code, .* FROM concierge_requests c INNER JOIN sites s .* WHERE c\.id = \$2 AND c\.user_code = \$1 AND s\.approval_status = 'approved' AND EXISTS .* LIMIT 1$/.test(sql)) {
+    return ok(state.seen.owned ? [conciergeRow(Number(params[1]), { unread: state.seen.unread })] : []);
   }
   throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 200)}`);
 }
@@ -125,10 +143,11 @@ const GOOD = { site_code: SITE, area_id: 5, date: '2030-01-07', start: '10:00', 
 const GOOD_REQ = { site_code: SITE, category: 'paket_teslim', note: 'Kapıda', idempotency_key: 'abc-12345-xyz' };
 
 describe('rota zinciri ve hız sınırları', () => {
-  it('sözleşmedeki 18 uç vardır; her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır (GET: okuma; yazan: yazma)', () => {
+  it('sözleşmedeki 21 uç vardır; her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır (GET ve /seen: okuma; yazan: yazma)', () => {
     const routes = ORIGINAL_ROUTES.map((route) => `${route.method.toUpperCase()} ${route.path}`);
     assert.deepEqual([...routes].sort(), [
       'GET /app/concierge-requests',
+      'GET /app/concierge-requests/:id',
       'GET /app/reservation-areas',
       'GET /app/reservation-areas/:id/availability',
       'GET /app/reservations',
@@ -142,14 +161,16 @@ describe('rota zinciri ve hız sınırları', () => {
       'PATCH /manager/sites/:siteCode/reservation-areas/:id',
       'POST /app/concierge-requests',
       'POST /app/concierge-requests/:id/cancel',
+      'POST /app/concierge-requests/:id/seen',
       'POST /app/reservations',
       'POST /app/reservations/:id/cancel',
+      'POST /app/reservations/:id/seen',
       'POST /manager/sites/:siteCode/reservation-areas',
       'POST /manager/sites/:siteCode/reservations/:id/decision',
     ].sort());
     for (const route of ORIGINAL_ROUTES) {
       assert.equal(route.handlers[0], authRequired, `${route.method} ${route.path}`);
-      const expected = route.method === 'get' ? reservationReadLimiter : reservationWriteLimiter;
+      const expected = route.method === 'get' || route.path.endsWith('/seen') ? reservationReadLimiter : reservationWriteLimiter;
       assert.equal(route.handlers[1], expected, `${route.method} ${route.path}`);
     }
   });
@@ -279,15 +300,55 @@ describe('sakin uçları: doğrulama veritabanına gitmeden döner', () => {
     for (const [method, path, code] of [
       ['GET', '/app/reservations/abc', 'RESERVATION_NOT_FOUND'],
       ['POST', '/app/reservations/abc/cancel', 'RESERVATION_NOT_FOUND'],
+      ['POST', '/app/reservations/abc/seen', 'RESERVATION_NOT_FOUND'],
+      ['GET', '/app/concierge-requests/abc', 'CONCIERGE_NOT_FOUND'],
       ['POST', '/app/concierge-requests/abc/cancel', 'CONCIERGE_NOT_FOUND'],
+      ['POST', '/app/concierge-requests/abc/seen', 'CONCIERGE_NOT_FOUND'],
       ['GET', '/app/reservation-areas/abc/availability', 'AREA_NOT_FOUND'],
     ]) {
       const res = await call(method, path, { user: users.resident, body: method === 'POST' ? {} : undefined });
       assert.deepEqual([res.status, res.body.code], [404, code], path);
     }
+    assert.equal(log.length, 0, 'geçersiz kimlik veritabanına gitmez');
     for (const path of ['/app/reservations?scope=x', '/app/reservations?before_id=x', '/app/concierge-requests?status=bogus', '/app/reservation-areas?site_code=x']) {
       const res = await call('GET', path, { user: users.resident });
       assert.deepEqual([res.status, res.body.code], [400, 'INVALID_QUERY'], path);
     }
+  });
+});
+
+describe('okunmamış işareti uçları (048)', () => {
+  it('POST /app/reservations/:id/seen ve /app/concierge-requests/:id/seen: sahip 200 { id, unread:false } (TEK koşullu UPDATE: sahip + okunmamış + onaylı site + modül açık); okunmuşsa UPDATE boş, sahiplik SELECT ile (ikinci UPDATE yok); başkasının 404', async () => {
+    for (const [path, code] of [['/app/reservations/5/seen', 'RESERVATION_NOT_FOUND'], ['/app/concierge-requests/5/seen', 'CONCIERGE_NOT_FOUND']]) {
+      state.seen = { owned: true, unread: true };
+      log = [];
+      const fresh = await call('POST', path, { user: users.resident });
+      assert.deepEqual([fresh.status, fresh.body], [200, { id: 5, unread: false }], path);
+      assert.equal(log.length, 1, path);
+      assert.match(
+        log[0],
+        /^UPDATE (reservations r|concierge_requests c) SET resident_seen_at = clock_timestamp\(\) WHERE (\w)\.id = \$2 AND \2\.user_code = \$1 AND \2\.resident_updated_at > \2\.resident_seen_at AND EXISTS \(SELECT 1 FROM sites sa WHERE sa\.site_code = \2\.site_code AND sa\.approval_status = 'approved'\) AND EXISTS \(SELECT 1 FROM site_modules smod WHERE smod\.site_code = \2\.site_code AND smod\.module_code = 'reservation' AND smod\.enabled = TRUE\) RETURNING \2\.id$/,
+        path,
+      );
+      state.seen = { owned: true, unread: false };
+      log = [];
+      const again = await call('POST', path, { user: users.resident });
+      assert.deepEqual([again.status, again.body], [200, { id: 5, unread: false }], path);
+      assert.deepEqual(log.map((sql) => sql.split(' ')[0]), ['UPDATE', 'SELECT'], path);
+      state.seen = { owned: false, unread: true };
+      const other = await call('POST', path, { user: users.resident });
+      assert.deepEqual([other.status, other.body.code], [404, code], path);
+    }
+  });
+
+  it('GET /app/concierge-requests/:id: sahip 200 { request } (unread alanı taşır); yalnız SELECT (yazmaz); başkasının 404 CONCIERGE_NOT_FOUND', async () => {
+    state.seen = { owned: true, unread: true };
+    const detail = await call('GET', '/app/concierge-requests/5', { user: users.resident });
+    assert.equal(detail.status, 200);
+    assert.deepEqual([detail.body.request.id, detail.body.request.unread, detail.body.request.staff_note, detail.body.request.can_cancel], [5, true, 'Hazır', false]);
+    assert.ok(log.length > 0 && log.every((sql) => sql.startsWith('SELECT')));
+    state.seen = { owned: false, unread: false };
+    const other = await call('GET', '/app/concierge-requests/5', { user: users.resident });
+    assert.deepEqual([other.status, other.body.code], [404, 'CONCIERGE_NOT_FOUND']);
   });
 });

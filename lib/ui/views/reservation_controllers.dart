@@ -1,6 +1,6 @@
 // Rezervasyon ve Konsiyerj pencerelerinin denetleyicileri. Ekran yalnız çizer; boş saat yükleme, seçim kuralları,
-// rezervasyon gönderimi, karar verme ve konsiyerj durum güncellemesi ile hata sınıflandırması burada durur (birim
-// testi ekransız yapılır).
+// rezervasyon gönderimi, karar verme, konsiyerj durum güncellemesi, sakin ayrıntısı + "görüldü" işareti ve hata
+// sınıflandırması burada durur (birim testi ekransız yapılır).
 //
 // Kurallar:
 // - Rol / yetki / kapasite kararını SUNUCU verir; denetleyici 403 / 404 / 409 yanıtlarını düz Türkçe mesaja çevirip
@@ -540,4 +540,182 @@ class ConciergeManageController extends ChangeNotifier {
       return false;
     }
   }
+}
+
+/// Sakin ayrıntı penceresi (rezervasyon / konsiyerj talebi): yükleme ve "görüldü" işareti. İş Takibi sakin
+/// ayrıntısıyla aynı akış: ayrıntı GET ile yeniden çekilir (yazmaz); yanıt `unread` ise `seen` ateşlenir (beklenmez);
+/// başarıda yerel bayrak silinir ve [changed] ile liste yenilenir; görüldü hatası SESSİZDİR (rozet kalır, sonraki
+/// açılışta yeniden denenir). Pencere salt okurdur; iptal listedeki karttan yapılır.
+abstract class ResidentDetailController<T> extends ChangeNotifier {
+  ResidentDetailController({required T initial}) : record = initial;
+
+  T record;
+
+  bool loading = false;
+  bool loaded = false;
+
+  /// Ayrıntı yüklenemedi (listedeki özet yine görünür; "Tekrar Dene" çizilir).
+  String? loadError;
+
+  /// Son hata nesnesi.
+  Object? lastError;
+
+  /// 403 `MODULE_DISABLED`: modül bu site için kapatılmış.
+  bool moduleClosed = false;
+
+  /// 404: kayıt artık yok / erişim yok (liste yenilenmeli).
+  bool gone = false;
+
+  /// Liste yeniden çekilmeli (görüldü işaretlendi, kayıt kalkmış ya da sunucu okunmuş diyor).
+  bool changed = false;
+
+  int _token = 0;
+  bool _disposed = false;
+
+  /// `GET` ayrıntı (yazmaz; `unread` taşır).
+  @protected
+  Future<T> fetch();
+
+  /// `POST .../seen` (idempotent).
+  @protected
+  Future<void> markSeen();
+
+  @protected
+  bool isUnread(T record);
+
+  @protected
+  T clearUnread(T record);
+
+  /// 404 hata kodu (`RESERVATION_NOT_FOUND` / `CONCIERGE_NOT_FOUND`).
+  @protected
+  String get notFoundCode;
+
+  @protected
+  String get loadFallback;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    ++_token;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  void _classify(Object error) {
+    if (error is ApiException) {
+      if (error.code == 'MODULE_DISABLED') moduleClosed = true;
+      if (error.statusCode == 404 || error.code == notFoundCode) {
+        gone = true;
+        changed = true;
+      }
+    }
+  }
+
+  /// Ayrıntıyı çeker; yanıt okunmamışsa görüldü işaretini (beklemeden) atar.
+  Future<void> load() async {
+    final token = ++_token;
+    loading = true;
+    loadError = null;
+    notifyListeners();
+    try {
+      final fresh = await fetch();
+      if (_disposed || token != _token) return;
+      // Listedeki özet okunmamış ama sunucu artık okunmuş diyorsa (başka cihazda görüldü) liste de eşitlenir.
+      if (isUnread(record) && !isUnread(fresh)) changed = true;
+      record = fresh;
+      loaded = true;
+      loading = false;
+      loadError = null;
+      gone = false;
+      moduleClosed = false;
+      notifyListeners();
+      if (isUnread(fresh)) unawaited(_markSeen());
+    } catch (e) {
+      if (_disposed || token != _token) return;
+      _classify(e);
+      loading = false;
+      loadError = crmMessageOf(e, loadFallback);
+      lastError = e;
+      notifyListeners();
+    }
+  }
+
+  /// "Görüldü" işareti: başarısızlık sessizdir (yalnız rozet kalır; sonraki açılışta yeniden denenir).
+  Future<void> _markSeen() async {
+    try {
+      await markSeen();
+      if (_disposed) return;
+      record = clearUnread(record);
+      changed = true;
+      notifyListeners();
+    } catch (_) {
+      // Görüldü işareti yardımcıdır; kullanıcıya hata gösterilmez.
+    }
+  }
+}
+
+/// Sakin rezervasyon ayrıntısı: `GET /app/reservations/:id` + `POST .../seen`.
+class ReservationResidentDetailController
+    extends ResidentDetailController<ReservationRecord> {
+  ReservationResidentDetailController({
+    required this.service,
+    required super.initial,
+  });
+
+  final ReservationService service;
+
+  @override
+  Future<ReservationRecord> fetch() => service.getMine(record.id);
+
+  @override
+  Future<void> markSeen() => service.markMineSeen(record.id);
+
+  @override
+  bool isUnread(ReservationRecord record) => record.unread;
+
+  @override
+  ReservationRecord clearUnread(ReservationRecord record) =>
+      record.copyWith(unread: false);
+
+  @override
+  String get notFoundCode => 'RESERVATION_NOT_FOUND';
+
+  @override
+  String get loadFallback =>
+      'Rezervasyon yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+}
+
+/// Sakin konsiyerj talebi ayrıntısı: `GET /app/concierge-requests/:id` + `POST .../seen`.
+class ConciergeResidentDetailController
+    extends ResidentDetailController<ConciergeRecord> {
+  ConciergeResidentDetailController({
+    required this.service,
+    required super.initial,
+  });
+
+  final ReservationService service;
+
+  @override
+  Future<ConciergeRecord> fetch() => service.getMyRequest(record.id);
+
+  @override
+  Future<void> markSeen() => service.markMyRequestSeen(record.id);
+
+  @override
+  bool isUnread(ConciergeRecord record) => record.unread;
+
+  @override
+  ConciergeRecord clearUnread(ConciergeRecord record) =>
+      record.copyWith(unread: false);
+
+  @override
+  String get notFoundCode => 'CONCIERGE_NOT_FOUND';
+
+  @override
+  String get loadFallback =>
+      'Talep yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
 }

@@ -82,6 +82,8 @@ import {
 } from '../services/device_service.js';
 import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
 import { publishOtaCheckToDevices } from '../mqtt_bridge.js';
+import { releaseAssignedWorkItems } from '../modules/work_tracking_service.js';
+import { releaseUserReservations } from '../modules/reservation_service.js';
 
 export const adminRouter = express.Router();
 
@@ -537,6 +539,13 @@ adminRouter.delete('/admin/users/:id', authRequired, requireSuperUser, async (re
 
     // 8. OTA guncelleme isleri
     await runOptionalStep(client, 'UPDATE ota_update_jobs SET requested_by_user_code = NULL WHERE requested_by_user_code = $1', [targetCode]);
+
+    // 8b. Kullanici satiri kilidi, SONRA kullaniciya bagli is takibi / rezervasyon satirlari (hesap silme ile AYNI yon: users -> work_items / reservations).
+    //     Acik is takibi atamalari birakilir (ic "assigned" olayi), gelecekteki rezervasyonlar ve acik konsiyerj talepleri sistemce iptal edilir: FK SET NULL
+    //     sahipsiz ama ETKIN kayit birakmasin (alan dilimi bossa diger sakinlere acilsin). Tablolar yoksa adimlar kendiliginden atlanir.
+    await client.query('SELECT user_code FROM users WHERE user_code = $1 AND deleted_at IS NULL FOR UPDATE', [targetCode]);
+    await releaseAssignedWorkItems(client, targetCode);
+    await releaseUserReservations(client, targetCode);
 
     // 9. Kullanici kaydini sil
     // deleted_at IS NULL: hesap silme (kimliksizleştirme) bu arada commit ettiyse tombstone KALICI silinmez (yukarıdaki ön kontrolle yarışı kapatır).

@@ -6,6 +6,8 @@
 // kendi GEÇMİŞİNİ okuyabilir. Kapasite / çakışma / kişi limitleri site+alan advisory kilidi altında sayılır (eşzamanlı istekte kapasite aşılmaz).
 // Sınırlar (env): kişi başı saatlik (RESERVATIONS_MAX_PER_USER_PER_HOUR=20; reservation_user:<kod> kilidi, siteler arası), kişi başı site içi geçerli (30), site geneli geçerli (5000);
 // alan başına günlük / haftalık kişi limiti alan ayarındadır. Idempotency: (site, kişi, anahtar) tekil; aynı anahtar + farklı içerik 409.
+// Okunmamış işareti (048, iş takibi ile aynı kalıp): unread = resident_updated_at > resident_seen_at; liste `unread_count` modül kapısındaki TÜM kendi kayıtlarını sayar
+// (sayfa / kapsam süzgeci değil). GET yazmaz; yalnız POST /app/reservations/:id/seen yazar. Sakinin kendi işlemleri (aç / iptal) iki sütunu birden yazar (öz-okunmamış yok).
 
 import { pool } from '../db.js';
 import { actorFromAuthUser } from './audit_service.js';
@@ -52,6 +54,8 @@ import { addDays, dayRangeUtc, formatHhmm, istanbulToUtc, todayIstanbul, weekRan
 
 const MODULE_ON = (siteColumn) =>
   `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = ${siteColumn} AND smod.module_code = '${RESERVATION_MODULE}' AND smod.enabled = TRUE)`;
+/** Sakin okuma / görüldü yolu: onaylı site (RESERVATION_FROM'suz sorgularda). */
+export const SITE_APPROVED = (siteColumn) => `EXISTS (SELECT 1 FROM sites sa WHERE sa.site_code = ${siteColumn} AND sa.approval_status = 'approved')`;
 
 const ACTIVE_SQL = `status IN ('${ACTIVE_DB_STATUSES.join("', '")}')`;
 
@@ -367,7 +371,10 @@ export async function createReservation({ actor, body, now = () => new Date() })
 // Listele / ayrıntı / iptal
 // ---------------------------------------------------------------------------
 
-/** GET /app/reservations -> { items, next_before_id }. Yalnız KENDİ rezervasyonları; scope upcoming (geçerli + bitmemiş) | past | all. */
+/**
+ * GET /app/reservations -> { items, next_before_id, unread_count }. Yalnız KENDİ rezervasyonları; scope upcoming (geçerli + bitmemiş) | past | all.
+ * unread_count: görmediğiniz yönetim değişikliği olan rezervasyon sayısı (site süzgeci uygulanır; kapsam / sayfa süzgeci UYGULANMAZ). Yazmaz.
+ */
 export async function listMyReservations(authUser, query = {}, db = pool) {
   const filters = parseResidentReservationQuery(query);
   const userCode = userCodeOf(authUser);
@@ -376,15 +383,18 @@ export async function listMyReservations(authUser, query = {}, db = pool) {
     if (await hasSiteRelation(db, userCode, filters.siteCode)) {
       throw moduleDisabled();
     }
-    return { items: [], next_before_id: null };
+    return { items: [], next_before_id: null, unread_count: 0 };
   }
   const now = new Date();
   const params = [userCode];
-  const clauses = ['r.user_code = $1', `s.approval_status = 'approved'`, MODULE_ON('r.site_code')];
+  const base = ['r.user_code = $1', `s.approval_status = 'approved'`, MODULE_ON('r.site_code')];
   if (filters.siteCode !== null) {
     params.push(filters.siteCode);
-    clauses.push(`r.site_code = $${params.length}`);
+    base.push(`r.site_code = $${params.length}`);
   }
+  // okunmamış sayacı kapsam / imleç / sınır parametrelerinden ÖNCE kopyalanır (sayaç yalnız sahiplik + site + modül koşullarını taşır)
+  const unreadParams = [...params];
+  const clauses = [...base];
   if (filters.scope !== 'all') {
     params.push(now);
     const live = `(r.status IN ('beklemede', 'onaylandi') AND r.ends_at > $${params.length})`;
@@ -395,14 +405,25 @@ export async function listMyReservations(authUser, query = {}, db = pool) {
     clauses.push(`r.id < $${params.length}`);
   }
   params.push(filters.limit + 1);
-  const result = await db.query(`SELECT ${RESERVATION_COLUMNS} ${RESERVATION_FROM} WHERE ${clauses.join(' AND ')} ORDER BY r.id DESC LIMIT $${params.length}`, params);
-  const rows = result.rows ?? [];
+  const [rowsResult, unreadResult] = await Promise.all([
+    db.query(`SELECT ${RESERVATION_COLUMNS} ${RESERVATION_FROM} WHERE ${clauses.join(' AND ')} ORDER BY r.id DESC LIMIT $${params.length}`, params),
+    db.query(
+      `SELECT COUNT(*)::INTEGER AS n FROM reservations r INNER JOIN sites s ON s.site_code = r.site_code
+       WHERE ${base.join(' AND ')} AND r.resident_updated_at > r.resident_seen_at`,
+      unreadParams,
+    ),
+  ]);
+  const rows = rowsResult.rows ?? [];
   const hasMore = rows.length > filters.limit;
   const items = rows.slice(0, filters.limit).map((row) => mapReservation(row, { view: 'resident', now }));
-  return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null };
+  return {
+    items,
+    next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    unread_count: Number(unreadResult.rows?.[0]?.n ?? 0),
+  };
 }
 
-/** GET /app/reservations/:id -> { reservation }. Başkasının / yok / modül kapalı -> 404 RESERVATION_NOT_FOUND. */
+/** GET /app/reservations/:id -> { reservation }. Başkasının / yok / modül kapalı -> 404 RESERVATION_NOT_FOUND. Yazmaz (okunmamış işareti yalnız /seen ile temizlenir). */
 export async function getMyReservation(authUser, rawId, db = pool) {
   const id = parsePositiveId(rawId);
   const userCode = userCodeOf(authUser);
@@ -451,7 +472,11 @@ export async function cancelMyReservation({ actor, rawId, now = () => new Date()
     if (current.getTime() > new Date(row.starts_at).getTime() - Number(row.cancel_cutoff_hours) * 3_600_000) {
       throw cancelWindowClosed(row.cancel_cutoff_hours);
     }
-    await client.query(`UPDATE reservations SET status = 'iptal', cancelled_at = NOW(), cancelled_by_kind = 'resident', updated_at = NOW() WHERE id = $1`, [id]);
+    // sakinin KENDİ işlemi: iki okunmamış sütunu AYNI değeri alır (NOW() işlem içinde sabittir) -> kendi kendine okunmamış üretmez
+    await client.query(
+      `UPDATE reservations SET status = 'iptal', cancelled_at = NOW(), cancelled_by_kind = 'resident', updated_at = NOW(), resident_updated_at = NOW(), resident_seen_at = NOW() WHERE id = $1`,
+      [id],
+    );
     await audit(client, actor, 'reservation.cancelled', siteCode, 'reservation', id, { from: row.status, to: 'iptal', by: 'resident' });
   });
   const row = await loadMyReservation(pool, userCode, id);
@@ -459,4 +484,29 @@ export async function cancelMyReservation({ actor, rawId, now = () => new Date()
     throw reservationNotFound();
   }
   return { reservation: mapReservation(row, { view: 'resident' }) };
+}
+
+/** POST /app/reservations/:id/seen -> { id, unread: false }. Yalnız kendi kaydı (başkasının / yok / modül kapalı 404); idempotent: okunmamış değilse hiçbir şey yazmaz. */
+export async function markMyReservationSeen(authUser, rawId, db = pool) {
+  const id = parsePositiveId(rawId);
+  const userCode = userCodeOf(authUser);
+  if (id === null) {
+    throw reservationNotFound();
+  }
+  // Yalnız gerçekten okunmamışsa yazar (gereksiz satır kilidi / yazma yok); değilse sahiplik ayrıca doğrulanır (aynı kapılar: sahip + onaylı site + modül açık).
+  const result = await db.query(
+    `UPDATE reservations r SET resident_seen_at = clock_timestamp()
+     WHERE r.id = $2 AND r.user_code = $1 AND r.resident_updated_at > r.resident_seen_at AND ${SITE_APPROVED('r.site_code')} AND ${MODULE_ON('r.site_code')} RETURNING r.id`,
+    [userCode, id],
+  );
+  if (!result.rows?.[0]) {
+    const own = await db.query(
+      `SELECT 1 FROM reservations r WHERE r.id = $2 AND r.user_code = $1 AND ${SITE_APPROVED('r.site_code')} AND ${MODULE_ON('r.site_code')} LIMIT 1`,
+      [userCode, id],
+    );
+    if (!own.rows?.[0]) {
+      throw reservationNotFound();
+    }
+  }
+  return { id, unread: false };
 }

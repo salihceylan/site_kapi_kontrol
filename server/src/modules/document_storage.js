@@ -25,6 +25,18 @@ export const REPO_ROOT = path.resolve(here, '..', '..', '..');
 export const STORAGE_KEY_PATTERN = /^\d{10}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SITE_DIR_PATTERN = /^\d{10}$/;
+/**
+ * Kök altındaki alt ağaçlar: `sites` (belgeler; varsayılan) ve `work_attachments` (iş takibi fotoğrafları, 047). Aynı anahtar biçimi (<site>/<uuid>), aynı
+ * güvenlik kuralları; ağaç ayrımı tablo düzeyindedir (belge yetim süpürmesi yalnız `sites/`e, ek süpürmesi yalnız `work_attachments/`a bakar).
+ */
+export const STORAGE_SUBTREES = Object.freeze(['sites', 'work_attachments']);
+
+function subtreeDir(root, subtree) {
+  if (!STORAGE_SUBTREES.includes(subtree)) {
+    throw new Error('gecersiz depolama alt agaci');
+  }
+  return path.join(root, subtree);
+}
 
 const isInside = (child, parent) => {
   const relative = path.relative(parent, child);
@@ -129,12 +141,12 @@ export function newStorageKey(siteCode) {
   return `${site}/${crypto.randomUUID()}`;
 }
 
-/** Yol üretmeden ÖNCE regex ile doğrulanır; çözümlenen yol kök/sites önekini taşımalı (traversal yok). */
-export function pathForKey(root, key) {
+/** Yol üretmeden ÖNCE regex ile doğrulanır; çözümlenen yol kök/<alt ağaç> önekini taşımalı (traversal yok). `subtree` varsayılan `sites` (belgeler). */
+export function pathForKey(root, key, subtree = 'sites') {
   if (typeof key !== 'string' || !STORAGE_KEY_PATTERN.test(key)) {
     throw new Error('gecersiz depolama anahtari');
   }
-  const base = path.join(root, 'sites');
+  const base = subtreeDir(root, subtree);
   const full = path.resolve(base, key);
   if (!isInside(full, base) || full === base) {
     throw new Error('depolama yolu kok disina cikiyor');
@@ -146,18 +158,18 @@ export function tmpFilePath(root) {
   return path.join(root, '_tmp', `${crypto.randomUUID()}.part`);
 }
 
-export async function ensureSiteDir(root, siteCode) {
+export async function ensureSiteDir(root, siteCode, subtree = 'sites') {
   const site = String(Number(siteCode));
   if (!SITE_DIR_PATTERN.test(site)) {
     throw new Error('gecersiz site kodu (dizin)');
   }
-  await ensureDir(path.join(root, 'sites', site));
+  await ensureDir(path.join(subtreeDir(root, subtree), site));
 }
 
 /** Dosyayı siler; yoksa sessizce geçer. Başka bir hata fırlar (çağıran satırı bırakır, sonra yeniden dener). @returns {Promise<boolean>} silindi mi */
-export async function removeStoredFile(root, key) {
+export async function removeStoredFile(root, key, subtree = 'sites') {
   try {
-    await fsp.unlink(pathForKey(root, key));
+    await fsp.unlink(pathForKey(root, key, subtree));
     return true;
   } catch (error) {
     if (error?.code === 'ENOENT') return false;
@@ -384,13 +396,13 @@ export class UploadInspector extends Transform {
 
 /**
  * İndirme için dosyayı açar: yol anahtardan türetilir; `lstat` ile düz dosya (symlink değil) ve boyut = DB `size_bytes` doğrulanır; mümkünse
- * O_NOFOLLOW ile açılır. Yok / uyuşmaz -> { error: 'missing' }.
+ * O_NOFOLLOW ile açılır. Yok / uyuşmaz -> { error: 'missing' }. `subtree` varsayılan `sites`.
  * @returns {Promise<{ handle: import('node:fs').promises.FileHandle, size: number } | { error: 'missing' | 'mismatch' }>}
  */
-export async function openStoredFile(root, key, expectedSize) {
+export async function openStoredFile(root, key, expectedSize, subtree = 'sites') {
   let full;
   try {
-    full = pathForKey(root, key);
+    full = pathForKey(root, key, subtree);
   } catch (_error) {
     return { error: 'missing' };
   }

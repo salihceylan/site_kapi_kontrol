@@ -4,8 +4,9 @@
 // Sahte servis SUNUCUYU taklit eder (docs/PLATFORM_REZERVASYON.md): satırlar bellekte sunucunun gerçek JSON biçiminde
 // tutulur ve modellerle ayrıştırılır; sakin listeleri `before_id` imleci, yönetim takvimi opak `cursor` uygular;
 // kurul telefonu ve kullanıcı kodunu GÖRMEZ, karar / yazma uçları kurulda 403 verir; kapasite, dilim sayısı,
-// iptal süresi ve geçişler sunucu kurallarıyla aynı hata kodlarını üretir. Hata ve yarış testleri için her çağrı
-// kuyruktaki bir hataya ya da kapıya takılabilir.
+// iptal süresi ve geçişler sunucu kurallarıyla aynı hata kodlarını üretir; sakin satırlarında `unread`, sakin
+// sayfalarında `unread_count` taşır ve `seen` uçları bayrağı siler (`unreadFields = false` eski sunucuyu taklit eder).
+// Hata ve yarış testleri için her çağrı kuyruktaki bir hataya ya da kapıya takılabilir.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -103,6 +104,7 @@ Map<String, dynamic> rzReservation(
   int site = 11,
   String siteName = 'Gül Sitesi',
   String? apartment = 'A Blok / 5',
+  bool unread = false,
 }) {
   return <String, dynamic>{
     'id': id,
@@ -126,6 +128,7 @@ Map<String, dynamic> rzReservation(
     'requester': <String, dynamic>{'user_code': 4001, 'name': requester, 'phone': phone},
     'decided_by': null,
     'can_decide': false,
+    'unread': unread,
   };
 }
 
@@ -141,6 +144,7 @@ Map<String, dynamic> rzRequest(
   String? phone = '+905551112233',
   int site = 11,
   String siteName = 'Gül Sitesi',
+  bool unread = false,
 }) {
   return <String, dynamic>{
     'id': id,
@@ -157,6 +161,7 @@ Map<String, dynamic> rzRequest(
     'updated_at': '2026-10-16T10:30:00Z',
     'closed_at': (status == 'tamamlandi' || status == 'iptal') ? '2026-10-16T10:30:00Z' : null,
     'requester': <String, dynamic>{'user_code': 4001, 'name': requester, 'phone': phone},
+    'unread': unread,
   };
 }
 
@@ -224,6 +229,24 @@ class FakeReservationService extends ReservationService {
   final List<({int site, String? status, String? category, int? before})> listManagedRequestsCalls = [];
   final List<int> getManagedRequestCalls = [];
   final List<({int site, int id, Map<String, Object?> fields})> updateRequestCalls = [];
+  final List<int> getMineCalls = [];
+  final List<int> seenCalls = [];
+  final List<int> getMyRequestCalls = [];
+  final List<int> seenRequestCalls = [];
+  final List<int?> unreadCountsCalls = [];
+
+  // --- Okunmamış (sakin rozeti) ---
+  /// false: eski sunucu (satırlarda `unread`, sayfalarda `unread_count` yok; sayaç ucu 0 verir).
+  bool unreadFields = true;
+
+  Map<String, dynamic> _residentRow(Map<String, dynamic> row) {
+    final copy = Map<String, dynamic>.of(row);
+    if (!unreadFields) copy.remove('unread');
+    return copy;
+  }
+
+  int _unreadOf(List<Map<String, dynamic>> rows, int? siteCode) =>
+      rows.where((r) => (siteCode == null || r['site_code'] == siteCode) && r['unread'] == true).length;
 
   // --- Sürücüler ---
   /// İşlem adı -> sıradaki hatalar (her çağrı birini fırlatır).
@@ -358,9 +381,28 @@ class FakeReservationService extends ReservationService {
     final from = beforeId == null ? filtered : filtered.where((r) => (r['id'] as int) < beforeId).toList();
     final page = from.take(limit).toList();
     return ReservationPage.fromJson(<String, dynamic>{
-      'items': [for (final r in page) Map<String, dynamic>.of(r)],
+      'items': [for (final r in page) _residentRow(r)],
       'next_before_id': from.length > limit ? page.last['id'] : null,
+      if (unreadFields) 'unread_count': _unreadOf(reservations, siteCode),
     });
+  }
+
+  @override
+  Future<ReservationRecord> getMine(int id) async {
+    getMineCalls.add(id);
+    await _enter('getMine');
+    final row = _row(reservations, id);
+    if (row == null) throw error(404, 'RESERVATION_NOT_FOUND');
+    return ReservationRecord.fromJson(<String, dynamic>{'reservation': _residentRow(row)});
+  }
+
+  @override
+  Future<void> markMineSeen(int id) async {
+    seenCalls.add(id);
+    await _enter('markMineSeen');
+    final row = _row(reservations, id);
+    if (row == null) throw error(404, 'RESERVATION_NOT_FOUND');
+    row['unread'] = false;
   }
 
   @override
@@ -395,9 +437,36 @@ class FakeReservationService extends ReservationService {
     final from = beforeId == null ? filtered : filtered.where((r) => (r['id'] as int) < beforeId).toList();
     final page = from.take(limit).toList();
     return ConciergePage.fromJson(<String, dynamic>{
-      'items': [for (final r in page) Map<String, dynamic>.of(r)],
+      'items': [for (final r in page) _residentRow(r)],
       'next_before_id': from.length > limit ? page.last['id'] : null,
+      if (unreadFields) 'unread_count': _unreadOf(requests, siteCode),
     });
+  }
+
+  @override
+  Future<ConciergeRecord> getMyRequest(int id) async {
+    getMyRequestCalls.add(id);
+    await _enter('getMyRequest');
+    final row = _row(requests, id);
+    if (row == null) throw error(404, 'CONCIERGE_NOT_FOUND');
+    return ConciergeRecord.fromJson(<String, dynamic>{'request': _residentRow(row)});
+  }
+
+  @override
+  Future<void> markMyRequestSeen(int id) async {
+    seenRequestCalls.add(id);
+    await _enter('markMyRequestSeen');
+    final row = _row(requests, id);
+    if (row == null) throw error(404, 'CONCIERGE_NOT_FOUND');
+    row['unread'] = false;
+  }
+
+  @override
+  Future<ReservationUnreadCounts> unreadCounts({int? siteCode}) async {
+    unreadCountsCalls.add(siteCode);
+    await _enter('unreadCounts');
+    if (!unreadFields) return (reservations: 0, concierge: 0);
+    return (reservations: _unreadOf(reservations, siteCode), concierge: _unreadOf(requests, siteCode));
   }
 
   @override

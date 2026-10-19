@@ -330,6 +330,31 @@ function locationParts(row) {
   };
 }
 
+// --- Ortak SQL parçaları (saf metin; service / resident / attachments paylaşır, döngüsel içe aktarma olmasın) ------------------------------
+
+/** `w` takma adlı work_items satırı için modül açık mı (site_modules). */
+export const MODULE_ON_SQL = `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = w.site_code AND smod.module_code = '${WORK_TRACKING_MODULE}' AND smod.enabled = TRUE)`;
+
+/**
+ * Atanan kişi bu sitede HÂLÂ atanabilir mi (hesabı silinmemiş + etkin + sitenin yöneticisi / görevlisi ya da süper). Değilse (silinen hesap, görevden alınan görevli)
+ * atama "yetim" sayılır: talep görevliler için atanmamış gibi görünür ve işlenebilir; yönetici yine her şeyi görür / yeniden atar.
+ */
+export const ASSIGNEE_ACTIVE_SQL = `
+  SELECT 1 FROM users ax
+  WHERE ax.user_code = w.assigned_to AND ax.deleted_at IS NULL AND ax.is_active = TRUE
+    AND (
+      ax.role = 'super_user'
+      OR EXISTS (SELECT 1 FROM site_manager_sites sx WHERE sx.site_code = w.site_code AND sx.manager_user_code = ax.user_code)
+      OR EXISTS (SELECT 1 FROM site_memberships mx WHERE mx.site_code = w.site_code AND mx.user_code = ax.user_code AND mx.is_active = TRUE AND mx.role IN ('SITE_OWNER', 'SITE_ADMIN', 'STAFF'))
+    )
+`;
+
+/** STAFF kapsamı: kendine atanmış, atanmamış VEYA yetim atamalı (bkz. ASSIGNEE_ACTIVE_SQL). Parametre sırasını çağıran yönetir. */
+export const staffScope = (param) => `(w.assigned_to IS NULL OR w.assigned_to = ${param} OR NOT EXISTS (${ASSIGNEE_ACTIVE_SQL}))`;
+
+/** Liste satırı: HAZIR (ready) fotoğraf sayısı (047). */
+export const ATTACHMENT_COUNT_SQL = `(SELECT COUNT(*)::INTEGER FROM work_item_attachments wa WHERE wa.work_item_id = w.id AND wa.status = 'ready') AS attachment_count`;
+
 /** Yönetim görünümü (yönetici / süper / görevli / kurul). Kurul: sakin telefonu YOK, kullanıcı kodu YOK. */
 export function mapManagerItem(row, { kind }) {
   const contact = kind !== 'board';
@@ -355,6 +380,7 @@ export function mapManagerItem(row, { kind }) {
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
     closed_at: toIso(row.closed_at),
+    attachment_count: Number(row.attachment_count ?? 0),
   };
 }
 
@@ -379,6 +405,7 @@ export function mapResidentItem(row) {
     unread: row.unread === true,
     can_cancel: row.status === 'yeni',
     can_comment: !TERMINAL_STATUSES.includes(row.status),
+    attachment_count: Number(row.attachment_count ?? 0),
   };
 }
 

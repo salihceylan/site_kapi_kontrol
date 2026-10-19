@@ -40,33 +40,38 @@ export function encodeRfc5987(name) {
   return encodeURIComponent(String(name ?? '')).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-export function contentDisposition(name) {
-  return `attachment; filename="${asciiFileName(name)}"; filename*=UTF-8''${encodeRfc5987(name)}`;
+/** Belgeler HEP `attachment`; iş takibi fotoğrafları `inline` (görüntü; nosniff + CSP sandbox yine gönderilir). */
+export function contentDisposition(name, disposition = 'attachment') {
+  const type = disposition === 'inline' ? 'inline' : 'attachment';
+  return `${type}; filename="${asciiFileName(name)}"; filename*=UTF-8''${encodeRfc5987(name)}`;
 }
 
-let activeDownloads = 0;
+/** Belge indirmelerinin eşzamanlılık sayacı (iş takibi fotoğrafları kendi sayacını verir: biri diğerinin yuvalarını tüketmez, WA-SEC-4). */
+const documentSlots = { active: 0 };
 
 /** Test yardımcısı. */
 export function activeDownloadCount() {
-  return activeDownloads;
+  return documentSlots.active;
 }
 
 /**
  * Dosyayı yanıta akıtır. Dosya yok / boyut uyuşmaz -> `onMissing()` (çağıran önce DB'den "silindi mi" bakar: silme × indirme yarışında 404, gerçek
  * kayıpta 500 DOCUMENT_FILE_MISSING). Eşzamanlı indirme sınırı aşılırsa 503 DOWNLOAD_BUSY + Retry-After.
+ * `disposition` (varsayılan `attachment`; iş takibi fotoğrafları `inline`), `subtree` (varsayılan `sites`; fotoğraflar `work_attachments`) ve `slots`
+ * (eşzamanlılık sayacı nesnesi `{ active }`; varsayılan belgelerinki) isteğe bağlıdır.
  * @param {{ root: string, version: { storageKey: string, sizeBytes: number, displayName: string, mimeType: string }, limit: number,
- *           onMissing: () => Promise<Error> }} options
+ *           onMissing: () => Promise<Error>, disposition?: 'attachment' | 'inline', subtree?: string, slots?: { active: number } }} options
  */
-export async function sendDocument(req, res, { root, version, limit, onMissing }) {
-  if (activeDownloads >= limit) {
+export async function sendDocument(req, res, { root, version, limit, onMissing, disposition = 'attachment', subtree = 'sites', slots = documentSlots }) {
+  if (slots.active >= limit) {
     res.setHeader('Retry-After', '5');
     const error = downloadBusy();
     return res.status(error.statusCode).json({ error: error.message, code: error.code });
   }
-  activeDownloads += 1;
+  slots.active += 1;
   let handle = null;
   try {
-    const opened = await openStoredFile(root, version.storageKey, version.sizeBytes);
+    const opened = await openStoredFile(root, version.storageKey, version.sizeBytes, subtree);
     if (opened.error) {
       throw await onMissing(opened.error);
     }
@@ -74,7 +79,7 @@ export async function sendDocument(req, res, { root, version, limit, onMissing }
     res.status(200);
     res.setHeader('Content-Type', version.mimeType);
     res.setHeader('Content-Length', String(opened.size));
-    res.setHeader('Content-Disposition', contentDisposition(version.displayName));
+    res.setHeader('Content-Disposition', contentDisposition(version.displayName, disposition));
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'private, no-store');
@@ -98,7 +103,7 @@ export async function sendDocument(req, res, { root, version, limit, onMissing }
     }
     return undefined;
   } finally {
-    activeDownloads -= 1;
+    slots.active -= 1;
     if (handle) {
       await handle.close().catch(() => {});
     }

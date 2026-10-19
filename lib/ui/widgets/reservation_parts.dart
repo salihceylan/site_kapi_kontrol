@@ -92,6 +92,97 @@ class ConciergeStatusChip extends StatelessWidget {
   );
 }
 
+/// "Yeni güncelleme" çipi (sakin listesi: `unread`; İş Takibi'ndeki çiple aynı görünüm).
+class ReservationUpdateChip extends StatelessWidget {
+  const ReservationUpdateChip({super.key});
+
+  @override
+  Widget build(BuildContext context) => const StatusChip(
+    label: 'Yeni güncelleme',
+    tone: AppTone.warning,
+    icon: Icons.notifications_active_rounded,
+  );
+}
+
+/// Sekme etiketindeki okunmamış sayısı (uyarı tonu: "Yeni güncelleme" çipiyle aynı aile; soluk zemin + ton mürekkebi,
+/// >= 4,5:1). 99'dan büyük sayılar "99+" yazılır; ekran okuyucuya "n yeni güncelleme" olarak okunur.
+class ReservationUnreadBadge extends StatelessWidget {
+  const ReservationUnreadBadge({super.key, required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    const tone = AppTone.warning;
+    final label = count > 99 ? '99+' : '$count';
+    return Semantics(
+      label: '$count yeni güncelleme',
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: tone.tint(p),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.sm,
+              vertical: AppSpace.xs / 2,
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: tone.ink(p),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Süzgecin gizlediği okunmamış kayıt uyarısı. Sekme rozetindeki sayı süzgeçten bağımsızdır (reddedilen ya da yönetimce
+/// iptal edilen rezervasyon "Geçmiş"te, tamamlanan talep "Kapanan"dadır) ve rozet ancak kayıt açılınca söner; bu yüzden
+/// "Tümünü göster" süzgeci "Tümü"ne alır. İş Takibi'ndeki "yeni güncelleme" uyarısıyla aynı ton ve ikon; düğme tam
+/// genişliktir, etiketi sarar / elips olur (320 dp x 2,0'da taşma yok).
+class ReservationHiddenUnreadNotice extends StatelessWidget {
+  const ReservationHiddenUnreadNotice({
+    super.key,
+    required this.message,
+    required this.onShowAll,
+    this.actionKey,
+  });
+
+  final String message;
+  final VoidCallback onShowAll;
+
+  /// "Tümünü göster" düğmesinin anahtarı.
+  final Key? actionKey;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      InlineNotice(
+        tone: AppTone.warning,
+        icon: Icons.notifications_active_rounded,
+        message: message,
+      ),
+      const SizedBox(height: AppSpace.sm),
+      PrimaryActionButton(
+        key: actionKey,
+        label: 'Tümünü göster',
+        icon: Icons.filter_alt_off_rounded,
+        variant: AppButtonVariant.tonal,
+        onPressed: onShowAll,
+      ),
+    ],
+  );
+}
+
 /// "n/max" sayacı (aşımda kırmızı + kalın; ekran okuyucu aşımı söyler).
 Widget reservationCounter(BuildContext context, int length, int max) {
   final p = context.palette;
@@ -173,7 +264,8 @@ class ReservationReadOnlyNote extends StatelessWidget {
 }
 
 /// Kart iskeleti: sol rozet, üstte çipler, başlık, alt başlık, ayrıntı satırları ve (varsa) altta eylem alanı.
-/// [onTap] verilirse kartın tamamı dokunulur (eylem alanı olmayan kartlarda); [semanticLabel] kartın TEK özetidir.
+/// [onTap] verilirse kartın tamamı dokunulur (ayrıntı açar); eylem alanındaki düğmeler kendi dokunuşlarını alır ve
+/// ekran okuyucuda ayrı kalır. [semanticLabel] kartın TEK özetidir. [tone] tonlu kart (örn. okunmamış karar: uyarı).
 class ReservationCardShell extends StatelessWidget {
   const ReservationCardShell({
     super.key,
@@ -186,6 +278,7 @@ class ReservationCardShell extends StatelessWidget {
     this.details = const <Widget>[],
     this.footer,
     this.onTap,
+    this.tone,
   });
 
   final IconData icon;
@@ -197,6 +290,7 @@ class ReservationCardShell extends StatelessWidget {
   final List<Widget> details;
   final Widget? footer;
   final VoidCallback? onTap;
+  final AppTone? tone;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +337,7 @@ class ReservationCardShell extends StatelessWidget {
     return AppCard(
       padding: listCardPadding(context),
       onTap: onTap,
+      tone: tone,
       semanticLabel: semanticLabel,
       child: footer == null
           ? ExcludeSemantics(child: info)
@@ -340,6 +435,7 @@ class ReservationAreaCard extends StatelessWidget {
 }
 
 /// Sakinin kendi rezervasyonu: durum, zaman, notlar ve iptal. İptal süresi dolduysa düğme PASİF ve nedeni yazar.
+/// Görülmemiş yönetim kararı (`unread`) "Yeni güncelleme" çipi + uyarı tonuyla gösterilir; [onTap] ayrıntıyı açar.
 class MyReservationCard extends StatelessWidget {
   const MyReservationCard({
     super.key,
@@ -347,6 +443,7 @@ class MyReservationCard extends StatelessWidget {
     required this.onCancel,
     this.showSite = false,
     this.busy = false,
+    this.onTap,
   });
 
   final ReservationRecord record;
@@ -355,6 +452,9 @@ class MyReservationCard extends StatelessWidget {
 
   /// Bu kartın iptali sürüyor (düğme yükleniyor).
   final bool busy;
+
+  /// Dokununca ayrıntı penceresi (okunmamış karar görüldü işaretlenir).
+  final VoidCallback? onTap;
 
   /// İptal düğmesinin altındaki açıklama (iptal edilebilirse son iptal zamanı; edilemezse neden).
   String _cancelNote() {
@@ -376,6 +476,7 @@ class MyReservationCard extends StatelessWidget {
     final semantic = StringBuffer(
       'Rezervasyon: ${r.areaLabel}. ${reservationWhenText(r)}. Durum: ${r.status.label}.',
     );
+    if (r.unread) semantic.write(' Yeni güncelleme var.');
     if (showSite && site.isNotEmpty) semantic.write(' $site.');
     if (r.decisionNote != null) semantic.write(' Yönetim notu var.');
     final cancelNote = r.status.isActive ? _cancelNote() : '';
@@ -385,7 +486,12 @@ class MyReservationCard extends StatelessWidget {
       title: r.areaLabel,
       subtitle: '${reservationWhenText(r)} · ${r.slotCount} dilim',
       semanticLabel: semantic.toString(),
-      chips: [ReservationStatusChip(r.status)],
+      tone: r.unread ? AppTone.warning : null,
+      onTap: onTap,
+      chips: [
+        ReservationStatusChip(r.status),
+        if (r.unread) const ReservationUpdateChip(),
+      ],
       details: [
         if ((showSite && site.isNotEmpty) || apartment.isNotEmpty)
           Wrap(
@@ -527,8 +633,9 @@ class ManagedReservationCard extends StatelessWidget {
   }
 }
 
-/// Konsiyerj talebi kartı (sakin ve yönetim). Sakinde [footer] iptal düğmesi; yönetimde [onTap] ayrıntıyı açar ve
-/// [showRequester] talebi açanı yazar.
+/// Konsiyerj talebi kartı (sakin ve yönetim). Sakinde [footer] iptal düğmesi ve [onTap] ayrıntı (görülmemiş yönetim
+/// güncellemesi `unread` çip + uyarı tonuyla gösterilir, ayrıntıda görüldü işaretlenir); yönetimde [onTap] ayrıntıyı
+/// açar ve [showRequester] talebi açanı yazar.
 class ConciergeCard extends StatelessWidget {
   const ConciergeCard({
     super.key,
@@ -555,6 +662,7 @@ class ConciergeCard extends StatelessWidget {
     final semantic = StringBuffer('Talep: ${r.category.label}. Durum: ${r.status.label}.');
     if (wanted != null) semantic.write(' İstenen zaman: $wanted.');
     if (showRequester && requester.isNotEmpty) semantic.write(' Açan: $requester.');
+    if (r.unread) semantic.write(' Yeni güncelleme var.');
     if (showSite && site.isNotEmpty) semantic.write(' $site.');
     if (r.staffNote != null) semantic.write(' Yönetim notu var.');
     return ReservationCardShell(
@@ -563,8 +671,12 @@ class ConciergeCard extends StatelessWidget {
       title: r.category.label,
       subtitle: wanted == null ? null : 'İstenen zaman: $wanted',
       semanticLabel: semantic.toString(),
-      chips: [ConciergeStatusChip(r.status)],
-      onTap: footer == null ? onTap : null,
+      tone: r.unread ? AppTone.warning : null,
+      chips: [
+        ConciergeStatusChip(r.status),
+        if (r.unread) const ReservationUpdateChip(),
+      ],
+      onTap: onTap,
       details: [
         if (r.note != null) _bodyText(context, r.note!),
         if (r.staffNote != null) _bodyText(context, 'Yönetim notu: ${r.staffNote}'),

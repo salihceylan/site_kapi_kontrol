@@ -7,6 +7,8 @@
 //  - Kapasite / çakışma / kişi limiti denetimi site+alan advisory kilidi altındadır (btree_gist / EXCLUDE yok); alan ayarı değişimi AYNI kilidi alır.
 //  - Her sorguda site_code vardır (IDOR yok). Kurul salt okur: sakin telefonu / kullanıcı kodu YOK. Görevli onay / red / iptal eder, alan TANIMLAMAZ.
 //  - Audit `details` yalnız kimlik / durum / sayı taşır: not, gerekçe, açıklama metni ASLA yazılmaz.
+//  - Okunmamış işareti (048, iş takibi ile aynı kalıp): yönetim kararı (onay / red / iptal + gerekçe) `resident_updated_at = clock_timestamp()` yazar; sakin
+//    `unread = resident_updated_at > resident_seen_at` görür ve yalnız POST /app/reservations/:id/seen ile temizler. Sistem iptali (hesap silme) işaret BIRAKMAZ.
 
 import { pool } from '../db.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
@@ -114,7 +116,8 @@ export const RESERVATION_COLUMNS = `
   r.cancelled_by_kind, r.created_at, a.name AS area_name, a.cancel_cutoff_hours, s.name AS site_name, b.block_name, ap.unit_label,
   CASE WHEN r.user_code IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
   CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone,
-  CASE WHEN du.deleted_at IS NOT NULL THEN NULL ELSE du.full_name END AS decider_name
+  CASE WHEN du.deleted_at IS NOT NULL THEN NULL ELSE du.full_name END AS decider_name,
+  (r.resident_updated_at > r.resident_seen_at) AS unread
 `;
 
 export const RESERVATION_FROM = `
@@ -331,7 +334,7 @@ export async function decideReservation({ siteCode, rawId, actor, access, body }
   const target = TARGET_OF[input.action];
   const outcome = await withReservationTransaction(siteCode, async (client) => {
     const userCode = await lockActiveUser(client, actor);
-    const found = await client.query(`SELECT status, starts_at, ends_at FROM reservations WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
+    const found = await client.query(`SELECT status, starts_at, ends_at, user_code FROM reservations WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
     const row = found.rows?.[0];
     if (!row) {
       throw reservationNotFound();
@@ -348,12 +351,19 @@ export async function decideReservation({ siteCode, rawId, actor, access, body }
     if (input.action === 'approve' && new Date(row.starts_at).getTime() <= now.getTime()) {
       throw reservationPast();
     }
+    // Sakine görünür değişiklik (durum + gerekçe): okunmamış işareti. clock_timestamp(): sakinin eşzamanlı /seen yazması bu işlemin başından (NOW) sonra olabilir;
+    // satır kilidi iki yazmayı sıralar, gerçek yazma anı kazanır.
+    // RU-1: kayıt sahibi işlemi yapanın kendisiyse (sakin olan yönetici / görevli) bu onun KENDİ işlemidir: iki sütun AYNI işlem-sabit değeri (NOW()) alır, öz-okunmamış
+    // oluşmaz (iki ayrı clock_timestamp() çağrısı farklı değer verebilir). Sahipsiz (silinmiş hesap, user_code NULL) kayıt sahip sayılmaz.
+    const selfAction = row.user_code !== null && row.user_code !== undefined && Number(row.user_code) === Number(userCode);
+    const unreadSet = selfAction ? 'resident_updated_at = NOW(), resident_seen_at = NOW()' : 'resident_updated_at = clock_timestamp()';
     await client.query(
       `
         UPDATE reservations
         SET status = $3, decision_note = $4, decided_by = $5, decided_at = NOW(), updated_at = NOW(),
             cancelled_at = CASE WHEN $3::TEXT = 'iptal' THEN NOW() ELSE NULL END,
-            cancelled_by_kind = CASE WHEN $3::TEXT = 'iptal' THEN 'management' ELSE NULL END
+            cancelled_by_kind = CASE WHEN $3::TEXT = 'iptal' THEN 'management' ELSE NULL END,
+            ${unreadSet}
         WHERE id = $1 AND site_code = $2
       `,
       [id, siteCode, target, input.note, userCode],

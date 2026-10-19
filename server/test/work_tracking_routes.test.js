@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { pool } from '../src/db.js';
 import { authRequired } from '../src/middlewares/auth_middleware.js';
-import { workItemReadLimiter, workItemWriteLimiter, workTrackingRouter } from '../src/modules/work_tracking_routes.js';
+import { workAttachmentUploadLimiter, workItemReadLimiter, workItemWriteLimiter, workTrackingRouter } from '../src/modules/work_tracking_routes.js';
 
 const SITE = 1000000001;
 const OTHER_SITE = 1000000002;
@@ -123,25 +123,35 @@ const url = (suffix = '', site = SITE) => `/manager/sites/${site}/work-items${su
 const GOOD = { site_code: SITE, category: 'ariza', location_type: 'ortak_alan', title: 'Başlık', description: 'Açıklama', idempotency_key: 'abc-12345-xyz' };
 
 describe('rota zinciri ve hız sınırları', () => {
-  it('sözleşmedeki 11 uç vardır; her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır; /assignees, /:id\'den ÖNCE tanımlıdır', () => {
+  it('sözleşmedeki 20 uç vardır (11 + 8 fotoğraf eki + rapor); her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır; /assignees ve /report, /:id\'den ÖNCE tanımlıdır', () => {
     const routes = ORIGINAL_ROUTES.map((route) => `${route.method.toUpperCase()} ${route.path}`);
     assert.deepEqual([...routes].sort(), [
+      'DELETE /app/work-items/:id/attachments/:attId',
+      'DELETE /manager/sites/:siteCode/work-items/:id/attachments/:attId',
       'GET /app/work-items',
       'GET /app/work-items/:id',
+      'GET /app/work-items/:id/attachments/:attId/content',
       'GET /manager/sites/:siteCode/work-items',
       'GET /manager/sites/:siteCode/work-items/:id',
+      'GET /manager/sites/:siteCode/work-items/:id/attachments/:attId/content',
       'GET /manager/sites/:siteCode/work-items/assignees',
+      'GET /manager/sites/:siteCode/work-items/report',
       'PATCH /manager/sites/:siteCode/work-items/:id',
       'POST /app/work-items',
+      'POST /app/work-items/:id/attachments',
       'POST /app/work-items/:id/cancel',
       'POST /app/work-items/:id/comments',
       'POST /app/work-items/:id/seen',
+      'POST /manager/sites/:siteCode/work-items/:id/attachments',
       'POST /manager/sites/:siteCode/work-items/:id/comments',
+      'PUT /app/work-items/:id/attachments/:attId/content',
+      'PUT /manager/sites/:siteCode/work-items/:id/attachments/:attId/content',
     ].sort());
     assert.ok(routes.indexOf('GET /manager/sites/:siteCode/work-items/assignees') < routes.indexOf('GET /manager/sites/:siteCode/work-items/:id'));
+    assert.ok(routes.indexOf('GET /manager/sites/:siteCode/work-items/report') < routes.indexOf('GET /manager/sites/:siteCode/work-items/:id'));
     for (const route of ORIGINAL_ROUTES) {
       assert.equal(route.handlers[0], authRequired, `${route.method} ${route.path}`);
-      const expected = route.method === 'get' || route.path.endsWith('/seen') ? workItemReadLimiter : workItemWriteLimiter;
+      const expected = route.method === 'put' ? workAttachmentUploadLimiter : route.method === 'get' || route.path.endsWith('/seen') ? workItemReadLimiter : workItemWriteLimiter;
       assert.equal(route.handlers[1], expected, `${route.method} ${route.path}`);
     }
   });

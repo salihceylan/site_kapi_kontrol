@@ -1,5 +1,6 @@
-// Rezervasyon ve Konsiyerj (043) şeması (DB'siz): migration 043 <-> reservation_schema.js aynı DDL (aynı sıra), ekleyici / idempotent, sütun / kısıt / indeks ayrıntıları,
-// AÇILIŞ 40P01 dersi (DDL dev ensureDbSchema bloğunda DEĞİL; katalog kontrolüyle yalnız EKSİKLER, kendi otomatik onaylı ifadeleriyle), yeniden deneme.
+// Rezervasyon ve Konsiyerj (043 + 048) şeması (DB'siz): migration 043 / 048 <-> reservation_schema.js aynı DDL (aynı sıra), ekleyici / idempotent, sütun / kısıt / indeks ayrıntıları,
+// AÇILIŞ 40P01 dersi (DDL dev ensureDbSchema bloğunda DEĞİL; katalog kontrolüyle yalnız EKSİKLER, kendi otomatik onaylı ifadeleriyle), yeniden deneme,
+// 048 okunmamış işareti sütunları (yalnız eksikse ALTER; tablodan SONRA).
 // Gerçek PostgreSQL doğrulaması: scripts/qa_platform_pg.mjs "reservation" (+ "chain" / "live" şema eşitliği).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,12 +8,21 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
-import { RESERVATION_DDL, RESERVATION_DDL_ORDER, ensureReservationSchema, schemaTuning } from '../src/modules/reservation_schema.js';
+import {
+  RESERVATION_DDL,
+  RESERVATION_DDL_ORDER,
+  RESERVATION_UNREAD_COLUMNS,
+  RESERVATION_UNREAD_DDL,
+  RESERVATION_UNREAD_DDL_ORDER,
+  ensureReservationSchema,
+  schemaTuning,
+} from '../src/modules/reservation_schema.js';
 
 schemaTuning.retryDelayMs = 1;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATION = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '043_reservation.sql'), 'utf8').replace(/\r\n/g, '\n');
+const MIGRATION_048 = readFileSync(path.join(DEFAULT_MIGRATIONS_DIR, '048_reservation_unread.sql'), 'utf8').replace(/\r\n/g, '\n');
 const DB_SOURCE = readFileSync(path.join(here, '..', 'src', 'db.js'), 'utf8').replace(/\r\n/g, '\n');
 
 function normalizeSql(text) {
@@ -44,6 +54,7 @@ function splitStatements(sqlText) {
 }
 
 const sql = (name) => normalizeSql(RESERVATION_DDL[name]);
+const usql = (name) => normalizeSql(RESERVATION_UNREAD_DDL[name]);
 const TABLES = ['reservation_areas', 'reservations', 'concierge_requests'];
 
 describe('migration 043: rezervasyon ve konsiyerj', () => {
@@ -211,14 +222,20 @@ describe('ensureReservationSchema (katalog kontrolü + yeniden deneme)', () => {
     });
   }
 
-  function fakeClient({ tables, indexes, fks = [], failures = {} }) {
+  /** `unread`: katalogdaki 048 sütun sayısı (tablo başına; 2 = tam, 0 = yok, 1 = yarım). */
+  function fakeClient({ tables, indexes, fks = [], unread = { reservations: 2, concierge: 2 }, failures = {} }) {
     const log = [];
+    const params = [];
     return {
       log,
-      async query(text) {
+      params,
+      async query(text, values) {
         const statement = normalizeSql(text);
         log.push(statement);
-        if (/^SELECT ARRAY/.test(statement)) return { rows: [{ tables, indexes, fks }] };
+        params.push(values ?? []);
+        if (/^SELECT ARRAY/.test(statement)) {
+          return { rows: [{ tables, indexes, fks, reservations_unread_columns: unread.reservations, concierge_unread_columns: unread.concierge }] };
+        }
         if (/^SET lock_timeout|^RESET lock_timeout/.test(statement)) return { rows: [] };
         const key = Object.keys(failures).find((needle) => statement.includes(needle));
         if (key && failures[key].length > 0) throw Object.assign(new Error('enjekte'), { code: failures[key].shift() });
@@ -226,7 +243,7 @@ describe('ensureReservationSchema (katalog kontrolü + yeniden deneme)', () => {
       },
     };
   }
-  const ddlOf = (client) => client.log.filter((statement) => /^(CREATE|DO)/.test(statement));
+  const ddlOf = (client) => client.log.filter((statement) => /^(CREATE|DO|ALTER)/.test(statement));
 
   it('14 indeks adı beklenen kümedir', () => {
     assert.equal(ALL_INDEXES.length, 14);
@@ -241,12 +258,12 @@ describe('ensureReservationSchema (katalog kontrolü + yeniden deneme)', () => {
     assert.match(client.log[0], /^SELECT ARRAY/);
   });
 
-  it("hiçbiri yoksa: lock_timeout, her ifade TEK ayrı sorgu olarak SIRAYLA (tablo, FK'leri, indeksleri), sonda RESET", async () => {
-    const client = fakeClient({ tables: ['apartments'], indexes: [] });
+  it("hiçbiri yoksa: lock_timeout, her ifade TEK ayrı sorgu olarak SIRAYLA (tablo, FK'leri, indeksleri; en sonda 048 sütunları), sonda RESET", async () => {
+    const client = fakeClient({ tables: ['apartments'], indexes: [], unread: { reservations: 0, concierge: 0 } });
     await ensureReservationSchema(client);
     assert.equal(client.log[1], "SET lock_timeout = '2s'");
     assert.equal(client.log[client.log.length - 1], 'RESET lock_timeout');
-    assert.deepEqual(client.log.slice(2, -1), RESERVATION_DDL_ORDER.map((name) => sql(name)));
+    assert.deepEqual(client.log.slice(2, -1), [...RESERVATION_DDL_ORDER.map((name) => sql(name)), ...RESERVATION_UNREAD_DDL_ORDER.map((name) => usql(name))]);
   });
 
   it('yalnız eksik indeks / yalnız eksik FK varsa yalnız o ifade gider; tablolar var ama hiç FK yoksa 11 FK sırayla tamamlanır', async () => {
@@ -281,5 +298,87 @@ describe('ensureReservationSchema (katalog kontrolü + yeniden deneme)', () => {
     const fatal = fakeClient({ ...missing, failures: { 'ADD CONSTRAINT reservations_site_code_fkey': ['42501'] } });
     await assert.rejects(ensureReservationSchema(fatal), { code: '42501' });
     assert.equal(fatal.log.filter((statement) => statement.includes('ADD CONSTRAINT reservations_site_code_fkey')).length, 1);
+  });
+
+  it('048: katalog sorgusu iki tablonun sütun sayısını pg_attribute ile AYNI tek sorguda ister ($4 = sütun adları, düşürülmüşler hariç); her şey varsa yine tek sorgu', async () => {
+    const client = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS });
+    await ensureReservationSchema(client);
+    assert.equal(client.log.length, 1);
+    assert.match(client.log[0], /\( SELECT COUNT\(\*\)::INTEGER FROM pg_attribute WHERE attrelid = to_regclass\('public\.reservations'\) AND attname = ANY\(\$4::TEXT\[\]\) AND NOT attisdropped \) AS reservations_unread_columns/);
+    assert.match(client.log[0], /\( SELECT COUNT\(\*\)::INTEGER FROM pg_attribute WHERE attrelid = to_regclass\('public\.concierge_requests'\) AND attname = ANY\(\$4::TEXT\[\]\) AND NOT attisdropped \) AS concierge_unread_columns/);
+    assert.deepEqual(client.params[0][3], ['resident_updated_at', 'resident_seen_at']);
+  });
+
+  it("048: 043 tam, yalnız sütunlar eksikse: lock_timeout + yalnız iki ALTER (reservations, sonra concierge_requests) + RESET; başka DDL yok", async () => {
+    const client = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, unread: { reservations: 0, concierge: 0 } });
+    await ensureReservationSchema(client);
+    assert.equal(client.log[1], "SET lock_timeout = '2s'");
+    assert.deepEqual(client.log.slice(2, -1), RESERVATION_UNREAD_DDL_ORDER.map((name) => usql(name)));
+    assert.equal(client.log[client.log.length - 1], 'RESET lock_timeout');
+  });
+
+  it("048: yalnız bir tabloda eksik ya da YARIM (tek sütun) ise yalnız o tablonun ALTER'ı gider (IF NOT EXISTS yarımı tamamlar)", async () => {
+    const onlyConcierge = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, unread: { reservations: 2, concierge: 0 } });
+    await ensureReservationSchema(onlyConcierge);
+    assert.deepEqual(ddlOf(onlyConcierge), [usql('conciergeUnreadColumns')]);
+    const half = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, unread: { reservations: 1, concierge: 2 } });
+    await ensureReservationSchema(half);
+    assert.deepEqual(ddlOf(half), [usql('reservationsUnreadColumns')]);
+  });
+
+  it('048: ilk kurulumda (tablo yok) sütunlar tablo oluşturulduktan SONRA, 043 ifadelerinin tamamının ardından eklenir', async () => {
+    const client = fakeClient({ tables: ['apartments'], indexes: [], unread: { reservations: 0, concierge: 0 } });
+    await ensureReservationSchema(client);
+    const ddl = ddlOf(client);
+    assert.equal(ddl.length, RESERVATION_DDL_ORDER.length + RESERVATION_UNREAD_DDL_ORDER.length);
+    assert.ok(ddl.indexOf(usql('reservationsUnreadColumns')) > ddl.indexOf(sql('reservationsTable')));
+    assert.ok(ddl.indexOf(usql('conciergeUnreadColumns')) > ddl.indexOf(sql('conciergeTable')));
+    assert.deepEqual(ddl.slice(-2), RESERVATION_UNREAD_DDL_ORDER.map((name) => usql(name)));
+  });
+
+  it('048: ALTER 55P03 / 40P01 ile yeniden denenir', async () => {
+    const client = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, unread: { reservations: 0, concierge: 2 }, failures: { 'ALTER TABLE reservations ADD COLUMN': ['55P03', '40P01'] } });
+    await ensureReservationSchema(client);
+    assert.equal(client.log.filter((statement) => statement.startsWith('ALTER TABLE reservations ADD COLUMN')).length, 3);
+    assert.equal(client.log[client.log.length - 1], 'RESET lock_timeout');
+  });
+});
+
+describe('migration 048: okunmamış işareti sütunları (resident_updated_at, resident_seen_at)', () => {
+  it('048 var, çalıştırıcı için güvenli, numara yinelenmez; 043 DEĞİŞMEDİ (043 ifadelerinde resident_ sütunu yok)', () => {
+    const list = listMigrations(DEFAULT_MIGRATIONS_DIR);
+    const entry = list.find((m) => m.number === 48);
+    assert.ok(entry, '048 numaralı migration yok');
+    assert.equal(entry.file, '048_reservation_unread.sql');
+    assert.equal(list.filter((m) => m.number === 48).length, 1);
+    assert.deepEqual(findUnsafeStatements(MIGRATION_048), []);
+    for (const name of RESERVATION_DDL_ORDER) assert.ok(!/resident_(updated|seen)_at/.test(RESERVATION_DDL[name]), name);
+    assert.ok(!/resident_(updated|seen)_at/.test(MIGRATION));
+  });
+
+  it('RESERVATION_UNREAD_DDL migration 048 ile AYNI 2 ifadeyi taşır (yorumlar ve boşluklar dışında birebir; sıra: reservations, concierge_requests)', () => {
+    const fromMigration = splitStatements(MIGRATION_048);
+    assert.equal(fromMigration.length, 2);
+    assert.deepEqual(fromMigration, RESERVATION_UNREAD_DDL_ORDER.map((name) => usql(name)));
+    assert.deepEqual(Object.keys(RESERVATION_UNREAD_DDL), [...RESERVATION_UNREAD_DDL_ORDER]);
+    assert.deepEqual([...RESERVATION_UNREAD_DDL_ORDER], ['reservationsUnreadColumns', 'conciergeUnreadColumns']);
+  });
+
+  it('EKLEMELİ ve idempotent: tablo başına TEK ALTER TABLE ... ADD COLUMN IF NOT EXISTS; iki sütun da TIMESTAMPTZ NOT NULL DEFAULT NOW() (aynı ifadede: mevcut satırlar okunmamış görünmez); DROP / UPDATE / DELETE / INSERT / CREATE YOK', () => {
+    const tables = ['reservations', 'concierge_requests'];
+    splitStatements(MIGRATION_048).forEach((statement, index) => {
+      assert.equal(
+        statement,
+        `ALTER TABLE ${tables[index]} ADD COLUMN IF NOT EXISTS resident_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), ADD COLUMN IF NOT EXISTS resident_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+      );
+    });
+    assert.ok(!/\b(DROP|TRUNCATE|UPDATE|DELETE FROM|INSERT INTO|CREATE)\b/i.test(normalizeSql(MIGRATION_048)));
+    assert.deepEqual([...RESERVATION_UNREAD_COLUMNS], ['resident_updated_at', 'resident_seen_at']);
+  });
+
+  it('048 ifadeleri db.js içinde DEĞİL (yalnız ensureReservationSchema üzerinden; db.js çağrısı değişmedi)', () => {
+    const normalizedDb = normalizeSql(DB_SOURCE);
+    for (const name of RESERVATION_UNREAD_DDL_ORDER) assert.equal(normalizedDb.includes(usql(name)), false, name);
+    assert.equal([...DB_SOURCE.matchAll(/await ensureReservationSchema\(client\);/g)].length, 1);
   });
 });

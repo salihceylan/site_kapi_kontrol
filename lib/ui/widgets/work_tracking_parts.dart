@@ -16,6 +16,8 @@ import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/helpers/date_input.dart' show formatCrmDate;
 import 'package:site_kapi_kontrol/ui/helpers/istanbul_time.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+import 'package:site_kapi_kontrol/ui/widgets/work_attachment_parts.dart'
+    show WorkPhotoCountChip;
 
 IconData workCategoryIcon(WorkCategory category) => switch (category) {
   WorkCategory.ariza => Icons.build_rounded,
@@ -132,6 +134,7 @@ class WorkResidentCard extends StatelessWidget {
     if (i.unread) semantic.write(' Yeni güncelleme var.');
     if (i.urgent) semantic.write(' Acil olarak işaretlendi.');
     semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (showSite && site.isNotEmpty) semantic.write(' $site.');
     if (i.createdAt != null) {
       semantic.write(' Açılış: ${_dateTime(i.createdAt)}.');
@@ -161,6 +164,8 @@ class WorkResidentCard extends StatelessWidget {
                       WorkStatusChip(i.status),
                       if (i.unread) const WorkUpdateChip(),
                       if (i.urgent) const WorkUrgentChip(),
+                      if (i.attachmentCount > 0)
+                        WorkPhotoCountChip(i.attachmentCount),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),
@@ -221,6 +226,7 @@ class WorkManagedCard extends StatelessWidget {
     );
     if (i.residentUrgent) semantic.write(' Sakin acil olarak işaretledi.');
     semantic.write(' ${i.category.label}. Konum: ${i.locationText}.');
+    if (i.attachmentCount > 0) semantic.write(' ${i.attachmentCount} fotoğraf.');
     if (requester.isNotEmpty) semantic.write(' Açan: $requester.');
     semantic.write(' $assigneeText.');
     if (due != null) semantic.write(' Hedef tarih: $due.');
@@ -253,6 +259,8 @@ class WorkManagedCard extends StatelessWidget {
                         WorkPriorityChip(i.priority),
                       if (i.residentUrgent)
                         const WorkUrgentChip(label: 'Sakin: acil'),
+                      if (i.attachmentCount > 0)
+                        WorkPhotoCountChip(i.attachmentCount),
                     ],
                   ),
                   const SizedBox(height: AppSpace.sm),
@@ -318,6 +326,10 @@ String workEventTitle(WorkEvent event) {
       return 'Hedef tarih: $from → $to';
     case WorkEventType.comment:
       return event.internal ? 'İç not' : 'Yorum';
+    case WorkEventType.attachmentAdded:
+      return 'Fotoğraf eklendi';
+    case WorkEventType.attachmentRemoved:
+      return 'Fotoğraf kaldırıldı';
     case WorkEventType.unknown:
       return 'Güncelleme';
   }
@@ -331,6 +343,8 @@ IconData _eventIcon(WorkEvent event) => switch (event.type) {
   WorkEventType.dueDateChanged => Icons.event_rounded,
   WorkEventType.comment =>
     event.internal ? Icons.lock_outline_rounded : Icons.chat_bubble_outline,
+  WorkEventType.attachmentAdded => Icons.add_photo_alternate_outlined,
+  WorkEventType.attachmentRemoved => Icons.hide_image_outlined,
   WorkEventType.unknown => Icons.circle_outlined,
 };
 

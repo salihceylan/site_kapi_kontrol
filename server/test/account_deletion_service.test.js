@@ -90,8 +90,9 @@ function handle(sql, params) {
     return ok([{ has_devices: state.optionalTables.push === true, has_outbox: state.optionalTables.push === true }]);
   }
   if (/^SELECT \(to_regclass\('public\.push_devices'\) IS NOT NULL\) AS has_push_devices/.test(sql)) {
-    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true, has_work_items: state.optionalTables.work === true }]);
+    return ok([{ has_push_devices: state.optionalTables.push === true, has_documents: state.optionalTables.documents === true, has_reminders: state.optionalTables.reminders === true, has_work_items: state.optionalTables.work === true, has_work_item_attachments: state.optionalTables.attachments === true }]);
   }
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_item_attachments WHERE uploaded_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.uploadedAttachments ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM push_devices WHERE user_code = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.pushDevices ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM document_versions WHERE uploaded_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.uploadedDocuments ?? 0 }]);
   if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM work_items WHERE created_by = \$1$/.test(sql)) return ok([{ n: state.optionalCounts.workItems ?? 0 }]);
@@ -956,6 +957,24 @@ describe('hesap silme: önizleme', () => {
     state.optionalCounts = { workItems: 0, workItemComments: 3 };
     preview = await previewAccountDeletion(USER);
     assert.match(preview.will_keep.join('\n'), /Taleplere yazdığınız yorumların metinleri \(3\) site yönetiminde kalır/);
+  });
+
+  it('İş Takibi fotoğrafları (047): önizleme — eklenen fotoğraflar SİLİNMEZ, will_keep\'te sayıyla anılır (yükleyen "Silinmiş Kullanıcı"); 0 ya da tablo yoksa satır çıkmaz; will_remove\'a girmez; sayım sorgusu yalnız tablo varken gider', async () => {
+    previewHandlers();
+    state.optionalTables = { work: true, attachments: true };
+    state.optionalCounts = { workItems: 1, uploadedAttachments: 3 };
+    let preview = await previewAccountDeletion(USER);
+    assert.ok(preview.will_keep.includes('İş takibi taleplerine eklediğiniz fotoğraflar (3) taleple birlikte site yönetiminde kalır; yükleyen adı "Silinmiş Kullanıcı" görünür.'));
+    assert.equal(/fotoğraflar/.test(preview.will_remove.join('\n')), false);
+    state.optionalCounts = { workItems: 1, uploadedAttachments: 0 };
+    preview = await previewAccountDeletion(USER);
+    assert.equal(/fotoğraflar/.test(preview.will_keep.join('\n')), false);
+    state.optionalTables = { work: true };
+    state.optionalCounts = { uploadedAttachments: 5 };
+    log.length = 0;
+    preview = await previewAccountDeletion(USER);
+    assert.equal(/fotoğraflar/.test(preview.will_keep.join('\n')), false, 'tablo yoksa sayılmaz (katalog bayrağı)');
+    assert.equal(log.some((e) => /FROM work_item_attachments/.test(e.sql)), false);
   });
 
   it('süper kullanıcı: SUPER_USER engeli; son yönetici: LAST_SITE_MANAGER + site_id', async () => {

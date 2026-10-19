@@ -57,6 +57,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   'İş takibi talepleri: yalnız sizin açtığınız taleplerin başlığı, açıklaması, kategorisi, konumu, durumu ve tarihleri "work_items_created" bölümünde, yalnız SİZİN yazdığınız yorumlar "work_item_comments" bölümündedir; başkalarının yorumları, yönetimin diğer iç notları, öncelik, atanan görevli, hedef tarih ve durum geçmişi satırları site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'Anket ve oylama: yalnız SİZİN kullandığınız oylar (anket başlığı, seçtiğiniz seçenek metni, oy zamanı) "survey_votes_cast" bölümündedir; başkalarının oyları, sonuç sayımları ve anketin hedef kitlesi site yönetiminin kaydı olduğu için dışarıda bırakılmıştır.',
   'Kartlı geçiş kartları: size tanımlı kartların etiketi, durumu ve numarasının yalnız son 4 karakteri "access_cards" bölümündedir; kart numarasının tamamı, kartı tanımlayan yönetici ve geçiş kayıtları site yönetiminin / güvenliğin kaydı olduğu için dışarıda bırakılmıştır.',
+  'İş takibi fotoğrafları: yalnız SİZİN eklediğiniz fotoğrafların kayıt bilgisi (talep kimliği, dosya adı, tür, boyut, durum, tarih) "work_item_attachments_uploaded" bölümündedir; fotoğrafın içeriği (görüntü), depolama anahtarı ve içerik özeti (hash) dosyaya KONMAZ (taleple birlikte site yönetiminin kaydıdır; görüntüyü uygulamadaki talep ekranından indirebilirsiniz); başkalarının eklediği fotoğraflar dışarıda bırakılmıştır.',
 ]);
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -264,6 +265,12 @@ const SQL = Object.freeze({
     FROM access_cards c
     INNER JOIN site_people sp ON sp.id = c.person_id AND sp.user_code = $1
     ORDER BY c.id DESC
+  // Eklediğiniz iş takibi fotoğrafları (047): YALNIZ sizin (uploaded_by = çağıran) eklediklerinizin kayıt bilgisi. İçerik, depolama anahtarı, sha256 SEÇİLMEZ.
+  workItemAttachments: `
+    SELECT a.id, a.work_item_id, a.site_code, a.file_name, a.mime_type, a.size_bytes, a.status, a.created_at
+    FROM work_item_attachments a
+    WHERE a.uploaded_by = $1
+    ORDER BY a.id DESC
   `,
   // Rezervasyonlarım (043): YALNIZ sizin yaptığınız kayıtlar; alan adı, zaman, durum ve kendi notunuz. Yönetim gerekçesi / kararı veren / daire SEÇİLMEZ.
   reservationsMade: `
@@ -356,6 +363,8 @@ const OPTIONAL_OBJECTS_SQL = `
     (to_regclass('public.work_items') IS NOT NULL) AS has_work_items,
     (to_regclass('public.reservations') IS NOT NULL) AS has_reservations,
     (to_regclass('public.survey_votes') IS NOT NULL) AS has_surveys
+    (to_regclass('public.work_item_attachments') IS NOT NULL) AS has_work_item_attachments,
+    (to_regclass('public.reservations') IS NOT NULL) AS has_reservations
 `;
 
 const CONSENT_KEYS = ['id', 'document_id', 'version', 'accepted_at', 'source'];
@@ -452,6 +461,8 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
     const financeReminders = optional.has_reminders === true ? await bounded('finance_reminders_received', SQL.financeReminders, EXPORT_ROW_LIMITS.finance_reminders_received) : [];
     const workItems = optional.has_work_items === true ? await bounded('work_items_created', SQL.workItems, EXPORT_ROW_LIMITS.work_items_created) : [];
     const workItemComments = optional.has_work_items === true ? await bounded('work_item_comments', SQL.workItemComments, EXPORT_ROW_LIMITS.work_item_comments) : [];
+    // Eklediğiniz iş takibi fotoğraflarının kayıt bilgisi (047): içerik / anahtar / özet HARİÇ. Tablo yoksa boş.
+    const workItemAttachments = optional.has_work_item_attachments === true ? await bounded('work_item_attachments_uploaded', SQL.workItemAttachments, EXPORT_ROW_LIMITS.work_item_attachments_uploaded) : [];
     const reservationsMade = optional.has_reservations === true ? await bounded('reservations_made', SQL.reservationsMade, EXPORT_ROW_LIMITS.reservations_made) : [];
     const conciergeRequestsMade = optional.has_reservations === true ? await bounded('concierge_requests_made', SQL.conciergeRequestsMade, EXPORT_ROW_LIMITS.concierge_requests_made) : [];
     const surveyVotesCast = optional.has_surveys === true ? await bounded('survey_votes_cast', SQL.surveyVotesCast, EXPORT_ROW_LIMITS.survey_votes_cast) : [];
@@ -527,6 +538,7 @@ export async function collectPersonalData(userCode, { now = new Date(), db = poo
       })),
       work_items_created: withIds(workItems),
       work_item_comments: withIds(workItemComments, ['id', 'work_item_id', 'site_code']),
+      work_item_attachments_uploaded: withIds(workItemAttachments, ['id', 'work_item_id', 'site_code', 'size_bytes']),
       reservations_made: withIds(reservationsMade),
       concierge_requests_made: withIds(conciergeRequestsMade),
       survey_votes_cast: surveyVotesCast.map((row) => ({ survey_title: row.survey_title, option_text: row.option_text ?? null, voted_at: row.voted_at })),
@@ -581,6 +593,7 @@ export const SHRINKABLE_SECTIONS = Object.freeze([
   'uploaded_documents',
   'work_items_created',
   'work_item_comments',
+  'work_item_attachments_uploaded',
   'reservations_made',
   'concierge_requests_made',
   'people_records',

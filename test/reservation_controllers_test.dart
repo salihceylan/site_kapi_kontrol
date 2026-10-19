@@ -368,4 +368,136 @@ void main() {
       off.dispose();
     });
   });
+
+  group('ResidentDetailController (sakin ayrıntısı + görüldü işareti)', () {
+    ReservationRecord reservation(FakeReservationService service, int id) =>
+        ReservationRecord.fromJson(service.reservations.firstWhere((r) => r['id'] == id));
+    ConciergeRecord request(FakeReservationService service, int id) =>
+        ConciergeRecord.fromJson(service.requests.firstWhere((r) => r['id'] == id));
+
+    test('okunmamış rezervasyon: ayrıntı GET sonrası seen ateşlenir; başarıda bayrak silinir ve changed', () async {
+      final service = _service();
+      service.reservations.first['unread'] = true;
+      final c = ReservationResidentDetailController(service: service, initial: reservation(service, 1));
+      expect(c.record.unread, isTrue);
+      await c.load();
+      expect(service.getMineCalls, <int>[1]);
+      expect(c.loaded, isTrue);
+      expect(c.loading, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(service.seenCalls, <int>[1]);
+      expect(c.record.unread, isFalse);
+      expect(c.changed, isTrue);
+      expect(service.reservations.first['unread'], isFalse, reason: 'sunucu bayrağı sildi');
+      c.dispose();
+    });
+
+    test('okunmuş kayıt: seen çağrılmaz, changed false', () async {
+      final service = _service();
+      final c = ReservationResidentDetailController(service: service, initial: reservation(service, 1));
+      await c.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.getMineCalls, <int>[1]);
+      expect(service.seenCalls, isEmpty);
+      expect(c.changed, isFalse);
+      c.dispose();
+    });
+
+    test('seen hatası sessiz: bayrak kalır, changed false, hata metni yok; yeniden yüklemede tekrar denenir', () async {
+      final service = _service();
+      service.reservations.first['unread'] = true;
+      service.failures['markMineSeen'] = <Object>[ApiException('Sunucuya bağlanılamadı.')];
+      final c = ReservationResidentDetailController(service: service, initial: reservation(service, 1));
+      await c.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.seenCalls, <int>[1]);
+      expect(c.record.unread, isTrue);
+      expect(c.changed, isFalse);
+      expect(c.loadError, isNull);
+      await c.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.seenCalls, <int>[1, 1]);
+      expect(c.record.unread, isFalse);
+      expect(c.changed, isTrue);
+      c.dispose();
+    });
+
+    test('liste okunmamış diyor, sunucu okunmuş (başka cihazda görüldü): seen yok ama liste eşitlenir', () async {
+      final service = _service();
+      final c = ReservationResidentDetailController(service: service, initial: reservation(service, 1).copyWith(unread: true));
+      await c.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.seenCalls, isEmpty);
+      expect(c.record.unread, isFalse);
+      expect(c.changed, isTrue);
+      c.dispose();
+    });
+
+    test('404: gone + changed; 403 modül: moduleClosed; ağ hatası: düz metin, özet korunur, seen yok', () async {
+      final service = _service();
+      service.failures['getMine'] = <Object>[FakeReservationService.error(404, 'RESERVATION_NOT_FOUND')];
+      final gone = ReservationResidentDetailController(service: service, initial: reservation(service, 1).copyWith(unread: true));
+      await gone.load();
+      expect(gone.gone, isTrue);
+      expect(gone.changed, isTrue);
+      expect(gone.loadError, contains('Rezervasyon bulunamadı'));
+      gone.dispose();
+
+      service.failures['getMine'] = <Object>[FakeReservationService.moduleOff()];
+      final off = ReservationResidentDetailController(service: service, initial: reservation(service, 1));
+      await off.load();
+      expect(off.moduleClosed, isTrue);
+      expect(off.loadError, contains('kapalı'));
+      off.dispose();
+
+      service.failures['getMine'] = <Object>[ApiException('Bağlantı yok.')];
+      final net = ReservationResidentDetailController(service: service, initial: reservation(service, 1).copyWith(unread: true));
+      await net.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(net.loadError, 'Bağlantı yok.');
+      expect(net.loaded, isFalse);
+      expect(net.record.unread, isTrue, reason: 'listedeki özet korunur');
+      expect(net.changed, isFalse);
+      expect(service.seenCalls, isEmpty);
+      net.dispose();
+    });
+
+    test('yarış: dispose sonrası yanıt yok sayılır, seen atılmaz', () async {
+      final service = _service();
+      service.reservations.first['unread'] = true;
+      final gate = Completer<void>();
+      service.gates['getMine'] = <Completer<void>>[gate];
+      final c = ReservationResidentDetailController(service: service, initial: reservation(service, 1));
+      final load = c.load();
+      expect(c.loading, isTrue);
+      c.dispose();
+      gate.complete();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+      expect(c.loaded, isFalse);
+      expect(service.seenCalls, isEmpty);
+    });
+
+    test('konsiyerj: GET /app/concierge-requests/:id + seen; 404 kodu CONCIERGE_NOT_FOUND', () async {
+      final service = _service();
+      service.requests[1]['unread'] = true;
+      final c = ConciergeResidentDetailController(service: service, initial: request(service, 2));
+      await c.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.getMyRequestCalls, <int>[2]);
+      expect(service.seenRequestCalls, <int>[2]);
+      expect(c.record.unread, isFalse);
+      expect(c.record.staffNote, 'Ekip öğleden sonra gelecek.');
+      expect(c.changed, isTrue);
+      c.dispose();
+
+      service.failures['getMyRequest'] = <Object>[FakeReservationService.error(404, 'CONCIERGE_NOT_FOUND')];
+      final gone = ConciergeResidentDetailController(service: service, initial: request(service, 2));
+      await gone.load();
+      expect(gone.gone, isTrue);
+      expect(gone.changed, isTrue);
+      expect(gone.loadError, contains('Talep bulunamadı'));
+      gone.dispose();
+    });
+  });
 }

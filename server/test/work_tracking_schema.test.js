@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MIGRATIONS_DIR, findUnsafeStatements, listMigrations } from '../scripts/migrate.js';
-import { WORK_TRACKING_DDL, WORK_TRACKING_DDL_ORDER, ensureWorkTrackingSchema, schemaTuning } from '../src/modules/work_tracking_schema.js';
+import { WORK_TRACKING_DDL, WORK_TRACKING_DDL_ORDER, ensureWorkTrackingSchema, repairResidentCancelUnread, schemaTuning } from '../src/modules/work_tracking_schema.js';
 
 schemaTuning.retryDelayMs = 1;
 
@@ -194,7 +194,7 @@ describe('ensureWorkTrackingSchema (katalog kontrolü + yeniden deneme)', () => 
   ];
   const ALL_TABLES = ['work_items', 'work_item_events', 'apartments', 'site_blocks'];
 
-  function fakeClient({ tables, indexes, fks = [], failures = {} }) {
+  function fakeClient({ tables, indexes, fks = [], failures = {}, repairNeeded = false, repairFails = null }) {
     const log = [];
     return {
       log,
@@ -203,6 +203,11 @@ describe('ensureWorkTrackingSchema (katalog kontrolü + yeniden deneme)', () => 
         log.push(statement);
         if (/^SELECT ARRAY/.test(statement)) return { rows: [{ tables, indexes, fks }] };
         if (/^SET lock_timeout|^RESET lock_timeout/.test(statement)) return { rows: [] };
+        if (/^SELECT EXISTS \(SELECT 1 FROM work_items w WHERE/.test(statement)) {
+          if (repairFails) throw Object.assign(new Error('enjekte'), { code: repairFails });
+          return { rows: [{ needed: repairNeeded }] };
+        }
+        if (/^UPDATE work_items w SET requester_seen_at = w\.resident_updated_at/.test(statement)) return { rows: [], rowCount: 3 };
         const key = Object.keys(failures).find((needle) => statement.includes(needle));
         if (key && failures[key].length > 0) throw Object.assign(new Error('enjekte'), { code: failures[key].shift() });
         return { rows: [] };
@@ -216,11 +221,33 @@ describe('ensureWorkTrackingSchema (katalog kontrolü + yeniden deneme)', () => 
     assert.ok(ALL_INDEXES.every((name) => /^(idx|uq)_work_item/.test(name)), ALL_INDEXES.join());
   });
 
-  it('her şey varsa (normal açılış) YALNIZ katalog sorgusu gider: DDL yok, kilit ayarı yok', async () => {
+  it('her şey varsa (normal açılış) katalog sorgusu + RU-2 onarımının UCUZ EXISTS okuması gider: DDL yok, kilit ayarı yok, UPDATE YOK', async () => {
     const client = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS });
     await ensureWorkTrackingSchema(client);
-    assert.equal(client.log.length, 1);
+    assert.equal(client.log.length, 2);
     assert.match(client.log[0], /^SELECT ARRAY/);
+    assert.match(client.log[1], /^SELECT EXISTS \(SELECT 1 FROM work_items w WHERE w\.status = 'iptal' AND w\.resident_updated_at > w\.requester_seen_at AND EXISTS \( SELECT 1 FROM work_item_events e WHERE e\.work_item_id = w\.id AND e\.event_type = 'status_changed' AND e\.actor_kind = 'resident' AND e\.to_value = 'iptal' \) \) AS needed$/);
+    assert.equal(client.log.some((statement) => /^UPDATE/.test(statement)), false);
+  });
+
+  it('RU-2 onarımı: gerekiyorsa (EXISTS true) TEK UPDATE 2 sn kilit beklemesiyle (SET / RESET); tablolar yoksa onarım sorgusu HİÇ gitmez; hata açılışı durdurmaz', async () => {
+    const needed = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, repairNeeded: true });
+    await ensureWorkTrackingSchema(needed);
+    assert.deepEqual(needed.log.slice(1).map((statement) => statement.split(' ').slice(0, 3).join(' ')), ['SELECT EXISTS (SELECT', "SET lock_timeout =", 'UPDATE work_items w', 'RESET lock_timeout']);
+    assert.ok(needed.log[3].endsWith("e.actor_kind = 'resident' AND e.to_value = 'iptal' )"), needed.log[3]);
+    assert.equal(await repairResidentCancelUnread(fakeClient({ tables: [], indexes: [], repairNeeded: true })), 3);
+    const fresh = fakeClient({ tables: ['apartments', 'site_blocks'], indexes: [] });
+    await ensureWorkTrackingSchema(fresh);
+    assert.equal(fresh.log.some((statement) => /EXISTS \(SELECT 1 FROM work_items w|^UPDATE work_items w/.test(statement)), false, 'ilk kurulumda onarım yok');
+    const realError = console.error;
+    console.error = () => {};
+    try {
+      const broken = fakeClient({ tables: ALL_TABLES, indexes: ALL_INDEXES, fks: ALL_FKS, repairFails: '57014' });
+      await ensureWorkTrackingSchema(broken);
+      assert.equal(broken.log.length, 2, 'hata yutuldu, açılış sürdü');
+    } finally {
+      console.error = realError;
+    }
   });
 
   it('hiçbiri yoksa: lock_timeout, her ifade TEK ayrı sorgu olarak SIRAYLA (tablo, FK\'leri, indeksleri), sonda RESET', async () => {

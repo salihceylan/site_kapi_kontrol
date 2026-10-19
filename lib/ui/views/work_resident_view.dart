@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/work_tracking_models.dart';
 import 'package:site_kapi_kontrol/services/api_exception.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
+import 'package:site_kapi_kontrol/services/work_attachment_picker.dart';
 import 'package:site_kapi_kontrol/services/work_tracking_api.dart';
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
@@ -34,6 +35,7 @@ class WorkResidentView extends StatefulWidget {
     required this.authService,
     this.service,
     this.sites = const <PeopleSite>[],
+    this.photoPicker,
   });
 
   final AuthService authService;
@@ -41,6 +43,9 @@ class WorkResidentView extends StatefulWidget {
 
   /// Sakinin talep açabileceği (modül açık) siteler.
   final List<PeopleSite> sites;
+
+  /// Fotoğraf seçici (testlerde sahte); null ise gerçek `file_picker`.
+  final WorkPhotoPicker? photoPicker;
 
   @override
   State<WorkResidentView> createState() => WorkResidentViewState();
@@ -136,20 +141,35 @@ class WorkResidentViewState extends State<WorkResidentView> {
     _applyFilters();
   }
 
+  WorkPhotoPicker get _picker =>
+      widget.photoPicker ?? const FilePickerWorkPhotoPicker();
+
+  /// Talep açıldıktan sonraki bildirim: fotoğraf yüklenemediyse DÜRÜSTÇE söylenir (talep önceden kayıtlı çıksa bile).
+  static String createdMessage(WorkCreateResult result) {
+    final failed = result.photosFailed;
+    final lead = result.replayed ? 'Bu talep zaten kayıtlıydı' : 'Talep oluşturuldu';
+    if (failed > 0) {
+      return result.photosCancelled
+          ? '$lead, fotoğraf yükleme iptal edildi; $failed fotoğraf eklenmedi.'
+          : '$lead, $failed fotoğraf yüklenemedi.';
+    }
+    if (result.replayed) return 'Bu talep zaten kayıtlıydı.';
+    return 'Talebiniz alındı. Durumunu buradan takip edebilirsiniz.';
+  }
+
   Future<void> _create() async {
     final result = await WorkItemFormDialog.show(
       context,
       service: _service,
       sites: widget.sites,
       initialSiteCode: _siteFilter,
+      picker: _picker,
     );
     if (result == null || !mounted) return;
     AppSnack.show(
       context,
-      result.replayed
-          ? 'Bu talep zaten kayıtlıydı.'
-          : 'Talebiniz alındı. Durumunu buradan takip edebilirsiniz.',
-      kind: AppSnackKind.success,
+      createdMessage(result),
+      kind: result.photosFailed > 0 ? AppSnackKind.warning : AppSnackKind.success,
     );
     // Yeni talep "Açık" listesindedir: kapanan süzgecinde görünmezdi.
     if (_status == 'closed') {
@@ -164,6 +184,7 @@ class WorkResidentViewState extends State<WorkResidentView> {
       context,
       service: _service,
       item: item,
+      picker: _picker,
     );
     if (changed && mounted) unawaited(_loader.reload());
   }

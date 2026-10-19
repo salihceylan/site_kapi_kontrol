@@ -210,6 +210,59 @@ void main() {
         'POST /app/concierge-requests/8/cancel',
       ]);
     });
+
+    test('okunmamış: listeler unread + unread_count okur; ayrıntılar unread taşır; görüldü uçları boş gövdeyle POST', () async {
+      final seen = <String>[];
+      final bodies = <String>[];
+      final api = _api((request) async {
+        seen.add('${request.method} ${request.url.path}');
+        if (request.method == 'POST') bodies.add(request.body);
+        if (request.url.path.endsWith('/seen')) {
+          return _json(200, <String, dynamic>{'id': 5, 'unread': false});
+        }
+        if (request.url.path == '/app/reservations') {
+          return _json(200, <String, dynamic>{'items': <Object>[rzReservation(5, unread: true)], 'next_before_id': null, 'unread_count': 2});
+        }
+        if (request.url.path == '/app/concierge-requests') {
+          return _json(200, <String, dynamic>{'items': <Object>[rzRequest(8, unread: true)], 'next_before_id': null, 'unread_count': 1});
+        }
+        if (request.url.path == '/app/concierge-requests/8') {
+          return _json(200, <String, dynamic>{'request': rzRequest(8, unread: true)});
+        }
+        return _json(200, <String, dynamic>{'reservation': rzReservation(5, unread: true)});
+      });
+      final page = await api.listMine(token: 't');
+      expect(page.items.single.unread, isTrue);
+      expect(page.unreadCount, 2);
+      final requests = await api.listMyRequests(token: 't');
+      expect(requests.items.single.unread, isTrue);
+      expect(requests.unreadCount, 1);
+      expect((await api.getMine(token: 't', id: 5)).unread, isTrue);
+      expect((await api.getMyRequest(token: 't', id: 8)).unread, isTrue);
+      await api.markMineSeen(token: 't', id: 5);
+      await api.markMyRequestSeen(token: 't', id: 8);
+      expect(seen, <String>[
+        'GET /app/reservations',
+        'GET /app/concierge-requests',
+        'GET /app/reservations/5',
+        'GET /app/concierge-requests/8',
+        'POST /app/reservations/5/seen',
+        'POST /app/concierge-requests/8/seen',
+      ]);
+      expect(bodies, <String>['{}', '{}']);
+    });
+
+    test('eski sunucu: unread / unread_count yoksa false / 0 (çökmez)', () async {
+      final api = _api(
+        (request) async => _json(200, <String, dynamic>{
+          'items': <Object>[rzReservation(5)..remove('unread')],
+          'next_before_id': null,
+        }),
+      );
+      final page = await api.listMine(token: 't');
+      expect(page.items.single.unread, isFalse);
+      expect(page.unreadCount, 0);
+    });
   });
 
   group('yönetim uçları', () {
@@ -531,6 +584,42 @@ void main() {
       await service.createRequest(_conciergeRequest);
       expect(keys[3], keys[0]);
       expect(keys[4], isNot(keys[0]));
+    });
+
+    test('unreadCounts: iki hafif liste isteği (limit 1, tüm kapsam / durum, site_code yalnız verilince); yalnız sayaçlar okunur', () async {
+      final queries = <String, Map<String, String>>{};
+      final service = ReservationService(
+        authService: _FakeAuth(),
+        api: _api((request) async {
+          queries[request.url.path] = request.url.queryParameters;
+          if (request.url.path == '/app/reservations') {
+            return _json(200, <String, dynamic>{'items': <Object>[rzReservation(1)], 'next_before_id': 1, 'unread_count': 2});
+          }
+          return _json(200, <String, dynamic>{'items': <Object>[], 'next_before_id': null, 'unread_count': 1});
+        }),
+      );
+      expect(await service.unreadCounts(siteCode: 11), (reservations: 2, concierge: 1));
+      expect(queries['/app/reservations'], <String, String>{'site_code': '11', 'scope': 'all', 'limit': '1'});
+      expect(queries['/app/concierge-requests'], <String, String>{'site_code': '11', 'status': 'all', 'limit': '1'});
+      await service.unreadCounts();
+      expect(queries['/app/reservations'], <String, String>{'scope': 'all', 'limit': '1'});
+      expect(queries['/app/concierge-requests'], <String, String>{'status': 'all', 'limit': '1'});
+    });
+
+    test('unreadCounts: eski sunucu 0 / 0; bir istek düşerse hata çağırana gider (ekran yutar, rozet yardımcıdır)', () async {
+      var fail = false;
+      final service = ReservationService(
+        authService: _FakeAuth(),
+        api: _api((request) async {
+          if (fail && request.url.path == '/app/concierge-requests') {
+            return _json(503, <String, dynamic>{'error': 'Geçici hata.'});
+          }
+          return _json(200, <String, dynamic>{'items': <Object>[], 'next_before_id': null});
+        }),
+      );
+      expect(await service.unreadCounts(), (reservations: 0, concierge: 0));
+      fail = true;
+      await expectLater(service.unreadCounts(), throwsA(anything));
     });
   });
 }

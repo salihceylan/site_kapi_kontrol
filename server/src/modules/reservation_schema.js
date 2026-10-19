@@ -1,6 +1,8 @@
-// Rezervasyon ve Konsiyerj şeması: 043. migrations/043_reservation.sql ile AYNI ifadeler, AYNI sırayla (test: reservation_schema).
+// Rezervasyon ve Konsiyerj şeması: 043 + 048. migrations/043_reservation.sql ve migrations/048_reservation_unread.sql ile AYNI ifadeler, AYNI sırayla (test: reservation_schema).
 //
-// Üç yeni tablo (ekleyici): reservation_areas, reservations, concierge_requests. Mevcut tablolara sütun/indeks EKLENMEZ.
+// 043: üç yeni tablo (ekleyici): reservation_areas, reservations, concierge_requests. Mevcut tablolara sütun/indeks EKLENMEZ.
+// 048: reservations ve concierge_requests tablolarına sakine okunmamış işareti sütunları (resident_updated_at, resident_seen_at; ADD COLUMN IF NOT EXISTS). Sütunlar
+//      yalnız EKSİKSE (katalog: pg_attribute) eklenir; her şey varken ALTER gönderilmez (ADD COLUMN IF NOT EXISTS sütun VARKEN bile ACCESS EXCLUSIVE kilit alır).
 // Açılış deadlock'u dersi (R2 F-1 / R11 F1, bkz. document_schema.js, work_tracking_schema.js): ifadeler db.js'te dev ensureDbSchema bloğu BİTTİKTEN sonra, katalog
 // kontrolüyle ve her biri kendi otomatik onaylı ifadesiyle yalnız EKSİK olanlar için çalışır; her şey varsa hiçbir tabloda kilit alınmaz. Tablolar FK'SIZ oluşturulur; her FK
 // ayrı, katalog korumalı `ALTER TABLE ... ADD CONSTRAINT <tablo>_<sütun>_fkey` ifadesidir (ifade başına TEK üst tablo; sites / users / apartments sıcak tablolardır).
@@ -172,6 +174,36 @@ const STEPS = Object.freeze([
 
 export const RESERVATION_DDL_ORDER = Object.freeze(STEPS.map(([name]) => name));
 
+// ---------------------------------------------------------------------------
+// 048: okunmamış işareti sütunları (docs/PLATFORM_REZERVASYON.md "Okunmamış işareti")
+// ---------------------------------------------------------------------------
+
+/** 048 ile eklenen sütunlar (iki tabloda da aynı). unread = resident_updated_at > resident_seen_at. */
+export const RESERVATION_UNREAD_COLUMNS = Object.freeze(['resident_updated_at', 'resident_seen_at']);
+
+/**
+ * Tablo başına TEK ifade: aynı ifadedeki iki DEFAULT NOW() aynı değeri alır, mevcut satırlar "okunmamış" görünmez. NOW() kararlı (STABLE) olduğundan PG 11+
+ * tabloyu yeniden yazmaz (eksik değer katalogda tutulur); kilit kısa sürer. Sıra tablo tablo: migration ile aynı.
+ */
+const unreadColumnsSql = (table) => `
+    ALTER TABLE ${table}
+      ADD COLUMN IF NOT EXISTS resident_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS resident_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `;
+
+export const RESERVATION_UNREAD_DDL = Object.freeze({
+  reservationsUnreadColumns: unreadColumnsSql('reservations'),
+  conciergeUnreadColumns: unreadColumnsSql('concierge_requests'),
+});
+
+/** `columns`: sütunların eklendiği tablo; `present`: katalog sorgusundaki sayaç alanı (mevcut sütun sayısı; 2 ise tam). */
+const UNREAD_STEPS = Object.freeze([
+  ['reservationsUnreadColumns', { columns: 'reservations', present: 'reservations_unread_columns' }],
+  ['conciergeUnreadColumns', { columns: 'concierge_requests', present: 'concierge_unread_columns' }],
+]);
+
+export const RESERVATION_UNREAD_DDL_ORDER = Object.freeze(UNREAD_STEPS.map(([name]) => name));
+
 const RETRYABLE = new Set(['40P01', '55P03']);
 /** Test ayarı: yeniden deneme beklemesi (ms) çarpanı. */
 export const schemaTuning = { retryDelayMs: 300 };
@@ -190,8 +222,9 @@ async function runDdl(client, sql) {
 }
 
 /**
- * 043'ü uygular (db.js ensureDbSchema bloğu BİTTİKTEN sonra çağrılır). Tek katalog sorgusuyla eksik nesneler belirlenir; yalnız eksikler, sırayla ve kendi
+ * 043 + 048'i uygular (db.js ensureDbSchema bloğu BİTTİKTEN sonra çağrılır). Tek katalog sorgusuyla eksik nesneler belirlenir; yalnız eksikler, sırayla ve kendi
  * otomatik onaylı ifadeleriyle çalışır. Her şey varsa (normal açılış) hiçbir ifade gönderilmez. Üst tablo (apartments) henüz yoksa o FK atlanır.
+ * 048 sütunları 043 ifadelerinden SONRA, yalnız tablo varken (bu turda oluşturulmuş olsa da) ve sütunlar eksikse eklenir.
  */
 export async function ensureReservationSchema(client) {
   const tables = ['reservation_areas', 'reservations', 'concierge_requests', 'apartments'];
@@ -206,22 +239,34 @@ export async function ensureReservationSchema(client) {
           SELECT (SELECT r.relname::TEXT FROM pg_class r WHERE r.oid = c.conrelid) || '.' || c.conname::TEXT
           FROM pg_constraint c
           WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.conname = ANY($3::TEXT[])
-        ) AS fks
+        ) AS fks,
+        (
+          SELECT COUNT(*)::INTEGER FROM pg_attribute
+          WHERE attrelid = to_regclass('public.reservations') AND attname = ANY($4::TEXT[]) AND NOT attisdropped
+        ) AS reservations_unread_columns,
+        (
+          SELECT COUNT(*)::INTEGER FROM pg_attribute
+          WHERE attrelid = to_regclass('public.concierge_requests') AND attname = ANY($4::TEXT[]) AND NOT attisdropped
+        ) AS concierge_unread_columns
     `,
-    [tables, indexes, foreignKeys],
+    [tables, indexes, foreignKeys, RESERVATION_UNREAD_COLUMNS],
   );
-  const presentTables = new Set(found.rows[0]?.tables ?? []);
-  const presentIndexes = new Set(found.rows[0]?.indexes ?? []);
-  const presentFks = new Set(found.rows[0]?.fks ?? []);
+  const state = found.rows[0] ?? {};
+  const presentTables = new Set(state.tables ?? []);
+  const presentIndexes = new Set(state.indexes ?? []);
+  const presentFks = new Set(state.fks ?? []);
   const hasParent = (parent) => parent === 'sites' || parent === 'users' || presentTables.has(parent);
   const fkPresent = (spec) => presentFks.has(`${spec.on}.${spec.fk}`);
+  const unreadReady = (spec) => Number(state[spec.present] ?? 0) === RESERVATION_UNREAD_COLUMNS.length;
   const pending = STEPS.filter(([, spec]) => {
     if (spec.table) return !presentTables.has(spec.table) && (spec.needs ?? []).every((dependency) => presentTables.has(dependency) || dependency === 'reservation_areas');
     if (spec.fk) return presentTables.has(spec.on) && hasParent(spec.parent) && !fkPresent(spec);
     return !presentIndexes.has(spec.index);
   });
+  // 048: tablo varken sütunlar eksikse (tablo bu turda oluşacaksa zaten `pending` dolu; sütunlar tablodan sonra eklenir).
+  const pendingUnread = UNREAD_STEPS.filter(([, spec]) => presentTables.has(spec.columns) && !unreadReady(spec));
   // Eksik nesne yoksa (her normal açılış) hiçbir ifade gönderilmez: kilit alınmaz.
-  if (pending.length === 0) {
+  if (pending.length === 0 && pendingUnread.length === 0) {
     return;
   }
   // Kilit kuyruğunda sonsuza dek beklemesin: 2 sn sonra 55P03, runDdl yeniden dener.
@@ -239,6 +284,12 @@ export async function ensureReservationSchema(client) {
         presentFks.add(`${spec.on}.${spec.fk}`);
       } else if (!presentIndexes.has(spec.index) && presentTables.has(spec.on)) {
         await runDdl(client, RESERVATION_DDL[name]);
+      }
+    }
+    // 048: tablo (bu turda oluşturulmuş olsa da) varsa ve sütunlar eksikse; tablo başına tek ALTER.
+    for (const [name, spec] of UNREAD_STEPS) {
+      if (presentTables.has(spec.columns) && !unreadReady(spec)) {
+        await runDdl(client, RESERVATION_UNREAD_DDL[name]);
       }
     }
   } finally {

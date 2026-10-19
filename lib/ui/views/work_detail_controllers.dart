@@ -27,7 +27,25 @@ List<WorkEvent> _mergeEvents(List<WorkEvent> events, WorkEvent added) {
   return List<WorkEvent>.unmodifiable(merged);
 }
 
-/// Sakin talep ayrıntısı: yükleme (+ "görüldü"), yorum, kendi `yeni` talebini iptal.
+List<WorkAttachment> _mergeAttachments(
+  List<WorkAttachment> attachments,
+  WorkAttachment added,
+) {
+  final merged = <WorkAttachment>[
+    for (final attachment in attachments)
+      if (attachment.id != added.id) attachment,
+    added,
+  ]..sort((a, b) => a.id.compareTo(b.id));
+  return List<WorkAttachment>.unmodifiable(merged);
+}
+
+List<WorkAttachment> _withoutAttachment(List<WorkAttachment> attachments, int id) =>
+    List<WorkAttachment>.unmodifiable(attachments.where((a) => a.id != id));
+
+const String _deleteFallback =
+    'Fotoğraf silinemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.';
+
+/// Sakin talep ayrıntısı: yükleme (+ "görüldü"), fotoğraf ekleri, yorum, kendi `yeni` talebini iptal.
 class WorkResidentDetailController extends ChangeNotifier {
   WorkResidentDetailController({
     required this.service,
@@ -38,6 +56,7 @@ class WorkResidentDetailController extends ChangeNotifier {
 
   WorkResidentItem item;
   List<WorkEvent> events = const <WorkEvent>[];
+  List<WorkAttachment> attachments = const <WorkAttachment>[];
 
   bool loading = false;
   bool loaded = false;
@@ -48,6 +67,9 @@ class WorkResidentDetailController extends ChangeNotifier {
 
   /// Son yazma isteğinin hatası (form içinde gösterilir).
   String? actionError;
+
+  /// Fotoğraf silme hatası (ek bölümünde gösterilir).
+  String? attachmentError;
 
   /// Son hata nesnesi (çağıran 429 için `RetryLock` kurar).
   Object? lastError;
@@ -60,6 +82,9 @@ class WorkResidentDetailController extends ChangeNotifier {
 
   /// Liste yeniden çekilmeli (durum, yorum, görüldü ya da iptal değişti).
   bool changed = false;
+
+  /// Başarılı her ayrıntı yüklemesinde artar (ekran "bir sonraki yüklemeye dek" kararlarını buna bağlar).
+  int loadGeneration = 0;
 
   int _token = 0;
   bool _disposed = false;
@@ -100,6 +125,8 @@ class WorkResidentDetailController extends ChangeNotifier {
       final wasUnread = detail.item.unread;
       item = detail.item;
       events = detail.events;
+      attachments = detail.attachments;
+      loadGeneration++;
       loaded = true;
       loading = false;
       loadError = null;
@@ -185,15 +212,84 @@ class WorkResidentDetailController extends ChangeNotifier {
       unawaited(load(silent: true));
     }
   }
+
+  // --- Fotoğraf ekleri ---
+
+  /// Talep açıkken ve sınırın altındayken fotoğraf eklenebilir (sunucu yine de doğrular).
+  bool get canAddAttachment =>
+      loaded && !item.status.isTerminal && attachments.length < kWorkAttachmentMax;
+
+  /// Sakin yalnız KENDİ yüklediği fotoğrafı, talep açıkken siler.
+  bool canDeleteAttachment(WorkAttachment attachment) =>
+      loaded && attachment.uploadedByMe && !item.status.isTerminal;
+
+  /// Yüklenen ek listeye girer (aynı kimlik varsa yenisi geçer); liste yenilenmeli işaretlenir.
+  void addAttachment(WorkAttachment attachment) {
+    attachments = _mergeAttachments(attachments, attachment);
+    item = item.copyWith(attachmentCount: _readyCount(attachments));
+    attachmentError = null;
+    changed = true;
+    notifyListeners();
+  }
+
+  /// Fotoğrafı siler. Başarıda true. 404 ek yok (`WORK_ATTACHMENT_NOT_FOUND`): yerelden düşer ve durum sunucuyla
+  /// sessizce eşitlenir; talep yok (`WORK_ITEM_NOT_FOUND`): [gone].
+  Future<bool> deleteAttachment(WorkAttachment attachment) async {
+    if (busy) return false;
+    busy = true;
+    attachmentError = null;
+    notifyListeners();
+    try {
+      await service.deleteAttachment(id: item.id, attachmentId: attachment.id);
+      if (_disposed) return true;
+      _removeAttachment(attachment.id);
+      busy = false;
+      changed = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      if (_disposed) return false;
+      busy = false;
+      lastError = e;
+      attachmentError = crmMessageOf(e, _deleteFallback);
+      if (_attachmentGone(e)) {
+        _removeAttachment(attachment.id);
+        changed = true;
+        unawaited(load(silent: true));
+      } else {
+        _classify(e);
+        if (e is ApiException && e.statusCode == 409) unawaited(load(silent: true));
+      }
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void _removeAttachment(int id) {
+    attachments = _withoutAttachment(attachments, id);
+    item = item.copyWith(attachmentCount: _readyCount(attachments));
+  }
 }
 
-/// Yönetim talep ayrıntısı (yönetici / görevli / kurul): yükleme, atanabilir kişiler, güncelleme, yorum.
+/// `attachment_count` yalnız HAZIR fotoğrafları sayar (sunucu ile aynı).
+int _readyCount(List<WorkAttachment> attachments) =>
+    attachments.where((a) => a.isReady).length;
+
+/// 404 eki gösterir (talep değil): ek zaten silinmiş.
+bool _attachmentGone(Object error) =>
+    error is ApiException &&
+    error.statusCode == 404 &&
+    error.code != 'WORK_ITEM_NOT_FOUND';
+
+/// Yönetim talep ayrıntısı (yönetici / görevli / kurul): yükleme, atanabilir kişiler, güncelleme, yorum, fotoğraf
+/// ekleri.
 class WorkManagerDetailController extends ChangeNotifier {
   WorkManagerDetailController({
     required this.service,
     required this.siteCode,
     required this.canWrite,
     required WorkManagedItem initial,
+    this.access = WorkSiteAccess.manager,
   }) : item = initial;
 
   final WorkTrackingService service;
@@ -202,10 +298,14 @@ class WorkManagerDetailController extends ChangeNotifier {
   /// Yazma düğmeleri çizilir mi (kurul: false). Yetkinin tek kaynağı yine sunucudur.
   final bool canWrite;
 
+  /// Erişim türü: yönetici her fotoğrafı, görevli yalnız kendi yüklediğini siler; kurul hiçbirini.
+  final WorkSiteAccess access;
+
   WorkManagedItem item;
   List<WorkEvent> events = const <WorkEvent>[];
   List<WorkStatus> nextStatuses = const <WorkStatus>[];
   List<WorkAssignee> assignees = const <WorkAssignee>[];
+  List<WorkAttachment> attachments = const <WorkAttachment>[];
 
   bool loading = false;
   bool loaded = false;
@@ -214,10 +314,16 @@ class WorkManagerDetailController extends ChangeNotifier {
   String? loadError;
   String? assigneesError;
   String? actionError;
+
+  /// Fotoğraf silme hatası (ek bölümünde gösterilir).
+  String? attachmentError;
   Object? lastError;
   bool moduleClosed = false;
   bool gone = false;
   bool changed = false;
+
+  /// Başarılı her ayrıntı yüklemesinde / güncellemesinde artar (ekran "bir sonraki yüklemeye dek" kararları için).
+  int loadGeneration = 0;
 
   int _token = 0;
   bool _disposed = false;
@@ -248,9 +354,72 @@ class WorkManagerDetailController extends ChangeNotifier {
     item = detail.item;
     events = detail.events;
     nextStatuses = detail.nextStatuses;
+    attachments = detail.attachments;
+    loadGeneration++;
     loaded = true;
     gone = false;
     moduleClosed = false;
+  }
+
+  // --- Fotoğraf ekleri ---
+
+  /// Yazma yetkisi varken, talep açıkken ve sınırın altındayken fotoğraf eklenebilir (kurul: asla).
+  bool get canAddAttachment =>
+      canWrite &&
+      loaded &&
+      !item.status.isTerminal &&
+      attachments.length < kWorkAttachmentMax;
+
+  /// Yönetici / süper her fotoğrafı, KAPANMIŞ ya da iptal edilmiş talepte de siler; görevli yalnız kendi yüklediğini ve
+  /// yalnız açık talepte (kapalıda sunucu 409 `INVALID_STATE`); kurul hiçbirini.
+  bool canDeleteAttachment(WorkAttachment attachment) {
+    if (!canWrite || !loaded) return false;
+    if (access == WorkSiteAccess.manager) return true;
+    return attachment.uploadedByMe && !item.status.isTerminal;
+  }
+
+  void addAttachment(WorkAttachment attachment) {
+    attachments = _mergeAttachments(attachments, attachment);
+    attachmentError = null;
+    changed = true;
+    notifyListeners();
+  }
+
+  /// Fotoğrafı siler. Başarıda true. 404 ek yok (`WORK_ATTACHMENT_NOT_FOUND`): yerelden düşer ve durum sunucuyla
+  /// sessizce eşitlenir; talep yok / görünmüyor (`WORK_ITEM_NOT_FOUND`): [gone].
+  Future<bool> deleteAttachment(WorkAttachment attachment) async {
+    if (busy) return false;
+    busy = true;
+    attachmentError = null;
+    notifyListeners();
+    try {
+      await service.deleteAttachment(
+        siteCode: siteCode,
+        id: item.id,
+        attachmentId: attachment.id,
+      );
+      if (_disposed) return true;
+      attachments = _withoutAttachment(attachments, attachment.id);
+      busy = false;
+      changed = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      if (_disposed) return false;
+      busy = false;
+      lastError = e;
+      attachmentError = crmMessageOf(e, _deleteFallback);
+      if (_attachmentGone(e)) {
+        attachments = _withoutAttachment(attachments, attachment.id);
+        changed = true;
+        unawaited(load(silent: true));
+      } else {
+        _classify(e);
+        if (e is ApiException && e.statusCode == 409) unawaited(load(silent: true));
+      }
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> load({bool silent = false}) async {

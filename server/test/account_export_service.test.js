@@ -653,6 +653,24 @@ describe('dışa aktarma: veri toplama şekli (sahte tutarlı görünüm)', () =
     assert.ok(EXPORT_EXCLUDED.some((line) => /^İş takibi talepleri:/.test(line) && /"work_item_comments"/.test(line) && /SİZİN yazdığınız yorumlar/.test(line)));
   });
 
+  it('İş Takibi fotoğrafları (047): "work_item_attachments_uploaded" yalnız kullanıcının KENDİ eklediği fotoğrafların kayıt bilgisi (içerik / depolama anahtarı / sha256 YOK); tablo yoksa boş ve sorgu gitmez; kısaltılabilir; hariç tutulanlar görüntünün dosyaya konmadığını söyler', async () => {
+    const snapshot = fakeSnapshot({
+      optional: { has_work_item_attachments: true },
+      workItemAttachments: [{ id: '41', work_item_id: '8', site_code: '1000000001', file_name: 'musluk.jpg', mime_type: 'image/jpeg', size_bytes: '123456', status: 'ready', created_at: new Date('2026-09-04T00:00:00Z') }],
+    });
+    const { data } = await collectPersonalData(12345, { db: snapshot.db });
+    assert.deepEqual(data.work_item_attachments_uploaded, [{ id: 41, work_item_id: 8, site_code: 1000000001, file_name: 'musluk.jpg', mime_type: 'image/jpeg', size_bytes: 123456, status: 'ready', created_at: new Date('2026-09-04T00:00:00Z') }]);
+    const sent = snapshot.log.find((entry) => /FROM work_item_attachments a/.test(entry.sql));
+    assert.equal(sent.params[0], 12345);
+    assert.equal(/storage_key|sha256|JOIN/.test(sent.sql), false);
+    assert.match(norm(exportInternals.SQL.workItemAttachments), /WHERE a\.uploaded_by = \$1 ORDER BY a\.id DESC$/);
+    const absent = fakeSnapshot();
+    assert.deepEqual((await collectPersonalData(12345, { db: absent.db })).data.work_item_attachments_uploaded, []);
+    assert.equal(absent.log.some((entry) => /FROM work_item_attachments/.test(entry.sql)), false);
+    assert.ok(SHRINKABLE_SECTIONS.includes('work_item_attachments_uploaded'));
+    assert.ok(EXPORT_EXCLUDED.some((line) => /^İş takibi fotoğrafları:/.test(line) && /"work_item_attachments_uploaded"/.test(line) && /içeriği \(görüntü\)/.test(line)));
+  });
+
   it('kullanıcı satırı yoksa 401 ACCOUNT_DELETED ve işlem kapatılır', async () => {
     const { log, db } = fakeSnapshot({ user: [] });
     await assert.rejects(collectPersonalData(12345, { db }), (error) => error.code === 'ACCOUNT_DELETED');

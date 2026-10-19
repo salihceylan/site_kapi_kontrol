@@ -225,10 +225,27 @@ describe('kaynak düzeyi gizlilik', () => {
     assert.ok(resident.indexOf('siteLockKey(siteCode)') < resident.indexOf('userLockKey(userCode)'));
     assert.equal((resident.match(/throw idempotencyConflict\(\)/g) ?? []).length, 2, 'talep + yorum');
     assert.match(service, /throw idempotencyConflict\(\)/);
-    assert.match(service, /NOT EXISTS \(\$\{ASSIGNEE_ACTIVE_SQL\}\)/);
+    // yetim atama kapsamı (staffScope) 047 ile work_tracking_common.js'e taşındı (fotoğraf ekleri de aynı kapsamı kullanır); servis onu içe aktarır
+    assert.match(src('work_tracking_common.js'), /NOT EXISTS \(\$\{ASSIGNEE_ACTIVE_SQL\}\)/);
+    assert.match(service, /staffScope\(/);
     assert.match(service, /users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE/);
     assert.match(service, /UPDATE work_items SET assigned_to = NULL/);
     assert.match(src('account_deletion_service.js'), /await releaseAssignedWorkItems\(client, userCode\)/);
+  });
+
+  it('sakinin KENDİ eylemi okunmamış işareti bırakmaz: iptalde requester_seen_at ve resident_updated_at TEK kararlı değerle (NOW()) yazılır, hiçbir UPDATE ikisini iki ayrı clock_timestamp() ile yazmaz; yönetim yazmaları yalnız resident_updated_at = clock_timestamp(); fotoğraf ekinde sakin eklerse resident_updated_at değişmez', () => {
+    const resident = src('work_tracking_resident.js');
+    assert.match(resident, /requester_seen_at = NOW\(\), resident_updated_at = NOW\(\)/);
+    for (const file of ['work_tracking_resident.js', 'work_tracking_service.js', 'work_attachments_service.js']) {
+      for (const match of src(file).matchAll(/UPDATE work_items[^`]*/g)) {
+        assert.ok(!(/requester_seen_at = clock_timestamp\(\)/.test(match[0]) && /resident_updated_at = clock_timestamp\(\)/.test(match[0])), `${file}: ${match[0]}`);
+      }
+    }
+    const service = src('work_tracking_service.js');
+    assert.ok(!/requester_seen_at/.test(service.replace(/requester_seen_at\) AS unread/g, '')), 'yönetim yolu sakinin görüldü damgasına dokunmaz');
+    const attachments = src('work_attachments_service.js');
+    assert.match(attachments, /management \? ', resident_updated_at = clock_timestamp\(\)' : ''/);
+    assert.ok(!/requester_seen_at/.test(attachments));
   });
 
   it('dışa aktarma yorum SQL\'i yalnız KENDİ yorumları (actor_user_code = $1, event_type = comment): talep başlığı, başkasının metni, atama / öncelik olayı seçilmez', () => {

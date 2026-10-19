@@ -12,8 +12,8 @@
 # Saklama: dis kopyalar EN FAZLA OFFSITE_PRUNE_DAYS (varsayilan 210 gun) tutulur; gonderim basarili olduktan sonra uzak taraftaki
 # bu yastan eski gunluk-veritabani ve yapilandirma dosyalari silinir (rsync: yerel dizin veya ssh uzerinden; rclone: `rclone delete
 # --min-age`). sftp-only hedeflerde uzak budama YAPILAMAZ: eski dosyalari elle silmeniz gerekir. Firmware arsivleri (kapi_firmware_*)
-# budanmaz (degismedikce tek yedek kopyadir). Belge deposu arsivleri (kapi_documents_*) EN YENISI HARIC ayni yastan (210 gun) sonra silinir:
-# en yeni arsiv yasi ne olursa olsun korunur (belge kumesi degismediyse tek geri yukleme kopyasidir).
+# budanmaz (degismedikce tek yedek kopyadir). Belge deposu (kapi_documents_*) ve is takibi fotograf (kapi_work_attachments_*) arsivleri her turun
+# EN YENISI HARIC ayni yastan (210 gun) sonra silinir: en yeni arsiv yasi ne olursa olsun korunur (kume degismediyse tek geri yukleme kopyasidir).
 #
 # Not: offsite/ icindeki dosyalar daily/weekly/monthly/config ile SERT BAG paylasir (backup_db.sh; diskte tek kopya). Bu betik yalniz
 # OKUR (rsync/sftp/rclone kaynagi); dosyalari yerinde degistirmez, yerel tutma budamasi backup_db.sh'tadir (KEEP_OFFSITE, gonderilmemisi silmez).
@@ -135,12 +135,14 @@ prune_remote() {
   esac
 }
 
-# Belge arsivleri (kapi_documents_*): EN YENISI HARIC, PRUNE_DAYS'ten eskiler silinir. En yeni arsiv asla silinmez.
-prune_docs_remote() {
+# Belge / fotograf arsivleri (<onek>_*.tgz.enc): EN YENISI HARIC, PRUNE_DAYS'ten eskiler silinir. En yeni arsiv asla silinmez.
+# prune_newest_kept_remote <onek> <etiket>; onek yalniz bu betikteki sabitlerdir (kapi_documents | kapi_work_attachments), disaridan gelmez.
+prune_newest_kept_remote() {
   [ "$PRUNE_DAYS" -gt 0 ] || return 0
-  local hostpart rpath out script cutoff
+  local prefix="$1" label="$2" hostpart rpath out script cutoff
+  [[ "$prefix" =~ ^kapi_[a-z_]+$ ]] || return 0
   script="cd \"\$1\" 2>/dev/null || exit 0
-ls -1t kapi_documents_*.tgz.enc 2>/dev/null | tail -n +2 | while IFS= read -r f; do
+ls -1t ${prefix}_*.tgz.enc 2>/dev/null | tail -n +2 | while IFS= read -r f; do
   if [ -n \"\$(find \"\$f\" -maxdepth 0 -mtime +$PRUNE_DAYS 2>/dev/null)\" ]; then rm -f -- \"\$f\" && echo \"\$f\"; fi
 done"
   case "$METHOD" in
@@ -156,14 +158,14 @@ done"
       ;;
     rclone)
       cutoff="$(date -d "-${PRUNE_DAYS} days" '+%Y-%m-%d %H:%M:%S')"
-      out="$(nolock timeout 120 rclone lsf "$TARGET" --files-only --include 'kapi_documents_*.tgz.enc' --format tp --separator '|' 2>/dev/null \
+      out="$(nolock timeout 120 rclone lsf "$TARGET" --files-only --include "${prefix}_*.tgz.enc" --format tp --separator '|' 2>/dev/null \
         | LC_ALL=C sort -r | tail -n +2 | while IFS='|' read -r t n; do
             if [[ -n "$n" && "$t" < "$cutoff" ]]; then nolock timeout 60 rclone deletefile "$TARGET/$n" >/dev/null 2>&1 && echo "$n"; fi
           done)"
       ;;
     *) return 0 ;;
   esac
-  [ -z "$out" ] || printf '%s\n' "$out" | while read -r l; do log "uzak budama (belge arsivi): silindi $l"; done
+  [ -z "$out" ] || printf '%s\n' "$out" | while read -r l; do log "uzak budama ($label): silindi $l"; done
 }
 
 SENT=0
@@ -235,6 +237,7 @@ for f in "${TO_SEND[@]}"; do grep -qxF "$f" "$PUSHED_LIST" 2>/dev/null || echo "
 write_status "$STATUS_FILE" "result=OK" "epoch=$(now_epoch)" "method=$METHOD" "pushed=$SENT"
 log "=== dis kopya BASARILI: $SENT dosya gonderildi ve dogrulandi ($METHOD) ==="
 prune_remote
-prune_docs_remote
+prune_newest_kept_remote kapi_documents "belge arsivi"
+prune_newest_kept_remote kapi_work_attachments "fotograf arsivi"
 trim_log
 exit 0

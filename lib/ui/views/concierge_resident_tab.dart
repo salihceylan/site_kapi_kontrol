@@ -10,6 +10,7 @@ import 'package:site_kapi_kontrol/ui/design/app_snack.dart';
 import 'package:site_kapi_kontrol/ui/design/buttons.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/concierge_request_form_dialog.dart';
+import 'package:site_kapi_kontrol/ui/dialogs/concierge_resident_detail_dialog.dart';
 import 'package:site_kapi_kontrol/ui/helpers/a11y_announce.dart';
 import 'package:site_kapi_kontrol/ui/helpers/cursor_loader.dart';
 import 'package:site_kapi_kontrol/ui/helpers/dialog_guard.dart';
@@ -19,8 +20,10 @@ import 'package:site_kapi_kontrol/ui/helpers/people_scope.dart';
 import 'package:site_kapi_kontrol/ui/widgets/cursor_list_body.dart';
 import 'package:site_kapi_kontrol/ui/widgets/reservation_parts.dart';
 
-/// Sakin "Konsiyerj" sekmesi: kendi talepleri (durum rozeti, yönetim notu), "Yeni Talep" formu ve kendi `yeni`
-/// talebini iptal.
+/// Sakin "Konsiyerj" sekmesi: kendi talepleri (durum rozeti, yönetim notu), "Yeni Talep" formu, ayrıntı penceresi ve
+/// kendi `yeni` talebini iptal. Görülmemiş yönetim güncellemesi (`unread`) "Yeni güncelleme" çipi + uyarı tonuyla
+/// gösterilir; karta dokununca ayrıntı açılır ve `seen` çağrılır (rozet söner; İş Takibi ile aynı akış). Süzgecin
+/// gizlediği okunmamış talep varsa (ör. tamamlanan talep "Açık"ta yok) uyarı + "Tümünü göster".
 ///
 /// Yarışlar: süzgeç / site değişimi sırasında eski imleçle gelen sayfa listeye eklenmez ([CursorLoader]); HATA ASLA
 /// "talep yok" demez; modül kapalıysa (403 `MODULE_DISABLED`) açıklayıcı kart çıkar. İptal sürerken düğme yükleniyor
@@ -31,6 +34,7 @@ class ConciergeResidentTab extends StatefulWidget {
     required this.service,
     required this.sites,
     this.siteFilter,
+    this.onUnreadCount,
   });
 
   final ReservationService service;
@@ -38,6 +42,9 @@ class ConciergeResidentTab extends StatefulWidget {
   /// Talep açılabilecek (modül açık) siteler.
   final List<PeopleSite> sites;
   final int? siteFilter;
+
+  /// İlk sayfa gelince (sunucu `unread_count`) ya da görüldü işaretlenince okunmamış sayısı (sekme rozeti).
+  final ValueChanged<int>? onUnreadCount;
 
   @override
   State<ConciergeResidentTab> createState() => ConciergeResidentTabState();
@@ -47,17 +54,29 @@ class ConciergeResidentTabState extends State<ConciergeResidentTab>
     implements ReservationReloadable {
   String _status = 'open';
   bool _moduleOff = false;
+  int _unread = 0;
   final Set<int> _cancelling = <int>{};
+
+  /// İlk sayfa isteklerinin sırası: rozet sayacı yalnız EN SON ilk sayfa yanıtından ve istek anındaki site süzgeci hâlâ
+  /// geçerliyse uygulanır (yükleyicinin belirteciyle aynı anlam). Site değişirken uçuştaki eski yanıt rozeti ezmez.
+  int _firstPageSeq = 0;
 
   late final CursorLoader<ConciergeRecord> _loader = CursorLoader<ConciergeRecord>(
     fetch: (before) async {
+      final filter = widget.siteFilter;
+      final seq = before == null ? ++_firstPageSeq : _firstPageSeq;
       final page = await widget.service.listMyRequests(
-        siteCode: widget.siteFilter,
+        siteCode: filter,
         status: _status,
         limit: 30,
         beforeId: before,
       );
-      if (before == null) _moduleOff = false;
+      if (before == null) {
+        _moduleOff = false;
+        if (mounted && seq == _firstPageSeq && filter == widget.siteFilter) {
+          _setUnread(page.unreadCount);
+        }
+      }
       return (items: page.items, next: page.nextBeforeId);
     },
     keyOf: (item) => item.id,
@@ -108,6 +127,35 @@ class ConciergeResidentTabState extends State<ConciergeResidentTab>
     if (status == _status) return;
     setState(() => _status = status);
     _resetList();
+  }
+
+  void _setUnread(int count) {
+    if (!mounted) return;
+    setState(() => _unread = count);
+    widget.onUnreadCount?.call(count);
+  }
+
+  /// Süzgeç "Tümü" değilken okunmamış sayısı listede görünen okunmamışlardan fazlaysa (tamamlanan / iptal edilen talep
+  /// "Açık"ta görünmez) uyarı + "Tümünü göster" çizilir: rozet ancak kayıt açılınca söner.
+  bool get _hiddenUnread =>
+      _status != 'all' &&
+      _loader.loadedOnce &&
+      _unread > _loader.items.where((record) => record.unread).length;
+
+  /// Ayrıntı penceresi: açılışta okunmamış güncelleme görüldü işaretlenir; pencere "değişti" derse yerel bayrak hemen
+  /// söner (yenileme başarısız olsa da rozet kalmaz) ve liste sunucuyla eşitlenir.
+  Future<void> _open(ConciergeRecord record) async {
+    final changed = await ConciergeResidentDetailDialog.show(
+      context,
+      service: widget.service,
+      record: record,
+    );
+    if (!changed || !mounted) return;
+    if (record.unread) {
+      _loader.updateItem(record.id, (old) => old.copyWith(unread: false));
+      _setUnread(_unread > 0 ? _unread - 1 : 0);
+    }
+    unawaited(_loader.reload());
   }
 
   Future<void> _create() async {
@@ -236,6 +284,15 @@ class ConciergeResidentTabState extends State<ConciergeResidentTab>
           ),
         ),
         const SizedBox(height: AppSpace.md),
+        if (_hiddenUnread) ...[
+          ReservationHiddenUnreadNotice(
+            key: const ValueKey<String>('cnc_unread_hidden_notice'),
+            actionKey: const ValueKey<String>('cnc_unread_show_all'),
+            message: '$_unread talebinizde yeni güncelleme var.',
+            onShowAll: () => _selectStatus('all'),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
         SectionHeader(
           title: 'Taleplerim',
           trailing: IconButton(
@@ -255,6 +312,7 @@ class ConciergeResidentTabState extends State<ConciergeResidentTab>
           itemBuilder: (context, record) => ConciergeCard(
             record: record,
             showSite: multiSite,
+            onTap: () => unawaited(_open(record)),
             footer: record.canCancel
                 ? PrimaryActionButton(
                     key: ValueKey<String>('cnc_cancel_${record.id}'),

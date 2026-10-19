@@ -8,6 +8,9 @@
 #
 # Belge deposu tutarliligi (YALNIZ varsayilan calismada): geri yuklenen veritabanindaki 'ready' belge surumlerinin (aktif belgeler) storage_key'leri,
 # en son sifreli belge arsivinin (config/kapi_documents_*.tgz.enc) icinde olmali; eksik varsa FAIL. Belge modulu hic kullanilmadiysa atlanir.
+# Fotograf tutarliligi (ayni kosulda): geri yuklenen veritabanindaki 'ready' is takibi fotograflari (work_item_attachments) en son sifreli fotograf
+# arsivinde (config/kapi_work_attachments_*.tgz.enc, work_attachments/<storage_key>) olmali. Arsiv dokumden SONRA alindigi icin aradaki dakikalarda
+# kullanicinin sildigi fotograf arsivde olmayabilir: eksik anahtar CANLI veritabaninda (salt okunur) artik hazir degilse hata sayilmaz.
 #
 # Kullanim:  bash ~/ops/restore_test.sh [--file <yedek.sql.gz | yedek.sql.gz.enc>]
 # Cikis kodu: 0 PASS, 1 FAIL, 64 kullanim hatasi, 75 kilit alinamadi.
@@ -38,6 +41,8 @@ CREATED=0
 CHECK_DOCS=0
 DOC_ARCHIVE=""
 DOC_LIST=""
+WA_ARCHIVE=""
+WA_LIST=""
 
 # Yalnizca KENDI olusturdugu kapi_restoretest_<TS> veritabanini siler (ad deseni dogrulanir).
 drop_temp_db() {
@@ -58,6 +63,7 @@ cleanup() {
 trap cleanup EXIT
 WORK="$(mktemp -d "$OPS_HOME/tmp.XXXXXX")" || { echo "gecici dizin olusturulamadi"; exit 1; }
 DOC_LIST="$WORK/docs.list"
+WA_LIST="$WORK/wa.list"
 
 FILES=()
 while [ $# -gt 0 ]; do
@@ -101,7 +107,7 @@ scan_dump() {
 
 # restore_one <dosya> : 0 = PASS, 1 = FAIL (FAIL_REASON dolu). Sonuc degiskenleri: R_*
 restore_one() {
-  local f="$1" plain="" errors first rows_line keyfail rc docs_reason has_docs nready nmissing
+  local f="$1" plain="" errors first rows_line keyfail rc docs_reason has_docs nready nmissing wa_reason has_wa nwa wmissing wgone
   FAIL_REASON=""
   R_TABLES_R=0; R_TABLES_L=0; R_ROWS_R=0; R_ROWS_L=0; R_ERR=0
   [ -f "$f" ] && [ -r "$f" ] || { FAIL_REASON="yedek dosyasi okunamiyor: $f"; return 1; }
@@ -216,12 +222,41 @@ restore_one() {
     fi
   fi
 
+  # fotograf (is takibi eki) tutarliligi: DB'deki hazir fotograflar fotograf arsivinde olmali; arsivde olmayan anahtar canli DB'de artik hazir degilse
+  # (yedekle arsiv arasinda silinmis) eksik sayilmaz. Canli sorgu basarisizsa hicbiri dusulmez (kati taraf).
+  wa_reason=""
+  if [ "$CHECK_DOCS" -eq 1 ]; then
+    has_wa="$(dpsql -d "$RDB" -Atc "select to_regclass('public.work_item_attachments') is not null" 2>/dev/null </dev/null)"
+    if [ "$has_wa" = "t" ]; then
+      dpsql -d "$RDB" -At -c "select 'work_attachments/' || a.storage_key from work_item_attachments a where a.status = 'ready' order by 1" 2>/dev/null </dev/null | LC_ALL=C sort >"$WORK/wa.keys"
+      nwa="$(num "$(wc -l <"$WORK/wa.keys")" 0)"
+      if [ "$nwa" -eq 0 ]; then
+        echo "Fotograf tutarliligi       : DB'de hazir fotograf yok (atlandi)" | tee -a "$REPORT"
+      elif [ -z "$WA_ARCHIVE" ]; then
+        wa_reason="veritabaninda $nwa hazir fotograf var ama sifreli fotograf arsivi (config/kapi_work_attachments_*) yok"
+      else
+        LC_ALL=C comm -23 "$WORK/wa.keys" "$WA_LIST" >"$WORK/wa.missing"
+        wmissing="$(num "$(wc -l <"$WORK/wa.missing")" 0)"
+        wgone=0
+        if [ "$wmissing" -gt 0 ] && dpsql_ro -d "$DB_NAME" -At -c "select 'work_attachments/' || storage_key from work_item_attachments where status = 'ready' order by 1" 2>/dev/null </dev/null | LC_ALL=C sort >"$WORK/wa.live"; then
+          wgone="$(num "$(LC_ALL=C comm -23 "$WORK/wa.missing" "$WORK/wa.live" | wc -l)" 0)"
+          wmissing=$((wmissing - wgone))
+        fi
+        echo "Fotograf tutarliligi       : DB hazir fotograf $nwa, arsivde eksik $wmissing (yedekten sonra silinen $wgone)" | tee -a "$REPORT"
+        [ "$wmissing" -eq 0 ] || wa_reason="fotograf arsivinde eksik dosya: $wmissing / $nwa (yedekte ve canlida hazir, arsivde yok; fotograf yedegi eksik ya da eski)"
+      fi
+    else
+      echo "Fotograf tutarliligi       : work_item_attachments tablosu yok (atlandi)" | tee -a "$REPORT"
+    fi
+  fi
+
   drop_temp_db   # gecici veritabanini HEMEN sil (sonraki dosya icin)
   [ "$errors" -eq 0 ] || { FAIL_REASON="yukleme sirasinda $errors hata (rapor: $REPORT)"; return 1; }
   [ "$R_TABLES_R" -ge "$MIN_TABLES" ] || { FAIL_REASON="yuklenen tablo sayisi az ($R_TABLES_R < $MIN_TABLES)"; return 1; }
   [ "$R_ROWS_R" -gt 0 ] || { FAIL_REASON="yuklenen veritabaninda hic satir yok"; return 1; }
   [ -z "$keyfail" ] || { FAIL_REASON="kritik tablo(lar) yedekte bos ama canlida dolu: $keyfail"; return 1; }
   [ -z "$docs_reason" ] || { FAIL_REASON="$docs_reason"; return 1; }
+  [ -z "$wa_reason" ] || { FAIL_REASON="$wa_reason"; return 1; }
   return 0
 }
 
@@ -268,6 +303,17 @@ if [ "$CHECK_DOCS" -eq 1 ]; then
     log "belge arsivi: $doc_name ($(wc -l <"$DOC_LIST") dosya)"
   else
     log "bilgi: belge arsivi yok (belge modulu kullanilmamis olabilir)"
+  fi
+  # is takibi fotograf arsivi (ayri arsiv; work_attachments/<site>/<uuid>)
+  wa_name="$(ls -1 "$BACKUP_ROOT/config" 2>/dev/null | grep -E '^kapi_work_attachments_[0-9]{8}_[0-9]{4}\.tgz\.enc$' | sort | tail -n1)"
+  if [ -n "$wa_name" ]; then
+    WA_ARCHIVE="$BACKUP_ROOT/config/$wa_name"
+    [ -s "$KEY_FILE" ] || fail_all "fotograf arsivi var ama sifreleme anahtari yok" "$WA_ARCHIVE"
+    dec_cmd -in "$WA_ARCHIVE" 2>/dev/null | tar -tzf - 2>/dev/null | grep -v '/$' | sed 's#^\./##' | LC_ALL=C sort >"$WA_LIST"
+    [ -s "$WA_LIST" ] || fail_all "fotograf arsivi cozulemedi veya bos ($wa_name)" "$WA_ARCHIVE"
+    log "fotograf arsivi: $wa_name ($(wc -l <"$WA_LIST") dosya)"
+  else
+    log "bilgi: fotograf arsivi yok (is takibi fotografi eklenmemis olabilir)"
   fi
 fi
 

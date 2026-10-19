@@ -373,4 +373,52 @@ void main() {
       expect(const ReservationSite(code: 1, name: ' ').label, 'İsimsiz site');
     });
   });
+
+  group('okunmamış karar / güncelleme (sakin rozeti)', () {
+    test('rezervasyon: unread yalnız true ise; alan yoksa (eski sunucu) false; copyWith bayrağı siler, kalanı korur', () {
+      expect(ReservationRecord.fromJson(rzReservation(1, unread: true)).unread, isTrue);
+      expect(ReservationRecord.fromJson(rzReservation(1)).unread, isFalse);
+      expect(ReservationRecord.fromJson(rzReservation(1)..remove('unread')).unread, isFalse);
+      expect(ReservationRecord.fromJson(<String, dynamic>{'id': 1, 'unread': 'true'}).unread, isFalse, reason: 'yalnız gerçek bool');
+      expect(ReservationRecord.fromJson(<String, dynamic>{'reservation': rzReservation(2, unread: true)}).unread, isTrue, reason: 'sarılı gövde');
+      final seen = ReservationRecord.fromJson(rzReservation(1, unread: true, note: 'Not', decisionNote: 'Tamam')).copyWith(unread: false);
+      expect(seen.unread, isFalse);
+      expect(seen.id, 1);
+      expect(seen.areaName, 'Spor Salonu');
+      expect(seen.note, 'Not');
+      expect(seen.decisionNote, 'Tamam');
+      expect(seen.canCancel, isTrue);
+      expect(seen.cancelDeadline, DateTime.utc(2026, 10, 20, 13));
+      expect(seen.copyWith().unread, isFalse);
+    });
+
+    test('rezervasyon sayfası: unread_count okunur; yoksa 0', () {
+      final page = ReservationPage.fromJson(<String, dynamic>{
+        'items': <Object>[rzReservation(1, unread: true), rzReservation(2)],
+        'next_before_id': null,
+        'unread_count': 3,
+      });
+      expect(page.unreadCount, 3);
+      expect(page.items.map((r) => r.unread), <bool>[true, false]);
+      expect(ReservationPage.fromJson(<String, dynamic>{'items': <Object>[rzReservation(1)]}).unreadCount, 0);
+      expect(ReservationPage.fromJson(const <String, dynamic>{}).unreadCount, 0);
+    });
+
+    test('konsiyerj: unread, copyWith ve sayfa unread_count; alan yoksa false / 0', () {
+      expect(ConciergeRecord.fromJson(rzRequest(2, unread: true)).unread, isTrue);
+      expect(ConciergeRecord.fromJson(rzRequest(2)).unread, isFalse);
+      expect(ConciergeRecord.fromJson(rzRequest(2)..remove('unread')).unread, isFalse);
+      expect(ConciergeRecord.fromJson(<String, dynamic>{'request': rzRequest(2, unread: true)}).unread, isTrue);
+      final seen = ConciergeRecord.fromJson(rzRequest(2, unread: true, staffNote: 'Yolda.', status: 'hazirlaniyor')).copyWith(unread: false);
+      expect(seen.unread, isFalse);
+      expect(seen.id, 2);
+      expect(seen.staffNote, 'Yolda.');
+      expect(seen.status, ConciergeStatus.hazirlaniyor);
+      expect(seen.category, ConciergeCategory.paketTeslim);
+      final page = ConciergePage.fromJson(<String, dynamic>{'items': <Object>[rzRequest(2, unread: true)], 'unread_count': 1});
+      expect(page.unreadCount, 1);
+      expect(page.items.single.unread, isTrue);
+      expect(ConciergePage.fromJson(<String, dynamic>{'items': <Object>[rzRequest(2)]}).unreadCount, 0);
+    });
+  });
 }

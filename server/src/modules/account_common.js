@@ -46,6 +46,7 @@ export const EXPORT_ROW_LIMITS = Object.freeze({
   uploaded_documents: 500,
   work_items_created: 500,
   work_item_comments: 1000,
+  work_item_attachments_uploaded: 500,
   reservations_made: 500,
   concierge_requests_made: 300,
   finance_reminders_received: 300,

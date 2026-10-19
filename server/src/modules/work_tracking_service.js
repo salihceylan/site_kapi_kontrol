@@ -11,6 +11,7 @@ import { pool } from '../db.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import {
+  ATTACHMENT_COUNT_SQL,
   STAFF_TRANSITIONS,
   STATUSES,
   TERMINAL_STATUSES,
@@ -27,9 +28,11 @@ import {
   parseListQuery,
   parsePatchInput,
   siteNotFound,
+  staffScope,
   workItemLimits,
   workItemNotFound,
 } from './work_tracking_common.js';
+import { listAttachmentsForItem } from './work_attachments_read.js';
 
 export const siteLockKey = (siteCode) => `work_items_site:${Number(siteCode)}`;
 /** Kullanıcı başına saatlik talep sınırı SİTELER ARASI sayıldığı için ayrı advisory kilidi (site kilidinden SONRA alınır; ters sıra yok). */
@@ -120,7 +123,8 @@ const MANAGER_COLUMNS = `
   w.created_by, w.assigned_to, w.apartment_id, w.block_id, b.block_name, a.unit_label,
   CASE WHEN w.created_by IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
   CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone,
-  CASE WHEN au.deleted_at IS NOT NULL THEN NULL ELSE au.full_name END AS assignee_name
+  CASE WHEN au.deleted_at IS NOT NULL THEN NULL ELSE au.full_name END AS assignee_name,
+  ${ATTACHMENT_COUNT_SQL}
 `;
 
 const MANAGER_FROM = `
@@ -131,22 +135,7 @@ const MANAGER_FROM = `
   LEFT JOIN users au ON au.user_code = w.assigned_to
 `;
 
-/**
- * Atanan kişi bu sitede HÂLÂ atanabilir mi (hesabı silinmemiş + etkin + sitenin yöneticisi / görevlisi ya da süper). Değilse (silinen hesap, görevden alınan görevli)
- * atama "yetim" sayılır: talep görevliler için atanmamış gibi görünür ve işlenebilir; yönetici yine her şeyi görür / yeniden atar.
- */
-const ASSIGNEE_ACTIVE_SQL = `
-  SELECT 1 FROM users ax
-  WHERE ax.user_code = w.assigned_to AND ax.deleted_at IS NULL AND ax.is_active = TRUE
-    AND (
-      ax.role = 'super_user'
-      OR EXISTS (SELECT 1 FROM site_manager_sites sx WHERE sx.site_code = w.site_code AND sx.manager_user_code = ax.user_code)
-      OR EXISTS (SELECT 1 FROM site_memberships mx WHERE mx.site_code = w.site_code AND mx.user_code = ax.user_code AND mx.is_active = TRUE AND mx.role IN ('SITE_OWNER', 'SITE_ADMIN', 'STAFF'))
-    )
-`;
-
-/** STAFF kapsamı: kendine atanmış, atanmamış VEYA yetim atamalı (bkz. ASSIGNEE_ACTIVE_SQL). Parametre sırasını çağıran yönetir. */
-const staffScope = (param) => `(w.assigned_to IS NULL OR w.assigned_to = ${param} OR NOT EXISTS (${ASSIGNEE_ACTIVE_SQL}))`;
+// Görevli kapsamı (staffScope) ve yetim atama kuralı (ASSIGNEE_ACTIVE_SQL) work_tracking_common.js'tedir (fotoğraf ekleri de aynı kapsamı kullanır).
 
 /** GET .../work-items -> { items, next_before_id, counts }. Sıra id DESC; imleç saf anahtar-kümesi (`id < before_id`). */
 export async function listWorkItems(siteCode, query, { kind, userCode }, db = pool) {
@@ -252,7 +241,7 @@ async function loadEvents(db, siteCode, itemId, { kind }) {
   return rows.map((row) => mapEvent(row, { detailed, labels }));
 }
 
-/** GET .../work-items/:id -> { item, events, next_statuses }. Görünmeyen / yok / başka site -> 404 WORK_ITEM_NOT_FOUND. */
+/** GET .../work-items/:id -> { item, events, next_statuses, attachments }. Görünmeyen / yok / başka site -> 404 WORK_ITEM_NOT_FOUND. */
 export async function getWorkItemDetail(siteCode, rawId, access, db = pool) {
   const id = parsePositiveId(rawId);
   if (id === null) {
@@ -263,10 +252,13 @@ export async function getWorkItemDetail(siteCode, rawId, access, db = pool) {
     throw workItemNotFound();
   }
   const events = await loadEvents(db, siteCode, id, access);
+  // Fotoğraf ekleri (047): hazır olanlar + çağıranın kendi tamamlanmamış yüklemeleri.
+  const attachments = await listAttachmentsForItem(db, id, access.userCode);
   return {
     item: mapManagerItem(row, { kind: access.kind }),
     events,
     next_statuses: access.kind === 'board' ? [] : [...(STAFF_TRANSITIONS[row.status] ?? [])],
+    attachments,
   };
 }
 

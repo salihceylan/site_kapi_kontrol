@@ -548,6 +548,8 @@ export function mapReservation(row, { view, now = new Date() }) {
     out.site_name = row.site_name ?? null;
     out.can_cancel = dbActive && now.getTime() <= deadline.getTime();
     out.cancel_deadline = dbActive && endsAt.getTime() > now.getTime() ? deadline.toISOString() : null;
+    // 048: görmediğiniz yönetim değişikliği var mı (resident_updated_at > resident_seen_at); yalnız sakin görünümünde
+    out.unread = row.unread === true;
     return out;
   }
   const contact = view !== 'board';
@@ -581,6 +583,8 @@ export function mapConcierge(row, { view }) {
   if (view === 'resident') {
     out.site_name = row.site_name ?? null;
     out.can_cancel = row.status === 'yeni';
+    // 048: görmediğiniz yönetim değişikliği (durum / yönetim notu) var mı; yalnız sakin görünümünde
+    out.unread = row.unread === true;
     return out;
   }
   out.requester = { name: row.requester_name ?? DELETED_USER_NAME };

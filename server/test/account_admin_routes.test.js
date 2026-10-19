@@ -119,6 +119,30 @@ describe('admin uçları: silinmiş (tombstone) hesap', () => {
     assert.ok(clientCalls.some((c) => c.sql === 'COMMIT'));
   });
 
+  it('DELETE (LEGAL-HARD-DELETE-RESERVATIONS): kullanıcı satırı ÖNCE kilitlenir (FOR UPDATE), sonra açık iş takibi atamaları bırakılır (+ iç "assigned" olayı), gelecekteki rezervasyonlar ve açık konsiyerj talepleri iptal edilir, EN SON kullanıcı satırı silinir; hepsi aynı işlemde', async () => {
+    clientHandler = async (sql) => {
+      if (/^SELECT to_regclass\('public\.(work_items|reservations)'\) IS NOT NULL AS present$/.test(sql)) return { rows: [{ present: true }], rowCount: 1 };
+      if (/^UPDATE work_items SET assigned_to = NULL/.test(sql)) return { rows: [{ id: '7', site_code: '1000000001' }], rowCount: 1 };
+      if (/^DELETE FROM users WHERE user_code = \$1/.test(sql)) return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    };
+    const res = await send('DELETE', '/admin/users/40010');
+    assert.equal(res.status, 204);
+    const at = (pattern) => clientCalls.findIndex((c) => pattern.test(c.sql));
+    const begin = at(/^BEGIN$/);
+    const lock = at(/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR UPDATE$/);
+    const release = at(/^UPDATE work_items SET assigned_to = NULL, updated_at = NOW\(\) WHERE id IN \(SELECT id FROM work_items WHERE assigned_to = \$1 AND status NOT IN \('kapandi', 'iptal'\) ORDER BY id FOR UPDATE\)/);
+    const event = at(/^INSERT INTO work_item_events .* VALUES \(\$1, \$2, 'assigned', 'internal', \$3, 'staff', \$4, NULL\)$/);
+    const reservations = at(/^UPDATE reservations SET status = 'iptal'/);
+    const concierge = at(/^UPDATE concierge_requests SET status = 'iptal'/);
+    const finalDelete = at(/^DELETE FROM users WHERE user_code = \$1 AND deleted_at IS NULL$/);
+    const commit = at(/^COMMIT$/);
+    assert.ok(begin >= 0 && begin < lock && lock < release && release < event && event < reservations && reservations < concierge && concierge < finalDelete && finalDelete < commit,
+      JSON.stringify({ begin, lock, release, event, reservations, concierge, finalDelete, commit }));
+    for (const index of [lock, release, reservations, concierge, finalDelete]) assert.equal(clientCalls[index].params[0], 40010);
+    assert.deepEqual(clientCalls[event].params, [7, 1000000001, 40010, '40010']);
+  });
+
   it('DELETE yarışı: ön kontrolde silinmemişti, kullanıcı silme bu arada commit etti -> son DELETE 0 satır, ROLLBACK, 409 ACCOUNT_ALREADY_DELETED (tombstone kalıcı silinmez)', async () => {
     let lookups = 0;
     poolHandler = async (sql) => {

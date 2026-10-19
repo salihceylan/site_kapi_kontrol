@@ -4,6 +4,8 @@
 // o sitede HÂLÂ aktif sakin olmak şarttır; kilit sırası sites -> users -> concierge_site:<site> advisory -> reservation_user:<kod> advisory -> satır (FOR UPDATE).
 // Sınırlar (env): kişi başı site içi açık talep (CONCIERGE_MAX_OPEN_PER_USER=10), kişi başı saatlik (CONCIERGE_MAX_PER_USER_PER_HOUR=10; siteler arası), site geneli açık (1000).
 // Tek "son durum + not" satırı yeterlidir (olay günlüğü yok); her yazma audit satırı bırakır (not / açıklama metni audit'e YAZILMAZ).
+// Okunmamış işareti (048, iş takibi ile aynı kalıp): yönetim durum / not değişikliği `resident_updated_at = clock_timestamp()`; sakin unread = resident_updated_at >
+// resident_seen_at görür, liste `unread_count` taşır, GET yazmaz, yalnız POST /app/concierge-requests/:id/seen yazar; sakinin kendi işlemleri iki sütunu birden yazar.
 
 import { pool } from '../db.js';
 import { actorFromAuthUser } from './audit_service.js';
@@ -35,7 +37,7 @@ import {
   siteNotFound,
 } from './reservation_common.js';
 import { advisoryLock, audit, conciergeLockKey, lockActiveUser, userLockKey, withReservationTransaction } from './reservation_service.js';
-import { hasSiteRelation, myApartmentsIn, pickApartment, syncMissingPerson } from './reservation_resident.js';
+import { SITE_APPROVED, hasSiteRelation, myApartmentsIn, pickApartment, syncMissingPerson } from './reservation_resident.js';
 
 const MODULE_ON = `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = c.site_code AND smod.module_code = '${RESERVATION_MODULE}' AND smod.enabled = TRUE)`;
 const OPEN_SQL = `'${CONCIERGE_OPEN.join("', '")}'`;
@@ -45,7 +47,8 @@ const COLUMNS = `
   c.id, c.site_code, c.user_code, c.apartment_id, c.category, c.note, c.requested_for, c.status, c.staff_note, c.created_at, c.updated_at, c.closed_at,
   s.name AS site_name, b.block_name, ap.unit_label,
   CASE WHEN c.user_code IS NULL OR ru.deleted_at IS NOT NULL THEN NULL ELSE ru.full_name END AS requester_name,
-  CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone
+  CASE WHEN ru.deleted_at IS NULL THEN ru.phone_number END AS requester_phone,
+  (c.resident_updated_at > c.resident_seen_at) AS unread
 `;
 
 const FROM = `
@@ -148,7 +151,10 @@ export async function createConciergeRequest({ actor, body, now = () => new Date
   return { request: mapConcierge(row, { view: 'resident' }), replayed: created.replayed };
 }
 
-/** GET /app/concierge-requests -> { items, next_before_id }. Yalnız KENDİ talepleri; status open | closed | all. */
+/**
+ * GET /app/concierge-requests -> { items, next_before_id, unread_count }. Yalnız KENDİ talepleri; status open | closed | all.
+ * unread_count: görmediğiniz yönetim değişikliği olan talep sayısı (site süzgeci uygulanır; durum / sayfa süzgeci UYGULANMAZ). Yazmaz.
+ */
 export async function listMyRequests(authUser, query = {}, db = pool) {
   const filters = parseConciergeResidentQuery(query);
   const userCode = userCodeOf(authUser);
@@ -157,14 +163,17 @@ export async function listMyRequests(authUser, query = {}, db = pool) {
     if (await hasSiteRelation(db, userCode, filters.siteCode)) {
       throw moduleDisabled();
     }
-    return { items: [], next_before_id: null };
+    return { items: [], next_before_id: null, unread_count: 0 };
   }
   const params = [userCode];
-  const clauses = ['c.user_code = $1', `s.approval_status = 'approved'`, MODULE_ON];
+  const base = ['c.user_code = $1', `s.approval_status = 'approved'`, MODULE_ON];
   if (filters.siteCode !== null) {
     params.push(filters.siteCode);
-    clauses.push(`c.site_code = $${params.length}`);
+    base.push(`c.site_code = $${params.length}`);
   }
+  // okunmamış sayacı durum / imleç / sınır parametrelerinden ÖNCE kopyalanır (sayaç yalnız sahiplik + site + modül koşullarını taşır)
+  const unreadParams = [...params];
+  const clauses = [...base];
   if (filters.status === 'open') clauses.push(`c.status IN (${OPEN_SQL})`);
   if (filters.status === 'closed') clauses.push(`c.status IN (${CLOSED_SQL})`);
   if (filters.beforeId !== null) {
@@ -172,11 +181,58 @@ export async function listMyRequests(authUser, query = {}, db = pool) {
     clauses.push(`c.id < $${params.length}`);
   }
   params.push(filters.limit + 1);
-  const result = await db.query(`SELECT ${COLUMNS} ${FROM} WHERE ${clauses.join(' AND ')} ORDER BY c.id DESC LIMIT $${params.length}`, params);
-  const rows = result.rows ?? [];
+  const [rowsResult, unreadResult] = await Promise.all([
+    db.query(`SELECT ${COLUMNS} ${FROM} WHERE ${clauses.join(' AND ')} ORDER BY c.id DESC LIMIT $${params.length}`, params),
+    db.query(
+      `SELECT COUNT(*)::INTEGER AS n FROM concierge_requests c INNER JOIN sites s ON s.site_code = c.site_code
+       WHERE ${base.join(' AND ')} AND c.resident_updated_at > c.resident_seen_at`,
+      unreadParams,
+    ),
+  ]);
+  const rows = rowsResult.rows ?? [];
   const hasMore = rows.length > filters.limit;
   const items = rows.slice(0, filters.limit).map((row) => mapConcierge(row, { view: 'resident' }));
-  return { items, next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null };
+  return {
+    items,
+    next_before_id: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    unread_count: Number(unreadResult.rows?.[0]?.n ?? 0),
+  };
+}
+
+/** GET /app/concierge-requests/:id -> { request }. Başkasının / yok / modül kapalı -> 404 CONCIERGE_NOT_FOUND. Yazmaz (okunmamış işareti yalnız /seen ile temizlenir). */
+export async function getMyRequest(authUser, rawId, db = pool) {
+  const id = parsePositiveId(rawId);
+  const userCode = userCodeOf(authUser);
+  if (id === null) {
+    throw conciergeNotFound();
+  }
+  const row = await loadMyRequest(db, userCode, id);
+  if (!row) {
+    throw conciergeNotFound();
+  }
+  return { request: mapConcierge(row, { view: 'resident' }) };
+}
+
+/** POST /app/concierge-requests/:id/seen -> { id, unread: false }. Yalnız kendi talebi (başkasının / yok / modül kapalı 404); idempotent: okunmamış değilse hiçbir şey yazmaz. */
+export async function markMyRequestSeen(authUser, rawId, db = pool) {
+  const id = parsePositiveId(rawId);
+  const userCode = userCodeOf(authUser);
+  if (id === null) {
+    throw conciergeNotFound();
+  }
+  // Yalnız gerçekten okunmamışsa yazar (gereksiz satır kilidi / yazma yok); değilse sahiplik ayrıca doğrulanır (aynı kapılar: sahip + onaylı site + modül açık).
+  const result = await db.query(
+    `UPDATE concierge_requests c SET resident_seen_at = clock_timestamp()
+     WHERE c.id = $2 AND c.user_code = $1 AND c.resident_updated_at > c.resident_seen_at AND ${SITE_APPROVED('c.site_code')} AND ${MODULE_ON} RETURNING c.id`,
+    [userCode, id],
+  );
+  if (!result.rows?.[0]) {
+    const own = await db.query(`SELECT 1 FROM concierge_requests c WHERE c.id = $2 AND c.user_code = $1 AND ${SITE_APPROVED('c.site_code')} AND ${MODULE_ON} LIMIT 1`, [userCode, id]);
+    if (!own.rows?.[0]) {
+      throw conciergeNotFound();
+    }
+  }
+  return { id, unread: false };
 }
 
 /** POST /app/concierge-requests/:id/cancel -> { request }. Yalnız KENDİ "yeni" talebi (aksi 409 INVALID_TRANSITION). */
@@ -202,7 +258,11 @@ export async function cancelMyRequest({ actor, rawId }) {
     if (row.status !== 'yeni') {
       throw invalidTransition(row.status, 'iptal');
     }
-    await client.query(`UPDATE concierge_requests SET status = 'iptal', closed_at = NOW(), updated_at = NOW() WHERE id = $1`, [id]);
+    // sakinin KENDİ işlemi: iki okunmamış sütunu AYNI değeri alır (NOW() işlem içinde sabittir) -> kendi kendine okunmamış üretmez
+    await client.query(
+      `UPDATE concierge_requests SET status = 'iptal', closed_at = NOW(), updated_at = NOW(), resident_updated_at = NOW(), resident_seen_at = NOW() WHERE id = $1`,
+      [id],
+    );
     await audit(client, actor, 'concierge.cancelled', siteCode, 'concierge_request', id, { from: 'yeni', to: 'iptal', by: 'resident' });
   });
   const row = await loadMyRequest(pool, userCode, id);
@@ -283,7 +343,7 @@ export async function updateRequest({ siteCode, rawId, actor, access, body }) {
   }
   const outcome = await withReservationTransaction(siteCode, async (client) => {
     const userCode = await lockActiveUser(client, actor);
-    const found = await client.query(`SELECT status, staff_note FROM concierge_requests WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
+    const found = await client.query(`SELECT status, staff_note, user_code FROM concierge_requests WHERE id = $1 AND site_code = $2 FOR UPDATE`, [id, siteCode]);
     const row = found.rows?.[0];
     if (!row) {
       throw conciergeNotFound();
@@ -299,7 +359,10 @@ export async function updateRequest({ siteCode, rawId, actor, access, body }) {
     if (statusChange && !(CONCIERGE_TRANSITIONS[row.status] ?? []).includes(input.status)) {
       throw invalidTransition(row.status, input.status);
     }
-    const sets = ['updated_at = NOW()'];
+    // durum da yönetim notu da sakine görünürdür: her gerçek değişiklik okunmamış işareti bırakır (clock_timestamp: eşzamanlı /seen ile sıralama satır kilidinde).
+    // RU-1: talep sahibi işlemi yapanın kendisiyse (sakin olan yönetici / görevli) KENDİ işlemidir: iki sütun AYNI işlem-sabit değeri (NOW()) alır, öz-okunmamış yok.
+    const selfAction = row.user_code !== null && row.user_code !== undefined && Number(row.user_code) === Number(userCode);
+    const sets = ['updated_at = NOW()', ...(selfAction ? ['resident_updated_at = NOW()', 'resident_seen_at = NOW()'] : ['resident_updated_at = clock_timestamp()'])];
     const params = [id, siteCode];
     if (statusChange) {
       params.push(input.status);

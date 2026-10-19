@@ -3,11 +3,12 @@
 //   Yönetim  GET   /manager/sites/:siteCode/reservation-areas        POST .../reservation-areas        PATCH .../reservation-areas/:id        (alan tanımı: yönetici / süper)
 //            GET   .../reservations   GET .../reservations/:id   POST .../reservations/:id/decision   (takvim; onay / red / iptal: yönetici / süper / görevli)
 //            GET   .../concierge-requests   GET .../concierge-requests/:id   PATCH .../concierge-requests/:id
-//   Sakin    GET /app/reservation-areas   GET /app/reservation-areas/:id/availability   GET/POST /app/reservations   GET /app/reservations/:id   POST /app/reservations/:id/cancel
-//            GET/POST /app/concierge-requests   POST /app/concierge-requests/:id/cancel
+//   Sakin    GET /app/reservation-areas   GET /app/reservation-areas/:id/availability   GET/POST /app/reservations   GET /app/reservations/:id   POST /app/reservations/:id/cancel | /seen
+//            GET/POST /app/concierge-requests   GET /app/concierge-requests/:id   POST /app/concierge-requests/:id/cancel | /seen
 //
 // Yetki: alanı yönetici / süper tanımlar; yönetici / süper / görevli (STAFF) onaylar, reddeder, iptal eder, konsiyerj durumunu ilerletir; BOARD_MEMBER salt okur (sakin telefonu /
 // kullanıcı kodu yok); sakin yalnız KENDİ kayıtlarını görür. `reservation` modülü kapalıysa 403 MODULE_DISABLED. Sözleşme: docs/PLATFORM_REZERVASYON.md. Hata gövdesi { error, code }.
+// `/seen` (okunmamış işaretini temizler) okuma hız sınırındadır (iş takibi ile aynı): liste yenilemesi kadar sık çağrılabilir.
 
 import express from 'express';
 import { authRequired } from '../middlewares/auth_middleware.js';
@@ -16,8 +17,8 @@ import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { resolveReservationAccess } from './reservation_access.js';
 import { MAX_BODY_BYTES, bodyTooLarge } from './reservation_common.js';
 import { createArea, decideReservation, getReservationDetail, listAreas, listReservations, updateArea } from './reservation_service.js';
-import { cancelMyReservation, createReservation, getAvailability, getMyReservation, listMyReservations, listResidentAreas } from './reservation_resident.js';
-import { cancelMyRequest, createConciergeRequest, getRequestDetail, listMyRequests, listRequests, updateRequest } from './reservation_concierge.js';
+import { cancelMyReservation, createReservation, getAvailability, getMyReservation, listMyReservations, listResidentAreas, markMyReservationSeen } from './reservation_resident.js';
+import { cancelMyRequest, createConciergeRequest, getMyRequest, getRequestDetail, listMyRequests, listRequests, markMyRequestSeen, updateRequest } from './reservation_concierge.js';
 
 export const reservationRouter = express.Router();
 
@@ -208,6 +209,13 @@ reservationRouter.post(
   appHandler({ context: 'my_reservation_cancel', fallback: 'Rezervasyon iptal edilemedi.' }, (req) => cancelMyReservation({ actor: req.authUser, rawId: req.params.id })),
 );
 
+// okunmamış işaretini temizler (okuma hız sınırı; gövde yok)
+reservationRouter.post(
+  '/app/reservations/:id/seen',
+  ...readChain,
+  appHandler({ context: 'my_reservation_seen', fallback: 'İşlem tamamlanamadı.' }, (req) => markMyReservationSeen(req.authUser, req.params.id)),
+);
+
 // --- Sakin: konsiyerj --------------------------------------------------------------------------------------------
 
 reservationRouter.get(
@@ -222,8 +230,21 @@ reservationRouter.post(
   appHandler({ context: 'my_concierge_create', fallback: 'Talep kaydedilemedi.', status: 201 }, (req) => createConciergeRequest({ actor: req.authUser, body: bodyOf(req) })),
 );
 
+reservationRouter.get(
+  '/app/concierge-requests/:id',
+  ...readChain,
+  appHandler({ context: 'my_concierge_request', fallback: 'Talep yüklenemedi.' }, (req) => getMyRequest(req.authUser, req.params.id)),
+);
+
 reservationRouter.post(
   '/app/concierge-requests/:id/cancel',
   ...writeChain,
   appHandler({ context: 'my_concierge_cancel', fallback: 'Talep iptal edilemedi.' }, (req) => cancelMyRequest({ actor: req.authUser, rawId: req.params.id })),
+);
+
+// okunmamış işaretini temizler (okuma hız sınırı; gövde yok)
+reservationRouter.post(
+  '/app/concierge-requests/:id/seen',
+  ...readChain,
+  appHandler({ context: 'my_concierge_seen', fallback: 'İşlem tamamlanamadı.' }, (req) => markMyRequestSeen(req.authUser, req.params.id)),
 );

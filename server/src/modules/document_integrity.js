@@ -12,7 +12,7 @@
 import crypto from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { SITE_DIR_PATTERN, UUID_PATTERN } from './document_storage.js';
+import { SITE_DIR_PATTERN, STORAGE_SUBTREES, UUID_PATTERN } from './document_storage.js';
 
 export const IDENTITY_FILE = '.instance';
 export const IDENTITY_SETTING_KEY = 'documents.storage_id';
@@ -99,34 +99,52 @@ async function writeIdentityDb(db, id) {
   await db.query(`INSERT INTO platform_settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO NOTHING`, [IDENTITY_SETTING_KEY, JSON.stringify({ id })]);
 }
 
-/** Kökteki (sites/ altındaki) ilk uuid-adlı dosya var mı: yeni/boş dizinde kimlik güvenle başlatılabilir. */
+/**
+ * Kökteki herhangi bir alt ağaçta (sites/ belgeler, work_attachments/ iş takibi fotoğrafları) uuid-adlı dosya var mı: yeni/boş dizinde kimlik güvenle başlatılabilir.
+ * Fotoğraf ağacı da sayılır: yalnız fotoğraf barındıran bir dizine yanlış / boş DB bakarsa kimlik sessizce benimsenip fotoğraflar yetim sanılmasın.
+ */
 async function diskHasStoredFiles(root) {
-  let siteDirs;
-  try {
-    siteDirs = (await fsp.readdir(path.join(root, 'sites'), { withFileTypes: true })).filter((entry) => entry.isDirectory() && SITE_DIR_PATTERN.test(entry.name));
-  } catch (_error) {
-    return false;
-  }
-  for (const siteDir of siteDirs) {
-    const files = await fsp.readdir(path.join(root, 'sites', siteDir.name)).catch(() => []);
-    if (files.some((name) => UUID_PATTERN.test(name))) return true;
+  for (const subtree of STORAGE_SUBTREES) {
+    let siteDirs;
+    try {
+      siteDirs = (await fsp.readdir(path.join(root, subtree), { withFileTypes: true })).filter((entry) => entry.isDirectory() && SITE_DIR_PATTERN.test(entry.name));
+    } catch (_error) {
+      continue;
+    }
+    for (const siteDir of siteDirs) {
+      const files = await fsp.readdir(path.join(root, subtree, siteDir.name)).catch(() => []);
+      if (files.some((name) => UUID_PATTERN.test(name))) return true;
+    }
   }
   return false;
 }
 
-/** DB'nin bildiği (ready) son sürümlerden / gider belgelerinden birkaçı diskte VAR mı: ilk kimlik başlatmada "bu DB bu dizinin DB'si mi" örneklemesi. */
+/** `work_item_attachments` (047) tablosu var mı? Yoksa fotoğraf örneklemesi yapılmaz. */
+async function attachmentsTableExists(db) {
+  const result = await db.query(`SELECT to_regclass('public.work_item_attachments') IS NOT NULL AS present`);
+  return result.rows?.[0]?.present === true;
+}
+
+/**
+ * DB'nin bildiği (ready) son sürümlerden / gider belgelerinden / iş takibi fotoğraflarından birkaçı diskte VAR mı: ilk kimlik başlatmada "bu DB bu dizinin DB'si mi"
+ * örneklemesi. Fotoğraflar `work_attachments/` alt ağacında aranır.
+ */
 async function dbMatchesDisk(db, root) {
   const keys = [];
   const versions = await db.query(`SELECT storage_key FROM document_versions WHERE status = 'ready' ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);
-  for (const row of versions.rows ?? []) keys.push(row.storage_key);
+  for (const row of versions.rows ?? []) keys.push(['sites', row.storage_key]);
   if (await expenseTableExists(db)) {
     const expenses = await db.query(`SELECT storage_key FROM expense_documents WHERE status = 'ready' ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);
-    for (const row of expenses.rows ?? []) keys.push(row.storage_key);
+    for (const row of expenses.rows ?? []) keys.push(['sites', row.storage_key]);
   }
-  for (const key of keys) {
+  if (await attachmentsTableExists(db)) {
+    const attachments = await db.query(`SELECT storage_key FROM work_item_attachments WHERE status = 'ready' ORDER BY id DESC LIMIT ${SAMPLE_SIZE}`);
+    for (const row of attachments.rows ?? []) keys.push(['work_attachments', row.storage_key]);
+  }
+  for (const [subtree, key] of keys) {
     if (typeof key !== 'string' || !/^\d{10}\/[0-9a-f-]{36}$/.test(key)) continue;
     try {
-      await fsp.lstat(path.join(root, 'sites', key));
+      await fsp.lstat(path.join(root, subtree, key));
       return true;
     } catch (_error) {
       // yok
