@@ -158,3 +158,32 @@ KALIR (kapı modülü): kapı kartı etiketleri ("SmartKeyPass AKILLI GEÇİŞ",
 - **Modüller (site yöneticisi):** kartta anahtar YOKTUR. Durum çipleri: "Tanımlı" (açık), "Tanımlı değil" + "Modül Talep Et" düğmesi (not alanlı pencere → talep gider), "Talep gönderildi" + "Talebi Geri Çek", "Yakında…", "Her sitede açık". Çekmeceden "Modüller" yönetici menüsünde kalır. Süper kullanıcıda anahtarlar (mevcut) kalır.
 - **Modül Talepleri (süper kullanıcı):** yeni çekmece öğesi, bekleyen sayısı rozetiyle; süzgeç (Bekleyen / Onaylanan / Reddedilen / Tümü); kart: site, modül, isteyen, not, tarih; "Onayla" ve "Reddet" (reddetmede isteğe bağlı gerekçe) — onay penceresi; işlem sonrası otomatik yenileme, çekip yenileme, "Daha fazla yükle". Rozet sayısı `pending_count` ile (ModuleAccess yoklamasıyla birlikte, yalnız süper kullanıcıda, arka planda durur).
 - Hata kodu eşlemeleri (<140 karakter, '_' yok): `MODULE_ADMIN_ONLY` "Modülleri yalnızca sistem yöneticisi açıp kapatabilir. Modül talebi gönderebilirsiniz." · `MODULE_ALREADY_ENABLED` "Bu modül zaten açık." · `MODULE_REQUEST_PENDING` "Bu modül için bekleyen bir talebiniz var." · `REQUEST_NOT_FOUND` "Talep bulunamadı." · `REQUEST_NOT_PENDING` "Bu talep artık bekleyen durumda değil."
+
+## Yönetim türü terimleri (F9) — 2026-10-19
+
+Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (blok/daire/sakin; API alan adları değişmez); yalnız kullanıcıya görünen kelimeler ve "bu tür için önerilen modüller" türe göre gelir. Kaynak: `server/src/modules/management_type_terms.js` (saf, DB'siz). Her tür için `terms {unit, unit_plural, resident, resident_plural, owner, fee, block, block_plural}` ve `recommended_modules[]`:
+
+| Tür | unit / unit_plural | resident / resident_plural | owner | fee | block / block_plural | Önerilen modüller |
+|---|---|---|---|---|---|---|
+| `apartment_site` | Daire / Daireler | Sakin / Sakinler | Malik | Aidat | Blok / Bloklar | door_control, finance, documents, announcements |
+| `residence` | Daire / Daireler | Sakin / Sakinler | Malik | Aidat | Blok / Bloklar | reservation, visitor_log, work_tracking, door_control, finance |
+| `business_center` | Ofis / Ofisler | Firma / Firmalar | Mal sahibi | Ortak gider | Kat / Katlar | work_tracking, visitor_log, finance, documents |
+| `cooperative` | Hisse / Hisseler | Üye / Üyeler | Üye | Üye aidatı | Blok / Bloklar | finance, documents, announcements, survey |
+| `shopping_mall` | Mağaza / Mağazalar | Kiracı firma / Kiracı firmalar | Mal sahibi | Ortak gider | Kat / Katlar | finance, work_tracking, visitor_log, documents |
+
+- Bilinmeyen/boş tür → `apartment_site` terimleri ve önerileri (varsayılan; `normalizeManagementType` ile aynı kural).
+- Katalogda henüz olmayan önerilen kodlar (`survey`, `visitor_log`) OLDUĞU GİBİ döner; istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yine yalnız katalogdaki 9 modülü içerir (katalog dışı öneri modül listesine eklenmez).
+- Her türün tek cümlelik Türkçe açıklaması `summary` (F9 deneme listesindeki tür açıklamaları; "Yakında" demez).
+
+### Ekleyici alanlar (mevcut alanlar ve değerleri DEĞİŞMEZ; eski istemciler alanları yok sayar)
+- `mapSiteRow` çıktısı (site nesnesi: `/admin/sites`, `/manager/sites`, site ayrıntısı vb.) → `management_terms`.
+- `POST /membership/setup-site` yanıtındaki `site` → `management_terms`.
+- `GET /app/my-modules` `sites[]` öğeleri → `management_terms`, `recommended_modules` (kod dizisi).
+- `GET /manager/sites/:siteCode/modules` → yanıta `management_terms`; her modül öğesine `recommended` (boolean: modül bu tür için önerilir mi).
+- **Yeni uç** `GET /app/management-types` (authRequired; sabit tablo, veritabanı sorgulanmaz) → `{ "items": [ { "code", "label", "selectable", "terms", "recommended_modules", "summary" } ] }`; 5 tür `MANAGEMENT_TYPES` sırasıyla. Örnek öğe: `{ "code": "business_center", "label": "İş Merkezi", "selectable": true, "terms": { "unit": "Ofis", "unit_plural": "Ofisler", "resident": "Firma", "resident_plural": "Firmalar", "owner": "Mal sahibi", "fee": "Ortak gider", "block": "Kat", "block_plural": "Katlar" }, "recommended_modules": ["work_tracking", "visitor_log", "finance", "documents"], "summary": "İş merkezi yönetimi: ..." }`.
+
+### Flutter (ayrı iş, aynı sözleşme)
+`lib/models/management_terms.dart` (JSON'dan parse; alan yoksa varsayılan Daire/Sakin/Malik/Aidat/Blok → eski sunucuyla çalışır), `SiteRecord` ve `MySiteModules`'e `managementTerms` (ekleyici), `AuthApi.getManagementTypes()`. Kullanım: Modüller ekranında "Bu tür için önerilir" çipi; `SetupSiteDialog`/`SiteDialog` tür seçicide `summary` ve kısa terim özeti ("Daire → Ofis, Sakin → Firma"); Kişiler ekranı Daireler sekmesi başlığı/boş durum metinleri `terms.unit` ile (yalnız metin; iş mantığı ve API alanları değişmez); site kartı tür çipinde terim özeti ipucu.
+
+### Testler
+`server/test/management_type_terms.test.js` (tablo, kopya/donmuş nesneler, bilinmeyen tür, katalog dışı kodlar, görünüm şekli); `platform_catalog.test.js` (mapSiteRow `management_terms`), `platform_module_routes.test.js` (her iki modül ucu + `/app/management-types`), `platform_site_create.test.js` (admin site yanıtında `management_terms`).

@@ -2,6 +2,7 @@
 //
 //   GET    /app/modules/catalog                              (authRequired)
 //   GET    /app/my-modules                                   (authRequired)
+//   GET    /app/management-types                             (authRequired; F9 terimler + önerilen modüller, DB'siz)
 //   GET    /manager/sites/:siteCode/modules                  (requireSiteManager + hasSiteManagementAccess)
 //   PUT    /manager/sites/:siteCode/modules/:moduleCode      (YALNIZ süper kullanıcı: yönetici 403 MODULE_ADMIN_ONLY;
 //                                                              yönetici modül açıp kapatmaz, modül TALEP eder:
@@ -20,6 +21,7 @@ import { INT32_MAX, parseId } from '../utils/ids.js';
 import { clampAuditLimit, listAuditLog } from './audit_service.js';
 import { publicCatalog } from './catalog.js';
 import { getSiteModulesView, listMySiteModules, setSiteModuleEnabled } from './module_service.js';
+import { listManagementTypesView } from './management_type_terms.js';
 import {
   HOUR_MS,
   SITE_NOT_FOUND_BODY,
@@ -77,6 +79,11 @@ moduleRouter.get('/app/my-modules', authRequired, async (req, res) => {
   } catch (error) {
     return respondError(res, 'my_modules', error, 'Modüller yüklenemedi.');
   }
+});
+
+// F9: yönetim türleri + terimler + önerilen modüller (sabit tablo, veritabanı sorgulanmaz).
+moduleRouter.get('/app/management-types', authRequired, (_req, res) => {
+  res.status(200).json({ items: listManagementTypesView() });
 });
 
 // ---------------------------------------------------------------------------

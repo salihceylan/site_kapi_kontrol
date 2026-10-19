@@ -262,6 +262,9 @@ describe('POST /admin/sites: management_type', () => {
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.equal(res.body.site.management_type, 'apartment_site');
     assert.equal(res.body.site.management_type_label, 'Apartman ve Site');
+    // F9 (ekleyici): mapSiteRow ciktisinda ture ozgu terimler
+    assert.equal(res.body.site.management_terms?.unit, 'Daire');
+    assert.equal(res.body.site.management_terms?.resident_plural, 'Sakinler');
     const insert = find(db.clientLog, /^INSERT INTO sites/);
     assert.match(insert.sql, /geofence_radius_meters, management_type \)/);
     assert.equal(insert.params.length, 20);

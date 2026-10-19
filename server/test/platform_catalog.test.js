@@ -21,6 +21,7 @@ import {
   resolveManagementTypeInput,
 } from '../src/modules/management_types.js';
 import { mapSiteRow } from '../src/utils/helpers.js';
+import { managementTerms } from '../src/modules/management_type_terms.js';
 
 const def = (code) => getModuleDefinition(code);
 
@@ -276,5 +277,34 @@ describe('platform: mapSiteRow management_type', () => {
     assert.equal(mapped.management_type, 'residence');
     assert.equal(mapped.management_type_label, 'Rezidans');
     assert.equal(mapSiteRow({ id: 1, name: 'S', management_type: 'garip' }).management_type, 'apartment_site');
+  });
+});
+
+describe('F9: mapSiteRow management_terms (ekleyici alan)', () => {
+  it('satirda tur yoksa varsayilan Daire/Sakin/Malik/Aidat/Blok terimleri; mevcut alanlar degismez', () => {
+    const mapped = mapSiteRow({ id: 1, name: 'S', created_at: new Date() });
+    assert.deepEqual(mapped.management_terms, managementTerms('apartment_site'));
+    assert.deepEqual(mapped.management_terms, {
+      unit: 'Daire',
+      unit_plural: 'Daireler',
+      resident: 'Sakin',
+      resident_plural: 'Sakinler',
+      owner: 'Malik',
+      fee: 'Aidat',
+      block: 'Blok',
+      block_plural: 'Bloklar',
+    });
+    assert.equal(mapped.management_type, 'apartment_site');
+    assert.equal(mapped.management_type_label, 'Apartman ve Site');
+  });
+
+  it('business_center satiri Ofis/Firma terimlerini tasir; bilinmeyen tur varsayilana duser', () => {
+    const mapped = mapSiteRow({ id: 1, name: 'S', management_type: 'business_center' });
+    assert.equal(mapped.management_terms.unit, 'Ofis');
+    assert.equal(mapped.management_terms.resident_plural, 'Firmalar');
+    assert.equal(mapped.management_terms.owner, 'Mal sahibi');
+    assert.equal(mapped.management_terms.fee, 'Ortak gider');
+    assert.equal(mapped.management_terms.block_plural, 'Katlar');
+    assert.equal(mapSiteRow({ id: 1, name: 'S', management_type: 'garip' }).management_terms.unit, 'Daire');
   });
 });
