@@ -18,6 +18,7 @@ import {
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { PlatformError } from './errors.js';
 import { managementTypeLabel, normalizeManagementType } from './management_types.js';
+import { isRecommendedModule, managementTerms, recommendedModules } from './management_type_terms.js';
 
 function toPositiveInt(value) {
   const parsed = Number(value);
@@ -84,7 +85,11 @@ export async function getSiteModulesView(siteCode, db = pool, { canToggle = fals
       ...entry,
       can_toggle: canToggle === true && entry.toggleable === true,
       request_status: pendingCodes.has(entry.code) ? 'pending' : null,
+      // F9 (ekleyici): bu modül bu yönetim türü için önerilir mi?
+      recommended: isRecommendedModule(managementType, entry.code),
     })),
+    // F9 (ekleyici): türe özgü terimler.
+    management_terms: managementTerms(managementType),
   };
 }
 
@@ -408,6 +413,9 @@ export async function listMySiteModules(authUser, db = pool) {
         role: ROLE_BY_RANK[Number(row.rank)] ?? 'resident',
         door_access: row.door_access === true,
         modules: computeEnabledMap(rowsByModuleCode(rowsBySite.get(siteCode) ?? [])),
+        // F9 (ekleyici): türe özgü terimler ve önerilen modül kodları (katalogda olmayan kod olduğu gibi döner).
+        management_terms: managementTerms(row.management_type),
+        recommended_modules: recommendedModules(row.management_type),
       };
     }),
   };

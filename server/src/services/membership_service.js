@@ -8,6 +8,7 @@ import { mapUserRow, normalizeEmail } from '../utils/helpers.js';
 import { PG_INT4_MAX, isValidEmail, parsePositiveId } from '../utils/validators.js';
 import { rotateTokensForDevices, rotateTokensForSite } from './local_token_service.js';
 import { managementTypeLabel, resolveManagementTypeInput } from '../modules/management_types.js';
+import { managementTerms } from '../modules/management_type_terms.js';
 import { pendingConsentsJson, recordConsents, sanitizeStoredConsents } from '../modules/legal_consent_service.js';
 import { describeErrorForLog } from '../security/log_redact.js';
 import { BCRYPT_COST } from '../security/password_hashing.js';
@@ -838,6 +839,8 @@ export async function setupSiteWithClaimedDevice({
       site: {
         ...site,
         management_type_label: managementTypeLabel(site.management_type),
+        // F9 (ekleyici): türe özgü terimler.
+        management_terms: managementTerms(site.management_type),
         blocks: createdBlocks,
         doors: createdDoors,
         assignedDevice,

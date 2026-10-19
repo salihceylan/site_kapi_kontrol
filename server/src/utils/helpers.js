@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { managementTypeLabel, normalizeManagementType } from '../modules/management_types.js';
+import { managementTerms } from '../modules/management_type_terms.js';
 import { isReservedEmail } from './reserved_email.js';
 
 export const validRoles = new Set(['super_user', 'site_manager', 'apartment_owner', 'individual']);
@@ -233,6 +234,8 @@ export function mapSiteRow(row) {
     // Platform: yönetim türü (satırda yoksa / bilinmiyorsa apartment_site).
     management_type: normalizeManagementType(row.management_type),
     management_type_label: managementTypeLabel(row.management_type),
+    // F9 (ekleyici): türe özgü terimler (Daire/Ofis/Mağaza...); eski istemciler alanı yok sayar.
+    management_terms: managementTerms(row.management_type),
     created_at: row.created_at,
   };
 }

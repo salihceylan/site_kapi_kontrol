@@ -446,7 +446,8 @@ const moduleUrl = (site = SITE_1, code = 'door_control') => `/manager/sites/${si
 
 describe('platform rotalari: kimlik zinciri', () => {
   it('her rota authRequired ile baslar; yonetici uclari requireSiteManager, denetim ucu requireSuperUser kullanir', () => {
-    assert.equal(ORIGINAL_FIRST_HANDLERS.length, 8);
+    // F9: GET /app/management-types eklendi (authRequired, DB'siz) -> 9 rota
+    assert.equal(ORIGINAL_FIRST_HANDLERS.length, 9);
     for (const route of ORIGINAL_FIRST_HANDLERS) {
       assert.equal(route.handlers[0], authRequired, `${route.methods} ${route.path}`);
       if (route.path.startsWith('/manager/')) {
@@ -466,6 +467,7 @@ describe('platform rotalari: kimlik zinciri', () => {
     assert.deepEqual(summary, [
       'DELETE /manager/sites/:siteCode/staff-roles/:userCode',
       'GET /admin/audit-log',
+      'GET /app/management-types',
       'GET /app/modules/catalog',
       'GET /app/my-modules',
       'GET /manager/sites/:siteCode/modules',
@@ -513,6 +515,8 @@ describe('GET /manager/sites/:siteCode/modules: yetki matrisi', () => {
       request_status: null,
       updated_at: null,
       updated_by: null,
+      // F9 (ekleyici): door_control apartman/site turu icin onerilir
+      recommended: true,
     });
     const finance = res.body.modules.find((m) => m.code === 'finance');
     assert.equal(finance.status, 'available', 'Faz 4a: Aidat ve Finans kullanılabilir');
@@ -1625,7 +1629,17 @@ describe('GET /app/my-modules', () => {
     );
     for (const site of res.body.sites) {
       assert.equal(typeof site.door_access, 'boolean');
-      assert.deepEqual(Object.keys(site), ['site_code', 'site_name', 'management_type', 'role', 'door_access', 'modules']);
+      // F9 (ekleyici): management_terms ve recommended_modules sona eklendi
+      assert.deepEqual(Object.keys(site), [
+        'site_code',
+        'site_name',
+        'management_type',
+        'role',
+        'door_access',
+        'modules',
+        'management_terms',
+        'recommended_modules',
+      ]);
     }
   });
 
@@ -1689,5 +1703,112 @@ describe('GET /app/my-modules', () => {
       assert.ok(inDoorService, 'door_service askiya kosulu bulunamadi');
       assert.equal(inModule, inDoorService);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F9: yonetim turu terimleri ve onerilen moduller (EKLEYICI alanlar + GET /app/management-types)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TERMS = Object.freeze({
+  unit: 'Daire',
+  unit_plural: 'Daireler',
+  resident: 'Sakin',
+  resident_plural: 'Sakinler',
+  owner: 'Malik',
+  fee: 'Aidat',
+  block: 'Blok',
+  block_plural: 'Bloklar',
+});
+
+describe('F9: yonetim turu terimleri', () => {
+  it('GET /manager/sites/:siteCode/modules: management_terms ve her modulde recommended (apartment_site)', async () => {
+    const res = await call('GET', `/manager/sites/${SITE_1}/modules`, { user: users.mgrA });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.management_terms, DEFAULT_TERMS);
+    for (const m of res.body.modules) assert.equal(typeof m.recommended, 'boolean', m.code);
+    assert.deepEqual(
+      res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
+      ['announcements', 'documents', 'door_control', 'finance'],
+    );
+    // mevcut alanlar degismez
+    assert.equal(res.body.management_type, 'apartment_site');
+    assert.equal(res.body.management_type_label, 'Apartman ve Site');
+    assert.equal(res.body.modules.length, 9);
+    assert.equal(typeof doorOf(res.body).can_toggle, 'boolean');
+  });
+
+  it('is merkezi: Ofis/Firma terimleri; katalogda olmayan oneri (visitor_log) modul listesine EKLENMEZ', async () => {
+    state.sites.get(SITE_2).management_type = 'business_center';
+    const res = await call('GET', `/manager/sites/${SITE_2}/modules`, { user: users.mgrB });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.management_type, 'business_center');
+    assert.equal(res.body.management_type_label, 'İş Merkezi');
+    assert.equal(res.body.management_terms.unit, 'Ofis');
+    assert.equal(res.body.management_terms.resident_plural, 'Firmalar');
+    assert.equal(res.body.management_terms.fee, 'Ortak gider');
+    assert.equal(res.body.modules.length, 9);
+    assert.deepEqual(
+      res.body.modules.filter((m) => m.recommended).map((m) => m.code).sort(),
+      ['documents', 'finance', 'work_tracking'],
+    );
+  });
+
+  it('GET /app/my-modules: her sitede management_terms ve recommended_modules (bilinmeyen kod oldugu gibi)', async () => {
+    state.myLinks = [
+      { site_code: String(SITE_1), site_name: 'Gül Sitesi', management_type: 'apartment_site', rank: 4, door_access: true },
+      { site_code: String(SITE_2), site_name: 'Lale Rezidans', management_type: 'residence', rank: 1, door_access: true },
+      { site_code: '1000000003', site_name: 'Garip', management_type: 'garip', rank: 1, door_access: false },
+    ];
+    const res = await call('GET', '/app/my-modules', { user: users.resident });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.sites.length, 3);
+    const [s1, s2, s3] = res.body.sites;
+    assert.deepEqual(s1.management_terms, DEFAULT_TERMS);
+    assert.deepEqual(s1.recommended_modules, ['door_control', 'finance', 'documents', 'announcements']);
+    assert.deepEqual(s2.management_terms, DEFAULT_TERMS, 'rezidans terimleri apartman ile ayni');
+    assert.deepEqual(s2.recommended_modules, ['reservation', 'visitor_log', 'work_tracking', 'door_control', 'finance']);
+    assert.equal(s3.management_type, 'apartment_site', 'bilinmeyen tur varsayilana duser');
+    assert.deepEqual(s3.management_terms, DEFAULT_TERMS);
+    // mevcut alanlar degismez
+    assert.equal(s1.role, 'manager');
+    assert.equal(s1.door_access, true);
+    assert.equal(typeof s1.modules.door_control, 'boolean');
+  });
+
+  it('GET /app/management-types: 5 tur, sozlesme alanlari, "Yakinda" yok, veritabani sorgulanmaz', async () => {
+    const res = await call('GET', '/app/management-types', { user: users.resident });
+    assert.equal(res.status, 200);
+    assert.deepEqual(Object.keys(res.body), ['items']);
+    assert.deepEqual(
+      res.body.items.map((i) => [i.code, i.label, i.selectable]),
+      [
+        ['apartment_site', 'Apartman ve Site', true],
+        ['residence', 'Rezidans', true],
+        ['business_center', 'İş Merkezi', true],
+        ['cooperative', 'Kooperatif', true],
+        ['shopping_mall', 'Alışveriş Merkezi', true],
+      ],
+    );
+    for (const item of res.body.items) {
+      assert.deepEqual(Object.keys(item), ['code', 'label', 'selectable', 'terms', 'recommended_modules', 'summary']);
+      assert.deepEqual(Object.keys(item.terms), Object.keys(DEFAULT_TERMS));
+      assert.ok(Array.isArray(item.recommended_modules) && item.recommended_modules.length >= 4, item.code);
+      assert.equal(typeof item.summary, 'string');
+      assert.ok(item.summary.length >= 20 && !/yak[ıi]nda/i.test(item.summary), item.code);
+    }
+    assert.deepEqual(res.body.items[0].terms, DEFAULT_TERMS);
+    assert.equal(res.body.items[2].terms.unit, 'Ofis');
+    assert.equal(res.body.items[3].terms.resident, 'Üye');
+    assert.equal(res.body.items[4].terms.unit, 'Mağaza');
+    assert.deepEqual(res.body.items[3].recommended_modules, ['finance', 'documents', 'announcements', 'survey']);
+    assert.equal(state.log.length, 0, 'sabit tablo: veritabani sorgulanmaz');
+  });
+
+  it('GET /app/management-types super kullanici dahil her oturum icin aynidir', async () => {
+    const asSuper = await call('GET', '/app/management-types', { user: users.superUser });
+    const asManager = await call('GET', '/app/management-types', { user: users.mgrA });
+    assert.equal(asSuper.status, 200);
+    assert.deepEqual(asSuper.body, asManager.body);
   });
 });
