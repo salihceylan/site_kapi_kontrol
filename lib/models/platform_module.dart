@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/management_type.dart';
+import 'package:site_kapi_kontrol/models/management_terms.dart';
 
 /// Katalogdaki modül kodları (sunucuda sabit: `server/src/modules/catalog.js`).
 abstract final class PlatformModuleCodes {
@@ -48,6 +49,7 @@ class PlatformModule {
     this.requestStatus,
     this.updatedAt,
     this.updatedBy,
+    this.recommended = false,
   }) : canToggle = canToggle ?? toggleable;
 
   final String code;
@@ -78,6 +80,9 @@ class PlatformModule {
 
   final DateTime? updatedAt;
   final String? updatedBy;
+
+  /// Sitenin yönetim türü için ÖNERİLEN modül mü (`recommended`, F9)? Eski sunucuda alan yok = false.
+  final bool recommended;
 
   bool get isAvailable => status == 'available';
   bool get isComingSoon => status == 'coming_soon';
@@ -119,6 +124,7 @@ class PlatformModule {
           : null,
       updatedAt: _parseDate(json['updated_at']),
       updatedBy: json['updated_by']?.toString(),
+      recommended: json['recommended'] == true,
     );
   }
 
@@ -139,6 +145,7 @@ class PlatformModule {
       requestStatus: clearRequestStatus ? null : (requestStatus ?? this.requestStatus),
       updatedAt: updatedAt,
       updatedBy: updatedBy,
+      recommended: recommended,
     );
   }
 
@@ -182,6 +189,7 @@ class SiteModulesState {
     this.managementType = ManagementType.apartmentSite,
     this.managementTypeLabel = 'Apartman ve Site',
     this.modules = const <PlatformModule>[],
+    this.managementTerms = ManagementTerms.defaults,
   });
 
   final int siteCode;
@@ -189,6 +197,9 @@ class SiteModulesState {
   final ManagementType managementType;
   final String managementTypeLabel;
   final List<PlatformModule> modules;
+
+  /// Türün arayüz terimleri (`management_terms`, F9); eski sunucuda varsayılan.
+  final ManagementTerms managementTerms;
 
   PlatformModule? module(String code) {
     for (final m in modules) {
@@ -213,6 +224,7 @@ class SiteModulesState {
               .map((m) => PlatformModule.fromJson(Map<String, dynamic>.from(m)))
               .toList(growable: false)
           : const <PlatformModule>[],
+      managementTerms: ManagementTerms.fromJson(json['management_terms']),
     );
   }
 }
@@ -227,6 +239,8 @@ class MySiteModules {
     this.role = 'resident',
     this.modules = const <String, bool>{},
     this.doorAccess = true,
+    this.managementTerms = ManagementTerms.defaults,
+    this.recommendedModules = const <String>[],
   });
 
   final int siteCode;
@@ -243,6 +257,13 @@ class MySiteModules {
 
   /// Katalogdaki tüm kodlar için hesaplanmış açık/kapalı.
   final Map<String, bool> modules;
+
+  /// Türün arayüz terimleri (`management_terms`, F9); eski sunucuda varsayılan.
+  final ManagementTerms managementTerms;
+
+  /// Bu tür için önerilen modül kodları (`recommended_modules`, F9); eski sunucuda boş. Bilinmeyen kod
+  /// listede kalır, katalogda eşleşmediği için gösterilmez.
+  final List<String> recommendedModules;
 
   /// Kullanıcı bu sitede Yönetim Kurulu / Denetçi (salt okunur) mu?
   bool get isBoardMember => role == 'board_member';
@@ -266,6 +287,12 @@ class MySiteModules {
       role: json['role']?.toString() ?? 'resident',
       modules: Map<String, bool>.unmodifiable(modules),
       doorAccess: json['door_access'] is bool ? json['door_access'] as bool : true,
+      managementTerms: ManagementTerms.fromJson(json['management_terms']),
+      recommendedModules: json['recommended_modules'] is List
+          ? List<String>.unmodifiable(
+              (json['recommended_modules'] as List).whereType<String>(),
+            )
+          : const <String>[],
     );
   }
 

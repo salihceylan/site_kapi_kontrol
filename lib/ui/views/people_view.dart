@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/bulk_import.dart' show BulkExportFilters, ImportKind;
+import 'package:site_kapi_kontrol/models/platform_module.dart' show MySiteModules;
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 import 'package:site_kapi_kontrol/services/bulk_api.dart' show BulkService;
 import 'package:site_kapi_kontrol/ui/design/app_card.dart';
@@ -124,7 +125,12 @@ class PeopleViewState extends State<PeopleView> {
           );
           for (final site in page.sites) {
             if (site.isApproved && !merged.any((m) => m.code == site.id)) {
-              merged.add(PeopleSite(code: site.id, name: site.name, canWrite: true));
+              merged.add(PeopleSite(
+                code: site.id,
+                name: site.name,
+                canWrite: true,
+                terms: site.managementTerms,
+              ));
             }
           }
           fetched += page.sites.length;
@@ -133,9 +139,21 @@ class PeopleViewState extends State<PeopleView> {
           pageNo++;
         }
       }
+      // F9: kurul üyesi siteleri (salt okunur) terimlerini son `my-modules` yanıtından alır; yanıt yoksa ya da
+      // eski sunucuda alan yoksa varsayılan terimler (Daire / Sakin / ...).
+      final cachedSites = widget.authService.cachedMyModules?.sites ?? const <MySiteModules>[];
       for (final site in widget.readOnlySites) {
         if (!merged.any((m) => m.code == site.code)) {
-          merged.add(PeopleSite(code: site.code, name: site.name));
+          var terms = site.terms;
+          if (terms.isDefault) {
+            for (final cached in cachedSites) {
+              if (cached.siteCode == site.code) {
+                terms = cached.managementTerms;
+                break;
+              }
+            }
+          }
+          merged.add(PeopleSite(code: site.code, name: site.name, terms: terms));
         }
       }
       if (!mounted || token != _sitesToken) return;
@@ -292,6 +310,7 @@ class PeopleViewState extends State<PeopleView> {
       siteCode: site.code,
       siteName: site.name,
       canWrite: site.canWrite,
+      terms: site.terms,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -378,7 +397,8 @@ class PeopleViewState extends State<PeopleView> {
               ChoiceChip(
                 key: ValueKey<String>('people_tab_$i'),
                 avatar: Icon(_tabs[i].$2, size: 18),
-                label: Text(_tabs[i].$1),
+                // F9: "Daireler" sekmesi türün terimiyle (Ofisler, Mağazalar, ...); iş mantığı aynıdır.
+                label: Text(i == 1 ? site.terms.unitPlural : _tabs[i].$1),
                 selected: _tab == i,
                 onSelected: (_) => _selectTab(i),
               ),

@@ -16,6 +16,8 @@ import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/guest_pass.dart';
 import 'package:site_kapi_kontrol/models/managed_user_account.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/management_terms.dart';
+import 'package:site_kapi_kontrol/models/management_type.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
 import 'package:site_kapi_kontrol/models/legal_document.dart';
@@ -640,6 +642,27 @@ class AuthApi {
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
     return _parsePayload('Modül durumu', () => MyModulesResult.fromJson(payload));
+  }
+
+  /// Yönetim türleri: terimler, önerilen modüller ve tek cümlelik açıklama (`GET /app/management-types`,
+  /// F9). Eski sunucuda uç yoktur (404 -> ApiException): çağıran yerleşik tanımlara düşer
+  /// ([ManagementTypeInfo.builtInAll]); bilinmeyen tür kodu `apartment_site` sayılmaz, atlanır.
+  Future<List<ManagementTypeInfo>> getManagementTypes({required String token}) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: '/app/management-types',
+      token: token,
+    );
+    _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload(
+      'Yönetim türleri',
+      () => (payload['items'] as List<dynamic>? ?? <dynamic>[])
+          .whereType<Map>()
+          .where((item) => ManagementType.values.any((t) => t.apiValue == item['code']))
+          .map((item) => ManagementTypeInfo.fromJson(Map<String, dynamic>.from(item)))
+          .toList(growable: false),
+    );
   }
 
   Future<SiteModulesState> getSiteModules({

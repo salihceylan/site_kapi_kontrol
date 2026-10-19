@@ -99,6 +99,9 @@ class ModuleCard extends StatelessWidget {
   final VoidCallback? onRequest;
   final VoidCallback? onCancelRequest;
 
+  /// Önerilen modül çipi (F9; `PlatformModule.recommended`).
+  static const String recommendedLabel = 'Bu tür için önerilir';
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -198,6 +201,13 @@ class ModuleCard extends StatelessWidget {
                             label: 'Bekleyen talep var',
                             tone: AppTone.info,
                             icon: Icons.hourglass_top_rounded,
+                          ),
+                        // F9: sitenin yönetim türü için sunucunun önerdiği modül (eski sunucuda alan yok = çip yok).
+                        if (module.recommended)
+                          const StatusChip(
+                            label: ModuleCard.recommendedLabel,
+                            tone: AppTone.primary,
+                            icon: Icons.recommend_rounded,
                           ),
                       ],
                     ),

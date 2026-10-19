@@ -114,10 +114,14 @@ class _SiteCardState extends State<SiteCard> {
                             tone: AppTone.warning,
                           ),
                         // Yönetim türü (Apartman ve Site, ...): sarabilen başlık akışında, tek satır + elips.
-                        StatusChip(
-                          label: site.managementTypeLabel,
-                          tone: AppTone.info,
-                          icon: Icons.category_rounded,
+                        // F9: uzun basış / üzerine gelme ipucu türün terimlerini sayar (Ofis, Firma, ...).
+                        Tooltip(
+                          message: site.managementTerms.tooltipText,
+                          child: StatusChip(
+                            label: site.managementTypeLabel,
+                            tone: AppTone.info,
+                            icon: Icons.category_rounded,
+                          ),
                         ),
                       ],
                     ),

@@ -20,6 +20,7 @@ import 'package:site_kapi_kontrol/models/legal_document.dart';
 import 'package:site_kapi_kontrol/models/local_door_access.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:site_kapi_kontrol/models/managed_user_page.dart';
+import 'package:site_kapi_kontrol/models/management_terms.dart';
 import 'package:site_kapi_kontrol/models/module_request.dart';
 import 'package:site_kapi_kontrol/models/person_record.dart';
 import 'package:site_kapi_kontrol/models/platform_module.dart';
@@ -964,6 +965,13 @@ class AuthService extends ChangeNotifier {
   /// Modül kataloğu (`GET /app/modules/catalog`).
   Future<List<PlatformModule>> getModuleCatalog() {
     return _runAuthorized((token) => api.getModuleCatalog(token: token));
+  }
+
+  /// Yönetim türleri: terimler, önerilen modüller ve açıklama (`GET /app/management-types`, F9). Eski
+  /// sunucuda uç yoktur: çağıran ApiException alınca [ManagementTypeInfo.builtInAll] ile devam eder
+  /// (seçici de `types` verilmezse aynı yerleşik tanımları gösterir).
+  Future<List<ManagementTypeInfo>> getManagementTypes() {
+    return _runAuthorized((token) => api.getManagementTypes(token: token));
   }
 
   /// Kullanıcının bağlı olduğu sitelerde modül durumları (`GET /app/my-modules`).

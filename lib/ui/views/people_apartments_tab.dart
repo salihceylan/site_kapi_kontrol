@@ -56,7 +56,9 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
       if (mounted) setState(() {});
     },
     isAlive: () => mounted,
-    errorFallback: 'Daireler yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+    // F9: tür terimi (Daireler / Ofisler / Mağazalar ...); eski sunucuda varsayılan "Daireler".
+    errorFallback:
+        '${widget.scope.terms.unitPlural} yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin.',
   );
 
   @override
@@ -150,8 +152,9 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
                 onChanged: _onSearchChanged,
                 onSubmitted: (_) => _applyFilters(),
                 decoration: InputDecoration(
-                  labelText: 'Daire ara',
-                  hintText: 'Daire no, blok veya kişi adı',
+                  labelText: '${widget.scope.terms.unit} ara',
+                  hintText:
+                      '${widget.scope.terms.unit} no, ${widget.scope.terms.blockLower} veya kişi adı',
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _search.text.isEmpty
                       ? null
@@ -174,14 +177,18 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
                   initialValue: _blockId ?? _allBlocks,
                   dropdownColor: p.surface,
                   style: th.bodyMedium?.copyWith(color: p.text),
-                  decoration: const InputDecoration(
-                    labelText: 'Blok',
-                    prefixIcon: Icon(Icons.filter_list_rounded),
+                  decoration: InputDecoration(
+                    labelText: widget.scope.terms.block,
+                    prefixIcon: const Icon(Icons.filter_list_rounded),
                   ),
                   items: [
-                    const DropdownMenuItem<int>(
+                    DropdownMenuItem<int>(
                       value: _allBlocks,
-                      child: Text('Tüm bloklar', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        'Tüm ${widget.scope.terms.blockPluralLower}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     for (final block in _blocks)
                       DropdownMenuItem<int>(
@@ -208,7 +215,7 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
         ),
         const SizedBox(height: AppSpace.md),
         SectionHeader(
-          title: 'Daireler',
+          title: widget.scope.terms.unitPlural,
           count: _loader.loadedOnce ? _loader.total : null,
           trailing: IconButton(
             onPressed: _loader.loading ? null : reload,
@@ -220,8 +227,8 @@ class PeopleApartmentsTabState extends State<PeopleApartmentsTab> {
         CrmListBody<ApartmentSummary>(
           loader: _loader,
           emptyIcon: Icons.apartment_rounded,
-          emptyTitle: 'Bu sitede daire bulunamadı.',
-          filteredTitle: 'Bu arama ve süzgeç için daire bulunamadı.',
+          emptyTitle: 'Bu sitede ${widget.scope.terms.unitLower} bulunamadı.',
+          filteredTitle: 'Bu arama ve süzgeç için ${widget.scope.terms.unitLower} bulunamadı.',
           filtered: _query.isNotEmpty || _blockId != null,
           itemBuilder: (context, apartment) =>
               ApartmentCrmCard(apartment: apartment, onTap: () => _open(apartment)),

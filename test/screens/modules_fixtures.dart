@@ -52,6 +52,12 @@ SiteModulesState mdState(
 
   /// modül kodu -> `request_status` (örn. `{'finance': 'pending'}`).
   Map<String, String> requests = const <String, String>{},
+
+  /// F9: `recommended: true` gönderilecek modül kodları (varsayılan boş = eski sunucu).
+  Set<String> recommended = const <String>{},
+
+  /// F9: `management_terms` nesnesi (null = alan yok, eski sunucu).
+  Map<String, dynamic>? terms,
 }) {
   Map<String, dynamic> m(
     String code,
@@ -73,12 +79,14 @@ SiteModulesState mdState(
     'request_status': requests[code],
     'updated_at': null,
     'updated_by': null,
+    if (recommended.contains(code)) 'recommended': true,
   };
   return SiteModulesState.fromJson(<String, dynamic>{
     'site_code': siteCode,
     'site_name': siteName,
     'management_type': 'apartment_site',
     'management_type_label': typeLabel,
+    'management_terms': ?terms,
     'modules': <Map<String, dynamic>>[
       m(
         'door_control',

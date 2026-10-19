@@ -1,3 +1,4 @@
+import 'package:site_kapi_kontrol/models/management_terms.dart';
 import 'package:site_kapi_kontrol/models/management_type.dart';
 
 class SiteRecord {
@@ -34,6 +35,7 @@ class SiteRecord {
     required this.createdAt,
     this.managementType = ManagementType.apartmentSite,
     this.managementTypeLabel = 'Apartman ve Site',
+    this.managementTerms = ManagementTerms.defaults,
   });
 
   final int id;
@@ -72,6 +74,9 @@ class SiteRecord {
 
   /// Türün Türkçe etiketi (`management_type_label`); sunucu göndermezse türün kendi etiketi.
   final String managementTypeLabel;
+
+  /// Türün arayüz terimleri (`management_terms`, F9); sunucu göndermezse varsayılan (Daire / Sakin / ...).
+  final ManagementTerms managementTerms;
 
   bool get isApproved => approvalStatus == 'approved';
 
@@ -139,6 +144,7 @@ class SiteRecord {
     DateTime? createdAt,
     ManagementType? managementType,
     String? managementTypeLabel,
+    ManagementTerms? managementTerms,
   }) {
     return SiteRecord(
       id: id ?? this.id,
@@ -173,6 +179,7 @@ class SiteRecord {
       createdAt: createdAt ?? this.createdAt,
       managementType: managementType ?? this.managementType,
       managementTypeLabel: managementTypeLabel ?? this.managementTypeLabel,
+      managementTerms: managementTerms ?? this.managementTerms,
     );
   }
 
@@ -234,6 +241,7 @@ class SiteRecord {
           rawTypeLabel is String && rawTypeLabel.trim().isNotEmpty
               ? rawTypeLabel.trim()
               : type.label,
+      managementTerms: ManagementTerms.fromJson(json['management_terms']),
     );
   }
 }
