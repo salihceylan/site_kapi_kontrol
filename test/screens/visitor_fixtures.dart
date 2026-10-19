@@ -74,6 +74,14 @@ Map<String, dynamic> vkEntry(
   };
 }
 
+/// Daire seçici ucunun (`GET .../visitor-entries/apartments`) öğesi: YALNIZ kimlik + etiket (malik / kiracı adı yok).
+Map<String, dynamic> vkApartment(int id, String block, String unit) => <String, dynamic>{
+  'id': id,
+  'apartment_label': '$block - $unit',
+  'block_name': block,
+  'label': unit,
+};
+
 /// Hata ya da yarış için kuyruğa konan sahte servis.
 class FakeVisitorService extends VisitorLogService {
   FakeVisitorService({required super.authService, this.kind = VisitorSiteAccess.manager})
@@ -94,6 +102,10 @@ class FakeVisitorService extends VisitorLogService {
   final List<({int site, int id, VisitorStatus? status, String? note})> updateCalls = [];
   final List<int> seenCalls = [];
   int summaryCalls = 0;
+  final List<({int site, String? query, int limit, int offset})> listApartmentsCalls = [];
+
+  /// Daire seçici ucunun (`GET .../visitor-entries/apartments`) satırları: sunucu biçimi, YALNIZ kimlik + etiket ([vkApartment]).
+  final List<Map<String, dynamic>> apartments = <Map<String, dynamic>>[];
 
   // --- Sürücüler ---
   /// İşlem adı -> sıradaki hatalar (her çağrı birini fırlatır).
@@ -196,6 +208,25 @@ class FakeVisitorService extends VisitorLogService {
   }
 
   // --- Yönetim ---
+
+  @override
+  Future<VisitorApartmentPage> listApartments(
+    int siteCode, {
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    listApartmentsCalls.add((site: siteCode, query: query, limit: limit, offset: offset));
+    await _enter('listApartments');
+    final q = (query ?? '').trim().toLowerCase();
+    final filtered = apartments
+        .where((a) => q.isEmpty || '${a['apartment_label']}'.toLowerCase().contains(q))
+        .toList();
+    return VisitorApartmentPage.fromJson(<String, dynamic>{
+      'items': filtered.skip(offset).take(limit).toList(),
+      'total': filtered.length,
+    });
+  }
 
   @override
   Future<VisitorManagedPage> listManaged(

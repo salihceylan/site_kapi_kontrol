@@ -399,6 +399,7 @@ export async function previewAccountDeletion(authUser, db = pool) {
   }
   if (optionalCounts.surveyVotes > 0) {
     willKeep.push(surveyVotesKeepNote(optionalCounts.surveyVotes));
+  }
   if (optionalCounts.visitorEntries > 0) {
     willKeep.push(visitorEntriesKeepNote(optionalCounts.visitorEntries));
   }

@@ -1,8 +1,8 @@
 ---
 id: dpa
 title: Veri İşleme Sözleşmesi
-version: 2026-10-16
-effective_date: 2026-10-16
+version: 2026-10-19
+effective_date: 2026-10-19
 required_for: [site_application]
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -35,6 +35,9 @@ Bu Sözleşme, kişisel verileri kendi amaçları doğrultusunda işleyen site, 
 - Makbuzlar, gecikme tazminatı kayıtları, giderler, tedarikçi kayıtları, kasa ve banka hesabı hareketleri, gider belgeleri ve borç hatırlatma e-postası kayıtları;
 - Yüklenen belgeler ve dosya içerikleri ile duyuruya eklenen belgeler;
 - Toplu yükleme ile Platforma işlenen kayıtlar ve toplu yükleme çalışma kayıtları;
+- Anket ve oylama kayıtları (anketler, hedef kitle ve oylar);
+- Ziyaretçi ve kargo kayıtları;
+- Geçiş kartı kayıtları;
 - Bu kayıtlara ilişkin denetim kayıtları.
 
 **2.2 Güde'nin sorumlu olduğu veriler.** Hesap ve Platform Verisi bakımından Güde veri sorumlusudur ve bu verileri KVKK Aydınlatma Metni ile Gizlilik Politikası'nda açıklandığı şekilde kendi sorumluluğunda işler; bu veriler bu Sözleşmenin kapsamı dışındadır. Hesaba bağlı ad, e-posta ve telefon gibi bilgiler, bir kişi sitenize katıldığında hesaptan canlı olarak okunur; Site Yönetimi bu bilgileri site yönetimi amacıyla kullanır ve bu kullanımın sorumluluğu Site Yönetimine aittir. Aynı daireye bağlı üyeler de birbirinin ad, e-posta ve telefon bilgisini görür. Kullanıcının telefon bildirimini açtığı cihazların kayıtları (cihaz türü, uygulama sürümü, bildirim jetonu ve tercihler) da Güde'nin hesap ve Platform verisi olarak kendi sorumluluğundadır; bildirimin dayandığı duyurunun içeriği ise Site Verisidir. [AVUKAT DOĞRULASIN: hesap verilerinde Güde ile Site Yönetimi arasındaki sorumluluk ayrımı; ortak veri sorumluluğu ihtimali; telefon bildirimi cihaz kayıtlarının hangi tarafın sorumluluğunda olduğu]
@@ -107,6 +110,9 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 - Finans: daire bazlı borç, tahsilat ve düzeltme kayıtları (tutar, tarih, ödeme yöntemi, açıklama, kaydı yapan yönetici), borçtan sorumlu taraf; makbuzlar (numara, tarih, tutar, ödeme yöntemi, daire etiketi, ödeyen olarak kayıtlı kişinin adı, makbuzu düzenleyen yöneticinin adı, doğrulama kodu); gecikme tazminatı kalemleri; giderler (kategori, açıklama, tutar, KDV, belge türü ve numarası), tedarikçiler (ad, isteğe bağlı vergi veya T.C. kimlik numarası, telefon, not), gider belgeleri (PDF, JPG, PNG), kasa ve banka hesabı adları ile hareketleri; borç hatırlatma e-postası için alıcı kişi, e-posta adresi (gönderim bitene kadar), adres özeti ve gönderim durumu.
 - Belgeler: başlık, açıklama, kategori, hedef kitle, dosya adı, sürümler, dosya içeriği (kişisel veri; ad, telefon, adres, T.C. kimlik numarası, IBAN gibi bilgiler içerebilir), yükleyen hesap, indirme sayısı.
 - Toplu yükleme: dosya ve ham satırlar saklanmaz; işlenen kişi, ilişki ve araç kayıtları ile yalnızca sayı içeren çalışma kaydı.
+- Anket ve oylama: anket başlığı, sorusu ve seçenekleri, hedef kitle (site, blok veya daire), anketi açan yönetici; oy (seçenek, zaman, daire ve oy veren hesap; oy veren hesap tek oy kuralı için her ankette kaydedilir, anonim ankette yönetime gösterilmez).
+- Ziyaretçi ve kargo: kayıt türü (ziyaretçi veya kargo), daire, ziyaretçinin adı, kargo firması, not, durum, geliş ve tamamlanma zamanı, kaydı giren ve sonlandıran görevli veya yönetici, sakinin kaydı gördüğü zaman.
+- Geçiş kartı: kart numarası (UID), etiket, kartın tanımlandığı kişi kaydı, durum ve iptal zamanı, kartı tanımlayan yönetici.
 - Denetim: yönetim işlemlerinin kaydı (kim, ne zaman, hangi işlem); ayrıntı alanında hesabı olmayan kişinin eski ve yeni adı, araç plakası, silinen dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri bulunabilir.
 
 Özel nitelikli kişisel verilerin işlenmesi amaçlanmaz; serbest metin alanlarına bu tür veri girilmemelidir.

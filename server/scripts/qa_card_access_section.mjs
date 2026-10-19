@@ -287,7 +287,7 @@ export async function sectionCardAccess(ctx) {
   const afterDelete = await countOf(`SELECT COUNT(*)::int AS n FROM access_cards WHERE person_id = $1`, [R2.person]);
   const listAfter = await call('GET', M('?status=all'), MGR);
   check('G2: hesap silme kartlari SILMEZ (kart site_people kaydina baglidir); yonetim listesi kayitlari gostermeye devam eder; sunucu hatasi yok',
-    Boolean(deletion) && beforeDelete === 3 && afterDelete === 3 && listAfter.status === 200 && listAfter.body.items.filter((i) => i.person_id === R2.person).length === 3, { beforeDelete, afterDelete, summary: deletion?.summary });
+    Boolean(deletion) && beforeDelete === 2 && afterDelete === 2 && listAfter.status === 200 && listAfter.body.items.filter((i) => i.person_id === R2.person).length === 2, { beforeDelete, afterDelete, summary: deletion?.summary });
 
   // ============================================================================================================
   console.log('--- H. gizlilik ---');

@@ -65,8 +65,15 @@ export function normalizeLabel(value) {
 /** Sakin görünümü ve dışa aktarma: yalnız son 4 karakter açık. */
 export function maskCardUid(uid) {
   const text = String(uid ?? '');
-  if (text.length <= 4) return '****' + text;
-  return '*'.repeat(Math.max(4, text.length - 4)) + text.slice(-4);
+  const visible = cardUidSuffix(text);
+  return '*'.repeat(Math.max(4, text.length - visible.length)) + visible;
+}
+
+/** UID'nin görünebilen sonu: en çok 4 karakter ve hiçbir zaman UID'nin yarısından fazlası değil (kısa UID tamamen açılmaz). Maske ve denetim kaydı aynı kuralı kullanır. */
+export function cardUidSuffix(uid) {
+  const text = String(uid ?? '');
+  const visible = Math.min(4, Math.floor(text.length / 2));
+  return visible > 0 ? text.slice(-visible) : '';
 }
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);

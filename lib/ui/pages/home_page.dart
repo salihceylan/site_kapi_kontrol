@@ -958,6 +958,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// "Anketler" (sakin) ekranındaki siteler: alıcısı olabilecek ve `survey` modülü AÇIK siteler (Rezervasyon kuralı).
   List<PeopleSite> _surveyResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.survey))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Anket ve Oylama" menüsü: süper kullanıcı ya da `survey` modülü açık bir sitede yönetici / kurul üyesi.
+  bool _canAccessSurveyManage(UserRole role) =>
+      role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
+
   // --- Ziyaretçi ve Kargo (F11.03) ---
 
   /// "Ziyaretçi ve Kargo" (yönetim / görevli) ekranındaki siteler: `visitor_log` modülü AÇIK olan siteler. Yönetici
@@ -996,15 +1017,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     return <PeopleSite>[
       for (final site in _moduleAccess.result!.sites)
-        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.survey))
         if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.visitorLog))
           PeopleSite(code: site.siteCode, name: site.siteName),
     ];
   }
 
-  /// "Anket ve Oylama" menüsü: süper kullanıcı ya da `survey` modülü açık bir sitede yönetici / kurul üyesi.
-  bool _canAccessSurveyManage(UserRole role) =>
-      role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
   /// Yönetim menüsü: süper kullanıcı ya da `visitor_log` modülü açık bir sitede yönetici / görevli / kurul üyesi.
   bool _canAccessVisitorManage(UserRole role) =>
       role == UserRole.superUser || _visitorManageSites(role).isNotEmpty;
@@ -1635,6 +1652,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.anket:
         return 'Anketler';
+
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
 
@@ -1789,6 +1807,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _selectedMenu = SirketMenuItem.dashboard;
         }
       });
+      // Sakin modunda ziyaretçi rozeti alıcılığı değişir: yoklama aralığını (60 sn) beklemeden tazelenir.
+      _kickVisitorBadge();
     });
   }
 
@@ -5240,7 +5260,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (_visitorResidentSites(session.role).isNotEmpty)
             SirketMenuItem.ziyaretcilerim: _visitorUnread,
         },
-        badgeNouns: const <SirketMenuItem, String>{SirketMenuItem.duyurular: 'okunmamış'},
+        badgeNouns: const <SirketMenuItem, String>{
+          SirketMenuItem.duyurular: 'okunmamış',
+          SirketMenuItem.ziyaretcilerim: 'görülmemiş',
+        },
         fullName: session.fullName,
         userEmail: session.email,
         role: session.role,

@@ -4,6 +4,8 @@
 // değerler enum'lara "unknown" ya da en zararsız değere düşer; zaman damgaları evrensel an (UTC) okunur ve ekranda
 // İstanbul saatiyle gösterilir. Ziyaretçi adı / firma / not HİÇBİR YERDE günlüğe yazılmaz.
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/apartment_crm.dart'
+    show ApartmentSummary;
 import 'package:site_kapi_kontrol/models/document_models.dart'
     show documentInstant;
 import 'package:site_kapi_kontrol/models/vehicle_record.dart'
@@ -206,8 +208,39 @@ class VisitorEntry {
 
 /// `GET /manager/sites/:siteCode/visitor-entries`: `{items, total}` (limit / offset).
 @immutable
+/// `GET .../visitor-entries/apartments` sayfası (kayıt formunun daire seçicisi). Sunucu YALNIZ daire kimliği ve
+/// "Blok - Daire" etiketi verir (malik / kiracı adı yok; görevli de kullanır); öğeler [ApartmentSummary] olarak okunur,
+/// kimliği geçersiz öğe atlanır.
+class VisitorApartmentPage {
+  const VisitorApartmentPage({
+    this.items = const <ApartmentSummary>[],
+    this.total = 0,
+  });
+
+  final List<ApartmentSummary> items;
+  final int total;
+
+  factory VisitorApartmentPage.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'];
+    final items = <ApartmentSummary>[
+      if (raw is List)
+        for (final item in raw)
+          if (item is Map)
+            ApartmentSummary.fromJson(Map<String, dynamic>.from(item)),
+    ].where((apartment) => apartment.id > 0).toList();
+    final total = crmIntOrNull(json['total']);
+    return VisitorApartmentPage(
+      items: items,
+      total: total == null || total < items.length ? items.length : total,
+    );
+  }
+}
+
 class VisitorManagedPage {
-  const VisitorManagedPage({this.items = const <VisitorEntry>[], this.total = 0});
+  const VisitorManagedPage({
+    this.items = const <VisitorEntry>[],
+    this.total = 0,
+  });
 
   final List<VisitorEntry> items;
   final int total;
@@ -225,7 +258,10 @@ class VisitorManagedPage {
 /// `GET /app/visitor-entries`: `id DESC`; sonraki sayfa `before_id`.
 @immutable
 class VisitorResidentPage {
-  const VisitorResidentPage({this.items = const <VisitorEntry>[], this.nextBeforeId});
+  const VisitorResidentPage({
+    this.items = const <VisitorEntry>[],
+    this.nextBeforeId,
+  });
 
   final List<VisitorEntry> items;
   final int? nextBeforeId;

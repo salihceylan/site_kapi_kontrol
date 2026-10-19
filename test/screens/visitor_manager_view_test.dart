@@ -17,7 +17,6 @@ import 'package:site_kapi_kontrol/ui/widgets/visitor_log_parts.dart';
 
 import 'dialog_layout_harness.dart' show settleFor;
 import 'list_fixtures.dart' show pumpList, tapFinder;
-import 'people_fixtures.dart' show pplApartmentJson;
 import 'visitor_fixtures.dart';
 
 const VisitorSite _gul = VisitorSite(code: 11, name: 'Gül Sitesi');
@@ -394,7 +393,8 @@ void main() {
 
     testWidgets('ziyaretçi kaydı: tür seçilir, daire seçilir, sekme İçeride olur', (t) async {
       final rig = _rig();
-      rig.auth.apartmentsJson[301] = pplApartmentJson(301, 'A Blok - 5');
+      // Seçici modülün kendi daire ucunu kullanır (Kişiler > Daireler görevliye 403); Kişiler verisi bilerek boş.
+      rig.service.apartments.add(vkApartment(301, 'A Blok', '5'));
       await rig.pump(t);
       await _tapKey(t, 'visitor_new_entry');
       await settleFor(t, 100);
@@ -414,9 +414,37 @@ void main() {
       await settleFor(t, 100);
       final sent = rig.service.createCalls.single.request;
       expect(sent.kind, VisitorKind.visitor);
-      expect(sent.apartmentId, isNotNull);
+      expect(sent.apartmentId, 301);
+      expect(rig.service.listApartmentsCalls, isNotEmpty);
+      expect(rig.service.listApartmentsCalls.map((c) => c.site), everyElement(11));
+      expect(rig.auth.apartmentCalls, isEmpty, reason: 'Kişiler > Daireler ucu (görevliye kapalı) çağrılmaz');
       expect(rig.service.listManagedCalls.last.status, 'iceride', reason: 'yeni kayıt kendi sekmesinde görünür');
       expect(find.text('Veli Kaya'), findsOneWidget);
+    });
+
+    testWidgets('görevli (STAFF): daire seçici modülün daire ucunu arar; kargo seçilen daireye açılır', (t) async {
+      final rig = _rig(kind: VisitorSiteAccess.staff);
+      rig.service.apartments
+        ..add(vkApartment(301, 'A Blok', '5'))
+        ..add(vkApartment(302, 'B Blok', '7'));
+      await rig.pump(t);
+      await _tapKey(t, 'visitor_new_entry');
+      await settleFor(t, 100);
+      await _tapKey(t, 'visitor_form_apartment');
+      await settleFor(t, 100);
+      await settleFor(t, 100);
+      final picker = find.byType(AlertDialog).last;
+      expect(find.descendant(of: picker, matching: find.textContaining('A Blok')), findsWidgets);
+      await tapFinder(t, find.descendant(of: picker, matching: find.textContaining('B Blok')).first);
+      await settleFor(t, 100);
+      expect(find.descendant(of: vkKey('visitor_form_apartment'), matching: find.textContaining('B Blok')), findsOneWidget);
+      await _type(t, 'visitor_form_name', 'Yurtiçi Kargo');
+      await _tapKey(t, 'visitor_form_send');
+      await settleFor(t, 100);
+      await settleFor(t, 100);
+      expect(rig.service.createCalls.single.request.apartmentId, 302);
+      expect(rig.service.listApartmentsCalls, isNotEmpty);
+      expect(rig.auth.apartmentCalls, isEmpty, reason: 'görevli Kişiler ucuna hiç gitmez');
     });
 
     testWidgets('gönderim hatası pencerede kalır, metin korunur; yeniden denemede başarı', (t) async {

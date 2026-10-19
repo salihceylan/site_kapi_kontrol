@@ -1,5 +1,6 @@
 // Yeni ziyaretçi / kargo kaydı formu (docs/PLATFORM_ZIYARETCI_KARGO.md `POST .../visitor-entries`): tür seçimi,
-// daire seçici (crm_pickers; isteğe bağlı, ortak alan ziyaretçisi dairesiz açılır), ad (kargoda firma / gönderen),
+// daire seçici (modülün `GET .../visitor-entries/apartments` ucu: görevli de kullanır, yalnız kimlik + etiket;
+// isteğe bağlı, ortak alan ziyaretçisi dairesiz açılır), ad (kargoda firma / gönderen),
 // firma ve not.
 //
 // Çift gönderim: düğme gönderim sürerken kapalıdır; gönderim sürerken geri tuşu pencereyi kapatmaz. Hata pencerenin
@@ -92,7 +93,28 @@ class _VisitorEntryFormDialogState extends State<VisitorEntryFormDialog> {
 
   Future<void> _pickApartment() async {
     if (_submitting) return;
-    final picked = await showApartmentPicker(context, widget.scope);
+    // Kişiler > Daireler ucu görevliye (STAFF) 403'tür ve malik / kiracı adı taşır: modülün kendi daire ucu
+    // (`GET .../visitor-entries/apartments`, yalnız kimlik + "Blok - Daire" etiketi) kullanılır.
+    final picked = await CrmPickerDialog.show<ApartmentSummary>(
+      context,
+      CrmPickerDialog<ApartmentSummary>(
+        title: 'Daire Seç',
+        icon: Icons.apartment_rounded,
+        searchLabel: 'Daire ara',
+        emptyTitle: 'Daire bulunamadı.',
+        fetch: (query, offset, limit) async {
+          final page = await widget.service.listApartments(
+            widget.scope.siteCode,
+            query: query,
+            limit: limit,
+            offset: offset,
+          );
+          return (items: page.items, total: page.total);
+        },
+        keyOf: (apartment) => apartment.id,
+        titleOf: (apartment) => apartment.fullLabel,
+      ),
+    );
     if (picked == null || !mounted) return;
     setState(() => _apartment = picked);
   }
@@ -225,7 +247,9 @@ class _VisitorEntryFormDialogState extends State<VisitorEntryFormDialog> {
                 children: [
                   for (final kind in VisitorKind.values)
                     ChoiceChip(
-                      key: ValueKey<String>('visitor_form_kind_${kind.apiValue}'),
+                      key: ValueKey<String>(
+                        'visitor_form_kind_${kind.apiValue}',
+                      ),
                       avatar: Icon(visitorKindIcon(kind), size: 18),
                       label: Text(kind.label),
                       selected: _kind == kind,
@@ -271,7 +295,9 @@ class _VisitorEntryFormDialogState extends State<VisitorEntryFormDialog> {
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: cargo ? 'Kargo firması / gönderen' : 'Ziyaretçi adı',
+                  labelText: cargo
+                      ? 'Kargo firması / gönderen'
+                      : 'Ziyaretçi adı',
                   prefixIcon: Icon(visitorKindIcon(_kind)),
                 ),
                 validator: (v) =>

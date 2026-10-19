@@ -20,15 +20,19 @@ Yönetim tabanı: `/manager/sites/:siteCode/visitor-entries`. DELETE YOK (kayıt
 
 | Uç | Gövde / sorgu | Yanıt |
 |---|---|---|
-| GET `.../visitor-entries` | `kind?`, `status?` (tek durum ya da `open` / `closed`), `apartment_id?`, `q?` (ad / firma), `from?`, `to?` (`YYYY-MM-DD` ya da ISO), `limit` (50, en çok 200), `offset` (0) | `{ items:[Entry], total }` (arrived_at azalan) |
+| GET `.../visitor-entries` | `kind?`, `status?` (tek durum ya da `open` / `closed`), `apartment_id?`, `q?` (ad / firma / daire etiketi "Blok - Daire"; Türkçe ve büyük-küçük harf duyarsız, `total` aynı süzgeçle), `from?`, `to?` (`YYYY-MM-DD` ya da ISO), `limit` (50, en çok 200), `offset` (0) | `{ items:[Entry], total }` (arrived_at azalan) |
 | POST `.../visitor-entries` (201) | `kind, apartment_id?, visitor_name, company?, note?` | `Entry` (durum türe göre hesaplanır) |
 | PATCH `.../visitor-entries/:id` | en az biri: `status?, note?` | `Entry` |
+| GET `.../visitor-entries/apartments` (kayıt formunun daire seçicisi; okuyan herkes, görevli dahil) | `q?` (yalnız "Blok - Daire" etiketinde), `limit` (50, en çok 200), `offset` (0) | `{ items:[{ id, apartment_label, block_name, label }], total }` (blok, daire sırası). YALNIZ kimlik + etiket: malik / kiracı / sakin adı ne yanıtta ne aramada vardır (Kişiler > Daireler ucu görevliye 403'tür) |
 | GET `/app/visitor-entries` | `site_code?`, `limit` (50, en çok 200), `before_id?` imleci | `{ items:[Entry + site_code, site_name, unread], next_before_id }` |
 | GET `/app/visitor-entries/summary` | `site_code?` | `{ unread }` (kendi dairelerinde `resident_seen_at` NULL olan kayıt sayısı) |
 | POST `/app/visitor-entries/:id/seen` | - | `{ ok:true }` (idempotent; ikinci çağrı yazmaz) |
 
 **Entry** (yönetim): `id, kind, apartment_id, apartment_label, block_name, visitor_name, company, note, status, next_statuses[], arrived_at, completed_at, recorded_by_name, completed_by_name, resident_seen_at`. `apartment_id` verildiyse o siteye ait olmalıdır (`404 APARTMENT_NOT_FOUND`).
 **Entry** (sakin): aynı alanlar ARTI `site_code, site_name, unread`; `recorded_by_name` / `completed_by_name` sakine GÖSTERİLMEZ, `next_statuses` boştur. Sakin yalnız KENDİ dairelerine (aktif `apartment_memberships` ya da güncel `apartment_residencies`) ait kayıtları görür; başkasının dairesi / dairesiz kayıt / yok `404 VISITOR_ENTRY_NOT_FOUND` (varlık sızmaz).
+- **Zaman sınırı (önceki sakin):** sakin yalnız o daireye bağlandığı andan SONRA gelen kayıtları görür (`arrived_at >= since`; üyelikte `apartment_memberships.created_at`, ilişkide `COALESCE(move_in_date, created_at)`; iki yol birden varsa erken olanı). Önceki sakinin kayıtları yeni sakinin listesine, `unread` sayısına girmez; `seen` 404 döner.
+- **Malik / kiracı:** malik (`owner`) ilişkisi dairede GÜNCEL kiracı (`tenant`) varken o daireyi vermez (kiracının ziyaretçi ve kargosu malike gösterilmez). Kiracı yokken malik, son biten kiracılığın kapanışından (`updated_at` ile `move_out_date` ertesi günün geç olanı) SONRAKİ kayıtları görür. `tenant`, `resident` ve `family_member` ilişkileri kendi başlangıçlarından itibaren görür.
+- Erişim üyeliği (`apartment_memberships`, kapı yetkisi) hane üyeliği sayılır; ilişki türüne bakılmaz. Bilinen sınır: aynı daireye yeniden etkinleştirilen üyelik ilk `created_at`ini korur (taşınıp aynı daireye geri dönen hesapta aradaki dönem görünür).
 
 ## Yetki matrisi
 | Rol | GET liste | POST kayıt | PATCH durum / not | /app uçları |

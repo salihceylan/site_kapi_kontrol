@@ -305,6 +305,83 @@ export async function sectionVisitorLog(ctx) {
   check('A2: sunucu gunlugunde ziyaretci adi / not yok', leak.length === 0, leak);
 
   // ============================================================================================================
+  // N: inceleme turu 2 (AYRI sitede; diger kontrollerin sayaclari etkilenmez): gorevli daire secici, daire etiketinde arama, pasif daire,
+  // sakin zaman siniri (onceki sakinin kayitlari yeni sakine gorunmez), malik / kiraci kurali.
+  {
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const nSite = await mkSite('VL Kural Sitesi', { 'A Blok': 2, 'B Blok': 2 });
+    const nMgr = await mkUser('VL Kural Yonetici', 'site_manager');
+    const nStaff = await mkUser('VL Kural Gorevli');
+    await linkManager(nSite.code, nMgr);
+    await addMember(nSite.code, nStaff, 'STAFF');
+    check('N0: kural sitesinde modul acilir', (await enableModule(nSite.code)).status === 200);
+    const [aptX, aptY, aptB1, aptB2] = nSite.apts;
+    const oldRes = await resident(nSite, aptX, 'VL Eski Sakin');
+    await q(`UPDATE apartments SET is_active = FALSE WHERE id = $1`, [aptB2.id]);
+    const look = await call('GET', M('/apartments', nSite.code), nStaff);
+    const lookB = await call('GET', M('/apartments?q=b%20blok', nSite.code), nStaff);
+    const lookText = JSON.stringify(look.body);
+    check('N1: gorevli daire seciciyi kullanir (200): yalniz { id, apartment_label, block_name, label } + total; pasif daire yok; sakin adi yok; q yalniz etikette',
+      look.status === 200 && look.body.total === 3 && look.body.items.every((i) => same(Object.keys(i).sort(), ['apartment_label', 'block_name', 'id', 'label']))
+        && same(look.body.items.map((i) => i.id), [aptX.id, aptY.id, aptB1.id]) && !lookText.includes('VL Eski Sakin')
+        && lookB.status === 200 && lookB.body.total === 1 && lookB.body.items[0].id === aptB1.id && lookB.body.items[0].apartment_label === aptB1.label,
+      { look: look.body, lookB: lookB.body });
+    const inactive = await create(nStaff, { kind: 'cargo', apartment_id: aptB2.id, visitor_name: 'x' }, nSite.code);
+    check('N2: pasif daireye kayit acilmaz: 404 APARTMENT_NOT_FOUND, satir yok', inactive.status === 404 && inactive.body?.code === 'APARTMENT_NOT_FOUND'
+      && (await countOf(`SELECT COUNT(*)::int AS n FROM visitor_entries WHERE apartment_id = $1`, [aptB2.id])) === 0, inactive.body);
+    const cX = await create(nStaff, { kind: 'cargo', apartment_id: look.body.items[0].id, visitor_name: 'Kural Kargo', company: 'Yurtici' }, nSite.code);
+    const oldList = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, oldRes);
+    const oldSum = await call('GET', `/app/visitor-entries/summary?site_code=${nSite.code}`, oldRes);
+    const byLabel = await call('GET', M(`?status=bekliyor&q=${encodeURIComponent('a blok - daire 1')}`, nSite.code), nMgr);
+    check('N3: gorevli seciciden gelen daireyle kargo acar (201, daire dolu); sakin gorur, okunmamis 1; yonetici daire etiketiyle arar (total 1, dogru kayit)',
+      cX.status === 201 && cX.body?.apartment_id === aptX.id && oldList.status === 200 && oldList.body.items.some((i) => i.id === cX.body.id)
+        && oldSum.status === 200 && oldSum.body?.unread === 1 && byLabel.status === 200 && byLabel.body.total === 1 && byLabel.body.items[0]?.id === cX.body.id,
+      { cX: cX.body, oldList: oldList.body, oldSum: oldSum.body, byLabel: byLabel.body });
+    // Zaman siniri: eski sakin tasinir, yeni sakin gelir -> eski kayit yeni sakine gorunmez, sayilmaz, goruldu yapilamaz; kendi doneminin kaydini gorur.
+    await q(`UPDATE apartment_residencies SET is_current = FALSE, move_out_date = CURRENT_DATE, updated_at = NOW() WHERE apartment_id = $1`, [aptX.id]);
+    await pause(20);
+    const newRes = await resident(nSite, aptX, 'VL Yeni Sakin');
+    const newList = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, newRes);
+    const newSum = await call('GET', `/app/visitor-entries/summary?site_code=${nSite.code}`, newRes);
+    const newSeen = await call('POST', `/app/visitor-entries/${cX.body.id}/seen`, newRes, {});
+    await pause(20);
+    const cX2 = await create(nStaff, { kind: 'cargo', apartment_id: aptX.id, visitor_name: 'Yeni Sakin Kargosu' }, nSite.code);
+    const newList2 = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, newRes);
+    const seenRow = (await q(`SELECT resident_seen_at FROM visitor_entries WHERE id = $1`, [cX.body.id])).rows[0];
+    check('N4: zaman siniri: yeni sakin onceki sakinin kaydini gormez, saymaz (unread 0), goruldu yapamaz (404, resident_seen_at NULL kalir); kendi kaydini gorur',
+      newList.status === 200 && !newList.body.items.some((i) => i.id === cX.body.id) && newSum.body?.unread === 0
+        && newSeen.status === 404 && newSeen.body?.code === 'VISITOR_ENTRY_NOT_FOUND' && seenRow.resident_seen_at === null
+        && cX2.status === 201 && same(newList2.body.items.map((i) => i.id), [cX2.body.id]),
+      { newList: newList.body, newSum: newSum.body, newSeen: newSeen.body, newList2: newList2.body });
+    // Malik / kiraci: Y dairesinde guncel kiraci varken malik (CRM 'owner' iliskisi) daireyi gormez; kiraci gorur; kiraci cikinca malik yalniz cikis sonrasini gorur.
+    const mkPerson = async (name) => {
+      const user = await mkUser(name, 'apartment_owner');
+      const person = Number((await q(`INSERT INTO site_people (site_code, user_code, is_active) VALUES ($1, $2, TRUE) RETURNING id`, [nSite.code, user])).rows[0].id);
+      return { user, person };
+    };
+    const owner = await mkPerson('VL Malik');
+    const tenant = await mkPerson('VL Kiraci');
+    await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin, move_in_date) VALUES ($1, $2, $3, 'owner', TRUE, 'manual', CURRENT_DATE - 400)`,
+      [nSite.code, aptY.id, owner.person]);
+    const tenancy = Number((await q(`INSERT INTO apartment_residencies (site_code, apartment_id, person_id, relation, is_current, origin, move_in_date) VALUES ($1, $2, $3, 'tenant', TRUE, 'manual', CURRENT_DATE - 15) RETURNING id`,
+      [nSite.code, aptY.id, tenant.person])).rows[0].id);
+    const cY1 = await create(nStaff, { kind: 'visitor', apartment_id: aptY.id, visitor_name: 'Kiracinin Misafiri' }, nSite.code);
+    const ownerList = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, owner.user);
+    const ownerSum = await call('GET', `/app/visitor-entries/summary?site_code=${nSite.code}`, owner.user);
+    const tenantList = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, tenant.user);
+    await q(`UPDATE apartment_residencies SET is_current = FALSE, move_out_date = CURRENT_DATE - 1, updated_at = NOW() WHERE id = $1`, [tenancy]);
+    await pause(20);
+    const cY2 = await create(nStaff, { kind: 'visitor', apartment_id: aptY.id, visitor_name: 'Malikin Misafiri' }, nSite.code);
+    const ownerList2 = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, owner.user);
+    const tenantList2 = await call('GET', `/app/visitor-entries?site_code=${nSite.code}`, tenant.user);
+    check('N5: kiraci varken malik dairenin kayitlarini gormez (liste bos, unread 0); kiraci gorur; kiraci cikinca malik yalniz cikis SONRASINI gorur, cikan kiraci hicbirini gormez',
+      cY1.status === 201 && ownerList.status === 200 && ownerList.body.items.length === 0 && ownerSum.body?.unread === 0
+        && same(tenantList.body.items.map((i) => i.id), [cY1.body.id]) && cY2.status === 201
+        && same(ownerList2.body.items.map((i) => i.id), [cY2.body.id]) && tenantList2.body.items.length === 0,
+      { ownerList: ownerList.body, ownerSum: ownerSum.body, tenantList: tenantList.body, ownerList2: ownerList2.body, tenantList2: tenantList2.body });
+  }
+
+  // ============================================================================================================
   // D: hesap silme + disa aktarma
   const staffPreview = await previewAccountDeletion({ user_code: STAFF, id: STAFF });
   const staffRowsBefore = await countOf(`SELECT COUNT(*)::int AS n FROM visitor_entries WHERE recorded_by = $1 OR completed_by = $1`, [STAFF]);
@@ -313,7 +390,7 @@ export async function sectionVisitorLog(ctx) {
   const afterList = await call('GET', M(), MGR);
   const c1After = afterList.body.items.find((i) => i.id === c1.body.id);
   check('D1: gorevli hesabi silinince kayitlar KALIR (satir sayisi degismez; tombstone), yonetim listesinde kaydeden / sonlandiran "Silinmis Kullanici"; onizleme will_keep notu',
-    staffPreview.will_keep.some((line) => /ziyaretçi ve kargo/i.test(line) && line.includes(`(${staffRowsBefore})`)) && staffRowsBefore === 3 && staffRowsAfter === 3
+    staffPreview.will_keep.some((line) => /ziyaretçi ve kargo/i.test(line) && line.includes(`(${staffRowsBefore})`)) && staffRowsBefore === 2 && staffRowsAfter === 2
       && c1After?.recorded_by_name === 'Silinmiş Kullanıcı' && c1After?.completed_by_name === 'Silinmiş Kullanıcı' && c1After.visitor_name === SECRET_NAME,
     { will_keep: staffPreview.will_keep, staffRowsBefore, staffRowsAfter, c1After });
   const exported = JSON.stringify(await collectPersonalData(R1));

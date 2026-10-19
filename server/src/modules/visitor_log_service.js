@@ -8,7 +8,7 @@
 
 import { pool } from '../db.js';
 import { actorFromAuthUser, recordAudit } from './audit_service.js';
-import { escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
+import { apartmentLabel, escapeLike, foldSql, foldText, parsePositiveId } from './people_common.js';
 import {
   TERMINAL_STATUSES,
   accountDeleted,
@@ -16,6 +16,7 @@ import {
   assertTransition,
   forbiddenRole,
   mapEntry,
+  parseApartmentLookupQuery,
   parseCreateInput,
   parseListQuery,
   parsePatchInput,
@@ -104,7 +105,17 @@ export const ENTRY_FROM = `
   LEFT JOIN users cu ON cu.user_code = v.completed_by
 `;
 
-/** Liste WHERE parçaları (yalnız `v.` sütunları: aynı parçalar COUNT sorgusunda da kullanılır). */
+/** COUNT sorgusunun FROM'u: arama daire etiketine de baktığı için ENTRY_FROM'daki daire / blok LEFT JOIN'leri burada da vardır (PK eşleşmesi: satır çoğalmaz). */
+const ENTRY_COUNT_FROM = `
+  FROM visitor_entries v
+  LEFT JOIN apartments a ON a.id = v.apartment_id
+  LEFT JOIN site_blocks b ON b.id = a.block_id
+`;
+
+/** Daire etiketi ("A Blok - 5"; mapEntry'deki apartmentLabel ile aynı birleşim). Dairesiz kayıtta NULL -> foldSql '' (aramada eşleşmez). */
+const APARTMENT_LABEL_SQL = "b.block_name || ' - ' || a.unit_label";
+
+/** Liste WHERE parçaları (`v.` sütunları + aramada `a.` / `b.` daire etiketi: aynı parçalar ENTRY_COUNT_FROM ile COUNT sorgusunda da kullanılır). */
 function listClauses(siteCode, filters) {
   const params = [siteCode];
   const clauses = ['v.site_code = $1'];
@@ -117,7 +128,10 @@ function listClauses(siteCode, filters) {
   if (filters.apartmentId !== null) clauses.push(`v.apartment_id = ${push(filters.apartmentId)}`);
   if (filters.q) {
     const term = push(`%${escapeLike(foldText(filters.q))}%`);
-    clauses.push(`(${foldSql('v.visitor_name')} LIKE ${term} ESCAPE '\\' OR ${foldSql("COALESCE(v.company, '')")} LIKE ${term} ESCAPE '\\')`);
+    // Ad, firma VEYA daire etiketi (ekrandaki arama kutusu "Ad, firma veya daire").
+    clauses.push(
+      `(${foldSql('v.visitor_name')} LIKE ${term} ESCAPE '\\' OR ${foldSql("COALESCE(v.company, '')")} LIKE ${term} ESCAPE '\\' OR ${foldSql(APARTMENT_LABEL_SQL)} LIKE ${term} ESCAPE '\\')`,
+    );
   }
   if (filters.from) clauses.push(filters.from.dateOnly ? `v.arrived_at >= ${push(filters.from.value)}::DATE` : `v.arrived_at >= ${push(filters.from.value)}::TIMESTAMPTZ`);
   if (filters.to) clauses.push(filters.to.dateOnly ? `v.arrived_at < (${push(filters.to.value)}::DATE + 1)` : `v.arrived_at <= ${push(filters.to.value)}::TIMESTAMPTZ`);
@@ -132,9 +146,43 @@ export async function listVisitorEntries(siteCode, query, db = pool) {
   params.push(filters.limit, filters.offset);
   const [rowsResult, totalResult] = await Promise.all([
     db.query(`SELECT ${ENTRY_COLUMNS} ${ENTRY_FROM} WHERE ${where} ORDER BY v.arrived_at DESC, v.id DESC LIMIT $${params.length - 1} OFFSET $${params.length}`, params),
-    db.query(`SELECT COUNT(*)::INTEGER AS n FROM visitor_entries v WHERE ${where}`, countParams),
+    db.query(`SELECT COUNT(*)::INTEGER AS n ${ENTRY_COUNT_FROM} WHERE ${where}`, countParams),
   ]);
   return { items: (rowsResult.rows ?? []).map((row) => mapEntry(row)), total: Number(totalResult.rows?.[0]?.n ?? 0) };
+}
+
+/**
+ * GET .../visitor-entries/apartments -> { items: [{ id, apartment_label, block_name, label }], total }: kayıt formunun daire seçicisi.
+ * Görevli (STAFF) de kullanır: Kişiler uçları (people_access) STAFF'a kapalıdır ve malik / kiracı adı taşır; burada YALNIZ daire kimliği ve
+ * "Blok - Daire" etiketi döner, sakin / malik / kiracı adı ne yanıtta ne aramada vardır. q yalnız etikette (Türkçe / büyük-küçük harf duyarsız).
+ * Sıra blok, daire sırası (Kişiler > Daireler ile aynı); limit / offset.
+ */
+export async function listVisitorApartments(siteCode, query, db = pool) {
+  const filters = parseApartmentLookupQuery(query);
+  const params = [siteCode];
+  const clauses = ['a.site_code = $1', 'a.is_active = TRUE'];
+  if (filters.q) {
+    params.push(`%${escapeLike(foldText(filters.q))}%`);
+    clauses.push(`${foldSql(APARTMENT_LABEL_SQL)} LIKE $${params.length} ESCAPE '\\'`);
+  }
+  const where = clauses.join(' AND ');
+  const from = 'FROM apartments a INNER JOIN site_blocks b ON b.id = a.block_id';
+  const [rowsResult, totalResult] = await Promise.all([
+    db.query(
+      `SELECT a.id, b.block_name, a.unit_label ${from} WHERE ${where} ORDER BY b.sort_order, a.sort_order, a.id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, filters.limit, filters.offset],
+    ),
+    db.query(`SELECT COUNT(*)::INTEGER AS n ${from} WHERE ${where}`, params),
+  ]);
+  return {
+    items: (rowsResult.rows ?? []).map((row) => ({
+      id: Number(row.id),
+      apartment_label: apartmentLabel(row.block_name, row.unit_label),
+      block_name: row.block_name ?? null,
+      label: row.unit_label ?? '',
+    })),
+    total: Number(totalResult.rows?.[0]?.n ?? 0),
+  };
 }
 
 async function loadEntry(db, siteCode, id) {
@@ -158,7 +206,8 @@ export async function createVisitorEntry({ siteCode, actor, access, body }) {
   const id = await withVisitorTransaction(siteCode, async (client) => {
     const userCode = await lockActiveUser(client, actor);
     if (input.apartmentId !== null) {
-      const apartment = await client.query(`SELECT id FROM apartments WHERE id = $1 AND site_code = $2 LIMIT 1`, [input.apartmentId, siteCode]);
+      // Pasif daire kabul edilmez: sakin sorguları (my_apts) yalnız etkin daireyi sayar; pasif daireye açılan kayıt hiçbir sakine görünmezdi.
+      const apartment = await client.query(`SELECT id FROM apartments WHERE id = $1 AND site_code = $2 AND is_active = TRUE LIMIT 1`, [input.apartmentId, siteCode]);
       if (!apartment.rows?.[0]) {
         throw apartmentNotFound();
       }

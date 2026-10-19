@@ -122,7 +122,8 @@ export function normalizeClosesAt(value, now = new Date()) {
   if (value === null || value === undefined) return null;
   if (typeof value !== 'string' || value.trim() === '') throw invalidField('Kapanış zamanı geçersiz.');
   const date = new Date(value.trim());
-  if (Number.isNaN(date.getTime())) throw invalidField('Kapanış zamanı geçersiz.');
+  // 9999 sonrası yıl: toISOString '+010000-…' üretir, PostgreSQL ayrıştıramaz (500 yerine 400).
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() > 9999) throw invalidField('Kapanış zamanı geçersiz.');
   if (date.getTime() <= now.getTime()) throw invalidField('Kapanış zamanı gelecekte olmalıdır.');
   return date.toISOString();
 }
@@ -271,6 +272,17 @@ export function assertTransition(from, to) {
   if (!(TRANSITIONS[from] ?? []).includes(to)) {
     const message = to === 'open' ? 'Yalnız taslak anket yayınlanabilir.' : 'Yalnız açık anket kapatılabilir.';
     throw invalidState(message, { from, to });
+  }
+}
+
+/**
+ * Yayın ön koşulu (draft -> open; assertTransition'dan SONRA): closes_at geçmiş ya da tam şimdiyse anket açıldığı anda kapanmış sayılırdı (oy 409 SURVEY_CLOSED;
+ * PATCH 'Kapanmış anket' 409 verdiğinden süre uzatılamaz; yalnız taslak silinebildiğinden silinemez). 409 INVALID_STATE { from, to, closes_at_passed: true }, satır
+ * değişmez; taslakta closes_at PATCH ile güncellenip yeniden yayınlanır. Saat ve kural effectiveStatus / decideVote ile AYNIDIR.
+ */
+export function assertOpenable(row, now = new Date()) {
+  if (effectiveStatus({ ...row, status: 'open' }, now) === 'closed') {
+    throw invalidState('Kapanış zamanı geçmiş; yayınlamadan önce kapanış zamanını güncelleyin.', { from: row.status, to: 'open', closes_at_passed: true });
   }
 }
 

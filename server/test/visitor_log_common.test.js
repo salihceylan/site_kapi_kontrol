@@ -218,7 +218,7 @@ describe('kaynak düzeyi gizlilik ve sözleşme kontrolleri', () => {
     assert.match(service, /'visitor_entry\.created', siteCode, entryId, \{ kind: input\.kind, apartment_id: input\.apartmentId, status: input\.status \}/);
     assert.ok(service.includes('details.note_changed = true') && !/details\.note = /.test(service) && !/details\.visitor_name/.test(service));
     assert.ok(service.includes('FOR UPDATE OF v') && service.includes('WHERE v.id = $1 AND v.site_code = $2'));
-    assert.ok(service.includes('SELECT id FROM apartments WHERE id = $1 AND site_code = $2 LIMIT 1'), 'daire bu siteye ait olmalı');
+    assert.ok(service.includes('SELECT id FROM apartments WHERE id = $1 AND site_code = $2 AND is_active = TRUE LIMIT 1'), 'daire bu siteye ait ve etkin olmalı');
     const routes = src('visitor_log_routes.js');
     assert.ok(!/visitorLogRouter\.delete\(/.test(routes), 'DELETE yok');
     assert.ok(routes.includes('max: 240, key: userKey') && routes.includes('max: 1200, key: userKey'));

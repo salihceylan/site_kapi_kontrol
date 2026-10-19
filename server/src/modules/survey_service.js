@@ -12,6 +12,7 @@ import { actorFromAuthUser, recordAudit } from './audit_service.js';
 import { apartmentLabel, parsePositiveId } from './people_common.js';
 import {
   accountDeleted,
+  assertOpenable,
   assertPatchAllowed,
   assertTransition,
   countsFromRows,
@@ -350,6 +351,7 @@ async function transition({ siteCode, rawId, actor, access, to }) {
     const row = await lockSurvey(client, siteCode, id);
     assertTransition(row.status, to);
     if (to === 'open') {
+      assertOpenable(row); // closes_at geçmiş taslak açılsaydı anında ölü anket olurdu (oy yok, süre uzatılamaz, silinemez): 409, UPDATE / audit yok
       await client.query(`UPDATE surveys SET status = 'open', opened_at = NOW(), updated_at = NOW() WHERE id = $1 AND site_code = $2`, [id, siteCode]);
       await audit(client, actor, 'survey.opened', siteCode, id, { from: row.status, to });
     } else {
@@ -361,7 +363,7 @@ async function transition({ siteCode, rawId, actor, access, to }) {
   return getSurveyDetail(siteCode, id);
 }
 
-/** POST .../surveys/:id/open -> Detail (yalnız draft; aksi 409 INVALID_STATE). */
+/** POST .../surveys/:id/open -> Detail (yalnız draft ve closes_at NULL / gelecekte; aksi 409 INVALID_STATE, geçmiş closes_at: closes_at_passed). */
 export const openSurvey = (args) => transition({ ...args, to: 'open' });
 
 /** POST .../surveys/:id/close -> Detail (yalnız open; aksi 409 INVALID_STATE). */

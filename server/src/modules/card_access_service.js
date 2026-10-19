@@ -13,6 +13,7 @@ import {
   CARD_ACCESS_MODULE,
   accountDeleted,
   cardExists,
+  cardUidSuffix,
   cardNotFound,
   invalidState,
   mapManagerCard,
@@ -162,7 +163,7 @@ export async function createAccessCard({ siteCode, actor, body }) {
       throw error;
     }
     const cardId = Number(inserted.rows[0].id);
-    await audit(client, actor, 'access_card.created', siteCode, cardId, { person_id: input.personId, uid_suffix: input.cardUid.slice(-4) });
+    await audit(client, actor, 'access_card.created', siteCode, cardId, { person_id: input.personId, uid_suffix: cardUidSuffix(input.cardUid) });
     return { item: await readManagerCard(client, siteCode, cardId) };
   });
 }
@@ -178,7 +179,7 @@ export async function revokeAccessCard({ siteCode, actor, rawId }) {
     if (!card) throw cardNotFound();
     if (card.is_active !== true) throw invalidState();
     await client.query(`UPDATE access_cards SET is_active = FALSE, revoked_at = NOW(), updated_at = NOW() WHERE id = $1 AND site_code = $2`, [cardId, siteCode]);
-    await audit(client, actor, 'access_card.revoked', siteCode, cardId, { person_id: Number(card.person_id), uid_suffix: String(card.card_uid).slice(-4) });
+    await audit(client, actor, 'access_card.revoked', siteCode, cardId, { person_id: Number(card.person_id), uid_suffix: cardUidSuffix(card.card_uid) });
     return { item: await readManagerCard(client, siteCode, cardId) };
   });
 }

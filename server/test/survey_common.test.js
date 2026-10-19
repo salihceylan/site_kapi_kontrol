@@ -10,6 +10,7 @@ import {
   STATUSES,
   TARGET_TYPES,
   TRANSITIONS,
+  assertOpenable,
   assertPatchAllowed,
   assertTransition,
   countsFromRows,
@@ -47,9 +48,10 @@ const OPTIONS = ['Evet', 'Hayır', 'Çekimser'];
 const survey = (over = {}) => ({ id: 7, status: 'open', closes_at: null, options: OPTIONS, one_vote_per_apartment: false, anonymous: true, ...over });
 
 describe('katalog girişi', () => {
-  it("survey katalogun SONUNDA: core false, available, varsayılan KAPALI, Türkçe ad", () => {
+  it("survey online_payment'tan hemen sonra: core false, available, varsayılan KAPALI, Türkçe ad", () => {
     const definition = getModuleDefinition('survey');
-    assert.equal(MODULE_CATALOG[MODULE_CATALOG.length - 1].code, 'survey');
+    const codes = MODULE_CATALOG.map((m) => m.code);
+    assert.equal(codes.indexOf('survey'), codes.indexOf('online_payment') + 1);
     assert.equal(definition.name, 'Anket ve Oylama');
     assert.deepEqual([definition.core, definition.status, definition.defaultEnabled], [false, 'available', false]);
     assert.deepEqual([moduleDisabled().statusCode, moduleDisabled().code, moduleDisabled().extra], [403, 'MODULE_DISABLED', { module: 'survey' }]);
@@ -76,6 +78,22 @@ describe('durum geçişleri ve PATCH alanları', () => {
     throwsCode(() => assertPatchAllowed(survey({ status: 'closed' }), { title: 'x' }, NOW), 409, 'INVALID_STATE');
     // closes_at geçmiş open anket okumada closed gibidir: PATCH de 409
     throwsCode(() => assertPatchAllowed(survey({ closes_at: PAST }), { title: 'x' }, NOW), 409, 'INVALID_STATE');
+  });
+
+  it('yayın ön koşulu: closes_at geçmiş / tam şimdi olan taslak açılamaz (409 INVALID_STATE, closes_at_passed); NULL / gelecek açılır; taslakta PATCH ile düzeltilebilir', () => {
+    assertOpenable(survey({ status: 'draft' }), NOW);
+    assertOpenable(survey({ status: 'draft', closes_at: FUTURE }), NOW);
+    assertOpenable(survey({ status: 'draft', closes_at: new Date(FUTURE) }), NOW);
+    for (const closesAt of [PAST, new Date(PAST), NOW.toISOString(), NOW]) {
+      assert.throws(
+        () => assertOpenable(survey({ status: 'draft', closes_at: closesAt }), NOW),
+        (error) => error.statusCode === 409 && error.code === 'INVALID_STATE' && error.extra.from === 'draft' && error.extra.to === 'open' && error.extra.closes_at_passed === true,
+        String(closesAt),
+      );
+    }
+    // Çıkış yolu açık: taslakta effective durum 'draft' kalır, closes_at PATCH'i serbesttir (gelecek ya da NULL)
+    assert.deepEqual(assertPatchAllowed(survey({ status: 'draft', closes_at: PAST }), { closesAt: FUTURE }, NOW), ['closes_at']);
+    assert.deepEqual(assertPatchAllowed(survey({ status: 'draft', closes_at: PAST }), { closesAt: null }, NOW), ['closes_at']);
   });
 });
 

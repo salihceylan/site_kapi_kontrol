@@ -83,6 +83,8 @@
 //   visitor_log  Ziyaretci ve kargo (045; govde scripts/qa_visitor_log_section.mjs): sema (CHECK / FK silme politikasi / indeks), ensure idempotans, modul kapisi, yetki matrisi
 //             (STAFF yazar, kurul okur, sakin 403, baska site 403), daire sahipligi, gecisler (409), seen idempotans, summary unread, sakin gizliligi, audit, hesap silme (tombstone),
 //             disa aktarmada bolum YOK. QA_ONLY=visitor_log (zincir esitligi icin chain,live,visitor_log).
+//   card_access  Kartli gecis (046; govde scripts/qa_card_access_section.mjs): sema, modul kapisi, yetki matrisi, UID tekilligi / maskeleme,
+//             iptal, cihaz dogrulama (verifyCardForDoor), hesap silme + disa aktarma. QA_ONLY=card_access (zincir esitligi icin chain,live,card_access).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -352,6 +354,7 @@ async function runParent() {
     reservation: `${prefix}_reservation`,
     survey: `${prefix}_survey`,
     visitor_log: `${prefix}_visitor_log`,
+    card_access: `${prefix}_card_access`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -410,8 +413,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey')))) continue;
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('visitor_log')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -449,8 +451,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey']) {
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'visitor_log']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -9802,6 +9803,11 @@ async function sectionAccount() {
     // Ziyaretci ve kargo (045): kayit siteye aittir; kaydeden / sonlandiran UPDATE edilmez (FK SET NULL yalniz satir silinirse), ad JOIN ile Silinmis Kullanici
     'visitor_entries.recorded_by': 'TOMBSTONE (kayit siteye aittir; kaydeden JOIN ile Silinmis Kullanici)',
     'visitor_entries.completed_by': 'TOMBSTONE (sonlandiran JOIN ile Silinmis Kullanici)',
+    // Anket ve oylama (044): oy KALIR ve anonimlesir; anketi acan bagi kopar (anonymizeUserSurveyData ayni islemde NULL yapar; tombstone satiri FK SET NULL'u tetiklemez)
+    'survey_votes.user_code': 'NULL (oy kalir, anonimlesir; hesap silme isleminde)',
+    'surveys.created_by': 'NULL (anket siteye aittir; acan bagi hesap silme isleminde kopar)',
+    // Kartli gecis (046): kart siteye / kisi kaydina aittir; tanimlayan yonetici UPDATE edilmez, ad JOIN ile Silinmis Kullanici
+    'access_cards.created_by': 'TOMBSTONE (kart siteye aittir; tanimlayan JOIN ile Silinmis Kullanici)',
   };
   const fkRows = (
     await q(`

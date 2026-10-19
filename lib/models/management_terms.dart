@@ -179,6 +179,8 @@ class ManagementTypeInfo {
     PlatformModuleCodes.workTracking: 'İş Takibi',
     PlatformModuleCodes.metering: 'Sayaç Okuma',
     PlatformModuleCodes.onlinePayment: 'Online Tahsilat',
+    PlatformModuleCodes.survey: 'Anket ve Oylama',
+    PlatformModuleCodes.visitorLog: 'Ziyaretçi ve Kargo',
   };
 
   factory ManagementTypeInfo.fromJson(Map<String, dynamic> json) {

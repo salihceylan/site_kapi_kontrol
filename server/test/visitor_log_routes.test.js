@@ -8,6 +8,8 @@ import express from 'express';
 import { pool } from '../src/db.js';
 import { authRequired } from '../src/middlewares/auth_middleware.js';
 import { visitorLogRouter, visitorReadLimiter, visitorWriteLimiter } from '../src/modules/visitor_log_routes.js';
+import { myApartmentsCte } from '../src/modules/visitor_log_resident.js';
+import { foldText } from '../src/modules/people_common.js';
 
 const SITE = 1000000001;
 const OTHER_SITE = 1000000002;
@@ -48,6 +50,7 @@ function makeState() {
       { id: APT_OTHER, site_code: OTHER_SITE, block_name: 'B Blok', unit_label: 'Daire 9' },
     ],
     myApts: { 20004: [APT_A], 20009: [APT_B] },
+    since: {},
     deletedUsers: new Set(),
     entries: [],
     nextId: 100,
@@ -88,6 +91,36 @@ function managerRows(sql, params) {
   if (statuses !== undefined) rows = rows.filter((e) => statuses.includes(e.status));
   const apartment = paramAt(sql, /v\.apartment_id = \$(\d+)/, params);
   if (apartment !== undefined) rows = rows.filter((e) => e.apartment_id === Number(apartment));
+  const term = likeTerm(sql, params);
+  if (term !== undefined) {
+    // Sözleşme: ad, firma VEYA "Blok - Daire" etiketi (liste ve COUNT sorgusu etikete de bakmalı).
+    assert.ok(sql.includes(APARTMENT_LABEL_FOLD), `arama daire etiketine bakmıyor: ${sql.slice(0, 120)}`);
+    rows = rows.filter((e) => {
+      const apt = apartmentOf(e.apartment_id);
+      const label = apt ? `${apt.block_name} - ${apt.unit_label}` : '';
+      return [e.visitor_name, e.company ?? '', label].some((text) => text !== '' && foldText(text).includes(term));
+    });
+  }
+  return rows;
+}
+
+const APARTMENT_LABEL_FOLD = "COALESCE(b.block_name || ' - ' || a.unit_label, '')";
+
+/** LIKE parametresi (`%katlanmış terim%`) -> terim; aramasız sorguda undefined. */
+function likeTerm(sql, params) {
+  const raw = paramAt(sql, /LIKE \$(\d+) ESCAPE/, params);
+  return raw === undefined ? undefined : String(raw).replace(/^%|%$/g, '').replace(/\\(.)/g, '$1');
+}
+
+/** Daire seçici: yalnız bu sitenin daireleri; q yalnız "Blok - Daire" etiketinde. */
+function apartmentLookupRows(sql, params) {
+  assert.ok(sql.includes('a.is_active = TRUE'), 'daire seçici yalnız etkin daireleri listeler');
+  let rows = state.apartments.filter((a) => a.site_code === Number(params[0]) && a.is_active !== false);
+  const term = likeTerm(sql, params);
+  if (term !== undefined) {
+    assert.ok(sql.includes(APARTMENT_LABEL_FOLD));
+    rows = rows.filter((a) => foldText(`${a.block_name} - ${a.unit_label}`).includes(term));
+  }
   return rows;
 }
 
@@ -95,6 +128,13 @@ function residentRows(sql, params) {
   if (!state.moduleEnabled) return [];
   const own = new Set(state.myApts[Number(params[0])] ?? []);
   let rows = state.entries.filter((e) => e.apartment_id !== null && own.has(e.apartment_id));
+  // Zaman sınırı (my_apts.since): YALNIZ SQL `v.arrived_at >= ma.since` taşıyorsa uygulanır; koşul düşerse önceki sakinin kaydı sızar ve test kırılır.
+  if (/(INNER JOIN my_apts ma ON ma\.id = v\.apartment_id|EXISTS \(SELECT 1 FROM my_apts ma WHERE ma\.id = v\.apartment_id) AND v\.arrived_at >= ma\.since/.test(sql)) {
+    rows = rows.filter((e) => {
+      const since = state.since[`${Number(params[0])}:${e.apartment_id}`];
+      return since === undefined || e.arrived_at >= since;
+    });
+  }
   const site = paramAt(sql, /v\.site_code = \$(\d+)/, params);
   if (site !== undefined) rows = rows.filter((e) => e.site_code === Number(site));
   const before = paramAt(sql, /v\.id < \$(\d+)/, params);
@@ -130,7 +170,18 @@ function fakeQuery(text, params = []) {
     const offset = Number(params[params.length - 1]);
     return ok(managerRows(sql, params).sort(byArrival).slice(offset, offset + limit).map(rowOf));
   }
-  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM visitor_entries v WHERE v\.site_code = \$1/.test(sql)) return ok([{ n: managerRows(sql, params).length }]);
+  // COUNT, liste ile AYNI daire / blok LEFT JOIN'leriyle (arama daire etiketine de bakar; total süzgeçle tutarlı kalır).
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM visitor_entries v LEFT JOIN apartments a ON a\.id = v\.apartment_id LEFT JOIN site_blocks b ON b\.id = a\.block_id WHERE v\.site_code = \$1/.test(sql)) {
+    return ok([{ n: managerRows(sql, params).length }]);
+  }
+  if (/^SELECT a\.id, b\.block_name, a\.unit_label FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1.* ORDER BY b\.sort_order, a\.sort_order, a\.id LIMIT \$\d+ OFFSET \$\d+$/.test(sql)) {
+    const limit = Number(params[params.length - 2]);
+    const offset = Number(params[params.length - 1]);
+    return ok(apartmentLookupRows(sql, params).slice(offset, offset + limit).map((a) => ({ id: String(a.id), block_name: a.block_name, unit_label: a.unit_label })));
+  }
+  if (/^SELECT COUNT\(\*\)::INTEGER AS n FROM apartments a INNER JOIN site_blocks b ON b\.id = a\.block_id WHERE a\.site_code = \$1/.test(sql)) {
+    return ok([{ n: apartmentLookupRows(sql, params).length }]);
+  }
   if (/^WITH my_apts AS MATERIALIZED \(.*\) SELECT v\.id, v\.site_code, s\.name AS site_name, .* ORDER BY v\.id DESC LIMIT \$\d+$/.test(sql)) {
     const limit = Number(params[params.length - 1]);
     return ok(residentRows(sql, params).sort((a, b) => b.id - a.id).slice(0, limit).map(rowOf));
@@ -138,14 +189,14 @@ function fakeQuery(text, params = []) {
   if (/^WITH my_apts AS MATERIALIZED \(.*\) SELECT COUNT\(\*\)::INTEGER AS n FROM visitor_entries v INNER JOIN my_apts ma/.test(sql)) {
     return ok([{ n: residentRows(sql, params).filter((e) => e.resident_seen_at === null).length }]);
   }
-  if (/^WITH my_apts AS MATERIALIZED \(.*\) UPDATE visitor_entries v SET resident_seen_at = NOW\(\) WHERE v\.id = \$2 AND v\.resident_seen_at IS NULL AND v\.apartment_id IN \(SELECT id FROM my_apts\)/.test(sql)) {
+  if (/^WITH my_apts AS MATERIALIZED \(.*\) UPDATE visitor_entries v SET resident_seen_at = NOW\(\) WHERE v\.id = \$2 AND v\.resident_seen_at IS NULL AND EXISTS \(SELECT 1 FROM my_apts ma WHERE ma\.id = v\.apartment_id AND v\.arrived_at >= ma\.since\)/.test(sql)) {
     const entry = residentRows(sql, params).find((e) => e.id === Number(params[1]) && e.resident_seen_at === null);
     if (!entry) return ok();
     entry.resident_seen_at = new Date();
     state.seenWrites += 1;
     return ok([{ id: entry.id }]);
   }
-  if (/^WITH my_apts AS MATERIALIZED \(.*\) SELECT 1 FROM visitor_entries v INNER JOIN my_apts ma ON ma\.id = v\.apartment_id WHERE v\.id = \$2/.test(sql)) {
+  if (/^WITH my_apts AS MATERIALIZED \(.*\) SELECT 1 FROM visitor_entries v INNER JOIN my_apts ma ON ma\.id = v\.apartment_id AND v\.arrived_at >= ma\.since WHERE v\.id = \$2/.test(sql)) {
     return ok(residentRows(sql, params).filter((e) => e.id === Number(params[1])).map(() => ({ x: 1 })));
   }
   throw new Error(`BEKLENMEYEN SQL (sahte DB katı): ${sql.slice(0, 200)}`);
@@ -160,8 +211,8 @@ function txQuery(text, params = []) {
   if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) {
     return ok(state.deletedUsers.has(Number(params[0])) ? [] : [{ user_code: Number(params[0]) }]);
   }
-  if (/^SELECT id FROM apartments WHERE id = \$1 AND site_code = \$2 LIMIT 1$/.test(sql)) {
-    return ok(state.apartments.filter((a) => a.id === Number(params[0]) && a.site_code === Number(params[1])).map((a) => ({ id: a.id })));
+  if (/^SELECT id FROM apartments WHERE id = \$1 AND site_code = \$2 AND is_active = TRUE LIMIT 1$/.test(sql)) {
+    return ok(state.apartments.filter((a) => a.id === Number(params[0]) && a.site_code === Number(params[1]) && a.is_active !== false).map((a) => ({ id: a.id })));
   }
   if (/^INSERT INTO visitor_entries \(site_code, kind, apartment_id, visitor_name, company, note, status, recorded_by\) VALUES \(\$1, \$2, \$3, \$4, \$5, \$6, \$7, \$8\) RETURNING id$/.test(sql)) {
     const [siteCode, kind, apartmentId, visitorName, company, note, status, recordedBy] = params;
@@ -256,12 +307,13 @@ const url = (suffix = '', site = SITE) => `/manager/sites/${site}/visitor-entrie
 const ENTRY_KEYS = ['id', 'kind', 'apartment_id', 'apartment_label', 'block_name', 'visitor_name', 'company', 'note', 'status', 'next_statuses', 'arrived_at', 'completed_at', 'resident_seen_at', 'recorded_by_name', 'completed_by_name'];
 
 describe('rota zinciri ve hız sınırları', () => {
-  it("sözleşmedeki 6 uç vardır; her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır (GET ve seen okuma, POST / PATCH yazma); /summary, /:id/seen'den ÖNCE; DELETE yok", () => {
+  it("sözleşmedeki 7 uç vardır; her biri authRequired ile BAŞLAR, ikinci halka hız sınırlayıcıdır (GET ve seen okuma, POST / PATCH yazma); /summary, /:id/seen'den ÖNCE; DELETE yok", () => {
     const routes = ORIGINAL_ROUTES.map((route) => `${route.method.toUpperCase()} ${route.path}`);
     assert.deepEqual([...routes].sort(), [
       'GET /app/visitor-entries',
       'GET /app/visitor-entries/summary',
       'GET /manager/sites/:siteCode/visitor-entries',
+      'GET /manager/sites/:siteCode/visitor-entries/apartments',
       'PATCH /manager/sites/:siteCode/visitor-entries/:id',
       'POST /app/visitor-entries/:id/seen',
       'POST /manager/sites/:siteCode/visitor-entries',
@@ -379,6 +431,49 @@ describe('yönetim uçları: liste ve kayıt açma (görevli yazar)', () => {
     assert.equal((await call('GET', url(), { user: users.board })).status, 200);
   });
 
+  it('GET q: ad, firma VEYA "Blok - Daire" etiketi (Türkçe / büyük-küçük harf duyarsız); total aynı süzgeçle; dairesiz kayıt etikette eşleşmez', async () => {
+    const a1 = seed({ visitor_name: 'Aras Kargo' });
+    const b1 = seed({ apartment_id: APT_B, visitor_name: 'MNG', company: 'Yurtiçi' });
+    seed({ apartment_id: null, visitor_name: 'Ortak Alan Ziyaretçisi' });
+    const byLabel = await call('GET', url(`?q=${encodeURIComponent('a blok - daire 2')}`), { user: users.staff });
+    assert.deepEqual([byLabel.status, byLabel.body.total, byLabel.body.items.map((item) => item.id)], [200, 1, [b1.id]]);
+    const byUnit = await call('GET', url(`?status=bekliyor&q=${encodeURIComponent('DAİRE 1')}`), { user: users.staff });
+    assert.deepEqual([byUnit.body.total, byUnit.body.items.map((item) => item.id)], [1, [a1.id]]);
+    assert.deepEqual((await call('GET', url('?q=yurtici'), { user: users.staff })).body.items.map((item) => item.id), [b1.id], 'firma');
+    assert.equal((await call('GET', url(`?q=${encodeURIComponent('A Blok')}`), { user: users.staff })).body.total, 2, 'dairesiz kayıt etikette eşleşmez');
+    const searchSql = log.filter((sql) => sql.includes('FROM visitor_entries v') && sql.includes(' LIKE '));
+    assert.ok(searchSql.some((sql) => sql.startsWith('SELECT COUNT(*)')), 'COUNT da aramalı');
+    assert.ok(searchSql.every((sql) => sql.includes(APARTMENT_LABEL_FOLD)), 'liste ve COUNT sorgusu daire etiketine bakar');
+  });
+
+  it('GET .../apartments (kayıt formunun daire seçicisi): görevli / yönetici / kurul 200; YALNIZ { id, apartment_label, block_name, label }; yalnız bu site; q etikette; sayfalı; sakin 403; modül kapalı 403', async () => {
+    const res = await call('GET', url('/apartments'), { user: users.staff });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, {
+      items: [
+        { id: APT_A, apartment_label: 'A Blok - Daire 1', block_name: 'A Blok', label: 'Daire 1' },
+        { id: APT_B, apartment_label: 'A Blok - Daire 2', block_name: 'A Blok', label: 'Daire 2' },
+      ],
+      total: 2,
+    });
+    const lookupSql = log.filter((sql) => sql.includes('FROM apartments a'));
+    assert.equal(lookupSql.length, 2);
+    assert.ok(lookupSql.every((sql) => !/residenc|site_people|full_name|users/.test(sql)), 'malik / kiracı / sakin adına hiç gitmez');
+    const searched = await call('GET', url(`/apartments?q=${encodeURIComponent('DAİRE 2')}`), { user: users.staff });
+    assert.deepEqual([searched.body.total, searched.body.items.map((apt) => apt.id)], [1, [APT_B]]);
+    const paged = await call('GET', url('/apartments?limit=1&offset=1'), { user: users.manager });
+    assert.deepEqual([paged.body.total, paged.body.items.map((apt) => apt.id)], [2, [APT_B]]);
+    assert.equal((await call('GET', url('/apartments'), { user: users.board })).status, 200);
+    const badLimit = await call('GET', url('/apartments?limit=0'), { user: users.staff });
+    assert.deepEqual([badLimit.status, badLimit.body.code], [400, 'INVALID_QUERY']);
+    const resident = await call('GET', url('/apartments'), { user: users.resident });
+    assert.deepEqual([resident.status, resident.body.code], [403, 'FORBIDDEN_ROLE']);
+    assert.equal((await call('GET', url('/apartments', OTHER_SITE), { user: users.staff })).status, 403, 'başka sitenin daireleri görevliye kapalı');
+    state.moduleEnabled = false;
+    const off = await call('GET', url('/apartments'), { user: users.staff });
+    assert.deepEqual([off.status, off.body.code, off.body.module], [403, 'MODULE_DISABLED', 'visitor_log']);
+  });
+
   it('POST (görevli): kargo -> bekliyor, ziyaretçi -> iceride; 201 Entry; kaydeden görevli; daire olmadan da açılır; audit visitor_entry.created ad / firma sızdırmaz', async () => {
     allowTx();
     const cargo = await call('POST', url(), { user: users.staff, body: { kind: 'cargo', apartment_id: APT_A, visitor_name: SECRET, company: 'Aras', status: 'ayrildi' } });
@@ -403,6 +498,18 @@ describe('yönetim uçları: liste ve kayıt açma (görevli yazar)', () => {
     state.deletedUsers.add(20005);
     const gone = await call('POST', url(), { user: users.staff, body: { kind: 'cargo', visitor_name: 'Aras' } });
     assert.deepEqual([gone.status, gone.body.code], [401, 'ACCOUNT_DELETED']);
+  });
+
+  it('pasif daire: kayıt açılamaz (404 APARTMENT_NOT_FOUND, kayıt yok) ve daire seçicide listelenmez', async () => {
+    allowTx();
+    state.apartments.find((a) => a.id === APT_B).is_active = false;
+    const res = await call('POST', url(), { user: users.staff, body: { kind: 'cargo', apartment_id: APT_B, visitor_name: 'Aras' } });
+    assert.deepEqual([res.status, res.body.code], [404, 'APARTMENT_NOT_FOUND']);
+    assert.ok(state.entries.length === 0 && state.audits.length === 0);
+    const picker = await call('GET', url('/apartments'), { user: users.staff });
+    assert.equal(picker.status, 200);
+    assert.deepEqual(picker.body.items.map((i) => i.id), [APT_A]);
+    assert.equal(picker.body.total, 1);
   });
 });
 
@@ -486,6 +593,42 @@ describe('sakin uçları (/app): yalnız kendi dairesi, summary unread, seen ide
     }
     assert.equal(state.seenWrites, 1);
     assert.deepEqual((await call('GET', '/app/visitor-entries/summary', { user: users.resident2 })).body, { unread: 1 });
+  });
+
+  it('zaman sınırı: sakin dairesine bağlandığı andan (since) ÖNCE gelen kaydı (önceki sakinin) görmez, saymaz, görüldü yapamaz (404); her sakin sorgusu since koşulunu taşır', async () => {
+    const old = seed({ kind: 'visitor', status: 'iceride', visitor_name: 'Önceki Sakinin Ziyaretçisi', note: 'evde bakım' });
+    const mine = seed();
+    state.since[`20004:${APT_A}`] = new Date(mine.arrived_at.getTime() - 1);
+    log.length = 0;
+    const list = await call('GET', '/app/visitor-entries', { user: users.resident });
+    assert.deepEqual([list.status, list.body.items.map((i) => i.id)], [200, [mine.id]]);
+    assert.ok(!JSON.stringify(list.body).includes('Önceki Sakinin'));
+    assert.deepEqual((await call('GET', '/app/visitor-entries/summary', { user: users.resident })).body, { unread: 1 });
+    const seenOld = await call('POST', `/app/visitor-entries/${old.id}/seen`, { user: users.resident });
+    assert.deepEqual([seenOld.status, seenOld.body.code, state.seenWrites, old.resident_seen_at], [404, 'VISITOR_ENTRY_NOT_FOUND', 0, null]);
+    const seenMine = await call('POST', `/app/visitor-entries/${mine.id}/seen`, { user: users.resident });
+    assert.deepEqual([seenMine.status, state.seenWrites], [200, 1]);
+    const residentSql = log.filter((sql) => sql.startsWith('WITH my_apts AS MATERIALIZED'));
+    assert.equal(residentSql.length, 5, 'liste + summary + seen (UPDATE + sahiplik) + seen (UPDATE)');
+    for (const sql of residentSql) assert.ok(sql.includes('ma.id = v.apartment_id AND v.arrived_at >= ma.since'), sql.slice(-200));
+    // since sınırı kalkınca (aynı daire, since yok) eski kayıt görünür: sahte DB sınırı gerçekten uyguluyor.
+    delete state.since[`20004:${APT_A}`];
+    assert.deepEqual((await call('GET', '/app/visitor-entries', { user: users.resident })).body.items.map((i) => i.id), [mine.id, old.id]);
+  });
+
+  it('my_apts CTE: daire başına tek satır MIN(since); üyelik am.created_at, ilişki COALESCE(move_in_date, created_at); güncel kiracı varken malik dairesi gelmez; malik since >= son kiracılık kapanışı', () => {
+    const cte = norm(myApartmentsCte('$1'));
+    assert.ok(cte.startsWith('my_apts AS MATERIALIZED ( SELECT c.id, c.site_code, MIN(c.since) AS since FROM ( '), cte.slice(0, 120));
+    assert.ok(cte.endsWith(') c GROUP BY c.id, c.site_code )'), cte.slice(-120));
+    for (const part of [
+      'SELECT ap.id, ap.site_code, am.created_at AS since FROM apartment_memberships am',
+      'WHERE am.user_code = $1 AND am.is_active = TRUE UNION ALL SELECT ap.id, ap.site_code, GREATEST(',
+      "GREATEST( COALESCE(r.move_in_date::timestamptz, r.created_at), CASE WHEN r.relation = 'owner' THEN ( SELECT MAX(GREATEST(t.updated_at, (t.move_out_date + 1)::timestamptz)) FROM apartment_residencies t WHERE t.apartment_id = r.apartment_id AND t.relation = 'tenant' AND t.is_current = FALSE ) END ) AS since",
+      "WHERE sp.user_code = $1 AND sp.is_active = TRUE AND NOT (r.relation = 'owner' AND EXISTS ( SELECT 1 FROM apartment_residencies t WHERE t.apartment_id = r.apartment_id AND t.relation = 'tenant' AND t.is_current = TRUE ))",
+    ]) {
+      assert.ok(cte.includes(part), part);
+    }
+    assert.ok(!cte.includes('UNION SELECT'), 'UNION (DISTINCT) değil UNION ALL + GROUP BY: aynı daire iki since ile çift satır vermez');
   });
 
   it('site_code verilmiş ve modül kapalı -> 403 MODULE_DISABLED; site_code yoksa kapalı sitenin kayıtları gelmez; liste sorgusu geçersizse 400', async () => {

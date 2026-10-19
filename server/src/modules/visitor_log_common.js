@@ -217,6 +217,11 @@ export function parseListQuery(query = {}) {
   };
 }
 
+/** Daire seçici sorgusu (GET .../visitor-entries/apartments): q (yalnız "Blok - Daire" etiketi), limit (50, en çok 200), offset. */
+export function parseApartmentLookupQuery(query = {}) {
+  return { q: parseSearchTerm(typeof query.q === 'string' ? query.q : null), limit: parseLimit(query.limit), offset: parseOffset(query.offset) };
+}
+
 /** Sakin listesi sorgusu: site_code (isteğe bağlı), before_id imleci, limit. */
 export function parseResidentListQuery(query = {}) {
   return { siteCode: optionalQueryId(query.site_code), beforeId: optionalQueryId(query.before_id), limit: parseLimit(query.limit) };

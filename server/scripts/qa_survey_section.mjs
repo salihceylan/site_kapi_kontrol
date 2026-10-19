@@ -101,7 +101,7 @@ export async function sectionSurvey(ctx) {
   // Hedef kitle = AKTIF apartment_memberships
   const resident = async (apartment, name) => {
     const user = await mkUser(name, 'apartment_owner');
-    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active) VALUES ($1, $2, 'RESIDENT', TRUE)`, [apartment.id, user]);
+    await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role, is_active) VALUES ($1, $2, 'FAMILY_MEMBER', TRUE)`, [apartment.id, user]);
     return user;
   };
 
@@ -188,8 +188,23 @@ export async function sectionSurvey(ctx) {
   const patchDraft = await call('PATCH', M(`/surveys/${D}`), MGR, { options: ['Evet', 'Hayir'], target: { type: 'apartments', apartment_ids: [site.apts[0].id, site.apts[1].id] } });
   check('D3: draft her alan: 2 secenek + daire hedefi (labels 2, eligible 3)', patchDraft.status === 200 && patchDraft.body?.options?.length === 2 && patchDraft.body?.target?.labels?.length === 2 && patchDraft.body?.eligible_count === 3, patchDraft.body);
   const delOpen = await call('DELETE', M(`/surveys/${S}`), MGR);
+  // IDOR: ikinci sitede de modul ACIK olmali; yoksa istek modul kapisina (MODULE_DISABLED) takilir ve kaynak yalitimi sinanmaz.
+  check('D4a: super ikinci sitede de modulu acar', (await enableModule(site2.code)).status === 200);
   const idor = await call('GET', M(`/surveys/${S}`, site2.code), MGR2);
   check('D4: open anket silinemez 409; baska sitenin yoneticisi kendi sitesi yoluyla 404 SURVEY_NOT_FOUND (IDOR)', delOpen.status === 409 && idor.status === 404 && idor.body?.code === 'SURVEY_NOT_FOUND', { delOpen: delOpen.body, idor: idor.body });
+  // D5 (inceleme turu 2; ikinci sitede, ana sitenin sayaclari etkilenmez): kapanis zamani gecmis taslak yayinlanamaz (409 closes_at_passed, satir taslak
+  // kalir); kapanis ileri alininca yayinlanir. 9999 sonrasi yil 400 (500 degil).
+  const lateDraft = await call('POST', M('/surveys', site2.code), MGR2, { ...GOOD, closes_at: new Date(Date.now() + 3_600_000).toISOString() });
+  await q(`UPDATE surveys SET closes_at = NOW() - interval '1 minute' WHERE id = $1`, [lateDraft.body?.id]);
+  const lateOpen = await call('POST', M(`/surveys/${lateDraft.body?.id}/open`, site2.code), MGR2);
+  const lateStatus = (await q(`SELECT status FROM surveys WHERE id = $1`, [lateDraft.body?.id])).rows[0]?.status;
+  const moved = await call('PATCH', M(`/surveys/${lateDraft.body?.id}`, site2.code), MGR2, { closes_at: new Date(Date.now() + 86_400_000).toISOString() });
+  const lateOpen2 = await call('POST', M(`/surveys/${lateDraft.body?.id}/open`, site2.code), MGR2);
+  const farYear = await call('POST', M('/surveys', site2.code), MGR2, { ...GOOD, closes_at: '+010000-01-01T00:00:00.000Z' });
+  check('D5: kapanisi gecmis taslak yayinlanamaz 409 INVALID_STATE closes_at_passed (taslak kalir); kapanis ileri alinca 200; 9999 sonrasi yil 400',
+    lateDraft.status === 201 && lateOpen.status === 409 && lateOpen.body?.code === 'INVALID_STATE' && lateOpen.body?.closes_at_passed === true && lateStatus === 'draft'
+      && moved.status === 200 && lateOpen2.status === 200 && farYear.status === 400,
+    { lateDraft: lateDraft.body, lateOpen: lateOpen.body, lateStatus, moved: moved.body, lateOpen2: lateOpen2.body, farYear: farYear.body });
 
   // ============================================================================================================
   console.log('--- E. oy kurallari ---');
@@ -260,9 +275,9 @@ export async function sectionSurvey(ctx) {
   const exported = await collectPersonalData(A1);
   const cast = exported?.data?.survey_votes_cast ?? exported?.survey_votes_cast ?? [];
   check('H1: disa aktarma survey_votes_cast: yalniz kendi oylari (baslik, secenek metni, zaman); baskasinin oyu yok', Array.isArray(cast) && cast.length === 2 && cast.every((r) => typeof r.survey_title === 'string' && typeof r.option_text === 'string' && r.voted_at && Object.keys(r).length === 3), cast);
-  const preview = await previewAccountDeletion(A1);
+  const preview = await previewAccountDeletion({ user_code: A1, id: A1 });
   check('H2: silme onizlemesi oylarin kalacagini soyler (will_keep)', (preview?.will_keep ?? []).some((t) => /oy/i.test(t) && /\(2\)/.test(t)), preview?.will_keep);
-  await performAccountDeletion(A1, {});
+  await performAccountDeletion(A1);
   const afterDel = (await q(`SELECT COUNT(*)::int AS n, COUNT(user_code)::int AS linked FROM survey_votes WHERE apartment_id = $1 AND survey_id IN ($2, $3)`, [site.apts[0].id, S, race.body.id])).rows[0];
   const votersAfter = await call('GET', M(`/surveys/${S}/voters`), MGR);
   const gone = (votersAfter.body?.items ?? []).find((v) => v.user_code === null);

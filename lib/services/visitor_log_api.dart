@@ -120,6 +120,30 @@ class VisitorLogApi {
     return VisitorManagedPage.fromJson(_object(response));
   }
 
+  /// `GET .../visitor-entries/apartments?q=&limit=&offset=`: kayıt formunun daire seçicisi (yalnız kimlik + "Blok - Daire"
+  /// etiketi). Kişiler > Daireler ucu görevliye (STAFF) kapalıdır ve malik / kiracı adı taşır; form bunu kullanır.
+  Future<VisitorApartmentPage> listApartments({
+    required String token,
+    required int siteCode,
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final trimmed = query?.trim();
+    final response = await _send(
+      'GET',
+      _managerPath(siteCode, 'apartments'),
+      token: token,
+      query: <String, String>{
+        if (trimmed != null && trimmed.isNotEmpty) 'q': trimmed,
+        'limit': '$limit',
+        'offset': '$offset',
+      },
+      timeout: _readTimeout,
+    );
+    return VisitorApartmentPage.fromJson(_object(response));
+  }
+
   /// `POST .../visitor-entries` (201 Entry; durumu sunucu hesaplar).
   Future<VisitorEntry> create({
     required String token,
@@ -496,9 +520,26 @@ class VisitorLogService {
     ),
   );
 
+  /// Kayıt formunun daire seçicisi (yalnız kimlik + etiket; görevli de kullanır).
+  Future<VisitorApartmentPage> listApartments(
+    int siteCode, {
+    String? query,
+    int limit = 50,
+    int offset = 0,
+  }) => _guard(
+    (token) => api.listApartments(
+      token: token,
+      siteCode: siteCode,
+      query: query,
+      limit: limit,
+      offset: offset,
+    ),
+  );
+
   Future<VisitorEntry> create(int siteCode, VisitorCreateRequest request) =>
       _guard(
-        (token) => api.create(token: token, siteCode: siteCode, request: request),
+        (token) =>
+            api.create(token: token, siteCode: siteCode, request: request),
       );
 
   Future<VisitorEntry> update(

@@ -49,6 +49,10 @@ class AuditLogEntry {
     'online_payment': 'Online Tahsilat ve Banka Bağlantısı',
     'survey': 'Anket ve Oylama',
     'visitor_log': 'Ziyaretçi ve Kargo',
+    'card_access': 'Kartlı Geçiş',
+    'plate_recognition': 'Plaka Tanıma',
+    'hgs_access': 'HGS Geçişi',
+    'cctv_link': 'Kamera (CCTV) Bağlantısı',
   };
 
   static const Map<String, String> _staffRoleNames = <String, String>{

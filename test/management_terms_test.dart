@@ -159,11 +159,17 @@ void main() {
       expect(all[4].recommendedModules, <String>['finance', 'work_tracking', 'visitor_log', 'documents']);
     });
 
-    test('recommendedModuleNames: katalogda olmayan kod (survey, visitor_log) atlanır, sıra korunur', () {
+    test('recommendedModuleNames: öneriler adla döner (survey, visitor_log dahil), sıra korunur; bilinmeyen kod atlanır', () {
       final coop = ManagementTypeInfo.builtIn(ManagementType.cooperative);
-      expect(coop.recommendedModuleNames, <String>['Aidat ve Finans', 'Belgeler', 'Duyuru ve Bildirim']);
+      expect(coop.recommendedModuleNames, <String>['Aidat ve Finans', 'Belgeler', 'Duyuru ve Bildirim', 'Anket ve Oylama']);
       final mall = ManagementTypeInfo.builtIn(ManagementType.shoppingMall);
-      expect(mall.recommendedModuleNames, <String>['Aidat ve Finans', 'İş Takibi', 'Belgeler']);
+      expect(mall.recommendedModuleNames, <String>['Aidat ve Finans', 'İş Takibi', 'Ziyaretçi ve Kargo', 'Belgeler']);
+      final custom = ManagementTypeInfo.fromJson(<String, dynamic>{
+        'code': 'shopping_mall',
+        'recommended_modules': <Object>['finance', 'garip_modul', 'documents'],
+      });
+      expect(custom.recommendedModules, <String>['finance', 'garip_modul', 'documents']);
+      expect(custom.recommendedModuleNames, <String>['Aidat ve Finans', 'Belgeler']);
     });
 
     test('fromJson: sunucu öğesi (code, label, selectable, terms, recommended_modules, summary)', () {

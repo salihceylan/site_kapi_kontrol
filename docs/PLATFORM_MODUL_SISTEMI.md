@@ -8,7 +8,7 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 
 1. **Geriye dönük uyum:** Modül satırı olmayan site, katalogdaki varsayılana göre davranır. `door_control` varsayılanı AÇIK; bu yüzden mevcut siteler, mevcut
    uygulamalar ve cihazlar hiçbir değişiklik görmez. Yeni modüller varsayılan KAPALI/"yakında".
-2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Bu fazda yalnız `apartment_site` seçilebilir; diğer dördü reddedilir ("Yakında…").
+2. **Yönetim türü:** `sites.management_type` (varsayılan `apartment_site`). Beş türün hepsi seçilebilir (311ed6d); türe göre arayüz terimleri ve önerilen modüller F9 bölümündedir.
 3. **Çekirdek modüller** (`people`, `announcements`) her sitede hep açıktır. Ekranları Faz 2/3'te geldi: `people` Faz 2a'dan, `announcements` Faz 3a'dan beri `status: available`.
 4. **Denetim kaydı** (`audit_log`) yalnız eklenir; API'de güncelleme/silme yoktur, bakım servisi temizlemez.
 5. **Ek roller:** `BOARD_MEMBER` (Yönetim Kurulu / Denetçi) ve `STAFF` (Görevli), `site_memberships.role` değerleridir. Kullanıcının genel rolü (`users.role`) DEĞİŞMEZ.
@@ -101,7 +101,7 @@ Gövde `{ "enabled": true|false, "confirm": true|false }`. Yanıt: GET ile aynı
 - Sakin/görevli/kurul üyesinin bu uçlardaki 403'ü mevcut `requireSiteManager` ara katmanından gelir ve `code` taşımaz; `FORBIDDEN_SITE` yalnız yönetici olup başka siteye ait kişilere döner.
 
 ### Site oluşturma
-`POST /admin/sites` ve `POST /membership/setup-site` gövdesine isteğe bağlı `management_type` (varsayılan `apartment_site`). `apartment_site` dışı → 400 `MANAGEMENT_TYPE_COMING_SOON` ("Bu yönetim türü yakında."); bilinmeyen değer → 400 `MANAGEMENT_TYPE_INVALID`. `mapSiteRow` çıktısına `management_type` ve `management_type_label` eklenir (etiketler: Apartman ve Site, Rezidans, İş Merkezi, Kooperatif, Alışveriş Merkezi). Türü sonradan değiştirme bu fazda yok.
+`POST /admin/sites` ve `POST /membership/setup-site` gövdesine isteğe bağlı `management_type` (varsayılan `apartment_site`). Beş tür de seçilebilir; `selectable: false` olan bir tür eklenirse o tür 400 `MANAGEMENT_TYPE_COMING_SOON` ("Bu yönetim türü yakında.") döndürür; bilinmeyen değer → 400 `MANAGEMENT_TYPE_INVALID`. `mapSiteRow` çıktısına `management_type` ve `management_type_label` eklenir (etiketler: Apartman ve Site, Rezidans, İş Merkezi, Kooperatif, Alışveriş Merkezi). Türü sonradan değiştirme bu fazda yok.
 
 ### Kapı açma koruması (Geçiş Kontrol kapalıysa)
 Hata: HTTP 403 `{ "error": "Geçiş Kontrol modülü kapalı.", "code": "MODULE_DISABLED", "module": "door_control" }`.
@@ -120,7 +120,7 @@ Hata: HTTP 403 `{ "error": "Geçiş Kontrol modülü kapalı.", "code": "MODULE_
 - **Hata kodları → Türkçe mesaj** (`messageForErrorCode`, her biri <140 karakter, '_' içermez): `MODULE_DISABLED` "Bu özellik şu an kapalı. Site yöneticisi Modüller ekranından açabilir." · `MODULE_COMING_SOON` "Bu modül yakında." · `MODULE_NOT_TOGGLEABLE` "Bu modül kapatılamaz." · `MODULE_NOT_FOUND` "Modül bulunamadı." · `MODULE_CONFIRM_REQUIRED` (sunucu metni kullanılır; uygulama onay penceresini önceden gösterir) · `MANAGEMENT_TYPE_COMING_SOON` "Bu yönetim türü yakında." · `MANAGEMENT_TYPE_INVALID` "Geçersiz yönetim türü." · `USER_NOT_FOUND` "Bu e-posta ile kayıtlı hesap yok." · `USER_NOT_ACTIVE` "Bu hesap henüz etkin değil." · `ALREADY_SITE_MANAGER` "Bu kişi zaten site yöneticisi." · `ROLE_INVALID` "Geçersiz rol." · `ROLE_NOT_FOUND` "Bu kişide kurul veya görevli rolü yok." (mevcut kodlarla çakışanlar yeniden kullanılır).
 - **ModuleAccess** (ChangeNotifier, `lib/services/module_access.dart`): girişten sonra ve her genel yenilemede `getMyModules` çeker; `AdaptivePoller` ile kısa aralıklı tazelenir (arka planda durur). `isEnabled(siteCode, code)`, `anyEnabled(code)`, `sitesWith(code)`. Süper kullanıcıda her şey açık sayılır. Çağrı hatası durumunda mevcut değer korunur; ilk yükleme başarısızsa TÜM modüller açık sayılır (fail-open: ağ hatası yüzünden menüler kaybolmasın).
 - **Menü:** `SirketMenuItem.moduller` ("Modüller": süper kullanıcı + site yöneticisi yönetici modunda), `SirketMenuItem.denetimKaydi` ("Denetim Kaydı": yalnız süper kullanıcı). `YanMenu`'ye gizlenecek öğe kümesi verilir; `_canAccessMenu` aynı süzgeci uygular. Süper olmayan kullanıcıda, bağlı OLDUĞU TÜM sitelerde `door_control` kapalıysa kapıyla ilgili öğeler (`kayitliCihazlar`, `bluetoothWifiKur`, `ellerSerbest`) gizlenir; `dashboard` kalır ve kapı kartları yerine "Geçiş Kontrol modülü kapalı" bilgi kartı gösterilir. Panel'deki site seçici yalnız modülü açık siteleri listeler.
-- **Yönetim türü seçici:** `SetupSiteDialog` ve `SiteDialog`'da Site Adı ile İl arasında; "Apartman ve Site" seçili, diğer dördü `StatusChip` "Yakında…" ile devre dışı. Site kartında tür çipi.
+- **Yönetim türü seçici:** `SetupSiteDialog` ve `SiteDialog`'da Site Adı ile İl arasında; beş tür de seçilebilir, her satırda türün açıklaması ve varsayılandan farklı terimlerin özeti (F9). Site kartında tür çipi.
 - **Modüller ekranı:** site seçici (süper kullanıcıda tüm siteler, yönetici modunda yönetilen siteler), modül kartları (ad, açıklama, durum çipi: Açık / Kapalı / Yakında… / Her sitede açık, anahtar), `door_control` kapatırken önce `AppDialog` onayı (uyarı metni sunucudakiyle aynı), sonra `confirm: true`. Yenileme: çekip yenileme + yenile düğmesi, işlem sonrası otomatik yeniden çekme. "Ek roller" bölümü: liste, ekle (e-posta + rol), kaldır.
 - **Denetim Kaydı ekranı:** liste (tarih, kim, ne, site), site süzgeci, "Daha fazla yükle", çekip yenileme.
 - Taşma yok (320x640 ×2,0), iskelet/boş durum/hata durumu, tasarım sistemi bileşenleri (`lib/ui/design/`).
@@ -172,7 +172,7 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 | `shopping_mall` | Mağaza / Mağazalar | Kiracı firma / Kiracı firmalar | Mal sahibi | Ortak gider | Kat / Katlar | finance, work_tracking, visitor_log, documents |
 
 - Bilinmeyen/boş tür → `apartment_site` terimleri ve önerileri (varsayılan; `normalizeManagementType` ile aynı kural).
-- Katalogda henüz olmayan önerilen kodlar (`survey`, `visitor_log`) OLDUĞU GİBİ döner; istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yine yalnız katalogdaki 9 modülü içerir (katalog dışı öneri modül listesine eklenmez).
+- Önerilen kodların hepsi artık katalogdadır (`survey`, `visitor_log` dahil); katalogda olmayan bir kod önerilirse OLDUĞU GİBİ döner ve istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yalnız katalogdaki modülleri (15) içerir; katalog dışı öneri modül listesine eklenmez.
 - Her türün tek cümlelik Türkçe açıklaması `summary` (F9 deneme listesindeki tür açıklamaları; "Yakında" demez).
 
 ### Ekleyici alanlar (mevcut alanlar ve değerleri DEĞİŞMEZ; eski istemciler alanları yok sayar)

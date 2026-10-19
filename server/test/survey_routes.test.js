@@ -256,6 +256,59 @@ describe('yönetim uçları: sıra biçim -> yetki -> site -> modül (yetki matr
     const big = await call('POST', url(), { user: users.manager, body: { ...GOOD, question: 'z'.repeat(20000) } });
     assert.deepEqual([big.status, big.body.code], [413, 'BODY_TOO_LARGE']);
   });
+
+  it('open: closes_at geçmiş taslak 409 INVALID_STATE { from, to, closes_at_passed } (UPDATE / audit YOK, ROLLBACK, taslak kalır); NULL / gelecek closes_at açılır', async () => {
+    const row = { id: 5, status: 'draft', closes_at: null, options: ['Evet', 'Hayır'], target_type: 'site', anonymous: true, one_vote_per_apartment: false };
+    let tx = [];
+    pool.connect = async () => ({
+      release: () => tx.push('RELEASE'),
+      query: async (text, params = []) => {
+        const sql = norm(text);
+        tx.push(sql);
+        if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(sql) || /^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) /.test(sql)) return ok();
+        if (/^SELECT site_code FROM sites WHERE site_code = \$1 FOR KEY SHARE$/.test(sql)) return ok([{ site_code: String(params[0]) }]);
+        if (/^SELECT user_code FROM users WHERE user_code = \$1 AND deleted_at IS NULL FOR KEY SHARE$/.test(sql)) return ok([{ user_code: params[0] }]);
+        if (/^SELECT id, status, closes_at, .* FROM surveys WHERE site_code = \$1 AND id = \$2 FOR UPDATE$/.test(sql)) {
+          assert.deepEqual(params.map(Number), [SITE, 5]);
+          return ok([{ ...row }]);
+        }
+        if (/^UPDATE surveys SET status = 'open', opened_at = NOW\(\)/.test(sql)) {
+          row.status = 'open';
+          return ok();
+        }
+        if (/^INSERT INTO audit_log /.test(sql)) return ok();
+        throw new Error(`BEKLENMEYEN İŞLEM SQL: ${sql.slice(0, 200)}`);
+      },
+    });
+    // Ayrıntı okuması (işlemden sonra, havuzdan): satır + oy sayımı
+    pool.query = async (text, params) => {
+      const sql = norm(text);
+      if (/FROM surveys s LEFT JOIN users cu ON cu\.user_code = s\.created_by WHERE s\.site_code = \$1 AND s\.id = \$2 LIMIT 1$/.test(sql)) {
+        const at = new Date();
+        return ok([{ ...row, site_code: String(SITE), title: 'Aidat', question: 'Aidat artsın mı?', target_block_ids: [], target_apartment_ids: [], opened_at: at, closed_at: null, created_by: 20001, created_at: at, updated_at: at, created_by_name: 'Yönetici', total_votes: 0, eligible_count: 0 }]);
+      }
+      if (/^SELECT option_index, COUNT\(\*\)::INTEGER AS n FROM survey_votes WHERE survey_id = \$1 GROUP BY option_index$/.test(sql)) return ok();
+      return fakeQuery(text, params);
+    };
+
+    row.closes_at = new Date(Date.now() - 60_000);
+    const expired = await call('POST', url('/5/open'), { user: users.manager, body: {} });
+    assert.deepEqual([expired.status, expired.body.code, expired.body.from, expired.body.to, expired.body.closes_at_passed], [409, 'INVALID_STATE', 'draft', 'open', true]);
+    assert.match(expired.body.error, /Kapanış zamanı geçmiş/);
+    assert.equal(row.status, 'draft', 'satır taslak kalır');
+    assert.ok(!tx.some((sql) => /^UPDATE surveys/.test(sql)), 'UPDATE gitmez');
+    assert.ok(!tx.some((sql) => /^INSERT INTO audit_log /.test(sql)), 'survey.opened audit yazılmaz');
+    assert.ok(tx.includes('ROLLBACK') && !tx.includes('COMMIT') && tx.at(-1) === 'RELEASE', 'işlem geri alınır, bağlantı bırakılır');
+
+    for (const closesAt of [new Date(Date.now() + 86_400_000), null]) {
+      row.status = 'draft';
+      row.closes_at = closesAt;
+      tx = [];
+      const opened = await call('POST', url('/5/open'), { user: users.manager, body: {} });
+      assert.deepEqual([opened.status, opened.body.status, opened.body.effective_status], [200, 'open', 'open'], String(closesAt));
+      assert.ok(tx.some((sql) => /^UPDATE surveys SET status = 'open'/.test(sql)) && tx.some((sql) => /^INSERT INTO audit_log /.test(sql)) && tx.includes('COMMIT') && !tx.includes('ROLLBACK'));
+    }
+  });
 });
 
 describe('sakin uçları', () => {

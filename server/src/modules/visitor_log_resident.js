@@ -1,7 +1,8 @@
 // Ziyaretçi ve Kargo: sakin tarafı (kendi dairesinin kayıtlarını listele / okunmamış sayısı / görüldü).
 //
-// Sözleşme: docs/PLATFORM_ZIYARETCI_KARGO.md. Sakin YALNIZ kendi dairelerine (aktif apartment_memberships ya da güncel apartment_residencies) ait kayıtları görür;
-// başkasının dairesi / dairesiz kayıt / yok -> 404 VISITOR_ENTRY_NOT_FOUND. Kaydeden / sonlandıran görevlinin adı sakine GÖSTERİLMEZ.
+// Sözleşme: docs/PLATFORM_ZIYARETCI_KARGO.md. Sakin YALNIZ kendi dairelerine (aktif apartment_memberships ya da güncel apartment_residencies) ait ve o daireye
+// bağlandığı andan (`since`) SONRA gelen kayıtları görür (önceki sakinin geçmişi yeni sakine görünmez; kiracılı dairede malik kiracının kayıtlarını görmez);
+// başkasının dairesi / since öncesi kayıt / dairesiz kayıt / yok -> 404 VISITOR_ENTRY_NOT_FOUND. Kaydeden / sonlandıran görevlinin adı sakine GÖSTERİLMEZ.
 // Okuma: site onaylı + `visitor_log` AÇIK olmalı (modül kapalıysa liste o siteyi atlar; site_code verilmiş listede 403 MODULE_DISABLED).
 // Bildirim = uygulama içi: resident_seen_at NULL olanlar "okunmamış"; summary { unread }; seen idempotent. E-posta / push YOK (Yakında).
 
@@ -14,23 +15,45 @@ import { VISITOR_LOG_MODULE, accountDeleted, mapEntry, moduleDisabled, parseResi
 const MODULE_ON = `EXISTS (SELECT 1 FROM site_modules smod WHERE smod.site_code = v.site_code AND smod.module_code = '${VISITOR_LOG_MODULE}' AND smod.enabled = TRUE)`;
 
 /**
- * Çağıranın daireleri (CTE `my_apts`): aktif apartment_memberships VEYA site_people + güncel apartment_residencies (document_resident.myApartmentsCte ile aynı kural).
- * İki yol birleşir: eski üyelik tablosuyla bağlı sakin de, CRM ile bağlanan sakin de kendi dairesinin kayıtlarını görür.
+ * Çağıranın daireleri (CTE `my_apts`: id, site_code, since): aktif apartment_memberships VEYA site_people + güncel apartment_residencies
+ * (document_resident.myApartmentsCte ile aynı daire kuralı). İki yol birleşir: eski üyelik tablosuyla bağlı sakin de, CRM ile bağlanan sakin de görür.
+ * Zaman sınırı `since`: sakin yalnız `v.arrived_at >= since` kayıtları görür (önceki sakinin kayıtları yeni sakine görünmez, sayılmaz, görüldü yapılamaz).
+ * Üyelikte since = am.created_at; ilişkide COALESCE(move_in_date, created_at). Malik (owner) ilişkisi dairede GÜNCEL kiracı (tenant) varken daire vermez;
+ * kiracı yokken malikin since'i son biten kiracılığın kapanışından (updated_at ya da move_out_date ertesi gün, geç olanı) önce olamaz.
+ * Aynı daire iki yoldan gelirse MIN(since) (iki hakkın birleşimi); daire başına TEK satır (liste satırı çoğalmaz).
  */
 export function myApartmentsCte(user = '$1') {
   return `my_apts AS MATERIALIZED (
-    SELECT ap.id, ap.site_code
-    FROM apartment_memberships am
-    INNER JOIN apartments ap ON ap.id = am.apartment_id AND ap.is_active = TRUE
-    WHERE am.user_code = ${user} AND am.is_active = TRUE
-    UNION
-    SELECT ap.id, ap.site_code
-    FROM site_people sp
-    INNER JOIN apartment_residencies r ON r.person_id = sp.id AND r.is_current = TRUE
-    INNER JOIN apartments ap ON ap.id = r.apartment_id AND ap.is_active = TRUE AND ap.site_code = sp.site_code
-    WHERE sp.user_code = ${user} AND sp.is_active = TRUE
+    SELECT c.id, c.site_code, MIN(c.since) AS since
+    FROM (
+      SELECT ap.id, ap.site_code, am.created_at AS since
+      FROM apartment_memberships am
+      INNER JOIN apartments ap ON ap.id = am.apartment_id AND ap.is_active = TRUE
+      WHERE am.user_code = ${user} AND am.is_active = TRUE
+      UNION ALL
+      SELECT ap.id, ap.site_code, GREATEST(
+        COALESCE(r.move_in_date::timestamptz, r.created_at),
+        CASE WHEN r.relation = 'owner' THEN (
+          SELECT MAX(GREATEST(t.updated_at, (t.move_out_date + 1)::timestamptz))
+          FROM apartment_residencies t
+          WHERE t.apartment_id = r.apartment_id AND t.relation = 'tenant' AND t.is_current = FALSE
+        ) END
+      ) AS since
+      FROM site_people sp
+      INNER JOIN apartment_residencies r ON r.person_id = sp.id AND r.is_current = TRUE
+      INNER JOIN apartments ap ON ap.id = r.apartment_id AND ap.is_active = TRUE AND ap.site_code = sp.site_code
+      WHERE sp.user_code = ${user} AND sp.is_active = TRUE
+        AND NOT (r.relation = 'owner' AND EXISTS (
+          SELECT 1 FROM apartment_residencies t
+          WHERE t.apartment_id = r.apartment_id AND t.relation = 'tenant' AND t.is_current = TRUE
+        ))
+    ) c
+    GROUP BY c.id, c.site_code
   )`;
 }
+
+/** Kayıt -> çağıranın dairesi, zaman sınırıyla (`my_apts` CTE'si gerekir). Liste, summary ve sahiplik denetimi aynı parçayı kullanır. */
+const MY_APT_JOIN = 'INNER JOIN my_apts ma ON ma.id = v.apartment_id AND v.arrived_at >= ma.since';
 
 /** Sakin sütunları: recorded_by / completed_by ve adları SEÇİLMEZ. */
 const RESIDENT_COLUMNS = `
@@ -40,7 +63,7 @@ const RESIDENT_COLUMNS = `
 
 const RESIDENT_FROM = `
   FROM visitor_entries v
-  INNER JOIN my_apts ma ON ma.id = v.apartment_id
+  ${MY_APT_JOIN}
   INNER JOIN sites s ON s.site_code = v.site_code AND s.approval_status = 'approved'
   LEFT JOIN apartments a ON a.id = v.apartment_id
   LEFT JOIN site_blocks b ON b.id = a.block_id
@@ -94,7 +117,7 @@ export async function myVisitorSummary(authUser, query = {}, db = pool) {
   }
   const result = await db.query(
     `WITH ${myApartmentsCte('$1')} SELECT COUNT(*)::INTEGER AS n FROM visitor_entries v
-     INNER JOIN my_apts ma ON ma.id = v.apartment_id
+     ${MY_APT_JOIN}
      INNER JOIN sites s ON s.site_code = v.site_code AND s.approval_status = 'approved'
      WHERE ${clauses.join(' AND ')}`,
     params,
@@ -112,12 +135,12 @@ export async function markMyVisitorEntrySeen(authUser, rawId, db = pool) {
   // Yalnız gerçekten okunmamışsa yazar (gereksiz satır kilidi / yazma yok); değilse sahiplik ayrıca doğrulanır.
   const updated = await db.query(
     `WITH ${myApartmentsCte('$1')} UPDATE visitor_entries v SET resident_seen_at = NOW()
-     WHERE v.id = $2 AND v.resident_seen_at IS NULL AND v.apartment_id IN (SELECT id FROM my_apts) AND ${MODULE_ON} RETURNING v.id`,
+     WHERE v.id = $2 AND v.resident_seen_at IS NULL AND EXISTS (SELECT 1 FROM my_apts ma WHERE ma.id = v.apartment_id AND v.arrived_at >= ma.since) AND ${MODULE_ON} RETURNING v.id`,
     [userCode, id],
   );
   if (!updated.rows?.[0]) {
     const own = await db.query(
-      `WITH ${myApartmentsCte('$1')} SELECT 1 FROM visitor_entries v INNER JOIN my_apts ma ON ma.id = v.apartment_id WHERE v.id = $2 AND ${MODULE_ON} LIMIT 1`,
+      `WITH ${myApartmentsCte('$1')} SELECT 1 FROM visitor_entries v ${MY_APT_JOIN} WHERE v.id = $2 AND ${MODULE_ON} LIMIT 1`,
       [userCode, id],
     );
     if (!own.rows?.[0]) {

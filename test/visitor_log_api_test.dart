@@ -155,6 +155,31 @@ void main() {
       expect(seen.url.queryParameters, <String, String>{'limit': '50', 'offset': '0'});
     });
 
+    test('daire seçici: GET .../visitor-entries/apartments?q=&limit=&offset=; yalnız kimlik + etiket; kimliksiz öğe atlanır', () async {
+      late http.Request seen;
+      final api = _api((request) async {
+        seen = request;
+        return _json(200, <String, dynamic>{
+          'items': <Object>[
+            <String, dynamic>{'id': 301, 'apartment_label': 'A Blok - 5', 'block_name': 'A Blok', 'label': '5'},
+            <String, dynamic>{'label': 'kimliksiz'},
+          ],
+          'total': 7,
+        });
+      });
+      final page = await api.listApartments(token: 'tok-1', siteCode: 11, query: '  a blok ', limit: 20, offset: 40);
+      expect(seen.method, 'GET');
+      expect(seen.url.path, '/manager/sites/11/visitor-entries/apartments');
+      expect(seen.headers['Authorization'], 'Bearer tok-1');
+      expect(seen.url.queryParameters, <String, String>{'q': 'a blok', 'limit': '20', 'offset': '40'});
+      expect(page.items.map((a) => a.id), <int>[301]);
+      expect(page.items.single.blockName, 'A Blok');
+      expect(page.items.single.owner, isNull);
+      expect(page.total, 7);
+      await api.listApartments(token: 'tok-1', siteCode: 11, query: '   ');
+      expect(seen.url.queryParameters, <String, String>{'limit': '50', 'offset': '0'});
+    });
+
     test('create: POST gövdesi; 201 Entry; durum sunucudan', () async {
       late http.Request seen;
       final api = _api((request) async {

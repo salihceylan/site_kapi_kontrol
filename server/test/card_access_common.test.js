@@ -8,6 +8,7 @@ import {
   mapManagerCard,
   mapResidentCard,
   maskCardUid,
+  cardUidSuffix,
   moduleDisabled,
   normalizeCardUid,
   normalizeLabel,
@@ -40,8 +41,13 @@ describe('kart UID normalizasyonu', () => {
 
   it('maske: yalnız son 4 karakter açık; kısa UID de tamamen açılmaz', () => {
     assert.equal(maskCardUid('04A3B2C1D5'), '******C1D5');
-    assert.equal(maskCardUid('ABCDE'), '****BCDE');
-    assert.equal(maskCardUid('ABCD'), '****ABCD');
+    // Kısa UID tamamen açılmaz: en çok 4 karakter ve UID'nin yarısından fazlası görünmez.
+    assert.equal(maskCardUid('ABCDE'), '****DE');
+    assert.equal(maskCardUid('ABCD'), '****CD');
+    assert.equal(maskCardUid('12345678'), '****5678');
+    assert.equal(cardUidSuffix('ABCD'), 'CD');
+    assert.equal(cardUidSuffix('04A3B2C1D5'), 'C1D5');
+    assert.equal(cardUidSuffix(''), '');
     assert.ok(!maskCardUid('04A3B2C1D5').includes('04A3'));
   });
 });

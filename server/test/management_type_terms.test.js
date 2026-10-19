@@ -74,14 +74,14 @@ describe('F9 onerilen moduller', () => {
     assert.deepEqual(recommendedModules('shopping_mall'), ['finance', 'work_tracking', 'visitor_log', 'documents']);
   });
 
-  it('katalogda olmayan kodlar (survey, visitor_log) OLDUGU GIBI doner; kalanlar katalogda vardir', () => {
+  it('onerilen kodlarin hepsi katalogda vardir (survey, visitor_log katalogda; bilinmeyen kod olsaydi oldugu gibi donerdi)', () => {
     const unknown = new Set();
     for (const code of TYPE_CODES) {
       for (const moduleCode of recommendedModules(code)) {
         if (!MODULE_CODES.includes(moduleCode)) unknown.add(moduleCode);
       }
     }
-    assert.deepEqual([...unknown].sort(), ['survey', 'visitor_log']);
+    assert.deepEqual([...unknown].sort(), []);
   });
 
   it('bilinmeyen tur -> apartment_site onerileri; donen dizi kopyadir', () => {

@@ -3,6 +3,7 @@
 //   Yönetim  GET   /manager/sites/:siteCode/visitor-entries     (liste + süzgeç + total)
 //            POST  .../visitor-entries                            (kayıt aç; kargo -> bekliyor, ziyaretçi -> iceride)
 //            PATCH .../visitor-entries/:id                        (durum geçişi / not)            DELETE YOK
+//            GET   .../visitor-entries/apartments                 (kayıt formunun daire seçicisi: yalnız kimlik + "Blok - Daire" etiketi)
 //   Sakin    GET   /app/visitor-entries     GET /app/visitor-entries/summary     POST /app/visitor-entries/:id/seen
 //
 // Yetki: yönetici / süper / görevli (STAFF: kapıcı / güvenlik) yazar; BOARD_MEMBER salt okur; sakin yönetim uçlarında 403 FORBIDDEN_ROLE, /app'te yalnız KENDİ
@@ -14,7 +15,7 @@ import { createRuleLimiter } from '../middlewares/rate_limiters.js';
 import { HOUR_MS, ipKey, respondError, userKey } from './route_helpers.js';
 import { resolveVisitorAccess } from './visitor_log_access.js';
 import { MAX_BODY_BYTES, bodyTooLarge } from './visitor_log_common.js';
-import { createVisitorEntry, listVisitorEntries, updateVisitorEntry } from './visitor_log_service.js';
+import { createVisitorEntry, listVisitorApartments, listVisitorEntries, updateVisitorEntry } from './visitor_log_service.js';
 import { listMyVisitorEntries, markMyVisitorEntrySeen, myVisitorSummary } from './visitor_log_resident.js';
 
 export const visitorLogRouter = express.Router();
@@ -89,6 +90,16 @@ visitorLogRouter.get(
   visitorReadLimiter,
   managerHandler({ context: 'visitor_entries_list', fallback: 'Kayıtlar yüklenemedi.' }, async ({ req, access }) => ({
     body: await listVisitorEntries(access.siteCode, req.query),
+  })),
+);
+
+// Daire seçici: Kişiler uçları görevliye (STAFF) kapalıdır ve malik / kiracı adı taşır; bu uç okuyan herkese (görevli dahil) YALNIZ kimlik + etiket verir.
+visitorLogRouter.get(
+  `${BASE}/apartments`,
+  authRequired,
+  visitorReadLimiter,
+  managerHandler({ context: 'visitor_apartments_list', fallback: 'Daireler yüklenemedi.' }, async ({ req, access }) => ({
+    body: await listVisitorApartments(access.siteCode, req.query),
   })),
 );
 

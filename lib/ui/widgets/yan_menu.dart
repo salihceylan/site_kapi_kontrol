@@ -113,6 +113,7 @@ enum SirketMenuItem {
   /// Anket ve Oylama sakin ekranı "Anketler". Rol listesinde YOKTUR; alıcısı olabilecek ve `survey` modülü AÇIK
   /// sitesi olan sakine [YanMenu.additionalItems] ile eklenir ("Anket ve Oylama"nın altına).
   anket,
+
   /// Ziyaretçi ve Kargo yönetim / görevli ekranı. Rol listesinde YOKTUR; `visitor_log` modülü AÇIK olan sitenin
   /// yöneticisine / görevlisine / süper kullanıcıya / kurul üyesine (salt okunur) [YanMenu.additionalItems] ile
   /// eklenir ("Rezervasyon"un, yoksa üstteki öğelerin altına). Modül kapalıyken ya da modül verisi yokken eklenmez.
@@ -519,6 +520,20 @@ List<SirketMenuItem> _withExtras(
     if (extra == SirketMenuItem.anketler || extra == SirketMenuItem.anket) {
       for (final above in <SirketMenuItem>[
         if (extra == SirketMenuItem.anket) SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyon,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     // "Ziyaretçi ve Kargo" (yönetim / görevli ve sakin) "Rezervasyon" / "Rezervasyonlar" / "Taleplerim" / "Talepler" /
     // "Belgeler" / "Borcum" / "Finans" / "Duyurular" / "Kişiler" sırasıyla ilk bulunanın altına gelir; sakin öğesi
     // varsa yönetim öğesinin altına.
