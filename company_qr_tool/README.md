@@ -26,41 +26,58 @@ Bu dosya:
 
 PowerShell `ExecutionPolicy` hatasina takilmaz, cunku `.bat` kullanir.
 
-## Kullanma Adimlari
+## Arayüz
 
-1. ESP32 cihazi USB ile bilgisayara baglayin.
-2. `launch_company_qr_tool.bat` dosyasina cift tiklayin.
-3. Uygulamada `Bagli cihazlari tara` butonuna basin.
-4. Listeden cihazi secin.
-5. `Secili cihaz UID oku` butonuna basin.
-6. `Secili cihaz icin QR olustur` butonuna basin.
-7. `QR kaydet` ile PNG ciktiyi alin veya `QR yazdir` ile direkt yazdirin.
+Tek pencere, solda menü (Ctrl+1…5 ile de geçilir, F5 bulunduğunuz sayfayı yeniler):
 
-## Cihaz Deneme
+| Sayfa | Ne yapar |
+| --- | --- |
+| **Etiketle** | Bağlı kartın kimliğini okur, karekodu hazırlar, sunucuya kaydeder, yazdırır |
+| **Kayıtlı cihazlar** | Sunucu + bu bilgisayardaki kayıtlar: arama, karekod, yazdır, sil, PDF raporu |
+| **Cihaz testi** | Seri porttan canlı durum, röle / karekod okuyucu testleri, renkli seri kayıt |
+| **Cihaz yazılımı** | Derle → Sürüm oluştur → Dağıt (USB, sunucu/OTA, çalışma arkadaşı ZIP'i) |
+| **Ekran yazılımı** | 2.4" ekran modülünü bulur, derler, sürüm oluşturur, USB ile yükler, canlı test |
 
-Ana ekrandaki `Cihaz dene` butonu seri port test penceresini acar.
+- Her akışın üstünde adım göstergesi vardır; sıradaki adımın düğmesi vurgulanır.
+- Başarı mesajları sağ altta kendiliğinden kaybolan bildirim olarak gelir; hatalar
+  çözüm adımlarıyla birlikte pencere olarak gelir.
+- Alt çubukta son durum ve iş sürerken dönen gösterge bulunur.
+- Windows'ta "Animasyon efektleri" kapalıysa uygulama da animasyonsuz çalışır.
+- Arayüz parçaları (tema, simgeler, bileşenler) `ui_kit.py` içindedir; yalnızca
+  tkinter ve Pillow kullanır, yeni paket gerekmez.
 
-Bu pencerede:
-- Cihaz UID, firmware surumu, OTA durumu, Wi-Fi, Bluetooth, MQTT ve role bilgileri
-  canli durum bloklarindan okunur.
-- `h`, `l`, `r`, `p` seri komutlari butonlarla gonderilir.
-- Role pininin HIGH/LOW/pulse davranisi seri logdan takip edilir.
+## Kullanma Adımları (Etiketle)
 
-## Firmware Surumleme ve Yukleme
+1. `launch_company_qr_tool.bat` dosyasına çift tıklayın.
+2. ESP32 kartını USB ile bağlayın. Liste kendiliğinden yenilenir (elle: `Yeniden tara` / F5);
+   tek kart bağlıysa kendiliğinden seçilir.
+3. Satırı seçip `Kimliği oku` düğmesine basın (çift tık ya da Enter da olur).
+   Okuma kartı yeniden başlatabilir. Kimlik okununca karekod kendiliğinden hazırlanır.
+4. `Sunucuya kaydet` ile cihazı ve karekodu hem bu bilgisayara hem sunucuya yazın.
+5. `Yazdır` ile doğrudan yazdırın ya da `PNG kaydet` ile `output/` klasörüne alın.
 
-1. `Env` secin (su an yalniz `lolin_c3_mini` aktiftir).
-2. `Surum` alanina deger yazin (`1.2.3` formati).
-3. `Firmware derle` butonuna basin.
-4. Derleme basarili olursa `Surum olustur` butonuna basin.
-   Bu adim:
-   - `firmware.bin`, `bootloader.bin`, `partitions.bin` dosyalarini
-     `cihaz_kontrol/firmware_releases/...` altina kaydeder.
-5. Cihazi listeden secin.
-6. `Surumu USB ile cihaza yukle` butonuna basin.
-   Yukleme ilerlemesi `%` olarak gosterilir, tamamlaninca `TMM` mesaji gelir.
-7. `Guncelleme Dosyasini Sunucuya gonder` butonu son surumu VPS'e tasir.
-8. `Calisma arkadasina guncelleme zip dosyasi olustur` butonu USB yukleme
-   paketini olusturur.
+Seçili kartın karekodu hazır değilse kaydet/yazdır düğmeleri kapalıdır; böylece başka
+bir kartın etiketi yanlışlıkla basılmaz.
+
+## Cihaz Testi
+
+- Port seçip `Bağlan`a basın; kartın durum bloğu geldikçe kimlik, yazılım sürümü, OTA,
+  Wi-Fi, Bluetooth, MQTT ve röle bilgileri gruplu olarak dolar (değişen değer kısa süre vurgulanır).
+- `h`, `l`, `r`, `k`, `p` seri komutları `Hızlı testler` düğmeleriyle gönderilir.
+- Röle pininin HIGH/LOW/pulse davranışı seri kayıttan izlenir.
+- Kart aynı ağda yerel yayın (UDP 8765) yapıyorsa `Yerel yayın (UDP)` alanı dolar.
+  Windows Güvenlik Duvarı ilk seferde Python için izin isteyebilir (özel ağa izin verin).
+
+## Yazılım Sürümleme ve Yükleme (Cihaz yazılımı)
+
+1. `Kart türü` seçin, `Sürüm numarası` yazın (`1.2.3` biçimi).
+2. `Derle`ye basın (sürüm numarası kaynak koda da yazılır).
+3. `Sürüm oluştur`: `firmware.bin`, `bootloader.bin`, `partitions.bin` ve `manifest.json`
+   `cihaz_kontrol/firmware_releases/...` altına kaydedilir.
+4. `Dağıt` kartında hedef kartı seçin ve `USB ile karta yükle`ye basın.
+   İlerleme `%` olarak görünür, bitince `TMM` bildirimi gelir.
+5. `Sunucuya gönder (OTA)` son sürümü VPS'e taşır; sahadaki kartlar OTA ile indirir.
+6. `Çalışma arkadaşı için ZIP` USB yükleme paketini oluşturur.
 
 ## Cihaz Kaydı, Sunucu Depolama ve PDF Raporlama
 
@@ -81,10 +98,10 @@ SmartKeyPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilg
 - **Cihaz İndeks Dosyası:** `company_qr_tool/output/labeled_devices.json`
 - **PDF Raporları:** İsteğe bağlı olarak seçilen dosya yolu (ör. `SmartKeyPass_Cihaz_Karekod_Raporu_YYYYMMDD.pdf`)
 
-### 3. Yeni Butonlar ve İşlevleri
-- **`[ Cihazı Sunucuya Kaydet ]`**: Seçili cihazın UID'sini, çipini ve karekod görselini sunucuya (`/var/www/site_kapi_kontrol/server/public/qrcodes/`) ve veritabanına aktarır.
-- **`[ Karekodlu PDF Raporu İndir ]`**: Sunucu ve yereldeki tüm cihazları toplayarak 300 DPI A4 boyutunda yüksek çözünürlüklü, taranabilir karekodlu çok sayfalı PDF envanter kataloğu oluşturur.
-- **`[ Kayıtlı Cihazlar & Karekodlar ]`**: Şimdiye kadar etiketlenmiş tüm cihazları listeleyen, tekil yazdırma ve önizleme sunan yönetim penceresini açar.
+### 3. İlgili Düğmeler
+- **`Sunucuya kaydet`** (Etiketle): Seçili cihazın UID'sini, çipini ve karekod görselini sunucuya (`/var/www/site_kapi_kontrol/server/public/qrcodes/`) ve veritabanına aktarır.
+- **`Karekodlu PDF raporu`** (Kayıtlı cihazlar): Sunucu ve yereldeki tüm cihazları toplayarak 300 DPI A4 boyutunda yüksek çözünürlüklü, taranabilir karekodlu çok sayfalı PDF envanter kataloğu oluşturur.
+- **Kayıtlı cihazlar** sayfası: Şimdiye kadar etiketlenmiş tüm cihazları listeler; arama, önizleme, yazdırma, kimlik kopyalama ve silme (sağ tık menüsü ve Delete tuşu dahil) sunar.
 
 ## Logo
 

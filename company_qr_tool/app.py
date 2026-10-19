@@ -8,6 +8,7 @@ import os
 import queue
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -28,6 +29,8 @@ from qrcode.constants import ERROR_CORRECT_H
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
 import serial
 from serial.tools import list_ports
+
+from ui_kit import C, Kit, Pill, Sidebar, SmoothProgress, Spinner, Stepper, Tooltip, enable_dpi_awareness
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -274,26 +277,32 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 OTA_VERSION_C3_RE = re.compile(r'OTA_VERSION_C3\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
 OTA_VERSION_WROOM_RE = re.compile(r'OTA_VERSION_WROOM\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
 OTA_VERSION_RE = re.compile(r'OTA_(?:CURRENT_)?VERSION(?:_[A-Z0-9]+)?\[\]\s*=\s*"(\d+\.\d+\.\d+)"')
-PREVIEW_SIZE = 180
 QR_SIZE = 1200
 QR_LABEL_HEIGHT = 150
+# Arayuz: karekod onizleme kutusu (96 dpi pikseli; yuksek DPI'da olceklenir) ve port izleme araligi.
+QR_PREVIEW_PX = 220
+PORT_POLL_MS = 1500
+FW_OP_LABELS = {
+    "build": "Derleniyor",
+    "release": "Sürüm hazırlanıyor",
+    "upload": "Karta yükleniyor",
+    "server": "Sunucuya gönderiliyor",
+    "zip": "ZIP hazırlanıyor",
+}
 
-CLR_APP_BG = "#F2F6F4"
-CLR_CARD_BG = "#FFFFFF"
-CLR_ACCENT = "#16A34A"
-CLR_ACCENT_DARK = "#0F7A37"
-CLR_ACCENT_SOFT = "#EAF7EF"
-CLR_BORDER = "#D9E6DE"
-CLR_TEXT_MAIN = "#13281D"
-CLR_TEXT_SUB = "#5D7467"
-CLR_STATUS = "#127741"
-CLR_ROW_SEL_BG = "#DDF3E5"
-CLR_ROW_SEL_TEXT = "#103423"
-CLR_HEADER_BG = "#0F3A29"
-CLR_HEADER_TEXT = "#F5FFF8"
-CLR_DANGER = "#DC2626"
-CLR_DANGER_DARK = "#B91C1C"
-CLR_DANGER_SOFT = "#FEE2E2"
+
+def format_when(value: object) -> str:
+    """ISO zaman damgasini yerel saatle 'GG.AA.YYYY SS:DD' yazar; cozulemezse oldugu gibi birakir."""
+    text = str(value or "-").strip()
+    if "T" not in text:
+        return text
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
+        return dt.strftime("%d.%m.%Y %H:%M")
+    except ValueError:
+        return text
 
 
 @dataclass
@@ -1064,19 +1073,20 @@ def suggest_env_for_chip(chip: str, envs: list[str]) -> str | None:
 
 class App:
     def __init__(self) -> None:
+        enable_dpi_awareness()
         self.root = tk.Tk()
         self.root.title("SmartKeyPass Cihaz Etiketleyici")
-        self.root.configure(bg=CLR_APP_BG)
-        self.root.minsize(1100, 760)
+        self.kit = Kit(self.root)
+        px = self.kit.px
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.root.minsize(min(px(1120), sw - 40), min(px(700), sh - 80))
         try:
             self.root.state("zoomed")
         except tk.TclError:
             try:
                 self.root.attributes("-zoomed", True)
             except tk.TclError:
-                self.root.geometry(
-                    f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
-                )
+                self.root.geometry(f"{sw}x{sh}+0+0")
 
         self.logo_path = ensure_logo()
         self.devices: list[EspDevice] = []
@@ -1085,32 +1095,49 @@ class App:
 
         self.latest_qr: Image.Image | None = None
         self.latest_uid: str | None = None
-        self.preview_photo: ImageTk.PhotoImage | None = None
+        self._preview_uid: str | None = None
         self.brand_photo: ImageTk.PhotoImage | None = None
         self.icon_photo: ImageTk.PhotoImage | None = None
 
-        self.status_var = tk.StringVar(value="Hazir.")
-        self.uid_var = tk.StringVar(value="Unique ID: -")
+        self.status_var = tk.StringVar(value="Hazır.")
+        self.uid_var = tk.StringVar(value="—")
+        self.qr_meta_var = tk.StringVar(value="Listeden bir cihaz seçin.")
         self.env_var = tk.StringVar(value=self.envs[0] if self.envs else "lolin_c3_mini")
         self.version_var = tk.StringVar(
             value=read_firmware_source_version(self.env_var.get())
             or suggest_version(self.releases, self.env_var.get())
         )
-        self.latest_release_var = tk.StringVar(value="Son surum: -")
+        self.latest_release_var = tk.StringVar(value="Son sürüm: -")
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_text_var = tk.StringVar(value="%0")
+        self.fw_device_var = tk.StringVar(value="")
 
         self.scanning = False
         self.uid_reading = False
+        self.saving_device = False
         self.fw_busy = False
         self.fw_build_ready = False
         self.fw_release_ready = False
         self.fw_build_key: tuple[str, str] | None = None
         self.fw_release_key: tuple[str, str] | None = None
-        self.screen_window: ScreenFirmwareWindow | None = None
+        self.fw_op = ""
+        self.fw_result: tuple[bool, str] | None = None
+        self.fw_dispatched_key: tuple[str, str] | None = None
+        self.saved_uids: set[str] = set()
+        self._jobs = 0
+        self._was_busy = False
+        self._was_hw_busy = False
+        self._port_hwids: dict[str, str] = {}
+        self._port_poll_running = False
+        self._port_cooldown_until = 0.0
+        self.screen_window: ScreenFirmwarePage | None = None
+        self.device_tester: DeviceTesterPage | None = None
+        self.labeled_page: LabeledDevicesPage | None = None
+        self.pages: dict[str, ttk.Frame] = {}
+        self.current_page: ttk.Frame | None = None
+        self.current_key = ""
 
-        self._style()
-        self.brand_photo = self._load_brand(64)
+        self.brand_photo = self._load_brand(px(42))
         self.icon_photo = self._load_brand(32)
         if self.icon_photo is not None:
             self.root.iconphoto(True, self.icon_photo)
@@ -1119,128 +1146,11 @@ class App:
         self.version_var.trace_add("write", lambda *_args: self._on_fw_input_changed())
         self.refresh_latest_release()
         self._apply_fw_button_state()
-
-    def _style(self) -> None:
-        s = ttk.Style(self.root)
-        if "clam" in s.theme_names():
-            s.theme_use("clam")
-        elif s.theme_names():
-            s.theme_use(s.theme_names()[0])
-
-        s.configure("App.TFrame", background=CLR_APP_BG)
-        s.configure("Header.TFrame", background=CLR_HEADER_BG)
-        s.configure("Card.TFrame", background=CLR_CARD_BG, borderwidth=0, relief="flat")
-        s.configure("Card.TLabel", background=CLR_CARD_BG)
-        s.configure("Header.TLabel", background=CLR_HEADER_BG)
-        s.configure("Title.TLabel", background=CLR_HEADER_BG, foreground=CLR_HEADER_TEXT, font=("Segoe UI", 18, "bold"))
-        s.configure("Sub.TLabel", background=CLR_HEADER_BG, foreground="#D2EDE0", font=("Segoe UI", 10))
-        s.configure("Head.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 11, "bold"))
-        s.configure("Text.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_SUB, font=("Segoe UI", 10))
-        s.configure("Value.TLabel", background=CLR_CARD_BG, foreground=CLR_TEXT_MAIN, font=("Segoe UI", 10, "bold"))
-        s.configure("Status.TLabel", background=CLR_CARD_BG, foreground=CLR_STATUS, font=("Segoe UI", 10, "bold"))
-
-        s.configure(
-            "Accent.TButton",
-            background=CLR_ACCENT,
-            foreground="#FFFFFF",
-            borderwidth=0,
-            focusthickness=0,
-            focuscolor=CLR_ACCENT,
-            padding=(14, 8),
-            font=("Segoe UI", 10, "bold"),
-        )
-        s.map(
-            "Accent.TButton",
-            background=[("active", CLR_ACCENT_DARK), ("disabled", "#9BC8AC")],
-            foreground=[("disabled", "#EEF5F0")],
-        )
-
-        s.configure(
-            "Soft.TButton",
-            background=CLR_ACCENT_SOFT,
-            foreground=CLR_TEXT_MAIN,
-            borderwidth=0,
-            focusthickness=0,
-            focuscolor=CLR_ACCENT_SOFT,
-            padding=(14, 8),
-            font=("Segoe UI", 10),
-        )
-        s.map(
-            "Soft.TButton",
-            background=[("active", "#DDF3E8"), ("disabled", "#F2F7F4")],
-            foreground=[("disabled", "#8DA394")],
-        )
-
-        s.configure(
-            "Danger.TButton",
-            background=CLR_DANGER,
-            foreground="#FFFFFF",
-            borderwidth=0,
-            focusthickness=0,
-            focuscolor=CLR_DANGER,
-            padding=(14, 8),
-            font=("Segoe UI", 10, "bold"),
-        )
-        s.map(
-            "Danger.TButton",
-            background=[("active", CLR_DANGER_DARK), ("disabled", "#FCA5A5")],
-            foreground=[("disabled", "#FFFFFF")],
-        )
-
-        s.configure(
-            "TCombobox",
-            fieldbackground=CLR_CARD_BG,
-            background=CLR_CARD_BG,
-            foreground=CLR_TEXT_MAIN,
-            bordercolor=CLR_BORDER,
-            arrowsize=14,
-            padding=4,
-        )
-        s.map(
-            "TCombobox",
-            fieldbackground=[("readonly", CLR_CARD_BG)],
-            background=[("readonly", CLR_CARD_BG)],
-            foreground=[("readonly", CLR_TEXT_MAIN)],
-            selectbackground=[("readonly", CLR_CARD_BG)],
-            selectforeground=[("readonly", CLR_TEXT_MAIN)],
-        )
-        self.root.option_add("*TCombobox*Listbox.background", CLR_CARD_BG)
-        self.root.option_add("*TCombobox*Listbox.foreground", CLR_TEXT_MAIN)
-        self.root.option_add("*TCombobox*Listbox.selectBackground", CLR_ROW_SEL_BG)
-        self.root.option_add("*TCombobox*Listbox.selectForeground", CLR_ROW_SEL_TEXT)
-
-        s.configure(
-            "Treeview",
-            rowheight=29,
-            font=("Segoe UI", 10),
-            background=CLR_CARD_BG,
-            fieldbackground=CLR_CARD_BG,
-            foreground=CLR_TEXT_MAIN,
-            bordercolor=CLR_BORDER,
-            lightcolor=CLR_BORDER,
-            darkcolor=CLR_BORDER,
-        )
-        s.configure(
-            "Treeview.Heading",
-            font=("Segoe UI", 10, "bold"),
-            background="#EDF5F0",
-            foreground=CLR_TEXT_MAIN,
-            relief="flat",
-        )
-        s.map(
-            "Treeview",
-            background=[("selected", CLR_ROW_SEL_BG)],
-            foreground=[("selected", CLR_ROW_SEL_TEXT)],
-        )
-
-        s.configure(
-            "Accent.Horizontal.TProgressbar",
-            troughcolor="#E6F3EC",
-            background=CLR_ACCENT,
-            bordercolor="#E6F3EC",
-            lightcolor=CLR_ACCENT,
-            darkcolor=CLR_ACCENT,
-        )
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Port listesi karta dokunmaz (yalnizca isletim sisteminden okunur): acilista ve sonra duzenli yenilenir.
+        self.root.after(120, lambda: self.scan_devices(manual=False))
+        self.root.after(PORT_POLL_MS, self._poll_ports)
+        self.root.after(200, self._tick_busy)
 
     def _load_brand(self, size: int) -> ImageTk.PhotoImage | None:
         try:
@@ -1255,155 +1165,562 @@ class App:
         return ImageTk.PhotoImage(badge)
 
     def _ui(self) -> None:
-        main = ttk.Frame(self.root, style="App.TFrame", padding=16)
-        main.pack(fill=tk.BOTH, expand=True)
-        main.columnconfigure(0, weight=3)
-        main.columnconfigure(1, weight=2)
-        main.rowconfigure(1, weight=1)
+        kit = self.kit
+        px = kit.px
+        shell = ttk.Frame(self.root, style="page.TFrame")
+        shell.pack(fill=tk.BOTH, expand=True)
+        shell.columnconfigure(1, weight=1)
+        shell.rowconfigure(0, weight=1)
 
-        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 14))
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-        header.columnconfigure(1, weight=1)
-        hlogo = ttk.Label(header, image=self.brand_photo, style="Header.TLabel")
-        hlogo.grid(row=0, column=0, rowspan=2, sticky="w")
-        hlogo.image = self.brand_photo
-        ttk.Label(header, text="SmartKeyPass Cihaz Etiketleyici", style="Title.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
-        ttk.Label(header, text="ID oku, QR uret, firmware surumle ve cihaza yukle.", style="Sub.TLabel").grid(row=1, column=1, sticky="w", padx=(10, 0))
+        self.sidebar = Sidebar(shell, kit, self.brand_photo, "SmartKeyPass", "Cihaz Etiketleyici", self.show_page)
+        self.sidebar.grid(row=0, column=0, sticky="nsw")
+        self.sidebar.add_group("ÜRETİM")
+        self.sidebar.add_item("label", "Etiketle", "qr", "Ctrl+1")
+        self.sidebar.add_item("devices", "Kayıtlı cihazlar", "library", "Ctrl+2")
+        self.sidebar.add_group("BAKIM")
+        self.sidebar.add_item("tester", "Cihaz testi", "diag", "Ctrl+3")
+        self.sidebar.add_item("firmware", "Cihaz yazılımı", "chip", "Ctrl+4")
+        self.sidebar.add_item("screen", "Ekran yazılımı", "monitor", "Ctrl+5")
+        key_ok = bool(get_company_api_key())
+        key_label = kit.label(
+            self.sidebar.footer,
+            "Sunucu anahtarı hazır" if key_ok else "Sunucu anahtarı yok",
+            "body",
+            "nav",
+            image=kit.dot("#4ADE80" if key_ok else "#FBBF24"),
+            compound="left",
+        )
+        key_label.pack(anchor="w")
+        if not key_ok:
+            Tooltip(key_label, COMPANY_KEY_MISSING_MESSAGE, kit, side="right")
+        host = urllib.parse.urlparse(PUBLIC_API_URL).netloc or PUBLIC_API_URL
+        kit.label(self.sidebar.footer, host, "caption", "nav").pack(anchor="w", pady=(px(2), 0))
 
-        left = ttk.Frame(main, style="Card.TFrame", padding=14)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
-        left.rowconfigure(3, weight=1)
+        main = ttk.Frame(shell, style="page.TFrame")
+        main.grid(row=0, column=1, sticky="nsew")
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(0, weight=1)
+        self.page_host = ttk.Frame(main, style="page.TFrame")
+        self.page_host.grid(row=0, column=0, sticky="nsew")
+        kit.separator(main).grid(row=1, column=0, sticky="ew")
+        footer = ttk.Frame(main, style="page.TFrame", padding=(px(28), px(8)))
+        footer.grid(row=2, column=0, sticky="ew")
+        self.footer_spinner = Spinner(footer, kit, surface="page")
+        self.footer_spinner.pack(side=tk.LEFT, padx=(0, px(8)))
+        kit.label(footer, "Ctrl+1…5 sayfalar  ·  F5 yenile", "caption", "page").pack(side=tk.RIGHT, padx=(px(16), 0))
+        kit.label(footer, textvariable=self.status_var, kind="body2", surface="page", anchor="w").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self._page_builders: dict[str, Callable[[ttk.Frame], None]] = {
+            "label": self._build_label_page,
+            "devices": self._build_devices_page,
+            "tester": self._build_tester_page,
+            "firmware": self._build_firmware_page,
+            "screen": self._build_screen_page,
+        }
+        for i, key in enumerate(("label", "devices", "tester", "firmware", "screen"), start=1):
+            self.root.bind_all(f"<Control-Key-{i}>", lambda _e, k=key: self.show_page(k))
+        self.root.bind_all("<F5>", self._on_refresh_key)
+        # Yazilim sayfasinin dugmeleri baslangicta durum hesaplarinda kullanilir: hemen kur.
+        self._ensure_page("firmware")
+        self.show_page("label", animate=False)
+
+    def _ensure_page(self, key: str) -> ttk.Frame:
+        page = self.pages.get(key)
+        if page is None:
+            px = self.kit.px
+            page = ttk.Frame(self.page_host, style="page.TFrame", padding=(px(28), px(22), px(28), px(14)))
+            self.pages[key] = page
+            self._page_builders[key](page)
+        return page
+
+    def show_page(self, key: str, animate: bool = True) -> None:
+        first = key not in self.pages
+        page = self._ensure_page(key)
+        if page is self.current_page:
+            return
+        if self.current_page is not None:
+            self.current_page.place_forget()
+        self.current_page = page
+        self.current_key = key
+        self.sidebar.select(key, animate=animate)
+        dx = self.kit.px(28) if animate and self.kit.motion else 0
+        page.place(x=dx, y=0, relwidth=1, relheight=1)
+        if dx:
+            self.kit.anim.run("page", 260, lambda t: page.place_configure(x=int(round(dx * (1 - t)))))
+        if first:
+            return
+        if key == "devices" and self.labeled_page is not None:
+            self.labeled_page.refresh_devices()
+        elif key == "tester" and self.device_tester is not None:
+            self.device_tester.refresh_ports()
+        elif key == "firmware":
+            self._sync_fw_device_choices()
+
+    def _build_devices_page(self, page: ttk.Frame) -> None:
+        self.labeled_page = LabeledDevicesPage(page, self.kit, self.logo_path, self.download_pdf_report)
+
+    def _build_tester_page(self, page: ttk.Frame) -> None:
+        self.device_tester = DeviceTesterPage(page, self.kit)
+
+    def _build_screen_page(self, page: ttk.Frame) -> None:
+        self.screen_window = ScreenFirmwarePage(page, self.kit, self.logo_path)
+
+    def _build_label_page(self, page: ttk.Frame) -> None:
+        kit = self.kit
+        px = kit.px
+        page.columnconfigure(0, weight=1)
+        page.columnconfigure(1, weight=0, minsize=px(360))
+        page.rowconfigure(1, weight=1)
+        header, slot = kit.page_header(
+            page,
+            "Cihaz etiketle",
+            "Kartı USB ile bağlayın ve kimliğini okuyun; karekod kendiliğinden hazırlanır. Sonra sunucuya kaydedip yazdırın.",
+            icon="qr",
+        )
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, px(18)))
+        self.label_stepper = Stepper(slot, kit, ["Cihazı seç", "Kimliği oku", "Kaydet ve yazdır"])
+        self.label_stepper.pack()
+
+        left = kit.card(page)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, px(18)))
         left.columnconfigure(0, weight=1)
-
-        row = ttk.Frame(left, style="Card.TFrame")
-        row.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        self.scan_btn = ttk.Button(row, text="Bagli cihazlari tara", command=self.scan_devices, style="Accent.TButton")
-        self.scan_btn.pack(side=tk.LEFT)
-        self.read_uid_btn = ttk.Button(row, text="Secili cihaz UID oku", command=self.read_selected_uid, style="Soft.TButton")
-        self.read_uid_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self.qr_btn = ttk.Button(row, text="Secili cihaz icin QR olustur", command=self.make_qr, style="Accent.TButton")
-        self.qr_btn.pack(side=tk.LEFT, padx=8)
-        self.save_btn = ttk.Button(row, text="QR kaydet", command=self.save_qr, style="Soft.TButton")
-        self.save_btn.pack(side=tk.LEFT)
-        self.print_btn = ttk.Button(row, text="QR yazdir", command=self.print_qr, style="Soft.TButton")
-        self.print_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self.test_btn = ttk.Button(row, text="Cihaz dene", command=self.open_device_tester, style="Soft.TButton")
-        self.test_btn.pack(side=tk.LEFT, padx=(8, 0))
-
-        row2 = ttk.Frame(left, style="Card.TFrame")
-        row2.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        self.server_save_device_btn = ttk.Button(
-            row2,
-            text="Cihazı Sunucuya Kaydet",
-            command=self.save_device_to_server,
-            style="Accent.TButton",
+        left.rowconfigure(2, weight=1)
+        top = ttk.Frame(left, style="card.TFrame")
+        top.grid(row=0, column=0, sticky="ew")
+        top.columnconfigure(2, weight=1)
+        kit.label(top, "Bağlı cihazlar", "title").grid(row=0, column=0, sticky="w")
+        self.device_count_pill = Pill(top, kit, "Port yok", "neutral")
+        self.device_count_pill.grid(row=0, column=1, sticky="w", padx=(px(10), 0))
+        self.scan_btn = kit.button(top, "Yeniden tara", self.scan_devices, icon="refresh")
+        self.scan_btn.grid(row=0, column=3, sticky="e")
+        Tooltip(self.scan_btn, "Listeyi baştan oluşturur (F5). Kart takılıp çıkarıldığında liste zaten kendiliğinden yenilenir.", kit)
+        kit.label(left, "Kart takılınca burada belirir. Satırı seçin; çift tıklamak kimliği okur.", "caption").grid(
+            row=1, column=0, sticky="w", pady=(px(4), px(12))
         )
-        self.server_save_device_btn.pack(side=tk.LEFT)
-        self.pdf_report_btn = ttk.Button(
-            row2,
-            text="Karekodlu PDF Raporu İndir",
-            command=self.download_pdf_report,
-            style="Accent.TButton",
+        box, self.tree = kit.tree(
+            left,
+            [
+                ("port", "Port", 76, "w", False),
+                ("state", "Durum", 126, "w", False),
+                ("chip", "Çip", 104, "w", False),
+                ("unique_id", "Kimlik (UID)", 140, "w", False),
+                ("description", "Aygıt açıklaması", 170, "w", True),
+            ],
+            height=10,
         )
-        self.pdf_report_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self.view_labeled_btn = ttk.Button(
-            row2,
-            text="Kayıtlı Cihazlar & Karekodlar",
-            command=self.open_labeled_devices_window,
-            style="Soft.TButton",
+        box.grid(row=2, column=0, sticky="nsew")
+        self.tree.bind("<<TreeviewSelect>>", self.on_select, add="+")
+        self.tree.bind(
+            "<Double-1>",
+            lambda e: self.read_selected_uid() if self.tree.identify_region(e.x, e.y) == "cell" else None,
         )
-        self.view_labeled_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self.screen_fw_btn = ttk.Button(
-            row2,
-            text="🖥️ Ekran Yazılımı Güncelle",
-            command=self.open_screen_firmware_window,
-            style="Accent.TButton",
-        )
-        self.screen_fw_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.tree.bind("<Return>", lambda _e: self.read_selected_uid())
+        self.devices_empty = kit.empty_state(box, "usb", "Bağlı kart yok", "Kartı USB kablosuyla bağlayın; liste kendiliğinden yenilenir.")
+        actions = ttk.Frame(left, style="card.TFrame")
+        actions.grid(row=3, column=0, sticky="ew", pady=(px(16), 0))
+        actions.columnconfigure(1, weight=1)
+        self.read_uid_btn = kit.button(actions, "Kimliği oku", self.read_selected_uid, "primary", icon="scan")
+        self.read_uid_btn.grid(row=0, column=0, sticky="w")
+        kit.label(actions, "Okuma sırasında kart yeniden başlayabilir.", "caption").grid(row=0, column=1, sticky="w", padx=(px(12), 0))
 
-        ttk.Label(left, text="Bagli Cihazlar", style="Head.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 6))
-        cols = ("port", "chip", "unique_id", "description")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=15)
-        self.tree.heading("port", text="Port")
-        self.tree.heading("chip", text="Chip")
-        self.tree.heading("unique_id", text="Unique ID")
-        self.tree.heading("description", text="Aygit Aciklamasi")
-        self.tree.column("port", width=90, anchor=tk.CENTER)
-        self.tree.column("chip", width=170, anchor=tk.W)
-        self.tree.column("unique_id", width=180, anchor=tk.CENTER)
-        self.tree.column("description", width=320, anchor=tk.W)
-        self.tree.grid(row=3, column=0, sticky="nsew")
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        sc = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sc.set)
-        sc.grid(row=3, column=1, sticky="ns")
-        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(row=4, column=0, sticky="w", pady=(8, 0))
-
-        right = ttk.Frame(main, style="Card.TFrame", padding=14)
+        right = kit.card(page)
         right.grid(row=1, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        ttk.Label(right, text="QR Onizleme", style="Head.TLabel").grid(row=0, column=0, sticky="w")
-        self.preview = ttk.Label(right, style="Card.TLabel", anchor="center")
-        self.preview.grid(row=1, column=0, sticky="ew", pady=(8, 8))
-        ttk.Label(right, textvariable=self.uid_var, style="Text.TLabel").grid(row=2, column=0, sticky="w")
-        ttk.Separator(right, orient=tk.HORIZONTAL).grid(row=3, column=0, sticky="ew", pady=12)
+        head = ttk.Frame(right, style="card.TFrame")
+        head.grid(row=0, column=0, sticky="ew")
+        head.columnconfigure(0, weight=1)
+        kit.label(head, "Karekod", "title").grid(row=0, column=0, sticky="w")
+        self.qr_state_pill = Pill(head, kit, "Bekliyor", "neutral")
+        self.qr_state_pill.grid(row=0, column=1, sticky="e")
+        self.preview = ttk.Label(right, style=kit.label_style("body"), anchor="center")
+        self.preview.grid(row=1, column=0, pady=(px(16), px(12)))
+        uid_row = ttk.Frame(right, style="card.TFrame")
+        uid_row.grid(row=2, column=0)
+        kit.label(uid_row, textvariable=self.uid_var, kind="uid").pack(side=tk.LEFT)
+        self.copy_uid_btn = kit.icon_button(uid_row, "copy", self.copy_uid, "Kimliği panoya kopyala")
+        self.copy_uid_btn.pack(side=tk.LEFT, padx=(px(6), 0))
+        kit.label(right, textvariable=self.qr_meta_var, kind="caption", justify="center", wraplength=px(300)).grid(
+            row=3, column=0, pady=(px(2), 0)
+        )
+        kit.separator(right).grid(row=4, column=0, sticky="ew", pady=px(16))
+        self.server_save_device_btn = kit.button(right, "Sunucuya kaydet", self.save_device_to_server, "primary", icon="cloud")
+        self.server_save_device_btn.grid(row=5, column=0, sticky="ew")
+        row2 = ttk.Frame(right, style="card.TFrame")
+        row2.grid(row=6, column=0, sticky="ew", pady=(px(8), 0))
+        row2.columnconfigure(0, weight=1, uniform="qa")
+        row2.columnconfigure(1, weight=1, uniform="qa")
+        self.print_btn = kit.button(row2, "Yazdır", self.print_qr, icon="print")
+        self.print_btn.grid(row=0, column=0, sticky="ew", padx=(0, px(4)))
+        self.save_btn = kit.button(row2, "PNG kaydet", self.save_qr, icon="save")
+        self.save_btn.grid(row=0, column=1, sticky="ew", padx=(px(4), 0))
+        kit.label(right, "Kaydet: cihaz ve karekodu bu bilgisayara ve sunucuya yazılır.", "caption", wraplength=px(300), justify="left").grid(
+            row=7, column=0, sticky="w", pady=(px(14), 0)
+        )
+        self._set_qr_preview(None)
 
-        ttk.Label(right, text="Firmware Yonetimi", style="Head.TLabel").grid(row=4, column=0, sticky="w")
-        form = ttk.Frame(right, style="Card.TFrame")
-        form.grid(row=5, column=0, sticky="ew", pady=(8, 6))
-        form.columnconfigure(1, weight=1)
-        ttk.Label(form, text="Env:", style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.env_combo = ttk.Combobox(form, state="readonly", values=self.envs, textvariable=self.env_var, width=30)
-        self.env_combo.grid(row=0, column=1, sticky="ew")
+    def _build_firmware_page(self, page: ttk.Frame) -> None:
+        kit = self.kit
+        px = kit.px
+        page.columnconfigure(0, weight=1, uniform="fw")
+        page.columnconfigure(1, weight=1, uniform="fw")
+        page.rowconfigure(3, weight=1)
+        header, slot = kit.page_header(
+            page,
+            "Cihaz yazılımı",
+            "Kapı kartının yazılımını derleyin, sürüm paketi oluşturun ve dağıtın.",
+            icon="chip",
+        )
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, px(18)))
+        self.fw_stepper = Stepper(slot, kit, ["Derle", "Sürüm oluştur", "Dağıt"])
+        self.fw_stepper.pack()
+
+        left = kit.card(page)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, px(18)))
+        left.columnconfigure(0, weight=1)
+        kit.label(left, "Sürüm hazırla", "title").grid(row=0, column=0, sticky="w")
+        kit.label(
+            left,
+            "Kart türünü ve sürüm numarasını seçin, derleyin, ardından sürüm paketini oluşturun.",
+            "caption",
+            wraplength=px(420),
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(px(4), px(14)))
+        kit.label(left, "Kart türü (PlatformIO ortamı)", "value").grid(row=2, column=0, sticky="w")
+        self.env_combo = kit.combobox(left, self.env_var, self.envs)
+        self.env_combo.grid(row=3, column=0, sticky="ew", pady=(px(6), px(12)))
         self.env_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_env_changed())
-        ttk.Label(form, text="Surum:", style="Text.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(8, 0))
-        self.version_entry = ttk.Entry(form, textvariable=self.version_var)
-        self.version_entry.grid(row=1, column=1, sticky="ew", pady=(8, 0))
+        kit.label(left, "Sürüm numarası", "value").grid(row=4, column=0, sticky="w")
+        self.version_entry = kit.entry(left, self.version_var)
+        self.version_entry.grid(row=5, column=0, sticky="ew", pady=(px(6), px(4)))
+        kit.label(left, "Biçim 1.2.3. Derleme, sürüm numarasını kaynak koda da yazar.", "caption").grid(row=6, column=0, sticky="w")
+        kit.label(
+            left,
+            textvariable=self.latest_release_var,
+            kind="muted",
+            image=kit.icon("history", px(16), C.TEXT_3, gap=px(6)),
+            compound="left",
+        ).grid(row=7, column=0, sticky="w", pady=(px(12), 0))
+        btns = ttk.Frame(left, style="card.TFrame")
+        btns.grid(row=8, column=0, sticky="ew", pady=(px(18), 0))
+        btns.columnconfigure(0, weight=1, uniform="fwb")
+        btns.columnconfigure(1, weight=1, uniform="fwb")
+        self.build_btn = kit.button(btns, "Derle", self.start_build, "primary", icon="build")
+        self.build_btn.grid(row=0, column=0, sticky="ew", padx=(0, px(5)))
+        self.release_btn = kit.button(btns, "Sürüm oluştur", self.start_release, icon="package")
+        self.release_btn.grid(row=0, column=1, sticky="ew", padx=(px(5), 0))
 
-        fw = ttk.Frame(right, style="Card.TFrame")
-        fw.grid(row=6, column=0, sticky="ew", pady=(8, 6))
-        self.build_btn = ttk.Button(fw, text="Firmware derle", command=self.start_build, style="Soft.TButton")
-        self.build_btn.pack(side=tk.LEFT)
-        self.release_btn = ttk.Button(fw, text="Surum olustur", command=self.start_release, style="Soft.TButton")
-        self.release_btn.pack(side=tk.LEFT, padx=8)
-        self.upload_btn = ttk.Button(fw, text="Surumu USB ile cihaza yukle", command=self.start_upload, style="Accent.TButton")
-        self.upload_btn.pack(side=tk.LEFT)
-        self.server_upload_btn = ttk.Button(
-            fw,
-            text="Guncelleme Dosyasini Sunucuya gonder",
-            command=self.start_server_upload,
-            style="Accent.TButton",
-        )
-        self.server_upload_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self.coworker_zip_btn = ttk.Button(
-            fw,
-            text="Calisma arkadasina guncelleme ZIP'i olustur",
-            command=self.start_coworker_zip,
-            style="Soft.TButton",
-        )
-        self.coworker_zip_btn.pack(side=tk.LEFT, padx=(8, 0))
+        right = kit.card(page)
+        right.grid(row=1, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+        kit.label(right, "Dağıt", "title").grid(row=0, column=0, sticky="w")
+        kit.label(
+            right,
+            "Oluşturulan sürümü USB ile karta yükleyin, sunucuya gönderin ya da çalışma arkadaşınız için paket hazırlayın.",
+            "caption",
+            wraplength=px(420),
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", pady=(px(4), px(14)))
+        kit.label(right, "Hedef kart (USB)", "value").grid(row=2, column=0, sticky="w")
+        devrow = ttk.Frame(right, style="card.TFrame")
+        devrow.grid(row=3, column=0, sticky="ew", pady=(px(6), px(14)))
+        devrow.columnconfigure(0, weight=1)
+        self.fw_device_combo = kit.combobox(devrow, self.fw_device_var, [])
+        self.fw_device_combo.grid(row=0, column=0, sticky="ew")
+        self.fw_device_combo.bind("<<ComboboxSelected>>", self._on_fw_device_chosen)
+        kit.icon_button(devrow, "refresh", self.scan_devices, "Portları yeniden tara").grid(row=0, column=1, padx=(px(6), 0))
+        self.upload_btn = kit.button(right, "USB ile karta yükle", self.start_upload, icon="usb")
+        self.upload_btn.grid(row=4, column=0, sticky="ew")
+        self.server_upload_btn = kit.button(right, "Sunucuya gönder (OTA)", self.start_server_upload, icon="cloud")
+        self.server_upload_btn.grid(row=5, column=0, sticky="ew", pady=(px(8), 0))
+        self.coworker_zip_btn = kit.button(right, "Çalışma arkadaşı için ZIP", self.start_coworker_zip, icon="zip")
+        self.coworker_zip_btn.grid(row=6, column=0, sticky="ew", pady=(px(8), 0))
+        kit.label(
+            right,
+            "Sunucuya gönderilen sürümü sahadaki kartlar OTA ile kendiliğinden indirir.",
+            "caption",
+            wraplength=px(420),
+            justify="left",
+        ).grid(row=7, column=0, sticky="w", pady=(px(12), 0))
 
-        ttk.Label(right, textvariable=self.latest_release_var, style="Text.TLabel").grid(row=7, column=0, sticky="w", pady=(2, 6))
-        p = ttk.Frame(right, style="Card.TFrame")
-        p.grid(row=8, column=0, sticky="ew")
-        p.columnconfigure(0, weight=1)
-        self.pbar = ttk.Progressbar(
-            p,
-            orient="horizontal",
-            mode="determinate",
-            maximum=100,
-            variable=self.progress_var,
-            style="Accent.Horizontal.TProgressbar",
+        prog = kit.card(page)
+        prog.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(px(18), 0))
+        prog.columnconfigure(0, weight=1)
+        top = ttk.Frame(prog, style="card.TFrame")
+        top.grid(row=0, column=0, sticky="ew")
+        top.columnconfigure(2, weight=1)
+        kit.label(top, "İlerleme", "title").grid(row=0, column=0, sticky="w")
+        self.fw_pill = Pill(top, kit, "Hazır", "neutral")
+        self.fw_pill.grid(row=0, column=1, sticky="w", padx=(px(10), 0))
+        kit.label(top, textvariable=self.progress_text_var, kind="value").grid(row=0, column=3, sticky="e")
+        self.pbar = SmoothProgress(prog, kit, self.progress_var)
+        self.pbar.grid(row=1, column=0, sticky="ew", pady=(px(12), px(10)))
+        kit.label(prog, textvariable=self.status_var, kind="mono").grid(row=2, column=0, sticky="w")
+        kit.label(prog, "Yükleme sırasında yüzde görünür; bitince TMM bildirimi gelir.", "caption").grid(
+            row=3, column=0, sticky="w", pady=(px(6), 0)
         )
-        self.pbar.grid(row=0, column=0, sticky="ew")
-        ttk.Label(p, textvariable=self.progress_text_var, style="Text.TLabel").grid(row=0, column=1, sticky="e", padx=(8, 0))
-        ttk.Label(right, text="Yukleme sirasinda yuzde gorunur, bitince TMM mesaji gelir.", style="Text.TLabel", wraplength=360).grid(row=9, column=0, sticky="w", pady=(8, 0))
+
+    def _on_refresh_key(self, _event: object = None) -> None:
+        if self.current_key in ("label", "firmware"):
+            self.scan_devices()
+        elif self.current_key == "devices" and self.labeled_page is not None:
+            self.labeled_page.refresh_devices()
+        elif self.current_key == "tester" and self.device_tester is not None:
+            self.device_tester.refresh_ports()
+
+    def _on_close(self) -> None:
+        for page in (self.device_tester, self.screen_window):
+            if page is not None:
+                try:
+                    page.shutdown()
+                except Exception:
+                    pass
+        self.root.destroy()
+
+    def toast(self, text: str, kind: str = "info", duration: int | None = None) -> None:
+        self.kit.toast(text, kind, duration)
+
+    def _tracked(self, fn: Callable, on_exit: Callable[[], None] | None = None) -> Callable:
+        """Arka plan isini alt cubuktaki mesgul gostergesine bagla; bitince (hata olsa da) on_exit calisir."""
+        self._jobs += 1
+
+        def run(*args: object) -> None:
+            try:
+                fn(*args)
+            finally:
+                self.root.after(0, self._job_done)
+                if on_exit is not None:
+                    self.root.after(0, on_exit)
+
+        return run
+
+    def _job_done(self) -> None:
+        self._jobs = max(0, self._jobs - 1)
+
+    def _screen_busy(self) -> bool:
+        s = self.screen_window
+        return bool(s is not None and (s.fw_busy or s.scanning))
+
+    def _tick_busy(self) -> None:
+        busy = self.scanning or self.uid_reading or self.fw_busy or self._jobs > 0
+        if busy != self._was_busy:
+            self._was_busy = busy
+            if busy:
+                self.footer_spinner.start()
+            else:
+                self.footer_spinner.stop()
+        hw_busy = busy or self._screen_busy()
+        if self._was_hw_busy and not hw_busy:
+            # Kart yeniden baslatildiysa USB yeniden listelenene kadar port izlemeyi beklet.
+            self._port_cooldown_until = max(self._port_cooldown_until, time.monotonic() + 4.0)
+        self._was_hw_busy = hw_busy
+        self.root.after(200, self._tick_busy)
+
+    def _poll_ports(self) -> None:
+        try:
+            idle = not (self.scanning or self.uid_reading or self.fw_busy or self._screen_busy())
+            if idle and not self._port_poll_running and time.monotonic() >= self._port_cooldown_until:
+                self._port_poll_running = True
+                threading.Thread(target=self._poll_ports_worker, daemon=True).start()
+        finally:
+            self.root.after(PORT_POLL_MS, self._poll_ports)
+
+    def _poll_ports_worker(self) -> None:
+        try:
+            ports: list[tuple[str, str, str]] | None = [
+                (p.device, p.description or "", p.hwid or "") for p in list_ports.comports()
+            ]
+        except Exception:
+            ports = None
+        self.root.after(0, lambda: self._apply_port_poll(ports))
+
+    def _apply_port_poll(self, ports: list[tuple[str, str, str]] | None) -> None:
+        self._port_poll_running = False
+        if ports is None or self.scanning or self.uid_reading or self.fw_busy or self._screen_busy():
+            return
+        old = {d.port: d for d in self.devices}
+        seen = {port for port, _desc, _hwid in ports}
+        removed = [p for p in old if p not in seen]
+        added: list[str] = []
+        new_devices: list[EspDevice] = []
+        for port, desc, hwid in ports:
+            prev = old.get(port)
+            if prev is not None and self._port_hwids.get(port, hwid) == hwid:
+                new_devices.append(prev)
+            else:
+                # Yeni ya da degismis donanim: onceki kimlik bilgisi TASINMAZ (yanlis etiket riski).
+                new_devices.append(EspDevice(port=port, description=desc, chip="Okunmadi", unique_id=""))
+                added.append(port)
+        if not added and not removed:
+            return
+        self.devices = new_devices
+        self._port_hwids = {port: hwid for port, _desc, hwid in ports}
+        self._render_devices()
+        if added:
+            self.toast(f"Kart bağlandı: {', '.join(added)}", "info", 3000)
+        if removed:
+            self.toast(f"Kart çıkarıldı: {', '.join(removed)}", "info", 3000)
+        self.set_status(f"{len(new_devices)} port bağlı." if new_devices else "Bağlı seri port yok.")
+
+    def _device_row(self, d: EspDevice) -> tuple[str, str, str, str, str]:
+        if d.unique_id:
+            state = "✓ Kaydedildi" if d.unique_id in self.saved_uids else "Karekod hazır"
+        else:
+            state = "Kimlik okunmadı"
+        chip = d.chip if d.chip and d.chip != "Okunmadi" else "—"
+        return (d.port, state, chip, d.unique_id or "—", d.description)
+
+    def _render_devices(self, keep_port: str | None = None) -> None:
+        sel = self.tree.selection()
+        port = keep_port if keep_port is not None else (sel[0] if sel else None)
+        self.tree.delete(*self.tree.get_children())
+        for d in self.devices:
+            self.tree.insert("", tk.END, iid=d.port, values=self._device_row(d))
+        if port and self.tree.exists(port):
+            self.tree.selection_set(port)
+            self.tree.see(port)
+        elif len(self.devices) == 1:
+            # Tek kart bagliysa onu kendiliginden sec (bir tik az).
+            self.tree.selection_set(self.devices[0].port)
+        self.kit.zebra(self.tree)
+        if self.devices:
+            self.devices_empty.place_forget()
+        else:
+            self.devices_empty.place(relx=0.5, rely=0.55, anchor="center")
+        n = len(self.devices)
+        self.device_count_pill.set(f"{n} port" if n else "Port yok", "info" if n else "neutral")
+        self._sync_fw_device_choices()
+        self.on_select()
+
+    def _qr_meta(self, d: EspDevice) -> str:
+        chip = d.chip if d.chip and d.chip != "Okunmadi" else "Çip bilinmiyor"
+        return f"{chip}  ·  {d.port}"
+
+    def _set_qr_preview(self, img: Image.Image | None, uid: str | None = None) -> None:
+        if not hasattr(self, "preview"):
+            return
+        if img is not None and uid is not None and uid == self._preview_uid:
+            return
+        self._preview_uid = uid if img is not None else None
+        size = self.kit.px(QR_PREVIEW_PX)
+        if img is None:
+            self.kit.anim.cancel("qr-preview")
+            self.preview.configure(image=self.kit.placeholder_tile(size))
+            return
+        self.kit.pop_image(self.preview, self.kit.framed(img, size), "qr-preview")
+
+    def _refresh_label_ui(self) -> None:
+        if not hasattr(self, "read_uid_btn"):
+            return
+        d = self.selected_device()
+        busy = self.scanning or self.uid_reading
+        has_uid = bool(d is not None and d.unique_id)
+        qr_ready = bool(d is not None and has_uid and self.latest_qr is not None and self.latest_uid == d.unique_id)
+        saved = bool(d is not None and has_uid and d.unique_id in self.saved_uids)
+        self.scan_btn.configure(state=tk.DISABLED if busy else tk.NORMAL)
+        self.read_uid_btn.configure(state=tk.NORMAL if d is not None and not busy else tk.DISABLED)
+        text = "Kimliği yeniden oku" if has_uid else "Kimliği oku"
+        if self.read_uid_btn.cget("text") != text:
+            self.kit.restyle(self.read_uid_btn, variant="secondary" if has_uid else "primary", text=text)
+        self.server_save_device_btn.configure(state=tk.NORMAL if qr_ready and not busy and not self.saving_device else tk.DISABLED)
+        for b in (self.print_btn, self.save_btn):
+            b.configure(state=tk.NORMAL if qr_ready and not busy else tk.DISABLED)
+        self.copy_uid_btn.configure(state=tk.NORMAL if has_uid else tk.DISABLED)
+        if d is None:
+            self.label_stepper.set(0, 0)
+        elif not has_uid:
+            self.label_stepper.set(1, 1)
+        elif not saved:
+            self.label_stepper.set(2, 2)
+        else:
+            self.label_stepper.set(3, None)
+        if self.uid_reading:
+            self.qr_state_pill.set("Kimlik okunuyor", "busy")
+        elif self.saving_device:
+            self.qr_state_pill.set("Kaydediliyor", "busy")
+        elif saved:
+            self.qr_state_pill.set("Kaydedildi", "ok")
+        elif qr_ready:
+            self.qr_state_pill.set("Hazır", "info")
+        else:
+            self.qr_state_pill.set("Bekliyor", "neutral")
+
+    def copy_uid(self) -> None:
+        d = self.selected_device()
+        if d is None or not d.unique_id:
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(d.unique_id)
+        self.toast(f"Kopyalandı: {d.unique_id}", "info", 2200)
+
+    def _device_choice_label(self, d: EspDevice) -> str:
+        chip = d.chip if d.chip and d.chip != "Okunmadi" else "çip bilinmiyor"
+        return f"{d.port}  ·  {chip}" + (f"  ·  {d.unique_id}" if d.unique_id else "")
+
+    def _sync_fw_device_choices(self) -> None:
+        if not hasattr(self, "fw_device_combo"):
+            return
+        self.fw_device_combo.configure(values=[self._device_choice_label(d) for d in self.devices])
+        d = self.selected_device() if hasattr(self, "tree") else None
+        if d is not None:
+            self.fw_device_var.set(self._device_choice_label(d))
+        else:
+            self.fw_device_var.set("Kart seçin" if self.devices else "Bağlı kart yok")
+
+    def _on_fw_device_chosen(self, _event: object = None) -> None:
+        idx = self.fw_device_combo.current()
+        if 0 <= idx < len(self.devices) and hasattr(self, "tree"):
+            port = self.devices[idx].port
+            self.tree.selection_set(port)
+            self.tree.see(port)
+            self.on_select()
+
+    def _begin_fw_op(self, op: str) -> None:
+        self.fw_op = op
+        self.fw_result = None
+        self._refresh_fw_ui()
+
+    def _fw_done(self, ok: bool, text: str, dispatched: tuple[str, str] | None = None, duration: int | None = None) -> None:
+        self.fw_result = (ok, text)
+        if ok and dispatched is not None:
+            self.fw_dispatched_key = dispatched
+        if ok:
+            self.toast(text, "success", duration)
+        self._refresh_fw_ui()
+
+    def _fw_failed(self, title: str, message: str) -> None:
+        self.fw_result = (False, message)
+        self._refresh_fw_ui()
+        messagebox.showerror(title, message)
+
+    def _refresh_fw_ui(self) -> None:
+        if not hasattr(self, "fw_stepper"):
+            return
+        key = self._fw_current_key()
+        built = self.fw_build_ready and self.fw_build_key == key
+        released = self.fw_release_ready and self.fw_release_key == key
+        sent = released and self.fw_dispatched_key == key
+        done = 3 if sent else (2 if released else (1 if built else 0))
+        self.fw_stepper.set(done, None if done >= 3 else done)
+        # Siradaki adimin dugmesi vurgulanir.
+        emphasis = {self.build_btn: done == 0, self.release_btn: done == 1, self.upload_btn: done >= 2}
+        for btn, primary in emphasis.items():
+            variant = "primary" if primary else "secondary"
+            if btn._kit["variant"] != variant:  # type: ignore[attr-defined]
+                self.kit.restyle(btn, variant=variant)
+        self.pbar.set_busy(self.fw_busy)
+        if self.fw_busy:
+            self.fw_pill.set(FW_OP_LABELS.get(self.fw_op, "Çalışıyor"), "busy")
+        elif self.fw_result is not None:
+            ok = self.fw_result[0]
+            self.fw_pill.set("Tamamlandı" if ok else "Başarısız", "ok" if ok else "error")
+        else:
+            self.fw_pill.set("Hazır", "neutral")
 
     def run(self) -> None:
         self.root.mainloop()
 
     def open_device_tester(self) -> None:
-        self.device_tester = DeviceTesterWindow(self.root)
+        self.show_page("tester")
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
@@ -1413,34 +1730,55 @@ class App:
         sel = self.tree.selection()
         if not sel:
             return None
-        idx = int(sel[0])
-        return self.devices[idx] if 0 <= idx < len(self.devices) else None
+        return next((d for d in self.devices if d.port == sel[0]), None)
 
-    def on_select(self, _event: object) -> None:
+    def on_select(self, _event: object = None) -> None:
+        if not hasattr(self, "tree"):
+            return
         d = self.selected_device()
-        if d:
-            self.uid_var.set(f"Unique ID: {d.unique_id or 'Okunmadi'}")
+        if d is None:
+            self.uid_var.set("—")
+            self.qr_meta_var.set("Listeden bir cihaz seçin.")
+            self._set_qr_preview(None)
+            if hasattr(self, "fw_device_combo"):
+                self.fw_device_var.set("Kart seçin" if self.devices else "Bağlı kart yok")
+        else:
+            if hasattr(self, "fw_device_combo"):
+                self.fw_device_var.set(self._device_choice_label(d))
+            if d.unique_id:
+                if self.latest_qr is None or self.latest_uid != d.unique_id:
+                    self.make_qr()
+                else:
+                    self.uid_var.set(d.unique_id)
+                    self.qr_meta_var.set(self._qr_meta(d))
+                    self._set_qr_preview(self.latest_qr, d.unique_id)
+            else:
+                self.uid_var.set("—")
+                self.qr_meta_var.set("Kimliği okuyun; karekod kendiliğinden hazırlanır.")
+                self._set_qr_preview(None)
             suggested = suggest_env_for_chip(d.chip, self.envs)
             if suggested and suggested != self.env_var.get():
                 self.env_var.set(suggested)
                 self.refresh_latest_release()
-                self.set_status(f"Cihaza gore env secildi: {suggested}")
+                self._on_fw_input_changed()
+                self.set_status(f"Cihaza göre kart türü seçildi: {suggested}")
+        self._refresh_label_ui()
 
-    def scan_devices(self) -> None:
-        if self.scanning:
+    def scan_devices(self, manual: bool = True) -> None:
+        if self.scanning or self.uid_reading:
             return
         self.scanning = True
-        self.scan_btn.configure(state=tk.DISABLED)
-        self.read_uid_btn.configure(state=tk.DISABLED)
-        self.qr_btn.configure(state=tk.DISABLED)
-        self.save_btn.configure(state=tk.DISABLED)
-        self.print_btn.configure(state=tk.DISABLED)
-        self.set_status("Portlar listeleniyor...")
-        threading.Thread(target=self._scan_worker, daemon=True).start()
+        self._refresh_label_ui()
+        self.set_status("Portlar listeleniyor…")
+        threading.Thread(target=self._scan_worker, args=(manual,), daemon=True).start()
 
-    def _scan_worker(self) -> None:
-        ports = list(list_ports.comports())
+    def _scan_worker(self, manual: bool = True) -> None:
+        try:
+            ports = list(list_ports.comports())
+        except Exception:
+            ports = []
         found: list[EspDevice] = []
+        hwids: dict[str, str] = {}
         for p in ports:
             found.append(
                 EspDevice(
@@ -1450,42 +1788,34 @@ class App:
                     unique_id="",
                 )
             )
-        self.root.after(0, lambda: self._finish_scan(found))
+            hwids[p.device] = p.hwid or ""
+        self.root.after(0, lambda: self._finish_scan(found, hwids, manual))
 
-    def _finish_scan(self, found: list[EspDevice]) -> None:
+    def _finish_scan(self, found: list[EspDevice], hwids: dict[str, str] | None = None, manual: bool = True) -> None:
         self.scanning = False
-        self.scan_btn.configure(state=tk.NORMAL)
-        self.read_uid_btn.configure(state=tk.NORMAL)
-        self.qr_btn.configure(state=tk.NORMAL)
-        self.save_btn.configure(state=tk.NORMAL)
-        self.print_btn.configure(state=tk.NORMAL)
         self.devices = found
-        for x in self.tree.get_children():
-            self.tree.delete(x)
-        for i, d in enumerate(found):
-            self.tree.insert("", tk.END, iid=str(i), values=(d.port, d.chip, d.unique_id or "Okunmadi", d.description))
+        self._port_hwids = dict(hwids or {})
+        self._render_devices()
         if found:
-            self.set_status(f"{len(found)} port listelendi. UID okuma ayri islemdir ve cihazi resetleyebilir.")
+            self.set_status(f"{len(found)} port listelendi. Kimlik okuma ayrı bir adımdır ve kartı yeniden başlatabilir.")
         else:
-            self.set_status("Bagli seri port bulunamadi.")
-            messagebox.showwarning("Port bulunamadi", "USB/driver/COM baglantisini kontrol edin.")
+            self.set_status("Bağlı seri port bulunamadı.")
+            if manual:
+                self.toast("Bağlı seri port bulunamadı. USB kablosunu ve sürücüyü (CH340 / CP210x) kontrol edin.", "warning")
 
     def read_selected_uid(self) -> None:
-        if self.uid_reading:
+        if self.uid_reading or self.scanning:
             return
         d = self.selected_device()
         if d is None:
-            messagebox.showinfo("Secim gerekli", "Lutfen listeden bir port secin.")
+            messagebox.showinfo("Seçim gerekli", "Lütfen listeden bir port seçin.")
             return
         self.uid_reading = True
-        self.scan_btn.configure(state=tk.DISABLED)
-        self.read_uid_btn.configure(state=tk.DISABLED)
-        self.qr_btn.configure(state=tk.DISABLED)
-        self.set_status(f"UID okunuyor: {d.port}. Bu islem cihazi resetleyebilir.")
-        idx = self.devices.index(d)
-        threading.Thread(target=self._read_uid_worker, args=(idx, d), daemon=True).start()
+        self._refresh_label_ui()
+        self.set_status(f"Kimlik okunuyor: {d.port}. Kart yeniden başlayabilir…")
+        threading.Thread(target=self._read_uid_worker, args=(d.port, d), daemon=True).start()
 
-    def _read_uid_worker(self, idx: int, dev: EspDevice) -> None:
+    def _read_uid_worker(self, port: str, dev: EspDevice) -> None:
         try:
             if getattr(self, "device_tester", None) is not None:
                 try:
@@ -1500,90 +1830,90 @@ class App:
                 chip=chip,
                 unique_id=uid,
             )
-            self.root.after(0, lambda: self._finish_uid_read(idx, updated, None))
+            self.root.after(0, lambda: self._finish_uid_read(port, updated, None))
         except Exception as exc:
-            self.root.after(0, lambda: self._finish_uid_read(idx, dev, str(exc)))
+            self.root.after(0, lambda m=str(exc): self._finish_uid_read(port, dev, m))
 
-    def _finish_uid_read(self, idx: int, dev: EspDevice, error: str | None) -> None:
+    def _finish_uid_read(self, port: str, dev: EspDevice, error: str | None) -> None:
         self.uid_reading = False
-        self.scan_btn.configure(state=tk.NORMAL)
-        self.read_uid_btn.configure(state=tk.NORMAL)
-        self.qr_btn.configure(state=tk.NORMAL)
+        self._port_cooldown_until = time.monotonic() + 4.0
         if error is not None:
-            self.set_status("UID okunamadi.")
-            messagebox.showerror("UID okunamadi", error)
+            self.set_status("Kimlik okunamadı.")
+            self._refresh_label_ui()
+            messagebox.showerror("Kimlik okunamadı", error)
             return
-        if 0 <= idx < len(self.devices):
-            self.devices[idx] = dev
-            self.tree.item(str(idx), values=(dev.port, dev.chip, dev.unique_id, dev.description))
-            self.tree.selection_set(str(idx))
-        self.uid_var.set(f"Unique ID: {dev.unique_id}")
-        suggested = suggest_env_for_chip(dev.chip, self.envs)
-        if suggested:
-            self.env_var.set(suggested)
-            self.refresh_latest_release()
-        self.set_status(f"UID okundu: {dev.unique_id}")
+        for i, x in enumerate(self.devices):
+            if x.port == port:
+                self.devices[i] = dev
+                break
+        else:
+            self.devices.append(dev)
+        self._render_devices(keep_port=port)
+        self.set_status(f"Kimlik okundu: {dev.unique_id}. Karekod hazır.")
+        self.toast(f"Kimlik okundu: {dev.unique_id}", "success")
 
     def make_qr(self) -> None:
         d = self.selected_device()
         if d is None:
-            messagebox.showinfo("Secim gerekli", "Lutfen listeden bir cihaz secin.")
+            messagebox.showinfo("Seçim gerekli", "Lütfen listeden bir cihaz seçin.")
             return
         if not d.unique_id:
             messagebox.showinfo(
-                "UID gerekli",
-                "Once secili cihaz icin UID oku komutunu calistirin. Bu komut cihazi resetleyebilir.",
+                "Kimlik gerekli",
+                "Önce seçili cihazın kimliğini okuyun. Okuma kartı yeniden başlatabilir.",
             )
             return
         img = generate_qr(d.unique_id, self.logo_path)
         self.latest_qr = img
         self.latest_uid = d.unique_id
-        self.uid_var.set(f"Unique ID: {d.unique_id}")
-        prev = img.copy()
-        prev.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE), Image.Resampling.LANCZOS)
-        self.preview_photo = ImageTk.PhotoImage(prev)
-        self.preview.configure(image=self.preview_photo)
-        self.set_status(f"QR hazir: {d.unique_id}")
+        self.uid_var.set(d.unique_id)
+        self.qr_meta_var.set(self._qr_meta(d))
+        self._set_qr_preview(img, d.unique_id)
+        self.set_status(f"Karekod hazır: {d.unique_id}")
+        self._refresh_label_ui()
 
     def save_qr(self) -> None:
         if self.latest_qr is None or self.latest_uid is None:
-            messagebox.showinfo("QR yok", "Once QR olusturun.")
+            messagebox.showinfo("Karekod yok", "Önce cihazın kimliğini okuyun.")
             return
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sanitize_filename(self.latest_uid)}.png"
         path = OUTPUT_DIR / name
         self.latest_qr.save(path, format="PNG")
         self.set_status(f"Kaydedildi: {path}")
-        messagebox.showinfo("Kaydedildi", f"QR kaydedildi:\n{path}")
+        self.toast(f"Karekod kaydedildi: output\\{path.name}", "success")
 
     def print_qr(self) -> None:
         if self.latest_qr is None or self.latest_uid is None:
-            messagebox.showinfo("QR yok", "Once QR olusturun.")
+            messagebox.showinfo("Karekod yok", "Önce cihazın kimliğini okuyun.")
             return
         if os.name != "nt":
-            messagebox.showerror("Yazdirma", "Yalnizca Windows destekleniyor.")
+            messagebox.showerror("Yazdırma", "Yalnızca Windows destekleniyor.")
             return
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         name = f"print_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sanitize_filename(self.latest_uid)}.png"
         path = OUTPUT_DIR / name
         self.latest_qr.save(path, format="PNG")
         os.startfile(str(path), "print")
-        self.set_status(f"Yazdirma gonderildi: {path.name}")
+        self.set_status(f"Yazdırma gönderildi: {path.name}")
+        self.toast("Karekod yazdırmaya gönderildi.", "success")
 
     def save_device_to_server(self) -> None:
+        if self.saving_device:
+            return
         d = self.selected_device()
         if d is None:
-            messagebox.showinfo("Secim gerekli", "Lutfen listeden bir cihaz secin.")
+            messagebox.showinfo("Seçim gerekli", "Lütfen listeden bir cihaz seçin.")
             return
         if not d.unique_id:
-            messagebox.showinfo("UID gerekli", "Once secili cihaz icin UID oku komutunu calistirin.")
+            messagebox.showinfo("Kimlik gerekli", "Önce seçili cihazın kimliğini okuyun.")
             return
 
         if self.latest_qr is None or self.latest_uid != d.unique_id:
             self.make_qr()
 
         if self.latest_qr is None:
-            messagebox.showerror("QR hatasi", "QR kod olusturulamadi.")
+            messagebox.showerror("Karekod hatası", "Karekod oluşturulamadı.")
             return
 
         # 1. Yerel veritabanına ve klasöre kaydet
@@ -1598,7 +1928,7 @@ class App:
             self.latest_qr,
         )
 
-        self.set_status(f"Cihaz sunucuya gonderiliyor: {d.unique_id}...")
+        self.set_status(f"Cihaz sunucuya gönderiliyor: {d.unique_id}…")
 
         # 2. QR görselini base64 formatına çevir
         buffer = io.BytesIO()
@@ -1617,7 +1947,30 @@ class App:
             # Sunucu hardware_type/hardware_target/chip alanlarindan donanim turunu okur (OTA hedef izolasyonu icin).
             payload["hardware_type"] = hardware_type
 
-        threading.Thread(target=self._server_device_save_worker, args=(d, payload), daemon=True).start()
+        self.saving_device = True
+        self._refresh_label_ui()
+        worker = self._tracked(self._server_device_save_worker, on_exit=self._end_device_save)
+        threading.Thread(target=worker, args=(d, payload), daemon=True).start()
+
+    def _end_device_save(self) -> None:
+        self.saving_device = False
+        self._refresh_label_ui()
+
+    def _on_device_saved(self, dev: EspDevice, ok: bool, info: str) -> None:
+        self.saving_device = False
+        if ok:
+            self.saved_uids.add(dev.unique_id)
+            self._render_devices()
+            self.set_status(f"Cihaz sunucuya kaydedildi: {dev.unique_id}  ·  {info}")
+            self.toast(f"Sunucuya kaydedildi: {dev.unique_id}", "success")
+            return
+        self._refresh_label_ui()
+        self.set_status(f"Sunucu kayıt uyarısı: {info}")
+        messagebox.showwarning(
+            "Yerel kayıt tamam, sunucuya gönderilemedi",
+            f"Cihaz bu bilgisayara kaydedildi ancak sunucu API'sine ulaşılamadı:\n{info}\n\n"
+            f"Cihaz kimliği: {dev.unique_id}",
+        )
 
     def _server_device_save_worker(self, dev: EspDevice, payload: dict) -> None:
         success = False
@@ -1651,31 +2004,15 @@ class App:
                     error_msg = str(exc)
 
         if success:
-            self.root.after(0, lambda: self.set_status(f"Cihaz sunucuya kaydedildi: {dev.unique_id}"))
-            self.root.after(
-                0,
-                lambda: messagebox.showinfo(
-                    "Sunucuya Kaydedildi",
-                    f"Cihaz ve karekod görseli sunucuya başarıyla kaydedildi!\n\n"
-                    f"Cihaz UID: {dev.unique_id}\n"
-                    f"Çip: {dev.chip}\n"
-                    f"Karekod URL: {PUBLIC_API_URL}/qrcodes/{dev.unique_id}.png",
-                ),
-            )
+            url = f"{PUBLIC_API_URL}/qrcodes/{dev.unique_id}.png"
+            self.root.after(0, lambda: self._on_device_saved(dev, True, url))
         else:
-            self.root.after(0, lambda: self.set_status(f"Sunucu kayıt uyarısı: {error_msg}"))
-            self.root.after(
-                0,
-                lambda: messagebox.showwarning(
-                    "Yerel Kayıt Başarılı / Sunucu Uyarısı",
-                    f"Cihaz yerel veritabanına kaydedildi ancak sunucu API'sine ulaşılamadı:\n{error_msg}\n\n"
-                    f"Cihaz UID: {dev.unique_id}",
-                ),
-            )
+            msg = error_msg or "Bilinmeyen hata."
+            self.root.after(0, lambda: self._on_device_saved(dev, False, msg))
 
     def download_pdf_report(self) -> None:
-        self.set_status("Cihaz listesi alınıyor ve PDF hazırlanıyor...")
-        threading.Thread(target=self._pdf_report_worker, daemon=True).start()
+        self.set_status("Cihaz listesi alınıyor ve PDF hazırlanıyor…")
+        threading.Thread(target=self._tracked(self._pdf_report_worker), daemon=True).start()
 
     def _pdf_report_worker(self) -> None:
         server_devices, server_error = fetch_server_labeled_devices_with_status()
@@ -1710,10 +2047,7 @@ class App:
             self.root.after(0, lambda: self.set_status("Raporlanacak kayıtlı cihaz bulunamadı."))
             self.root.after(
                 0,
-                lambda: messagebox.showinfo(
-                    "Kayıtlı Cihaz Yok",
-                    "Rapor oluşturmak için önce en az 1 cihazı etiketleyip kaydedin.",
-                ),
+                lambda: self.toast("Rapor için önce en az bir cihazı etiketleyip kaydedin.", "warning"),
             )
             return
 
@@ -1744,36 +2078,27 @@ class App:
                 except Exception:
                     pass
 
-            messagebox.showinfo(
-                "PDF Raporu Hazır",
-                f"Toplam {len(devices)} cihaz için karekodlu envanter PDF raporu başarıyla oluşturuldu:\n\n{out_path}",
-            )
+            self.set_status(f"PDF hazırlandı ({len(devices)} cihaz): {out_path}")
+            self.toast(f"PDF raporu hazır: {len(devices)} cihaz  ·  {out_path.name}", "success", 6000)
         except Exception as exc:
             self.set_status("PDF oluşturma hatası.")
             messagebox.showerror("PDF Hatası", f"PDF raporu oluşturulurken hata oluştu:\n{exc}")
 
     def open_labeled_devices_window(self) -> None:
-        LabeledDevicesWindow(self.root, self.logo_path, self.download_pdf_report)
+        self.show_page("devices")
 
     def open_screen_firmware_window(self) -> None:
-        if getattr(self, "screen_window", None) is not None:
-            try:
-                self.screen_window.window.lift()
-                self.screen_window.window.focus_force()
-                return
-            except Exception:
-                self.screen_window = None
-        self.screen_window = ScreenFirmwareWindow(self.root, self.logo_path)
+        self.show_page("screen")
 
     def refresh_latest_release(self) -> None:
         env = self.env_var.get().strip()
         items = [r for r in self.releases if r.get("env") == env]
         if not items:
-            self.latest_release_var.set(f"Son surum ({env}): -")
+            self.latest_release_var.set(f"{env} için henüz sürüm yok.")
             return
         items.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
         last = items[0]
-        self.latest_release_var.set(f"Son surum ({env}): v{last['version']} [{last['created_at']}]")
+        self.latest_release_var.set(f"Son sürüm: v{last['version']}  ·  {format_when(last.get('created_at'))}")
 
     def _fw_current_key(self) -> tuple[str, str]:
         return (self.env_var.get().strip(), self.version_var.get().strip())
@@ -1804,15 +2129,15 @@ class App:
             self.coworker_zip_btn.configure(state=tk.DISABLED)
             self.env_combo.configure(state="disabled")
             self.version_entry.configure(state=tk.DISABLED)
-            return
-
-        self.build_btn.configure(state=tk.NORMAL)
-        self.release_btn.configure(state=tk.NORMAL if self.fw_build_ready else tk.DISABLED)
-        self.upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
-        self.server_upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
-        self.coworker_zip_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
-        self.env_combo.configure(state="readonly")
-        self.version_entry.configure(state=tk.NORMAL)
+        else:
+            self.build_btn.configure(state=tk.NORMAL)
+            self.release_btn.configure(state=tk.NORMAL if self.fw_build_ready else tk.DISABLED)
+            self.upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+            self.server_upload_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+            self.coworker_zip_btn.configure(state=tk.NORMAL if self.fw_release_ready else tk.DISABLED)
+            self.env_combo.configure(state="readonly")
+            self.version_entry.configure(state=tk.NORMAL)
+        self._refresh_fw_ui()
 
     def _set_fw_state(self, enabled: bool) -> None:
         self.fw_busy = not enabled
@@ -1872,6 +2197,7 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
+        self._begin_fw_op("build")
         threading.Thread(target=self._build_worker, args=(env, version), daemon=True).start()
 
     def _build_worker(self, env: str, version: str) -> None:
@@ -1889,15 +2215,15 @@ class App:
             self.fw_build_ready = True
             self.fw_release_ready = False
             self.fw_release_key = None
-            self.root.after(0, lambda: self.set_status(f"Derleme tamamlandi: v{version}"))
-            self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Firmware v{version} derleme tamamlandi."))
+            self.root.after(0, lambda: self.set_status(f"Derleme tamamlandı: v{version}"))
+            self.root.after(0, lambda: self._fw_done(True, f"Derleme tamamlandı: v{version}"))
         except Exception as exc:
             self.fw_build_ready = False
             self.fw_release_ready = False
             self.fw_build_key = None
             self.fw_release_key = None
-            self.root.after(0, lambda: messagebox.showerror("Derleme hatasi", str(exc)))
-            self.root.after(0, lambda: self.set_status("Derleme basarisiz."))
+            self.root.after(0, lambda m=str(exc): self._fw_failed("Derleme hatası", m))
+            self.root.after(0, lambda: self.set_status("Derleme başarısız."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
@@ -1921,6 +2247,7 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
+        self._begin_fw_op("release")
         threading.Thread(target=self._release_worker, args=(env, version), daemon=True).start()
 
     def _release_worker(self, env: str, version: str) -> None:
@@ -1994,13 +2321,13 @@ class App:
 
             self.root.after(0, self.refresh_latest_release)
             self.root.after(0, lambda: self.version_var.set(read_firmware_source_version(env) or suggest_version(self.releases, env)))
-            self.root.after(0, lambda: self.set_status(f"Surum olusturuldu: v{version}"))
-            self.root.after(0, lambda: messagebox.showinfo("Basarili", f"Surum olusturuldu: v{version}\n{folder}"))
+            self.root.after(0, lambda: self.set_status(f"Sürüm oluşturuldu: v{version}  ·  {folder}"))
+            self.root.after(0, lambda: self._fw_done(True, f"Sürüm oluşturuldu: v{version}"))
         except Exception as exc:
             self.fw_release_ready = False
             self.fw_release_key = None
-            self.root.after(0, lambda: messagebox.showerror("Surum hatasi", str(exc)))
-            self.root.after(0, lambda: self.set_status("Surum olusturma basarisiz."))
+            self.root.after(0, lambda m=str(exc): self._fw_failed("Sürüm hatası", m))
+            self.root.after(0, lambda: self.set_status("Sürüm oluşturma başarısız."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
@@ -2024,6 +2351,7 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
+        self._begin_fw_op("upload")
         threading.Thread(target=self._upload_worker, args=(dev, rel), daemon=True).start()
 
     def _upload_worker(self, dev: EspDevice, rel: dict) -> None:
@@ -2133,11 +2461,19 @@ class App:
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
-            self.root.after(0, lambda: self.set_status("TMM: Firmware yukleme tamamlandi."))
-            self.root.after(0, lambda: messagebox.showinfo("TMM", f"Yukleme tamamlandi.\nPort: {dev.port}\nSurum: v{rel['version']}"))
+            self.root.after(0, lambda: self.set_status(f"TMM: Yazılım yükleme tamamlandı ({dev.port}, v{rel['version']})."))
+            self.root.after(
+                0,
+                lambda: self._fw_done(
+                    True,
+                    f"TMM · Yükleme tamamlandı ({dev.port}, v{rel['version']})",
+                    (str(rel.get("env", "")), str(rel.get("version", ""))),
+                    7000,
+                ),
+            )
         except Exception as exc:
-            self.root.after(0, lambda m=str(exc): messagebox.showerror("Yukleme hatasi", m))
-            self.root.after(0, lambda: self.set_status("Yukleme basarisiz."))
+            self.root.after(0, lambda m=str(exc): self._fw_failed("Yükleme hatası", m))
+            self.root.after(0, lambda: self.set_status("Yükleme başarısız."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
@@ -2173,6 +2509,7 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
+        self._begin_fw_op("server")
         threading.Thread(target=self._server_upload_worker, args=(rel, password), daemon=True).start()
 
     def _server_upload_worker(self, rel: dict, password: str) -> None:
@@ -2222,21 +2559,19 @@ class App:
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
-            self.root.after(0, lambda: self.set_status(f"TMM: v{rel['version']} ({target}) guncelleme dosyasi sunucuya gonderildi."))
+            self.root.after(0, lambda: self.set_status(f"TMM: v{rel['version']} ({target}) güncelleme dosyası sunucuya ({VPS_HOST}) gönderildi."))
             self.root.after(
                 0,
-                lambda: messagebox.showinfo(
-                    "TMM",
-                    f"Firmware guncelleme paketi sunucuya basariyla gonderildi!\n\n"
-                    f"Hedef Donanim: {target}\n"
-                    f"Surum: v{rel['version']}\n"
-                    f"Sunucu: {VPS_HOST}\n\n"
-                    f"Sahadaki {target} cihazlari bu surumu OTA uzerinden otomatik olarak indirecektir.",
+                lambda: self._fw_done(
+                    True,
+                    f"TMM · v{rel['version']} ({target}) sunucuya gönderildi. Sahadaki {target} kartları bu sürümü OTA ile indirecek.",
+                    (str(rel.get("env", "")), str(rel.get("version", ""))),
+                    9000,
                 ),
             )
         except Exception as exc:
-            self.root.after(0, lambda: messagebox.showerror("Sunucu yukleme hatasi", str(exc)))
-            self.root.after(0, lambda: self.set_status("Sunucuya gonderme basarisiz."))
+            self.root.after(0, lambda m=str(exc): self._fw_failed("Sunucuya gönderme hatası", m))
+            self.root.after(0, lambda: self.set_status("Sunucuya gönderme başarısız."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
@@ -2265,6 +2600,7 @@ class App:
         self._apply_fw_button_state()
         self.progress_var.set(0)
         self.progress_text_var.set("%0")
+        self._begin_fw_op("zip")
         threading.Thread(target=self._coworker_zip_worker, args=(rel, Path(target)), daemon=True).start()
 
     def _coworker_zip_worker(self, rel: dict, target: Path) -> None:
@@ -2285,7 +2621,8 @@ class App:
             speed = int(self.upload_speeds.get(rel["env"], 460800))
             version = str(rel.get("version", ""))
             env = str(rel.get("env", ""))
-            target = target_for_env(env)
+            # Donanim hedefi; 'target' (ZIP dosya yolu) ile karismasin diye ayri ad.
+            hw_target = target_for_env(env)
             boot_offset = bootloader_offset_for_env(env)
             required_bundle_paths = [
                 ("Paket Python", BUNDLED_PYTHON_DIR),
@@ -2315,7 +2652,7 @@ if not exist "%PYEXE%" (
 )
 set PYTHONPATH=%~dp0tools\\site-packages;%~dp0tools\\tool-esptoolpy;%~dp0tools\\tool-esptoolpy\\_contrib
 if "%PORT%"=="" (
-  echo ESP32 ({target}) COM portu otomatik araniyor...
+  echo ESP32 ({hw_target}) COM portu otomatik araniyor...
   for /f "delims=" %%P in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-CimInstance Win32_SerialPort | Where-Object {{ $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty DeviceID; if(-not $p){{ $n=Get-CimInstance Win32_PnPEntity | Where-Object {{ $_.Name -match '(COM[0-9]+)' -and $_.Name -match 'USB|UART|CP210|CH340|CH910|ESP|Silicon|Serial' }} | Select-Object -First 1 -ExpandProperty Name; if($n -match '(COM[0-9]+)'){{ $p=$Matches[1] }} }}; if($p){{ $p.ToUpper() }}"') do set PORT=%%P
 )
 if "%PORT%"=="" (
@@ -2344,19 +2681,19 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo SmartKeyPass firmware yukleme tamamlandi. Surum: v{version} ({target})
+echo SmartKeyPass firmware yukleme tamamlandi. Surum: v{version} ({hw_target})
 pause
 """
             readme = f"""SmartKeyPass cihaz USB guncelleme paketi
 
 Surum: v{version}
-Hedef Donanim: {target}
+Hedef Donanim: {hw_target}
 PlatformIO env: {env}
 Bootloader offset: {boot_offset}
 
 Kullanim:
 1. ZIP dosyasini bir klasore cikarin.
-2. {target} cihazini USB ile bilgisayara baglayin.
+2. {hw_target} cihazini USB ile bilgisayara baglayin.
 3. flash_smartkeypass_usb.bat dosyasina cift tiklayin.
 4. Program COM portunu otomatik bulur ve firmware yukler.
 
@@ -2394,94 +2731,101 @@ Paket icerigi:
 
             self.root.after(0, lambda: self.progress_var.set(100))
             self.root.after(0, lambda: self.progress_text_var.set("%100"))
-            self.root.after(0, lambda: self.set_status(f"ZIP hazir: {target}"))
-            self.root.after(0, lambda: messagebox.showinfo("ZIP hazir", f"Guncelleme ZIP dosyasi olusturuldu:\n{target}"))
+            self.root.after(0, lambda: self.set_status(f"ZIP hazır: {target}"))
+            self.root.after(0, lambda: self._fw_done(True, f"ZIP hazır: {target.name}", (env, version)))
         except Exception as exc:
-            self.root.after(0, lambda: messagebox.showerror("ZIP hatasi", str(exc)))
-            self.root.after(0, lambda: self.set_status("ZIP olusturma basarisiz."))
+            self.root.after(0, lambda m=str(exc): self._fw_failed("ZIP hatası", m))
+            self.root.after(0, lambda: self.set_status("ZIP oluşturma başarısız."))
         finally:
             self.fw_busy = False
             self.root.after(0, self._apply_fw_button_state)
 
 
-class LabeledDevicesWindow:
-    def __init__(self, parent: tk.Tk, logo_path: Path, on_download_pdf: Callable[[], None]) -> None:
-        self.window = tk.Toplevel(parent)
-        self.window.title("SmartKeyPass Kayıtlı Cihazlar ve Karekod Envanteri")
-        self.window.configure(bg=CLR_APP_BG)
-        self.window.minsize(1080, 680)
+class LabeledDevicesPage:
+    def __init__(self, parent: ttk.Frame, kit: Kit, logo_path: Path, on_download_pdf: Callable[[], None]) -> None:
+        # Ana penceredeki sayfa cercevesi; eski kodla uyum icin adi 'window' kaldi.
+        self.window = parent
+        self.kit = kit
         self.logo_path = logo_path
         self.on_download_pdf = on_download_pdf
 
         self.devices: list[dict] = []
         self.filtered_devices: list[dict] = []
         self.selected_qr: Image.Image | None = None
-        self.preview_photo: ImageTk.PhotoImage | None = None
+        self._preview_uid: str | None = None
+        self._server_note = ""
 
         self.search_var = tk.StringVar(value="")
-        self.status_var = tk.StringVar(value="Cihazlar yükleniyor...")
-        self.selected_uid_var = tk.StringVar(value="Seçili Cihaz: -")
+        self.status_var = tk.StringVar(value="Cihazlar yükleniyor…")
+        self.selected_uid_var = tk.StringVar(value="—")
+        self.meta_var = tk.StringVar(value="")
 
         self._ui()
         self.search_var.trace_add("write", lambda *_args: self._on_search_changed())
         self.refresh_devices()
 
     def _ui(self) -> None:
-        main = ttk.Frame(self.window, style="App.TFrame", padding=16)
-        main.pack(fill=tk.BOTH, expand=True)
-        main.columnconfigure(0, weight=3)
-        main.columnconfigure(1, weight=2)
+        kit = self.kit
+        px = kit.px
+        main = self.window
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=0, minsize=px(340))
         main.rowconfigure(1, weight=1)
 
-        # Header
-        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 12))
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-        ttk.Label(header, text="Kayıtlı Cihazlar ve Karekod Envanteri", style="Title.TLabel").pack(side=tk.LEFT)
-        ttk.Label(header, textvariable=self.status_var, style="Sub.TLabel").pack(side=tk.RIGHT, padx=10)
+        header, slot = kit.page_header(
+            main,
+            "Kayıtlı cihazlar",
+            "Etiketlenmiş tüm cihazlar ve karekodları. Sunucudaki kayıtlar ile bu bilgisayardakiler birlikte listelenir.",
+            icon="library",
+        )
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, px(18)))
+        kit.button(slot, "Yenile", self.refresh_devices, icon="refresh", surface="page").pack(side=tk.LEFT)
+        kit.button(slot, "Karekodlu PDF raporu", self.on_download_pdf, "primary", icon="pdf", surface="page").pack(
+            side=tk.LEFT, padx=(px(8), 0)
+        )
 
-        # Left: Devices list
-        left = ttk.Frame(main, style="Card.TFrame", padding=14)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        left = kit.card(main)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, px(18)))
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(2, weight=1)
+        left.rowconfigure(1, weight=1)
+        bar = ttk.Frame(left, style="card.TFrame")
+        bar.grid(row=0, column=0, sticky="ew", pady=(0, px(12)))
+        bar.columnconfigure(0, weight=1)
+        search = kit.entry(bar, self.search_var, placeholder="Kimlik, çip ya da açıklama ara…", icon="search")
+        search.grid(row=0, column=0, sticky="ew")
+        search.bind("<Escape>", lambda _e: self.search_var.set(""))
+        self.count_pill = Pill(bar, kit, "Yükleniyor", "busy")
+        self.count_pill.grid(row=0, column=1, padx=(px(10), 0))
 
-        # Toolbar Buttons
-        btn_row = ttk.Frame(left, style="Card.TFrame")
-        btn_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(btn_row, text="🔄 Yenile", command=self.refresh_devices, style="Accent.TButton").pack(side=tk.LEFT)
-        ttk.Button(btn_row, text="📄 Karekodlu PDF İndir", command=self.on_download_pdf, style="Accent.TButton").pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(btn_row, text="🗑️ Seçili Cihazı Sil", command=self._delete_selected_device, style="Danger.TButton").pack(side=tk.LEFT, padx=(12, 0))
-
-        # Search / Filter Bar
-        search_row = ttk.Frame(left, style="Card.TFrame")
-        search_row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(search_row, text="🔍 Ara:", style="Head.TLabel").pack(side=tk.LEFT, padx=(0, 6))
-        search_entry = ttk.Entry(search_row, textvariable=self.search_var)
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
-        ttk.Button(search_row, text="✕ Temizle", command=lambda: self.search_var.set(""), style="Soft.TButton").pack(side=tk.LEFT)
-
-        cols = ("device_uid", "chip", "created_at", "description")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=16)
-        self.tree.heading("device_uid", text="Cihaz Unique ID")
-        self.tree.heading("chip", text="Çip Modeli")
-        self.tree.heading("created_at", text="Kayıt Tarihi")
-        self.tree.heading("description", text="Açıklama")
-        self.tree.column("device_uid", width=190, anchor=tk.CENTER)
-        self.tree.column("chip", width=110, anchor=tk.CENTER)
-        self.tree.column("created_at", width=150, anchor=tk.CENTER)
-        self.tree.column("description", width=200, anchor=tk.W)
-        self.tree.grid(row=2, column=0, sticky="nsew")
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        box, self.tree = kit.tree(
+            left,
+            [
+                ("device_uid", "Cihaz kimliği (UID)", 180, "w", False),
+                ("chip", "Çip", 110, "w", False),
+                ("created_at", "Kayıt tarihi", 140, "w", False),
+                ("description", "Açıklama", 200, "w", True),
+            ],
+            height=14,
+        )
+        box.grid(row=1, column=0, sticky="nsew")
+        self.tree.bind("<<TreeviewSelect>>", self._on_select, add="+")
         self.tree.bind("<Delete>", lambda _e: self._delete_selected_device())
-        self.tree.bind("<F5>", lambda _e: self.refresh_devices())
+        self.empty = kit.empty_state(
+            box,
+            "library",
+            "Henüz kayıtlı cihaz yok",
+            "Etiketle sayfasında bir cihazı kaydettiğinizde burada görünür.",
+        )
+        self.status_label = kit.label(left, textvariable=self.status_var, kind="caption", justify="left", wraplength=px(640))
+        self.status_label.grid(row=2, column=0, sticky="w", pady=(px(10), 0))
 
-        # Context Menu (Right Click)
-        self.context_menu = tk.Menu(self.window, tearoff=0)
-        self.context_menu.add_command(label="🗑️ Seçili Cihazı Sil (Kalıcı)", command=self._delete_selected_device)
+        # Sag tik menusu
+        self.context_menu = tk.Menu(self.window, tearoff=0, font=kit.fonts["body"])
+        self.context_menu.add_command(label="Karekodu yazdır", command=self._print_selected_qr)
+        self.context_menu.add_command(label="Karekodu PNG kaydet", command=self._save_selected_qr)
+        self.context_menu.add_command(label="Kimliği kopyala", command=self._copy_uid_to_clipboard)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="🖨️ Karekodu Yazdır", command=self._print_selected_qr)
-        self.context_menu.add_command(label="💾 Karekodu Kaydet", command=self._save_selected_qr)
-        self.context_menu.add_command(label="📋 Unique ID Kopyala", command=self._copy_uid_to_clipboard)
+        self.context_menu.add_command(label="Cihazı kalıcı olarak sil…", command=self._delete_selected_device)
 
         def _popup_menu(event):
             item = self.tree.identify_row(event.y)
@@ -2491,28 +2835,65 @@ class LabeledDevicesWindow:
 
         self.tree.bind("<Button-3>", _popup_menu)
 
-        sc = ttk.Scrollbar(left, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sc.set)
-        sc.grid(row=2, column=1, sticky="ns")
-
-        # Right: QR Preview
-        right = ttk.Frame(main, style="Card.TFrame", padding=14)
+        right = kit.card(main)
         right.grid(row=1, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
+        kit.label(right, "Karekod", "title").grid(row=0, column=0, sticky="w")
+        self.preview_label = ttk.Label(right, style=kit.label_style("body"), anchor="center")
+        self.preview_label.grid(row=1, column=0, pady=(px(16), px(12)))
+        uid_row = ttk.Frame(right, style="card.TFrame")
+        uid_row.grid(row=2, column=0)
+        kit.label(uid_row, textvariable=self.selected_uid_var, kind="uid").pack(side=tk.LEFT)
+        self.copy_btn = kit.icon_button(uid_row, "copy", self._copy_uid_to_clipboard, "Kimliği panoya kopyala")
+        self.copy_btn.pack(side=tk.LEFT, padx=(px(6), 0))
+        kit.label(right, textvariable=self.meta_var, kind="caption", justify="center").grid(row=3, column=0, pady=(px(2), 0))
+        kit.separator(right).grid(row=4, column=0, sticky="ew", pady=px(16))
+        row2 = ttk.Frame(right, style="card.TFrame")
+        row2.grid(row=5, column=0, sticky="ew")
+        row2.columnconfigure(0, weight=1, uniform="lq")
+        row2.columnconfigure(1, weight=1, uniform="lq")
+        self.print_btn = kit.button(row2, "Yazdır", self._print_selected_qr, icon="print")
+        self.print_btn.grid(row=0, column=0, sticky="ew", padx=(0, px(4)))
+        self.save_btn = kit.button(row2, "PNG kaydet", self._save_selected_qr, icon="save")
+        self.save_btn.grid(row=0, column=1, sticky="ew", padx=(px(4), 0))
+        self.delete_btn = kit.button(right, "Cihazı sil", self._delete_selected_device, "danger_soft", icon="delete")
+        self.delete_btn.grid(row=6, column=0, sticky="ew", pady=(px(8), 0))
+        kit.label(
+            right,
+            "Silme, cihazı sunucudan ve bu bilgisayardan kalıcı olarak kaldırır.",
+            "caption",
+            wraplength=px(290),
+            justify="left",
+        ).grid(row=7, column=0, sticky="w", pady=(px(12), 0))
+        self._set_preview(None)
 
-        ttk.Label(right, text="Karekod Önizleme", style="Head.TLabel").grid(row=0, column=0, sticky="w")
-        self.preview_label = ttk.Label(right, style="Card.TLabel", anchor="center")
-        self.preview_label.grid(row=1, column=0, sticky="ew", pady=(12, 12))
-        ttk.Label(right, textvariable=self.selected_uid_var, style="Value.TLabel").grid(row=2, column=0, sticky="w")
+    def _set_preview(self, img: Image.Image | None, uid: str | None = None) -> None:
+        size = self.kit.px(QR_PREVIEW_PX)
+        state = tk.NORMAL if img is not None else tk.DISABLED
+        for b in (self.print_btn, self.save_btn, self.delete_btn, self.copy_btn):
+            b.configure(state=state)
+        if img is None:
+            self._preview_uid = None
+            self.selected_uid_var.set("—")
+            self.meta_var.set("")
+            self.kit.anim.cancel("labeled-preview")
+            self.preview_label.configure(image=self.kit.placeholder_tile(size))
+            return
+        if uid == self._preview_uid:
+            return
+        self._preview_uid = uid
+        self.kit.pop_image(self.preview_label, self.kit.framed(img, size), "labeled-preview")
 
-        qr_actions = ttk.Frame(right, style="Card.TFrame")
-        qr_actions.grid(row=3, column=0, sticky="ew", pady=(16, 0))
-        ttk.Button(qr_actions, text="🖨️ Yazdır", command=self._print_selected_qr, style="Soft.TButton").pack(side=tk.LEFT)
-        ttk.Button(qr_actions, text="💾 Kaydet", command=self._save_selected_qr, style="Soft.TButton").pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(qr_actions, text="🗑️ Sil", command=self._delete_selected_device, style="Danger.TButton").pack(side=tk.LEFT, padx=(8, 0))
+    def _show_server_note(self, msg: str) -> None:
+        self._server_note = msg
+        self.status_var.set(msg)
+        self.status_label.configure(image=self.kit.icon("warning", self.kit.px(16), C.WARNING, gap=self.kit.px(6)), compound="left")
 
     def refresh_devices(self) -> None:
-        self.status_var.set("Cihazlar güncelleniyor...")
+        self._server_note = ""
+        self.status_label.configure(image="")
+        self.status_var.set("Cihazlar güncelleniyor…")
+        self.count_pill.set("Yükleniyor", "busy")
         threading.Thread(target=self._fetch_worker, daemon=True).start()
 
     def _fetch_worker(self) -> None:
@@ -2535,7 +2916,7 @@ class LabeledDevicesWindow:
         self.devices = devices
         self.window.after(0, self._apply_search_and_render)
         if server_error:
-            self.window.after(50, lambda msg=server_error: self.status_var.set(msg))
+            self.window.after(50, lambda msg=server_error: self._show_server_note(msg))
 
     def _on_search_changed(self) -> None:
         self._apply_search_and_render()
@@ -2559,28 +2940,31 @@ class LabeledDevicesWindow:
         for i, d in enumerate(self.filtered_devices):
             uid = str(d.get("device_uid", "")).upper()
             chip = str(d.get("chip", "ESP32"))
-            date_val = str(d.get("created_at", "-"))
-            if "T" in date_val:
-                try:
-                    dt = datetime.fromisoformat(date_val.replace("Z", "+00:00"))
-                    date_val = dt.strftime("%d.%m.%Y %H:%M")
-                except Exception:
-                    pass
+            date_val = format_when(d.get("created_at", "-"))
             desc = str(d.get("description", ""))
             self.tree.insert("", tk.END, iid=str(i), values=(uid, chip, date_val, desc))
 
-        if q:
-            self.status_var.set(f"Filtrelendi: {len(self.filtered_devices)} / {len(self.devices)} cihaz")
-        else:
-            self.status_var.set(f"Toplam {len(self.devices)} kayıtlı cihaz")
+        total = len(self.devices)
+        shown = len(self.filtered_devices)
+        self.count_pill.set(f"{shown} / {total} cihaz" if q else f"{total} cihaz", "info" if total else "neutral")
+        if not self._server_note:
+            self.status_var.set("Sağ tık: yazdır, kaydet, kopyala, sil. Delete tuşu seçili cihazı siler.")
 
         if self.filtered_devices:
+            self.empty.place_forget()
             self.tree.selection_set("0")
             self._show_device_preview(self.filtered_devices[0])
         else:
-            self.selected_uid_var.set("Seçili Cihaz: -")
-            self.preview_label.configure(image="")
+            if q:
+                self.empty.title_label.configure(text="Eşleşen cihaz yok")
+                self.empty.text_label.configure(text="Aramayı değiştirin ya da Esc ile temizleyin.")
+            else:
+                self.empty.title_label.configure(text="Henüz kayıtlı cihaz yok")
+                self.empty.text_label.configure(text="Etiketle sayfasında bir cihazı kaydettiğinizde burada görünür.")
+            self.empty.place(relx=0.5, rely=0.5, anchor="center")
             self.selected_qr = None
+            self._set_preview(None)
+        self.kit.zebra(self.tree)
 
     def _on_select(self, _event: object) -> None:
         sel = self.tree.selection()
@@ -2592,13 +2976,14 @@ class LabeledDevicesWindow:
 
     def _show_device_preview(self, dev: dict) -> None:
         uid = str(dev.get("device_uid", "")).upper()
-        self.selected_uid_var.set(f"Seçili: {uid}")
+        self.selected_uid_var.set(uid or "—")
+        chip = str(dev.get("chip", "ESP32"))
+        self.meta_var.set(f"{chip}  ·  {format_when(dev.get('created_at', '-'))}")
+        if uid == self._preview_uid and self.selected_qr is not None:
+            return
         qr_img = generate_qr(uid, self.logo_path)
         self.selected_qr = qr_img
-        prev = qr_img.copy()
-        prev.thumbnail((PREVIEW_SIZE, PREVIEW_SIZE), Image.Resampling.LANCZOS)
-        self.preview_photo = ImageTk.PhotoImage(prev)
-        self.preview_label.configure(image=self.preview_photo)
+        self._set_preview(qr_img, uid)
 
     def _delete_selected_device(self) -> None:
         sel = self.tree.selection()
@@ -2628,7 +3013,8 @@ class LabeledDevicesWindow:
         if not confirm:
             return
 
-        self.status_var.set(f"'{uid}' siliniyor...")
+        self.status_var.set(f"'{uid}' siliniyor…")
+        self.count_pill.set("Siliniyor", "busy")
 
         def _delete_worker():
             # 1. Yerel JSON ve QR dosyasından sil
@@ -2639,7 +3025,7 @@ class LabeledDevicesWindow:
             def _done():
                 self.refresh_devices()
                 if server_ok:
-                    messagebox.showinfo("Cihaz Silindi", f"'{uid}' kodlu cihaz hem yerelden hem sunucudan başarıyla silindi.", parent=self.window)
+                    self.kit.toast(f"{uid} hem bu bilgisayardan hem sunucudan silindi.", "success")
                 else:
                     messagebox.showwarning("Kısmi Silme", f"'{uid}' yerelden silindi fakat sunucu bildirimi:\n{server_msg}", parent=self.window)
 
@@ -2656,7 +3042,7 @@ class LabeledDevicesWindow:
             uid = str(self.filtered_devices[idx].get("device_uid", "")).upper()
             self.window.clipboard_clear()
             self.window.clipboard_append(uid)
-            self.status_var.set(f"Panoya kopyalandı: {uid}")
+            self.kit.toast(f"Kopyalandı: {uid}", "info", 2200)
 
     def _print_selected_qr(self) -> None:
         if self.selected_qr is None:
@@ -2671,7 +3057,7 @@ class LabeledDevicesWindow:
         path = OUTPUT_DIR / f"print_{sanitize_filename(uid)}.png"
         self.selected_qr.save(path, format="PNG")
         os.startfile(str(path), "print")
-        self.status_var.set(f"Yazdırmaya gönderildi: {path.name}")
+        self.kit.toast("Karekod yazdırmaya gönderildi.", "success")
 
     def _save_selected_qr(self) -> None:
         if self.selected_qr is None:
@@ -2682,19 +3068,50 @@ class LabeledDevicesWindow:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         path = OUTPUT_DIR / f"{sanitize_filename(uid)}.png"
         self.selected_qr.save(path, format="PNG")
-        messagebox.showinfo("Kaydedildi", f"Karekod kaydedildi:\n{path}", parent=self.window)
+        self.kit.toast(f"Karekod kaydedildi: output\\{path.name}", "success")
 
 
-class DeviceTesterWindow:
+class DeviceTesterPage:
     STATUS_START = "--- ESP32 SISTEM BILGISI ---"
     STATUS_START_ALT = "----- CIHAZ DURUMU -----"
     STATUS_END = "------------------------"
 
-    def __init__(self, parent: tk.Tk) -> None:
-        self.window = tk.Toplevel(parent)
-        self.window.title("SmartKeyPass Cihaz Deneme")
-        self.window.configure(bg=CLR_APP_BG)
-        self.window.minsize(1040, 700)
+    SECTIONS = (
+        (0, "KİMLİK VE YAZILIM", ("Cihaz UID", "Hedef mimari", "Firmware surumu", "OTA durum")),
+        (0, "BLUETOOTH", ("Bluetooth provisioning", "Bluetooth adi")),
+        (0, "DONANIM", ("Role GPIO", "Role pin okuma", "Kamera / QR Okuyucu", "WiFi LED GPIO", "Bluetooth LED GPIO")),
+        (1, "WI-FI VE AĞ", ("WiFi kayitli", "WiFi SSID", "WiFi bagli", "WiFi IP", "WiFi gucu", "Yerel Beacon (UDP)", "Genel IP (WAN)")),
+        (1, "MQTT", ("MQTT", "MQTT kimligi", "MQTT sunucu")),
+    )
+    # Anahtarlar kartin durum blogundaki adlardir (degismez); yalnizca ekrandaki etiketler Turkcelestirildi.
+    FIELD_LABELS = {
+        "Cihaz UID": "Cihaz kimliği",
+        "Hedef mimari": "Hedef mimari",
+        "Firmware surumu": "Yazılım sürümü",
+        "OTA durum": "OTA durumu",
+        "Bluetooth provisioning": "Kurulum modu",
+        "Bluetooth adi": "Bluetooth adı",
+        "Role GPIO": "Röle pini",
+        "Role pin okuma": "Röle pin okuma",
+        "Kamera / QR Okuyucu": "Karekod okuyucu",
+        "WiFi LED GPIO": "Wi-Fi LED pini",
+        "Bluetooth LED GPIO": "Bluetooth LED pini",
+        "WiFi kayitli": "Kayıtlı ağ",
+        "WiFi SSID": "Ağ adı (SSID)",
+        "WiFi bagli": "Bağlantı",
+        "WiFi IP": "Yerel IP",
+        "WiFi gucu": "Sinyal gücü",
+        "Yerel Beacon (UDP)": "Yerel yayın (UDP)",
+        "Genel IP (WAN)": "Genel IP (WAN)",
+        "MQTT": "Durum",
+        "MQTT kimligi": "Kimlik",
+        "MQTT sunucu": "Sunucu",
+    }
+
+    def __init__(self, parent: ttk.Frame, kit: Kit) -> None:
+        # Ana penceredeki sayfa cercevesi; eski kodla uyum icin adi 'window' kaldi.
+        self.window = parent
+        self.kit = kit
 
         self.worker: SerialWorker | None = None
         self.line_queue: queue.Queue[str] = queue.Queue()
@@ -2704,110 +3121,144 @@ class DeviceTesterWindow:
         self._stop_beacon = False
 
         self.port_var = tk.StringVar()
-        self.connection_var = tk.StringVar(value="Bagli degil")
-        self.last_command_var = tk.StringVar(value="-")
+        self.connection_var = tk.StringVar(value="Bağlı değil")
+        self.last_command_var = tk.StringVar(value="—")
         self.status_vars: dict[str, tk.StringVar] = {}
 
         self._ui()
         self.refresh_ports()
         self._start_beacon_listener()
         self.window.after(100, self._drain_lines)
-        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _ui(self) -> None:
-        main = ttk.Frame(self.window, style="App.TFrame", padding=16)
-        main.pack(fill=tk.BOTH, expand=True)
-        main.columnconfigure(0, weight=3)
-        main.columnconfigure(1, weight=2)
-        main.rowconfigure(2, weight=1)
+        kit = self.kit
+        px = kit.px
+        main = self.window
+        # Bilgi karti genis (%60): kimlik ve sunucu adresi gibi uzun degerler bolunmesin.
+        main.columnconfigure(0, weight=3, uniform="tst")
+        main.columnconfigure(1, weight=2, uniform="tst", minsize=px(340))
+        main.rowconfigure(1, weight=1)
 
-        ttk.Label(main, text="SmartKeyPass Cihaz Deneme", style="Head.TLabel").grid(
-            row=0,
-            column=0,
-            columnspan=2,
-            sticky="w",
+        header, slot = kit.page_header(
+            main,
+            "Cihaz testi",
+            "Kartı seri porttan canlı izleyin; röle ve karekod okuyucu testlerini çalıştırın.",
+            icon="diag",
         )
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, px(18)))
+        self.conn_pill = Pill(slot, kit, "Bağlı değil", "neutral", surface="page")
+        self.conn_pill.pack()
 
-        conn = ttk.Frame(main, style="Card.TFrame", padding=14)
-        conn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 12))
-        conn.columnconfigure(1, weight=1)
-        ttk.Label(conn, text="Seri Port", style="Head.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
-        self.port_combo = ttk.Combobox(conn, textvariable=self.port_var, state="readonly", width=42)
-        self.port_combo.grid(row=0, column=1, sticky="ew")
-        ttk.Button(conn, text="Yenile", command=self.refresh_ports, style="Soft.TButton").grid(row=0, column=2, padx=(8, 0))
-        self.connect_btn = ttk.Button(conn, text="Baglan", command=self.toggle_connection, style="Accent.TButton")
-        self.connect_btn.grid(row=0, column=3, padx=(8, 0))
-        ttk.Label(conn, textvariable=self.connection_var, style="Text.TLabel").grid(row=1, column=1, sticky="w", pady=(8, 0))
-
-        status_card = ttk.Frame(main, style="Card.TFrame", padding=14)
-        status_card.grid(row=2, column=0, sticky="nsew", padx=(0, 10))
-        status_card.columnconfigure(1, weight=1)
-        ttk.Label(status_card, text="Cihaz Bilgileri", style="Head.TLabel").grid(
-            row=0,
-            column=0,
-            columnspan=2,
-            sticky="w",
-            pady=(0, 10),
+        info = kit.card(main)
+        info.grid(row=1, column=0, sticky="nsew", padx=(0, px(18)))
+        info.columnconfigure(0, weight=1, uniform="info")
+        info.columnconfigure(1, weight=1, uniform="info")
+        kit.label(info, "Cihaz bilgileri", "title").grid(row=0, column=0, sticky="w")
+        kit.label(info, "Kart durum bloğunu yazdıkça kendiliğinden güncellenir.", "caption").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(px(2), px(12))
         )
+        cols = [ttk.Frame(info, style="card.TFrame") for _ in range(2)]
+        cols[0].grid(row=2, column=0, sticky="nsew", padx=(0, px(6)))
+        cols[1].grid(row=2, column=1, sticky="nsew", padx=(px(6), 0))
+        for col, title, keys in self.SECTIONS:
+            sec = kit.inset(cols[col], padding=10)
+            sec.pack(fill=tk.X, pady=(0, px(10)))
+            sec.columnconfigure(1, weight=1)
+            kit.label(sec, title, "caps", "inset").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, px(4)))
+            for r, key in enumerate(keys, start=1):
+                kit.label(sec, self.FIELD_LABELS.get(key, key), "caption", "inset").grid(
+                    row=r, column=0, sticky="nw", pady=px(2), padx=(0, px(10))
+                )
+                var = tk.StringVar(value="-")
+                self.status_vars[key] = var
+                value = tk.Label(
+                    sec,
+                    textvariable=var,
+                    bg=C.SURFACE_ALT,
+                    fg=C.TEXT,
+                    font=kit.fonts["body_sb"],
+                    anchor="w",
+                    justify="left",
+                    wraplength=px(160),
+                    bd=0,
+                    padx=px(4),
+                    pady=0,
+                )
+                value.grid(row=r, column=1, sticky="ew", pady=px(1))
+                # Uzun degerler (or. MQTT sunucusu) sutun genisliginde alt satira gecer.
+                value.bind("<Configure>", lambda e, w=value: w.configure(wraplength=max(px(60), e.width - px(8))))
+                self._watch_value(key, var, value)
 
-        fields = [
-            "Cihaz UID",
-            "Hedef mimari",
-            "Firmware surumu",
-            "OTA durum",
-            "WiFi kayitli",
-            "WiFi SSID",
-            "WiFi bagli",
-            "WiFi IP",
-            "Yerel Beacon (UDP)",
-            "Genel IP (WAN)",
-            "WiFi gucu",
-            "Bluetooth provisioning",
-            "Bluetooth adi",
-            "WiFi LED GPIO",
-            "Bluetooth LED GPIO",
-            "MQTT",
-            "MQTT kimligi",
-            "MQTT sunucu",
-            "Role GPIO",
-            "Kamera / QR Okuyucu",
-            "Role pin okuma",
-        ]
-        for row, field_name in enumerate(fields, start=1):
-            ttk.Label(status_card, text=f"{field_name}:", style="Text.TLabel").grid(row=row, column=0, sticky="w", pady=3)
-            var = tk.StringVar(value="-")
-            self.status_vars[field_name] = var
-            ttk.Label(status_card, textvariable=var, style="Value.TLabel").grid(row=row, column=1, sticky="w", pady=3)
+        side = ttk.Frame(main, style="page.TFrame")
+        side.grid(row=1, column=1, sticky="nsew")
+        side.columnconfigure(0, weight=1)
+        side.rowconfigure(2, weight=1)
 
-        tools = ttk.Frame(main, style="Card.TFrame", padding=14)
-        tools.grid(row=2, column=1, sticky="nsew")
-        tools.columnconfigure(0, weight=1)
-        ttk.Label(tools, text="Temel Testler", style="Head.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 10))
-        ttk.Button(tools, text="Role Pin HIGH", command=lambda: self.send_command("h"), style="Accent.TButton").grid(row=1, column=0, sticky="ew", pady=4)
-        ttk.Button(tools, text="Role Pin LOW", command=lambda: self.send_command("l"), style="Accent.TButton").grid(row=2, column=0, sticky="ew", pady=4)
-        ttk.Button(tools, text="Role Pulse", command=lambda: self.send_command("r"), style="Accent.TButton").grid(row=3, column=0, sticky="ew", pady=4)
-        ttk.Button(tools, text="Kamera Test (Isik/Bip)", command=lambda: self.send_command("k"), style="Accent.TButton").grid(row=4, column=0, sticky="ew", pady=4)
-        ttk.Button(tools, text="Pin Bulma Testi", command=lambda: self.send_command("p"), style="Soft.TButton").grid(row=5, column=0, sticky="ew", pady=4)
-        ttk.Separator(tools).grid(row=6, column=0, sticky="ew", pady=12)
-        ttk.Label(tools, text="Son Komut", style="Head.TLabel").grid(row=7, column=0, sticky="w")
-        ttk.Label(tools, textvariable=self.last_command_var, style="Value.TLabel").grid(row=8, column=0, sticky="w", pady=(4, 12))
-        ttk.Label(
-            tools,
-            text="Cihaz seri porttan durum blogu yazdiginda bilgiler otomatik guncellenir. Komutlar: h=HIGH, l=LOW, r=pulse, k=kamera self-test, p=pin bulma.",
-            style="Text.TLabel",
-            wraplength=330,
-        ).grid(row=9, column=0, sticky="ew")
+        conn = kit.card(side, padding=16)
+        conn.grid(row=0, column=0, sticky="ew")
+        conn.columnconfigure(0, weight=1)
+        kit.label(conn, "Seri port", "title", image=kit.icon("usb", px(18), C.TEXT_2, gap=px(8)), compound="left").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, px(10))
+        )
+        self.port_combo = kit.combobox(conn, self.port_var, [])
+        self.port_combo.grid(row=1, column=0, sticky="ew")
+        kit.icon_button(conn, "refresh", self.refresh_ports, "Port listesini yenile").grid(row=1, column=1, padx=(px(6), 0))
+        self.connect_btn = kit.button(conn, "Bağlan", self.toggle_connection, "primary", icon="connect")
+        self.connect_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(px(10), 0))
 
-        log_card = ttk.Frame(main, style="Card.TFrame", padding=14)
-        log_card.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
-        log_card.columnconfigure(0, weight=1)
-        log_card.rowconfigure(1, weight=1)
-        ttk.Label(log_card, text="Seri Log", style="Head.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
-        self.log_text = tk.Text(log_card, height=12, bg="#07111F", fg="#D6E8FF", insertbackground="#D6E8FF", relief=tk.FLAT)
-        self.log_text.grid(row=1, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(log_card, orient=tk.VERTICAL, command=self.log_text.yview)
-        scrollbar.grid(row=1, column=1, sticky="ns")
-        self.log_text.configure(yscrollcommand=scrollbar.set)
+        tools = kit.card(side, padding=16)
+        tools.grid(row=1, column=0, sticky="ew", pady=(px(16), 0))
+        tools.columnconfigure(0, weight=1, uniform="t")
+        tools.columnconfigure(1, weight=1, uniform="t")
+        kit.label(tools, "Hızlı testler", "title").grid(row=0, column=0, sticky="w")
+        last = ttk.Frame(tools, style="card.TFrame")
+        last.grid(row=0, column=1, sticky="e")
+        kit.label(last, "Son komut:", "caption").pack(side=tk.LEFT)
+        kit.label(last, textvariable=self.last_command_var, kind="value").pack(side=tk.LEFT, padx=(px(6), 0))
+        tests = (
+            ("Röle HIGH", "h", "bolt"),
+            ("Röle LOW", "l", "bolt"),
+            ("Röle pulse", "r", "play"),
+            ("Kamera testi", "k", "camera"),
+            ("Pin bulma", "p", "search"),
+        )
+        for i, (text, cmd, icon) in enumerate(tests):
+            b = kit.button(tools, text, lambda c=cmd: self.send_command(c), icon=icon)
+            b.grid(row=1 + i // 2, column=i % 2, sticky="ew", padx=(0, px(4)) if i % 2 == 0 else (px(4), 0), pady=(px(8) if i < 2 else px(3), px(3)))
+            Tooltip(b, f"Seri komut: {cmd}. Sonucu seri kayıtta izleyin.", kit)
+
+        log = kit.card(side, padding=16)
+        log.grid(row=2, column=0, sticky="nsew", pady=(px(16), 0))
+        log.columnconfigure(0, weight=1)
+        log.rowconfigure(1, weight=1)
+        lh = ttk.Frame(log, style="card.TFrame")
+        lh.grid(row=0, column=0, sticky="ew")
+        lh.columnconfigure(0, weight=1)
+        kit.label(lh, "Seri kayıt", "title").grid(row=0, column=0, sticky="w")
+        kit.button(lh, "Temizle", self.clear_log, "ghost", icon="delete").grid(row=0, column=1, sticky="e")
+        box, self.log_text = kit.console(log, height=6)
+        box.grid(row=1, column=0, sticky="nsew", pady=(px(8), 0))
+
+    def _watch_value(self, key: str, var: tk.StringVar, widget: tk.Label) -> None:
+        last = {"value": var.get()}
+
+        def changed(*_args: object) -> None:
+            value = var.get()
+            if value != last["value"]:
+                last["value"] = value
+                if value and value != "-":
+                    self.kit.flash(widget, C.PRIMARY_SOFT, C.SURFACE_ALT, f"fv{id(self)}{key}")
+
+        var.trace_add("write", changed)
+
+    def _set_conn(self, text: str, kind: str) -> None:
+        self.connection_var.set(text)
+        self.conn_pill.set(text, kind)
+
+    def clear_log(self) -> None:
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.configure(state=tk.DISABLED)
 
     def _start_beacon_listener(self) -> None:
         def _worker():
@@ -2843,7 +3294,7 @@ class DeviceTesterWindow:
         if not current_uid or current_uid == "-" or current_uid == uid:
             rssi_str = f" ({rssi} dBm)" if rssi != "" and rssi is not None else ""
             if "Yerel Beacon (UDP)" in self.status_vars:
-                self.status_vars["Yerel Beacon (UDP)"].set(f"🟢 {ip}:{port}{rssi_str} (Canlı)")
+                self.status_vars["Yerel Beacon (UDP)"].set(f"{ip}:{port}{rssi_str} · canlı")
             if "WiFi IP" in self.status_vars and (not self.status_vars["WiFi IP"].get() or self.status_vars["WiFi IP"].get() == "-"):
                 self.status_vars["WiFi IP"].set(ip)
 
@@ -2859,8 +3310,8 @@ class DeviceTesterWindow:
             self.worker.stop()
             self.worker = None
             try:
-                self.connect_btn.configure(text="Baglan")
-                self.connection_var.set("Bagli degil")
+                self.kit.restyle(self.connect_btn, variant="primary", text="Bağlan", icon="connect")
+                self._set_conn("Bağlı değil", "neutral")
             except Exception:
                 pass
 
@@ -2871,7 +3322,7 @@ class DeviceTesterWindow:
 
         port_text = self.port_var.get().strip()
         if not port_text:
-            messagebox.showinfo("Port gerekli", "Lutfen bir seri port secin.")
+            messagebox.showinfo("Port gerekli", "Lütfen bir seri port seçin.")
             return
         port = port_text.split(" - ", 1)[0].strip()
         self.worker = SerialWorker(
@@ -2880,12 +3331,12 @@ class DeviceTesterWindow:
             on_error=lambda text: self.line_queue.put(f"[hata] {text}"),
         )
         self.worker.start()
-        self.connect_btn.configure(text="Kes")
-        self.connection_var.set(f"Baglaniyor: {port}")
+        self.kit.restyle(self.connect_btn, variant="danger_soft", text="Bağlantıyı kes", icon="close")
+        self._set_conn(f"Bağlanıyor: {port}", "busy")
 
     def send_command(self, command: str) -> None:
         if self.worker is None:
-            messagebox.showinfo("Baglanti yok", "Once cihaza seri porttan baglanin.")
+            self.kit.toast("Önce karta seri porttan bağlanın.", "warning")
             return
         self.worker.write(command)
         self.last_command_var.set(command)
@@ -2900,9 +3351,9 @@ class DeviceTesterWindow:
     def _handle_line(self, line: str) -> None:
         self._append_log(line)
         if line.startswith("[baglandi]"):
-            self.connection_var.set(line.replace("[baglandi] ", "Bagli: "))
+            self._set_conn(line.replace("[baglandi] ", "Bağlı: "), "ok")
         if line.startswith("[hata]"):
-            self.connection_var.set("Hata")
+            self._set_conn("Bağlantı hatası", "error")
 
         if line.strip() in (self.STATUS_START, self.STATUS_START_ALT, "--- ESP32 SISTEM BILGISI ---", "----- CIHAZ DURUMU -----"):
             self._collecting_status = True
@@ -2967,28 +3418,35 @@ class DeviceTesterWindow:
                         if str(d.get("device_uid", "")).upper() == uid.upper():
                             pub_ip = d.get("public_ip") or d.get("client_ip") or d.get("last_ip")
                             if pub_ip and "Genel IP (WAN)" in self.status_vars:
-                                self.window.after(0, lambda p=pub_ip: self.status_vars["Genel IP (WAN)"].set(f"🌐 {p}"))
+                                self.window.after(0, lambda p=pub_ip: self.status_vars["Genel IP (WAN)"].set(str(p)))
                             break
         except Exception:
             pass
 
     def _append_log(self, line: str) -> None:
-        self.log_text.insert(tk.END, f"{line}\n")
-        self.log_text.see(tk.END)
+        tag = None
+        if line.startswith(">>>"):
+            tag = "tx"
+        elif line.startswith("[hata]"):
+            tag = "err"
+        elif line.startswith("[baglandi]"):
+            tag = "ok"
+        elif line.startswith("---"):
+            tag = "dim"
+        self.kit.console_append(self.log_text, line, tag)
 
-    def _on_close(self) -> None:
+    def shutdown(self) -> None:
         self._stop_beacon = True
         if self.worker is not None:
             self.worker.stop()
-        self.window.destroy()
+            self.worker = None
 
 
-class ScreenFirmwareWindow:
-    def __init__(self, parent: tk.Tk, logo_path: Path | None = None) -> None:
-        self.window = tk.Toplevel(parent)
-        self.window.title("SmartKeyPass Ekran Yazılımı Güncelleyici (2.4\" ST7789)")
-        self.window.configure(bg=CLR_APP_BG)
-        self.window.minsize(1060, 720)
+class ScreenFirmwarePage:
+    def __init__(self, parent: ttk.Frame, kit: Kit, logo_path: Path | None = None) -> None:
+        # Ana penceredeki sayfa cercevesi; eski kodla uyum icin adi 'window' kaldi.
+        self.window = parent
+        self.kit = kit
 
         self.logo_path = logo_path
         self.worker: SerialWorker | None = None
@@ -2997,10 +3455,12 @@ class ScreenFirmwareWindow:
         self.fw_busy = False
         self.fw_build_ready = False
         self.fw_release_ready = False
+        self.has_release = False
+        self.uploaded_ok = False
 
         self.port_var = tk.StringVar()
         self.ports: list[str] = []
-        self.detected_screen_var = tk.StringVar(value="Ekran taranıyor...")
+        self.detected_screen_var = tk.StringVar(value="Ekran taranıyor…")
         self.version_var = tk.StringVar(value=read_display_source_version())
         self.latest_release_var = tk.StringVar(value="Henüz sürüm yok.")
         self.progress_var = tk.DoubleVar(value=0)
@@ -3012,245 +3472,161 @@ class ScreenFirmwareWindow:
         self.refresh_latest_release()
         self.find_screen()
         self.window.after(100, self._drain_lines)
-        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _ui(self) -> None:
-        main = ttk.Frame(self.window, style="App.TFrame", padding=14)
-        main.pack(fill=tk.BOTH, expand=True)
-        main.columnconfigure(0, weight=1)
-        main.columnconfigure(1, weight=1)
+        kit = self.kit
+        px = kit.px
+        main = self.window
+        main.columnconfigure(0, weight=1, uniform="scr")
+        main.columnconfigure(1, weight=1, uniform="scr")
         main.rowconfigure(1, weight=1)
 
-        # 1. Header
-        header = ttk.Frame(main, style="Header.TFrame", padding=(16, 12))
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        header.columnconfigure(1, weight=1)
-
-        ttk.Label(header, text="🖥️ SmartKeyPass Ekran Yazılımı Güncelleyici", style="Title.TLabel").grid(
-            row=0, column=0, sticky="w"
+        header, slot = kit.page_header(
+            main,
+            "Ekran yazılımı",
+            '2.4" ST7789 dokunmatik ekran modülü (ESP32-C3): ekranı bulun, sürüm oluşturun ve USB ile yükleyin.',
+            icon="monitor",
         )
-        ttk.Label(
-            header,
-            text="2.4\" ST7789 Dokunmatik Ekran Modülü (ESP32-C3) — Otomatik Port Tespiti, Sürümleme ve USB Yükleme",
-            style="Sub.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, px(18)))
+        self.screen_stepper = Stepper(slot, kit, ["Ekranı bul", "Sürüm oluştur", "Yükle"])
+        self.screen_stepper.pack()
 
-        # 2. Sol Kart: Port Tespiti & Sürüm & Yükleme
-        left = ttk.Frame(main, style="Card.TFrame", padding=14)
-        left.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
-        left.columnconfigure(0, weight=1)
+        leftcol = ttk.Frame(main, style="page.TFrame")
+        leftcol.grid(row=1, column=0, sticky="nsew", padx=(0, px(18)))
+        leftcol.columnconfigure(0, weight=1)
 
-        # Donanım Port Tespiti
-        ttk.Label(left, text="1. Ekran Donanımı Tespiti (Port)", style="Head.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 6)
-        )
-        port_frame = ttk.Frame(left, style="Card.TFrame")
-        port_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
-        port_frame.columnconfigure(0, weight=1)
-
-        self.port_combo = ttk.Combobox(port_frame, textvariable=self.port_var, state="readonly", width=18)
-        self.port_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        conn = kit.card(leftcol)
+        conn.grid(row=0, column=0, sticky="ew")
+        conn.columnconfigure(0, weight=1)
+        kit.label(conn, "Ekran bağlantısı", "title").grid(row=0, column=0, columnspan=3, sticky="w")
+        self.detect_pill = Pill(conn, kit, "Ekran aranıyor…", "busy")
+        self.detect_pill.grid(row=1, column=0, columnspan=3, sticky="w", pady=(px(8), px(12)))
+        self.port_combo = kit.combobox(conn, self.port_var, [])
+        self.port_combo.grid(row=2, column=0, sticky="ew")
         self.port_combo.bind("<<ComboboxSelected>>", self._on_port_changed)
+        self.find_btn = kit.button(conn, "Ekranı bul", self.find_screen, icon="search")
+        self.find_btn.grid(row=2, column=1, padx=(px(8), 0))
+        Tooltip(self.find_btn, "Portlara ping gönderir; yanıt yoksa esptool ile ESP32-C3 arar (kartlar yeniden başlayabilir).", kit)
+        self.connect_btn = kit.button(conn, "Bağlan", self.toggle_serial, icon="connect", width=15)
+        self.connect_btn.grid(row=2, column=2, padx=(px(8), 0))
 
-        self.find_btn = ttk.Button(
-            port_frame,
-            text="🔍 Ekranı Bul",
-            command=self.find_screen,
-            style="Accent.TButton",
+        fw = kit.card(leftcol)
+        fw.grid(row=1, column=0, sticky="ew", pady=(px(18), 0))
+        fw.columnconfigure(0, weight=1, uniform="sb")
+        fw.columnconfigure(1, weight=1, uniform="sb")
+        kit.label(fw, "Sürüm ve yükleme", "title").grid(row=0, column=0, columnspan=2, sticky="w")
+        kit.label(fw, f"Hedef: {DISPLAY_TARGET}  ·  ortam: {DISPLAY_ENV}", "caption").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(px(4), px(12))
         )
-        self.find_btn.grid(row=0, column=1, padx=(0, 6))
-
-        self.connect_btn = ttk.Button(
-            port_frame,
-            text="🔌 Bağlan",
-            command=self.toggle_serial,
-            style="Soft.TButton",
-        )
-        self.connect_btn.grid(row=0, column=2)
-
-        ttk.Label(left, textvariable=self.detected_screen_var, style="Status.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(0, 10)
-        )
-
-        ttk.Separator(left, orient=tk.HORIZONTAL).grid(row=3, column=0, sticky="ew", pady=8)
-
-        # Sürüm Yönetimi
-        ttk.Label(left, text="2. Sürüm ve PlatformIO Derleme", style="Head.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(0, 6)
-        )
-        target_info = ttk.Label(
-            left,
-            text=f"Hedef: {DISPLAY_TARGET} (Ortam: {DISPLAY_ENV})",
-            style="Text.TLabel",
-        )
-        target_info.grid(row=5, column=0, sticky="w", pady=(0, 6))
-
-        v_frame = ttk.Frame(left, style="Card.TFrame")
-        v_frame.grid(row=6, column=0, sticky="ew", pady=(0, 8))
-        v_frame.columnconfigure(1, weight=1)
-        ttk.Label(v_frame, text="Sürüm No:", style="Text.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.version_entry = ttk.Entry(v_frame, textvariable=self.version_var, width=15)
-        self.version_entry.grid(row=0, column=1, sticky="w")
-
-        btn_row = ttk.Frame(left, style="Card.TFrame")
-        btn_row.grid(row=7, column=0, sticky="ew", pady=(0, 8))
-        self.build_btn = ttk.Button(
-            btn_row,
-            text="🔨 Firmware Derle",
-            command=self.start_build,
-            style="Soft.TButton",
-        )
-        self.build_btn.pack(side=tk.LEFT)
-
-        self.release_btn = ttk.Button(
-            btn_row,
-            text="📦 Sürüm Oluştur (Release)",
-            command=self.start_release,
-            style="Accent.TButton",
-        )
-        self.release_btn.pack(side=tk.LEFT, padx=(8, 0))
-
-        ttk.Label(left, textvariable=self.latest_release_var, style="Text.TLabel", wraplength=460).grid(
-            row=8, column=0, sticky="w", pady=(0, 8)
-        )
-
-        ttk.Separator(left, orient=tk.HORIZONTAL).grid(row=9, column=0, sticky="ew", pady=8)
-
-        # USB Yükleme
-        ttk.Label(left, text="3. USB ile Ekrana Yükle (Flaşlama)", style="Head.TLabel").grid(
-            row=10, column=0, sticky="w", pady=(0, 6)
-        )
-        self.upload_btn = ttk.Button(
-            left,
-            text="⚡ Sürümü USB ile Ekrana Yükle",
-            command=self.start_upload,
-            style="Accent.TButton",
-        )
-        self.upload_btn.grid(row=11, column=0, sticky="ew", pady=(0, 8))
-
-        p_frame = ttk.Frame(left, style="Card.TFrame")
-        p_frame.grid(row=12, column=0, sticky="ew", pady=(0, 6))
-        p_frame.columnconfigure(0, weight=1)
-        self.pbar = ttk.Progressbar(
-            p_frame,
-            orient="horizontal",
-            mode="determinate",
-            maximum=100,
-            variable=self.progress_var,
-            style="Accent.Horizontal.TProgressbar",
-        )
+        kit.label(fw, "Sürüm numarası", "value").grid(row=2, column=0, columnspan=2, sticky="w")
+        self.version_entry = kit.entry(fw, self.version_var)
+        self.version_entry.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(px(6), px(8)))
+        kit.label(
+            fw,
+            textvariable=self.latest_release_var,
+            kind="muted",
+            image=kit.icon("history", px(16), C.TEXT_3, gap=px(6)),
+            compound="left",
+            wraplength=px(440),
+            justify="left",
+        ).grid(row=4, column=0, columnspan=2, sticky="w")
+        self.build_btn = kit.button(fw, "Derle", self.start_build, icon="build")
+        self.build_btn.grid(row=5, column=0, sticky="ew", padx=(0, px(4)), pady=(px(14), 0))
+        self.release_btn = kit.button(fw, "Sürüm oluştur", self.start_release, "primary", icon="package")
+        self.release_btn.grid(row=5, column=1, sticky="ew", padx=(px(4), 0), pady=(px(14), 0))
+        kit.separator(fw).grid(row=6, column=0, columnspan=2, sticky="ew", pady=px(16))
+        self.upload_btn = kit.button(fw, "USB ile ekrana yükle", self.start_upload, icon="usb")
+        self.upload_btn.grid(row=7, column=0, columnspan=2, sticky="ew")
+        prow = ttk.Frame(fw, style="card.TFrame")
+        prow.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(px(14), px(6)))
+        prow.columnconfigure(0, weight=1)
+        self.pbar = SmoothProgress(prow, kit, self.progress_var)
         self.pbar.grid(row=0, column=0, sticky="ew")
-        ttk.Label(p_frame, textvariable=self.progress_text_var, style="Text.TLabel").grid(
-            row=0, column=1, sticky="e", padx=(8, 0)
-        )
+        kit.label(prow, textvariable=self.progress_text_var, kind="value").grid(row=0, column=1, sticky="e", padx=(px(10), 0))
+        kit.label(fw, textvariable=self.status_var, kind="mono").grid(row=9, column=0, columnspan=2, sticky="w")
+        kit.label(
+            fw,
+            "ESP32-C3 doğrudan USB CDC ya da CH340 üzerinden 460800 baud ile yazılır.",
+            "caption",
+            wraplength=px(440),
+            justify="left",
+        ).grid(row=10, column=0, columnspan=2, sticky="w", pady=(px(6), 0))
 
-        ttk.Label(left, textvariable=self.status_var, style="Status.TLabel").grid(
-            row=13, column=0, sticky="w", pady=(4, 0)
-        )
-        ttk.Label(
-            left,
-            text="ESP32-C3 doğrudan USB CDC veya CH340 üzerinden 460800 baud hızında flash belleğe yazılır.",
-            style="Text.TLabel",
-            wraplength=460,
-        ).grid(row=14, column=0, sticky="w", pady=(6, 0))
-
-        # 3. Sağ Kart: Canlı Testler & Log Konsolu
-        right = ttk.Frame(main, style="Card.TFrame", padding=14)
-        right.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+        right = kit.card(main)
+        right.grid(row=1, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(2, weight=1)
-
-        ttk.Label(right, text="Ekran Canlı Test Komutları", style="Head.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 8)
+        right.rowconfigure(4, weight=1)
+        kit.label(right, "Canlı test", "title").grid(row=0, column=0, sticky="w")
+        kit.label(right, "Komutlar ekrana seri porttan gönderilir; bağlı değilse önce bağlanılır.", "caption").grid(
+            row=1, column=0, sticky="w", pady=(px(2), px(10))
         )
-        t_row = ttk.Frame(right, style="Card.TFrame")
-        t_row.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-
-        ttk.Button(t_row, text="📡 Ping", command=lambda: self.send_command("DISP_PING"), style="Soft.TButton").pack(
-            side=tk.LEFT
+        grid = ttk.Frame(right, style="card.TFrame")
+        grid.grid(row=2, column=0, sticky="ew")
+        for c in range(3):
+            grid.columnconfigure(c, weight=1, uniform="cmd")
+        commands = (
+            ("Ping", lambda: self.send_command("DISP_PING"), "broadcast", "secondary"),
+            ("Test karekodu", lambda: self.send_command("SHOW_QR|AHBU:DOOR:00861A0D5020"), "qr", "secondary"),
+            ("Kapı açıldı", lambda: self.send_command("DOOR_OPENED"), "unlock", "secondary"),
+            ("Ayarlar", lambda: self.send_command("SHOW_SETTINGS"), "settings", "secondary"),
+            ("Ana ekran", lambda: self.send_command("SHOW_HOME"), "home", "secondary"),
+            ("Yeniden başlat", self.reset_screen, "power", "danger_soft"),
         )
-        ttk.Button(
-            t_row,
-            text="📷 Test QR",
-            command=lambda: self.send_command("SHOW_QR|AHBU:DOOR:00861A0D5020"),
-            style="Soft.TButton",
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            t_row,
-            text="🚪 Kapı Açıldı",
-            command=lambda: self.send_command("DOOR_OPENED"),
-            style="Soft.TButton",
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            t_row,
-            text="⚙️ Ayarlar",
-            command=lambda: self.send_command("SHOW_SETTINGS"),
-            style="Soft.TButton",
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            t_row,
-            text="🏠 Ana Ekran",
-            command=lambda: self.send_command("SHOW_HOME"),
-            style="Soft.TButton",
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            t_row,
-            text="🔄 Reset",
-            command=self.reset_screen,
-            style="Danger.TButton",
-        ).pack(side=tk.LEFT, padx=4)
+        for i, (text, cmd, icon, variant) in enumerate(commands):
+            b = kit.button(grid, text, cmd, variant, icon=icon)
+            b.grid(row=i // 3, column=i % 3, sticky="ew", padx=px(3), pady=px(3))
 
-        # Log Konsolu
-        log_header = ttk.Frame(right, style="Card.TFrame")
-        log_header.grid(row=2, column=0, sticky="ew", pady=(4, 6))
-        log_header.columnconfigure(0, weight=1)
-        ttk.Label(log_header, text="Ekran Seri Logu (115200 baud)", style="Head.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Button(
-            log_header,
-            text="Temizle",
-            command=self.clear_log,
-            style="Soft.TButton",
-        ).grid(row=0, column=1, sticky="e")
+        lh = ttk.Frame(right, style="card.TFrame")
+        lh.grid(row=3, column=0, sticky="ew", pady=(px(16), px(8)))
+        lh.columnconfigure(0, weight=1)
+        kit.label(lh, "Seri kayıt  ·  115200 baud", "title").grid(row=0, column=0, sticky="w")
+        kit.button(lh, "Temizle", self.clear_log, "ghost", icon="delete").grid(row=0, column=1, sticky="e")
+        box, self.log_text = kit.console(right, height=14)
+        box.grid(row=4, column=0, sticky="nsew")
+        self._sync_ui()
 
-        log_box_frame = ttk.Frame(right, style="Card.TFrame")
-        log_box_frame.grid(row=3, column=0, sticky="nsew")
-        log_box_frame.columnconfigure(0, weight=1)
-        log_box_frame.rowconfigure(0, weight=1)
+    def _set_detected(self, text: str, kind: str) -> None:
+        self.detected_screen_var.set(text)
+        self.detect_pill.set(text, kind)
+        self._sync_ui()
 
-        self.log_text = tk.Text(
-            log_box_frame,
-            height=20,
-            bg="#07111F",
-            fg="#D6E8FF",
-            insertbackground="#D6E8FF",
-            relief=tk.FLAT,
-            font=("Consolas", 9),
-        )
-        self.log_text.grid(row=0, column=0, sticky="nsew")
-        sc = ttk.Scrollbar(log_box_frame, orient=tk.VERTICAL, command=self.log_text.yview)
-        sc.grid(row=0, column=1, sticky="ns")
-        self.log_text.configure(yscrollcommand=sc.set)
+    def _sync_ui(self) -> None:
+        if not hasattr(self, "screen_stepper"):
+            return
+        found = self.worker is not None or self.detect_pill.kind in ("ok", "info")
+        released = self.fw_release_ready or self.has_release
+        done = 0
+        if found:
+            done = 1
+            if released:
+                done = 3 if self.uploaded_ok else 2
+        self.screen_stepper.set(done, None if done >= 3 else done)
+        for btn, primary in ((self.release_btn, not released), (self.upload_btn, released)):
+            variant = "primary" if primary else "secondary"
+            if btn._kit["variant"] != variant:  # type: ignore[attr-defined]
+                self.kit.restyle(btn, variant=variant)
+        self.pbar.set_busy(self.fw_busy)
 
     def refresh_latest_release(self) -> None:
         releases = load_display_releases()
+        self.has_release = bool(releases)
         if not releases:
-            self.latest_release_var.set("Henüz sürüm yok. 'Sürüm Oluştur' ile ilk paketi derleyin.")
+            self.latest_release_var.set("Henüz sürüm yok. 'Sürüm oluştur' ile ilk paketi hazırlayın.")
+            self._sync_ui()
             return
         releases.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
         last = releases[0]
         v = last.get("version", "?")
-        created = last.get("created_at", "")[:19].replace("T", " ")
-        self.latest_release_var.set(f"Son Sürüm: v{v} (Oluşturulma: {created})")
+        self.latest_release_var.set(f"Son sürüm: v{v}  ·  {format_when(last.get('created_at', ''))}")
+        self._sync_ui()
 
     def find_screen(self) -> None:
         if self.scanning:
             return
         self.scanning = True
         self.find_btn.configure(state=tk.DISABLED)
-        self.detected_screen_var.set("🔍 Bağlı portlar taranıyor...")
-        self.status_var.set("Portlar taranıyor...")
+        self._set_detected("Bağlı portlar taranıyor…", "busy")
+        self.status_var.set("Portlar taranıyor…")
         threading.Thread(target=self._find_screen_worker, daemon=True).start()
 
     def _find_screen_worker(self) -> None:
@@ -3258,13 +3634,14 @@ class ScreenFirmwareWindow:
         port_names = [p.device for p in ports]
         detected_port = None
         detected_info = ""
+        detected_kind = "ok"
 
         # 1. Önce doğrudan USB seri port üzerinden ping ile ekran yazılımı tespiti dene
         for p in ports:
             p_name = p.device
             if self.worker is not None and self.worker.port == p_name:
                 detected_port = p_name
-                detected_info = f"✅ {p_name} (Şu anda bağlı ekran)"
+                detected_info = f"{p_name}  ·  şu anda bağlı ekran"
                 break
             try:
                 with serial.Serial(
@@ -3284,7 +3661,7 @@ class ScreenFirmwareWindow:
                     buf = s.read(s.in_waiting or 64).decode("utf-8", errors="ignore")
                     if "AHBU_DEVICE:DISPLAY" in buf or "Display Controller" in buf:
                         detected_port = p_name
-                        detected_info = f"✅ {p_name} (SmartKeyPass 2.4\" Ekran Aktif)"
+                        detected_info = f"{p_name}  ·  SmartKeyPass 2.4\" ekran yanıt verdi"
                         break
             except Exception:
                 pass
@@ -3302,14 +3679,15 @@ class ScreenFirmwareWindow:
                     text = (out.stdout + out.stderr).lower()
                     if "esp32-c3" in text:
                         detected_port = p_name
-                        detected_info = f"💡 {p_name} (ESP32-C3 Ekran Modülü Tespit Edildi)"
+                        detected_info = f"{p_name}  ·  ESP32-C3 ekran modülü bulundu (yazılım yanıt vermedi)"
+                        detected_kind = "info"
                         break
                 except Exception:
                     pass
 
-        self.window.after(0, lambda: self._finish_find_screen(port_names, detected_port, detected_info))
+        self.window.after(0, lambda: self._finish_find_screen(port_names, detected_port, detected_info, detected_kind))
 
-    def _finish_find_screen(self, port_names: list[str], detected_port: str | None, detected_info: str) -> None:
+    def _finish_find_screen(self, port_names: list[str], detected_port: str | None, detected_info: str, kind: str = "ok") -> None:
         self.scanning = False
         self.find_btn.configure(state=tk.NORMAL)
         self.ports = port_names
@@ -3317,23 +3695,23 @@ class ScreenFirmwareWindow:
 
         if detected_port:
             self.port_var.set(detected_port)
-            self.detected_screen_var.set(detected_info)
+            self._set_detected(detected_info, kind)
             self.status_var.set(f"Ekran bulundu: {detected_port}")
             self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] {detected_info}")
         elif port_names:
             if not self.port_var.get() or self.port_var.get() not in port_names:
                 self.port_var.set(port_names[0])
-            self.detected_screen_var.set(f"⚠️ Otomatik doğrulanamadı. Seçili port: {self.port_var.get()}")
+            self._set_detected(f"Otomatik doğrulanamadı  ·  seçili port: {self.port_var.get()}", "warn")
             self.status_var.set("Ekran otomatik doğrulanamadı, listeden seçebilirsiniz.")
         else:
             self.port_var.set("")
-            self.detected_screen_var.set("❌ Bağlı COM port bulunamadı.")
+            self._set_detected("Bağlı COM port bulunamadı", "error")
             self.status_var.set("Bağlı COM port bulunamadı.")
 
     def _on_port_changed(self, _event: object) -> None:
         p = self.port_var.get().strip()
         if p:
-            self.detected_screen_var.set(f"Seçili port: {p}")
+            self._set_detected(f"Seçili port: {p}", "info")
             self.status_var.set(f"Port seçildi: {p}")
 
     def toggle_serial(self) -> None:
@@ -3355,9 +3733,10 @@ class ScreenFirmwareWindow:
                 baud_rate=115200,
             )
             self.worker.start()
-            self.connect_btn.configure(text="🔌 Bağlantıyı Kes")
+            self.kit.restyle(self.connect_btn, variant="danger_soft", text="Bağlantıyı kes", icon="close")
             self.connected_var.set(f"Bağlı: {port}")
             self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] {port} portuna 115200 baud ile bağlanıldı.")
+            self._sync_ui()
             # Bağlanınca bir ping atalım
             time.sleep(0.1)
             self.send_command("DISP_PING")
@@ -3371,9 +3750,10 @@ class ScreenFirmwareWindow:
             except Exception:
                 pass
             self.worker = None
-        self.connect_btn.configure(text="🔌 Bağlan")
+        self.kit.restyle(self.connect_btn, variant="secondary", text="Bağlan", icon="connect")
         self.connected_var.set("Bağlı değil")
         self._append_log(f"[{datetime.now().strftime('%H:%M:%S')}] Seri port bağlantısı kapatıldı.")
+        self._sync_ui()
 
     def send_command(self, cmd: str) -> None:
         if self.worker is None:
@@ -3400,7 +3780,9 @@ class ScreenFirmwareWindow:
             self._append_log(f"[RESET HATA] {exc}")
 
     def clear_log(self) -> None:
+        self.log_text.configure(state=tk.NORMAL)
         self.log_text.delete("1.0", tk.END)
+        self.log_text.configure(state=tk.DISABLED)
 
     def _drain_lines(self) -> None:
         while True:
@@ -3412,8 +3794,16 @@ class ScreenFirmwareWindow:
         self.window.after(100, self._drain_lines)
 
     def _append_log(self, text: str) -> None:
-        self.log_text.insert(tk.END, f"{text}\n")
-        self.log_text.see(tk.END)
+        tag = None
+        if text.startswith("> TX:"):
+            tag = "tx"
+        elif text.startswith("[HATA]") or text.startswith("[RESET HATA]"):
+            tag = "err"
+        elif text.startswith("---"):
+            tag = "dim"
+        elif "bağlanıldı" in text or "Ekran bulundu" in text:
+            tag = "ok"
+        self.kit.console_append(self.log_text, text, tag)
 
     def start_build(self) -> None:
         if self.fw_busy:
@@ -3433,6 +3823,7 @@ class ScreenFirmwareWindow:
         self.progress_text_var.set("%10")
         self._append_log(f"--- EKRAN FIRMWARE DERLEME BAŞLADI (v{version}) ---")
 
+        self._sync_ui()
         threading.Thread(target=self._build_worker, args=(version,), daemon=True).start()
 
     def _build_worker(self, version: str) -> None:
@@ -3460,11 +3851,11 @@ class ScreenFirmwareWindow:
             self.window.after(0, lambda: self.status_var.set(f"Derleme tamamlandı: v{version}"))
             self.window.after(0, lambda: self.progress_var.set(100))
             self.window.after(0, lambda: self.progress_text_var.set("%100"))
-            self.window.after(0, lambda: messagebox.showinfo("Başarılı", f"Ekran firmware v{version} derlendi.", parent=self.window))
+            self.window.after(0, lambda: self.kit.toast(f"Ekran yazılımı v{version} derlendi.", "success"))
         except Exception as exc:
             self.fw_build_ready = False
             self.window.after(0, lambda: self.status_var.set("Derleme başarısız."))
-            self.window.after(0, lambda: messagebox.showerror("Derleme Hatası", str(exc), parent=self.window))
+            self.window.after(0, lambda m=str(exc): messagebox.showerror("Derleme Hatası", m, parent=self.window))
         finally:
             self.fw_busy = False
             self.window.after(0, self._restore_buttons)
@@ -3487,6 +3878,7 @@ class ScreenFirmwareWindow:
         self.progress_text_var.set("%20")
         self._append_log(f"--- EKRAN SÜRÜM OLUŞTURMA BAŞLADI (v{version}) ---")
 
+        self._sync_ui()
         threading.Thread(target=self._release_worker, args=(version,), daemon=True).start()
 
     def _release_worker(self, version: str) -> None:
@@ -3565,15 +3957,11 @@ class ScreenFirmwareWindow:
             self.window.after(0, lambda: self.status_var.set(f"Sürüm v{version} başarıyla oluşturuldu."))
             self.window.after(0, lambda: self.progress_var.set(100))
             self.window.after(0, lambda: self.progress_text_var.set("%100"))
-            self.window.after(0, lambda: messagebox.showinfo(
-                "Sürüm Hazır",
-                f"Ekran Yazılımı v{version} sürüm paketi oluşturuldu:\n\n{folder}",
-                parent=self.window,
-            ))
+            self.window.after(0, lambda: self.kit.toast(f"Ekran yazılımı v{version} sürüm paketi hazır.", "success"))
         except Exception as exc:
             self.fw_release_ready = False
             self.window.after(0, lambda: self.status_var.set("Sürüm oluşturma başarısız."))
-            self.window.after(0, lambda: messagebox.showerror("Sürüm Hatası", str(exc), parent=self.window))
+            self.window.after(0, lambda m=str(exc): messagebox.showerror("Sürüm Hatası", m, parent=self.window))
         finally:
             self.fw_busy = False
             self.window.after(0, self._restore_buttons)
@@ -3606,6 +3994,7 @@ class ScreenFirmwareWindow:
         self.status_var.set(f"{port} portuna yükleniyor...")
         self._append_log(f"--- EKRANA YÜKLEME BAŞLADI ({port} - v{latest_rel.get('version')}) ---")
 
+        self._sync_ui()
         threading.Thread(target=self._upload_worker, args=(port, latest_rel), daemon=True).start()
 
     def _upload_worker(self, port: str, rel: dict) -> None:
@@ -3685,17 +4074,21 @@ class ScreenFirmwareWindow:
 
             self.window.after(0, lambda: self.progress_var.set(100))
             self.window.after(0, lambda: self.progress_text_var.set("%100"))
-            self.window.after(0, lambda: self.status_var.set(f"✅ Yükleme Başarılı: v{rel.get('version')}"))
-            self.window.after(0, lambda: messagebox.showinfo(
-                "TMM - Yükleme Başarılı",
-                f"Ekran yazılımı v{rel.get('version')} {port} portuna başarıyla yüklendi!\n\nCihaz donanımsal olarak yeniden başlatıldı.",
-                parent=self.window,
-            ))
+            self.uploaded_ok = True
+            self.window.after(0, lambda: self.status_var.set(f"TMM: Yükleme başarılı, v{rel.get('version')} ({port})"))
+            self.window.after(
+                0,
+                lambda: self.kit.toast(
+                    f"TMM · Ekran yazılımı v{rel.get('version')} {port} portuna yüklendi; ekran yeniden başlatıldı.",
+                    "success",
+                    7000,
+                ),
+            )
             # Otomatik seri konsolu bağla
             self.window.after(1000, self.connect_serial)
         except Exception as exc:
             self.window.after(0, lambda: self.status_var.set("Yükleme başarısız."))
-            self.window.after(0, lambda: messagebox.showerror("Yükleme Hatası", str(exc), parent=self.window))
+            self.window.after(0, lambda m=str(exc): messagebox.showerror("Yükleme Hatası", m, parent=self.window))
         finally:
             self.fw_busy = False
             self.window.after(0, self._restore_buttons)
@@ -3704,14 +4097,15 @@ class ScreenFirmwareWindow:
         self.build_btn.configure(state=tk.NORMAL)
         self.release_btn.configure(state=tk.NORMAL)
         self.upload_btn.configure(state=tk.NORMAL)
+        self._sync_ui()
 
-    def _on_close(self) -> None:
+    def shutdown(self) -> None:
         if self.worker is not None:
             try:
                 self.worker.stop()
             except Exception:
                 pass
-        self.window.destroy()
+            self.worker = None
 
 
 def main() -> None:

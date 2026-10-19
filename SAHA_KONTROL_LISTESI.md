@@ -2158,3 +2158,43 @@ Yönetici vadesi geçmiş borcu olan dairelerin sorumlularına (borç ve bildiri
 - [ ] **80.5. (Geliştirici) Hesap Silme ve Veri Dosyası Yeni Bölüm Doğrulaması:**
   - **Nasıl Test Edilir:** server klasöründe `node --test test/account_deletion_service.test.js test/account_export_service.test.js test/account_routes.test.js` çalıştırın. Tek kullanımlık yerel PostgreSQL ile `QA_ONLY=account QA_CONFIRM_DISPOSABLE_DB=yes DB_HOST=127.0.0.1 DB_PORT=55432 DB_USER=postgres DB_PASSWORD= node scripts/qa_platform_pg.mjs` çalıştırın (üretimde ÇALIŞTIRMAYIN).
   - **Beklenen Sonuç:** Testler yeşil. Silme önizleme metinleri `server/legal/account_deletion.md` ile tutarlıdır; dışa aktarma yeni bölümleri (`receipts`, `uploaded_documents`, `finance_reminders_received`, `push_devices`) şemadan türetilir ve belge başlığı/ödeyen adı/doğrulama kodu/jeton seçilmez; yeni tablolar yoksa (eski şema) bölümler boş döner ve silme önizlemesi bozulmaz.
+
+---
+
+## 81. 🎨 Cihaz Etiketleyici (company_qr_tool) Yeni Arayüz — Tek Pencere, Adımlı Akışlar (2026-10-19)
+
+Masaüstü etiketleme aracı tek pencereli, sol menülü yeni arayüze geçti: Etiketle, Kayıtlı cihazlar, Cihaz testi, Cihaz yazılımı, Ekran yazılımı. Kimlik okuma, karekod, sunucu kaydı, derleme ve yükleme mantığı değişmedi. Başarı mesajları sağ altta kendiliğinden kaybolan bildirim oldu; hatalar yine pencere olarak gelir. Başlatma: `company_qr_tool/launch_company_qr_tool.bat`.
+
+- [ ] **81.1. Açılış, Menü ve Kısayollar:**
+  - **Nasıl Test Edilir:** Rol: Şirket (üretim) bilgisayarı. `launch_company_qr_tool.bat` ile açın. Sol menüdeki sayfalara tıklayın; sonra Ctrl+1…Ctrl+5 ile geçin. Ekran ölçeği %125/%150 olan bir bilgisayarda da açın.
+  - **Beklenen Sonuç:** Pencere tam ekran açılır; solda lacivert menü, SmartKeyPass logosu ve altta "Sunucu anahtarı hazır" (yeşil nokta) ya da "Sunucu anahtarı yok" (sarı nokta, üzerine gelince nasıl tanımlanacağı yazar) görünür. Sayfa geçişi kısa bir kaymayla olur, menüdeki seçim çizgisi yeni öğeye kayar. Yazılar yüksek ölçekte bulanık değildir.
+- [ ] **81.2. Kart Takınca Liste Kendiliğinden Yenilenir:**
+  - **Nasıl Test Edilir:** Etiketle sayfasında bir ESP32 kartını USB ile takın, birkaç saniye bekleyin; sonra çıkarın. Ardından "Yeniden tara" (F5) düğmesine basın.
+  - **Beklenen Sonuç:** Takınca kart 2 saniye içinde listeye gelir, sağ altta "Kart bağlandı: COMx" bildirimi çıkar; tek kart bağlıysa kendiliğinden seçilir. Çıkarınca listeden düşer ve "Kart çıkarıldı" bildirimi gelir. Hiç kart yokken tabloda "Bağlı kart yok" açıklaması görünür.
+- [ ] **81.3. Etiketleme Akışı (Seç → Kimliği oku → Kaydet ve yazdır):**
+  - **Nasıl Test Edilir:** Listeden kartı seçip "Kimliği oku"ya basın (çift tık ya da Enter da olur).
+  - **Beklenen Sonuç:** Okurken sağdaki rozet "Kimlik okunuyor", alt çubukta dönen gösterge görünür. Bitince "Kimlik okundu" bildirimi gelir, karekod hafif bir animasyonla belirir, kimlik büyük yazıyla ve kopyalama düğmesiyle görünür; satırın durumu "Karekod hazır" olur, üstteki adım göstergesinde ilk iki adım tamamlanır. Ayrıca "QR oluştur" düğmesine basmak gerekmez.
+- [ ] **81.4. Sunucuya Kaydet, Yazdır, PNG Kaydet:**
+  - **Nasıl Test Edilir:** Kimliği okunmuş kartta sırayla "Sunucuya kaydet", "Yazdır" ve "PNG kaydet"e basın. Sonra kimliği okunmamış başka bir kartı seçin.
+  - **Beklenen Sonuç:** Kaydederken rozet "Kaydediliyor", bitince "Kaydedildi" olur; satırda "✓ Kaydedildi" yazar, adım göstergesinin üçü de tamamlanır. Sunucu anahtarı yoksa "Yerel kayıt tamam, sunucuya gönderilemedi" uyarı penceresi çıkar. Yazdır yazıcıya gönderir; PNG `output\` klasörüne kaydedilir ve bildirim gelir. Kimliği okunmamış kart seçiliyken kaydet/yazdır/PNG düğmeleri kapalıdır (başka kartın etiketi basılamaz).
+- [ ] **81.5. Kimlik Okunamazsa Düğmeler Kilitlenmez:**
+  - **Nasıl Test Edilir:** Kartın portunu başka bir seri monitörde açık tutun (ya da okuma sürerken kabloyu çekin) ve "Kimliği oku"ya basın.
+  - **Beklenen Sonuç:** Çözüm adımlarını anlatan "Kimlik okunamadı" penceresi çıkar; kapatınca düğmeler yeniden kullanılabilir (eskiden okuma hatasından sonra düğmeler kalıcı olarak kapalı kalıyordu).
+- [ ] **81.6. Kayıtlı Cihazlar Sayfası:**
+  - **Nasıl Test Edilir:** "Kayıtlı cihazlar" sayfasını açın. Arama kutusuna kimliğin bir parçasını yazın, Esc ile temizleyin. Bir satır seçin; Yazdır, PNG kaydet, kimlik kopyala düğmelerini ve sağ tık menüsünü deneyin. "Karekodlu PDF raporu"na basın. (Silmeyi yalnız TEST kaydıyla deneyin.)
+  - **Beklenen Sonuç:** Arama kutusunun yanındaki rozet cihaz sayısını ("3 cihaz" / aramada "1 / 3 cihaz") gösterir; eşleşme yoksa "Eşleşen cihaz yok" yazar. Seçilen cihazın karekodu sağda belirir; kayıt tarihleri yerel saatle görünür. PDF açılır ve "PDF raporu hazır" bildirimi gelir. Sunucuya ulaşılamazsa tablonun altında sarı uyarı simgesiyle neden yazar.
+- [ ] **81.7. Cihaz Testi Sayfası:**
+  - **Nasıl Test Edilir:** "Cihaz testi"nde portu seçip "Bağlan"a basın; "Hızlı testler"deki Röle HIGH/LOW/pulse, Kamera testi ve Pin bulma düğmelerini deneyin; "Temizle"ye basın; "Bağlantıyı kes" ile kapatın.
+  - **Beklenen Sonuç:** Başlıktaki rozet "Bağlanıyor" → "Bağlı: COMx" olur. Bilgiler Kimlik ve yazılım, Bluetooth, Donanım, Wi-Fi ve ağ, MQTT gruplarında dolar; değişen değer kısa süre vurgulanır. Seri kayıtta gönderilen komutlar mavi, hatalar kırmızı görünür. Kart aynı ağdaysa "Yerel yayın (UDP)" alanı dolar (eskiden hiç dolmuyordu); Windows Güvenlik Duvarı ilk seferde Python için izin isteyebilir, özel ağa izin verin.
+- [ ] **81.8. Cihaz Yazılımı: Derle → Sürüm oluştur → Dağıt:**
+  - **Nasıl Test Edilir:** "Cihaz yazılımı"nda kart türünü ve sürüm numarasını seçip "Derle", ardından "Sürüm oluştur"a basın; "Hedef kart" listesinden kartı seçip "USB ile karta yükle"ye basın. Bir de bilerek hatalı sürüm (ör. `1.2`) ya da derlenmeyen bir kodla deneyin.
+  - **Beklenen Sonuç:** Sıradaki adımın düğmesi koyu renkle vurgulanır. Derlerken ilerleme çubuğunda gidip gelen şerit ve "Derleniyor" rozeti görünür; yüklemede yüzde ilerler; bitince "TMM · Yükleme tamamlandı" bildirimi gelir ve adım göstergesi tamamlanır. Hedef kart listesi Etiketle sayfasındaki seçimle eşittir. Derleme/sürüm/sunucu/ZIP hatasında hata penceresi çıkar (eskiden bu hatalarda pencere hiç açılmıyordu) ve rozet "Başarısız" olur.
+- [ ] **81.9. Çalışma Arkadaşı İçin ZIP:**
+  - **Nasıl Test Edilir:** Sürüm oluşturduktan sonra "Çalışma arkadaşı için ZIP"e basıp bir dosya adı seçin; ZIP'i açıp `flash_smartkeypass_usb.bat` ve `README.txt` dosyalarına bakın.
+  - **Beklenen Sonuç:** ZIP oluşur ve "ZIP hazır" bildirimi gelir (eskiden bu düğme hata verip ZIP oluşturmuyordu). BAT ve README'de hedef donanım adı (`esp32-c3` / `esp32-wroom`) doğru yazar.
+- [ ] **81.10. Ekran Yazılımı Sayfası:**
+  - **Nasıl Test Edilir:** Ekran modülü bağlıyken "Ekran yazılımı" sayfasını ilk kez açın (açılışta portlar taranır, kartlar yeniden başlayabilir). "Bağlan", canlı test düğmeleri (Ping, Test karekodu, Kapı açıldı, Ayarlar, Ana ekran, Yeniden başlat), "Sürüm oluştur" ve "USB ile ekrana yükle"yi deneyin.
+  - **Beklenen Sonuç:** Ekran bulununca yeşil rozette "COMx · SmartKeyPass 2.4" ekran yanıt verdi" yazar; bulunamazsa sarı/kırmızı rozet nedenini söyler. Komutlar seri kayıtta mavi görünür; yükleme bitince "TMM" bildirimi gelir ve seri konsol kendiliğinden yeniden bağlanır.
+- [ ] **81.11. Animasyon Efektleri Kapalıyken:**
+  - **Nasıl Test Edilir:** Windows Ayarlar → Erişilebilirlik → Görsel efektler → "Animasyon efektleri"ni kapatıp uygulamayı yeniden açın; sayfalar arasında geçin, bir kimlik okuyun.
+  - **Beklenen Sonuç:** Sayfa geçişleri, bildirimler ve karekod animasyonsuz, anında görünür; işlevler aynı çalışır.
