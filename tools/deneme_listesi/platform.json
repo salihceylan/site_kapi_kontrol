@@ -529,6 +529,19 @@
           "on_kosul": "",
           "yeni": false,
           "gelistirme": "hazir"
+        },
+        {
+          "id": "F1.31",
+          "baslik": "Yönetim türü seçimi (5 tür)",
+          "adimlar": [
+            "Süper kullanıcı ya da site kurulum ekranında \"Yönetim Türü\" listesine bakın.",
+            "Rezidans, İş Merkezi, Kooperatif ya da Alışveriş Merkezi seçip siteyi kurun."
+          ],
+          "beklenen": "Beş türün hepsi seçilebilir; \"Yakında…\" etiketi yoktur. Seçilen tür site kartında etiket olarak görünür. Şimdilik hepsinde \"daire\" ve \"blok\" terimleri kullanılır (ofis/mağaza/üye payı gibi türe özel terimler sonraki aşamadadır). Kurulmuş sitenin türü düzenlemede salt okunur gösterilir.",
+          "rol_notu": "",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
         }
       ]
     },
@@ -3705,7 +3718,7 @@
           "beklenen": "Modül açılınca yöneticide/görevlide/kurulda \"Talepler\", sakinde \"Taleplerim\" menüsü görünür. Modül kapalıyken bu menüler yoktur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3718,7 +3731,7 @@
           "beklenen": "Talep listede \"Yeni\" durumuyla görünür. Başlık ve açıklama boşsa kayıt reddedilir ve nedeni yazılır.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3731,7 +3744,7 @@
           "beklenen": "Sitedeki tüm talepler listelenir; süzgeçler listeyi daraltır. Başka sitenin talebi hiç görünmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3745,7 +3758,7 @@
           "beklenen": "Sunucunun izin vermediği geçiş seçeneklerde yoktur. Kapandı/iptal sonrası yorum yazılamaz. Sakinin listesinde güncelleme göstergesi çıkar; açınca kaybolur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3758,7 +3771,7 @@
           "beklenen": "Sakin yalnız \"Sakine görünür\" yorumları görür; iç not hiç görünmez. Sakin de herkese açık yorum yazabilir.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3771,7 +3784,7 @@
           "beklenen": "Kendi \"Yeni\" talebi iptal edilir (işlemde olan iptal edilemez). Başka sakinin talebi listede ve doğrudan açılışta bulunamaz (404).",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3784,7 +3797,7 @@
           "beklenen": "Kurulda ekleme/atama/yorum düğmesi yoktur, \"yalnızca görüntüleyebilirsiniz\" notu çıkar; iç notlar ve sakin telefonu görünmez. Görevli yalnız kendine atanmış ya da atanmamış talepleri işler.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3797,7 +3810,7 @@
           "beklenen": "Kişi başı sitede en çok 30 açık talep, saatte 20 yeni talep. Silinen görevlinin açık talepleri atamasız kalır. Hesabı silinen sakinin talepleri sitede kalır (açan \"Silinmiş Kullanıcı\"), dışa aktarma dosyasında kendi talepleri ve yorumları bulunur.",
           "rol_notu": "Geliştirici",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
@@ -3818,7 +3831,7 @@
           "beklenen": "Yönetici/görevli/kurulda \"Rezervasyonlar\", sakinde \"Rezervasyon\" menüsü görünür. Modül kapalıyken menü yoktur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3830,7 +3843,7 @@
           "beklenen": "Alan kaydedilir ve sakinin alan listesinde görünür. Görevli hesabında alan ekleme/düzenleme düğmesi YOKTUR. Pasif alan sakine görünmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3843,7 +3856,7 @@
           "beklenen": "Boş/dolu slotlar görünür; rezervasyon hemen \"Onaylandı\" olur ve \"Rezervasyonlarım\"da listelenir. Kapalı saate, geçmişe veya izin verilenden uzak tarihe rezervasyon yapılamaz.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3856,7 +3869,7 @@
           "beklenen": "Sakinde \"Onay bekliyor\" görünür; onay sonrası \"Onaylandı\", ret sonrası gerekçeli \"Reddedildi\". Ret ve yönetici iptalinde gerekçe zorunludur. Bekleyen rezervasyon da kapasiteyi tutar.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3868,7 +3881,7 @@
           "beklenen": "İkincisi \"dolu\" hatasıyla reddedilir; kapasite aşılmaz.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3881,7 +3894,7 @@
           "beklenen": "Süre içinde iptal olur ve kapasite geri açılır. Süre dolduysa iptal düğmesi pasiftir ve nedeni yazar. Başkasının rezervasyonu görünmez.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3894,7 +3907,7 @@
           "beklenen": "Sakin talebini ve durum/notu görür; açıkken iptal edebilir. Kurul salt okur, düğme yoktur.",
           "rol_notu": "",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         },
         {
@@ -3907,7 +3920,7 @@
           "beklenen": "Görevli rezervasyonu onaylar/reddeder ama alan tanımlayamaz; kurul yalnız okur ve sakin telefonunu görmez. Silinen hesabın gelecekteki bekleyen/onaylı rezervasyonları ve açık konsiyerj talepleri otomatik iptal olur; kayıtlar sitede kalır (\"Silinmiş Kullanıcı\"), dışa aktarma dosyasında kendi rezervasyonları bulunur.",
           "rol_notu": "Geliştirici",
           "on_kosul": "",
-          "yeni": true,
+          "yeni": false,
           "gelistirme": "hazir"
         }
       ]
