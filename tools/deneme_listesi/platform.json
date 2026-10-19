@@ -3924,6 +3924,226 @@
           "gelistirme": "hazir"
         }
       ]
+    },
+    {
+      "id": "F19",
+      "baslik": "Cihaz Etiketleyici (masaüstü) yeni arayüz",
+      "durum": "hazir",
+      "ozet": "Şirket bilgisayarındaki SmartKeyPass Cihaz Etiketleyici tek pencereli, sol menülü yeni arayüze geçti: Etiketle, Kayıtlı cihazlar, Cihaz testi, Cihaz yazılımı, Ekran yazılımı. Kimlik okuma, karekod, sunucu kaydı, derleme ve yükleme mantığı değişmedi. Başarı mesajları sağ altta kendiliğinden kaybolan bildirim oldu; hatalar yine pencere olarak gelir. Açmak için company_qr_tool klasöründeki launch_company_qr_tool.bat dosyasına çift tıklayın.",
+      "maddeler": [
+        {
+          "id": "F19.01",
+          "baslik": "Açılış, menü ve kısayollar",
+          "adimlar": [
+            "launch_company_qr_tool.bat ile uygulamayı açın.",
+            "Sol menüdeki sayfalara tıklayın; sonra Ctrl+1…Ctrl+5 ile sayfalar arasında geçin.",
+            "Ekran ölçeği %125 ya da %150 olan bir bilgisayarda da açın."
+          ],
+          "beklenen": "Pencere tam ekran açılır; solda lacivert menü, SmartKeyPass logosu ve altta “Sunucu anahtarı hazır” (yeşil nokta) ya da “Sunucu anahtarı yok” (sarı nokta; üzerine gelince nasıl tanımlanacağı yazar) görünür. Sayfa geçişi kısa bir kaymayla olur, menüdeki seçim çizgisi yeni öğeye kayar. Yazılar yüksek ölçekte bulanık değildir.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.02",
+          "baslik": "Kart takınca liste kendiliğinden yenilenir",
+          "adimlar": [
+            "Etiketle sayfasında bir ESP32 kapı kartını USB ile takın, birkaç saniye bekleyin.",
+            "Kartı çıkarın.",
+            "“Yeniden tara” düğmesine (ya da F5) basın."
+          ],
+          "beklenen": "Takınca kart 2 saniye içinde listeye gelir ve sağ altta “Kart bağlandı: COMx” bildirimi çıkar; tek kart bağlıysa kendiliğinden seçilir. Çıkarınca listeden düşer ve “Kart çıkarıldı” bildirimi gelir. Hiç kart yokken tabloda “Bağlı kart yok” açıklaması görünür.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Bir ESP32 kapı kartı ve USB kablosu",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.03",
+          "baslik": "Etiketleme akışı: Seç → Kimliği oku → Kaydet ve yazdır",
+          "adimlar": [
+            "Listeden kartı seçin.",
+            "“Kimliği oku”ya basın (çift tıklamak ya da Enter da olur)."
+          ],
+          "beklenen": "Okurken sağdaki rozet “Kimlik okunuyor” der, alt çubukta dönen gösterge görünür. Bitince “Kimlik okundu” bildirimi gelir, karekod hafif bir animasyonla belirir, kimlik büyük yazıyla ve kopyalama düğmesiyle görünür. Satırın durumu “Karekod hazır” olur, üstteki adım göstergesinde ilk iki adım tamamlanır. Ayrıca “QR oluştur” düğmesine basmak gerekmez.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Bir ESP32 kapı kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.04",
+          "baslik": "Sunucuya kaydet, yazdır, PNG kaydet",
+          "adimlar": [
+            "Kimliği okunmuş kartta sırayla “Sunucuya kaydet”, “Yazdır” ve “PNG kaydet”e basın.",
+            "Sonra kimliği okunmamış başka bir kartı seçip aynı düğmelere bakın."
+          ],
+          "beklenen": "Kaydederken rozet “Kaydediliyor”, bitince “Kaydedildi” olur; satırda “✓ Kaydedildi” yazar ve adım göstergesinin üçü de tamamlanır. Sunucu anahtarı yoksa “Yerel kayıt tamam, sunucuya gönderilemedi” uyarı penceresi çıkar. Yazdır yazıcıya gönderir; PNG output klasörüne kaydedilir ve bildirim gelir. Kimliği okunmamış kart seçiliyken kaydet, yazdır ve PNG düğmeleri kapalıdır (başka kartın etiketi basılamaz).",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Kimliği okunmuş bir kart; yazıcı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.05",
+          "baslik": "Kimlik okunamazsa düğmeler kilitlenmez",
+          "adimlar": [
+            "Kartın portunu başka bir seri monitörde açık tutun (ya da okuma sürerken kabloyu çekin).",
+            "“Kimliği oku”ya basın."
+          ],
+          "beklenen": "Çözüm adımlarını anlatan “Kimlik okunamadı” penceresi çıkar; kapatınca düğmeler yeniden kullanılabilir. (Eskiden okuma hatasından sonra düğmeler kalıcı olarak kapalı kalıyordu.)",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Bir ESP32 kapı kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.06",
+          "baslik": "Kayıtlı cihazlar sayfası",
+          "adimlar": [
+            "“Kayıtlı cihazlar” sayfasını açın.",
+            "Arama kutusuna bir kimliğin bir parçasını yazın, Esc ile temizleyin.",
+            "Bir satır seçin; Yazdır, PNG kaydet, kimlik kopyalama düğmelerini ve sağ tık menüsünü deneyin.",
+            "“Karekodlu PDF raporu”na basın."
+          ],
+          "beklenen": "Arama kutusunun yanındaki rozet cihaz sayısını gösterir (“3 cihaz”; aramada “1 / 3 cihaz”); eşleşme yoksa “Eşleşen cihaz yok” yazar. Seçilen cihazın karekodu sağda belirir; kayıt tarihleri yerel saatle görünür. PDF açılır ve “PDF raporu hazır” bildirimi gelir. Sunucuya ulaşılamazsa tablonun altında sarı uyarı simgesiyle nedeni yazar.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Silmeyi yalnızca TEST kaydıyla deneyin",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.07",
+          "baslik": "Cihaz testi sayfası",
+          "adimlar": [
+            "“Cihaz testi”nde portu seçip “Bağlan”a basın.",
+            "“Hızlı testler”deki Röle HIGH, Röle LOW, Röle pulse, Kamera testi ve Pin bulma düğmelerini deneyin.",
+            "“Temizle”ye basın, sonra “Bağlantıyı kes” ile kapatın."
+          ],
+          "beklenen": "Başlıktaki rozet “Bağlanıyor” → “Bağlı: COMx” olur. Bilgiler Kimlik ve yazılım, Bluetooth, Donanım, Wi-Fi ve ağ, MQTT gruplarında dolar; değişen değer kısa süre vurgulanır. Seri kayıtta gönderilen komutlar mavi, hatalar kırmızı görünür. Kart aynı ağdaysa “Yerel yayın (UDP)” alanı dolar (eskiden hiç dolmuyordu); Windows Güvenlik Duvarı ilk seferde Python için izin isteyebilir, özel ağa izin verin. “Genel IP (WAN)” alanı için F20’ye bakın.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Bir ESP32 kapı kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.08",
+          "baslik": "Cihaz yazılımı: Derle → Sürüm oluştur → Dağıt",
+          "adimlar": [
+            "“Cihaz yazılımı”nda kart türünü ve sürüm numarasını seçip “Derle”ye, ardından “Sürüm oluştur”a basın.",
+            "“Hedef kart” listesinden kartı seçip “USB ile karta yükle”ye basın.",
+            "Bir kez de bilerek hatalı sürüm numarasıyla (ör. 1.2) deneyin."
+          ],
+          "beklenen": "Sıradaki adımın düğmesi koyu renkle vurgulanır. Derlerken ilerleme çubuğunda gidip gelen şerit ve “Derleniyor” rozeti görünür; yüklemede yüzde ilerler; bitince “TMM · Yükleme tamamlandı” bildirimi gelir ve adım göstergesi tamamlanır. Hedef kart listesi Etiketle sayfasındaki seçimle aynıdır. Derleme, sürüm, sunucu ya da ZIP hatasında hata penceresi çıkar (eskiden bu hatalarda pencere hiç açılmıyordu) ve rozet “Başarısız” olur.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "PlatformIO kurulu bilgisayar ve bir test kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.09",
+          "baslik": "Çalışma arkadaşı için ZIP",
+          "adimlar": [
+            "Sürüm oluşturduktan sonra “Çalışma arkadaşı için ZIP”e basıp bir dosya adı seçin.",
+            "ZIP’i açıp flash_smartkeypass_usb.bat ve README.txt dosyalarına bakın."
+          ],
+          "beklenen": "ZIP oluşur ve “ZIP hazır” bildirimi gelir (eskiden bu düğme hata verip ZIP oluşturmuyordu). BAT ve README dosyalarında hedef donanım adı (esp32-c3 ya da esp32-wroom) doğru yazar.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Oluşturulmuş bir sürüm",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.10",
+          "baslik": "Ekran yazılımı sayfası",
+          "adimlar": [
+            "Ekran modülü bağlıyken “Ekran yazılımı” sayfasını ilk kez açın (açılışta portlar taranır, bağlı kartlar yeniden başlayabilir).",
+            "“Bağlan”a basıp canlı test düğmelerini deneyin: Ping, Test karekodu, Kapı açıldı, Ayarlar, Ana ekran, Yeniden başlat.",
+            "“Sürüm oluştur” ve “USB ile ekrana yükle”yi deneyin."
+          ],
+          "beklenen": "Ekran bulununca yeşil rozette “COMx · SmartKeyPass 2.4\" ekran yanıt verdi” yazar; bulunamazsa sarı ya da kırmızı rozet nedenini söyler. Komutlar seri kayıtta mavi görünür. Yükleme bitince “TMM” bildirimi gelir ve seri konsol kendiliğinden yeniden bağlanır.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "2.4\" ekran modülü",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F19.11",
+          "baslik": "Animasyon efektleri kapalıyken",
+          "adimlar": [
+            "Windows Ayarlar → Erişilebilirlik → Görsel efektler → “Animasyon efektleri”ni kapatın.",
+            "Uygulamayı yeniden açın; sayfalar arasında geçin ve bir kartın kimliğini okuyun."
+          ],
+          "beklenen": "Sayfa geçişleri, bildirimler ve karekod animasyonsuz, anında görünür; işlevler aynı çalışır.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "hazir"
+        }
+      ]
+    },
+    {
+      "id": "F20",
+      "baslik": "Cihaz testi: “Genel IP (WAN)” alanı dolmuyor (açık hata)",
+      "durum": "planli",
+      "ozet": "Cihaz Etiketleyici → “Cihaz testi” sayfasındaki “Genel IP (WAN)” alanı hiç dolmuyor. Neden: araç kartın genel IP’sini tanımsız bir adresten istiyor, bu yüzden istek hiç gönderilmiyor. Sunucu kartın genel IP’sini aslında tutuyor (MQTT bağlantısından), ama bunu şirket anahtarıyla okunabilir şekilde veren bir uç yok; bu bilgi yalnızca yönetici oturumu isteyen uçlardan dönüyor. Hata henüz düzeltilmedi; sayfadaki diğer alanlar etkilenmez.",
+      "maddeler": [
+        {
+          "id": "F20.01",
+          "baslik": "Şu anki durum (bilinen hata)",
+          "adimlar": [
+            "Wi-Fi’ye ve MQTT’ye bağlı (internete çıkan) bir kapı kartını USB ile bağlayın.",
+            "Cihaz Etiketleyici → “Cihaz testi” → portu seçip “Bağlan”a basın.",
+            "Kart durum bloğunu yazana kadar bekleyin (gerekirse kartı yeniden başlatın)."
+          ],
+          "beklenen": "Şu an: cihaz kimliği, Yerel IP, MQTT gibi alanlar dolar; “Genel IP (WAN)” alanı “-” olarak kalır. Uygulama donmaz, hata penceresi çıkmaz. (Bu madde hatanın varlığını doğrular; “Çalışmıyor” işaretlemeniz beklenen sonuçtur.)",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "İnternete bağlı bir kapı kartı",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F20.02",
+          "baslik": "Genel IP sunucuda var mı",
+          "adimlar": [
+            "F20.01’deki kartın genel IP (WAN) bilgisine mobil uygulamada, yönetici hesabıyla, kartın durum bilgisinden bakın."
+          ],
+          "beklenen": "Mobil uygulamada genel IP görünüyorsa veri sunucuda var demektir; sorun yalnızca masaüstü aracının bu bilgiye erişememesidir. Görünmüyorsa sorun daha geniştir (sunucu kartın genel IP’sini hiç almıyor) ve düzeltmeye bu da eklenmelidir.",
+          "rol_notu": "Süper kullanıcı / site yöneticisi",
+          "on_kosul": "F20.01’deki kart",
+          "yeni": true,
+          "gelistirme": "hazir"
+        },
+        {
+          "id": "F20.03",
+          "baslik": "Düzeltmeden sonra kabul ölçütü",
+          "adimlar": [
+            "Düzeltilmiş sürümle F20.01 adımlarını tekrarlayın.",
+            "company_qr_tool/.env içindeki COMPANY_API_KEY satırını geçici olarak kaldırıp uygulamayı yeniden açın ve tekrar deneyin.",
+            "Bilgisayarın internetini kesip tekrar deneyin. Bitince anahtarı geri koyun."
+          ],
+          "beklenen": "Durum bloğu geldikten birkaç saniye içinde “Genel IP (WAN)” alanı kartın genel IP’siyle dolar (değer kısa süre vurgulanır) ve F20.02’de görülen değerle aynıdır; yalnızca bağlı kartın IP’si gösterilir. Anahtar yokken ya da sunucuya ulaşılamazken alan “-” kalır, uygulama donmaz ve hata penceresi çıkmaz.",
+          "rol_notu": "Şirket (üretim) bilgisayarı",
+          "on_kosul": "Düzeltme sürümü",
+          "yeni": true,
+          "gelistirme": "planli"
+        },
+        {
+          "id": "F20.04",
+          "baslik": "Düzeltme kapsamı ve doğrulaması",
+          "adimlar": [
+            "Sunucuya şirket anahtarıyla korunan, tek bir cihaz kimliği için yalnızca genel IP’yi (ve son görülme zamanını) döndüren salt okunur bir uç ekleyin (ör. GET /api/company/devices/:deviceUid/runtime).",
+            "company_qr_tool/app.py içindeki DeviceTesterPage._fetch_public_ip bu uca şirket anahtarı başlığıyla istek atsın; tanımsız API_BASE_URL kaldırılsın.",
+            "server klasöründe npm test ve npm run lint; company_qr_tool için python -m py_compile app.py ui_kit.py çalıştırın."
+          ],
+          "beklenen": "Uç anahtarsız istekte 401, geçersiz kimlikte 400, bilinmeyen cihazda 404 döner; yanıt yalnızca istenen cihazın genel IP’sini içerir (cihaz listesi, kullanıcı ya da site bilgisi dönmez). Testler ve lint yeşil, derleme hatasız.",
+          "rol_notu": "Geliştirici",
+          "on_kosul": "",
+          "yeni": true,
+          "gelistirme": "planli"
+        }
+      ]
     }
   ]
 }
