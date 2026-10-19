@@ -28,6 +28,10 @@ Sunucu ve Flutter uygulaması bu belgeye göre yazılır. Deneme listesi: `tools
 | `work_tracking` | İş Takibi | hayır | `available` (bkz. PLATFORM_IS_TAKIBI.md) | KAPALI |
 | `metering` | Sayaç Okuma ve Faturalandırma | hayır | `coming_soon` | KAPALI |
 | `online_payment` | Online Tahsilat ve Banka Bağlantısı | hayır | `coming_soon` | KAPALI |
+| `contracts` | Firma ve Sözleşme Takibi | hayır | `available` (bkz. PLATFORM_SOZLESMELER.md) | KAPALI |
+| `decision_book` | Karar Defteri | hayır | `available` | KAPALI |
+
+Tam ve güncel liste (17 modül, sırasıyla) `catalog.js` içindedir; bu tablo yalnız örnek satırları ve ilk sürüm durumlarını gösterir.
 
 Açıklamalar (Türkçe, kısa) katalogda tutulur. `toggleable = !core && status === 'available'`.
 `enabled` hesabı: `status !== 'available'` → `false`; `core` → `true`; aksi halde `site_modules` satırı varsa `enabled`, yoksa varsayılan.
@@ -172,7 +176,7 @@ Yeni tablo ve migration YOK. Türe göre veri modeli ve modüller AYNI kalır (b
 | `shopping_mall` | Mağaza / Mağazalar | Kiracı firma / Kiracı firmalar | Mal sahibi | Ortak gider | Kat / Katlar | finance, work_tracking, visitor_log, documents |
 
 - Bilinmeyen/boş tür → `apartment_site` terimleri ve önerileri (varsayılan; `normalizeManagementType` ile aynı kural).
-- Önerilen kodların hepsi artık katalogdadır (`survey`, `visitor_log` dahil); katalogda olmayan bir kod önerilirse OLDUĞU GİBİ döner ve istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yalnız katalogdaki modülleri (15) içerir; katalog dışı öneri modül listesine eklenmez.
+- Önerilen kodların hepsi artık katalogdadır (`survey`, `visitor_log` dahil); katalogda olmayan bir kod önerilirse OLDUĞU GİBİ döner ve istemci bilmediği kodu atlar. `GET /manager/sites/:siteCode/modules` `modules` dizisi yalnız katalogdaki modülleri (17) içerir; katalog dışı öneri modül listesine eklenmez.
 - Her türün tek cümlelik Türkçe açıklaması `summary` (F9 deneme listesindeki tür açıklamaları; "Yakında" demez).
 
 ### Ekleyici alanlar (mevcut alanlar ve değerleri DEĞİŞMEZ; eski istemciler alanları yok sayar)

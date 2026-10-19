@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/models/contract_models.dart' show contractActionLabel;
+import 'package:site_kapi_kontrol/models/decision_models.dart' show decisionBookActionLabel;
 import 'package:site_kapi_kontrol/models/document_models.dart' show documentActionLabel;
 import 'package:site_kapi_kontrol/models/finance.dart';
 import 'package:site_kapi_kontrol/models/history_item.dart';
@@ -53,6 +55,8 @@ class AuditLogEntry {
     'plate_recognition': 'Plaka Tanıma',
     'hgs_access': 'HGS Geçişi',
     'cctv_link': 'Kamera (CCTV) Bağlantısı',
+    'decision_book': 'Karar Defteri',
+    'contracts': 'Firma ve Sözleşme Takibi',
   };
 
   static const Map<String, String> _staffRoleNames = <String, String>{
@@ -95,6 +99,8 @@ class AuditLogEntry {
             siteApplicationActionLabel(action) ??
             financeActionLabel(action) ??
             visitorLogActionLabel(action) ??
+            decisionBookActionLabel(action) ??
+            contractActionLabel(action, details) ??
             'Diğer işlem';
     }
   }
@@ -148,6 +154,16 @@ class AuditLogEntry {
       case 'visitor_entry':
         // Ziyaretçi adı / firma / not denetim kaydına yazılmaz; yalnız numara gösterilir.
         return _numbered('Ziyaretçi kaydı');
+      case 'board_decision':
+        // Karar başlığı / metni denetim kaydına yazılmaz; kesinleşmişse karar numarası, değilse kayıt numarası.
+        final label = details['number_label']?.toString();
+        return label != null && label.isNotEmpty ? 'Karar $label' : _numbered('Karar');
+      case 'contract_vendor':
+        // Firma adı / iletişim bilgileri denetim kaydına yazılmaz; yalnız numara gösterilir.
+        return _numbered('Firma');
+      case 'contract':
+        // Sözleşme başlığı / tutarı denetim kaydına yazılmaz; yalnız numara gösterilir.
+        return _numbered('Sözleşme');
       default:
         final id = targetId;
         return id == null || id.isEmpty ? null : id;

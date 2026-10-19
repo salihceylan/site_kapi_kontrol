@@ -61,6 +61,8 @@ void main() {
         'Sürüm Raporu (PDF)',
         'Tümüne OTA Kontrolü',
         'Bilgileri Gönder',
+        // Daire PIN'ini değiştirir (eski PIN ve oturumlar geçersiz): e2e gezgini ASLA dokunmaz.
+        "PIN'i Sıfırla",
       ]) {
         expect(E2ePolicy.check(label, inDialog: false), isNotNull, reason: label);
       }

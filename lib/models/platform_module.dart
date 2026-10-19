@@ -20,6 +20,10 @@ abstract final class PlatformModuleCodes {
   static const String survey = 'survey';
   /// Ziyaretçi ve Kargo (kapı kaydı; F11.03). Varsayılan KAPALI.
   static const String visitorLog = 'visitor_log';
+  /// Firma ve Sözleşme Takibi. Varsayılan KAPALI.
+  static const String contracts = 'contracts';
+  /// Karar Defteri (yönetim / genel / denetim kurulu kararları). Varsayılan KAPALI.
+  static const String decisionBook = 'decision_book';
 }
 
 DateTime? _parseDate(Object? raw) {

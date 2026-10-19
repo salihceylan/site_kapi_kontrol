@@ -26,6 +26,9 @@ String? peopleActionLabel(String action) {
       return 'Araç kaldırıldı';
     case 'apartment.deleted':
       return 'Daire silindi';
+    case 'apartment.pin_reset':
+      // PIN değeri kayıtta YOKTUR (yalnız kim, hangi daire).
+      return "Daire PIN'i sıfırlandı";
     case 'import.committed':
       return 'Toplu yükleme';
     case 'export':

@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../db.js';
 import { authRequired, requireSuperUser } from '../middlewares/auth_middleware.js';
-import { adminSensitiveLimiter } from '../middlewares/rate_limiters.js';
+import { adminSensitiveLimiter, apartmentPinResetLimiter } from '../middlewares/rate_limiters.js';
 import { isClientFacingError, newErrorId } from '../middlewares/error_handler.js';
 import {
   mapUserRow,
@@ -56,9 +56,13 @@ import {
   confirmSiteDeletionWithEmailCode,
 } from '../services/site_service.js';
 import {
+  APARTMENT_PIN_ERROR_MESSAGES,
+  APARTMENT_PIN_NOT_STORED_MESSAGE,
   provisionApartmentResident,
+  resetApartmentPin,
   resetApartmentResident,
   sendApartmentCredentials,
+  sendIssuedApartmentPin,
 } from '../services/apartment_service.js';
 import { updateDoorDeviceAssignment } from '../services/door_service.js';
 import { runDatabaseCleanup, getDatabaseHealth } from '../services/maintenance_service.js';
@@ -1213,12 +1217,45 @@ adminRouter.patch('/admin/apartments/:id/resident', authRequired, requireSuperUs
       Number(apartment.site_code),
       'apartment_resident_changed',
     );
-    return res.status(200).json({ apartment: mapApartmentRow(apartment) });
+    // Yeni daire hesabı açıldıysa PIN bu yanıtta BİR KEZ döner (apartment.resident_pin_code) ve e-posta varsa bir kez gönderilir; saklanmaz.
+    const credentialsSent = await sendIssuedApartmentPin(apartmentId, apartment.issued_pin_code);
+    if (apartment.issued_pin_code) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+    return res.status(200).json({ apartment: mapApartmentRow(apartment), credentials_sent: credentialsSent });
   } catch (error) {
     if (error?.message === 'APARTMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Daire bulunamadi.' });
     }
     return handleUserMutationError(error, res, 'Daire kullanicisi kaydedilemedi.');
+  }
+});
+
+// POST /admin/apartments/:id/reset-pin  (daire hesabına yeni PIN; yanıtta BİR KEZ döner, e-posta varsa bir kez gönderilir)
+adminRouter.post('/admin/apartments/:id/reset-pin', authRequired, requireSuperUser, apartmentPinResetLimiter, async (req, res) => {
+  const apartmentId = parseId(req.params.id);
+  if (apartmentId === null) {
+    return res.status(400).json({ error: 'Gecersiz daire ID.' });
+  }
+  const sendEmail = req.body?.send_email !== false;
+
+  try {
+    const { apartment, pinCode } = await resetApartmentPin(apartmentId, { actor: req.authUser });
+    // PIN değişti ve commit edildi: yerel kontrol belirteci yenilemesi düşerse de PIN BİR KEZ gösterilsin (aksi halde kaybolurdu).
+    await rotateLocalControlTokensForSite(Number(apartment.site_code), 'apartment_pin_reset').catch((rotateError) => {
+      console.error('[admin] reset_pin yerel kontrol belirteci yenilenemedi', rotateError?.code || rotateError?.message);
+    });
+    const credentialsSent = sendEmail ? await sendIssuedApartmentPin(apartmentId, pinCode) : null;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true, apartment: mapApartmentRow(apartment), pin_code: pinCode, credentials_sent: credentialsSent });
+  } catch (error) {
+    if (error?.message === 'APARTMENT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Daire bulunamadi.' });
+    }
+    if (APARTMENT_PIN_ERROR_MESSAGES[error?.code]) {
+      return res.status(409).json({ error: APARTMENT_PIN_ERROR_MESSAGES[error.code], code: error.code });
+    }
+    return sendServiceError(res, error, 'Daire PIN\'i sifirlanamadi.');
   }
 });
 
@@ -1263,6 +1300,10 @@ adminRouter.post('/admin/apartments/:id/send-credentials', authRequired, require
     }
     if (error?.message === 'APARTMENT_CREDENTIALS_NOT_READY') {
       return res.status(400).json({ error: 'Kullanici adi veya PIN hazir degil.' });
+    }
+    if (error?.message === 'APARTMENT_PIN_NOT_STORED') {
+      // Migration 051: PIN saklanmaz, sonradan yeniden gönderilemez (eski istemci); yeni istemci reset-pin kullanır.
+      return res.status(409).json({ error: APARTMENT_PIN_NOT_STORED_MESSAGE, code: 'APARTMENT_PIN_NOT_STORED' });
     }
     return res.status(500).json({ error: 'Daire bilgileri e-posta ile gonderilemedi.' });
   }

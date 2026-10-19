@@ -139,7 +139,8 @@ class PeoplePersonsTabState extends State<PeoplePersonsTab> {
       case false:
         AppSnack.show(
           context,
-          'Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi.',
+          // PIN sunucuda saklanmaz: e-posta gitmediyse PIN yalnız Daireler ekranından sıfırlanarak verilebilir.
+          "Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi. PIN saklanmadığı için Daireler ekranından PIN'i sıfırlayın.",
           kind: AppSnackKind.warning,
         );
       case null:

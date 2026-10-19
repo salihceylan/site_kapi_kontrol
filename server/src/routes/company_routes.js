@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pool } from '../db.js';
@@ -8,6 +9,8 @@ import { requireCompanyAccess } from '../middlewares/company_auth.js';
 import { newErrorId } from '../middlewares/error_handler.js';
 import { createRuleLimiter, clientIp } from '../middlewares/rate_limiters.js';
 import { syncMqttAclOrThrow } from '../mqtt_acl_sync.js';
+import { normalizeClientIp } from '../services/firmware_manifest_service.js';
+import { isCloudflareIp } from '../security/cloudflare_ranges.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -205,6 +208,37 @@ export async function syncAclAfterCompanyDelete(syncFn = syncMqttAclOrThrow) {
     console.error('[company] mqtt_acl_sync_failed', syncErr?.syncResult?.message || syncErr?.message);
     return publicSyncSummary(syncErr?.syncResult);
   }
+}
+
+// F20: Sirket araci "Cihaz testi" sayfasi bagli kartin genel IP'sini (WAN) buradan okur. Kaynak
+// device_runtime_status.public_ip: kartin OTA manifest isteginin (GET /firmware/:target/manifest.json?uid=...; acilista
+// Wi-Fi oturduktan ~1,5-2,5 dk sonra, sonra 24 saatte bir) kaynak adresi (firmware_routes -> updateDevicePublicIp; yalniz
+// devices tablosunda kayitli kartlar). Kart kayitli ama henuz manifest istememisse public_ip null doner.
+// API Cloudflare turuncu bulut arkasindayken TRUST_PROXY Cloudflare'i kapsamiyorsa kaydedilen adres Cloudflare kenar
+// IP'sidir (kartin degil): o durumda yanlis IP gostermek yerine null doner.
+export function companyDeviceRuntimeBody(deviceUid, row) {
+  const ip = normalizeClientIp(row?.public_ip);
+  const seen = row?.last_seen_at ? new Date(row.last_seen_at) : null;
+  return {
+    device_uid: deviceUid,
+    public_ip: ip && net.isIP(ip) && !isCloudflareIp(ip) ? ip : null,
+    last_seen_at: seen && !Number.isNaN(seen.getTime()) ? seen.toISOString() : null,
+  };
+}
+
+// Tek cihazin calisma ozeti. null = cihaz devices tablosunda yok (404). Hata YUTULMAZ (cagiran 500 doner).
+export async function readCompanyDeviceRuntime(db, deviceUid) {
+  const result = await db.query(
+    `SELECT d.device_uid, rs.public_ip, rs.last_seen_at
+     FROM devices d
+     LEFT JOIN device_runtime_status rs ON rs.device_uid = d.device_uid
+     WHERE UPPER(d.device_uid) = $1
+     ORDER BY (d.device_uid = $1) DESC
+     LIMIT 1`,
+    [deviceUid],
+  );
+  const row = result?.rows?.[0];
+  return row ? companyDeviceRuntimeBody(deviceUid, row) : null;
 }
 
 function ensureDirectoryExists(dir) {
@@ -435,4 +469,28 @@ companyRouter.delete('/api/company/labeled-devices/:deviceUid', async (req, res)
     console.error('[company] cihaz silinemedi:', err);
     return res.status(500).json({ error: 'Cihaz silinemedi.' });
   }
+});
+
+// GET /api/company/devices/:deviceUid/runtime  (F20, salt okunur)
+// Yetki + hiz siniri yukaridaki companyRouter.use(['/qrcodes', '/api/company'], ...) zincirinden gelir (anahtarsiz -> 401).
+// Yanit YALNIZ istenen cihazin { device_uid, public_ip, last_seen_at } alanlari: cihaz listesi, sahip/kullanici/site,
+// MQTT kimligi ya da yerel anahtar DONMEZ. Gecersiz kimlik -> 400, kayitli olmayan cihaz -> 404.
+companyRouter.get('/api/company/devices/:deviceUid/runtime', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const deviceUid = normalizeCompanyUid(req.params.deviceUid);
+  if (!deviceUid) {
+    return res.status(400).json({ error: 'device_uid 12 haneli hex (0-9, A-F) olmalidir.' });
+  }
+  let body;
+  try {
+    body = await readCompanyDeviceRuntime(pool, deviceUid);
+  } catch (dbErr) {
+    const errorId = newErrorId();
+    console.error(`[company] ${errorId} cihaz calisma durumu okunamadi:`, dbErr?.code || dbErr?.message || dbErr);
+    return res.status(500).json({ error: 'Cihaz durumu okunamadi; biraz sonra tekrar deneyin.', errorId });
+  }
+  if (!body) {
+    return res.status(404).json({ error: 'Cihaz bulunamadi.' });
+  }
+  return res.status(200).json(body);
 });

@@ -919,6 +919,12 @@ authRouter.patch('/me', authRequired, profileUpdateLimiter, async (req, res) => 
 
     const responseBody = { user: mapUserRow(updated) };
     if (password !== undefined) {
+      // Daire hesabı kendi parolasını belirledi: yönetimin verdiği PIN artık geçerli değil -> "PIN verildi" işareti kalkar (migration 051;
+      // daire sakini change-password ucuyla aynı). Ayrı otomatik onaylı ifade: users güncellemesiyle aynı işlemde DEĞİL (kilit sırası apartments -> users).
+      await pool.query(
+        'UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE resident_user_code = $1 AND (resident_pin_issued OR resident_pin_code IS NOT NULL)',
+        [userCode],
+      );
       const newHashRes = await pool.query(
         'SELECT password_hash FROM users WHERE user_code = $1 LIMIT 1',
         [userCode],

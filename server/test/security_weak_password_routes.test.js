@@ -260,9 +260,10 @@ describe('changeApartmentMemberPassword: sakinin kendi seçtiği parola düz met
       if (saved === undefined) delete process.env.JWT_SECRET;
       else process.env.JWT_SECRET = saved;
     }
-    const pinUpdate = log.find((entry) => entry.sql.startsWith('UPDATE apartments SET resident_pin_code'));
-    assert.ok(pinUpdate, 'legacy PIN temizlenmeli');
-    assert.match(pinUpdate.sql, /resident_pin_code = NULL/);
+    // Migration 051: PIN zaten saklanmaz; sakin kendi parolasını belirleyince "PIN verildi" işareti kalkar (olası eski düz kopya da NULL).
+    const pinUpdate = log.find((entry) => entry.sql.startsWith('UPDATE apartments SET resident_pin_issued'));
+    assert.ok(pinUpdate, 'legacy PIN işareti temizlenmeli');
+    assert.match(pinUpdate.sql, /resident_pin_issued = FALSE, resident_pin_code = NULL/);
     assert.equal(log.some((entry) => entry.params.includes(STRONG)), false, 'parola hiçbir sorguya düz metin gitmez');
   });
 

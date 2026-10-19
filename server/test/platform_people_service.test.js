@@ -6,6 +6,7 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
 import { pool } from '../src/db.js';
 import { updateApartment } from '../src/modules/apartment_records_service.js';
 import {
@@ -362,11 +363,11 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
         [/^SELECT a\.id, a\.site_code, a\.resident_user_code, a\.resident_email, b\.block_name, a\.unit_label, a\.sort_order FROM apartments a/, () => ok([{ id: '9', site_code: String(SITE), resident_user_code: null, resident_email: null, block_name: 'A Blok', unit_label: 'Daire 2', sort_order: 2 }])],
         [/^SELECT user_code FROM users WHERE LOWER\(login_name\)/, () => ok()],
         [/^INSERT INTO users/, () => ok([{ id: 40001, full_name: 'Ali Veli', email: 'x@ahbu.local', login_name: 'ln', role: 'apartment_owner' }])],
-        [/^UPDATE apartments SET resident_user_code = \$1, resident_email = \$2, resident_pin_code = \$3, is_active = \$4 WHERE id = \$5$/, () => ok()],
+        [/^UPDATE apartments SET resident_user_code = \$1, resident_email = \$2, resident_pin_issued = TRUE, resident_pin_code = NULL, is_active = \$3 WHERE id = \$4$/, () => ok()],
         [/^SELECT a\.id, a\.site_code, a\.block_id, b\.block_name, a\.unit_label, a\.sort_order, a\.is_active, a\.resident_user_code/, () => ok([{ id: '9', site_code: String(SITE), resident_user_code: 40001 }])],
         [
-          /^SELECT a\.id, a\.site_code, a\.unit_label, a\.resident_email, a\.resident_pin_code, b\.block_name, s\.name AS site_name/,
-          () => ok([{ id: '9', site_code: String(SITE), unit_label: 'Daire 2', resident_email: 'ali@example.com', resident_pin_code: '4821', block_name: 'A Blok', site_name: 'Gül Sitesi', resident_full_name: 'Ali Veli', resident_login_name: 'a.blok.2' }]),
+          /^SELECT a\.id, a\.site_code, a\.unit_label, a\.resident_email, b\.block_name, s\.name AS site_name/,
+          () => ok([{ id: '9', site_code: String(SITE), unit_label: 'Daire 2', resident_email: 'ali@example.com', block_name: 'A Blok', site_name: 'Gül Sitesi', resident_full_name: 'Ali Veli', resident_login_name: 'a.blok.2' }]),
         ],
         [PERSON_INSERT, () => ok([{ id: '5' }])],
         [RESIDENCY_INSERT, () => ok([{ id: '31' }])],
@@ -386,7 +387,9 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       const aptUpdate = find(/^UPDATE apartments SET resident_user_code = \$1, resident_email = \$2/);
       assert.equal(aptUpdate.params[0], 40001);
       assert.equal(aptUpdate.params[1], 'ali@example.com');
-      assert.match(aptUpdate.params[2], /^\d{4}$/, '4 haneli PIN (mevcut akis)');
+      // Migration 051: PIN daire satirina YAZILMAZ (yalniz "PIN verildi" isareti); parametrelerde 4 haneli deger yok.
+      assert.equal(aptUpdate.params.length, 4);
+      assert.equal(aptUpdate.params.some((p) => /^\d{4}$/.test(String(p))), false, 'PIN duz metin saklanmaz');
       assert.equal(aptUpdate.inTx, true);
       assert.equal(log.filter((q) => q.sql === 'BEGIN').length, 1, 'tek BEGIN: provisionApartmentResident kendi transaction\'ini ACMAZ');
       assert.equal(log.filter((q) => q.sql === 'COMMIT').length, 1);
@@ -402,7 +405,10 @@ describe('createPerson: kayit, hesap baglama (yalniz bu sitede erisimi olan hesa
       assert.equal(sent[0].to, 'ali@example.com');
       assert.match(sent[0].subject, /Daire giris bilgileriniz/);
       assert.match(sent[0].html, /a\.blok\.2/);
-      assert.match(sent[0].html, /4821/);
+      // E-postadaki PIN, bu istekte uretilip yalniz users.password_hash'e (bcrypt) yazilan PIN'dir (veritabanindan okunmaz).
+      const mailedPin = /<strong>PIN:<\/strong> (\d{4})/.exec(sent[0].html)?.[1];
+      assert.match(String(mailedPin), /^\d{4}$/);
+      assert.equal(await bcrypt.compare(mailedPin, userInsert.params[8]), true, 'e-postadaki PIN hesabin parola ozetiyle eslesir');
     });
 
     it('dairenin ZATEN bir sakin hesabi varsa: yeni hesap acilmaz/mevcut sakin ezilmez, yalniz kayit tutulur (has_account false)', async () => {

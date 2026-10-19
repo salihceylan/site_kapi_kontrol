@@ -595,7 +595,9 @@ void main() {
       final auth = PeopleFakeAuth.seeded()..nextCredentialsSent = false;
       await addPerson(t, auth);
       expect(
-        find.text('Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi.'),
+        find.text(
+          "Kişi eklendi ve hesap açıldı; ancak giriş bilgisi e-postası gönderilemedi. PIN saklanmadığı için Daireler ekranından PIN'i sıfırlayın.",
+        ),
         findsOneWidget,
       );
     });

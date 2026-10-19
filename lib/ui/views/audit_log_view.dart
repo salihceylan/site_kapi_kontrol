@@ -47,6 +47,7 @@ class AuditLogView extends StatefulWidget {
     ('vehicle.added', 'Araç eklendi'),
     ('vehicle.removed', 'Araç kaldırıldı'),
     ('apartment.deleted', 'Daire silindi'),
+    ('apartment.pin_reset', "Daire PIN'i sıfırlandı"),
     ('site_application.created', 'Site başvurusu yapıldı'),
     ('site_application.approved', 'Site başvurusu onaylandı'),
     ('site_application.rejected', 'Site başvurusu reddedildi'),

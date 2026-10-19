@@ -38,7 +38,7 @@ SitesView _view({
   SiteManagersData? managers,
   Set<int> busyDelete = const <int>{},
   Set<int> busyApprovals = const <int>{},
-  Set<int> busyMails = const <int>{},
+  Set<int> busyPins = const <int>{},
 }) {
   final l = log ?? <String>[];
   final list = sites ?? fxSites();
@@ -55,7 +55,7 @@ SitesView _view({
     isLoadingStructure: loading,
     busyDeleteSites: busyDelete,
     busySiteApprovals: busyApprovals,
-    busyApartmentMails: busyMails,
+    busyApartmentPins: busyPins,
     onRefreshSites: () => l.add('refresh'),
     onLoadPage: (p) => l.add('page:$p'),
     onOpenAddSite: () => l.add('addSite'),
@@ -65,7 +65,7 @@ SitesView _view({
     onApproveSite: (s) => l.add('approve:${s.id}'),
     onRejectSite: (s) => l.add('reject:${s.id}'),
     onEditApartmentResident: (a) => l.add('editApt:${a.id}'),
-    onSendApartmentMail: (a) => l.add('mailApt:${a.id}'),
+    onResetApartmentPin: (a) => l.add('pinApt:${a.id}'),
     onAssignDoorDevice: (d) => l.add('assign:${d.id}'),
     siteManagersData: loading ? null : (managers ?? fxManagers()),
     isLoadingManagers: loading,
@@ -185,7 +185,12 @@ void main() {
         await tapText(t, 'Daireler');
         expect(find.byType(ApartmentCard), findsNWidgets(3));
         await tapText(t, 'A Blok / Daire 1');
-        expect(find.text('Bilgileri Gönder'), findsOneWidget);
+        expect(find.text("PIN'i Sıfırla"), findsOneWidget);
+        expect(find.text('Bilgileri Gönder'), findsNothing);
+        expect(
+          find.text('PIN yalnız oluşturulurken bir kez gösterilir; unutulduysa yenileyin.'),
+          findsOneWidget,
+        );
         expect(find.text('Sakini Sil'), findsOneWidget);
         expect(find.textContaining('Kullanıcı Adı: sakin1'), findsOneWidget);
 
@@ -330,7 +335,7 @@ void main() {
             isLoadingStructure: false,
             busyDeleteSites: const <int>{},
             busySiteApprovals: const <int>{},
-            busyApartmentMails: const <int>{},
+            busyApartmentPins: const <int>{},
             onRefreshSites: () => log.add('refresh-loading'),
             onLoadPage: (_) {},
             onOpenAddSite: () {},
@@ -340,7 +345,7 @@ void main() {
             onApproveSite: (_) {},
             onRejectSite: (_) {},
             onEditApartmentResident: (_) {},
-            onSendApartmentMail: (_) {},
+            onResetApartmentPin: (_) {},
             onAssignDoorDevice: (_) {},
           ),
           width: 360,
@@ -454,9 +459,9 @@ void main() {
       log.clear();
       await tapText(t, 'Daireler');
       await tapText(t, 'A Blok / Daire 1');
-      await tapText(t, 'Bilgileri Gönder');
+      await tapText(t, "PIN'i Sıfırla");
       await tapText(t, 'Sakini Sil');
-      expect(log, <String>['mailApt:1', 'delApt:1']);
+      expect(log, <String>['pinApt:1', 'delApt:1']);
 
       log.clear();
       // Kapı 3 cihazsız: "Cihaz Ata"; kapı 1 cihazlı: "Değiştir".
@@ -541,7 +546,7 @@ void main() {
         _view(
           busyApprovals: const <int>{5899864116},
           busyDelete: const <int>{5899864117, 5899864116},
-          busyMails: const <int>{1},
+          busyPins: const <int>{1},
         ),
         width: 360,
         height: 800,

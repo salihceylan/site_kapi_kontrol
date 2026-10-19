@@ -120,6 +120,22 @@ export const MODULE_CATALOG = Object.freeze([
     defaultEnabled: false,
   }),
   defineModule({
+    code: 'contracts',
+    name: 'Firma ve Sözleşme Takibi',
+    description: 'Firmalar, sözleşme bitiş tarihleri ve hatırlatmalar.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
+    code: 'decision_book',
+    name: 'Karar Defteri',
+    description: 'Yönetim kurulu ve genel kurul kararlarının kaydı.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
+  defineModule({
     code: 'plate_recognition',
     name: 'Plaka Tanıma',
     description: 'Araç plakasını tanıyarak otopark kapısını açma; plaka kayıtları.',

@@ -180,14 +180,14 @@ export async function sendApartmentCredentialsEmail({
     from,
     to,
     subject: 'Site ve Toplu Yaşam Yönetim Sistemi - Daire giris bilgileriniz',
-    text: `Merhaba ${residentName}, ${siteName} icindeki ${apartmentLabel} icin giris bilgileriniz: kullanici adi ${loginName}, PIN ${pinCode}`,
+    text: `Merhaba ${residentName}, ${siteName} icindeki ${apartmentLabel} icin giris bilgileriniz: kullanici adi ${loginName}, PIN ${pinCode}. PIN sistemde okunabilir bicimde saklanmaz ve yeniden gonderilemez; unutursaniz site yonetiminden yeni PIN isteyin.`,
     html: `
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937">
         <p>Merhaba <strong>${safeResidentName}</strong>,</p>
         <p><strong>${safeSiteName}</strong> icindeki <strong>${safeApartmentLabel}</strong> icin giris bilgileriniz asagidadir:</p>
         <p><strong>Kullanici adi:</strong> ${safeLoginName}</p>
         <p><strong>PIN:</strong> ${safePinCode}</p>
-        <p>Giris yaptiktan sonra gerekirse site yoneticinizden yeni sifre talep edebilirsiniz.</p>
+        <p>Bu PIN sistemde okunabilir bicimde saklanmaz ve yeniden gonderilemez. Giris yaptiktan sonra sifrenizi profilinizden degistirebilirsiniz; unutursaniz site yonetiminden yeni PIN isteyin.</p>
       </div>
     `,
   });

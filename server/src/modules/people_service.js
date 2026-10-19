@@ -802,8 +802,11 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
   }
 
   let provisionedApartmentId = null;
+  // Açılan daire hesabının PIN'i: yalnız bu istekte bellekte tutulur ve BİR KEZ e-postalanır (migration 051: veritabanında düz kopya yok).
+  let provisionedPinCode = null;
   const personId = await withSiteTransaction(siteCode, async (client) => {
     provisionedApartmentId = null; // 40P01 yeniden denemesinde sıfırlanır
+    provisionedPinCode = null;
     const apartment = input.apartmentId ? await loadApartmentForSite(client, siteCode, input.apartmentId, { lock: true }) : null;
     if (apartment) {
       await assertRelationAvailable(client, apartment.id, input.relation);
@@ -842,6 +845,7 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
       });
       provisionedUserCode = provisioned?.resident_user_code ? Number(provisioned.resident_user_code) : null;
       provisionedApartmentId = provisionedUserCode !== null ? Number(apartment.id) : null;
+      provisionedPinCode = provisionedApartmentId !== null ? provisioned?.issued_pin_code ?? null : null;
     }
     const accountUserCode = linkedUserCode ?? provisionedUserCode;
     const isBound = accountUserCode !== null;
@@ -929,8 +933,9 @@ export async function createPerson({ siteCode, input, actor, includeUserCode = t
   let credentialsSent = null;
   if (provisionedApartmentId !== null) {
     // Kimlik bilgilerini e-postayla gönder (mevcut akış); hata kişi kaydını bozmaz, istemciye credentials_sent:false bildirilir.
+    // PIN saklanmadığı için yalnız bu anda gönderilebilir; gönderilemezse yönetici Daireler ekranından PIN'i sıfırlar.
     try {
-      await sendApartmentCredentials(provisionedApartmentId);
+      await sendApartmentCredentials(provisionedApartmentId, { pinCode: provisionedPinCode });
       credentialsSent = true;
     } catch (error) {
       credentialsSent = false;

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import ipaddress
 import json
 import hashlib
 import os
@@ -605,6 +606,43 @@ def delete_server_labeled_device(device_uid: str) -> tuple[bool, str]:
             return False, f"Sunucu hatasi: HTTP {he.code}"
     except Exception as exc:
         return False, f"Baglanti hatasi: {exc}"
+
+
+# F20: "Cihaz testi" sayfasindaki "Genel IP (WAN)" alani. Sunucu kartin genel IP'sini, kartin OTA manifest isteginin
+# kaynak adresinden kaydeder; arac yalniz BAGLI kartin kaydini sirket anahtariyla okur (salt okunur uc).
+DEVICE_RUNTIME_TIMEOUT_S = 4
+_DEVICE_UID_RE = re.compile(r"[0-9A-F]{12}")
+
+
+def fetch_device_public_ip(device_uid: str) -> str:
+    """Kartin sunucudaki genel IP'sini dondurur; yoksa / anahtar yoksa / sunucuya ulasilamazsa bos metin.
+
+    Arka plan is parcaciginda cagrilir (arayuz donmasin). Hicbir zaman istisna firlatmaz ve hata penceresi acmaz.
+    """
+    uid = str(device_uid or "").strip().upper().replace(":", "").replace("-", "")
+    if not _DEVICE_UID_RE.fullmatch(uid) or not get_company_api_key():
+        return ""
+    url = f"{PUBLIC_API_URL}/api/company/devices/{urllib.parse.quote(uid)}/runtime"
+    if not _is_key_safe_url(url):
+        # Anahtar duz HTTP ile gonderilmez; anahtarsiz istek zaten 401 alir.
+        return ""
+    req = urllib.request.Request(url, headers=company_request_headers(url, {"Accept": "application/json"}))
+    try:
+        with urllib.request.urlopen(req, timeout=DEVICE_RUNTIME_TIMEOUT_S) as response:
+            if response.status != 200:
+                return ""
+            data = json.loads(response.read(4096).decode("utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(data, dict) or str(data.get("device_uid", "")).strip().upper() != uid:
+        return ""
+    raw_ip = data.get("public_ip")
+    if not isinstance(raw_ip, str):
+        return ""
+    try:
+        return str(ipaddress.ip_address(raw_ip.strip()))
+    except ValueError:
+        return ""
 
 
 def generate_devices_catalog_pdf(
@@ -3119,6 +3157,10 @@ class DeviceTesterPage:
         self._collecting_status = False
         self._status_lines: list[str] = []
         self._stop_beacon = False
+        # F20 genel IP (WAN): alanda IP'si gosterilen/istenen kart, sonraki sorgu zamani, suren sorgunun karti.
+        self._wan_uid = ""
+        self._wan_next_fetch = 0.0
+        self._wan_inflight_uid = ""
 
         self.port_var = tk.StringVar()
         self.connection_var = tk.StringVar(value="Bağlı değil")
@@ -3402,26 +3444,53 @@ class DeviceTesterPage:
         if role_line:
             self.status_vars["Role pin okuma"].set(role_line.replace("Role pin okuma ", ""))
 
-        uid = values.get("Cihaz UID", "").strip()
+        uid = values.get("Cihaz UID", "").strip().upper()
         if uid and uid != "-":
-            threading.Thread(target=self._fetch_public_ip, args=(uid,), daemon=True).start()
+            self._request_public_ip(uid)
+
+    # Kart durum blogunu seri oturumda ~5 sn'de bir yazar: sunucu her blokta sorgulanmaz. Genel IP sunucuda en sik
+    # kartin OTA kontrolunde (acilista ve 24 saatte bir) degisir; basarisizlikta (anahtar/ag/henuz IP yok) daha erken denenir.
+    WAN_REFRESH_OK_S = 120.0
+    WAN_REFRESH_RETRY_S = 30.0
+
+    def _request_public_ip(self, uid: str) -> None:
+        wan_var = self.status_vars.get("Genel IP (WAN)")
+        if wan_var is None:
+            return
+        if uid != self._wan_uid:
+            # Baska kart baglandi: onceki kartin genel IP'si bu kartinmis gibi gosterilmez.
+            self._wan_uid = uid
+            self._wan_next_fetch = 0.0
+            wan_var.set("-")
+        if not get_company_api_key():
+            return  # Anahtar yok: sessizce "-" kalir (anahtar ancak uygulama yeniden acilinca okunur).
+        now = time.monotonic()
+        if self._wan_inflight_uid == uid or now < self._wan_next_fetch:
+            return
+        self._wan_inflight_uid = uid
+        self._wan_next_fetch = now + self.WAN_REFRESH_RETRY_S
+        threading.Thread(target=self._fetch_public_ip, args=(uid,), daemon=True).start()
 
     def _fetch_public_ip(self, uid: str) -> None:
+        """Arka plan is parcacigi: sunucudan yalniz bu kartin genel IP'sini okur (kisa zaman asimi, hata penceresi yok)."""
+        public_ip = fetch_device_public_ip(uid)
         try:
-            url = f"{API_BASE_URL}/api/devices"
-            req = urllib.request.Request(url, headers={"User-Agent": "SmartKeyPass-Tester/1.0"})
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    devices = data if isinstance(data, list) else data.get("devices", [])
-                    for d in devices:
-                        if str(d.get("device_uid", "")).upper() == uid.upper():
-                            pub_ip = d.get("public_ip") or d.get("client_ip") or d.get("last_ip")
-                            if pub_ip and "Genel IP (WAN)" in self.status_vars:
-                                self.window.after(0, lambda p=pub_ip: self.status_vars["Genel IP (WAN)"].set(str(p)))
-                            break
+            self.window.after(0, lambda: self._apply_public_ip(uid, public_ip))
         except Exception:
-            pass
+            pass  # Pencere kapanmis olabilir.
+
+    def _apply_public_ip(self, uid: str, public_ip: str) -> None:
+        if self._wan_inflight_uid == uid:
+            self._wan_inflight_uid = ""
+        # Yanit gelene kadar baska kart baglandiysa ya da kimlik degistiyse sonuc atilir.
+        uid_var = self.status_vars.get("Cihaz UID")
+        current_uid = uid_var.get().strip().upper() if uid_var is not None else ""
+        if uid != self._wan_uid or uid != current_uid:
+            return
+        if public_ip:
+            self._wan_next_fetch = time.monotonic() + self.WAN_REFRESH_OK_S
+            # Deger degisince _watch_value alani kisa sure vurgular (kit.flash).
+            self.status_vars["Genel IP (WAN)"].set(public_ip)
 
     def _append_log(self, line: str) -> None:
         tag = None

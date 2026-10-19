@@ -91,6 +91,7 @@ SmartKeyPass Cihaz Etiketleyici, üretilen/etiketlenen cihazları hem yerel bilg
 - **API Uçları:**
   - `POST /api/company/labeled-devices` (Cihaz ve karekod görseli kaydetme / güncelleme - mükerrer kaydı engeller)
   - `GET /api/company/labeled-devices` (Tüm kayıtlı cihaz listesi)
+  - `GET /api/company/devices/:deviceUid/runtime` (Salt okunur; "Cihaz testi" sayfasındaki "Genel IP (WAN)" alanı için yalnızca o kartın `{device_uid, public_ip, last_seen_at}` bilgisi. Genel IP, kartın OTA güncelleme kontrolünü yaptığı adrestir: açılıştan ~2 dk sonra ve günde bir yenilenir. Anahtarsız 401, geçersiz kimlik 400, kayıtsız kart 404)
   - `GET /qrcodes/:file` (Karekod görselini doğrudan tarayıcı/uygulamaya sunma)
 
 ### 2. Yerel Bilgisayar Depolama

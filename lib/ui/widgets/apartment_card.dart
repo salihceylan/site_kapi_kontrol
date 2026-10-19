@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
+import 'package:site_kapi_kontrol/ui/design/app_card.dart';
 import 'package:site_kapi_kontrol/ui/design/status_chip.dart';
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 import 'package:site_kapi_kontrol/ui/widgets/list_parts.dart';
+
+/// Daire satırındaki PIN notu (KVKK m.12: sunucu PIN'i saklamaz, liste PIN taşımaz).
+const String kApartmentPinOnceNotice =
+    'PIN yalnız oluşturulurken bir kez gösterilir; unutulduysa yenileyin.';
 
 /// Daire satırı. "Daireler" kartının (tek yüzey) içinde düz satır olarak durur; satırlar arasındaki
 /// `Divider`'ı üst öğe koyar (kart-içinde-kart kalktı). Dokununca açılır/kapanır.
@@ -11,15 +16,17 @@ class ApartmentCard extends StatefulWidget {
     super.key,
     required this.apartment,
     required this.onEdit,
-    required this.onSendMail,
-    required this.sendingMail,
+    this.onResetPin,
+    this.resettingPin = false,
     this.onDelete,
   });
 
   final ApartmentRecord apartment;
   final VoidCallback onEdit;
-  final VoidCallback onSendMail;
-  final bool sendingMail;
+
+  /// "PIN'i Sıfırla" (yalnız dahili daire hesabında ve yetkili rolde verilir). Yeni PIN bir kez gösterilir.
+  final VoidCallback? onResetPin;
+  final bool resettingPin;
   final VoidCallback? onDelete;
 
   @override
@@ -113,6 +120,11 @@ class _ApartmentCardState extends State<ApartmentCard> {
       fontWeight: FontWeight.w600,
       color: p.text,
     );
+    // PIN sunucuda SAKLANMAZ: yalnız "verildi" durumu gösterilir; PIN'in kendisi hiçbir zaman burada yazmaz.
+    final pinResettable = hasResident && apartment.residentPinResettable;
+    final showPinState =
+        hasResident &&
+        (apartment.residentPinIssued || apartment.residentPinResettable);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,8 +141,13 @@ class _ApartmentCardState extends State<ApartmentCard> {
                 'Kullanıcı Adı: ${apartment.residentLoginName}',
                 style: strong,
               ),
-            if ((apartment.residentPinCode ?? '').isNotEmpty)
-              Text('Şifre (PIN): ${apartment.residentPinCode}', style: strong),
+            if (showPinState)
+              Text(
+                apartment.residentPinIssued
+                    ? 'Şifre (PIN): yönetim verdi'
+                    : 'Şifre (PIN): sakin kendisi belirledi',
+                style: strong,
+              ),
             if (apartment.residentUserCode != null)
               Text(
                 'Kullanıcı ID: ${apartment.residentUserCode}',
@@ -149,23 +166,31 @@ class _ApartmentCardState extends State<ApartmentCard> {
             style: th.bodyMedium,
           ),
         ],
+        if (pinResettable) ...[
+          const SizedBox(height: AppSpace.md),
+          const InlineNotice(
+            tone: AppTone.info,
+            icon: Icons.lock_outline_rounded,
+            message: kApartmentPinOnceNotice,
+          ),
+        ],
         const SizedBox(height: AppSpace.md),
         Wrap(
           spacing: AppSpace.sm,
           runSpacing: AppSpace.sm,
           children: [
-            if ((apartment.residentEmail ?? '').isNotEmpty)
+            if (pinResettable && widget.onResetPin != null)
               OutlinedButton.icon(
-                onPressed: widget.sendingMail ? null : widget.onSendMail,
-                style: tonalActionStyle(context),
-                icon: widget.sendingMail
+                onPressed: widget.resettingPin ? null : widget.onResetPin,
+                style: tonalActionStyle(context, tone: AppTone.warning),
+                icon: widget.resettingPin
                     ? const SizedBox(
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.email_outlined, size: 16),
-                label: const Text('Bilgileri Gönder'),
+                    : const Icon(Icons.lock_reset_rounded, size: 16),
+                label: const Text("PIN'i Sıfırla"),
               ),
             ElevatedButton.icon(
               onPressed: widget.onEdit,

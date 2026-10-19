@@ -33,7 +33,7 @@ Hesap silme iki farklı yolla olur ve sonuçları farklıdır: (1) kullanıcın�
 - **Kim görür:** kimse düz halini göremez (yalnız özet).
 - **Saklama:** parola sıfırlama belirteci kullanılınca NULL olur; **süresi dolan sıfırlama özeti users satırında kalır** ve `email_verification_code_hash` (eski doğrulanmamış hesap yolu) temizlenmez; ikisi de yalnız özettir.
 - **Hesap silmede (1):** NULL'lanır; parola özeti kullanılamaz rastgele değerle değişir (`account_deletion_service.js:296,372-374`).
-- **UYARI (istisna):** yönetimin açtığı eski tip daire hesaplarında 4 haneli PIN `apartments.resident_pin_code` sütununda **düz metin** saklanır, yönetici tarafından görülür (`server/src/services/site_service.js:741`) ve PIN değişince bu kopya da güncellenir (`server/src/services/membership_service.js:1891-1978`, `server/src/services/apartment_service.js:63-105,203-214`; kod yorumu "tasarım gereği düz metin"). PIN ayrıca e-postayla düz gönderilebilir (`server/src/mailer.js:160-194`). Gizlilik metinleri bu istisnayı açıkça belirtir; karar avukat kontrol listesinde (madde 14).
+- **2026-10-19 GİDERİLDİ (migration 051):** eski tip daire hesaplarının PIN'i artık yalnız `users.password_hash` (bcrypt) olarak saklanır; `apartments.resident_pin_code` her zaman NULL (geri dönüş uyumluluğu için sütun duruyor), yalnız `resident_pin_issued` bayrağı tutulur. PIN oluşturma/sıfırlamada bir kez gösterilir ve bir kez e-postalanır. Değişiklik öncesi yedeklerde eski PIN'ler yedek döngüsü dolana kadar bulunabilir.
 
 ### V03 E-posta doğrulama kayıtları
 - **Alanlar:** `email`, `code_hash`, `attempt_count`, `is_verified`, `verified_at`, `created_at`.
@@ -197,13 +197,13 @@ Hesap silme iki farklı yolla olur ve sonuçları farklıdır: (1) kullanıcın�
 - **Hesap silmede (1):** kullanıcının talepleri silinir; davet belirteçleri iptal; kullanıcının eski e-postasına gelen davetlerde e-posta tombstone ile değişir (`account_deletion_service.js:429-443`).
 
 ### V23 Daire hesabı (eski tip)
-- **Alanlar:** `apartments.resident_user_code`, `resident_email`, `resident_pin_code` (düz metin), `users.login_name`, `users.phone_number`.
+- **Alanlar:** `apartments.resident_user_code`, `resident_email`, `resident_pin_issued` (bayrak; `resident_pin_code` 051'den beri NULL), `users.login_name`, `users.phone_number`.
 - **Kaynak:** `server/src/db.js:595-617`; `server/src/services/apartment_service.js:63-105,113-292,380-400`.
 - **Amaç:** hesapsız sakine kapı erişimi için yönetimin açtığı hesap.
 - **Hukuki sebep önerisi:** m.5/2-c, f.
-- **Kim görür:** SY (PIN dahil: `server/src/services/site_service.js:741`), süper.
+- **Kim görür:** SY ve süper; PIN yalnız oluşturma/sıfırlama anında bir kez (yanıtta, `Cache-Control: no-store`).
 - **Hesap silmede (1):** `resident_email` NULL, devir kuralları (`account_deletion_service.js:405-420`).
-- **Risk:** düz metin PIN (bkz. V02 uyarısı).
+- **Risk:** 4 haneli PIN kısa bir sırdır; giriş hız sınırı ve kilit uygulanır. Düz metin saklama 2026-10-19'da kaldırıldı.
 
 ### V24 CRM kişi kaydı
 - **Alanlar:** `site_people`: `full_name`, `phone`, `email`, `note`, `user_code`, `is_active`, `created_by`. Hesabı olan kişide ad/telefon/e-posta `users`'tan okunur (burada boş).

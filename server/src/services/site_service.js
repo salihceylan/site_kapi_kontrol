@@ -3,7 +3,7 @@ import { pool } from '../db.js';
 import { recordApartmentDeletionSnapshot } from '../modules/apartment_deletion_audit.js';
 import { apartmentHasFinance, financeLockKey } from '../modules/finance_common.js';
 import { peopleLockKey } from '../modules/people_sync.js';
-import { ensureSiteApartmentResidents } from './apartment_service.js';
+import { APARTMENT_ROW_SELECT_SQL, ensureSiteApartmentResidents } from './apartment_service.js';
 import {
   deviceIdsForSite,
   rotateLocalControlTokensForDeviceIds,
@@ -725,30 +725,9 @@ export async function listSiteBlocks(siteCode, db = pool) {
 }
 
 export async function listSiteApartments(siteCode, db = pool) {
+  // Daire PIN'i SEÇİLMEZ (migration 051: düz kopya yok); yalnız "PIN verildi" işareti ve "PIN sıfırlanabilir" (dahili hesap) bilgisi.
   const result = await db.query(
-    `
-      SELECT
-        a.id,
-        a.site_code,
-        a.block_id,
-        b.block_name,
-        a.unit_label,
-        a.sort_order,
-        a.is_active,
-        a.resident_user_code,
-        u.full_name AS resident_full_name,
-        u.login_name AS resident_login_name,
-        a.resident_email,
-        a.resident_pin_code,
-        u.phone_number AS resident_phone_number,
-        u.is_active AS resident_is_active,
-        a.created_at
-      FROM apartments a
-      INNER JOIN site_blocks b ON b.id = a.block_id
-      LEFT JOIN users u ON u.user_code = a.resident_user_code
-      WHERE a.site_code = $1
-      ORDER BY b.sort_order ASC, a.sort_order ASC
-    `,
+    `${APARTMENT_ROW_SELECT_SQL} WHERE a.site_code = $1 ORDER BY b.sort_order ASC, a.sort_order ASC`,
     [siteCode],
   );
   return result.rows;

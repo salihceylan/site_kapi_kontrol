@@ -13,7 +13,10 @@ import { ensureReservationSchema } from './modules/reservation_schema.js';
 import { ensureSurveySchema } from './modules/survey_schema.js';
 import { ensureVisitorLogSchema } from './modules/visitor_log_schema.js';
 import { ensureCardAccessSchema } from './modules/card_access_schema.js';
+import { ensureContractsSchema } from './modules/contracts_schema.js';
+import { ensureDecisionBookSchema } from './modules/decision_book_schema.js';
 import { ensurePushSchema } from './modules/push_schema.js';
+import { ensureApartmentPinSchema } from './modules/apartment_pin_schema.js';
 
 dotenv.config();
 
@@ -1876,6 +1879,13 @@ export async function ensureDbSchema() {
     await ensureCardAccessSchema(client);
     // 047 (is takibi fotograf ekleri): 042'den SONRA; katalog kontrolu + her adim kendi otomatik onayli ifadesi (work_attachments_schema.js = migrations/047).
     await ensureWorkAttachmentsSchema(client);
+    // 049 (firma ve sozlesme takibi): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (contracts_schema.js = migrations/049).
+    await ensureContractsSchema(client);
+    // 050 (karar defteri): dev blokta DEGIL; katalog kontrolu + her adim kendi otomatik onayli ifadesi (decision_book_schema.js = migrations/050).
+    await ensureDecisionBookSchema(client);
+    // 051 (daire PIN'i duz metin kopyasi silinir): katalog kontrolu + kendi otomatik onayli ALTER'i; aktarim partili ve kilitli satiri atlar
+    // (apartment_pin_schema.js = migrations/051). Aktarim hatasi acilisi durdurmaz (sonraki acilista yeniden denenir).
+    await ensureApartmentPinSchema(client);
 
     // 031 people_v1: mevcut sakinlerin CRM'e tek seferlik aktarimi. Savunmaci: hata sunucunun acilmasini ENGELLEMEZ
     // (kendi transaction'i geri alinir, isaret yazilmaz => sonraki acilista yeniden denenir; okuma anindaki

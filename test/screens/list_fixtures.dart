@@ -181,7 +181,10 @@ ApartmentRecord fxApartment(
     'resident_user_code': resident ? 4000 + i : null,
     'resident_full_name': resident ? 'Sakin Adı Soyadı $i' : null,
     'resident_login_name': resident ? 'sakin$i' : null,
-    'resident_pin_code': resident ? '1234' : null,
+    // Sunucu PIN saklamaz (051): listede resident_pin_code hep null; yalniz isaret / sifirlanabilirlik gelir.
+    'resident_pin_code': null,
+    'resident_pin_issued': resident,
+    'resident_pin_resettable': resident,
     'resident_email': resident && contact
         ? 'sakin$i.cok.uzun.eposta@ornek-alan.com'
         : null,

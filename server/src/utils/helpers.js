@@ -380,7 +380,13 @@ export function mapApartmentRow(row) {
     resident_full_name: row.resident_full_name ?? null,
     resident_login_name: row.resident_login_name ?? null,
     resident_email: row.resident_email ?? null,
-    resident_pin_code: row.resident_pin_code ?? null,
+    // Daire PIN'i SAKLANMAZ (migration 051): yalnız oluşturma / sıfırlama yanıtında BİR KEZ dolu gelir (servisin koyduğu issued_pin_code);
+    // listelerde her zaman null. Veritabanı sütunu (resident_pin_code) bilerek okunmaz: eski bir sürecin yazdığı kopya API'ye sızmaz.
+    resident_pin_code: row.issued_pin_code ?? null,
+    // true: göstergedeki hesabın parolası yönetimin verdiği PIN'dir (sakin kendi parolasını belirlemedi).
+    resident_pin_issued: row.resident_pin_issued === true,
+    // true: dahili daire hesabı -> yönetici PIN'i sıfırlayabilir (kayıtlı kullanıcının parolası yönetici tarafından değiştirilemez).
+    resident_pin_resettable: row.resident_pin_resettable === true,
     resident_phone_number: row.resident_phone_number ?? null,
     resident_is_active:
       row.resident_is_active === null || row.resident_is_active === undefined

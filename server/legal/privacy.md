@@ -58,7 +58,7 @@ Hangi duyuruların size ulaştığı, ne zaman okuduğunuz ve e-posta tercihiniz
 
 Bu duyuru e-postaları sitenizin yönetiminden gelen bilgilendirmelerdir; ticari ileti değildir ve içerikleri reklam amacıyla kullanılmaz. Acil duyurular, uygulamadaki e-posta tercihinizden bağımsız olarak gönderilir; e-postadaki bağlantıyla çıkarsanız acil duyurular dâhil tüm duyuru e-postaları durur.
 
-Platform ayrıca işlemle ilgili e-postalar gönderir: e-posta doğrulama kodu, parola sıfırlama bağlantısı, yönetici daveti, katılım başvurusu ve site başvurusu bildirimleri, yönetimin isteğiyle daire hesabı giriş bilgileri (kullanıcı adı ve PIN) ve hesabınız silindiğinde bilgilendirme.
+Platform ayrıca işlemle ilgili e-postalar gönderir: e-posta doğrulama kodu, parola sıfırlama bağlantısı, yönetici daveti, katılım başvurusu ve site başvurusu bildirimleri, daire hesabı açıldığında veya PIN'i sıfırlandığında bir kez giriş bilgileri (kullanıcı adı ve PIN) ve hesabınız silindiğinde bilgilendirme.
 
 Yeni duyurular uygulama açıkken uygulama içinde gösterilir. Uygulama kapalıyken telefona bildirim gönderilmesi, yalnızca siz açıkça açarsanız mümkündür; ayrıntılar bölüm 3.8'dedir.
 
@@ -182,7 +182,7 @@ Diğer kayıtlar:
 Yalnızca gerçekten uygulanan önlemler:
 
 - Uygulama ile sunucu arasındaki bağlantılar şifrelidir (HTTPS); kapı cihazlarıyla sunucu arasındaki haberleşme TLS ile korunur. Android uygulaması internet üzerinde şifresiz (HTTP) bağlantıya izin vermez.
-- Hesap parolanız geri döndürülemez biçimde (özet olarak) saklanır; doğrulama kodları ve parola sıfırlama bağlantıları da yalnızca özet olarak tutulur. İstisna: yönetim tarafından açılan eski tip "daire hesaplarında" hesabın sakine iletilebilmesi için PIN ayrıca okunabilir biçimde saklanır ve e-postayla iletilebilir. [KARAR/BİLGİ GEREKLİ: daire hesabı PIN'inin okunabilir saklanması kaldırılacak mı; kaldırılmazsa bu cümle kalır]
+- Hesap parolanız geri döndürülemez biçimde (özet olarak) saklanır; doğrulama kodları ve parola sıfırlama bağlantıları da yalnızca özet olarak tutulur. Yönetimin açtığı daire hesaplarının PIN'i de yalnızca özet olarak saklanır; PIN yalnızca oluşturulurken veya sıfırlanırken bir kez gösterilir ve e-posta adresi varsa bir kez e-postayla iletilir; sonradan görüntülenemez ve yeniden gönderilemez. Bu değişiklikten önce alınmış yedeklerde eski PIN'ler yedek saklama döngüsü dolana kadar bulunabilir.
 - Oturumlar imzalı ve süreli belirteçlerle yürür; belirteç yalnızca kullanıcı kodunu, parola sürümünü ve süre bilgisini taşır; e-posta veya rol taşımaz. Parolanız değişince eski oturumlar geçersiz olur. Hatalı giriş denemeleri sınırlandırılır ve art arda hatalı denemede hesap geçici olarak kilitlenir.
 - Oturum anahtarınızın ana ekran widget'ı için tutulan kopyası işletim sisteminin anahtar deposunda değil, widget deposundadır (bölüm 3.7); çıkışta silinir.
 - Erişim rol ve site bazında sınırlandırılmıştır: bir site yöneticisi yalnızca kendi sitesinin kayıtlarını görür; sakin yalnızca kendi kayıtlarını, kendi dairesinin borcunu ve aynı dairedeki üyelerin iletişim bilgisini görür.

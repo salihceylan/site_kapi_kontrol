@@ -108,6 +108,8 @@ Bu belge hukuki görüş değildir; kararlar avukata aittir. Öneriler, ürünü
 
 ## 14. Daire PIN'inin düz metin saklanması
 
+**[2026-10-19 YAPILDI: PIN artık yalnız özet olarak saklanır (migration 051); oluşturma/sıfırlamada bir kez gösterilir ve bir kez e-postalanır; yasal metinlerdeki istisna cümleleri kaldırıldı. Eski yedeklerde PIN'ler yedek döngüsü dolana kadar kalabilir.]**
+
 - **Soru:** Eski tip "daire hesabı" PIN'i `apartments.resident_pin_code` sütununda düz metin ve e-postayla düz gönderiliyor. Bu, KVKK m.12 teknik tedbir yükümlülüğü ve gizlilik metinlerindeki "parola özet olarak saklanır" ifadesiyle bağdaşır mı?
 - **Önerilen varsayılan:** (1) Metinler istisnayı açıkça yazıyor (bugünkü hâliyle). (2) Önerilen: geliştirme ile düz kopyayı kaldırmak (PIN yalnız oluşturulurken bir kez gösterilsin/e-postalansın), sonra metindeki istisna cümleleri silinsin.
 - **Gerekçe:** Düz metin parola, yönetici ve veritabanı yedeklerini okuyan herkes için hesap ele geçirme riski; ihlal halinde sorumluluk artar.

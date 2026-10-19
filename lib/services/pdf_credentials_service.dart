@@ -391,12 +391,12 @@ class PdfCredentialsService {
       );
     }
 
+    // PIN sütunu YOK (KVKK m.12): sunucu PIN'i saklamaz; PIN yalnız oluşturma / sıfırlama anında bir kez gösterilir.
     final headers = [
       '#',
       'Blok',
       'Daire No',
       'Kullanıcı Adı (Giriş)',
-      'Şifre / PIN',
       'Sakin Adı',
       'Durum',
     ];
@@ -418,9 +418,8 @@ class PdfCredentialsService {
         1: pw.Alignment.centerLeft,
         2: pw.Alignment.centerLeft,
         3: pw.Alignment.centerLeft,
-        4: pw.Alignment.center,
-        5: pw.Alignment.centerLeft,
-        6: pw.Alignment.center,
+        4: pw.Alignment.centerLeft,
+        5: pw.Alignment.center,
       },
       cellStyle: pw.TextStyle(
         font: fontRegular,
@@ -442,7 +441,6 @@ class PdfCredentialsService {
           apt.blockName,
           apt.unitLabel,
           apt.residentLoginName ?? (apt.residentEmail ?? '-'),
-          apt.residentPinCode ?? '-',
           apt.residentFullName ?? '-',
           isRowActive ? 'Aktif' : 'Pasif',
         ];
@@ -465,10 +463,14 @@ class PdfCredentialsService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            '⚠️ Gizlilik Bildirimi: Bu belge site sakinlerinin özel giriş şifrelerini içerir. Yalnızca yetkili kişilerce saklanmalıdır.',
-            style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: _mutedText),
+          // Uzun not sayfa numarasına çarpmadan alt satıra sarar.
+          pw.Expanded(
+            child: pw.Text(
+              "Gizlilik Bildirimi: Bu belge sakinlerin giriş kullanıcı adlarını içerir; PIN'ler güvenlik gereği saklanmaz ve belgede yer almaz. Yalnızca yetkili kişilerce saklanmalıdır.",
+              style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: _mutedText),
+            ),
           ),
+          pw.SizedBox(width: 12),
           pw.Text(
             'Sayfa ${context.pageNumber} / ${context.pagesCount}',
             style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: _darkText),

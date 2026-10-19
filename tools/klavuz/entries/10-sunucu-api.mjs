@@ -1418,7 +1418,7 @@ export default {
         { file: 'server/src/routes/admin_routes.js', find: "adminRouter.post('/admin/apartments/:id/send-credentials'", note: 'Süper kullanıcı eşdeğeri' },
         { file: 'server/src/services/apartment_service.js', find: 'export async function sendApartmentCredentials(', note: 'e-posta, kullanıcı adı ve PIN\'in üçü de dolu olmalı' },
         { file: 'server/src/services/apartment_service.js', find: "throw new Error('APARTMENT_EMAIL_REQUIRED');", note: 'Dairede resident_email boş (e-posta alanı kaydedilmemiş)' },
-        { file: 'server/src/services/apartment_service.js', find: "throw new Error('APARTMENT_CREDENTIALS_NOT_READY');", note: 'login_name ya da resident_pin_code boş (sakin hesabı oluşturulmamış/şifre sıfırlanmış)' },
+        { file: 'server/src/services/apartment_service.js', find: "throw new Error('APARTMENT_CREDENTIALS_NOT_READY');", note: 'login_name boş (sakin hesabı oluşturulmamış). Migration 051: PIN saklanmadığı için eski uç PIN verilmezse 409 APARTMENT_PIN_NOT_STORED döner; yeni PIN reset-pin ile verilir' },
         { file: 'server/src/mailer.js', find: 'export async function sendApartmentCredentialsEmail({', note: 'SMTP gönderimi; başarısızlık 500 + error_id ile döner' },
       ],
       causes: [

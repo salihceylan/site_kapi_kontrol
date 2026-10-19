@@ -40,6 +40,8 @@ Bu Sözleşme, kişisel verileri kendi amaçları doğrultusunda işleyen site, 
 - Geçiş kartı kayıtları;
 - İş takibi kayıtları (talepler, yorumlar ve fotoğraflar);
 - Rezervasyon ve konsiyerj kayıtları;
+- Firma ve sözleşme kayıtları;
+- Karar defteri kayıtları;
 - Bu kayıtlara ilişkin denetim kayıtları.
 
 **2.2 Güde'nin sorumlu olduğu veriler.** Hesap ve Platform Verisi bakımından Güde veri sorumlusudur ve bu verileri KVKK Aydınlatma Metni ile Gizlilik Politikası'nda açıklandığı şekilde kendi sorumluluğunda işler; bu veriler bu Sözleşmenin kapsamı dışındadır. Hesaba bağlı ad, e-posta ve telefon gibi bilgiler, bir kişi sitenize katıldığında hesaptan canlı olarak okunur; Site Yönetimi bu bilgileri site yönetimi amacıyla kullanır ve bu kullanımın sorumluluğu Site Yönetimine aittir. Aynı daireye bağlı üyeler de birbirinin ad, e-posta ve telefon bilgisini görür. Kullanıcının telefon bildirimini açtığı cihazların kayıtları (cihaz türü, uygulama sürümü, bildirim jetonu ve tercihler) da Güde'nin hesap ve Platform verisi olarak kendi sorumluluğundadır; bildirimin dayandığı duyurunun içeriği ise Site Verisidir. [AVUKAT DOĞRULASIN: hesap verilerinde Güde ile Site Yönetimi arasındaki sorumluluk ayrımı; ortak veri sorumluluğu ihtimali; telefon bildirimi cihaz kayıtlarının hangi tarafın sorumluluğunda olduğu]
@@ -117,6 +119,8 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 - Geçiş kartı: kart numarası (UID), etiket, kartın tanımlandığı kişi kaydı, durum ve iptal zamanı, kartı tanımlayan yönetici.
 - İş takibi: talep kategorisi, konumu (ortak alan veya daire), başlık ve açıklama, durum, öncelik, atanan görevli ve hedef tarih, yorumlar ve yönetimin iç notları, durum geçmişi; talebe eklenen fotoğraflar (görüntü, dosya adı, tür, boyut, yükleyen hesap; uygulama fotoğrafı yüklemeden önce küçültür ve konum dahil üstveriyi siler), talebi açan ve işlem yapan hesaplar.
 - Rezervasyon ve konsiyerj: ortak alan, tarih ve saat dilimi, durum, sakinin notu, yönetimin onay/ret gerekçesi ve notu; konsiyerj talep türü, not, istenen zaman, durum ve yönetimin notu; kaydı yapan ve işlem yapan hesaplar.
+- Firma ve sözleşme: hizmet alınan firmanın adı, kategorisi, yetkili kişinin adı, telefonu ve e-postası, vergi numarası, not; sözleşme başlığı, başlangıç ve bitiş tarihleri, tutar ve dönemi, otomatik yenileme ve fesih bildirim süresi, durum; kaydı oluşturan ve güncelleyen yönetici; bitiş hatırlatmalarının gönderim kaydı.
+- Karar defteri: toplantı türü ve tarihi, karar başlığı ve metni, katılanlar, oy sonucu ve oy sayıları, sakinlere açık olup olmadığı, karar numarası, kararı yazan ve kesinleştiren yönetici. Bu kayıt noter onaylı karar defterinin yerine geçmez.
 - Denetim: yönetim işlemlerinin kaydı (kim, ne zaman, hangi işlem); ayrıntı alanında hesabı olmayan kişinin eski ve yeni adı, araç plakası, silinen dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri bulunabilir.
 
 Özel nitelikli kişisel verilerin işlenmesi amaçlanmaz; serbest metin alanlarına bu tür veri girilmemelidir.
@@ -124,7 +128,7 @@ Site başvurusunu yapan (veya Platformda siteyi oluşturan) kişi, bu Sözleşme
 ## Ek-2: Teknik ve idari tedbirler
 
 - Uygulama ile sunucu arasında HTTPS; kapı cihazları ile sunucu arasında TLS ve sertifika doğrulaması.
-- Parolalar geri döndürülemez özet (bcrypt) olarak saklanır; e-posta doğrulama kodları ve parola sıfırlama belirteçleri özet olarak saklanır. İstisna: yönetim tarafından açılan eski tip daire hesaplarında PIN ayrıca okunabilir saklanır, Site Yönetimi tarafından görülebilir ve e-postayla iletilebilir. [KARAR/BİLGİ GEREKLİ: bu istisnanın kaldırılması]
+- Parolalar geri döndürülemez özet (bcrypt) olarak saklanır; e-posta doğrulama kodları ve parola sıfırlama belirteçleri özet olarak saklanır. Daire hesabı PIN'leri de yalnızca özet olarak saklanır; Site Yönetimi PIN'i yalnızca oluşturma veya sıfırlama anında bir kez görür; sıfırlama denetim kaydına PIN olmadan yazılır.
 - İmzalı ve süreli oturum belirteçleri (belirteç kullanıcı kodu, parola sürümü ve süre taşır); parola değişince eski oturumların geçersiz olması; hatalı giriş denemelerinin sınırlandırılması ve geçici kilit; imzalı giriş cihazı belirteci; istek hız sınırlaması.
 - Rol ve site bazlı erişim denetimi: yönetici yalnızca kendi sitesini yönetir, kurul üyesi salt okur, görevli kişi listesi ve finans kayıtlarını göremez, sakin yalnızca kendi kayıtlarını ve aynı dairedeki üyelerin iletişim bilgisini görür.
 - Yönetim değiştirme işlemleri için denetim kaydı; salt görüntüleme erişimi ayrıca kaydedilmez.

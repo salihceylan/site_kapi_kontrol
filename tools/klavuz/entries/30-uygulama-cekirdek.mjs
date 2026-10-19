@@ -2460,8 +2460,8 @@ export default {
         },
         {
           file: 'lib/services/pdf_credentials_service.dart',
-          find: "'Şifre / PIN',",
-          note: 'Tablo sütunu: gösterilen değer sunucunun döndürdüğü apartman kaydından gelir',
+          find: "'Kullanıcı Adı (Giriş)',",
+          note: 'Tablo sütunları: PIN sütunu YOK (migration 051: sunucu PIN saklamaz; PIN yalnız oluşturma / sıfırlamada bir kez gösterilir)',
         },
         {
           file: 'lib/ui/pages/home_page.dart',

@@ -15,6 +15,8 @@ class ApartmentRecord {
     required this.residentPhoneNumber,
     required this.residentIsActive,
     required this.createdAt,
+    this.residentPinIssued = false,
+    this.residentPinResettable = false,
   });
 
   final int id;
@@ -28,10 +30,20 @@ class ApartmentRecord {
   final String? residentFullName;
   final String? residentLoginName;
   final String? residentEmail;
+
+  /// Daire PIN'i. Sunucu PIN'i SAKLAMAZ (KVKK m.12): yalnız oluşturma / sıfırlama yanıtında BİR KEZ dolu
+  /// gelir; listelerde her zaman null. Ekranda saklanıp yeniden gösterilmez.
   final String? residentPinCode;
   final String? residentPhoneNumber;
   final bool? residentIsActive;
   final DateTime? createdAt;
+
+  /// Göstergedeki hesabın parolası yönetimin verdiği PIN'dir (sakin kendi parolasını belirlemedi).
+  final bool residentPinIssued;
+
+  /// Dahili daire hesabı: yönetici PIN'i sıfırlayabilir (kendi hesabıyla giren sakinin parolası
+  /// yönetici tarafından değiştirilemez).
+  final bool residentPinResettable;
 
   String get label => '$blockName / $unitLabel';
 
@@ -54,6 +66,9 @@ class ApartmentRecord {
       createdAt: json['created_at'] == null
           ? null
           : DateTime.tryParse(json['created_at'] as String),
+      // Eski sunucu bu alanları göndermez: false (PIN notu ve sıfırlama düğmesi gösterilmez).
+      residentPinIssued: json['resident_pin_issued'] == true,
+      residentPinResettable: json['resident_pin_resettable'] == true,
     );
   }
 }

@@ -61,7 +61,7 @@ Aranacak desen: `[KARAR/BİLGİ GEREKLİ: …]`. Her madde için hangi belgede g
 
 ### 2.3 Güvenlik ve ürün kararları
 
-13. **Daire hesabı PIN'inin okunabilir saklanması kaldırılacak mı?** Gizlilik bölüm 8; DPA Ek-2. Kaldırılması geliştirme gerektirir (kontrol listesi madde 14); kaldırılana kadar metindeki istisna cümleleri kalır.
+13. **Daire hesabı PIN'inin okunabilir saklanması kaldırılacak mı?** Gizlilik bölüm 8; DPA Ek-2. Kaldırılması geliştirme gerektirir (kontrol listesi madde 14); kaldırılana kadar metindeki istisna cümleleri kalır. **[2026-10-19 YAPILDI: PIN artık yalnız özet olarak saklanır (migration 051); oluşturma/sıfırlamada bir kez gösterilir ve bir kez e-postalanır; yasal metinlerdeki istisna cümleleri kaldırıldı. Eski yedeklerde PIN'ler yedek döngüsü dolana kadar kalabilir.]**
 13a. **Setup-site ve süper kullanıcı site oluşturma akışlarında DPA onayı.** DPA giriş. Bugün yalnız site başvurusu akışında onay alınır (kontrol listesi madde 28). Geliştirme gerekir.
 13b. **Yönetici kimliksizleştirme aracı.** Hesap ve Veri Silme §4. Uygulamaya erişemeyen kullanıcının e-posta talebinde süper kullanıcının kalıcı silme yolu uygulamadaki silmeden farklı sonuç verir (kontrol listesi madde 29). Geliştirme gerekir.
 13c. **Site silindiğinde denetim kaydının (`audit_log`) temizlenmesi.** DPA 5.3. Bugün temizlenmez (kontrol listesi madde 32). Geliştirme gerekir.
@@ -107,7 +107,7 @@ Metinler aşağıdaki sayısal ve operasyonel taahhütleri içerir. Güde'nin bu
 
 (Ayrıntı `AVUKAT_KONTROL_LISTESI.md` ve `VERI_ENVANTERI.md` içinde.)
 
-0. Misafir geçişlerinin IP adresinin oluşturan sakinin veri dışa aktarımına girmemesi (kod düzeltmesi sürüyor; gizlilik metni bu davranışı yazıyor).
+0. Misafir geçişlerinin IP adresinin oluşturan sakinin veri dışa aktarımına girmemesi (2026-10-19 doğrulandı: dışa aktarımda misafir IP'si yok, `account_export_service.js` ve QA ile sınanıyor).
 1. Daire PIN'inin düz saklanmasının kaldırılması (veya istisnanın açıkça kabulü).
 2. Google bağlantı denetimi (`lib/services/network_service.dart:57-60`) ve web derlemesi CDN'i: kaldırma/kendi sunucuya alma.
 3. Saklama süreleri kesinleşince otomatik temizlik işleri (denetim kaydı, misafir bağlantısı, pasif araç, katılım başvuruları/davetler, eski site başvuruları).

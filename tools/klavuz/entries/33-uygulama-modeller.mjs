@@ -219,7 +219,7 @@ export default {
       refs: [
         { file: 'lib/models/site_residents_tree_record.dart', find: 'factory SiteResidentsTreeData.fromJson', note: 'Kök: site + blocks; anahtar yoksa boş site/liste ile devam eder (hata vermez)' },
         { file: 'lib/models/site_residents_tree_record.dart', find: 'factory SiteResidentBlock.fromJson', note: 'blocks[].apartments listesi; sayaçlar sunucudan okunur, listeden hesaplanmaz' },
-        { file: 'lib/models/site_residents_tree_record.dart', find: 'factory SiteResidentApartment.fromJson', note: 'apartments[].residents ve resident_pin_code; daire boşluğu residents.isEmpty ile belirlenir' },
+        { file: 'lib/models/site_residents_tree_record.dart', find: 'factory SiteResidentApartment.fromJson', note: 'apartments[].residents (PIN alanı YOK, migration 051); daire boşluğu residents.isEmpty ile belirlenir' },
         { file: 'lib/models/site_residents_tree_record.dart', find: 'factory SiteResidentsTreeSite.fromJson', note: 'Site özeti sayaçları (total_blocks, total_apartments, empty_apartments_count)' },
         { file: 'lib/services/auth_service.dart', find: 'return (SiteResidentsTreeData.fromJson(json), null);', note: 'Ağaç yanıtı doğrudan fromJson ile çevrilir (_parsePayload yok); ayrıştırma hatası catch ile "Sakin listesi yüklenemedi." iletisine döner' },
       ],

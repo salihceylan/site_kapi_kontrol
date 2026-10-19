@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:site_kapi_kontrol/models/announcement.dart';
 import 'package:site_kapi_kontrol/models/apartment_crm.dart';
+import 'package:site_kapi_kontrol/models/apartment_pin_issue.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
@@ -2194,7 +2195,10 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<(ApartmentRecord?, String?)> upsertApartmentResident({
+  /// (kayıt, bir kez verilen PIN [yeni daire hesabı açıldıysa], hata). PIN saklanmaz; çağıran yalnız
+  /// gösterir.
+  Future<(ApartmentRecord?, ApartmentPinIssue?, String?)>
+  upsertApartmentResident({
     required int apartmentId,
     required String fullName,
     required String loginName,
@@ -2205,11 +2209,11 @@ class AuthService extends ChangeNotifier {
   }) async {
     final active = _safeRequireManagementSession();
     if (active == null) {
-      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
+      return (null, null, 'Bu islem icin site yonetim yetkisi gerekir.');
     }
 
     try {
-      final apartment = await api.upsertApartmentResident(
+      final saved = await api.upsertApartmentResident(
         token: active.token,
         role: active.role,
         apartmentId: apartmentId,
@@ -2220,7 +2224,33 @@ class AuthService extends ChangeNotifier {
         phoneNumber: phoneNumber,
         isActive: isActive,
       );
-      return (apartment, null);
+      return (saved.apartment, saved.pinIssue, null);
+    } on ApiException catch (e) {
+      _handleSessionError(e, usedToken: active.token);
+      return (null, null, e.message);
+    } catch (_) {
+      return (null, null, 'Sunucuya baglanilamadi.');
+    }
+  }
+
+  /// Daire hesabının PIN'ini sıfırlar: (bir kez verilen yeni PIN, hata).
+  Future<(ApartmentPinIssue?, String?)> resetApartmentPin({
+    required int apartmentId,
+    bool sendEmail = true,
+  }) async {
+    final active = _safeRequireManagementSession();
+    if (active == null) {
+      return (null, 'Bu islem icin site yonetim yetkisi gerekir.');
+    }
+
+    try {
+      final issue = await api.resetApartmentPin(
+        token: active.token,
+        role: active.role,
+        apartmentId: apartmentId,
+        sendEmail: sendEmail,
+      );
+      return (issue, null);
     } on ApiException catch (e) {
       _handleSessionError(e, usedToken: active.token);
       return (null, e.message);
@@ -2237,27 +2267,6 @@ class AuthService extends ChangeNotifier {
 
     try {
       await api.deleteApartmentResident(
-        token: active.token,
-        role: active.role,
-        apartmentId: apartmentId,
-      );
-      return null;
-    } on ApiException catch (e) {
-      _handleSessionError(e, usedToken: active.token);
-      return e.message;
-    } catch (_) {
-      return 'Sunucuya baglanilamadi.';
-    }
-  }
-
-  Future<String?> sendApartmentCredentials({required int apartmentId}) async {
-    final active = _safeRequireManagementSession();
-    if (active == null) {
-      return 'Bu islem icin site yonetim yetkisi gerekir.';
-    }
-
-    try {
-      await api.sendApartmentCredentials(
         token: active.token,
         role: active.role,
         apartmentId: apartmentId,

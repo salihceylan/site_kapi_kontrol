@@ -1,8 +1,8 @@
 ---
 id: kvkk_notice
 title: KVKK Aydınlatma Metni
-version: 2026-10-16
-effective_date: 2026-10-16
+version: 2026-10-19
+effective_date: 2026-10-19
 required_for: [register]
 complete: false   # köşeli [KARAR/BİLGİ GEREKLİ ...] ve [AVUKAT DOĞRULASIN ...] işaretleri çözülünce bu satır silinir
 ---
@@ -53,7 +53,7 @@ Kullandığınız özelliğe göre aşağıdaki veri kategorileri işlenir:
 - **İşlem güvenliği:** yönetim işlemlerinin denetim kaydı (kim, ne zaman, hangi işlemi yaptı). Denetim kaydının ayrıntı alanında kişi/daire/araç işlemlerine ilişkin veriler bulunabilir: hesabı olmayan bir kişinin adında yapılan değişikliğin eski ve yeni adı, araç plakası, silinen bir dairenin geçmiş sakinlerinin adları, ilişki türleri ve tarihleri. Ayrıca sunucu günlükleri ve uygulama hata raporları (aşağıda açıklanır).
 - **Cihaz ve ağ:** kapı cihazlarının yerel ve genel IP adresi, bağlantı durumu ve yazılım sürümü.
 
-Eski tip "daire hesaplarında" hesabın teslimi için belirlenen PIN, Site Yönetimi tarafından görülebilmesi için okunabilir biçimde ayrıca saklanır ve istenirse e-postayla iletilir.
+Daire hesaplarının PIN'i yalnızca geri döndürülemez özet olarak saklanır; oluşturulurken veya sıfırlanırken bir kez gösterilir ve e-posta adresi varsa bir kez e-postayla iletilir.
 
 Platform; sağlık, biyometrik veri gibi özel nitelikli kişisel verileri işlemeyi amaçlamaz. Kamera ile görüntü kaydı, yüz tanıma veya otomatik plaka tanıma yapılmaz. Not, açıklama ve duyuru gibi serbest metin alanlarına özel nitelikli kişisel veri veya gereksiz kişisel veri yazılmaması rica olunur.
 

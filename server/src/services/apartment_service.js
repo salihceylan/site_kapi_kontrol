@@ -1,12 +1,64 @@
 import { pool } from '../db.js';
 import { sendApartmentCredentialsEmail } from '../mailer.js';
 import { createUser } from './user_service.js';
+import { hashPassword } from '../security/password_hashing.js';
+import { clearAccountLocks } from '../middlewares/login_throttle.js';
+import { recordAudit } from '../modules/audit_service.js';
+import { INTERNAL_EMAIL_SUFFIX } from '../modules/people_sync_sql.js';
 import {
   apartmentBaseLoginName,
   apartmentResidentFullName,
   generateApartmentPin,
   generateInternalApartmentEmail,
 } from '../utils/helpers.js';
+
+// Daire PIN'i (KVKK m.12, migration 051): PIN yalnız users.password_hash'te bcrypt özeti olarak saklanır ve girişte YALNIZ o özetle doğrulanır.
+// Okunabilir kopyası TUTULMAZ: PIN yalnız oluşturulduğu / sıfırlandığı yanıtta bir kez döner (`issued_pin_code` -> mapApartmentRow.resident_pin_code)
+// ve sakinin e-posta adresi varsa bir kez e-postalanır. apartments.resident_pin_issued yalnız "göstergedeki hesabın parolası yönetimin verdiği
+// PIN'dir" işaretidir (sırrın hiçbir türevini taşımaz); apartments.resident_pin_code eski uyumluluk için durur ama HER ZAMAN NULL'dır.
+
+/** Daire satırının API'ye giden alanları (mapApartmentRow). Düz PIN sütunu SEÇİLMEZ; yalnız işaret ve "PIN sıfırlanabilir mi" (dahili hesap). */
+export const APARTMENT_ROW_SELECT_SQL = `
+  SELECT
+    a.id,
+    a.site_code,
+    a.block_id,
+    b.block_name,
+    a.unit_label,
+    a.sort_order,
+    a.is_active,
+    a.resident_user_code,
+    u.full_name AS resident_full_name,
+    u.login_name AS resident_login_name,
+    a.resident_email,
+    a.resident_pin_issued,
+    (u.user_code IS NOT NULL AND u.deleted_at IS NULL AND LOWER(u.email) LIKE '%${INTERNAL_EMAIL_SUFFIX}') AS resident_pin_resettable,
+    u.phone_number AS resident_phone_number,
+    u.is_active AS resident_is_active,
+    a.created_at
+  FROM apartments a
+  INNER JOIN site_blocks b ON b.id = a.block_id
+  LEFT JOIN users u ON u.user_code = a.resident_user_code
+`;
+
+/** Eski "Bilgileri Gönder" ucu (send-credentials) için 409 iletisi: PIN artık sonradan okunup gönderilemez. */
+export const APARTMENT_PIN_NOT_STORED_MESSAGE =
+  "PIN güvenlik gereği saklanmaz; yalnız oluşturulurken bir kez gösterilir. Unutulduysa uygulamayı güncelleyip Daireler ekranından PIN'i sıfırlayın.";
+
+/** PIN sıfırlamanın 409 iletileri (rota yanıtı yalnız bu sabitlerden kurulur; error.message istemciye taşınmaz). */
+export const APARTMENT_PIN_ERROR_MESSAGES = Object.freeze({
+  APARTMENT_PIN_NO_ACCOUNT: 'Bu dairede daire hesabı yok; önce sakini ekleyin.',
+  APARTMENT_PIN_NOT_RESETTABLE:
+    'Bu dairenin sakini kendi hesabıyla giriş yapıyor; şifresini yönetici değiştiremez. Sakin giriş ekranındaki "Şifremi Unuttum?" bağlantısıyla yenileyebilir.',
+});
+
+function apartmentPinError(code) {
+  const error = new Error(APARTMENT_PIN_ERROR_MESSAGES[code]);
+  error.statusCode = 409;
+  error.code = code;
+  error.expose = true;
+  return error;
+}
 
 export async function ensureUniqueLoginName({
   db,
@@ -91,17 +143,20 @@ export async function createApartmentResidentAccount({
     db,
   });
 
+  // PIN düz metin SAKLANMAZ (yalnız users.password_hash); çağıran dönen PIN'i bir kez iletir.
   await db.query(
     `
       UPDATE apartments
       SET
         resident_user_code = $1,
-        resident_pin_code = $2,
+        resident_pin_issued = TRUE,
+        resident_pin_code = NULL,
         is_active = TRUE
-      WHERE id = $3
+      WHERE id = $2
     `,
-    [Number(createdUser.id), pinCode, apartmentId],
+    [Number(createdUser.id), apartmentId],
   );
+  return { userCode: Number(createdUser.id), pinCode };
 }
 
 export async function ensureSiteApartmentResidents(_siteCode, _db = pool) {
@@ -124,6 +179,8 @@ export async function provisionApartmentResident({
   // transaction'da yapılabilir (sonraki adım düşerse hesap da geri alınır). Verilmezse eski davranış (kendi bağlantısı/transaction'ı).
   const ownClient = db === null;
   const client = ownClient ? await pool.connect() : db;
+  // Bu çağrıda yeni hesap açıldıysa verilen PIN (yanıtta BİR KEZ döner; saklanmaz). Mevcut sakin düzenlemesinde null.
+  let issuedPinCode = null;
   try {
     if (ownClient) {
       await client.query('BEGIN');
@@ -200,18 +257,21 @@ export async function provisionApartmentResident({
         db: client,
       });
       userCode = Number(createdUser.id);
+      // PIN düz metin SAKLANMAZ (createUser onu users.password_hash'e bcrypt ile yazdı); yalnız "yönetimin verdiği PIN" işareti kurulur.
       await client.query(
         `
           UPDATE apartments
           SET
             resident_user_code = $1,
             resident_email = $2,
-            resident_pin_code = $3,
-            is_active = $4
-          WHERE id = $5
+            resident_pin_issued = TRUE,
+            resident_pin_code = NULL,
+            is_active = $3
+          WHERE id = $4
         `,
-        [userCode, residentEmail, password, isActive, apartmentId],
+        [userCode, residentEmail, isActive, apartmentId],
       );
+      issuedPinCode = String(password).trim();
     } else {
       // Kimlik (ad/e-posta/kullanici adi/aktiflik) YALNIZCA dahili (@ahbu.local) daire hesabinda guncellenir.
       // Uyelik sistemiyle gelen gercek kullanicinin (e-postayla kayitli) e-postasi/giris adi ezilmez;
@@ -249,36 +309,13 @@ export async function provisionApartmentResident({
       );
     }
 
-    const finalResult = await client.query(
-      `
-        SELECT
-          a.id,
-          a.site_code,
-          a.block_id,
-          b.block_name,
-          a.unit_label,
-          a.sort_order,
-          a.is_active,
-          a.resident_user_code,
-          u.full_name AS resident_full_name,
-          u.login_name AS resident_login_name,
-          a.resident_email,
-          a.resident_pin_code,
-          u.phone_number AS resident_phone_number,
-          u.is_active AS resident_is_active,
-          a.created_at
-        FROM apartments a
-        INNER JOIN site_blocks b ON b.id = a.block_id
-        LEFT JOIN users u ON u.user_code = a.resident_user_code
-        WHERE a.id = $1
-      `,
-      [apartmentId],
-    );
+    const finalResult = await client.query(`${APARTMENT_ROW_SELECT_SQL} WHERE a.id = $1`, [apartmentId]);
 
     if (ownClient) {
       await client.query('COMMIT');
     }
-    return finalResult.rows[0];
+    const row = finalResult.rows[0];
+    return row ? { ...row, issued_pin_code: issuedPinCode } : row;
   } catch (error) {
     if (ownClient) {
       await client.query('ROLLBACK');
@@ -327,6 +364,7 @@ export async function resetApartmentResident(apartmentId, db = pool) {
         UPDATE apartments
         SET
           resident_user_code = NULL,
+          resident_pin_issued = FALSE,
           resident_pin_code = NULL,
           resident_email = NULL,
           is_active = TRUE
@@ -360,7 +398,6 @@ export async function getApartmentCredentialSnapshot(apartmentId) {
         a.site_code,
         a.unit_label,
         a.resident_email,
-        a.resident_pin_code,
         b.block_name,
         s.name AS site_name,
         u.full_name AS resident_full_name,
@@ -377,7 +414,11 @@ export async function getApartmentCredentialSnapshot(apartmentId) {
   return result.rows[0] || null;
 }
 
-export async function sendApartmentCredentials(apartmentId) {
+/**
+ * Giriş bilgisi e-postası. PIN SAKLANMADIĞI için yalnız oluşturma / sıfırlama anında, o an üretilen PIN'le (pinCode) gönderilebilir;
+ * pinCode verilmezse (eski "Bilgileri Gönder" ucu) APARTMENT_PIN_NOT_STORED fırlatılır: PIN artık sonradan okunup yeniden gönderilemez.
+ */
+export async function sendApartmentCredentials(apartmentId, { pinCode = null } = {}) {
   const snapshot = await getApartmentCredentialSnapshot(apartmentId);
   if (!snapshot) {
     throw new Error('APARTMENT_NOT_FOUND');
@@ -385,8 +426,12 @@ export async function sendApartmentCredentials(apartmentId) {
   if (!snapshot.resident_email) {
     throw new Error('APARTMENT_EMAIL_REQUIRED');
   }
-  if (!snapshot.resident_login_name || !snapshot.resident_pin_code) {
+  if (!snapshot.resident_login_name) {
     throw new Error('APARTMENT_CREDENTIALS_NOT_READY');
+  }
+  const pin = String(pinCode ?? '').trim();
+  if (!pin) {
+    throw new Error('APARTMENT_PIN_NOT_STORED');
   }
 
   await sendApartmentCredentialsEmail({
@@ -395,6 +440,91 @@ export async function sendApartmentCredentials(apartmentId) {
     apartmentLabel: `${snapshot.block_name} / ${snapshot.unit_label}`,
     siteName: snapshot.site_name,
     loginName: snapshot.resident_login_name,
-    pinCode: snapshot.resident_pin_code,
+    pinCode: pin,
   });
+}
+
+/**
+ * Az önce verilen PIN'i (oluşturma / sıfırlama) sakinin e-posta adresine BİR KEZ gönderir. Dönüş: true gönderildi, false gönderilemedi
+ * (SMTP vb.; işlem geri alınmaz, yönetici PIN'i ekranda bir kez görür), null e-posta adresi yok ya da verilecek PIN yok.
+ * PIN, e-posta adresi ve hata ayrıntısı günlüğe YAZILMAZ.
+ */
+export async function sendIssuedApartmentPin(apartmentId, pinCode) {
+  if (!pinCode) {
+    return null;
+  }
+  try {
+    await sendApartmentCredentials(apartmentId, { pinCode });
+    return true;
+  } catch (error) {
+    if (error?.message === 'APARTMENT_EMAIL_REQUIRED') {
+      return null;
+    }
+    // eslint-disable-next-line no-console
+    console.error('[apartment] daire PIN e-postasi gonderilemedi:', error?.code || error?.message || 'hata');
+    return false;
+  }
+}
+
+/**
+ * Daire hesabının PIN'ini sıfırlar (yönetici / süper kullanıcı; "unutulduysa yenileyin"). YALNIZ dahili (@ahbu.local) daire hesabında: kayıtlı
+ * kullanıcının (kendi e-postasıyla üye olan sakin) parolasını yönetici değiştiremez (membership_service.changeApartmentMemberPassword ilkesi).
+ * Yeni PIN CSPRNG ile üretilir, yalnız users.password_hash'e (BCRYPT_COST) yazılır ve dönüşte BİR KEZ verilir; düz kopyası saklanmaz.
+ * Parola özeti değiştiği için hesabın açık oturumları (JWT pv) ve güvenilir cihaz belirteçleri geçersizleşir; giriş kilitleri açılır.
+ * Kilit sırası: apartments -> users (resetApartmentResident ve yönetici devriyle aynı; 40P01 önleme). bcrypt özeti kilit ALINMADAN hesaplanır.
+ */
+export async function resetApartmentPin(apartmentId, { actor = null } = {}) {
+  const pinCode = generateApartmentPin();
+  const passwordHash = await hashPassword(pinCode);
+  const client = await pool.connect();
+  let user;
+  let row;
+  try {
+    await client.query('BEGIN');
+    const aptRes = await client.query(
+      `SELECT id, site_code, resident_user_code FROM apartments WHERE id = $1 LIMIT 1 FOR UPDATE`,
+      [apartmentId],
+    );
+    if (aptRes.rowCount === 0) {
+      throw new Error('APARTMENT_NOT_FOUND');
+    }
+    const apt = aptRes.rows[0];
+    if (apt.resident_user_code === null || apt.resident_user_code === undefined) {
+      throw apartmentPinError('APARTMENT_PIN_NO_ACCOUNT');
+    }
+    // deleted_at IS NULL: kimliksizleştirilmiş (silinmiş) hesaba gerçek parola özeti yazılmaz (account_users_writers değişmezi).
+    const userRes = await client.query(
+      `
+        UPDATE users
+        SET password_hash = $1, updated_at = NOW()
+        WHERE user_code = $2 AND deleted_at IS NULL AND LOWER(email) LIKE $3
+        RETURNING user_code, login_name, email
+      `,
+      [passwordHash, Number(apt.resident_user_code), `%${INTERNAL_EMAIL_SUFFIX}`],
+    );
+    if (userRes.rowCount === 0) {
+      throw apartmentPinError('APARTMENT_PIN_NOT_RESETTABLE');
+    }
+    user = userRes.rows[0];
+    await client.query(
+      `UPDATE apartments SET resident_pin_issued = TRUE, resident_pin_code = NULL WHERE id = $1`,
+      [apartmentId],
+    );
+    // Kim, hangi dairenin PIN'ini sıfırladı (PIN / e-posta YAZILMAZ).
+    await recordAudit(
+      client,
+      { actor, action: 'apartment.pin_reset', siteCode: apt.site_code, targetType: 'apartment', targetId: apt.id },
+      { inTransaction: true },
+    );
+    row = (await client.query(`${APARTMENT_ROW_SELECT_SQL} WHERE a.id = $1`, [apartmentId])).rows[0];
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+  // Yetkili yeni PIN verdi: hesabın giriş / mevcut parola kilitleri açılır (şifre sıfırlama bağlantısıyla aynı).
+  clearAccountLocks({ email: user.email, loginName: user.login_name, userCode: user.user_code });
+  return { apartment: { ...row, issued_pin_code: pinCode }, pinCode };
 }

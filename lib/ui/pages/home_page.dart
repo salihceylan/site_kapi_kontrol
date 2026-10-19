@@ -62,6 +62,7 @@ import 'package:site_kapi_kontrol/ui/design/theme_toggle_button.dart';
 
 import 'package:site_kapi_kontrol/ui/design/tokens.dart';
 
+import 'package:site_kapi_kontrol/ui/dialogs/apartment_pin_dialogs.dart';
 import 'package:site_kapi_kontrol/ui/dialogs/apartment_resident_dialog.dart';
 
 import 'package:site_kapi_kontrol/ui/dialogs/create_guest_pass_dialog.dart';
@@ -147,6 +148,9 @@ import 'package:site_kapi_kontrol/ui/views/reservation_resident_view.dart';
 import 'package:site_kapi_kontrol/models/survey_models.dart';
 import 'package:site_kapi_kontrol/ui/views/survey_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/survey_resident_view.dart';
+import 'package:site_kapi_kontrol/models/decision_models.dart';
+import 'package:site_kapi_kontrol/ui/views/decision_manager_view.dart';
+import 'package:site_kapi_kontrol/ui/views/decision_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -160,6 +164,8 @@ import 'package:site_kapi_kontrol/models/visitor_log_models.dart';
 import 'package:site_kapi_kontrol/services/visitor_log_api.dart';
 import 'package:site_kapi_kontrol/ui/views/visitor_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/visitor_resident_view.dart';
+import 'package:site_kapi_kontrol/models/contract_models.dart';
+import 'package:site_kapi_kontrol/ui/views/contracts_view.dart';
 
 
 
@@ -265,8 +271,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<ReservationResidentViewState> _reservationResidentKey = GlobalKey<ReservationResidentViewState>();
   final GlobalKey<SurveyManagerViewState> _surveyManagerKey = GlobalKey<SurveyManagerViewState>();
   final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
+  final GlobalKey<DecisionManagerViewState> _decisionManagerKey = GlobalKey<DecisionManagerViewState>();
+  final GlobalKey<DecisionResidentViewState> _decisionResidentKey = GlobalKey<DecisionResidentViewState>();
   final GlobalKey<VisitorManagerViewState> _visitorManagerKey = GlobalKey<VisitorManagerViewState>();
   final GlobalKey<VisitorResidentViewState> _visitorResidentKey = GlobalKey<VisitorResidentViewState>();
+  final GlobalKey<ContractsViewState> _contractsKey = GlobalKey<ContractsViewState>();
 
   // Ziyaretçi ve Kargo: sakin çekmece rozeti (`GET /app/visitor-entries/summary`), duyuru kalıbındaki gibi
   // AdaptivePoller ile (ön planda ~60 sn; `visitor_log` modülü açık sitesi olmayan kullanıcıda ağ isteği yok).
@@ -362,7 +371,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   final Set<int> _busySiteApprovals = <int>{};
 
-  final Set<int> _busyApartmentMails = <int>{};
+  final Set<int> _busyApartmentPins = <int>{};
 
 
 
@@ -792,8 +801,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_reservationResidentSites(role).isNotEmpty) SirketMenuItem.rezervasyon,
         if (_canAccessSurveyManage(role)) SirketMenuItem.anketler,
         if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
+        if (_canAccessDecisionManage(role)) SirketMenuItem.kararDefteri,
+        if (_decisionResidentSites(role).isNotEmpty) SirketMenuItem.kararlar,
         if (_canAccessVisitorManage(role)) SirketMenuItem.ziyaretciKayitlari,
         if (_visitorResidentSites(role).isNotEmpty) SirketMenuItem.ziyaretcilerim,
+        if (_canAccessContracts(role)) SirketMenuItem.sozlesmeler,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -979,6 +991,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _canAccessSurveyManage(UserRole role) =>
       role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
 
+  // --- Karar Defteri ---
+
+  /// "Karar Defteri" (yönetim) ekranındaki siteler: `decision_book` modülü AÇIK siteler. Yönetici (yönetici modunda)
+  /// yazar ve kesinleştirir; kurul üyesi taslaklar dahil SALT OKUR; görevli ve sakin GÖREMEZ. Süper kullanıcıda boştur
+  /// (ekran tüm siteleri çeker). FAIL-OPEN YOK: modül verisi yoksa site yoktur; `decision_book` kodu yoksa modül KAPALI
+  /// sayılır. Sunucu yine de her çağrıda yetkiyi ve modül durumunu doğrular.
+  List<DecisionSite> _decisionManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <DecisionSite>[];
+    final canManage = _canManagePeople(role);
+    return <DecisionSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.decisionBook))
+          if (site.role == 'manager' && canManage)
+            DecisionSite(code: site.siteCode, name: site.siteName)
+          else if (site.isBoardMember)
+            DecisionSite(code: site.siteCode, name: site.siteName, access: DecisionSiteAccess.board),
+    ];
+  }
+
+  /// "Kararlar" (sakin) ekranındaki siteler: alıcısı olabilecek ve `decision_book` modülü AÇIK siteler (Anket kuralı).
+  List<PeopleSite> _decisionResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.decisionBook))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Karar Defteri" menüsü: süper kullanıcı ya da `decision_book` modülü açık bir sitede yönetici / kurul üyesi.
+  bool _canAccessDecisionManage(UserRole role) =>
+      role == UserRole.superUser || _decisionManageSites(role).isNotEmpty;
+
   // --- Ziyaretçi ve Kargo (F11.03) ---
 
   /// "Ziyaretçi ve Kargo" (yönetim / görevli) ekranındaki siteler: `visitor_log` modülü AÇIK olan siteler. Yönetici
@@ -1025,6 +1079,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Yönetim menüsü: süper kullanıcı ya da `visitor_log` modülü açık bir sitede yönetici / görevli / kurul üyesi.
   bool _canAccessVisitorManage(UserRole role) =>
       role == UserRole.superUser || _visitorManageSites(role).isNotEmpty;
+
+  // --- Firma ve Sözleşme Takibi ---
+
+  /// "Sözleşmeler" ekranındaki siteler: `contracts` modülü AÇIK siteler. Yönetici (yönetici modunda) yazar; kurul üyesi
+  /// ve görevli (STAFF) SALT OKUR; sakin GÖREMEZ. Süper kullanıcıda boştur (ekran tüm siteleri çeker). FAIL-OPEN YOK:
+  /// modül verisi hiç gelmediyse site yoktur ve menü AÇILMAZ; `contracts` kodu yoksa modül KAPALI sayılır. Sunucu yine
+  /// de her çağrıda yetkiyi ve modül durumunu doğrular.
+  List<ContractSite> _contractSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <ContractSite>[];
+    final canManage = _canManagePeople(role);
+    return <ContractSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.contracts))
+          if (site.role == 'manager' && canManage)
+            ContractSite(code: site.siteCode, name: site.siteName)
+          else if (site.isBoardMember)
+            ContractSite(code: site.siteCode, name: site.siteName, access: ContractSiteAccess.board)
+          else if (site.role == 'staff')
+            ContractSite(code: site.siteCode, name: site.siteName, access: ContractSiteAccess.staff),
+    ];
+  }
+
+  /// "Sözleşmeler" menüsü: süper kullanıcı ya da `contracts` modülü açık bir sitede yönetici / kurul üyesi / görevli.
+  bool _canAccessContracts(UserRole role) =>
+      role == UserRole.superUser || _contractSites(role).isNotEmpty;
 
   /// Sakin rozeti bir turu: modül açık sitesi olmayan kullanıcıda ağ isteği yok (rozet sıfırlanır); hata geri
   /// çekilir. Sayı değişmedikçe sayfa yeniden kurulmaz.
@@ -1487,6 +1566,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.anket) {
       return _surveyResidentSites(role).isNotEmpty;
     }
+    // Karar Defteri: `decision_book` modülü açık siteye bağlı yönetici / kurul (Karar Defteri) ya da sakin (Kararlar);
+    // görevli, modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.kararDefteri) {
+      return _canAccessDecisionManage(role);
+    }
+    if (item == SirketMenuItem.kararlar) {
+      return _decisionResidentSites(role).isNotEmpty;
+    }
 
     // Ziyaretçi ve Kargo: `visitor_log` modülü açık siteye bağlı yönetici / görevli / kurul (yönetim ekranı) ya da
     // sakin; modül kapalıyken ya da modül verisi yokken erişim YOKTUR.
@@ -1495,6 +1582,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (item == SirketMenuItem.ziyaretcilerim) {
       return _visitorResidentSites(role).isNotEmpty;
+    }
+
+    // Sözleşmeler: `contracts` modülü açık siteye bağlı yönetici / kurul / görevli; sakin, modül kapalıyken ya da modül
+    // verisi yokken erişim YOKTUR.
+    if (item == SirketMenuItem.sozlesmeler) {
+      return _canAccessContracts(role);
     }
 
     switch (role) {
@@ -1653,11 +1746,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.anket:
         return 'Anketler';
 
+      case SirketMenuItem.kararDefteri:
+        return 'Karar Defteri';
+
+      case SirketMenuItem.kararlar:
+        return 'Kararlar';
+
       case SirketMenuItem.ziyaretciKayitlari:
         return 'Ziyaretçi ve Kargo';
 
       case SirketMenuItem.ziyaretcilerim:
         return 'Ziyaretçi ve Kargo';
+
+      case SirketMenuItem.sozlesmeler:
+        return 'Sözleşmeler';
 
     }
 
@@ -3641,7 +3743,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
-    final (updated, error) = await widget.authService.upsertApartmentResident(
+    final (updated, pinIssue, error) = await widget.authService.upsertApartmentResident(
 
       apartmentId: apartment.id,
 
@@ -3668,6 +3770,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else if (updated != null) {
 
       _showMessage('Daire kullanıcısı güncellendi.');
+
+      // Yeni daire hesabı: PIN yalnız bu yanıtta gelir (sunucu saklamaz) -> bir kez gösterilir.
+      if (pinIssue != null && mounted) {
+        await ApartmentPinIssuedDialog.show(context, pinIssue);
+      }
+
+      if (!mounted) return;
 
       if (_selectedSite != null) {
 
@@ -3755,32 +3864,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 
 
-  Future<void> _sendApartmentCredentials(ApartmentRecord apartment) async {
-
-    setState(() => _busyApartmentMails.add(apartment.id));
-
-    final error = await widget.authService.sendApartmentCredentials(
-
-      apartmentId: apartment.id,
-
+  /// "PIN'i Sıfırla": onaydan sonra yeni PIN üretilir; PIN sunucuda saklanmadığı için yalnız burada bir kez
+  /// gösterilir (e-posta varsa sunucu ayrıca bir kez gönderir).
+  Future<void> _resetApartmentPin(ApartmentRecord apartment) async {
+    final confirmed = await confirmApartmentPinReset(
+      context,
+      apartment: apartment,
     );
-
+    if (!confirmed || !mounted) return;
+    setState(() => _busyApartmentPins.add(apartment.id));
+    final (issue, error) = await widget.authService.resetApartmentPin(
+      apartmentId: apartment.id,
+    );
     if (!mounted) return;
-
-    setState(() => _busyApartmentMails.remove(apartment.id));
-
-
-
-    if (error != null) {
-
-      _showMessage(error);
-
-    } else {
-
-      _showMessage('Giriş bilgileri e-posta olarak gönderildi.');
-
+    setState(() => _busyApartmentPins.remove(apartment.id));
+    if (error != null || issue == null) {
+      _showMessage(error ?? "PIN sıfırlanamadı.");
+      return;
     }
-
+    await ApartmentPinIssuedDialog.show(context, issue);
+    if (!mounted) return;
+    if (_selectedSite != null) {
+      _selectSite(_selectedSite!);
+    }
   }
 
 
@@ -4953,6 +5059,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.anket:
         await _surveyResidentKey.currentState?.reload();
         break;
+      case SirketMenuItem.kararDefteri:
+        await _decisionManagerKey.currentState?.reload();
+        break;
+      case SirketMenuItem.kararlar:
+        await _decisionResidentKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -4994,6 +5106,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.ziyaretcilerim:
         await _visitorResidentKey.currentState?.reload();
         _refreshVisitorBadge();
+        break;
+      case SirketMenuItem.sozlesmeler:
+        await _contractsKey.currentState?.reload();
         break;
       case SirketMenuItem.katilimVeKurulum:
       case SirketMenuItem.cihazEkle:
@@ -5602,7 +5717,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           busySiteApprovals: _busySiteApprovals,
 
-          busyApartmentMails: _busyApartmentMails,
+          busyApartmentPins: _busyApartmentPins,
 
           onRefreshSites: () => _loadSites(force: true),
 
@@ -5630,7 +5745,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
           onEditApartmentResident: _openApartmentResidentDialog,
 
-          onSendApartmentMail: _sendApartmentCredentials,
+          onResetApartmentPin: _resetApartmentPin,
 
           onAssignDoorDevice: _assignDoorDevice,
           onOpenAddDoor: () => _openDoorDialog(),
@@ -5838,6 +5953,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           sites: _surveyResidentSites(session.role),
         );
 
+      case SirketMenuItem.kararDefteri:
+        return DecisionManagerView(
+          key: _decisionManagerKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _decisionManageSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role) ? () => _goToMenu(SirketMenuItem.moduller) : null,
+        );
+
+      case SirketMenuItem.kararlar:
+        return DecisionResidentView(
+          key: _decisionResidentKey,
+          authService: widget.authService,
+          sites: _decisionResidentSites(session.role),
+        );
+
       case SirketMenuItem.modulTalepleri:
         return ModuleRequestsView(
           key: _moduleRequestsViewKey,
@@ -5961,6 +6093,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           sites: _visitorResidentSites(session.role),
           // Kayıt görüldü işaretlenince çekmece rozeti sunucudan hemen tazelenir.
           onUnreadChanged: _refreshVisitorBadge,
+        );
+
+      case SirketMenuItem.sozlesmeler:
+        return ContractsView(
+          key: _contractsKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _contractSites(session.role),
+          // Modül kapalıysa Modüller ekranına yönlendirir (süper kullanıcı açar, yönetici talep eder).
+          onOpenModules: _canManagePeople(session.role)
+              ? () => _goToMenu(SirketMenuItem.moduller)
+              : null,
         );
 
       case SirketMenuItem.katilimVeKurulum:

@@ -284,6 +284,17 @@ export const adminSensitiveLimiter = createRuleLimiter({
   includeRetryBody: true,
 });
 
+// Daire PIN'i sifirlama (POST /manager|admin/apartments/:id/reset-pin): authRequired'dan SONRA -> kullanici bazli. Her istek bcrypt (CPU) harcar ve
+// sakine e-posta gonderebilir; yonetici bir oturumda birkac dairenin PIN'ini sifirlayabilsin diye kurallar genistir.
+export const apartmentPinResetLimiter = createRuleLimiter({
+  rules: [
+    { windowMs: HOUR, max: 60, key: userOrIpKey },
+    { windowMs: HOUR, max: 300, key: ipKey },
+  ],
+  message: 'Cok fazla PIN sifirlama istegi. Biraz sonra tekrar deneyin.',
+  includeRetryBody: true,
+});
+
 // PATCH /me (ad / telefon / parola degisimi): authRequired'dan SONRA kullanilir -> kullanici bazli (NAT guvenli), IP kurali genis.
 // Parola degisiminde mevcut parola denemesi ayrica hesap bazli sayacla (5 hata -> 15 dk) sinirlidir; bu sinirlayici bcrypt (CPU) harcayan
 // yanlis-parola isteklerinin toplu gonderilmesini ve profil guncelleme dongulerini keser.

@@ -1483,7 +1483,7 @@ export async function checkApartmentManagementAccess(authUser, apartmentId) {
   }
 
   const aptRes = await pool.query(
-    `SELECT a.id, a.site_code, a.block_id, a.unit_label, a.resident_user_code, a.resident_pin_code
+    `SELECT a.id, a.site_code, a.block_id, a.unit_label, a.resident_user_code
      FROM apartments a
      WHERE a.id = $1 LIMIT 1`,
     [aptId],
@@ -1590,8 +1590,9 @@ export async function handOverApartmentResident(
     if (indicatorOwnedByRemoved) {
       // Gösterge yeni yöneticiye geçerken eski PIN SİLİNİR (R1 B5): PIN'i çıkarılan kişi biliyordu; devredilen göstergeyle birlikte geçerli kalsaydı
       // daireden çıkarılan kişi PIN ile girmeye devam ederdi (keepPin yalnız göstergenin kimseye geçmediği geri alınabilir pasife alma içindir).
+      // Migration 051'den beri PIN saklanmaz: silinen "PIN verildi" işaretidir (eski bir sürecin yazmış olabileceği düz kopya da NULL'lanır).
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1, resident_pin_code = NULL WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $2`,
         [Number(otherAdminRes.rows[0].user_code), apartmentId],
       );
     }
@@ -1614,7 +1615,7 @@ export async function handOverApartmentResident(
     if (indicatorOwnedByRemoved) {
       // Eski PIN yeni yöneticiye geçerken silinir (yukarıdaki açıklama).
       await client.query(
-        `UPDATE apartments SET resident_user_code = $1, resident_pin_code = NULL WHERE id = $2`,
+        `UPDATE apartments SET resident_user_code = $1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $2`,
         [newAdminCode, apartmentId],
       );
     }
@@ -1623,7 +1624,7 @@ export async function handOverApartmentResident(
     await client.query(
       keepPin
         ? `UPDATE apartments SET resident_user_code = NULL WHERE id = $1`
-        : `UPDATE apartments SET resident_user_code = NULL, resident_pin_code = NULL WHERE id = $1`,
+        : `UPDATE apartments SET resident_user_code = NULL, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $1`,
       [apartmentId],
     );
   }
@@ -1907,8 +1908,8 @@ function accountDeletedHttpError() {
  *
  * Güvenlik kuralı: Yöneticiler daire sakinlerinin şifresini değiştiremez; kullanıcı kendi hesabında
  * `current_password` ile doğrulayarak değiştirir (PATCH /me ile aynı ilke).
- * Tasarım kararı (korundu): daire PIN'i/şifre politikası en az 4 karakterdir ve eski (legacy)
- * apartments.resident_pin_code alanı tasarım gereği düz metin tutulur.
+ * Tasarım kararı (korundu): daire PIN'i/şifre politikası en az 4 karakterdir. Daire PIN'i (migration 051) yalnız users.password_hash'te
+ * bcrypt özeti olarak tutulur; apartments'ta düz metin kopyası YOKTUR (yalnız resident_pin_issued işareti).
  */
 export async function changeApartmentMemberPassword({
   apartmentId,
@@ -2009,11 +2010,11 @@ export async function changeApartmentMemberPassword({
     throw httpError(404, 'Kullanıcı hesabı bulunamadı.');
   }
 
-  // Legacy daire PIN'i: sakin KENDİ parolasını belirledi -> yöneticinin verdiği PIN artık geçersiz. Yeni parola düz metin
-  // olarak SAKLANMAZ (S-C: yöneticiye görünür / "bilgileri gönder" e-postasıyla gönderilirdi); kolon temizlenir.
+  // Legacy daire PIN'i: sakin KENDİ parolasını belirledi -> yöneticinin verdiği PIN artık geçerli değil: "PIN verildi" işareti kalkar
+  // (migration 051: PIN hiçbir yerde düz metin tutulmaz; eski bir sürecin yazmış olabileceği kopya da temizlenir).
   if (isLegacyResident(apt, tUserCode)) {
     await pool.query(
-      `UPDATE apartments SET resident_pin_code = NULL WHERE id = $1`,
+      `UPDATE apartments SET resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = $1`,
       [apt.id],
     );
   }
@@ -2596,7 +2597,7 @@ export async function getSiteResidentsTree({ siteCode, authUser }) {
 
   // 2. Daireleri çek
   const aptsRes = await pool.query(
-    `SELECT id, block_id, unit_label, sort_order, resident_pin_code
+    `SELECT id, block_id, unit_label, sort_order
      FROM apartments
      WHERE site_code = $1 AND is_active = TRUE
      ORDER BY sort_order ASC, id ASC`,
@@ -2690,7 +2691,7 @@ export async function getSiteResidentsTree({ siteCode, authUser }) {
       block_id: bId,
       unit_label: apt.unit_label,
       sort_order: apt.sort_order,
-      resident_pin_code: apt.resident_pin_code || null,
+      // resident_pin_code ARTIK YOK (migration 051: PIN saklanmaz; eski istemci alanı null okur).
       total_residents: residents.length,
       residents,
     });

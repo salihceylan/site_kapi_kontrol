@@ -85,6 +85,16 @@
 //             disa aktarmada bolum YOK. QA_ONLY=visitor_log (zincir esitligi icin chain,live,visitor_log).
 //   card_access  Kartli gecis (046; govde scripts/qa_card_access_section.mjs): sema, modul kapisi, yetki matrisi, UID tekilligi / maskeleme,
 //             iptal, cihaz dogrulama (verifyCardForDoor), hesap silme + disa aktarma. QA_ONLY=card_access (zincir esitligi icin chain,live,card_access).
+//   contracts  Firma ve sozlesme takibi (049; govde scripts/qa_contracts_section.mjs): sema (CHECK / FK / RESTRICT / tekil firma adi), modul kapisi, yetki matrisi
+//             (kurul + gorevli salt okur), IDOR, sinirlar (eszamanli dahil), state (Istanbul gun siniri; SQL = JS), imlecle sayfalama, audit gizliligi, hatirlatma isi
+//             (alicilar, idempotans, gunde tek e-posta, modul kapali, SMTP yok), site silme CASCADE, hesap silme. QA_ONLY=contracts (zincir esitligi icin chain,live,contracts).
+//   decision_book  Karar defteri (050; govde scripts/qa_decision_book_section.mjs): sema, modul kapisi, yetki matrisi (kurul salt okur, gorevli 403), IDOR, numaralama
+//             (eszamanli kesinlestirme yarisi), supersedes kurallari, degismezlik tetikleyicisi (dogrudan SQL), site silme CASCADE, sakin gorunurlugu, hesap silme.
+//             QA_ONLY=decision_book (zincir esitligi icin chain,live,decision_book; board_decisions + tetikleyiciler sema katalogundadir).
+//   apartment_pin  Daire PIN'inin duz metin kopyasi kaldirildi (051; govde scripts/qa_apartment_pin_section.mjs): 051 oncesi sema + duz PIN'lerden yukseltme
+//             (duz kopya NULL, isaret, eski PIN'le giris calisir), ikinci calistirma no-op, migration dosyasi yolu, ilk kurulum x apartments yazici yuku (40P01 = 0),
+//             HTTP (liste PIN tasimaz, olusturma / sifirlama PIN'i bir kez, yetki matrisi, eski oturum gecersiz, eski uc 409). QA_ONLY=apartment_pin
+//             (zincir esitligi icin chain,live,apartment_pin; live yukseltmesi 051 aktarimini ayrica dogrular).
 //
 // GEREKSINIMLER
 //   - Yerelde calisan, SUPERUSER ile erisilebilen BIR PostgreSQL sunucusu (tek kullanimlik; ornegin gecici bir dizinde
@@ -116,6 +126,9 @@ import { sectionReservation } from './qa_reservation_section.mjs';
 import { sectionSurvey } from './qa_survey_section.mjs';
 import { sectionVisitorLog } from './qa_visitor_log_section.mjs';
 import { sectionCardAccess } from './qa_card_access_section.mjs';
+import { sectionContracts } from './qa_contracts_section.mjs';
+import { sectionDecisionBook } from './qa_decision_book_section.mjs';
+import { sectionApartmentPin } from './qa_apartment_pin_section.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const SERVER_DIR = path.resolve(path.dirname(SELF), '..');
@@ -201,6 +214,10 @@ const CATALOG_TABLES = [
   'announcement_attachments',
   'push_devices',
   'push_outbox',
+  'board_decisions',
+  'contract_vendors',
+  'site_contracts',
+  'contract_reminders',
 ];
 const APARTMENT_COLUMNS = ['floor', 'gross_area_m2', 'net_area_m2', 'land_share_numerator', 'land_share_denominator', 'category', 'responsible_party'];
 const NAMED_CONSTRAINTS = [
@@ -239,10 +256,10 @@ async function readCatalog(client) {
   const triggers = await client.query(
     `SELECT c.relname AS tbl, t.tgname, regexp_replace(pg_get_triggerdef(t.oid), '\\s+', ' ', 'g') AS def
      FROM pg_trigger t INNER JOIN pg_class c ON c.oid = t.tgrelid
-     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update') ORDER BY 1, 2`,
+     WHERE NOT t.tgisinternal AND t.tgname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_ledger_entries_no_truncate', 'trg_fee_runs_append_only', 'trg_fee_runs_no_truncate', 'trg_finance_period_closures_no_update', 'trg_board_decisions_immutable', 'trg_board_decisions_no_truncate') ORDER BY 1, 2`,
   );
   const functions = await client.query(
-    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate') ORDER BY 1`,
+    `SELECT proname, regexp_replace(prosrc, '\\s+', ' ', 'g') AS src FROM pg_proc WHERE proname IN ('trg_users_preserve_site_people', 'trg_ledger_entries_append_only', 'trg_ledger_entries_reversal_check', 'trg_fee_runs_append_only', 'trg_finance_period_closures_no_update', 'trg_finance_block_truncate', 'trg_board_decisions_immutable', 'trg_board_decisions_block_truncate') ORDER BY 1`,
   );
   // tohum satirlari (zamandan bagimsiz alanlar): migration zinciri ile ensureDbSchema ayni tohumu yazmali
   const seeds = {
@@ -355,6 +372,9 @@ async function runParent() {
     survey: `${prefix}_survey`,
     visitor_log: `${prefix}_visitor_log`,
     card_access: `${prefix}_card_access`,
+    contracts: `${prefix}_contracts`,
+    decision_book: `${prefix}_decision_book`,
+    apartment_pin: `${prefix}_apartment_pin`,
     finance_upgrade_base: `${prefix}_fu_base`,
     finance_upgrade_ensure: `${prefix}_fu_ensure`,
     finance_upgrade_migrate: `${prefix}_fu_migrate`,
@@ -413,7 +433,7 @@ async function runParent() {
 
     // legacy ve live: yukseltme senaryolari
     for (const [key, limit, scenario] of [['legacy', platformFirst, 'legacy'], ['live', peopleFirst, 'live']]) {
-      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access')))) continue;
+      if (!wants(key) && !(key === 'live' && (wants('platform') || wants('people') || wants('locks') || wants('announcements') || wants('site_applications') || wants('finance') || wants('finance4b') || wants('platform_services') || wants('account') || wants('bulk_import') || wants('documents') || wants('push') || wants('work_tracking') || wants('reservation') || wants('survey') || wants('visitor_log') || wants('card_access') || wants('contracts') || wants('decision_book') || wants('apartment_pin')))) continue;
       await recreate(names[key]);
       const subset = subsetMigrations(limit);
       dirs.push(subset);
@@ -451,7 +471,7 @@ async function runParent() {
     }
 
     // platform / people / locks: yukseltilmis "live" veritabaninin kopyalari
-    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access']) {
+    for (const key of ['platform', 'people', 'locks', 'announcements', 'site_applications', 'finance', 'finance4b', 'platform_services', 'account', 'bulk_import', 'documents', 'push', 'work_tracking', 'reservation', 'survey', 'visitor_log', 'card_access', 'contracts', 'decision_book', 'apartment_pin']) {
       if (!wants(key)) continue;
       await recreate(names[key], names.live);
       record(key, runSection(key, names[key]));
@@ -789,8 +809,11 @@ async function sectionUpgrade() {
   const afterFirst = await crmDump(q);
   const settingsFirst = (await q(`SELECT key, value, updated_at FROM platform_settings ORDER BY key`)).rows;
   const plansFirst = (await q(`SELECT * FROM subscription_plans ORDER BY code`)).rows;
+  // 051 (daire PIN'i): ilk ensure duz PIN kopyasini siler; ikinci ensure apartments'in HICBIR satirina / sutununa dokunmamali.
+  const apartmentsFirst = (await q(`SELECT * FROM apartments ORDER BY id`)).rows;
   await ensureDbSchema();
   const afterSecond = await crmDump(q);
+  check(`${scenario}: ikinci ensureDbSchema apartments satirlarini DEGISTIRMEDI (051 aktarimi tek seferlik; tum sutunlar)`, same(apartmentsFirst, (await q(`SELECT * FROM apartments ORDER BY id`)).rows));
   check(`${scenario}: ikinci ensureDbSchema tohumu DEGISTIRMEDI (ayar ve planlar, zaman damgalari dahil)`, same(settingsFirst, (await q(`SELECT key, value, updated_at FROM platform_settings ORDER BY key`)).rows) && same(plansFirst, (await q(`SELECT * FROM subscription_plans ORDER BY code`)).rows));
   check(`${scenario}: ensureDbSchema iki kez hatasiz`, true);
   const announcementTables = await q(`SELECT to_regclass('public.announcements') AS a, to_regclass('public.announcement_recipients') AS r, to_regclass('public.notification_preferences') AS p`);
@@ -850,6 +873,17 @@ async function sectionUpgrade() {
   // --- hicbir yetki degismedi
   const afterDumps = await legacyDumps(q);
   for (const key of Object.keys(beforeDumps)) {
+    if (key === 'apartments') {
+      // 051 (daire PIN'i, KVKK m.12): ilk ensure YALNIZ duz PIN kopyasini NULL'lar ve "PIN verildi" isaretini kurar; diger tum sutunlar AYNI kalmali.
+      const expectedApartments = beforeDumps.apartments.map((row) => ({ ...row, resident_pin_code: null }));
+      check(`${scenario}: apartments ensureDbSchema ile YALNIZ 051 aktarimi kadar degisti (duz PIN -> NULL; diger sutunlar ayni)`,
+        beforeDumps.apartments.some((row) => row.resident_pin_code !== null) && same(expectedApartments, afterDumps.apartments));
+      const issuedRows = (await q(`SELECT id, resident_pin_issued FROM apartments ORDER BY id`)).rows;
+      const expectedIssued = beforeDumps.apartments.map((row) => ({ id: row.id, resident_pin_issued: String(row.resident_pin_code ?? '').trim() !== '' }));
+      check(`${scenario}: 051 isareti yalniz duz PIN'i olan satirlarda TRUE (${expectedIssued.filter((row) => row.resident_pin_issued).length} satir)`,
+        same(expectedIssued, issuedRows), issuedRows.filter((row) => row.resident_pin_issued));
+      continue;
+    }
     check(`${scenario}: ${key} ensureDbSchema ile DEGISMEDI`, same(beforeDumps[key], afterDumps[key]));
   }
   // kurul/gorevli rolleri (029 ile gelen) yukseltilmis semada eklenir; kapi yetkisi VERMEZ
@@ -1715,7 +1749,8 @@ async function sectionPeople() {
         [code, name, email, role],
       );
     const keysOf = (body) => Object.keys(body ?? {}).sort().join();
-    const residentOf = async (apartmentId) => (await q(`SELECT resident_user_code, resident_pin_code, resident_email FROM apartments WHERE id = $1`, [apartmentId])).rows[0];
+    // 051: PIN duz metin saklanmaz; "PIN verildi" isareti (resident_pin_issued) PIN'in yerini tutar (resident_pin_code hep NULL).
+    const residentOf = async (apartmentId) => (await q(`SELECT resident_user_code, resident_pin_code, resident_pin_issued, resident_email FROM apartments WHERE id = $1`, [apartmentId])).rows[0];
     const memberOf = async (apartmentId, user) => (await q(`SELECT role, is_active FROM apartment_memberships WHERE apartment_id = $1 AND user_code = $2`, [apartmentId, user])).rows[0];
     const auditOf = async (action, personId) => (await q(`SELECT actor_name, details FROM audit_log WHERE action = $1 AND target_type = 'person' AND target_id = $2 ORDER BY id DESC`, [action, String(personId)])).rows;
     const doorYan = Number((await q(`SELECT id FROM site_doors WHERE site_code = $1 AND door_index = 2`, [S1])).rows[0].id);
@@ -2111,14 +2146,14 @@ async function sectionPeople() {
     const aIndicator = await newApt();
     await call('POST', `${P(S1)}/people`, MGR, { full_name: 'Gosterge Dahili', email: 'gosterge.dahili@example.com', apartment_id: aIndicator });
     const indicatorUser = Number((await residentOf(aIndicator)).resident_user_code);
-    const pinBefore = (await residentOf(aIndicator)).resident_pin_code;
+    const pinBefore = (await residentOf(aIndicator)).resident_pin_issued; // 051: isaret (PIN saklanmaz)
     await mkUser(10060, 'Kayitli Yonetici R', 'r60@example.com');
     await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10060, 'APARTMENT_ADMIN')`, [aIndicator]);
     await call('GET', `${P(S1)}/people`, MGR);
     const rPerson = await personOfUser(10060);
     res = await call('POST', `${P(S1)}/residencies/${(await detailOf(rPerson.id)).residencies[0].id}/end`, MGR, {});
     check('S3: kayitli APARTMENT_ADMIN R tasininca dahili hesap I\'nin gostergesi, PIN\'i ve kapi erisimi KORUNUR; R\'nin uyeligi kapanir',
-      res.status === 200 && Number((await residentOf(aIndicator)).resident_user_code) === indicatorUser && (await residentOf(aIndicator)).resident_pin_code === pinBefore && pinBefore !== null
+      res.status === 200 && Number((await residentOf(aIndicator)).resident_user_code) === indicatorUser && (await residentOf(aIndicator)).resident_pin_issued === pinBefore && pinBefore === true && (await residentOf(aIndicator)).resident_pin_code === null
         && same(await doorNames(indicatorUser), ['Ana Kapi', 'Yan Kapi']) && (await memberOf(aIndicator, 10060)).is_active === false && same(await doorNames(10060), []) && (await q(`SELECT is_active FROM users WHERE user_code = $1`, [indicatorUser])).rows[0].is_active === true, await residentOf(aIndicator));
     // ayni kural mevcut "daireden cikar" akisinda (ayni yardimci)
     const aIndicator2 = await newApt();
@@ -2127,7 +2162,7 @@ async function sectionPeople() {
     await mkUser(10061, 'Kayitli Yonetici R2', 'r61@example.com');
     await q(`INSERT INTO apartment_memberships (apartment_id, user_code, role) VALUES ($1, 10061, 'APARTMENT_ADMIN')`, [aIndicator2]);
     await membershipSvc.removeApartmentMember({ apartmentId: aIndicator2, targetUserCode: 10061, authUser: superActor });
-    check('S3: mevcut removeApartmentMember akisinda da gosterge/PIN baska kisiye aitse KORUNUR', Number((await residentOf(aIndicator2)).resident_user_code) === indicatorUser2 && (await residentOf(aIndicator2)).resident_pin_code !== null && same(await doorNames(indicatorUser2), ['Ana Kapi', 'Yan Kapi']));
+    check('S3: mevcut removeApartmentMember akisinda da gosterge/PIN baska kisiye aitse KORUNUR', Number((await residentOf(aIndicator2)).resident_user_code) === indicatorUser2 && (await residentOf(aIndicator2)).resident_pin_issued === true && same(await doorNames(indicatorUser2), ['Ana Kapi', 'Yan Kapi']));
 
     // --- S5: pasif kisiyi etkinlestiren yollar ham 23505 -> 500 vermez
     const s5A = await call('POST', `${P(S1)}/people`, MGR, { full_name: 'S5 Pasif', email: 's5a@example.com' });
@@ -9811,6 +9846,13 @@ async function sectionAccount() {
     'surveys.created_by': 'NULL (anket siteye aittir; acan bagi hesap silme isleminde kopar)',
     // Kartli gecis (046): kart siteye / kisi kaydina aittir; tanimlayan yonetici UPDATE edilmez, ad JOIN ile Silinmis Kullanici
     'access_cards.created_by': 'TOMBSTONE (kart siteye aittir; tanimlayan JOIN ile Silinmis Kullanici)',
+    // Firma ve sozlesme takibi (049): firma / sozlesme siteye aittir; ekleyen / guncelleyen UPDATE edilmez (FK SET NULL yalniz satir silinirse), ad JOIN ile Silinmis Kullanici
+    'contract_vendors.created_by': 'TOMBSTONE (firma kaydi siteye aittir; ekleyen JOIN ile Silinmis Kullanici)',
+    'site_contracts.created_by': 'TOMBSTONE (sozlesme siteye aittir; ekleyen JOIN ile Silinmis Kullanici)',
+    'site_contracts.updated_by': 'TOMBSTONE (son guncelleyen; FK SET NULL)',
+    // Karar defteri (050): karar siteye aittir; kesin karar DEGISMEZ (tetikleyici), *_by yalniz users satiri silinirse FK SET NULL ile NULL olur; ad JOIN ile Silinmis Kullanici
+    'board_decisions.created_by': 'TOMBSTONE (karar siteye aittir; yazan JOIN ile Silinmis Kullanici)',
+    'board_decisions.finalized_by': 'TOMBSTONE (degismez kesin karar; kesinlestiren JOIN ile Silinmis Kullanici)',
   };
   const fkRows = (
     await q(`
@@ -11421,6 +11463,12 @@ const SECTIONS = {
   visitor_log: () => sectionVisitorLog({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
   // Kartli gecis (046); govde scripts/qa_card_access_section.mjs
   card_access: () => sectionCardAccess({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Firma ve sozlesme takibi (049); govde scripts/qa_contracts_section.mjs
+  contracts: () => sectionContracts({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, mails }),
+  // Karar defteri (050); govde scripts/qa_decision_book_section.mjs
+  decision_book: () => sectionDecisionBook({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors }),
+  // Daire PIN'i duz metin kopyasi kaldirildi (051); govde scripts/qa_apartment_pin_section.mjs
+  apartment_pin: () => sectionApartmentPin({ check, same, sleep, childEnv, finishChild, installPoolHooks, serverErrors, mails }),
 };
 
 if (SECTION === '') {

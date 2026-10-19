@@ -40,6 +40,7 @@ AppTone auditToneOf(String action) {
     case 'module.disabled':
     case 'person.deactivated':
     case 'apartment.deleted':
+    case 'apartment.pin_reset':
     case 'announcement.withdrawn':
     case 'finance.definition.deactivated':
     case 'finance.entry.reversed':

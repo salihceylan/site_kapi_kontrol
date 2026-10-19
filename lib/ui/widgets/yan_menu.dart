@@ -123,6 +123,22 @@ enum SirketMenuItem {
   /// alıcısı olabilecek ve `visitor_log` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir
   /// (yönetim öğesinin altına).
   ziyaretcilerim,
+
+  /// Firma ve Sözleşme Takibi ekranı "Sözleşmeler" (Sözleşmeler | Firmalar). Rol listesinde YOKTUR; `contracts` modülü
+  /// AÇIK olan sitenin yöneticisine / süper kullanıcıya (yazar) ve kurul üyesine / görevlisine (salt okunur)
+  /// [YanMenu.additionalItems] ile eklenir (Ziyaretçi ve Kargo / Anket / Rezervasyon ... öğelerinin altına). Sakin için
+  /// yoktur; modül kapalıyken ya da modül verisi yokken eklenmez.
+  sozlesmeler,
+
+  /// Karar Defteri yönetim ekranı. Rol listesinde YOKTUR; `decision_book` modülü AÇIK olan sitenin yöneticisine /
+  /// süper kullanıcıya (yazar, kesinleştirir) ve kurul üyesine (salt okunur) [YanMenu.additionalItems] ile eklenir
+  /// (Sözleşmeler / Ziyaretçi ve Kargo / Anket / ... öğelerinin altına). Görevli için yoktur; modül kapalıyken ya da
+  /// modül verisi yokken eklenmez.
+  kararDefteri,
+
+  /// Karar Defteri sakin ekranı "Kararlar" (sakinlere açık kesin kararlar). Rol listesinde YOKTUR; alıcısı olabilecek ve
+  /// `decision_book` modülü AÇIK sitesi olan sakine [YanMenu.additionalItems] ile eklenir (yönetim öğesinin altına).
+  kararlar,
 }
 
 class YanMenu extends StatelessWidget {
@@ -554,6 +570,51 @@ List<SirketMenuItem> _withExtras(
         if (anchor >= 0) break;
       }
     }
+    // "Sözleşmeler": "Ziyaretçi ve Kargo" / "Anket" / "Rezervasyon" / ... / "Kişiler" sırasıyla ilk bulunanın altına.
+    if (extra == SirketMenuItem.sozlesmeler) {
+      for (final above in const <SirketMenuItem>[
+        SirketMenuItem.ziyaretcilerim,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anket,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyon,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
+    // "Karar Defteri" (yönetim) / "Kararlar" (sakin): "Sözleşmeler" / "Ziyaretçi ve Kargo" / "Anket" / ... / "Kişiler"
+    // sırasıyla ilk bulunanın altına; "Kararlar" varsa "Karar Defteri"nin altına.
+    if (extra == SirketMenuItem.kararDefteri || extra == SirketMenuItem.kararlar) {
+      for (final above in <SirketMenuItem>[
+        if (extra == SirketMenuItem.kararlar) SirketMenuItem.kararDefteri,
+        SirketMenuItem.sozlesmeler,
+        SirketMenuItem.ziyaretcilerim,
+        SirketMenuItem.ziyaretciKayitlari,
+        SirketMenuItem.anket,
+        SirketMenuItem.anketler,
+        SirketMenuItem.rezervasyon,
+        SirketMenuItem.rezervasyonlar,
+        SirketMenuItem.taleplerim,
+        SirketMenuItem.talepler,
+        SirketMenuItem.belgeler,
+        SirketMenuItem.borcum,
+        SirketMenuItem.finans,
+        SirketMenuItem.duyurular,
+        SirketMenuItem.kisiler,
+      ]) {
+        anchor = result.indexOf(above);
+        if (anchor >= 0) break;
+      }
+    }
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.siteler);
     if (anchor < 0) anchor = result.indexOf(SirketMenuItem.dashboard);
     result.insert(anchor < 0 ? result.length : anchor + 1, extra);
@@ -704,6 +765,12 @@ String _titleForItem(SirketMenuItem item, [UserRole? role]) {
       return 'Ziyaretçi ve Kargo';
     case SirketMenuItem.ziyaretcilerim:
       return 'Ziyaretçi ve Kargo';
+    case SirketMenuItem.sozlesmeler:
+      return 'Sözleşmeler';
+    case SirketMenuItem.kararDefteri:
+      return 'Karar Defteri';
+    case SirketMenuItem.kararlar:
+      return 'Kararlar';
   }
 }
 
@@ -775,6 +842,12 @@ IconData _iconForItem(SirketMenuItem item) {
       return Icons.door_front_door_rounded;
     case SirketMenuItem.ziyaretcilerim:
       return Icons.local_shipping_rounded;
+    case SirketMenuItem.sozlesmeler:
+      return Icons.handshake_rounded;
+    case SirketMenuItem.kararDefteri:
+      return Icons.gavel_rounded;
+    case SirketMenuItem.kararlar:
+      return Icons.library_books_rounded;
   }
 }
 

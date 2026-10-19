@@ -32,7 +32,7 @@ class SitesView extends StatelessWidget {
     required this.isLoadingStructure,
     required this.busyDeleteSites,
     required this.busySiteApprovals,
-    required this.busyApartmentMails,
+    required this.busyApartmentPins,
     required this.onRefreshSites,
     required this.onLoadPage,
     required this.onOpenAddSite,
@@ -43,7 +43,7 @@ class SitesView extends StatelessWidget {
     required this.onApproveSite,
     required this.onRejectSite,
     required this.onEditApartmentResident,
-    required this.onSendApartmentMail,
+    required this.onResetApartmentPin,
     required this.onAssignDoorDevice,
     this.siteManagersData,
     this.isLoadingManagers = false,
@@ -80,7 +80,8 @@ class SitesView extends StatelessWidget {
   final bool isLoadingStructure;
   final Set<int> busyDeleteSites;
   final Set<int> busySiteApprovals;
-  final Set<int> busyApartmentMails;
+  /// PIN'i sıfırlanmakta olan daireler (düğme döner gösterge + devre dışı).
+  final Set<int> busyApartmentPins;
   final VoidCallback onRefreshSites;
   final ValueChanged<int> onLoadPage;
   final VoidCallback onOpenAddSite;
@@ -97,7 +98,8 @@ class SitesView extends StatelessWidget {
   final ValueChanged<SiteRecord>? onRejectDeleteSite;
   final ValueChanged<SiteRecord>? onDeleteSiteWithEmail;
   final ValueChanged<ApartmentRecord> onEditApartmentResident;
-  final ValueChanged<ApartmentRecord> onSendApartmentMail;
+  /// "PIN'i Sıfırla" (dahili daire hesabı): yeni PIN bir kez gösterilir; sunucu PIN saklamaz.
+  final ValueChanged<ApartmentRecord> onResetApartmentPin;
   final ValueChanged<DoorRecord> onAssignDoorDevice;
   final SiteManagersData? siteManagersData;
   final bool isLoadingManagers;
@@ -584,9 +586,9 @@ class SitesView extends StatelessWidget {
                   apartment: structure.apartments[i],
                   onEdit: () =>
                       onEditApartmentResident(structure.apartments[i]),
-                  onSendMail: () =>
-                      onSendApartmentMail(structure.apartments[i]),
-                  sendingMail: busyApartmentMails.contains(
+                  onResetPin: () =>
+                      onResetApartmentPin(structure.apartments[i]),
+                  resettingPin: busyApartmentPins.contains(
                     structure.apartments[i].id,
                   ),
                   onDelete: onDeleteApartmentResident != null

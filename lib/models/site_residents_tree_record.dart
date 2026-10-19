@@ -104,7 +104,7 @@ class SiteResidentApartment {
   final int blockId;
   final String unitLabel;
   final int sortOrder;
-  final String? residentPinCode;
+  // Daire PIN'i bu ağaçta YOK: sunucu PIN'i saklamaz (KVKK m.12; migration 051).
   final int totalResidents;
   final List<SiteResidentMember> residents;
 
@@ -113,7 +113,6 @@ class SiteResidentApartment {
     required this.blockId,
     required this.unitLabel,
     required this.sortOrder,
-    this.residentPinCode,
     required this.totalResidents,
     required this.residents,
   });
@@ -124,7 +123,6 @@ class SiteResidentApartment {
       blockId: json['block_id'] as int? ?? 0,
       unitLabel: json['unit_label'] as String? ?? '',
       sortOrder: json['sort_order'] as int? ?? 0,
-      residentPinCode: json['resident_pin_code'] as String?,
       totalResidents: json['total_residents'] as int? ?? 0,
       residents: (json['residents'] as List<dynamic>? ?? const [])
           .map((r) => SiteResidentMember.fromJson(r as Map<String, dynamic>))

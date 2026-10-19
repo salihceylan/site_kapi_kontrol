@@ -69,9 +69,8 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
     _emailController = TextEditingController(
       text: widget.apartment.residentEmail ?? '',
     );
-    _passwordController = TextEditingController(
-      text: widget.apartment.residentPinCode ?? '',
-    );
+    // PIN sunucuda saklanmaz (liste PIN taşımaz): alan her zaman boş açılır; PIN kayıttan sonra bir kez gösterilir.
+    _passwordController = TextEditingController();
     _phoneController = TextEditingController(
       text: widget.apartment.residentPhoneNumber ?? '',
     );
@@ -160,10 +159,13 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Daire Sakini E-postası',
-                helperText: 'Mail gönderimi için opsiyonel.',
-                prefixIcon: Icon(Icons.email_rounded),
+                helperText: widget.apartment.residentUserCode == null
+                    ? 'Opsiyonel. Girilirse PIN bu adrese bir kez gönderilir.'
+                    : 'Opsiyonel. PIN sıfırlanınca yeni PIN bu adrese gönderilir.',
+                helperMaxLines: 3,
+                prefixIcon: const Icon(Icons.email_rounded),
               ),
               validator: (value) {
                 final text = (value ?? '').trim();
@@ -179,6 +181,9 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                 controller: _passwordController,
                 decoration: const InputDecoration(
                   labelText: 'İlk Giriş Şifresi / PIN',
+                  helperText:
+                      'Güvenlik gereği saklanmaz; kayıttan sonra yalnız bir kez gösterilir.',
+                  helperMaxLines: 3,
                   prefixIcon: Icon(Icons.pin_rounded),
                 ),
                 keyboardType: TextInputType.number,
@@ -193,7 +198,8 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
                 child: TextButton.icon(
                   onPressed: () {
                     final randomPin =
-                        (1000 + (math.Random().nextInt(9000))).toString();
+                        // Kriptografik rastgele (PIN bir giriş sırrıdır).
+                        (1000 + (math.Random.secure().nextInt(9000))).toString();
                     _passwordController.text = randomPin;
                   },
                   icon: const Icon(Icons.password_outlined, size: 18),
@@ -202,11 +208,12 @@ class _ApartmentResidentDialogState extends State<ApartmentResidentDialog> {
               ),
             ] else ...[
               const SizedBox(height: AppSpace.md),
-              const InlineNotice(
+              InlineNotice(
                 tone: AppTone.info,
                 icon: Icons.lock_outline_rounded,
-                message:
-                    'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Sakin şifresini kendi hesabından değiştirmelidir.',
+                message: widget.apartment.residentPinResettable
+                    ? 'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Daire hesabının PIN\'i unutulduysa daire satırındaki "PIN\'i Sıfırla" ile yenilenir.'
+                    : 'Güvenlik gereği kayıtlı sakinlerin şifresi yöneticiler tarafından değiştirilemez. Sakin şifresini kendi hesabından değiştirmelidir.',
               ),
             ],
             const SizedBox(height: AppSpace.md),

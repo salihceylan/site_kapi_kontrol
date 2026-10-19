@@ -366,7 +366,7 @@ describe('toggleApartmentMemberStatus: aile reisi pasife alinca tum daire pasifl
     assert.equal(result.is_active, false);
     assert.match(result.message, /pasife alındı/);
     assert.equal(has(clientLog, /^UPDATE apartments SET is_active/), false, 'tum daire pasiflesmemeli');
-    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_code = NULL WHERE id = \$2$/);
+    const handOver = find(clientLog, /^UPDATE apartments SET resident_user_code = \$1, resident_pin_issued = FALSE, resident_pin_code = NULL WHERE id = \$2$/);
     assert.deepEqual(handOver.params, [20001, 3]);
     assert.ok(has(clientLog, /^COMMIT/));
   });
@@ -485,7 +485,7 @@ describe('getSiteResidentsTree: is_active (uyelik+hesap) yaninda account_is_acti
       poolHandlers: [
         [/^SELECT site_code AS id, name, city, district/, { rowCount: 1, rows: [{ id: 101, name: 'S', city: 'c', district: 'd' }] }],
         [/^SELECT id, site_code, block_name, sort_order FROM site_blocks/, { rowCount: 1, rows: [{ id: 1, site_code: 101, block_name: 'A', sort_order: 1 }] }],
-        [/^SELECT id, block_id, unit_label, sort_order, resident_pin_code FROM apartments/, { rowCount: 1, rows: [{ id: 3, block_id: 1, unit_label: 'Daire 3', sort_order: 3, resident_pin_code: null }] }],
+        [/^SELECT id, block_id, unit_label, sort_order FROM apartments/, { rowCount: 1, rows: [{ id: 3, block_id: 1, unit_label: 'Daire 3', sort_order: 3 }] }],
         [/FROM apartment_memberships am INNER JOIN apartments a/, { rowCount: 3, rows: memberships }],
       ],
     });

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:site_kapi_kontrol/models/announcement.dart';
+import 'package:site_kapi_kontrol/models/apartment_pin_issue.dart';
 import 'package:site_kapi_kontrol/models/apartment_record.dart';
 import 'package:site_kapi_kontrol/models/audit_log.dart';
 import 'package:site_kapi_kontrol/models/device_connectivity_log.dart';
@@ -2227,7 +2228,10 @@ class AuthApi {
     return inner is Map ? Map<String, dynamic>.from(inner) : payload;
   }
 
-  Future<ApartmentRecord> upsertApartmentResident({
+  /// Daire sakinini oluşturur / düzenler. Yeni daire hesabı açıldıysa PIN yanıtta BİR KEZ gelir
+  /// (`pinIssue`; e-posta varsa sunucu PIN'i bir kez gönderir); mevcut sakin düzenlemesinde null.
+  Future<({ApartmentRecord apartment, ApartmentPinIssue? pinIssue})>
+  upsertApartmentResident({
     required String token,
     required UserRole role,
     required int apartmentId,
@@ -2254,26 +2258,44 @@ class AuthApi {
 
     _ensureStatus(response, 200);
     final payload = _decodePayload(response);
-    return _parsePayload(
-      'Daire kullanicisi',
-      () => ApartmentRecord.fromJson(
+    return _parsePayload('Daire kullanicisi', () {
+      final apartment = ApartmentRecord.fromJson(
         payload['apartment'] as Map<String, dynamic>,
-      ),
-    );
+      );
+      return (
+        apartment: apartment,
+        pinIssue: ApartmentPinIssue.fromResponse(apartment, payload),
+      );
+    });
   }
 
-  Future<void> sendApartmentCredentials({
+  /// Daire hesabının PIN'ini sıfırlar: yeni PIN yanıtta BİR KEZ gelir (sunucu saklamaz); [sendEmail]
+  /// ise sakinin e-posta adresine de bir kez gönderilir.
+  Future<ApartmentPinIssue> resetApartmentPin({
     required String token,
     required UserRole role,
     required int apartmentId,
+    bool sendEmail = true,
   }) async {
     final response = await _authorizedRequest(
       method: 'POST',
-      path: '${_managementPrefix(role)}/apartments/$apartmentId/send-credentials',
+      path: '${_managementPrefix(role)}/apartments/$apartmentId/reset-pin',
       token: token,
+      body: {'send_email': sendEmail},
     );
 
     _ensureStatus(response, 200);
+    final payload = _decodePayload(response);
+    return _parsePayload('Daire PIN', () {
+      final apartment = ApartmentRecord.fromJson(
+        payload['apartment'] as Map<String, dynamic>,
+      );
+      final issue = ApartmentPinIssue.fromResponse(apartment, payload);
+      if (issue == null) {
+        throw const FormatException('pin_code yok');
+      }
+      return issue;
+    });
   }
 
   Future<void> deleteApartmentResident({
