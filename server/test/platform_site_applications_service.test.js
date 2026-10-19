@@ -212,7 +212,6 @@ describe('createSiteApplication', () => {
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, note: 'x'.repeat(501) } }), 400, 'INVALID_BODY');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, note: 5 } }), 400, 'INVALID_BODY');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, deviceUid: 'x'.repeat(65) } }), 400, 'INVALID_BODY');
-    await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, managementType: 'residence' } }), 400, 'MANAGEMENT_TYPE_COMING_SOON');
     await rejectsWith(createSiteApplication({ actor: individual, body: { ...goodBody, management_type: 'otel' } }), 400, 'MANAGEMENT_TYPE_INVALID');
     assert.equal(db.connects(), 0);
     assert.equal(db.log.length, 0, 'transaction içinde hiçbir ifade yok');
@@ -667,7 +666,6 @@ describe('approveSiteApplication', () => {
       storedRow({ doors: null }),
       storedRow({ apartment_count: 99 }),
       storedRow({ blocks: [{ name: 'A', apartmentCount: 'on' }] }),
-      storedRow({ management_type: 'residence' }),
     ];
     for (const row of bad) {
       const db = install({ row });

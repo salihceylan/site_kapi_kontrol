@@ -1,16 +1,17 @@
 // Yönetim türleri (sites.management_type). Saf: DB/ağ bağımsız.
 //
 // Sözleşme: docs/PLATFORM_MODUL_SISTEMI.md ("Yönetim türü" / "Site oluşturma").
-// Bu fazda yalnız `apartment_site` seçilebilir; diğer dördü reddedilir ("Bu yönetim türü yakında.").
+// Tüm yönetim türleri seçilebilir (2026-10-19). Altındaki veri modeli ve modüller aynıdır (blok/daire/sakin); türe özgü
+// terimler (ofis, mağaza, üye payı vb.) sonraki aşamadadır. `selectable:false` bir tür hâlâ 400 MANAGEMENT_TYPE_COMING_SOON döndürür.
 
 export const DEFAULT_MANAGEMENT_TYPE = 'apartment_site';
 
 export const MANAGEMENT_TYPES = Object.freeze([
   Object.freeze({ code: 'apartment_site', label: 'Apartman ve Site', selectable: true }),
-  Object.freeze({ code: 'residence', label: 'Rezidans', selectable: false }),
-  Object.freeze({ code: 'business_center', label: 'İş Merkezi', selectable: false }),
-  Object.freeze({ code: 'cooperative', label: 'Kooperatif', selectable: false }),
-  Object.freeze({ code: 'shopping_mall', label: 'Alışveriş Merkezi', selectable: false }),
+  Object.freeze({ code: 'residence', label: 'Rezidans', selectable: true }),
+  Object.freeze({ code: 'business_center', label: 'İş Merkezi', selectable: true }),
+  Object.freeze({ code: 'cooperative', label: 'Kooperatif', selectable: true }),
+  Object.freeze({ code: 'shopping_mall', label: 'Alışveriş Merkezi', selectable: true }),
 ]);
 
 const TYPES_BY_CODE = new Map(MANAGEMENT_TYPES.map((type) => [type.code, type]));

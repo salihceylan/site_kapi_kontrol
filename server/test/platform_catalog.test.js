@@ -215,15 +215,15 @@ describe('platform katalog: enabled hesabi', () => {
 });
 
 describe('platform yonetim turleri', () => {
-  it('5 tur, etiketler ve yalniz apartment_site secilebilir', () => {
+  it('5 tur ve etiketler; hepsi secilebilir', () => {
     assert.deepEqual(
       MANAGEMENT_TYPES.map((t) => [t.code, t.label, t.selectable]),
       [
         ['apartment_site', 'Apartman ve Site', true],
-        ['residence', 'Rezidans', false],
-        ['business_center', 'İş Merkezi', false],
-        ['cooperative', 'Kooperatif', false],
-        ['shopping_mall', 'Alışveriş Merkezi', false],
+        ['residence', 'Rezidans', true],
+        ['business_center', 'İş Merkezi', true],
+        ['cooperative', 'Kooperatif', true],
+        ['shopping_mall', 'Alışveriş Merkezi', true],
       ],
     );
     assert.equal(DEFAULT_MANAGEMENT_TYPE, 'apartment_site');
@@ -237,14 +237,9 @@ describe('platform yonetim turleri', () => {
     assert.deepEqual(resolveManagementTypeInput(' apartment_site '), { ok: true, value: 'apartment_site' });
   });
 
-  it('diger dort tur 400 MANAGEMENT_TYPE_COMING_SOON ("Bu yönetim türü yakında.")', () => {
-    for (const raw of ['residence', 'business_center', 'cooperative', 'shopping_mall']) {
-      assert.deepEqual(resolveManagementTypeInput(raw), {
-        ok: false,
-        statusCode: 400,
-        code: 'MANAGEMENT_TYPE_COMING_SOON',
-        error: 'Bu yönetim türü yakında.',
-      });
+  it('tum turler secilebilir: gonderilen deger aynen kabul edilir', () => {
+    for (const raw of ['apartment_site', 'residence', 'business_center', 'cooperative', 'shopping_mall']) {
+      assert.deepEqual(resolveManagementTypeInput(raw), { ok: true, value: raw });
     }
   });
 

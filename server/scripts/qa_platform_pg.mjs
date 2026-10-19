@@ -5585,10 +5585,6 @@ async function sectionSiteApplications() {
     res = await apply(a3, extra);
     check(`gecersiz girdi (${label}): 400 + Turkce mesaj, satir yazilmaz`, res.status === 400 && typeof res.body.error === 'string' && /[a-zçğıöşü]/i.test(res.body.error) && res.body.code === 'INVALID_BODY', res.body);
   }
-  for (const type of ['residence', 'business_center', 'cooperative', 'shopping_mall']) {
-    res = await apply(a3, { managementType: type });
-    check(`yonetim turu ${type}: 400 MANAGEMENT_TYPE_COMING_SOON`, res.status === 400 && res.body.code === 'MANAGEMENT_TYPE_COMING_SOON');
-  }
   res = await apply(a3, { management_type: 'otel' });
   check('bilinmeyen yonetim turu: 400 MANAGEMENT_TYPE_INVALID', res.status === 400 && res.body.code === 'MANAGEMENT_TYPE_INVALID');
   check('tum gecersiz denemelerden sonra satir sayisi DEGISMEDI', (await q(`SELECT COUNT(*)::int AS n FROM site_applications`)).rows[0].n === rowsBeforeInvalid);
@@ -6002,7 +5998,6 @@ async function sectionSiteApplications() {
     ['sayilar tutarsiz', `UPDATE site_applications SET apartment_count = 99 WHERE id = $1`],
     ['kapi sayisi tutarsiz', `UPDATE site_applications SET door_count = 7 WHERE id = $1`],
     ['site adi bos', `UPDATE site_applications SET site_name = '   ' WHERE id = $1`],
-    ['yonetim turu yakinda', `UPDATE site_applications SET management_type = 'residence' WHERE id = $1`],
   ];
   for (const [label, sql] of corruptions) {
     const owner = await mkUser(`Bozuk ${label}`);

@@ -29,10 +29,9 @@ void main() {
       ]);
     });
 
-    test('yalnız Apartman ve Site seçilebilir', () {
-      expect(ManagementType.apartmentSite.selectable, isTrue);
-      for (final type in ManagementType.values.skip(1)) {
-        expect(type.selectable, isFalse, reason: type.apiValue);
+    test('beş yönetim türünün hepsi seçilebilir', () {
+      for (final type in ManagementType.values) {
+        expect(type.selectable, isTrue, reason: type.apiValue);
       }
     });
 

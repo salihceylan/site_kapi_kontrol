@@ -201,7 +201,6 @@ describe('revalidateStoredStructure (onayda saklanan yapı TEKRAR doğrulanır)'
       'site adı boş': (row) => { row.site_name = '  '; },
       'site adı çok uzun': (row) => { row.site_name = 'x'.repeat(121); },
       'normalizasyon adı değiştiriyor (uzun blok adı)': (row) => { row.blocks[0].name = 'x'.repeat(80); },
-      'yönetim türü yakında': (row) => { row.management_type = 'residence'; },
       'yönetim türü bilinmiyor': (row) => { row.management_type = 'otel'; },
     };
     for (const [label, mutate] of Object.entries(mutations)) {

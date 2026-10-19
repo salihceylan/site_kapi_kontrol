@@ -61,7 +61,6 @@ const requiredError = (error) =>
 
 const INVALID_BODIES = [
   ['boş site adı', { name: '   ' }],
-  ['yakında yönetim türü', { managementType: 'residence' }],
   ['bilinmeyen yönetim türü', { managementType: 'otel' }],
   ['101 blok', { blocks: Array.from({ length: 101 }, (_, i) => ({ name: `B${i}`, apartmentCount: 1 })) }],
   ['5001 daire', { blocks: [{ name: 'A', apartmentCount: 5001 }] }],

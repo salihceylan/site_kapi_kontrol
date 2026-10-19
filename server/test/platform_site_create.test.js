@@ -108,23 +108,6 @@ describe('setupSiteWithClaimedDevice: management_type', () => {
     }
   });
 
-  it('diger dort tur: 400 MANAGEMENT_TYPE_COMING_SOON, veritabanina HIC dokunulmaz (baglanti bile alinmaz)', async () => {
-    for (const managementType of ['residence', 'business_center', 'cooperative', 'shopping_mall']) {
-      const db = installDb(siteCreationHandlers());
-      await assert.rejects(
-        () => setupSiteWithClaimedDevice({ ...baseInput, managementType }),
-        (error) =>
-          error.statusCode === 400 &&
-          error.code === 'MANAGEMENT_TYPE_COMING_SOON' &&
-          error.message === 'Bu yönetim türü yakında.' &&
-          error.expose === true,
-        managementType,
-      );
-      assert.equal(db.connects(), 0, 'transaction acilmamali');
-      assert.equal(db.clientLog.length, 0);
-    }
-  });
-
   it('bilinmeyen / metin olmayan tur: 400 MANAGEMENT_TYPE_INVALID', async () => {
     for (const managementType of ['hotel', 'APARTMENT_SITE', 7, true, {}]) {
       const db = installDb(siteCreationHandlers());
@@ -211,18 +194,6 @@ describe('POST /membership/setup-site: management_type', () => {
     assert.equal(find(db.clientLog, /^INSERT INTO sites/).params[8], 'apartment_site');
   });
 
-  it('management_type ve camelCase managementType alanlari ayni sekilde islenir', async () => {
-    for (const body of [{ management_type: 'residence' }, { managementType: 'residence' }]) {
-      installDb(siteCreationHandlers());
-      const res = await post(body);
-      assert.equal(res.status, 400, JSON.stringify(body));
-      assert.deepEqual(res.body, { error: 'Bu yönetim türü yakında.', code: 'MANAGEMENT_TYPE_COMING_SOON' });
-    }
-    installDb(siteCreationHandlers());
-    const ok = await post({ management_type: 'apartment_site' });
-    assert.equal(ok.status, 201);
-  });
-
   it('bilinmeyen tur 400 MANAGEMENT_TYPE_INVALID ({ error, code })', async () => {
     installDb(siteCreationHandlers());
     const res = await post({ management_type: 'otel' });
@@ -304,16 +275,6 @@ describe('POST /admin/sites: management_type', () => {
       const res = await post({ management_type: value });
       assert.equal(res.status, 201, String(value));
       assert.equal(res.body.site.management_type, 'apartment_site');
-    }
-  });
-
-  it('diger dort tur 400 MANAGEMENT_TYPE_COMING_SOON; DB\'ye dokunulmaz', async () => {
-    for (const managementType of ['residence', 'business_center', 'cooperative', 'shopping_mall']) {
-      const db = installDb(siteCreationHandlers());
-      const res = await post({ management_type: managementType });
-      assert.equal(res.status, 400, managementType);
-      assert.deepEqual(res.body, { error: 'Bu yönetim türü yakında.', code: 'MANAGEMENT_TYPE_COMING_SOON' });
-      assert.equal(db.connects(), 0);
     }
   });
 

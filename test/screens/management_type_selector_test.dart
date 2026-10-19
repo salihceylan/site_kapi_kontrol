@@ -64,7 +64,7 @@ void main() {
   tearDown(() => LegalApi.debugDefaultFactory = null);
 
   group('ManagementTypeSelector', () {
-    listMatrix('5 tür: Apartman ve Site seçili, diğer dördü "Yakında…" ve devre dışı', (
+    listMatrix('5 tür: Apartman ve Site seçili, diğer dördü seçilebilir (Yakında… çipi yok)', (
       t,
       w,
       h,
@@ -90,23 +90,26 @@ void main() {
       }
       expect(_radioOn, findsOneWidget);
       expect(_radioOff, findsNWidgets(4));
-      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(4));
+      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNothing);
 
-      // Devre dışı türe dokunmak seçimi değiştirmez.
-      for (final label in <String>['Rezidans', 'İş Merkezi', 'Kooperatif', 'Alışveriş Merkezi']) {
-        await t.ensureVisible(find.text(label));
-        await t.tap(find.text(label));
+      // Her türe dokunmak seçimi bildirir.
+      final expected = <ManagementType>[];
+      for (final type in <ManagementType>[
+        ManagementType.residence,
+        ManagementType.businessCenter,
+        ManagementType.cooperative,
+        ManagementType.shoppingMall,
+        ManagementType.apartmentSite,
+      ]) {
+        await t.ensureVisible(find.text(type.label));
+        await t.tap(find.text(type.label));
         await t.pump();
+        expected.add(type);
       }
-      expect(changes, isEmpty);
-
-      // Seçilebilir türe dokunmak bildirir.
-      await t.tap(find.text('Apartman ve Site'));
-      await t.pump();
-      expect(changes, <ManagementType>[ManagementType.apartmentSite]);
+      expect(changes, expected);
     });
 
-    testWidgets('anlamsal ağaç: seçili tür "seçili", devre dışı türler "Yakında…" ve etkin değil', (t) async {
+    testWidgets('anlamsal ağaç: seçili tür "seçili", diğer türler seçilebilir düğme', (t) async {
       final handle = t.ensureSemantics();
       await pumpList(
         t,
@@ -128,13 +131,14 @@ void main() {
         ),
       );
       expect(
-        t.getSemantics(find.bySemanticsLabel('Rezidans, Yakında…')),
+        t.getSemantics(find.bySemanticsLabel('Rezidans')),
         isSemantics(
           isSelected: false,
           isButton: true,
-          isEnabled: false,
+          isEnabled: true,
           hasEnabledState: true,
-          label: 'Rezidans, Yakında…',
+          hasTapAction: true,
+          label: 'Rezidans',
         ),
       );
       handle.dispose();
@@ -179,7 +183,7 @@ void main() {
       );
       await scrollTo(t, find.text('Yönetim Türü'));
       expect(find.text('Apartman ve Site'), findsOneWidget);
-      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(4));
+      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNothing);
 
       // Sıra: Site Adı < Yönetim Türü < İl.
       final name = t.getTopLeft(find.widgetWithText(TextFormField, 'Site Adı *')).dy;
@@ -189,7 +193,7 @@ void main() {
       expect(type, lessThan(city));
     });
 
-    testWidgets('kurulum managementType olarak apartment_site iletir (devre dışı türe dokunmak etkisiz)', (t) async {
+    testWidgets('kurulum seçilen yönetim türünü (kooperatif) iletir', (t) async {
       final auth = _SetupAuth();
       await openDialogAt(
         t,
@@ -208,7 +212,7 @@ void main() {
       await scrollTo(t, find.text('Site Kurulumunu Tamamla'));
       await t.tap(find.text('Site Kurulumunu Tamamla'));
       await settleFor(t, 800);
-      expect(auth.types, <String?>['apartment_site']);
+      expect(auth.types, <String?>['cooperative']);
     });
   });
 
@@ -223,7 +227,7 @@ void main() {
         dark: dark,
       );
       await scrollTo(t, find.text('Yönetim Türü'));
-      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNWidgets(4));
+      expect(find.widgetWithText(StatusChip, 'Yakında…'), findsNothing);
       final name = t.getTopLeft(find.widgetWithText(TextFormField, 'Site Adı')).dy;
       final type = t.getTopLeft(find.text('Yönetim Türü')).dy;
       final city = t.getTopLeft(find.text('İl (opsiyonel)')).dy;

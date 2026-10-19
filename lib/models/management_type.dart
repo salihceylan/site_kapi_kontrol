@@ -1,7 +1,6 @@
 /// Sitenin yönetim türü (`sites.management_type`).
 ///
-/// Platform modül sistemi Faz 1: yalnız [apartmentSite] seçilebilir; diğer dördü "Yakında…" olarak
-/// gösterilir ve sunucu tarafından `MANAGEMENT_TYPE_COMING_SOON` ile reddedilir.
+/// Platform modül sistemi: beş yönetim türünün hepsi seçilebilir (bkz. [selectable]).
 enum ManagementType {
   apartmentSite('apartment_site', 'Apartman ve Site'),
   residence('residence', 'Rezidans'),
@@ -17,8 +16,9 @@ enum ManagementType {
   /// Kullanıcıya gösterilen Türkçe ad (sunucudaki `management_type_label` ile aynı).
   final String label;
 
-  /// Bu fazda seçilebilir mi? (Yalnız Apartman ve Site.)
-  bool get selectable => this == ManagementType.apartmentSite;
+  /// Seçilebilir mi? Tüm türler seçilebilir (2026-10-19): veri modeli ve modüller aynıdır; türe özgü terimler (ofis, mağaza,
+  /// üye payı vb.) sonraki aşamadadır. Sunucu `selectable:false` bir türü hâlâ MANAGEMENT_TYPE_COMING_SOON ile reddeder.
+  bool get selectable => true;
 
   /// Sunucu değerinden tür. Alan yoksa, boşsa ya da bilinmiyorsa (eski sunucu / yeni tür)
   /// `apartment_site` (geriye dönük uyum: mevcut tüm siteler bu türdedir).

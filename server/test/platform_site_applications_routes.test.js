@@ -221,8 +221,6 @@ describe('site başvurusu uçları: HTTP', () => {
     assert.equal(res.status, 400);
     assert.equal(res.body.code, 'INVALID_BODY');
     assert.equal(res.body.error, 'Site adı zorunludur.');
-    res = await call('POST', '/membership/site-applications', 'individual', { ...body, managementType: 'residence' });
-    assert.deepEqual(res.body, { error: 'Bu yönetim türü yakında.', code: 'MANAGEMENT_TYPE_COMING_SOON' });
     assert.equal(res.status, 400);
     res = await call('POST', '/membership/site-applications', 'individual', { ...body, note: 'x'.repeat(501) });
     assert.equal(res.status, 400);
