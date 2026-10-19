@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:site_kapi_kontrol/models/management_terms.dart';
 import 'package:site_kapi_kontrol/services/auth_service.dart';
 
 /// Kişi ve Daire Kayıtları ekranlarının ve pencerelerinin ortak bağlamı (Platform Faz 2a): hangi
@@ -13,12 +14,17 @@ class PeopleScope {
     required this.siteCode,
     this.siteName = '',
     this.canWrite = false,
+    this.terms = ManagementTerms.defaults,
   });
 
   final AuthService authService;
   final int siteCode;
   final String siteName;
   final bool canWrite;
+
+  /// Yönetim türü terimleri (F9): yalnız başlık / sekme / boş durum metinlerinde kullanılır; iş mantığı ve
+  /// API alanları değişmez. Eski sunucuda varsayılan (Daire / Sakin / ...).
+  final ManagementTerms terms;
 }
 
 /// Site seçicide listelenen site.
@@ -28,6 +34,7 @@ class PeopleSite {
     required this.code,
     required this.name,
     this.canWrite = false,
+    this.terms = ManagementTerms.defaults,
   });
 
   final int code;
@@ -35,6 +42,9 @@ class PeopleSite {
 
   /// Yönetici / süper kullanıcı: true; yalnız kurul üyesi olunan sitede false.
   final bool canWrite;
+
+  /// Sitenin yönetim türü terimleri (F9); bilinmiyorsa varsayılan.
+  final ManagementTerms terms;
 
   /// Kullanıcıya görünen site adı. Ad boşsa teknik site KODU gösterilmez ("Site 11" değil).
   String get label => name.trim().isEmpty ? 'İsimsiz site' : name.trim();
@@ -44,8 +54,9 @@ class PeopleSite {
       other is PeopleSite &&
       other.code == code &&
       other.name == name &&
-      other.canWrite == canWrite;
+      other.canWrite == canWrite &&
+      other.terms == terms;
 
   @override
-  int get hashCode => Object.hash(code, name, canWrite);
+  int get hashCode => Object.hash(code, name, canWrite, terms);
 }
