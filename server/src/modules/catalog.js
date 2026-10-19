@@ -95,6 +95,14 @@ export const MODULE_CATALOG = Object.freeze([
     status: MODULE_STATUS_COMING_SOON,
     defaultEnabled: false,
   }),
+  defineModule({
+    code: 'survey',
+    name: 'Anket ve Oylama',
+    description: 'Sakinlere anket ve oylama açma; sonuçların takibi.',
+    core: false,
+    status: MODULE_STATUS_AVAILABLE,
+    defaultEnabled: false,
+  }),
 ]);
 
 export const MODULE_CODES = Object.freeze(MODULE_CATALOG.map((definition) => definition.code));
