@@ -144,6 +144,9 @@ import 'package:site_kapi_kontrol/ui/views/work_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/work_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/views/reservation_manager_view.dart';
 import 'package:site_kapi_kontrol/ui/views/reservation_resident_view.dart';
+import 'package:site_kapi_kontrol/models/survey_models.dart';
+import 'package:site_kapi_kontrol/ui/views/survey_manager_view.dart';
+import 'package:site_kapi_kontrol/ui/views/survey_resident_view.dart';
 import 'package:site_kapi_kontrol/ui/widgets/announcement_parts.dart';
 import 'package:site_kapi_kontrol/ui/widgets/unread_announcement_card.dart';
 
@@ -256,6 +259,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<WorkResidentViewState> _workResidentKey = GlobalKey<WorkResidentViewState>();
   final GlobalKey<ReservationManagerViewState> _reservationManagerKey = GlobalKey<ReservationManagerViewState>();
   final GlobalKey<ReservationResidentViewState> _reservationResidentKey = GlobalKey<ReservationResidentViewState>();
+  final GlobalKey<SurveyManagerViewState> _surveyManagerKey = GlobalKey<SurveyManagerViewState>();
+  final GlobalKey<SurveyResidentViewState> _surveyResidentKey = GlobalKey<SurveyResidentViewState>();
 
   // Platform Faz 3a: duyuru bildirimi. `getNotificationSummary` AdaptivePoller ile (ön planda ~20 sn;
   // arka planda ya da uygun olmayan rolde ağ isteği yok) yoklanır; yeni duyuru olayı SnackBar'a, okunmamış
@@ -765,6 +770,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (_workResidentSites(role).isNotEmpty) SirketMenuItem.taleplerim,
         if (_canAccessReservationManage(role)) SirketMenuItem.rezervasyonlar,
         if (_reservationResidentSites(role).isNotEmpty) SirketMenuItem.rezervasyon,
+        if (_canAccessSurveyManage(role)) SirketMenuItem.anketler,
+        if (_surveyResidentSites(role).isNotEmpty) SirketMenuItem.anket,
       };
 
   // --- Belgeler (Faz 3b-A) ---
@@ -908,6 +915,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// "Rezervasyonlar" menüsü: süper kullanıcı ya da `reservation` modülü açık bir sitede yönetici / görevli / kurul üyesi.
   bool _canAccessReservationManage(UserRole role) =>
       role == UserRole.superUser || _reservationManageSites(role).isNotEmpty;
+
+  // --- Anket ve Oylama (F11.01) ---
+
+  /// "Anket ve Oylama" (yönetim) ekranındaki siteler: `survey` modülü AÇIK siteler. Yönetici (yönetici modunda) yazar;
+  /// kurul üyesi SALT OKUR (oy verenleri göremez); görevli ve sakin GÖREMEZ. Süper kullanıcıda boştur (ekran tüm
+  /// siteleri çeker). FAIL-OPEN YOK: modül verisi yoksa site yoktur; `survey` kodu yoksa modül KAPALI sayılır.
+  List<SurveySite> _surveyManageSites(UserRole role) {
+    if (role == UserRole.superUser || !_moduleAccess.isFiltering) return const <SurveySite>[];
+    final canManage = _canManagePeople(role);
+    return <SurveySite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (site.isEnabled(PlatformModuleCodes.survey))
+          if (site.role == 'manager' && canManage)
+            SurveySite(code: site.siteCode, name: site.siteName)
+          else if (site.isBoardMember)
+            SurveySite(code: site.siteCode, name: site.siteName, access: SurveySiteAccess.board),
+    ];
+  }
+
+  /// "Anketler" (sakin) ekranındaki siteler: alıcısı olabilecek ve `survey` modülü AÇIK siteler (Rezervasyon kuralı).
+  List<PeopleSite> _surveyResidentSites(UserRole role) {
+    if (!_moduleAccess.isFiltering) return const <PeopleSite>[];
+    switch (role) {
+      case UserRole.superUser:
+      case UserRole.individual:
+        return const <PeopleSite>[];
+      case UserRole.siteManager:
+        if (!_isResidentMode) return const <PeopleSite>[];
+      case UserRole.apartmentOwner:
+        break;
+    }
+    return <PeopleSite>[
+      for (final site in _moduleAccess.result!.sites)
+        if (_isRecipientSite(site) && site.isEnabled(PlatformModuleCodes.survey))
+          PeopleSite(code: site.siteCode, name: site.siteName),
+    ];
+  }
+
+  /// "Anket ve Oylama" menüsü: süper kullanıcı ya da `survey` modülü açık bir sitede yönetici / kurul üyesi.
+  bool _canAccessSurveyManage(UserRole role) =>
+      role == UserRole.superUser || _surveyManageSites(role).isNotEmpty;
 
   // --- Aidat ve Finans (Faz 4a) ---
 
@@ -1321,6 +1369,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (item == SirketMenuItem.rezervasyon) {
       return _reservationResidentSites(role).isNotEmpty;
     }
+    // Anket ve Oylama: `survey` modülü açık siteye bağlı yönetici / kurul (Anket ve Oylama) ya da sakin (Anketler).
+    if (item == SirketMenuItem.anketler) {
+      return _canAccessSurveyManage(role);
+    }
+    if (item == SirketMenuItem.anket) {
+      return _surveyResidentSites(role).isNotEmpty;
+    }
 
     switch (role) {
 
@@ -1471,6 +1526,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       case SirketMenuItem.istemciHatalari:
         return 'İstemci Hataları';
+
+      case SirketMenuItem.anketler:
+        return 'Anket ve Oylama';
+
+      case SirketMenuItem.anket:
+        return 'Anketler';
 
     }
 
@@ -4758,6 +4819,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case SirketMenuItem.istemciHatalari:
         await _clientErrorsKey.currentState?.reload();
         break;
+      case SirketMenuItem.anketler:
+        await _surveyManagerKey.currentState?.reload();
+        break;
+      case SirketMenuItem.anket:
+        await _surveyResidentKey.currentState?.reload();
+        break;
       case SirketMenuItem.modulTalepleri:
         await _moduleRequestsViewKey.currentState?.reload();
         break;
@@ -5613,6 +5680,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return ClientErrorsView(
           key: _clientErrorsKey,
           authService: widget.authService,
+        );
+
+      case SirketMenuItem.anketler:
+        return SurveyManagerView(
+          key: _surveyManagerKey,
+          authService: widget.authService,
+          manageAllSites: session.role == UserRole.superUser,
+          sites: _surveyManageSites(session.role),
+          onOpenModules: _canManagePeople(session.role) ? () => _goToMenu(SirketMenuItem.moduller) : null,
+        );
+
+      case SirketMenuItem.anket:
+        return SurveyResidentView(
+          key: _surveyResidentKey,
+          authService: widget.authService,
+          sites: _surveyResidentSites(session.role),
         );
 
       case SirketMenuItem.modulTalepleri:

@@ -47,6 +47,7 @@ class AuditLogEntry {
     'work_tracking': 'İş Takibi',
     'metering': 'Sayaç Okuma ve Faturalandırma',
     'online_payment': 'Online Tahsilat ve Banka Bağlantısı',
+    'survey': 'Anket ve Oylama',
   };
 
   static const Map<String, String> _staffRoleNames = <String, String>{
