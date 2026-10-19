@@ -265,6 +265,7 @@ const SQL = Object.freeze({
     FROM access_cards c
     INNER JOIN site_people sp ON sp.id = c.person_id AND sp.user_code = $1
     ORDER BY c.id DESC
+  `,
   // Eklediğiniz iş takibi fotoğrafları (047): YALNIZ sizin (uploaded_by = çağıran) eklediklerinizin kayıt bilgisi. İçerik, depolama anahtarı, sha256 SEÇİLMEZ.
   workItemAttachments: `
     SELECT a.id, a.work_item_id, a.site_code, a.file_name, a.mime_type, a.size_bytes, a.status, a.created_at
